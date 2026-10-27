@@ -48,3 +48,12 @@ it('usa el perfil por omisión cuando el campus se crea sin settings', function 
     expect($campus->settings)->toBe([])
         ->and($campus->profile->toArray())->toBe(CampusProfile::DEFAULTS);
 });
+
+it('lee el perfil nuevo en la misma instancia después de cambiar settings', function () {
+    $campus = Campus::factory()->create();
+    expect($campus->profile->usesRooms)->toBeTrue();
+
+    $campus->settings = [...$campus->settings, 'uses_rooms' => false];
+
+    expect($campus->profile->usesRooms)->toBeFalse();
+});
