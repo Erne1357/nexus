@@ -15,7 +15,7 @@ Nexus es un **monolito modular** en Laravel 13 + Livewire 4. No es hexagonal ni 
 | Bitácora | spatie/laravel-activitylog | Inmutable. |
 | Pruebas | Pest 5 (unit, feature, browser) | Ver `docs/arquitectura/testing.md`. |
 | Motor de horarios | Heurística en PHP (R2) y servicio Python con OR-Tools CP-SAT (R2) | Ver `docs/arquitectura/solver.md`. |
-| Infraestructura | Docker Compose: nginx, app, queue, postgres, valkey, vite (dev); `solver` se añade en R2 | |
+| Infraestructura | Docker Compose: nginx (solo dev), app, queue, postgres, valkey, vite (dev); en producción `caddy` (HTTPS) reemplaza a nginx y se suma `backup` ([ADR-0013](../decisiones/0013-despliegue-on-premise-itcj.md)); `solver` se añade en R2 | |
 
 ## Estructura de un módulo
 
