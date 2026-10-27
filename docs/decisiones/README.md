@@ -16,5 +16,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0010](0010-alcance-y-fecha-de-r1.md) | R1 sin motor de sugerencia, fecha 4 de diciembre de 2026 | Aceptada | 2026-10-26 |
 | [0011](0011-pest-5.md) | Pest 5 (PHPUnit 13) para todas las pruebas; reemplaza la versión de Pest de 0002 | Aceptada | 2026-10-27 |
 | [0012](0012-dependencias-base.md) | Dependencias base de la fundación: activitylog, openspout y Boost | Aceptada | 2026-10-27 |
+| [0013](0013-despliegue-on-premise-itcj.md) | Despliegue on-premise en el ITCJ: HTTPS con Caddy, `.env` con permisos restringidos, `pg_dump` diario con retención | Aceptada; puntos por confirmar con el ITCJ | 2026-10-27 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.
