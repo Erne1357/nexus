@@ -5,12 +5,10 @@ namespace App\Modules\Core\Actions;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Events\CampusUpdated;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Rules\CampusRules;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Spatie\Activitylog\Enums\ActivityEvent;
@@ -18,19 +16,19 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Cambia los datos, el estado (activar o desactivar) o el perfil de flujo de un campus: solo las
  * claves que recibe. Quién puede cambiar qué lo decide CampusPolicy antes de llamarla. Hace cumplir
- * las mismas reglas que CreateCampus (docs/dominio/modelo-de-datos.md, `campuses`):
+ * las mismas reglas que CreateCampus (CampusRules); conservar el código propio vale.
  *
- * - `code` se guarda en mayúsculas y sin espacios y es único entre todos los campus, también los
- *   borrados; conservar el propio vale.
- * - `settings` debe ser un perfil de flujo que CampusProfile acepte; se guarda completo y normalizado.
- *
- * El perfil se compara ya normalizado: PostgreSQL reordena las claves del jsonb y un perfil igual no
- * cuenta como cambio. Si nada cambió, no escribe, no registra ni avisa. Si algo cambió, en una
- * transacción guarda, deja en la bitácora el valor anterior y el nuevo de cada campo que cambió y
- * dispara CampusUpdated, que sale después del commit.
+ * En una transacción vuelve a leer el campus con bloqueo (`lockForUpdate`), así el valor anterior de
+ * la bitácora es el confirmado aunque `$campus` llegue viejo, y lo deja en `$campus`. El perfil se
+ * compara normalizado (PostgreSQL reordena el jsonb): uno igual no cuenta como cambio. Un perfil
+ * guardado inválido no estorba: los demás cambios funcionan y cualquier perfil válido lo repara. Si
+ * nada cambió, no escribe, no registra ni avisa; si algo cambió, guarda, deja en la bitácora el valor
+ * anterior y el nuevo de cada campo y, después del commit, avisa con CampusUpdated.
  */
 final class UpdateCampus
 {
+    public function __construct(private readonly CampusRules $rules) {}
+
     /**
      * @param  array{code?: string, name?: string, modality?: Modality|string, settings?: array<string, mixed>, is_active?: bool}  $data
      *
@@ -38,29 +36,40 @@ final class UpdateCampus
      */
     public function handle(Campus $campus, array $data): Campus
     {
-        $old = [...$campus->only(['code', 'name', 'modality', 'is_active']), 'settings' => $campus->profile->toArray()];
+        $data = Arr::only($data, ['code', 'name', 'modality', 'settings', 'is_active']);
 
         if (array_key_exists('code', $data)) {
-            $data['code'] = $this->freeCode($data['code'], $campus);
+            $data['code'] = $this->rules->normalizeCode($data['code']);
         }
 
         if (array_key_exists('settings', $data)) {
-            $data['settings'] = $this->validProfile($data['settings']);
+            $data['settings'] = $this->rules->profile($data['settings']);
+        }
 
-            if ($data['settings'] === $old['settings']) {
+        return DB::transaction(function () use ($campus, $data): Campus {
+            $campus->setRawAttributes($campus->newQuery()->lockForUpdate()->findOrFail($campus->getKey())->getAttributes(), sync: true);
+            $old = [...$campus->only(['code', 'name', 'modality', 'is_active']), 'settings' => $this->storedProfile($campus)];
+
+            if (array_key_exists('code', $data)) {
+                $this->rules->ensureCodeIsFree($data['code'], $campus);
+            }
+
+            if (array_key_exists('settings', $data) && $data['settings'] === $old['settings']) {
                 unset($data['settings']);
             }
-        }
 
-        $campus->fill(Arr::only($data, ['code', 'name', 'modality', 'settings', 'is_active']));
-        $changed = array_keys($campus->getDirty());
+            $campus->fill($data);
+            $changed = array_keys($campus->getDirty());
 
-        if ($changed === []) {
-            return $campus;
-        }
+            if ($changed === []) {
+                return $campus;
+            }
 
-        return DB::transaction(function () use ($campus, $changed, $old): Campus {
-            $campus->save();
+            try {
+                $campus->save();
+            } catch (UniqueConstraintViolationException) {
+                throw $this->rules->codeTaken($campus->code);
+            }
 
             activity()
                 ->performedOn($campus)
@@ -78,31 +87,17 @@ final class UpdateCampus
     }
 
     /**
-     * @throws ValidationException
-     */
-    private function freeCode(string $code, Campus $campus): string
-    {
-        $code = Str::upper(preg_replace('/\s+/u', '', $code));
-
-        Validator::make(['code' => $code], ['code' => Rule::unique(Campus::class, 'code')->ignore($campus)], [
-            'code.unique' => "Ya existe un campus con el código {$code}, aunque esté desactivado o borrado.",
-        ])->validate();
-
-        return $code;
-    }
-
-    /**
-     * @param  array<string, mixed>  $settings
-     * @return array<string, mixed>
+     * El perfil guardado, normalizado; si CampusProfile no lo acepta, tal como está (así queda en la
+     * bitácora como valor anterior).
      *
-     * @throws ValidationException
+     * @return array<string, mixed>
      */
-    private function validProfile(array $settings): array
+    private function storedProfile(Campus $campus): array
     {
         try {
-            return CampusProfile::fromArray($settings)->toArray();
-        } catch (InvalidArgumentException $exception) {
-            throw ValidationException::withMessages(['settings' => $exception->getMessage()]);
+            return $campus->profile->toArray();
+        } catch (InvalidArgumentException) {
+            return $campus->settings ?? [];
         }
     }
 }

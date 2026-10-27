@@ -18,14 +18,14 @@ use Livewire\WithPagination;
 use Mary\Traits\Toast;
 
 /**
- * CRUD de Campus, el módulo de referencia: tabla con búsqueda y filtro (CampusQuery), alta y edición
- * en un modal (CreateCampus, UpdateCampus) y activar o desactivar desde la tabla. No hay borrar: es
- * un catálogo.
+ * CRUD de Campus, el módulo de referencia: tabla con búsqueda y filtro, alta y edición en un modal y
+ * activar o desactivar desde la tabla. No hay borrar: es un catálogo.
  *
- * El componente valida la forma de los datos, autoriza con CampusPolicy en mount() y en cada acción
- * (una petición puede llegar con una página que abrió otra sesión) y llama a la Action, que hace
- * cumplir las reglas del campus. La subdirección solo cambia el perfil de flujo: lo demás no se le
- * envía a la Action aunque llegue del navegador, y en pantalla se muestra deshabilitado con su motivo.
+ * El componente lee con CampusQuery, autoriza con CampusPolicy en mount() y en cada acción (una
+ * petición puede llegar con una página que abrió otra sesión), valida la forma de los datos y llama a
+ * CreateCampus o UpdateCampus, que hacen cumplir las reglas del campus. La subdirección solo cambia el
+ * perfil de flujo: lo demás no se le envía a la Action aunque llegue del navegador, y en pantalla se
+ * muestra deshabilitado con su motivo, igual que el filtro de inactivos, que solo ve el admin.
  */
 new #[Title('Campus')] class extends Component
 {
@@ -48,6 +48,10 @@ new #[Title('Campus')] class extends Component
     /** Si el formulario deja cambiar código, nombre y modalidad; save() lo vuelve a decidir con la policy. */
     #[Locked]
     public bool $canEditData = true;
+
+    /** Si el perfil guardado era inválido y el formulario trae los valores por omisión. */
+    #[Locked]
+    public bool $profileWasReset = false;
 
     public string $code = '';
 
@@ -75,6 +79,7 @@ new #[Title('Campus')] class extends Component
                 default => null,
             }),
             'canCreate' => Gate::allows('create', Campus::class),
+            'canSeeInactive' => $context->isAdmin(),
             'headers' => [
                 ['key' => 'code', 'label' => 'Código'],
                 ['key' => 'name', 'label' => 'Nombre'],
@@ -100,12 +105,13 @@ new #[Title('Campus')] class extends Component
         $this->authorize('create', Campus::class);
 
         $this->resetValidation();
-        $this->reset('editingId', 'canEditData', 'code', 'name', 'modality', 'settings');
+        $this->reset('editingId', 'canEditData', 'profileWasReset', 'code', 'name', 'modality', 'settings');
         $this->showModal = true;
     }
 
-    public function edit(Campus $campus): void
+    public function edit(int $id, CampusQuery $campuses): void
     {
+        $campus = $campuses->findOrFail($id);
         $this->authorize('updateProfile', $campus);
 
         $this->resetValidation();
@@ -114,18 +120,25 @@ new #[Title('Campus')] class extends Component
         $this->code = $campus->code;
         $this->name = $campus->name;
         $this->modality = $campus->modality->value;
-        $this->settings = $campus->profile->toArray();
         $this->showModal = true;
+
+        try {
+            $this->settings = $campus->profile->toArray();
+            $this->profileWasReset = false;
+        } catch (InvalidArgumentException) {
+            $this->settings = CampusProfile::DEFAULTS;
+            $this->profileWasReset = true;
+        }
     }
 
-    public function save(CreateCampus $createCampus, UpdateCampus $updateCampus): void
+    public function save(CreateCampus $createCampus, UpdateCampus $updateCampus, CampusQuery $campuses): void
     {
         if ($this->editingId === null) {
             $this->authorize('create', Campus::class);
             $campus = $createCampus->handle($this->validatedCampus());
             $this->success('Campus creado', $this->describe($campus));
         } else {
-            $campus = Campus::findOrFail($this->editingId);
+            $campus = $campuses->findOrFail($this->editingId);
 
             if (Gate::allows('update', $campus)) {
                 $data = $this->validatedCampus();
@@ -134,18 +147,19 @@ new #[Title('Campus')] class extends Component
                 $data = ['settings' => $this->validatedProfile()];
             }
 
-            $updateCampus->handle($campus, $data);
+            $campus = $updateCampus->handle($campus, $data);
             $this->success('Campus actualizado', $this->describe($campus));
         }
 
         $this->showModal = false;
     }
 
-    public function toggleActive(Campus $campus, UpdateCampus $updateCampus): void
+    public function toggleActive(int $id, CampusQuery $campuses, UpdateCampus $updateCampus): void
     {
+        $campus = $campuses->findOrFail($id);
         $this->authorize('update', $campus);
 
-        $updateCampus->handle($campus, ['is_active' => ! $campus->is_active]);
+        $campus = $updateCampus->handle($campus, ['is_active' => ! $campus->is_active]);
 
         $this->success($campus->is_active ? 'Campus activado' : 'Campus desactivado', $this->describe($campus));
     }
@@ -237,7 +251,8 @@ new #[Title('Campus')] class extends Component
     }
 
     /**
-     * El perfil validado con los tipos de CampusProfile: el formulario entrega números como texto.
+     * El perfil validado con los tipos de CampusProfile: el formulario entrega números como texto y
+     * los días pueden llegar con huecos en las claves.
      *
      * @param  array<string, mixed>  $settings
      * @return array<string, mixed>
@@ -251,7 +266,7 @@ new #[Title('Campus')] class extends Component
             'block_minutes' => (int) $settings['block_minutes'],
             'day_start' => $settings['day_start'],
             'day_end' => $settings['day_end'],
-            'days' => array_map(intval(...), $settings['days']),
+            'days' => array_values(array_map(intval(...), $settings['days'])),
             'allow_external_teachers' => (bool) $settings['allow_external_teachers'],
             'requires_subdireccion_approval' => (bool) $settings['requires_subdireccion_approval'],
         ];

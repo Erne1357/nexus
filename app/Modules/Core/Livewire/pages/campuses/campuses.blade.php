@@ -9,12 +9,18 @@
                 clearable
             />
 
-            <x-select
-                wire:model.live="status"
-                aria-label="Estado"
-                :options="$statuses"
-                placeholder="Activos e inactivos"
-            />
+            @if ($canSeeInactive)
+                <x-select
+                    wire:model.live="status"
+                    aria-label="Estado"
+                    :options="$statuses"
+                    placeholder="Activos e inactivos"
+                />
+            @else
+                <span class="tooltip tooltip-bottom" data-tip="Solo el administrador ve los campus inactivos.">
+                    <x-select aria-label="Estado" :options="[]" placeholder="Activos" disabled />
+                </span>
+            @endif
 
             @if ($canCreate)
                 <x-button label="Nuevo campus" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
@@ -75,6 +81,14 @@
 
     <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo campus' : 'Editar campus'" box-class="max-w-3xl" separator>
         <x-form wire:submit="save" no-separator>
+            @if ($profileWasReset)
+                <x-alert
+                    title="El perfil de flujo guardado no es válido; se cargaron los valores por omisión. Revísalos y guarda para repararlo."
+                    icon="o-exclamation-triangle"
+                    class="alert-warning"
+                />
+            @endif
+
             <div class="grid gap-4 md:grid-cols-3">
                 <x-input label="Código" name="code" wire:model="code" placeholder="C3" :disabled="! $canEditData" />
                 <x-input label="Nombre" name="name" wire:model="name" :disabled="! $canEditData" />
