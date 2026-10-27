@@ -3,16 +3,18 @@
 namespace App\Modules\Imports\Queries;
 
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Imports\Enums\RowIssue;
 use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportRow;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\LazyCollection;
 
 /**
- * Lecturas de lotes de importación para el asistente y la descarga de errores. Quién las ve lo decide
+ * Lecturas de lotes de importación para el asistente y el archivo de errores. Quién las ve lo decide
  * la página con ImportBatchPolicy, que solo deja al admin: por eso no filtran por alcance.
  */
 final class ImportBatchQuery
@@ -25,7 +27,8 @@ final class ImportBatchQuery
     public function recent(int $limit = 10): Collection
     {
         return ImportBatch::query()
-            ->with(['campus', 'uploader'])
+            // Con el campus aunque se haya retirado: el lote sigue diciendo de cuál era.
+            ->with(['campus' => fn (BelongsTo $campus) => $campus->withTrashed(), 'uploader'])
             ->latest()
             ->orderByDesc('id')
             ->limit($limit)
@@ -38,32 +41,30 @@ final class ImportBatchQuery
     }
 
     /**
-     * Las filas del lote con error (`errors`) o con advertencia (`warnings`, también las ya aplicadas),
+     * Las filas del lote con error, o las que se aplican con advertencia (también las ya aplicadas),
      * por número de fila.
      *
-     * @param  'errors'|'warnings'  $kind
      * @return LengthAwarePaginator<int, ImportRow>
      */
-    public function issues(ImportBatch $batch, string $kind, int $perPage = 25): LengthAwarePaginator
+    public function issues(ImportBatch $batch, RowIssue $kind, int $perPage = 25): LengthAwarePaginator
     {
         return ImportRow::query()
             ->select(['id', 'batch_id', 'row_number', 'normalized', 'errors', 'warnings', 'status'])
             ->where('batch_id', $batch->id)
-            ->when(
-                $kind === 'errors',
-                fn (Builder $query) => $query->where('status', RowStatus::Error),
-                fn (Builder $query) => $query->whereRaw("warnings <> '{}'::jsonb"),
-            )
+            ->tap(fn (Builder $query) => match ($kind) {
+                RowIssue::Errors => $query->where('status', RowStatus::Error),
+                RowIssue::Warnings => $this->withWarnings($query),
+            })
             ->orderBy('row_number')
             ->paginate($perPage);
     }
 
     /**
-     * Cuántas filas traen advertencia. `valid_rows` las cuenta como válidas.
+     * Cuántas filas se aplican con advertencia: `valid_rows` las cuenta como válidas.
      */
     public function warningRows(ImportBatch $batch): int
     {
-        return ImportRow::query()->where('batch_id', $batch->id)->whereRaw("warnings <> '{}'::jsonb")->count();
+        return $this->withWarnings(ImportRow::query()->where('batch_id', $batch->id))->count();
     }
 
     /**
@@ -83,9 +84,8 @@ final class ImportBatchQuery
     }
 
     /**
-     * Las filas con error en el orden del archivo, de mil en mil, con la fila como vino y sus errores:
-     * la descarga que el admin corrige y vuelve a subir. Un kardex mal mapeado puede traer cientos de
-     * miles.
+     * Las filas con error en el orden del archivo, de mil en mil, con la fila como vino y sus errores,
+     * para ExportBatchErrors. Un kardex mal mapeado puede traer cientos de miles.
      *
      * @return LazyCollection<int, ImportRow>
      */
@@ -96,5 +96,17 @@ final class ImportBatchQuery
             ->where('batch_id', $batch->id)
             ->where('status', RowStatus::Error)
             ->lazyById(1000, 'row_number');
+    }
+
+    /**
+     * Las filas sin error que traen advertencia. Una advertencia vacía puede estar guardada como `{}`
+     * (la validación) o como `[]` (el cast del modelo).
+     *
+     * @param  Builder<ImportRow>  $query
+     * @return Builder<ImportRow>
+     */
+    private function withWarnings(Builder $query): Builder
+    {
+        return $query->where('status', '<>', RowStatus::Error)->whereRaw("warnings NOT IN ('{}'::jsonb, '[]'::jsonb)");
     }
 }

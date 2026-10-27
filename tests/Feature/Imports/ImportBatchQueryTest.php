@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Core\Models\Campus;
+use App\Modules\Imports\Enums\RowIssue;
 use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportRow;
@@ -38,6 +40,14 @@ it('lista los lotes más recientes primero, hasta el límite, con su campus y qu
         ->and($this->query->recent()->modelKeys())->toContain($old->id);
 });
 
+it('los lotes recientes conservan su campus aunque se haya retirado', function () {
+    $campus = Campus::factory()->create(['code' => 'C9']);
+    ImportBatch::factory()->create(['campus_id' => $campus->id]);
+    $campus->delete();
+
+    expect($this->query->recent()->sole()->campus?->code)->toBe('C9');
+});
+
 it('carga el lote abierto por su id y trata un id que no es uuid como uno que no existe', function () {
     $batch = ImportBatch::factory()->create();
 
@@ -53,20 +63,21 @@ it('lista las filas con error del lote por número de fila, paginadas', function
     importRowOf($batch, 5, RowStatus::Warning, ['warnings' => ['code' => ['Inactivo.']]]);
     importRowOf(ImportBatch::factory()->create(), 2, RowStatus::Error);
 
-    $page = $this->query->issues($batch, 'errors', perPage: 1);
+    $page = $this->query->issues($batch, RowIssue::Errors, perPage: 1);
 
     expect($page->total())->toBe(2)
         ->and($page->items()[0]->row_number)->toBe(3);
 });
 
-it('lista las filas con advertencia, también las que ya se aplicaron', function () {
+it('lista las filas que se aplican con advertencia, también las ya aplicadas, y no las de error', function () {
     $batch = ImportBatch::factory()->create();
     importRowOf($batch, 2, RowStatus::Applied, ['warnings' => ['code' => ['Inactivo.']]]);
     importRowOf($batch, 3, RowStatus::Warning, ['warnings' => ['code' => ['Inactivo.']]]);
     importRowOf($batch, 4, RowStatus::Applied);
-    importRowOf($batch, 5, RowStatus::Error);
+    importRowOf($batch, 5, RowStatus::Error, ['warnings' => ['code' => ['Inactivo.']], 'errors' => ['name' => ['Falta.']]]);
+    importRowOf($batch, 6, RowStatus::Valid, ['warnings' => []]);
 
-    expect($this->query->issues($batch, 'warnings')->pluck('row_number')->all())->toBe([2, 3])
+    expect($this->query->issues($batch, RowIssue::Warnings)->pluck('row_number')->all())->toBe([2, 3])
         ->and($this->query->warningRows($batch))->toBe(2);
 });
 
