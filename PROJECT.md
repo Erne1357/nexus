@@ -66,7 +66,7 @@ El registro completo está en `docs/decisiones/`.
 2. Los usernames de Nexus son los mismos que en el SII (número de empleado o número de control). Las contraseñas se generan al crear el usuario y se cambian en el primer acceso.
 3. El proceso de carga de Ene-Jun 2027 ya está en marcha en Excel para ambos campus. El piloto de Campus II capturará en Nexus lo que ya se decidió y terminará el proceso dentro de Nexus; si R1 no llega a tiempo, Nexus al menos conserva los catálogos validados y la carga capturada, y la publicación se hace exportando a Excel.
 4. El bloque horario presencial es de 1 hora, de 7:00 a 21:00, lunes a viernes, igual en ambos campus.
-5. Hay un servidor donde desplegar con Docker antes del piloto (por confirmar: on-premise del ITCJ o un VPS).
+5. Hay un servidor donde desplegar con Docker antes del piloto: on-premise del ITCJ, con dominio público y salida a internet ([ADR-0013](docs/decisiones/0013-despliegue-on-premise-itcj.md)). Falta confirmar con el ITCJ el nombre del dominio, el DNS, los puertos 80 y 443, las características del servidor y quién tiene acceso.
 
 ## Riesgos
 
