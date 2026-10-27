@@ -2,7 +2,7 @@
 
 > Archivo de estado. Se actualiza en cada PR que cierre o abra tareas de una fase. Contexto en [PROJECT.md](PROJECT.md); reglas de trabajo en [CLAUDE.md](CLAUDE.md).
 
-**Última actualización:** 2026-10-26 · **Fase activa:** 0 · **Entrega en curso:** R1
+**Última actualización:** 2026-10-27 · **Fase activa:** 0 · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
 
 ## Estados
 
