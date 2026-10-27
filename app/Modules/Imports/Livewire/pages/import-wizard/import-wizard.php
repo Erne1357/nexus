@@ -4,6 +4,8 @@ use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Imports\Actions\CreateImportMapping;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Enums\BatchStatus;
+use App\Modules\Imports\Enums\RowIssue;
+use App\Modules\Imports\Jobs\ApplyQueuedBatch;
 use App\Modules\Imports\Jobs\ValidateQueuedBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
@@ -25,6 +27,7 @@ use Livewire\Component;
 use Livewire\Features\SupportFileUploads\FileUploadConfiguration;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
+use Livewire\WithPagination;
 use Mary\Traits\Toast;
 
 /**
@@ -37,12 +40,18 @@ use Mary\Traits\Toast;
  *    mapeo nuevo con CreateImportMapping (pide un nombre). Al confirmar sube el lote con
  *    StoreImportBatch y lo manda a validar a la cola (ValidateQueuedBatch). Si la cola no responde, el
  *    lote ya quedó abierto y "Validar de nuevo" lo vuelve a encolar: un job de más no lo toca.
+ * 3. Muestra las cuentas de la validación y las filas con error o con advertencia, con sus mensajes, y
+ *    ofrece el CSV de errores cuando la cola lo termina (ExportBatchErrors). "Aplicar" manda el lote a
+ *    la cola (ApplyQueuedBatch) si sigue validado y tiene filas válidas.
+ * 4. Muestra el avance de la aplicación y, al terminar, lo que escribió y las filas que se saltaron.
+ *
+ * Los pasos 3 y 4 leen el lote de la URL (`?lote=`), así que se retoman al volver a la página o desde
+ * los lotes recientes. Mientras la cola trabaja, o prepara el archivo de errores, la vista se refresca
+ * sola con `wire:poll`.
  *
  * La copia temporal del archivo (una exportación del SII, con datos personales) se borra al subir el
  * lote, al cambiar de archivo y al empezar de nuevo; si el admin cierra la pestaña, la borra la limpieza
  * de Livewire a las 24 horas.
- * 3. y 4. Leen el lote de la URL (`?lote=`), así que se retoman al volver a la página o desde los lotes
- *    recientes. Mientras la cola trabaja, la vista se refresca sola con `wire:poll`.
  *
  * Todo es del admin (ImportBatchPolicy, fila "Importar catálogos"): mount() y cada acción vuelven a
  * autorizar, porque una petición puede llegar con una página que abrió otra sesión. El encabezado y el
@@ -51,7 +60,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Importaciones')] class extends Component
 {
-    use Toast, WithFileUploads;
+    use Toast, WithFileUploads, WithPagination;
 
     /** Paso del indicador (MaryUI x-steps); lo recalcula cada render a partir del estado. */
     public int $step = 1;
@@ -77,6 +86,9 @@ new #[Title('Importaciones')] class extends Component
 
     /** Nombre del mapeo nuevo, cuando el admin cambia la propuesta. */
     public string $mappingName = '';
+
+    /** Qué filas del lote se listan: un valor de RowIssue. */
+    public string $issues = RowIssue::Errors->value;
 
     /** El lote que se valida o se aplica; en la URL para retomarlo. */
     #[Locked]
@@ -110,12 +122,27 @@ new #[Title('Importaciones')] class extends Component
         };
 
         $labels = array_map(fn (ImportTemplate $template): string => $template->label(), $templates->all());
+        $batchTemplate = $batch !== null && $templates->has($batch->template) ? $templates->get($batch->template) : null;
+        // Con la validación terminada hay filas que revisar; mientras la cola trabaja, solo el avance.
+        $reviewing = $batch !== null && ! $batch->status->inProgress() && $batch->total_rows > 0;
+        $applied = $reviewing && $this->step === 4 ? $batches->appliedCounts($batch) : null;
+        $errorRows = $applied['skipped'] ?? $batch?->error_rows ?? 0;
+        $errorsReady = $reviewing && $errorRows > 0 && $batches->errorsFileReady($batch);
 
         return [
             // La vista recibe las propiedades antes de with(): el paso de este render va aparte.
             'currentStep' => $this->step,
             'batch' => $batch,
             'batchTemplate' => $batch === null ? null : ($labels[$batch->template] ?? $batch->template),
+            'batchFields' => $batchTemplate?->fields() ?? [],
+            'batchKey' => $batchTemplate?->naturalKey() ?? [],
+            'polling' => $batch !== null && ($batch->status->inProgress() || ($reviewing && $errorRows > 0 && ! $errorsReady)),
+            'warningRows' => $reviewing && $this->step === 3 ? $batches->warningRows($batch) : 0,
+            'applied' => $applied,
+            'errorRows' => $errorRows,
+            'errorsReady' => $errorsReady,
+            'issueKinds' => array_map(fn (RowIssue $kind): array => ['id' => $kind->value, 'name' => $kind->label()], RowIssue::cases()),
+            'issueRows' => $reviewing ? $batches->issues($batch, RowIssue::tryFrom($this->issues) ?? RowIssue::Errors) : null,
             'definition' => $definition,
             'campus' => $context->activeCampus(),
             'templateLabels' => $labels,
@@ -291,6 +318,37 @@ new #[Title('Importaciones')] class extends Component
         $this->discardUpload();
     }
 
+    public function updatedIssues(): void
+    {
+        $this->resetPage();
+    }
+
+    /**
+     * Paso 3 → 4: manda a aplicar en la cola un lote validado con filas válidas. Las filas con error
+     * se saltan (reglas-de-negocio.md, "Reglas de datos").
+     */
+    public function apply(ImportBatchQuery $batches, ScopedContext $context): void
+    {
+        $this->authorize('viewAny', ImportBatch::class);
+
+        $batch = $batches->findOrFail((string) $this->batchId);
+        $this->authorize('apply', $batch);
+
+        if ($batch->status !== BatchStatus::Validated) {
+            $this->error('No se puede aplicar', e("El lote ya no está validado: está {$batch->status->label()}."));
+
+            return;
+        }
+
+        if ($batch->valid_rows === 0) {
+            $this->error('No se puede aplicar', 'El lote no tiene filas válidas que aplicar.');
+
+            return;
+        }
+
+        ApplyQueuedBatch::dispatch($batch, $context->user());
+    }
+
     /**
      * Paso 2 → 1: elegir otro archivo u otra plantilla.
      */
@@ -311,6 +369,8 @@ new #[Title('Importaciones')] class extends Component
         $this->authorize('view', $batch);
 
         $this->batchId = $batch->id;
+        $this->reset('issues');
+        $this->resetPage();
     }
 
     /**
@@ -319,7 +379,8 @@ new #[Title('Importaciones')] class extends Component
     public function startOver(): void
     {
         $this->discardUpload();
-        $this->reset('template', 'file', 'header', 'readFile', 'assignments', 'mappingId', 'mappingName', 'batchId');
+        $this->reset('template', 'file', 'header', 'readFile', 'assignments', 'mappingId', 'mappingName', 'batchId', 'issues');
+        $this->resetPage();
         $this->resetValidation();
     }
 

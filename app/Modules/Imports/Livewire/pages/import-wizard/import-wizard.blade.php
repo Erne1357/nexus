@@ -174,7 +174,7 @@
     </x-steps>
 
     @if ($batch)
-        <div @if ($batch->status->inProgress()) wire:poll.2s @endif data-testid="batch-status">
+        <div @if ($polling) wire:poll.2s @endif data-testid="batch-status">
             <x-card :title="$batch->original_name" :subtitle="$batchTemplate" shadow separator>
                 <x-slot:menu>
                     <x-badge :value="$batch->status->label()" :class="$batch->status->badgeClass()" />
@@ -196,19 +196,110 @@
                 @elseif ($batch->status === BatchStatus::Validating)
                     <x-progress class="progress-info h-1" indeterminate />
                     <p class="mt-3 text-sm">Validando… {{ number_format($batch->processed_rows) }} filas leídas.</p>
-                @elseif ($batch->status === BatchStatus::Validated)
-                    <p class="text-sm">{{ number_format($batch->valid_rows) }} de {{ number_format($batch->total_rows) }} filas válidas; {{ number_format($batch->error_rows) }} con error.</p>
                 @elseif ($batch->status === BatchStatus::Applying)
                     <x-progress class="progress-primary h-1" :value="$batch->processed_rows" :max="max($batch->valid_rows, 1)" />
                     <p class="mt-3 text-sm">Aplicando… {{ number_format($batch->processed_rows) }} de {{ number_format($batch->valid_rows) }} filas.</p>
-                @elseif ($batch->status === BatchStatus::Applied)
-                    <p class="text-sm">Aplicado: {{ number_format($batch->created_rows) }} altas, {{ number_format($batch->updated_rows) }} cambios y {{ number_format($batch->unchanged_rows) }} sin cambios.</p>
-                @else
+                @elseif ($batch->status === BatchStatus::Failed)
                     <x-alert :title="$batch->failure_reason" icon="o-x-circle" class="alert-error" />
+                @endif
+
+                @if ($currentStep === 3 && $batch->status === BatchStatus::Validated)
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <x-stat title="Filas" :value="number_format($batch->total_rows)" icon="o-table-cells" />
+                        <x-stat title="Válidas" :value="number_format($batch->valid_rows)" icon="o-check-circle" />
+                        <x-stat title="Con advertencia" :value="number_format($warningRows)" icon="o-exclamation-triangle" />
+                        <x-stat title="Con error" :value="number_format($batch->error_rows)" icon="o-x-circle" />
+                    </div>
+                @elseif ($applied !== null)
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <x-stat title="Altas" :value="number_format($applied['created'])" icon="o-plus-circle" />
+                        <x-stat title="Cambios" :value="number_format($applied['updated'])" icon="o-pencil-square" />
+                        <x-stat title="Sin cambios" :value="number_format($applied['unchanged'])" icon="o-minus-circle" />
+                        <x-stat title="Con error, sin aplicar" :value="number_format($applied['skipped'])" icon="o-x-circle" />
+                    </div>
+                @endif
+
+                @if ($issueRows !== null)
+                    <div class="mt-6 flex flex-wrap items-end justify-between gap-4">
+                        <x-select label="Filas" wire:model.live="issues" :options="$issueKinds" class="w-56" />
+
+                        @if ($errorRows === 0)
+                            <span class="text-sm text-base-content/70">Ninguna fila trae error.</span>
+                        @elseif ($errorsReady)
+                            <x-button
+                                label="Descargar errores"
+                                icon="o-arrow-down-tray"
+                                :link="route('imports.batch-errors', $batch->id)"
+                                external
+                                no-wire-navigate
+                                class="btn-outline"
+                                tooltip-left="Las filas con error como vinieron, para corregirlas y volver a subir el archivo."
+                            />
+                        @else
+                            <span class="text-sm text-base-content/70">Preparando el archivo de errores…</span>
+                        @endif
+                    </div>
+
+                    <x-table
+                        :headers="[
+                            ['key' => 'row_number', 'label' => 'Fila', 'class' => 'w-24'],
+                            ['key' => 'key', 'label' => 'Clave', 'sortable' => false],
+                            ['key' => 'messages', 'label' => 'Mensajes', 'sortable' => false],
+                        ]"
+                        :rows="$issueRows"
+                        with-pagination
+                        class="mt-2"
+                    >
+                        @scope('cell_row_number', $row)
+                            Fila {{ $row->row_number }}
+                        @endscope
+
+                        @scope('cell_key', $row, $batchKey)
+                            {{ implode(' · ', array_map(fn (string $field): string => (string) ($row->normalized[$field] ?? '—'), $batchKey)) }}
+                        @endscope
+
+                        @scope('cell_messages', $row, $batchFields)
+                            <ul class="space-y-1">
+                                @foreach ($row->errors as $field => $messages)
+                                    <li class="flex items-start gap-2">
+                                        <x-badge value="Error" class="badge-error badge-sm shrink-0" />
+                                        <span>{{ $batchFields[$field] ?? $field }}: {{ implode(' ', $messages) }}</span>
+                                    </li>
+                                @endforeach
+                                @foreach ($row->warnings as $field => $messages)
+                                    <li class="flex items-start gap-2">
+                                        <x-badge value="Advertencia" class="badge-warning badge-sm shrink-0" />
+                                        <span>{{ $batchFields[$field] ?? $field }}: {{ implode(' ', $messages) }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endscope
+
+                        <x-slot:empty>
+                            <x-icon name="o-check-circle" label="Ninguna fila en esta lista." />
+                        </x-slot:empty>
+                    </x-table>
                 @endif
 
                 <x-slot:actions>
                     <x-button label="Importar otro archivo" icon="o-arrow-up-tray" wire:click="startOver" />
+
+                    @if ($currentStep === 3 && $batch->status === BatchStatus::Validated)
+                        @if ($batch->valid_rows > 0)
+                            <x-button
+                                :label="$batch->valid_rows === 1 ? 'Aplicar 1 fila' : 'Aplicar '.number_format($batch->valid_rows).' filas'"
+                                icon="o-check"
+                                class="btn-primary"
+                                wire:click="apply"
+                                spinner="apply"
+                                wire:confirm="Se escribirán {{ number_format($batch->valid_rows) }} filas en {{ $batchTemplate }}.{{ $batch->error_rows > 0 ? ' Las '.number_format($batch->error_rows).' filas con error se saltan.' : '' }}"
+                            />
+                        @else
+                            <span class="tooltip tooltip-left" data-tip="No hay filas válidas que aplicar.">
+                                <x-button label="Aplicar" icon="o-check" class="btn-primary" disabled />
+                            </span>
+                        @endif
+                    @endif
                 </x-slot:actions>
             </x-card>
         </div>

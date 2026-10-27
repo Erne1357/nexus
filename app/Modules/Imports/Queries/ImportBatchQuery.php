@@ -11,6 +11,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\LazyCollection;
 
 /**
@@ -81,6 +82,14 @@ final class ImportBatchQuery
             'unchanged' => $batch->unchanged_rows,
             'skipped' => ImportRow::query()->where('batch_id', $batch->id)->where('status', RowStatus::Error)->count(),
         ];
+    }
+
+    /**
+     * Si la cola ya dejó el CSV de errores del lote (ExportBatchErrors) para descargarlo.
+     */
+    public function errorsFileReady(ImportBatch $batch): bool
+    {
+        return Storage::disk('imports')->exists($batch->errors_path);
     }
 
     /**
