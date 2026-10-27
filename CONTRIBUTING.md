@@ -23,7 +23,7 @@ docker compose exec -w /app/.worktrees/feature-<issue>-<slug> vite npm install
 docker compose exec -w /app/.worktrees/feature-<issue>-<slug> app php artisan test
 ```
 
-Nunca corras `docker compose up` desde un worktree: comparte el nombre de proyecto con el repo principal y lo pisaría.
+Nunca corras `docker compose up` desde un worktree: comparte el nombre de proyecto con el repo principal y lo pisaría. Los contenedores `app` y `queue` sirven siempre el código de la carpeta principal: en un worktree se prueba con `php artisan test`, no en el navegador. El `.env` copiado comparte base de datos, Valkey y cola con el repo principal, así que no corras `migrate` de una rama sin mezclar contra la base de desarrollo.
 
 ## Commits
 
