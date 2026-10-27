@@ -94,7 +94,7 @@ Se detecta el viernes, no después. El orden de respuesta es: primero **rebalanc
 
 ## Tablero de GitHub
 
-- Un **tablero** del proyecto con columnas **Backlog**, **Listo**, **En curso**, **En revisión**, **Hecho**. "Listo" significa que la tarea tiene todo lo necesario para empezarla (contratos publicados, datos disponibles).
+- Un **tablero** del proyecto (https://github.com/users/Erne1357/projects/3) con columnas **Backlog**, **Listo**, **En curso**, **En revisión**, **Hecho**. "Listo" significa que la tarea tiene todo lo necesario para empezarla (contratos publicados, datos disponibles).
 - Un **milestone por fase** con su fecha de cierre; los issues de una fase pertenecen a su milestone.
 - Etiquetas: `type:*` (task, epic, feature, docs, chore; los bugs usan `bug`), `module:*` (uno por módulo más `infra`), `release:*` (r1, r2, r3, r4), `priority:*` (p0 bloquea la entrega en curso, p1 importante, p2 cuando haya tiempo). Las incidencias del piloto llevan además `piloto`.
 - Cada issue de tarea nace del archivo de fase con el mismo id y el mismo contenido (objetivo, módulo, dónde y por qué, pruebas, criterios); si difieren, manda el archivo de fase y se corrige el issue.

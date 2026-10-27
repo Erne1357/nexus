@@ -42,6 +42,19 @@ El script `docker/postgres/10-create-test-database.sh` se monta solo en `compose
 
 No se usa SQLite porque Nexus depende de comportamiento propio de PostgreSQL: restricciones de exclusión para empalmes, `jsonb` en perfiles y snapshots, rangos de tiempo, y detalles de ordenamiento y colación. Probar en un motor distinto al de producción deja pasar justo los errores que más cuestan en el piloto.
 
+## Browser tests en Docker
+
+Los browser tests (`tests/Browser`) usan Playwright con Chromium sin pantalla. Todo lo necesario vive en la etapa `dev` del `Dockerfile`: Node, el Chromium de Playwright (solo `chromium-headless-shell`) y sus librerías de sistema, instalados en `/ms-playwright` fuera de `/app`. La imagen `prod` no los lleva.
+
+```bash
+docker compose exec app php artisan test --testsuite=Browser
+```
+
+- El paquete `playwright` se instala con `npm install` (el contenedor `vite` lo hace al arrancar); si `node_modules` no existe, la prueba falla con "Playwright is not installed".
+- La versión de Chromium de la imagen se lee de `package-lock.json` al construir, así que siempre coincide con el paquete `playwright`. Al subir la versión basta con `npm install -D --save-exact playwright@<x>` y reconstruir la imagen.
+- Hay que reconstruir la imagen (`docker compose up -d --build`) después de mezclar un cambio del `Dockerfile` o de la versión de `playwright`.
+- Los tests visitan rutas con `visit('/ruta')`; el servidor HTTP lo levanta el propio plugin dentro del contenedor, no hace falta `nginx` ni `app`.
+
 ## Pruebas de rendimiento
 
 Hay tres presupuestos que se miden, no se suponen:

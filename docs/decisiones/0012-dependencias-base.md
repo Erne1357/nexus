@@ -3,7 +3,7 @@
 **Estado:** Aceptada · **Fecha:** 2026-10-27
 
 ## Contexto
-La tarea 0.1 instala las dependencias de la fundación. La regla del proyecto es que no se agrega una dependencia sin una nota en `docs/decisiones/`. Esta nota junta en un solo lugar el conjunto base y su respaldo; solo tres paquetes no tenían ADR propio.
+La tarea 0.1 instala las dependencias de la fundación. La regla del proyecto es que no se agrega una dependencia sin una nota en `docs/decisiones/`. Esta nota junta en un solo lugar el conjunto base y su respaldo; solo algunos paquetes no tenían ADR propio.
 
 ## Decisión
 | Paquete | Para qué | Respaldo |
@@ -15,16 +15,19 @@ La tarea 0.1 instala las dependencias de la fundación. La regla del proyecto es
 | `spatie/laravel-activitylog` ^5 | Bitácora inmutable de toda escritura hecha por Actions | Esta nota |
 | `openspout/openspout` ^5 | Leer y escribir Excel/CSV en streaming | Esta nota; contexto en [ADR-0005](0005-importacion-por-archivos.md) |
 | `laravel/boost` ^2 (solo dev) | Servidor MCP con la documentación exacta de las versiones instaladas | Esta nota |
+| `playwright` (npm, solo dev, versión exacta) | Navegador que controlan los browser tests; lo exige `pest-plugin-browser` | [ADR-0011](0011-pest-5.md), esta nota |
 
-Por qué los tres nuevos:
+Por qué los nuevos:
 - **activitylog:** CLAUDE.md exige bitácora que nunca se edita ni se borra y que toda escritura pase por una Action con bitácora; el paquete la resuelve sin tablas ni modelos propios.
 - **openspout:** las importaciones del SII y los exportes pueden ser archivos grandes; leerlos y escribirlos en streaming evita cargar el archivo completo en memoria dentro de un worker de Octane o de un job.
 - **Boost:** da a la IA documentación y APIs de Laravel 13, Livewire 4 y Pest 5 exactas para lo instalado, en lugar de depender de su memoria. Es solo de desarrollo y no entra a la imagen `prod`.
+- **playwright:** `pest-plugin-browser` lo lanza desde `node_modules/.bin`; sin el paquete no corre ningún browser test. Se fija a versión exacta porque cada versión descarga un Chromium distinto y el de la imagen `dev` debe coincidir.
 
 ## Consecuencias
 - `laravel/fortify` trae como dependencias transitivas `laravel/passkeys`, `web-auth/webauthn-lib`, `pragmarx/google2fa` y `bacon/bacon-qr-code`. No se usan en R1 (ni 2FA ni passkeys) y no se declaran aparte.
+- La etapa `dev` del `Dockerfile` agrega Node (imagen `node` con glibc, misma versión que la de Vite) y el Chromium de Playwright en `/ms-playwright`. La versión del navegador se lee de `package-lock.json` al construir la imagen; no se escribe a mano en dos lugares. La imagen `prod` no cambia.
 - Cualquier dependencia nueva a partir de aquí lleva su propio ADR o una fila en esta tabla en el mismo PR que la instala.
-- Las versiones exactas quedan en `composer.lock` y `package-lock.json`; esta nota fija solo la versión mayor.
+- Las versiones exactas quedan en `composer.lock` y `package-lock.json`; esta nota fija solo la versión mayor (`playwright` va con versión exacta).
 
 ## Alternativas descartadas
 - `maatwebsite/excel` en lugar de openspout: carga más a memoria y agrega una capa que no hace falta para leer y escribir filas.
