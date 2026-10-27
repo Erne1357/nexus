@@ -115,7 +115,7 @@ La imagen `dev` trae `pcov`. El job `tests` corre con `--coverage-text` y `.gith
 
 ### Duración
 
-Meta: menos de **10 minutos** en total para `lint` + `tests` + `browser`. Los tres jobs corren en paralelo, así que el tiempo de reloj es el del más lento. Medido en el PR #77: PENDIENTE. Si se excede, primero se paraleliza por módulo, después se revisa qué browser tests se pueden bajar a feature.
+Meta: menos de **10 minutos** en total para `lint` + `tests` + `browser`. Los tres jobs corren en paralelo, así que el tiempo de reloj es el del más lento. Medido en el PR #77 (los tres jobs en paralelo): unos **5 minutos** con la caché de la imagen vacía (la primera corrida, o tras cambiar el `Dockerfile`; casi todo es construir la imagen con Chromium) y **menos de 2 minutos** con la caché caliente. Si se excede, primero se paraleliza por módulo, después se revisa qué browser tests se pueden bajar a feature.
 
 ### Cuando falla
 
