@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core;
 
+use App\Modules\Core\Navigation\NavigationItem;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -23,6 +24,9 @@ use ReflectionClass;
  * - Lang                  traducciones: __('<alias>::<archivo>.<clave>')
  * - Policies              Policies/<Modelo>Policy ↔ Models/<Modelo> lo resuelve el auto-descubrimiento
  *                         de Laravel; $policies declara las que la convención no alcanza.
+ *
+ * Las entradas de la barra lateral del módulo se declaran en navigation(); Core las junta en el
+ * registro Navigation al arrancar.
  *
  * Un módulo que sobrescriba boot() debe llamar a parent::boot().
  */
@@ -67,6 +71,17 @@ abstract class ModuleServiceProvider extends ServiceProvider
         foreach ($this->policies as $model => $policy) {
             Gate::policy($model, $policy);
         }
+    }
+
+    /**
+     * Entradas de la barra lateral que aporta el módulo, en el orden en que se muestran. Core las
+     * junta, en el orden de bootstrap/providers.php, en el registro inmutable Navigation.
+     *
+     * @return list<NavigationItem>
+     */
+    public function navigation(): array
+    {
+        return [];
     }
 
     protected function moduleAlias(): string
