@@ -6,6 +6,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Imports\ImportsServiceProvider;
 use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\TemplateRegistry;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 
@@ -23,6 +24,24 @@ class CampusesWithActiveTemplate extends CampusesTemplate
     public function rules(): array
     {
         return [...parent::rules(), 'is_active' => ['required', 'boolean']];
+    }
+}
+
+/**
+ * Campus cuya clave natural no es asignable en masa: así suele quedar `campus_id` en un catálogo de
+ * un campus, que lo pone el sistema y no el formulario.
+ */
+#[Fillable(['name', 'modality', 'settings', 'is_active'])]
+class CampusWithGuardedCode extends Campus
+{
+    protected $table = 'campuses';
+}
+
+class CampusesWithGuardedCodeTemplate extends CampusesTemplate
+{
+    public function model(): string
+    {
+        return CampusWithGuardedCode::class;
     }
 }
 
@@ -59,6 +78,18 @@ describe('validate', function () {
             'name' => ['El campo nombre es obligatorio.'],
             'modality' => ['El campo modalidad no está en la lista de valores permitidos.'],
         ]);
+    });
+
+    it('un texto que no es UTF-8 válido es error y no se pierde en silencio', function () {
+        $template = new CampusesTemplate;
+        $row = $template->normalize(campusImportRow(['name' => "Ingenier\xEDa"]));
+
+        $issues = $template->validate($row, campusImportContext());
+
+        expect($row['name'])->toBe("Ingenier\xEDa")
+            ->and($issues->errors)->toBe([
+                'name' => ['El texto no es UTF-8 válido: guarda el archivo en UTF-8 o vuelve a exportarlo.'],
+            ]);
     });
 
     it('si las reglas fallan no revisa la fila contra la base', function () {
@@ -115,6 +146,26 @@ describe('apply', function () {
             ->and(Campus::count())->toBe(1)
             ->and($existing->fresh()->name)->toBe('Nuevo')
             ->and($existing->fresh()->settings)->toBe(['days' => [1, 2, 3, 4, 5, 6]]);
+    });
+
+    it('un cambio no pisa con null lo que el archivo trae vacío', function () {
+        $existing = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus Nueve']);
+
+        (new CampusesTemplate)->apply(campusImportRow(['name' => null, 'modality' => Modality::Mixta->value]), campusImportContext());
+
+        expect($existing->fresh())
+            ->name->toBe('Campus Nueve')
+            ->modality->toBe(Modality::Mixta);
+    });
+
+    it('fija la clave natural en un alta aunque el modelo no la deje asignar en masa', function () {
+        $campus = (new CampusesWithGuardedCodeTemplate)->apply(campusImportRow(), campusImportContext());
+
+        expect($campus->fresh()->code)->toBe('C9');
+
+        (new CampusesWithGuardedCodeTemplate)->apply(campusImportRow(['name' => 'Otro']), campusImportContext());
+
+        expect(Campus::count())->toBe(1);
     });
 
     it('aplicar dos veces la misma fila no cambia nada la segunda vez', function () {

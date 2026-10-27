@@ -110,10 +110,14 @@ Cada catálogo que llega del SII se importa con una plantilla: una clase en `app
 | `rules()`, `messages()` | Reglas de Laravel por campo sobre la fila normalizada |
 | `check()` | Lo que lee la base (claves cruzadas). La de la base ya marca como error un registro borrado con la misma clave y como advertencia uno inactivo; la plantilla la extiende |
 | `attributes()`, `defaults()` | Lo que se escribe en altas y cambios, y lo que solo se escribe al dar de alta |
-| `apply()` | Alta o cambio por clave natural; nunca cambia `is_active` de un registro existente ni restaura un borrado. La plantilla lo sobrescribe solo si su escritura no es un registro por fila |
+| `apply()` | Alta o cambio por clave natural. En un cambio no pisa con null lo que el archivo trae vacío y nunca cambia `is_active`; un borrado no se restaura. La plantilla lo sobrescribe solo si su escritura no es un registro por fila |
 | `afterApply()` | Lo que corre una vez al terminar el lote, como el job de recálculo de progreso de Students (tarea 1.4) |
 
-`validate()` y `keyFor()` son `final`: el motor depende de que se comporten igual en toda plantilla. Una plantilla no guarda estado; `TemplateRegistry` guarda clases y crea una plantilla nueva en cada `get()`, por eso es un singleton seguro con Octane. Lo que cambia por lote (quién lo aplica y el campus) llega en `ImportContext`. `apply()` no deja bitácora: el lote deja una entrada al aplicarse y el detalle por registro queda en `import_rows`.
+`validate()` y `keyFor()` son `final`: el motor depende de que se comporten igual en toda plantilla. `validate()` también rechaza el texto que no es UTF-8 válido.
+
+`TemplateRegistry` se arma al arrancar, como `Navigation`. Ahí rechaza claves repetidas, una clave natural fuera de los campos y los campos que pone el sistema (`id`, `deleted_at`, marcas de tiempo). Guarda clases y pide una plantilla nueva al contenedor en cada `get()`, por eso es un singleton seguro con Octane. Una plantilla no guarda estado del lote: quién lo aplica y el campus llegan en `ImportContext`.
+
+`apply()` escribe sin pasar por las Actions del catálogo porque corre dentro de la Action que aplica el lote. Por eso no deja bitácora por registro: el lote deja una entrada y el detalle queda en `import_rows`. Si el catálogo tiene reglas propias (como `CampusRules`), la plantilla las usa en `normalize()` y `check()`, para que un registro importado cumpla lo mismo que uno capturado.
 
 Pruebas de una plantilla: unit para `normalize()` y lo puro; feature para `validate()` (cada regla con su mensaje y cada clave cruzada) y `apply()` (alta, cambio, aplicar dos veces sin cambios). Copia `tests/Unit/Imports/ImportTemplateTest.php` y `tests/Feature/Imports/ImportTemplateTest.php`.
 

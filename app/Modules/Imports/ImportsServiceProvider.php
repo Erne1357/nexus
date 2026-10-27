@@ -20,9 +20,15 @@ final class ImportsServiceProvider extends ModuleServiceProvider
     public function register(): void
     {
         // Singleton porque es inmutable: guarda clases, y cada get() crea una plantilla nueva.
-        $this->app->singleton(TemplateRegistry::class, fn (Application $app): TemplateRegistry => new TemplateRegistry(
-            $app,
-            self::TEMPLATES,
-        ));
+        $this->app->singleton(TemplateRegistry::class, fn (): TemplateRegistry => new TemplateRegistry(self::TEMPLATES));
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        // Como Navigation: se arma al arrancar, antes de la primera petición, para que Octane lo cree
+        // una vez por worker y una plantilla mal declarada falle al arrancar y no al subir un lote.
+        $this->app->booted(fn (Application $app): TemplateRegistry => $app->make(TemplateRegistry::class));
     }
 }

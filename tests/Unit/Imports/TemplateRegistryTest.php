@@ -2,7 +2,6 @@
 
 use App\Modules\Core\Models\Campus;
 use App\Modules\Imports\Templates\TemplateRegistry;
-use Illuminate\Container\Container;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 
 /**
@@ -44,9 +43,22 @@ class EmptyKeyTemplate extends CampusesTemplate
     }
 }
 
+class ReservedFieldTemplate extends CampusesTemplate
+{
+    public function key(): string
+    {
+        return 'test-reserved';
+    }
+
+    public function fields(): array
+    {
+        return [...parent::fields(), 'deleted_at' => 'baja'];
+    }
+}
+
 function templateRegistryWith(string ...$templates): TemplateRegistry
 {
-    return new TemplateRegistry(new Container, $templates);
+    return new TemplateRegistry($templates);
 }
 
 it('entrega una instancia de la plantilla por su clave', function () {
@@ -83,3 +95,7 @@ it('rechaza una plantilla cuya clave natural no sale de sus campos', function (s
     'campo que no existe' => KeyOutsideFieldsTemplate::class,
     'clave vacía' => EmptyKeyTemplate::class,
 ])->throws(InvalidArgumentException::class, 'clave natural');
+
+it('rechaza una plantilla que importa columnas que solo maneja el sistema', function () {
+    templateRegistryWith(ReservedFieldTemplate::class);
+})->throws(InvalidArgumentException::class, 'deleted_at');
