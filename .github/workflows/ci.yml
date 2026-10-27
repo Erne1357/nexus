@@ -58,7 +58,7 @@ jobs:
 
       - name: Resumen de cobertura
         if: ${{ !cancelled() && hashFiles('storage/logs/coverage.txt') != '' }}
-        run: .github/scripts/coverage-summary.sh storage/logs/coverage.txt >> "$GITHUB_STEP_SUMMARY"
+        run: .github/scripts/coverage-summary.sh storage/logs/coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
 
   browser:
     name: browser

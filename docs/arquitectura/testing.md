@@ -83,14 +83,45 @@ Mínimo **80 % de líneas por módulo** desde la fase 1, medido en CI con el rep
 
 ## CI
 
+Workflow: `.github/workflows/ci.yml`. Se ejecuta en cada PR a `develop` y a `main`, a mano (`workflow_dispatch`) y en cada push a esas dos ramas (esto último solo para calentar la caché de la imagen: un PR lee las cachés de su rama y de la rama base). Una corrida nueva sobre el mismo PR cancela la anterior.
+
 | Job | Contenido | Bloquea el merge |
 |---|---|---|
-| `lint` | Pint en modo verificación | Sí |
+| `lint` | Pint en modo verificación (`./vendor/bin/pint --test`) | Sí |
 | `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey; reporte de cobertura por módulo | Sí |
 | `browser` | Browser tests de Pest 5 en el contenedor `dev` con Chromium | Sí |
-| `rendimiento` | Presupuestos de rendimiento | No (informa; ver arriba) |
+| `rendimiento` | Presupuestos de rendimiento (aún no existe) | No (informa; ver arriba) |
 
-Objetivo: menos de **10 minutos** en total para `lint` + `tests` + `browser`. Si se excede, primero se paraleliza por módulo, después se revisa qué browser tests se pueden bajar a feature. Se ejecuta en cada PR a `develop` y a `main`; el check `tests` y el check `browser` son requeridos en la protección de ambas ramas (tarea 0.12).
+Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protección de `develop` y `main` (tarea 0.12): no se renombran sin actualizar la protección.
+
+### Cómo corre
+
+CI usa lo mismo que el desarrollo local: la etapa `dev` del `Dockerfile` y los servicios de `compose.yaml` (PostgreSQL 18 y Valkey, mismas imágenes fijadas por digest; `nexus_test` la crea el script de `docker/postgres/` porque el volumen nace vacío). Cada job:
+
+1. Construye la imagen `dev` con Buildx y la caché de GitHub Actions (`type=gha`) y la etiqueta `nexus-app:dev`, que es la que espera `compose.override.yaml`; así `docker compose run` no reconstruye nada. Los build args `UID`/`GID` son los del usuario del runner, para que el usuario `app` de la imagen pueda escribir en el código montado en `/app`.
+2. Crea `.env` desde `.env.example` con un `APP_KEY` generado (igual que el README).
+3. Instala Composer dentro del contenedor (`browser` también hace `npm ci`: `pest-plugin-browser` busca `node_modules/.bin/playwright`; Chromium ya viene en la imagen).
+4. Levanta PostgreSQL y Valkey (`lint` no los necesita) y corre su comando con `docker compose run --rm -T app ...`.
+
+Los pasos 1 a 3 viven en la acción local `.github/actions/setup-ci`. Solo el job `tests` guarda las capas de la imagen en la caché (un solo escritor evita carreras); los tres la leen.
+
+Cachés: capas de la imagen (`type=gha`, incluye Chromium y las extensiones de PHP), descargas de Composer (clave `composer.lock`) y de npm (clave `package-lock.json`). Si cambia el `Dockerfile`, la primera corrida reconstruye desde la capa modificada.
+
+Las actions están fijadas por SHA completo con la versión en un comentario, igual que las imágenes por digest. Para actualizar una, cambia SHA y comentario juntos.
+
+### Cobertura
+
+La imagen `dev` trae `pcov`. El job `tests` corre con `--coverage-text` y `.github/scripts/coverage-summary.sh` deja en el resumen del job la cobertura de líneas por módulo de `app/Modules/` y el reporte completo. En la fase 0 es solo informativa (sin `--min`; meta 80 % en `app/Modules/Core`); desde la fase 1 se agrega el mínimo por módulo y pasa a bloquear. Los browser tests no entran al reporte.
+
+### Duración
+
+Meta: menos de **10 minutos** en total para `lint` + `tests` + `browser`. Los tres jobs corren en paralelo, así que el tiempo de reloj es el del más lento. Medido en el PR #77: PENDIENTE. Si se excede, primero se paraleliza por módulo, después se revisa qué browser tests se pueden bajar a feature.
+
+### Cuando falla
+
+- Cada job muestra la salida de Pest en su log; el resumen del job `tests` lleva la cobertura.
+- Si falla un browser test, el job sube las capturas de `tests/Browser/Screenshots` como artefacto `browser-screenshots`.
+- Para reproducirlo en local, los mismos comandos: `docker compose exec app ./vendor/bin/pint --test`, `docker compose exec app php artisan test --testsuite=Unit,Feature,Arch` y `docker compose exec app php artisan test --testsuite=Browser`.
 
 ## Pruebas inestables
 

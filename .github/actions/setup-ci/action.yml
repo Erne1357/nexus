@@ -37,6 +37,10 @@ runs:
         cache-to: ${{ inputs.cache-write == 'true' && 'type=gha,scope=dev-image,mode=max' || '' }}
         provenance: false
         sbom: false
+      env:
+        # Sin el resumen ni el artefacto .dockerbuild que sube la action por defecto
+        DOCKER_BUILD_SUMMARY: "false"
+        DOCKER_BUILD_RECORD_UPLOAD: "false"
 
     # Mismo punto de partida que el README: .env desde .env.example con APP_KEY nueva.
     - name: Crear .env
