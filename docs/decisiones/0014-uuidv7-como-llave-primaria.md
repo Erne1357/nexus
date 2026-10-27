@@ -26,7 +26,18 @@ La fase 0 se cerró con `id` bigint autoincremental en todas las tablas, como de
 ## Consecuencias
 - `tests/Arch/ModulesTest.php` exige `HasUuids` con UUIDv7 en todo modelo de `app/Modules/*/Models`, y que Queries y componentes no llamen `find()` ni `findOrFail()` del modelo fuera de `KeyLookup`. `tests/Feature/Core/PrimaryKeysTest.php` revisa en el esquema que ninguna llave ni referencia quede en bigint fuera de las tablas de infraestructura, y que toda llave uuid tenga `default uuidv7()`.
 - Las pruebas que necesitan un id de un registro que no crean (departamentos y carreras mientras Academic no tenga tablas) usan `fakeKey(10)` de `tests/Pest.php`: un uuid fijo y válido.
-- Cada llave pesa 16 bytes en lugar de 8; a la escala de Nexus (decenas de miles de alumnos, cientos de miles de filas de kardex) los índices crecen unos MB.
+- Cada llave pesa 16 bytes en lugar de 8. Se midió el 27 de octubre en PostgreSQL 18, con un volumen parecido al histórico del ITCJ desde 1990: 100 mil alumnos y 6 millones de filas de kardex insertadas por periodo.
+
+  | | bigint | UUIDv7 | UUIDv4 |
+  |---|---|---|---|
+  | Tabla de kardex | 345 MB | 438 MB | 438 MB |
+  | Índice de la llave primaria | 129 MB | 181 MB | 234 MB |
+  | Índice por alumno | 54 MB | 48 MB | 57 MB |
+  | Carga de las 6 millones de filas | 112 s | 116 s | 147 s |
+  | 20 mil búsquedas del kardex de un alumno por número de control | 4.4 s | 4.3 s | 4.4 s |
+
+  Las búsquedas por índice cuestan lo mismo con cualquier llave (unos 0.2 ms cada una). UUIDv7 ocupa más disco, unos 150 MB a este volumen, y carga casi igual que bigint. UUIDv4 es el que se descarta: al ser aleatorio fragmenta el índice y carga 27 % más lento.
+- Una importación histórica recibe UUIDv7 con la fecha de la importación, no la del periodo académico. No importa, porque el orden académico sale de la columna del periodo y nada ordena por `id`.
 - Depurar con UUIDs es menos cómodo que con enteros. Se compensa porque las consultas a mano van por las claves naturales: código de campus, número de control, número de empleado.
 - Un UUIDv7 revela su fecha de creación al milisegundo; en Nexus no es un dato sensible.
 - Las claves naturales con datos personales (número de control, RFC, CURP) siguen sin ir en URLs: la URL lleva el UUID.
