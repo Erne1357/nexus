@@ -1,6 +1,6 @@
 # Estrategia de pruebas
 
-Cómo se prueba Nexus. Aplica a todo el código del repositorio, incluido el escrito con ayuda de IA. Las herramientas son Pest 4 (unit, feature, browser y arquitectura) y GitHub Actions como CI bloqueante.
+Cómo se prueba Nexus. Aplica a todo el código del repositorio, incluido el escrito con ayuda de IA. Las herramientas son Pest 5 (unit, feature, browser y arquitectura) y GitHub Actions como CI bloqueante.
 
 ## Principios
 
@@ -14,7 +14,7 @@ Cómo se prueba Nexus. Aplica a todo el código del repositorio, incluido el esc
 |---|---|---|
 | **Unit** | Clases puras sin base de datos ni contenedor: reglas, cálculos, puntuaciones, plantillas | Cada regla dura HC-01 a HC-13 y cada blanda SC-01 a SC-08 como clase aislada; `RankingScorer` (orden determinista, empates, docentes sin horas); cálculo de `student_progress` con seriación y repetidores; validación por fila de cada plantilla de importación; Actions con reglas propias (por ejemplo, motivo obligatorio al asignar fuera del ranking, HC-16) |
 | **Feature** | Comportamiento con base de datos y contenedor de Laravel | Componentes Livewire con el helper de pruebas de Livewire (renderizado, propiedades, acciones, mensajes de validación); jobs de cola (recálculo de progreso, rankings, choques, aplicación de lotes); policies y alcance (`role_scopes`) en cada pantalla; transiciones de la máquina de estados de `academic_loads` con sus guardas; seeders; restricciones de PostgreSQL (exclusión de empalmes de salón y docente, suma de cupos) |
-| **Browser** (Pest 4) | Flujos completos en navegador real | Un flujo crítico por rol por fase: login y cambio de contraseña; asistente de importación; validar catálogos como jefe; enviar propuesta como coordinador; acomodar un semestre en el editor sin choques; asignar docente con motivo; pedir y aprobar un cambio; cerrar y publicar; consultar horario publicado y descargar PDF |
+| **Browser** (Pest 5) | Flujos completos en navegador real | Un flujo crítico por rol por fase: login y cambio de contraseña; asistente de importación; validar catálogos como jefe; enviar propuesta como coordinador; acomodar un semestre en el editor sin choques; asignar docente con motivo; pedir y aprobar un cambio; cerrar y publicar; consultar horario publicado y descargar PDF |
 | **Arquitectura** (`arch()`) | Que el código respete la convención del monolito modular | Dependencias solo hacia la izquierda del mapa de `docs/dominio/modelo-de-datos.md`; Actions `final`; modelos sin facades de request, sesión o auth; nada de consultas a base de datos desde Blade; todo módulo tiene su ServiceProvider; enums respaldados por string |
 
 La base es ancha en unit: las reglas de negocio son lo que más cambia y lo más barato de probar aislado. Feature cubre integración y permisos. Browser se reserva para los flujos que, si fallan, detienen el piloto.
@@ -72,7 +72,7 @@ Mínimo **80 % de líneas por módulo** desde la fase 1, medido en CI con el rep
 |---|---|---|
 | `lint` | Pint en modo verificación | Sí |
 | `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey; reporte de cobertura por módulo | Sí |
-| `browser` | Browser tests de Pest 4 en el contenedor `dev` con Chromium | Sí |
+| `browser` | Browser tests de Pest 5 en el contenedor `dev` con Chromium | Sí |
 | `rendimiento` | Presupuestos de rendimiento | No (informa; ver arriba) |
 
 Objetivo: menos de **10 minutos** en total para `lint` + `tests` + `browser`. Si se excede, primero se paraleliza por módulo, después se revisa qué browser tests se pueden bajar a feature. Se ejecuta en cada PR a `develop` y a `main`; el check `tests` y el check `browser` son requeridos en la protección de ambas ramas (tarea 0.12).

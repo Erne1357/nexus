@@ -9,7 +9,7 @@ Dejar una base sobre la que tres personas puedan trabajar en paralelo desde el 3
 ## Dependencias
 
 - Stack Docker ya existente (`compose.yaml`, `Dockerfile`).
-- Decisiones de `PROJECT.md` (monolito modular, Pest 4, MaryUI, Fortify con username).
+- Decisiones de `PROJECT.md` (monolito modular, Pest 5, MaryUI, Fortify con username).
 
 ## Alcance
 
@@ -31,7 +31,7 @@ Dejar una base sobre la que tres personas puedan trabajar en paralelo desde el 3
 
 | Id | Tarea | Módulo | Dónde y por qué | Pruebas | Persona |
 |---|---|---|---|---|---|
-| 0.1 | Dependencias: Pest 4 con plugins de Laravel, Livewire y browser; MaryUI; Fortify; spatie/laravel-permission; spatie/laravel-activitylog; Laravel Boost (dev); openspout para leer y escribir Excel/CSV | — | `composer.json`, `package.json`. Se quitan los tests de ejemplo de PHPUnit y se migra `phpunit.xml` a Pest. `APP_LOCALE=es`, zona horaria `America/Ciudad_Juarez` en `config/app.php`. | `php artisan test` corre vacío en verde | A |
+| 0.1 ✅ [#72](https://github.com/Erne1357/nexus/pull/72) | Dependencias: Pest 5 con plugins de Laravel, Livewire y browser; MaryUI; Fortify; spatie/laravel-permission; spatie/laravel-activitylog; Laravel Boost (dev); openspout para leer y escribir Excel/CSV | — | `composer.json`, `package.json`. Se quitan los tests de ejemplo de PHPUnit y se migra `phpunit.xml` a Pest. `APP_LOCALE=es`, zona horaria `America/Ciudad_Juarez` en `config/app.php`. | `php artisan test` corre vacío en verde | A |
 | 0.2 | Imagen `dev` con Node y dependencias de Chromium para que los browser tests de Pest corran dentro del contenedor `app` | — | `Dockerfile` etapa `dev`. Los browser tests usan Playwright; sin esto no corren ni en local ni en CI. | Un browser test de humo abre `/login` | A |
 | 0.3 | Base de datos de pruebas `nexus_test` en PostgreSQL y `phpunit.xml` apuntando a ella | — | Script de inicialización en `docker/postgres/` que crea la segunda base. Probar contra PostgreSQL evita diferencias de dialecto con SQLite (jsonb, exclusión de rangos). | Suite usa `RefreshDatabase` contra `nexus_test` | A |
 | 0.4 | Estructura de módulos: carpeta `app/Modules`, clase base `ModuleServiceProvider` que registra rutas, migraciones, vistas, namespace Livewire y policies por convención; registro de módulos en `bootstrap/providers.php` | Core | Es la convención de `docs/arquitectura/arquitectura.md`. Una sola clase base evita que cada módulo repita el registro. | Test de arquitectura: todo módulo tiene provider; dependencias solo hacia la izquierda del mapa | A |
@@ -43,7 +43,7 @@ Dejar una base sobre la que tres personas puedan trabajar en paralelo desde el 3
 | 0.10 | Skill `.claude/skills/nexus-module/SKILL.md` que explique cómo crear un módulo nuevo copiando la convención del módulo de referencia | — | Para que la IA genere módulos consistentes en fase 1 sin releer toda la arquitectura. | Revisión manual | A |
 | 0.11 | CI: workflow de GitHub Actions que construye la imagen `dev`, levanta PostgreSQL y Valkey, corre Pint en modo verificación, pruebas unit y feature, y browser tests en un job aparte; se ejecuta en PR a `develop` y `main` | — | `.github/workflows/ci.yml`. Sin CI bloqueante no hay forma de confiar en código generado con IA. | El workflow pasa en un PR de prueba | A |
 | 0.12 | Marcar el check de CI como requerido en la protección de `develop` y `main` | — | Configuración del repositorio (`gh api`). La protección de `develop` ya exige PR; falta el check. | PR sin CI verde no se puede mezclar | A |
-| 0.13 | Laravel Boost instalado en el contenedor y MCP configurado con `docker compose exec` (ver `docs/herramientas/ia-tooling.md`) | — | Da a la IA documentación exacta de Laravel 13, Livewire 4 y Pest 4 y acceso a tinker, esquema y logs. | Boost responde desde Claude Code | A |
+| 0.13 | Laravel Boost instalado en el contenedor y MCP configurado con `docker compose exec` (ver `docs/herramientas/ia-tooling.md`) | — | Da a la IA documentación exacta de Laravel 13, Livewire 4 y Pest 5 y acceso a tinker, esquema y logs. | Boost responde desde Claude Code | A |
 | 0.14 | Definir servidor de despliegue (on-premise del ITCJ o VPS) y preparar `compose.yaml` de producción con secretos, respaldos de PostgreSQL (`pg_dump` diario) y HTTPS | — | Decisión pendiente en `PROJECT.md`. Debe existir antes del piloto (fase 4). Se registra como ADR. | Despliegue de la rama `develop` en el servidor de pruebas | A |
 
 ## Pruebas de la fase
@@ -63,6 +63,6 @@ Dejar una base sobre la que tres personas puedan trabajar en paralelo desde el 3
 
 ## Riesgos y notas
 
-- Los browser tests de Pest 4 dentro de Docker pueden necesitar librerías del sistema para Chromium; reservar medio día.
+- Los browser tests de Pest 5 dentro de Docker pueden necesitar librerías del sistema para Chromium; reservar medio día.
 - Octane: cualquier singleton con estado (por ejemplo `ScopedContext`) debe reiniciarse por petición; usar `scoped` en el contenedor, no `singleton`.
 - La protección de `develop` ya está activa (PR obligatorio). No se puede subir directo.

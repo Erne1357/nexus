@@ -13,6 +13,18 @@ Reglas de trabajo del equipo. Lo que no esté aquí se decide en el issue y, si 
 
 Ramas cortas: integra a `develop` al menos cada dos días. Usa un worktree de git por rama para no mezclar cambios entre tareas.
 
+**Worktrees con Docker.** Docker monta solo la carpeta principal del repo en `/app`, así que los worktrees van dentro del repo, en `.worktrees/<rama>` (ignorado por git). Cada uno lleva su propio `vendor` y su propio `.env`, y todo comando se corre con `-w`. Git se usa desde la máquina local; el contenedor no lo tiene.
+
+```bash
+git worktree add -b feature/<issue>-<slug> .worktrees/feature-<issue>-<slug> origin/develop
+cp .env .worktrees/feature-<issue>-<slug>/.env
+docker compose exec -w /app/.worktrees/feature-<issue>-<slug> app composer install
+docker compose exec -w /app/.worktrees/feature-<issue>-<slug> vite npm install
+docker compose exec -w /app/.worktrees/feature-<issue>-<slug> app php artisan test
+```
+
+Nunca corras `docker compose up` desde un worktree: comparte el nombre de proyecto con el repo principal y lo pisaría. Los contenedores `app` y `queue` sirven siempre el código de la carpeta principal: en un worktree se prueba con `php artisan test`, no en el navegador. El `.env` copiado comparte base de datos, Valkey y cola con el repo principal, así que no corras `migrate` de una rama sin mezclar contra la base de desarrollo.
+
 ## Commits
 
 Formato convencional en inglés, con el módulo como alcance:

@@ -7,7 +7,7 @@ Qué se usa, para qué, y qué no hace falta. Criterio: lo justo para que tres p
 | Herramienta | Tipo | Uso en Nexus |
 |---|---|---|
 | **superpowers** | Plugin de proceso | Obligatorio. `brainstorming` cuando un issue tiene ambigüedad; `writing-plans` para volver detalladas las fases 🟦; `test-driven-development` en toda implementación; `systematic-debugging` ante cualquier bug; `using-git-worktrees` al iniciar una rama; `requesting-code-review` y `verification-before-completion` antes de abrir PR. |
-| **laravel-boost** | Plugin con servidor MCP | Documentación exacta de Laravel 13, Livewire 4, Pest 4 y paquetes instalados; tinker, esquema de BD, logs y errores del navegador. Hoy **falla al conectar** porque busca PHP local. Solución: instalar Boost en el contenedor y configurar el MCP del proyecto con `docker compose exec` (ver abajo). |
+| **laravel-boost** | Plugin con servidor MCP | Documentación exacta de Laravel 13, Livewire 4, Pest 5 y paquetes instalados; tinker, esquema de BD, logs y errores del navegador. Hoy **falla al conectar** porque busca PHP local. Solución: instalar Boost en el contenedor y configurar el MCP del proyecto con `docker compose exec` (ver abajo). |
 | **playwright** | Plugin con servidor MCP | Exploración manual de la UI por la IA (abrir una pantalla, hacer clic, leer errores de consola) cuando un browser test falla y hay que entender por qué. Los E2E automatizados son de Pest, no de este plugin. |
 | **caveman** | Plugin de estilo | Opcional. Reduce tokens en sesiones largas. No afecta el código. |
 

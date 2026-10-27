@@ -97,6 +97,8 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Igual que app.timezone: Laravel envía las fechas sin desfase.
+            'timezone' => 'America/Ciudad_Juarez',
         ],
 
         'sqlsrv' => [
