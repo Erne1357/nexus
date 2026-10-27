@@ -65,6 +65,8 @@ docker compose exec app php artisan make:livewire core::components.campus-badge
 
 Un provider que sobrescriba `boot()` debe llamar a `parent::boot()`. La base no guarda estado estático (Octane). Las factories no se descubren por convención: el modelo las declara con `#[UseFactory(...)]`.
 
+Las entradas de la barra lateral del módulo se declaran en el método `navigation()` de su provider (ver "Navegación").
+
 Reglas:
 
 - **Actions** son la única puerta de escritura. Reciben datos ya validados, abren la transacción, escriben, registran bitácora y disparan eventos. Los componentes Livewire nunca escriben en modelos directamente.
@@ -132,6 +134,36 @@ sequenceDiagram
 - **Policies:** usan el trait `Core\Policies\Concerns\UsesScopedContext` (una prueba arch lo exige) y preguntan con `$this->scope($user)`, que decide por el usuario que recibe la policy aunque no sea el autenticado (`Gate::forUser()`). Ejemplo: `$this->scope($user)->covers([Role::JefeDepartamento, Role::Coordinador], $group->campus_id, department: $group->department_id, career: $group->career_id)`.
 - **Contexto activo:** la Action `SetActiveContext::handle(?Campus $campus, ?Term $term)` lo guarda en la sesión (`ScopedContext::ACTIVE_CAMPUS` y `ACTIVE_TERM`); rechaza con `AuthorizationException` un campus que no esté en `campuses()` y `null` vuelve al de omisión. Por omisión, el campus es el único de `campuses()` (si hay varios, ninguno) y el periodo, el `is_current`. Cada lectura revalida el campus guardado contra el alcance vigente; `campuses()` y `activeTerm()` se recuerdan en la petición.
 - La navegación y los tableros se filtran por alcance con `ScopedContext`, para que ninguna pantalla repita la lógica. Las pruebas usan `User::factory()->admin()` y `User::factory()->withRole(Role::Coordinador, ['campus_id' => …, 'career_id' => …])`, que lanza `InvalidArgumentException` si el alcance no llena lo que exige el rol.
+
+## Navegación
+
+La barra lateral del layout (`resources/views/layouts/app.blade.php`) la arma Core, pero las entradas las declara cada módulo, así que Core no conoce a los módulos de su derecha:
+
+```php
+// app/Modules/Core/CoreServiceProvider.php (la 0.9 agrega "Campus" así)
+public function navigation(): array
+{
+    return [
+        new NavigationItem('Inicio', 'home', 'o-home'),
+        new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', ability: 'viewAny', arguments: [Campus::class]),
+    ];
+}
+
+// app/Modules/AcademicLoad/AcademicLoadServiceProvider.php (ejemplo)
+public function navigation(): array
+{
+    return [
+        new NavigationItem('Propuestas', 'academic-load.proposals', 'o-document-text',
+            visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador)),
+    ];
+}
+```
+
+- `NavigationItem` (`Core/Navigation`): etiqueta en español, **nombre** de una ruta del módulo, icono Heroicon de MaryUI y quién la ve. "Quién" es `visible` (una función que recibe `ScopedContext`), una ability de Gate con su argumento (`ability` y `arguments`, que reutilizan la policy del módulo) o ambas, y entonces debe cumplir las dos; sin ninguna, la ve cualquier usuario activo. Nunca se decide por el código del campus.
+- `Navigation` (`Core/Navigation`) es el registro: junta las entradas de todos los `ModuleServiceProvider` en el orden de `bootstrap/providers.php` y, dentro de un módulo, en el que las declara. Es un singleton **inmutable** (clases `final readonly`, lo exige `tests/Arch/NavigationTest.php`) que Core arma en `booted`, cuando ya arrancaron todos los módulos: con Octane se crea una vez por worker. Lo que depende del usuario se calcula en `visibleTo(ScopedContext)` en cada petición, sin guardarlo.
+- `core::components.navigation` muestra `visibleTo()` del usuario. Ninguna entrada puede apuntar a una ruta inexistente: `tests/Feature/Core/NavigationTest.php` lo verifica para todas las declaradas. Una entrada se agrega en el mismo PR que su pantalla, con una prueba de quién la ve y quién no.
+
+La topbar lleva `core::components.context-switcher`: ofrece `ScopedContext::campuses()` (fijo si solo hay uno) y los periodos de `TermQuery::selectable()`, y guarda la elección con `SetActiveContext`; elegir el periodo actual deja el de omisión para seguirlo cuando cambie. No hace falta middleware: `ScopedContext` lee la sesión en cada petición. La página de inicio (`/`, `core::pages.home`) muestra un bloque por cada rol que el usuario ejerce según `ScopedContext::has()`; el admin, solo el suyo.
 
 ## Acceso
 

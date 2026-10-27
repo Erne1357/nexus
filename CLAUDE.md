@@ -115,7 +115,7 @@ Detalle: [CONTRIBUTING.md](CONTRIBUTING.md).
 | Qué | Dónde |
 |---|---|
 | Módulos | `app/Modules/<Modulo>/` |
-| Layout y navegación | `resources/views/layouts/app.blade.php`, `app/Modules/Core/Livewire/components` |
+| Layout y navegación | `resources/views/layouts/app.blade.php`, `app/Modules/Core/Livewire/components`, `app/Modules/Core/Navigation` (entradas por módulo en `navigation()` de su provider) |
 | Pruebas | `tests/Unit/<Modulo>`, `tests/Feature/<Modulo>`, `tests/Browser/<Modulo>`, `tests/Arch` |
 | Fixtures de importación | `tests/Fixtures/imports/` (anonimizados) |
 | Docker | `Dockerfile`, `compose.yaml`, `compose.override.yaml`, `docker/` |
