@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Models\Term;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 
 /**
@@ -19,5 +20,15 @@ final class TermQuery
     public function selectable(): Collection
     {
         return Term::query()->orderByDesc('starts_on')->get();
+    }
+
+    /**
+     * El periodo elegido en la topbar.
+     *
+     * @throws ModelNotFoundException<Term>
+     */
+    public function findOrFail(int $id): Term
+    {
+        return Term::query()->findOrFail($id);
     }
 }

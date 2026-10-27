@@ -3,6 +3,7 @@
 use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TermQuery;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -45,11 +46,11 @@ new class extends Component
         ];
     }
 
-    public function apply(SetActiveContext $setActiveContext, ScopedContext $context): void
+    public function apply(SetActiveContext $setActiveContext, ScopedContext $context, CampusQuery $campuses, TermQuery $terms): void
     {
         try {
-            $campus = $this->campusId === null ? null : Campus::findOrFail($this->campusId);
-            $term = $this->termId === null ? null : Term::findOrFail($this->termId);
+            $campus = $this->campusId === null ? null : $campuses->findOrFail($this->campusId);
+            $term = $this->termId === null ? null : $terms->findOrFail($this->termId);
 
             $setActiveContext->handle($campus, $term?->is_current ? null : $term);
         } catch (ModelNotFoundException) {

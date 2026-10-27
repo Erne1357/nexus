@@ -5,7 +5,6 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
-use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
 /*
@@ -103,20 +102,6 @@ it('al volver a "Elige un campus" olvida el campus elegido', function () {
     expect(session(ScopedContext::ACTIVE_CAMPUS))->toBeNull()
         ->and(app(ScopedContext::class)->activeCampus())->toBeNull();
 });
-
-/**
- * El último toast que el componente mandó mostrar: MaryUI lo evalúa en el navegador como `toast({...})`.
- *
- * @return array{type: string, title: string, description: ?string}|null
- */
-function lastToastOf(Testable $component): ?array
-{
-    $expression = collect($component->effects['xjs'] ?? [])
-        ->pluck('expression')
-        ->last(fn (string $expression): bool => str_starts_with($expression, 'toast('));
-
-    return $expression === null ? null : json_decode(substr($expression, 6, -1), true)['toast'];
-}
 
 describe('elección rechazada', function () {
     beforeEach(function () {

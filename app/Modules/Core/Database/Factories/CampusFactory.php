@@ -29,4 +29,12 @@ class CampusFactory extends Factory
             'is_active' => true,
         ];
     }
+
+    /**
+     * Campus desactivado: no se ofrece en el selector y sus alcances no cuentan.
+     */
+    public function inactive(): static
+    {
+        return $this->state(['is_active' => false]);
+    }
 }

@@ -12,4 +12,17 @@ enum Modality: string
     case Mixta = 'mixta';
     case EnLinea = 'en_linea';
     case VirtualTecnm = 'virtual_tecnm';
+
+    /**
+     * Nombre para la interfaz (glosario).
+     */
+    public function label(): string
+    {
+        return match ($this) {
+            self::Presencial => 'Presencial',
+            self::Mixta => 'Mixta',
+            self::EnLinea => 'En línea',
+            self::VirtualTecnm => 'TecNM Virtual',
+        };
+    }
 }

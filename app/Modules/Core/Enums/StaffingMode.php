@@ -10,4 +10,15 @@ enum StaffingMode: string
 {
     case Department = 'department';
     case Central = 'central';
+
+    /**
+     * Nombre para la interfaz.
+     */
+    public function label(): string
+    {
+        return match ($this) {
+            self::Department => 'Por jefe de departamento',
+            self::Central => 'Central',
+        };
+    }
 }
