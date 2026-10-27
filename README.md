@@ -36,11 +36,15 @@ Sin pooler de conexiones: con Octane cada worker mantiene una conexión persiste
 
 ```bash
 cp .env.example .env
-docker compose up -d --build        # usa compose.yaml + compose.override.yaml
-docker compose exec app composer install
-docker compose exec app php artisan key:generate
-docker compose exec app php artisan migrate
+docker compose build                                        # imagen dev (PHP, Node y Chromium)
+docker compose run --rm --no-deps app composer install      # vendor antes de levantar: sin él, Octane no arranca
+docker compose run --rm --no-deps app php artisan key:generate
+docker compose up -d                                        # usa compose.yaml + compose.override.yaml
+docker compose exec app php artisan migrate --seed          # roles, campus y usuario admin
 ```
+
+- El seeder crea el usuario `admin` con `must_change_password`. Su contraseña inicial sale de `ADMIN_INITIAL_PASSWORD` en `.env`; en local, si no la defines, se genera una y se imprime en la consola. El primer acceso pide cambiarla.
+- El contenedor `vite` instala `node_modules` al arrancar (incluye Playwright para los browser tests).
 
 - App: http://localhost · Vite: http://localhost:5173
 - El código se monta como volumen y Octane recarga los workers al detectar cambios (`--watch`).

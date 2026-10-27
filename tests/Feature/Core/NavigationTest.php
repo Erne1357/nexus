@@ -49,7 +49,7 @@ function navigationLabelsFor(?User $user): array
 it('Core declara Inicio, visible para cualquier usuario con sesión', function () {
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
-    expect(navigationLabelsFor($docente))->toBe(['Inicio'])
+    expect(navigationLabelsFor($docente))->toContain('Inicio')->not->toContain('Campus')
         ->and(app(Navigation::class)->items()[0])
         ->route->toBe('home')
         ->icon->toBe('o-home');
@@ -62,9 +62,10 @@ it('filtra por rol: admin, coordinador y docente ven menús distintos', function
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => 20])->create();
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
-    expect(navigationLabelsFor($admin))->toBe(['Inicio', 'Campus', 'Saludo', 'Elementos'])
-        ->and(navigationLabelsFor($coordinador))->toBe(['Inicio', 'Saludo'])
-        ->and(navigationLabelsFor($docente))->toBe(['Inicio']);
+    // Presencia y ausencia, no listas exactas: cada módulo nuevo agrega entradas sin romper esta prueba.
+    expect(navigationLabelsFor($admin))->toContain('Inicio', 'Campus', 'Saludo', 'Elementos')
+        ->and(navigationLabelsFor($coordinador))->toContain('Inicio', 'Saludo')->not->toContain('Campus')->not->toContain('Elementos')
+        ->and(navigationLabelsFor($docente))->toContain('Inicio')->not->toContain('Campus')->not->toContain('Saludo')->not->toContain('Elementos');
 });
 
 it('decide por la ability de Gate con la policy del módulo', function () {

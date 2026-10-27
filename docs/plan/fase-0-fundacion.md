@@ -1,6 +1,6 @@
 # Fase 0 — Fundación
 
-**Entrega:** R1 · **Ventana:** 27 oct – 2 nov 2026 · **Modo:** individual (1 persona) · **Estado:** 🟨 · **Milestone:** `Fase 0 — Fundación`
+**Entrega:** R1 · **Ventana:** 27 oct – 2 nov 2026 · **Modo:** individual (1 persona) · **Estado:** ✅ (cerrada el 27 oct 2026) · **Milestone:** `Fase 0 — Fundación`
 
 ## Objetivo
 
@@ -40,7 +40,7 @@ Dejar una base sobre la que tres personas puedan trabajar en paralelo desde el 3
 | 0.7 ✅ [#81](https://github.com/Erne1357/nexus/pull/81) | Roles, permisos y alcances: seeder de roles, modelo `RoleScope`, `ScopedContext` (campus y periodo activos del usuario, alcances por rol) y helper para policies | Core | Toda policy de los demás módulos usa `ScopedContext`; centralizarlo evita duplicar la lógica de alcance. | Unit: `ScopedContext` responde correctamente para cada rol; feature: policy de ejemplo | A |
 | 0.8 ✅ [#83](https://github.com/Erne1357/nexus/pull/83) | Layout MaryUI: sidebar por rol, topbar con selector de campus y periodo, toasts, página de inicio por rol, tema daisyUI inicial (claro y oscuro) | Core | `resources/views/layouts/app.blade.php` y componentes en `Core/Livewire/components`. Es lo que verán todas las pantallas; se define una vez. | Browser: navegación muestra solo lo permitido por rol | A |
 | 0.9 ✅ [#84](https://github.com/Erne1357/nexus/pull/84) | Módulo de referencia: CRUD de Campus como página MFC con tabla, formulario en modal, `CreateCampus`/`UpdateCampus` Actions, `CampusQuery`, `CampusPolicy`, factory y seeder | Core | Es la plantilla que copiarán los demás módulos. Debe mostrar cómo se escribe cada tipo de clase y cómo se prueba. | Unit (Action con reglas), feature (componente Livewire), browser (crear y editar campus) | A |
-| 0.10 | Skill `.claude/skills/nexus-module/SKILL.md` que explique cómo crear un módulo nuevo copiando la convención del módulo de referencia | — | Para que la IA genere módulos consistentes en fase 1 sin releer toda la arquitectura. | Revisión manual | A |
+| 0.10 ✅ [#85](https://github.com/Erne1357/nexus/pull/85) | Skill `.claude/skills/nexus-module/SKILL.md` que explique cómo crear un módulo nuevo copiando la convención del módulo de referencia | — | Para que la IA genere módulos consistentes en fase 1 sin releer toda la arquitectura. | Revisión manual | A |
 | 0.11 ✅ [#77](https://github.com/Erne1357/nexus/pull/77) | CI: workflow de GitHub Actions que construye la imagen `dev`, levanta PostgreSQL y Valkey, corre Pint en modo verificación, pruebas unit y feature, y browser tests en un job aparte; se ejecuta en PR a `develop` y `main` | — | `.github/workflows/ci.yml`. Sin CI bloqueante no hay forma de confiar en código generado con IA. | El workflow pasa en un PR de prueba | A |
 | 0.12 ✅ (protección vía `gh api`; bloqueo verificado en [#80](https://github.com/Erne1357/nexus/pull/80)) | Marcar el check de CI como requerido en la protección de `develop` y `main` | — | Configuración del repositorio (`gh api`). La protección de `develop` ya exige PR; falta el check. | PR sin CI verde no se puede mezclar | A |
 | 0.13 ✅ [#75](https://github.com/Erne1357/nexus/pull/75) | Laravel Boost instalado en el contenedor y MCP configurado con `docker compose exec` (ver `docs/herramientas/ia-tooling.md`) | — | Da a la IA documentación exacta de Laravel 13, Livewire 4 y Pest 5 y acceso a tinker, esquema y logs. | Boost responde desde Claude Code | A |
@@ -66,3 +66,29 @@ Dejar una base sobre la que tres personas puedan trabajar en paralelo desde el 3
 - Los browser tests de Pest 5 dentro de Docker pueden necesitar librerías del sistema para Chromium; reservar medio día.
 - Octane: cualquier singleton con estado (por ejemplo `ScopedContext`) debe reiniciarse por petición; usar `scoped` en el contenedor, no `singleton`.
 - La protección de `develop` ya está activa (PR obligatorio). No se puede subir directo.
+
+## Pendientes al cierre
+
+La fase se cerró con todas sus tareas mezcladas en `develop`. Quedan fuera del código:
+
+- **Despliegue en el servidor de pruebas del ITCJ (0.14).** Todo está listo en `compose.prod.yaml` y [docs/operacion/despliegue.md](../operacion/despliegue.md). Falta acceso al servidor y confirmar dominio, DNS, puertos 80/443 y quién copia los respaldos fuera del servidor ([ADR-0013](../decisiones/0013-despliegue-on-premise-itcj.md)).
+- **Supuestos por confirmar con el equipo.** En todos se eligió la opción más restrictiva que no contradice los documentos:
+  - **Alcances:**
+    - el docente necesita un alcance por campus y nunca "cubre" gestión;
+    - el admin cuenta como si tuviera todos los roles;
+    - no hay permisos finos de spatie;
+    - los alcances incompletos se ignoran al leerse, sin `CHECK` por rol en la BD.
+  - **Login:**
+    - el username se compara exacto, con mayúsculas;
+    - los accesos no van a la bitácora (solo `last_login_at`);
+    - 5 intentos por minuto y contraseña de 8 caracteres con letras y números.
+  - **Campus:** Subdirección edita solo el perfil de flujo de sus campus, y EAD, ENL y TNMV quedan inactivos hasta la fase 10.
+  - **Diseño:** la paleta de colores es provisional, a la espera de la institucional.
+- **Decisiones antes de la fase 1:**
+  1. La tarea 1.4 pone a Students a escuchar `BatchApplied` de Imports, pero el mapa lo prohíbe (Imports está a la derecha de Students). Opción: el listener vive en Imports y llama una Action de Students.
+  2. Cuando Academic agregue las FK de `role_scopes`, las pruebas que usan ids inventados de departamento o carrera tendrán que crear registros reales.
+  3. `reglas-de-negocio.md` no dice quién administra edificios y salones, ni cómo un catálogo con `campus_id` elige su campus: el activo de la topbar o un select.
+- **Seguridad:**
+  - PHPUnit 13.4.3 tiene un aviso (PKSA-qhjm-rpqc-qkn6) que no se puede corregir mientras Pest 5.3.3 pida `phpunit <=13.4.3`; solo afecta a la cobertura de PHPT;
+  - se neutralizó un XSS almacenado en la ruta `/mary/toogle-sidebar` de MaryUI. Falta decidir si se reporta al proyecto.
+

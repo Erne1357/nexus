@@ -2,7 +2,7 @@
 
 > Archivo de estado. Se actualiza en cada PR que cierre o abra tareas de una fase. Contexto en [PROJECT.md](PROJECT.md); reglas de trabajo en [CLAUDE.md](CLAUDE.md).
 
-**Última actualización:** 2026-10-27 · **Fase activa:** 0 · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
+**Última actualización:** 2026-10-27 · **Fase activa:** 1 (arranca el 3 de noviembre) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
 
 ## Estados
 
@@ -18,7 +18,7 @@
 
 | # | Fase | Entrega | Ventana | Modo | Estado | Detalle |
 |---|---|---|---|---|---|---|
-| 0 | Fundación | R1 | 27 oct – 2 nov 2026 | Individual | 🟨 | [fase-0-fundacion.md](docs/plan/fase-0-fundacion.md) |
+| 0 | Fundación | R1 | 27 oct – 2 nov 2026 | Individual | ✅ | [fase-0-fundacion.md](docs/plan/fase-0-fundacion.md) |
 | 1 | Catálogos e importación | R1 | 3 – 14 nov 2026 | 3 en paralelo | ⬜ | [fase-1-catalogos-importacion.md](docs/plan/fase-1-catalogos-importacion.md) |
 | 2 | Validación de catálogos y periodo | R1 | 10 – 19 nov 2026 | 3 en paralelo | ⬜ | [fase-2-validacion-y-periodo.md](docs/plan/fase-2-validacion-y-periodo.md) |
 | 3 | Captura de carga: grupos, horarios, docentes, salones | R1 | 17 nov – 4 dic 2026 | 3 en paralelo | ⬜ | [fase-3-captura-de-carga.md](docs/plan/fase-3-captura-de-carga.md) |
@@ -36,7 +36,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 
 | Hito | Fecha | Criterio |
 |---|---|---|
-| H1 Fundación lista | 2 nov | Login por username, roles y alcances, layout, módulo de referencia con pruebas unit/feature/browser, CI verde en PR a `develop` |
+| H1 Fundación lista ✅ (27 oct) | 2 nov | Login por username, roles y alcances, layout, módulo de referencia con pruebas unit/feature/browser, CI verde en PR a `develop` |
 | H2 Catálogos reales cargados | 14 nov | Exportaciones del SII de Campus II importadas sin errores bloqueantes; `student_progress` calculado |
 | H3 Catálogos validados por jefes | 19 nov | Jefes de departamento de Campus II validan sus catálogos en Nexus; periodo `2027-1` abierto |
 | H4 Carga capturada | 4 dic | Grupos, horarios, cupos, docentes y salones de Campus II sin choques duros; ranking visible |
@@ -46,7 +46,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 
 | Módulo | Fase que lo crea | Estado |
 |---|---|---|
-| Core | 0 | 🟨 |
+| Core | 0 | ✅ (base de R1; periodos y notificaciones en fase 2) |
 | Academic | 1 | ⬜ |
 | Facilities | 1 | ⬜ |
 | Faculty | 1 | ⬜ |
@@ -72,3 +72,4 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Fecha | Cambio |
 |---|---|
 | 2026-10-26 | Plan inicial. Fecha de R1 fijada para la carga de Campus II Ene-Jun 2027. Motor de sugerencia movido a R2. |
+| 2026-10-27 | Fase 0 cerrada (PRs #72 a #85). Pest 5 en lugar de Pest 4 ([ADR-0011](docs/decisiones/0011-pest-5.md)); despliegue on-premise en el ITCJ con dominio público ([ADR-0013](docs/decisiones/0013-despliegue-on-premise-itcj.md)). Pendientes al cierre en [fase-0-fundacion.md](docs/plan/fase-0-fundacion.md#pendientes-al-cierre). |

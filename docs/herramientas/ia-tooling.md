@@ -34,7 +34,7 @@ Notas de uso:
 
 ### Permisos y hooks de Claude Code
 
-`.claude/settings.json` del proyecto permite sin preguntar los comandos de Docker, Pest, Pint y `gh` que se usan todo el día, y bloquea los peligrosos (push forzado, borrar volúmenes, leer `.env`). Un hook opcional corre Pint sobre cada archivo PHP editado; se activa cuando los contenedores están siempre arriba.
+**Pendiente de acordar en el equipo:** todavía no hay `.claude/settings.json` versionado. La plantilla `docs/herramientas/claude-settings.example.json`, una vez copiada a `.claude/settings.json`, permite sin preguntar los comandos de Docker, Pest, Pint y `gh` que se usan todo el día, y bloquea los peligrosos (push forzado, borrar volúmenes, leer `.env`). Un hook opcional corre Pint sobre cada archivo PHP editado; se activa cuando los contenedores están siempre arriba.
 
 ### Skills del proyecto (`.claude/skills/`)
 
@@ -42,7 +42,7 @@ Se crean cuando exista el código que describen, no antes, para que no se desví
 
 | Skill | Cuándo se crea | Qué enseña |
 |---|---|---|
-| `nexus-module` | Fase 0, tras el módulo de referencia | Crear un módulo nuevo: carpetas, provider, namespace Livewire, migraciones, factories, pruebas en tres niveles |
+| `nexus-module` | ✅ Creado en la fase 0 (tarea 0.10), tras el módulo de referencia | Crear un módulo nuevo o agregarle una pantalla de catálogo, Action, Query o Policy copiando el CRUD de Campus: mapa de dependencias, provider, migraciones, modelo y factory, enums, Policy, Actions y eventos, Queries, página MFC, ruta, menú, seeder, pruebas por nivel, errores comunes y checklist del PR |
 | `nexus-import-template` | Fase 1, tras la primera plantilla | Agregar una plantilla de importación: columnas, reglas, clave natural, aplicación, fixture y pruebas |
 | `nexus-constraint-rule` | Fase 3, tras las primeras reglas | Agregar una regla HC o SC: clase, id, mensaje, prueba unitaria, registro en el validador y en el documento de reglas |
 
