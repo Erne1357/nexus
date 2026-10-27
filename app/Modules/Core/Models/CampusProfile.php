@@ -18,8 +18,8 @@ final readonly class CampusProfile
 {
     /**
      * Bloques, horario y días: supuesto 4 de PROJECT.md (bloque de 1 h, 7:00 a 21:00, lunes a viernes).
-     * `allow_external_teachers` y `requires_subdireccion_approval` no están confirmados para
-     * presencial; van en su opción más conservadora (sin externos, con visto bueno de Subdirección).
+     * Sin visto bueno obligatorio de Subdirección: ADR-0008 (se activa por configuración). Sin
+     * docentes externos: los de presencial son del ITCJ.
      *
      * @var array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool}
      */
@@ -32,7 +32,7 @@ final readonly class CampusProfile
         'day_end' => '21:00',
         'days' => [1, 2, 3, 4, 5],
         'allow_external_teachers' => false,
-        'requires_subdireccion_approval' => true,
+        'requires_subdireccion_approval' => false,
     ];
 
     /** Días ISO-8601 (1 = lunes) que admite `group_sessions.day`. */

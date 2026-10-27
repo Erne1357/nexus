@@ -36,6 +36,18 @@ it('crea los cinco campus con su modalidad', function () {
     ]);
 });
 
+it('deja activos solo Campus I y Campus II; las otras modalidades esperan a la fase 10', function () {
+    $this->seed(DatabaseSeeder::class);
+
+    expect(Campus::orderBy('id')->pluck('is_active', 'code')->all())->toBe([
+        'C1' => true,
+        'C2' => true,
+        'EAD' => false,
+        'ENL' => false,
+        'TNMV' => false,
+    ]);
+});
+
 it('guarda el perfil de flujo completo en settings de cada campus', function () {
     $this->seed(DatabaseSeeder::class);
 
@@ -53,7 +65,8 @@ it('siembra el perfil presencial de PROJECT.md en Campus I y Campus II', functio
         ->and($profile->blockMinutes)->toBe(60)
         ->and($profile->dayStart)->toBe('07:00')
         ->and($profile->dayEnd)->toBe('21:00')
-        ->and($profile->days)->toBe([1, 2, 3, 4, 5]);
+        ->and($profile->days)->toBe([1, 2, 3, 4, 5])
+        ->and($profile->requiresSubdireccionApproval)->toBeFalse();
 })->with(['C1', 'C2']);
 
 it('siembra EAD con clases de lunes a sábado y docentes propios', function () {
@@ -111,7 +124,7 @@ it('exige ADMIN_INITIAL_PASSWORD para crear el admin fuera de local y testing', 
 
 it('no duplica ni pisa lo sembrado al volver a sembrar', function () {
     $this->seed(DatabaseSeeder::class);
-    Campus::where('code', 'C2')->sole()->update(['settings' => ['requires_subdireccion_approval' => false]]);
+    Campus::where('code', 'C2')->sole()->update(['settings' => ['requires_subdireccion_approval' => true]]);
     Campus::where('code', 'ENL')->sole()->delete();
 
     $this->app->detectEnvironment(fn () => 'production');
@@ -121,7 +134,7 @@ it('no duplica ni pisa lo sembrado al volver a sembrar', function () {
     expect(SpatieRole::count())->toBe(6)
         ->and(Campus::withTrashed()->count())->toBe(5)
         ->and(Campus::where('code', 'ENL')->exists())->toBeFalse()
-        ->and(Campus::where('code', 'C2')->sole()->profile->requiresSubdireccionApproval)->toBeFalse()
+        ->and(Campus::where('code', 'C2')->sole()->profile->requiresSubdireccionApproval)->toBeTrue()
         ->and(User::where('username', 'admin')->count())->toBe(1)
         ->and(Hash::check('Inicial-2026!', User::where('username', 'admin')->sole()->password))->toBeTrue();
 });

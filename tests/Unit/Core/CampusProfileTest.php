@@ -39,11 +39,11 @@ it('usa el perfil presencial de PROJECT.md para las claves que faltan', function
         ->and($profile->days)->toBe([1, 2, 3, 4, 5]);
 });
 
-it('deja los valores sin confirmar en su opción más conservadora cuando faltan', function () {
+it('arranca sin visto bueno obligatorio de Subdirección (ADR-0008) y sin docentes externos', function () {
     $profile = CampusProfile::fromArray([]);
 
-    expect($profile->allowExternalTeachers)->toBeFalse()
-        ->and($profile->requiresSubdireccionApproval)->toBeTrue();
+    expect($profile->requiresSubdireccionApproval)->toBeFalse()
+        ->and($profile->allowExternalTeachers)->toBeFalse();
 });
 
 it('completa con valores por omisión solo las claves que faltan', function () {
