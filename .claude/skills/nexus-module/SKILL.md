@@ -104,7 +104,7 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 - Copia `Livewire/pages/campuses/campuses.php`:
   - `new #[Title('…')] class extends Component` con `use Toast, WithPagination;`.
   - `mount()` autoriza `viewAny`. Cada método público (`create`, `edit`, `save`, `toggleActive`) carga con la Query y vuelve a autorizar: puede llegar de una página que abrió otra sesión. En un catálogo con una sola ability de edición, `edit()` y `save()` autorizan `update`.
-  - Catálogo con `campus_id` (Campus no lo tiene porque es el alcance): está sin decidir de dónde sale el campus del formulario (`activeCampus()` de la topbar o un select de `campuses()`), si la tabla filtra por el campus activo y si el campus se puede cambiar. Pregúntalo en el issue.
+  - Catálogo con `campus_id` (Campus no lo tiene porque es el alcance): el listado filtra por `$context->activeCampus()` y el alta usa ese campus, sin select de campus en el formulario; para trabajar en otro campus se cambia en la topbar. Sin campus activo, la pantalla pide elegir uno (`docs/arquitectura/arquitectura.md`, "Catálogos de un campus").
   - `with(<Modelo>Query $query, ScopedContext $context)` entrega a la vista todo lo que muestra. Nada de `<Modelo>::find()` ni `query()` en el componente, ni consultas en Blade.
   - `#[Locked]` en `editingId` y en las banderas que decide la policy; `#[Session]` en búsqueda y filtros, con `resetPage()` en `updated()`.
   - `validate()` solo de forma, con `validationAttributes()` y `messages()` en español; convierte tipos (números, listas) y llama la Action. Lo que el rol no puede cambiar no se manda, aunque llegue del navegador.
