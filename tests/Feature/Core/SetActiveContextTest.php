@@ -16,8 +16,8 @@ beforeEach(function () {
     $this->previous = Term::factory()->create();
 
     $this->user = User::factory()
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => 10])
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => 10])
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => fakeKey(10)])
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => fakeKey(10)])
         ->create();
 });
 
@@ -45,7 +45,7 @@ it('con null olvida la elección y vuelve al campus y periodo por omisión', fun
 });
 
 it('rechaza un campus fuera del alcance del usuario y no cambia el contexto', function () {
-    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => 20])->create());
+    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create());
     $other = Campus::factory()->create(['code' => 'C9']);
 
     expect(fn () => app(SetActiveContext::class)->handle($other, $this->previous))

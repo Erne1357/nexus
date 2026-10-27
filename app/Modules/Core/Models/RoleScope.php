@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,7 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class RoleScope extends Model
 {
     /** @use HasFactory<RoleScopeFactory> */
-    use HasFactory;
+    use HasFactory, HasUuids;
 
     /**
      * @return array<string, string>
@@ -31,9 +32,6 @@ class RoleScope extends Model
     {
         return [
             'role' => Role::class,
-            'campus_id' => 'integer',
-            'department_id' => 'integer',
-            'career_id' => 'integer',
             'valid_from' => 'immutable_date',
             'valid_to' => 'immutable_date',
         ];

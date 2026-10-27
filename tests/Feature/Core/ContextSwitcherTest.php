@@ -21,8 +21,8 @@ beforeEach(function () {
     $this->previous = Term::factory()->create(['code' => '2026-2', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
 
     $this->jefe = User::factory()
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => 10])
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => 10])
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => fakeKey(10)])
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => fakeKey(10)])
         ->create();
 });
 
@@ -39,7 +39,7 @@ it('ofrece solo los campus del alcance y todos los periodos, del más reciente a
 });
 
 it('con un solo campus lo muestra fijo, sin selector de campus', function () {
-    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => 20])->create());
+    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create());
 
     Livewire::test('core::components.context-switcher')
         ->assertSee('Campus II')
@@ -127,9 +127,9 @@ describe('elección rechazada', function () {
             ->and(session(ScopedContext::ACTIVE_TERM))->toBe($this->previous->id);
     });
 
-    it('con un campus o un periodo que no existen avisa con un toast, regresa la selección y no cambia el contexto', function (string $property) {
+    it('con un campus o un periodo que no existen avisa con un toast, regresa la selección y no cambia el contexto', function (string $property, string $id) {
         $component = Livewire::test('core::components.context-switcher')
-            ->set($property, 999_999)
+            ->set($property, $id)
             ->call('apply')
             ->assertOk()
             ->assertNoRedirect()
@@ -142,7 +142,10 @@ describe('elección rechazada', function () {
             ->description->toBe('El campus o el periodo elegido ya no existe.')
             ->and(session(ScopedContext::ACTIVE_CAMPUS))->toBe($this->c1->id)
             ->and(session(ScopedContext::ACTIVE_TERM))->toBe($this->previous->id);
-    })->with(['campusId', 'termId']);
+    })->with(['campusId', 'termId'])->with([
+        'uuid sin registro' => '0190a8c2-3d4e-7f00-8a00-000000000000',
+        'id que no es uuid' => '999999',
+    ]);
 });
 
 describe('sin periodo activo', function () {

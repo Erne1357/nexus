@@ -16,9 +16,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('term_stages', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('term_id')->constrained();
-            $table->foreignId('campus_id')->nullable()->constrained();
+            $table->uuid('id')->primary()->default(DB::raw('uuidv7()'));
+            $table->foreignUuid('term_id')->constrained();
+            $table->foreignUuid('campus_id')->nullable()->constrained();
             $table->string('stage');
             $table->date('starts_on');
             $table->date('ends_on');

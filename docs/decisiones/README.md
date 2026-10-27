@@ -17,5 +17,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0011](0011-pest-5.md) | Pest 5 (PHPUnit 13) para todas las pruebas; reemplaza la versión de Pest de 0002 | Aceptada | 2026-10-27 |
 | [0012](0012-dependencias-base.md) | Dependencias base de la fundación: activitylog, openspout y Boost | Aceptada | 2026-10-27 |
 | [0013](0013-despliegue-on-premise-itcj.md) | Despliegue on-premise en el ITCJ: HTTPS con Caddy, `.env` con permisos restringidos, `pg_dump` diario con retención | Aceptada; puntos por confirmar con el ITCJ | 2026-10-27 |
+| [0014](0014-uuidv7-como-llave-primaria.md) | UUIDv7 como llave primaria en todo modelo de Nexus; se editaron una sola vez las migraciones de la fase 0 | Aceptada | 2026-10-27 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.

@@ -27,8 +27,8 @@ final class TermQuery
      *
      * @throws ModelNotFoundException<Term>
      */
-    public function findOrFail(int $id): Term
+    public function findOrFail(string $id): Term
     {
-        return Term::query()->findOrFail($id);
+        return KeyLookup::findOrFail(Term::query(), $id);
     }
 }

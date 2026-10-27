@@ -131,7 +131,7 @@ final class ScopedContext
      *
      * @param  Role|list<Role>  $roles
      */
-    public function covers(Role|array $roles, Campus|int $campus, ?int $department = null, ?int $career = null): bool
+    public function covers(Role|array $roles, Campus|string $campus, ?string $department = null, ?string $career = null): bool
     {
         if ($this->isAdmin()) {
             return true;
@@ -149,7 +149,7 @@ final class ScopedContext
     /**
      * Si el usuario trabaja en el campus con algún rol, aunque sea sobre una parte de él.
      */
-    public function canAccessCampus(Campus|int $campus): bool
+    public function canAccessCampus(Campus|string $campus): bool
     {
         $campusId = $campus instanceof Campus ? $campus->getKey() : $campus;
 
@@ -213,7 +213,7 @@ final class ScopedContext
         $key = (string) $selected;
 
         if (! array_key_exists($key, $this->terms)) {
-            $this->terms[$key] = ($selected === null ? null : Term::find($selected)) ?? Term::current()->first();
+            $this->terms[$key] = KeyLookup::find(Term::query(), $selected) ?? Term::current()->first();
         }
 
         return $this->terms[$key];

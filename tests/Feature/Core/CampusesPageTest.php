@@ -288,9 +288,9 @@ describe('subdirección', function () {
 
 describe('otros roles e invitados', function () {
     $roles = [
-        'coordinador' => [Role::Coordinador, ['career_id' => 20]],
-        'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => 10]],
-        'jefe de proyecto docente' => [Role::JefeProyectoDocente, ['department_id' => 10]],
+        'coordinador' => [Role::Coordinador, ['career_id' => fakeKey(20)]],
+        'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => fakeKey(10)]],
+        'jefe de proyecto docente' => [Role::JefeProyectoDocente, ['department_id' => fakeKey(10)]],
         'docente' => [Role::Docente, []],
     ];
 
@@ -347,9 +347,9 @@ describe('menú', function () {
 
         expect(seesCampusMenu($user))->toBeFalse();
     })->with([
-        'coordinador' => [Role::Coordinador, ['career_id' => 20]],
-        'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => 10]],
-        'jefe de proyecto docente' => [Role::JefeProyectoDocente, ['department_id' => 10]],
+        'coordinador' => [Role::Coordinador, ['career_id' => fakeKey(20)]],
+        'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => fakeKey(10)]],
+        'jefe de proyecto docente' => [Role::JefeProyectoDocente, ['department_id' => fakeKey(10)]],
         'docente' => [Role::Docente, []],
     ]);
 });

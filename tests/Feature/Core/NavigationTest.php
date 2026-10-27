@@ -59,7 +59,7 @@ it('filtra por rol: admin, coordinador y docente ven menús distintos', function
     withDemoCatalogNavigation();
 
     $admin = User::factory()->admin()->create();
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => 20])->create();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create();
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
     // Presencia y ausencia, no listas exactas: cada módulo nuevo agrega entradas sin romper esta prueba.
@@ -71,7 +71,7 @@ it('filtra por rol: admin, coordinador y docente ven menús distintos', function
 it('decide por la ability de Gate con la policy del módulo', function () {
     withDemoCatalogNavigation();
 
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => 10])->create();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => fakeKey(10)])->create();
 
     expect(navigationLabelsFor($jefe))->not->toContain('Elementos')
         ->and(navigationLabelsFor(User::factory()->admin()->create()))->toContain('Elementos');
@@ -110,7 +110,7 @@ it('se arma una vez para toda la aplicación, no por petición', function () {
 describe('barra lateral', function () {
     it('muestra al coordinador sus entradas con enlace e icono, y no las del admin', function () {
         withDemoCatalogNavigation();
-        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => 20])->create());
+        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create());
 
         Livewire::test('core::components.navigation')
             ->assertSee('Inicio')

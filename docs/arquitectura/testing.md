@@ -32,6 +32,7 @@ La base es ancha en unit: las reglas de negocio son lo que más cambia y lo más
 - **Factories por módulo** en `app/Modules/<Módulo>/Database/Factories/`, con estados nombrados que expresen el dominio: docente de tiempo completo, docente de honorarios, materia con laboratorio, plan inactivo, grupo sin docente, carga cerrada.
 - **`DemoSeeder` de Campus II**: las 6 carreras con planes vigentes, tronco común compartido, seriación, docentes con plazas variadas, salones de varios tipos. Es el conjunto de datos de los browser tests, de las demostraciones del viernes y de las mediciones de rendimiento.
 - **Fixtures de importación** en `tests/Fixtures/imports/`: archivos pequeños con la estructura real de las exportaciones del SII, **anonimizados** (nombres y números de control inventados, claves de materia reales). Sirven para probar plantillas y el asistente de importación de principio a fin.
+- **Ids de registros que la prueba no crea:** `fakeKey(10)` (`tests/Pest.php`) da un uuid fijo y válido. Lo usan los departamentos y carreras de los alcances mientras Academic no tenga sus tablas; un id que no es uuid lo rechaza PostgreSQL ([ADR-0014](../decisiones/0014-uuidv7-como-llave-primaria.md)).
 - **Nunca datos personales reales en el repositorio.** Las exportaciones reales viven solo en el servidor de pruebas y en las máquinas del equipo, fuera de `git`.
 
 ## Base de datos de pruebas

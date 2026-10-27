@@ -57,14 +57,14 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 ### 3. Migraciones
 
 - Siempre con `--path=app/Modules/<M>/Database/Migrations`: sin él, la migración cae fuera del módulo. Modelo: `Database/Migrations/2026_10_27_000001_create_campuses_table.php`.
-- Catálogo: clave natural única (un registro borrado la sigue ocupando), la que dicen `reglas-de-negocio.md` ("Reglas de datos") y el modelo de datos. Puede ser compuesta: `rooms.code` es única por campus, `$table->unique(['campus_id', 'code'])`. Si no está escrita, pregunta. Además: `is_active` con `default(true)`, `timestampsTz()` y `softDeletesTz()`. El stub trae `timestamps()`: cámbialo. Eventos en `timestampTz`, horas de sesión en `time`, enums como `string`, jsonb para perfiles.
-- Tablas y columnas exactamente como `docs/dominio/modelo-de-datos.md`; si cambias algo, actualiza ese documento en el mismo PR. Llaves foráneas solo hacia tablas del módulo o de su izquierda. Academic agrega las FK de `role_scopes.department_id` y `career_id`, que Core dejó sin FK. Al hacerlo, las pruebas que usan ids sueltos (`'department_id' => 10`, `'career_id' => 20`, en muchas de `tests/Feature/Core/`) necesitan filas reales: ajústalas en el mismo PR, acordado en el issue.
+- Catálogo: clave natural única (un registro borrado la sigue ocupando), la que dicen `reglas-de-negocio.md` ("Reglas de datos") y el modelo de datos. Puede ser compuesta: `rooms.code` es única por campus, `$table->unique(['campus_id', 'code'])`. Si no está escrita, pregunta. Además: `is_active` con `default(true)`, `timestampsTz()` y `softDeletesTz()`. El stub trae `$table->id()` y `timestamps()`: cámbialos por `$table->uuid('id')->primary()->default(DB::raw('uuidv7()'))` y `timestampsTz()` (ADR-0014). Llaves foráneas con `foreignUuid()`, polimórficas con `nullableUuidMorphs()`. Eventos en `timestampTz`, horas de sesión en `time`, enums como `string`, jsonb para perfiles.
+- Tablas y columnas exactamente como `docs/dominio/modelo-de-datos.md`; si cambias algo, actualiza ese documento en el mismo PR. Llaves foráneas solo hacia tablas del módulo o de su izquierda. Academic agrega las FK de `role_scopes.department_id` y `career_id`, que Core dejó sin FK. Al hacerlo, las pruebas que usan ids sueltos (`'department_id' => fakeKey(10)`, `'career_id' => fakeKey(20)`, en muchas de `tests/Feature/Core/`) necesitan filas reales: ajústalas en el mismo PR, acordado en el issue.
 - Docblock en español con el porqué (catálogo, clave natural, ADR que aplica).
 - Una migración mezclada en `develop` no se edita: crea otra.
 
 ### 4. Modelo y factory
 
-- Copia `Models/Campus.php`: `#[Fillable([...])]`, `#[UseFactory(<Modelo>Factory::class)]`, `use HasFactory, SoftDeletes;` y `casts()` con enums y booleanos. Solo relaciones, casts, scopes y accessors: nada de "si el estado es X…", ni `request()`, `session()`, `auth()` o sus fachadas (`tests/Arch/ModulesTest.php`). Las relaciones apuntan solo a la izquierda: `Building::campus()` sí, `Campus::buildings()` no, porque Core importaría Facilities.
+- Copia `Models/Campus.php`: `#[Fillable([...])]`, `#[UseFactory(<Modelo>Factory::class)]`, `use HasFactory, HasUuids, SoftDeletes;` (UUIDv7, lo exige arch) y `casts()` con enums y booleanos. Solo relaciones, casts, scopes y accessors: nada de "si el estado es X…", ni `request()`, `session()`, `auth()` o sus fachadas (`tests/Arch/ModulesTest.php`). Las relaciones apuntan solo a la izquierda: `Building::campus()` sí, `Campus::buildings()` no, porque Core importaría Facilities.
 - Copia `Database/Factories/CampusFactory.php`: `#[UseModel(<Modelo>::class)]` (fuera de `app/Models` y `database/factories` Laravel no empareja modelo y factory por convención: hacen falta los dos atributos), `definition()` válido con `fake()->unique()` en la clave natural, y estados con nombre del dominio (`inactive()`).
 - No uses `make:model` ni `make:factory`: escriben en `app/Models` y `database/factories`.
 
@@ -95,7 +95,7 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 
 - Copia `Queries/CampusQuery.php`, `final`:
   - `forTable(ScopedContext $context, string $search = '', ?bool $active = null, int $perPage = 15)`: al admin todo; a los demás, solo lo que la policy les deja ver, sin repetir la lógica de alcance. Búsqueda con `->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))` (`Queries/TextSearch.php`); filtro de estado; orden por la clave natural; `paginate()`.
-  - `findOrFail(int $id)` carga lo que se edita.
+  - `findOrFail(string $id)` carga lo que se edita con `KeyLookup::findOrFail(<Modelo>::query(), $id)`: el id llega del cliente y uno que no es uuid haría fallar a PostgreSQL.
 - CampusQuery filtra con `Gate::forUser($context->user())` sobre `ScopedContext::campuses()` porque los campus son el alcance mismo. Una tabla con columnas de alcance (`campus_id`, `department_id`, `career_id`) no se autoriza fila por fila: se filtra en SQL con los alcances de `$context->scopes()`, y una prueba confirma que el resultado coincide con la policy.
 
 ### 9. Página MFC
@@ -174,6 +174,7 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 | Autorizar solo en `mount()` | Autorizar en cada método público y probarlo llamándolo directo |
 | `covers(Role::Docente, …)` esperando `true` | `covers()` nunca cubre al docente; su acceso lo deciden Staffing y Scheduling por asignación |
 | `if ($campus->code === 'C2')` | El perfil de flujo, `$campus->profile` |
+| `wire:click="edit({{ $campus->id }})"` sin comillas, o `findOrFail()` directo con un id del cliente | `edit('{{ $campus->id }}')` también en `spinner`; buscar con `KeyLookup::findOrFail()`. Un uuid sin comillas es un error de JS y uno inválido, un 500 de PostgreSQL |
 | `NavigationItem` con una ruta que no existe, o antes que su pantalla | En el mismo PR que la ruta; `tests/Feature/Core/NavigationTest.php` lo atrapa |
 | Toast con texto sin `e()` | XSS: MaryUI lo pinta con `x-html` |
 | `hasMany` desde un modelo de Core u otro módulo de la izquierda hacia el nuevo | La relación solo del lado nuevo (`belongsTo`); arch lo rechaza |

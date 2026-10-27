@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -13,7 +14,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('campuses', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary()->default(DB::raw('uuidv7()'));
             $table->string('code')->unique();
             $table->string('name');
             $table->string('modality');

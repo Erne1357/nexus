@@ -6,6 +6,7 @@ use App\Modules\Core\Enums\Stage;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable(['term_id', 'campus_id', 'stage', 'starts_on', 'ends_on'])]
 class TermStage extends Model
 {
+    use HasUuids;
+
     /**
      * @return array<string, string>
      */
@@ -49,7 +52,7 @@ class TermStage extends Model
      * @param  Builder<self>  $query
      */
     #[Scope]
-    protected function appliesTo(Builder $query, Campus|int $campus): void
+    protected function appliesTo(Builder $query, Campus|string $campus): void
     {
         $campusId = $campus instanceof Campus ? $campus->getKey() : $campus;
 

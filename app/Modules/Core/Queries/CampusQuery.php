@@ -39,8 +39,8 @@ final class CampusQuery
      *
      * @throws ModelNotFoundException<Campus>
      */
-    public function findOrFail(int $id): Campus
+    public function findOrFail(string $id): Campus
     {
-        return Campus::query()->findOrFail($id);
+        return KeyLookup::findOrFail(Campus::query(), $id);
     }
 }

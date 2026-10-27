@@ -15,7 +15,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('terms', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary()->default(DB::raw('uuidv7()'));
             $table->string('code')->unique();
             $table->string('name');
             $table->date('starts_on');

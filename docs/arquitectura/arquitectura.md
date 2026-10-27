@@ -133,6 +133,17 @@ sequenceDiagram
     L-->>U: re-render con mensajes del validador
 ```
 
+## Llaves
+
+Todo modelo de Nexus usa UUIDv7 como llave primaria ([ADR-0014](../decisiones/0014-uuidv7-como-llave-primaria.md)); `tests/Arch/ModulesTest.php` y `tests/Feature/Core/PrimaryKeysTest.php` lo exigen.
+
+- **Migración:** `$table->uuid('id')->primary()->default(DB::raw('uuidv7()'));`, `foreignUuid()` para las llaves foráneas y `nullableUuidMorphs()` para las polimórficas. El default cubre los inserts que no pasan por el modelo, como las importaciones en bloque.
+- **Modelo:** `use HasUuids;`, que genera el UUIDv7 en la app antes de insertar.
+- **Ids que llegan del cliente:** una propiedad de Livewire, un argumento de `wire:click` o un segmento de ruta pueden traer algo que no es uuid, y PostgreSQL lo rechaza con un error. Las Queries buscan con `KeyLookup::findOrFail($query, $id)` (`Core/Queries`), que lo trata como un registro que no existe (`ModelNotFoundException`), o con `KeyLookup::find()`, que devuelve `null` (así lee `ScopedContext` el periodo guardado en la sesión). Una prueba de texto prohíbe `find()` y `findOrFail()` del modelo en Queries y componentes. Las propiedades de id son `?string`; un select vacío llega como `''`, así que se pregunta con `blank()`.
+- **Blade:** el id va entre comillas en las expresiones que Livewire evalúa: `wire:click="edit('{{ $campus->id }}')"` y `spinner="edit('{{ $campus->id }}')"`.
+- **Orden:** los listados ordenan por una columna del dominio (código, nombre, fecha), no por `id`.
+- **Infraestructura:** `jobs`, `failed_jobs`, `roles`, `permissions` y `activity_log` conservan su llave bigint; no son entidades de Nexus. Por eso el sujeto de la bitácora es siempre un modelo de Nexus: un cambio de rol se registra sobre el usuario, no sobre el `Role` de spatie.
+
 ## Autorización y alcance
 
 - Los **roles** (spatie, enum `Role`) dicen qué puede hacer alguien; los **alcances** (`role_scopes`, modelo `RoleScope`) dicen sobre qué campus, departamento o carrera. Un rol cuenta solo con el rol de spatie **y** un alcance vigente hoy en Ciudad Juárez (`RoleScope::current()`), en un campus activo y no borrado, que llene lo que exige `Role::scopeColumns()`: campus para `subdireccion` y `docente`, departamento en un campus para los dos jefes, carrera en un campus para `coordinador`. Un usuario inactivo no tiene ningún rol.
@@ -144,8 +155,8 @@ sequenceDiagram
 | Método | Responde |
 |---|---|
 | `has(Role $role): bool` | ejerce el rol en algún lugar |
-| `covers(Role\|array $roles, Campus\|int $campus, ?int $department = null, ?int $career = null): bool` | con alguno de los roles cubre el campus completo, o el departamento o la carrera dentro de él |
-| `canAccessCampus(Campus\|int $campus): bool` | trabaja en el campus con algún rol, aunque sea sobre una parte |
+| `covers(Role\|array $roles, Campus\|string $campus, ?string $department = null, ?string $career = null): bool` | con alguno de los roles cubre el campus completo, o el departamento o la carrera dentro de él |
+| `canAccessCampus(Campus\|string $campus): bool` | trabaja en el campus con algún rol, aunque sea sobre una parte |
 | `isAdmin()`, `user()`, `scopes(?Role $role = null)` | admin, usuario activo, alcances vigentes y completos |
 | `campuses()`, `activeCampus()`, `activeTerm()` | campus activos donde trabaja (selector de la topbar), y el campus y periodo activos |
 | `forUser(User $user)` | el contexto de otro usuario, sin su elección de sesión; se recuerda por id en la instancia y no carga los roles del autenticado para compararlo |

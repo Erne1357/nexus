@@ -2,6 +2,8 @@
 
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /*
@@ -202,3 +204,45 @@ arch('module policies check role and scope through UsesScopedContext')
     ->expect($layer('Policies'))
     ->classes()
     ->toUseTrait(UsesScopedContext::class);
+
+// ADR-0014: todo modelo de Nexus usa UUIDv7 como llave primaria. Models/ también tiene value
+// objects (CampusProfile), que no son modelos y no cuentan.
+test('module models use UUIDv7 primary keys', function (string $module) use ($filesIn, $namespace, $root) {
+    $violations = [];
+
+    foreach ($filesIn("{$root}/app/Modules/{$module}/Models") as $file) {
+        $relative = substr($file->getPathname(), strlen("{$root}/app/Modules/{$module}/Models/"), -strlen('.php'));
+        $class = $namespace($module).'\\Models\\'.str_replace('/', '\\', $relative);
+
+        if (! is_subclass_of($class, Model::class) || (new ReflectionClass($class))->isAbstract()) {
+            continue;
+        }
+
+        if (! in_array(HasUuids::class, class_uses_recursive($class), true) || ! Str::isUuid((new $class)->newUniqueId(), 7)) {
+            $violations[] = $class;
+        }
+    }
+
+    expect($violations)->toBeEmpty(implode(PHP_EOL, $violations));
+})->with(array_keys($leftOf));
+
+// ADR-0014: un id del cliente que no es uuid hace fallar a PostgreSQL. Las Queries buscan por llave
+// con KeyLookup, nunca con find() del modelo, y los componentes leen por las Queries. Como arch() no
+// ve las MFC, se revisa el texto.
+test('module queries and components look up keys through KeyLookup', function (string $module) use ($filesIn, $root) {
+    $patterns = [
+        'Queries' => '/(?:->|(?<!KeyLookup)::)(?:find|findOrFail|findOr|findMany)\(/',
+        'Livewire' => '/(?:(?<!KeyLookup)::(?:find|findOrFail|findOr|findMany)|query\(\)[^;]*->(?:find|findOrFail|findOr|findMany))\(/',
+    ];
+    $violations = [];
+
+    foreach ($patterns as $folder => $pattern) {
+        foreach ($filesIn("{$root}/app/Modules/{$module}/{$folder}") as $file) {
+            if ($file->getFilename() !== 'KeyLookup.php' && preg_match($pattern, file_get_contents($file->getPathname()))) {
+                $violations[] = substr($file->getPathname(), strlen($root) + 1);
+            }
+        }
+    }
+
+    expect($violations)->toBeEmpty(implode(PHP_EOL, $violations));
+})->with(array_keys($leftOf));

@@ -1,6 +1,6 @@
 # Modelo de datos
 
-Modelo conceptual por módulo. Describe tablas, campos clave y decisiones; los tipos exactos y los índices se definen en las migraciones de cada módulo (ver `docs/arquitectura/arquitectura.md`). Nombres de tablas y columnas en inglés, `snake_case`, plural. Todos los modelos usan `id` bigint autoincremental y `timestamps`; los catálogos usan **soft deletes** nunca borrado físico.
+Modelo conceptual por módulo. Describe tablas, campos clave y decisiones; los tipos exactos y los índices se definen en las migraciones de cada módulo (ver `docs/arquitectura/arquitectura.md`). Nombres de tablas y columnas en inglés, `snake_case`, plural. Todos los modelos usan `id` UUIDv7 (`HasUuids` y `default uuidv7()`, [ADR-0014](../decisiones/0014-uuidv7-como-llave-primaria.md)), con llaves foráneas y polimórficas en `uuid`, y `timestamps`; los catálogos usan **soft deletes** nunca borrado físico.
 
 Convenciones transversales:
 

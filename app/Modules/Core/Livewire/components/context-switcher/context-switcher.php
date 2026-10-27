@@ -25,9 +25,9 @@ new class extends Component
 {
     use Toast;
 
-    public ?int $campusId = null;
+    public ?string $campusId = null;
 
-    public ?int $termId = null;
+    public ?string $termId = null;
 
     public function mount(ScopedContext $context): void
     {
@@ -49,8 +49,8 @@ new class extends Component
     public function apply(SetActiveContext $setActiveContext, ScopedContext $context, CampusQuery $campuses, TermQuery $terms): void
     {
         try {
-            $campus = $this->campusId === null ? null : $campuses->findOrFail($this->campusId);
-            $term = $this->termId === null ? null : $terms->findOrFail($this->termId);
+            $campus = blank($this->campusId) ? null : $campuses->findOrFail($this->campusId);
+            $term = blank($this->termId) ? null : $terms->findOrFail($this->termId);
 
             $setActiveContext->handle($campus, $term?->is_current ? null : $term);
         } catch (ModelNotFoundException) {
