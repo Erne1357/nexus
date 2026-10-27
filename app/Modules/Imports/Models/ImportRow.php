@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * Fila de un lote: cómo vino (`raw`), normalizada, sus errores y advertencias por campo y, ya
  * aplicada, el registro que escribió (`target`).
  */
-#[Fillable(['batch_id', 'row_number', 'raw', 'normalized', 'errors', 'warnings', 'status', 'target_type', 'target_id'])]
+#[Fillable(['batch_id', 'row_number', 'raw', 'normalized', 'errors', 'warnings', 'status', 'key_hash', 'target_type', 'target_id'])]
 #[UseFactory(ImportRowFactory::class)]
 class ImportRow extends Model
 {

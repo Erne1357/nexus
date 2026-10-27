@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
+use Tests\Fixtures\ImportTemplates\CampusScopedTemplate;
 
 /*
 | StoreImportBatch guarda el archivo que sube el admin en el disco `imports` (storage/app/imports,
@@ -23,22 +24,9 @@ use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 | ImportBatchPolicy.
 */
 
-class StoreBatchCampusScopedTemplate extends CampusesTemplate
-{
-    public function key(): string
-    {
-        return 'test-campus-scoped';
-    }
-
-    public function requiresCampus(): bool
-    {
-        return true;
-    }
-}
-
 beforeEach(function () {
     Storage::fake('imports');
-    app()->instance(TemplateRegistry::class, new TemplateRegistry([CampusesTemplate::class, StoreBatchCampusScopedTemplate::class]));
+    app()->instance(TemplateRegistry::class, new TemplateRegistry([CampusesTemplate::class, CampusScopedTemplate::class]));
     $this->admin = User::factory()->admin()->create();
 });
 
@@ -83,7 +71,7 @@ it('guarda el mapeo de columnas elegido', function () {
     expect(storeImportBatch($this->admin, mapping: $mapping)->mapping->is($mapping))->toBeTrue();
 });
 
-it('acepta xlsx y csv sin importar mayúsculas en la extensión', function (string $name) {
+it('acepta xlsx, csv y txt sin importar mayúsculas en la extensión', function (string $name) {
     $batch = storeImportBatch($this->admin, file: UploadedFile::fake()->createWithContent($name, 'x'));
 
     Storage::disk('imports')->assertExists($batch->file_path);
@@ -99,6 +87,15 @@ it('registra en la bitácora quién subió qué archivo y para qué plantilla', 
         ->description->toBe('Subió campus.csv para importar Campus (prueba)')
         ->and($entry->subject->is($batch))->toBeTrue()
         ->and($entry->causer->is($this->admin))->toBeTrue();
+});
+
+it('recorta un nombre de archivo demasiado largo y conserva la extensión', function () {
+    $name = str_repeat('exportacion_sii_', 20).'.csv';
+
+    $batch = storeImportBatch($this->admin, file: UploadedFile::fake()->createWithContent($name, 'x'));
+
+    expect(mb_strlen($batch->fresh()->original_name))->toBeLessThanOrEqual(255)
+        ->and($batch->original_name)->toEndWith('.csv');
 });
 
 it('avisa con BatchUploaded solo después del commit', function () {
@@ -118,11 +115,13 @@ it('avisa con BatchUploaded solo después del commit', function () {
     }
 
     expect($heard)->toBe([])
-        ->and(ImportBatch::count())->toBe(0);
+        ->and(ImportBatch::count())->toBe(0)
+        ->and(Storage::disk('imports')->allFiles())->toBe([]);
 
     storeImportBatch($this->admin);
 
-    expect($heard)->toBe(['campus.csv']);
+    expect($heard)->toBe(['campus.csv'])
+        ->and(Storage::disk('imports')->allFiles())->toHaveCount(1);
 });
 
 it('rechaza sin guardar nada lo que no se puede importar', function (Closure $attempt, string $field, string $message) {
@@ -145,7 +144,7 @@ it('rechaza sin guardar nada lo que no se puede importar', function (Closure $at
     ],
     'Excel antiguo' => [
         fn (User $admin) => storeImportBatch($admin, file: UploadedFile::fake()->createWithContent('campus.xls', 'x')),
-        'file', 'El archivo debe ser .xlsx o .csv.',
+        'file', 'El archivo debe ser .xlsx, .csv o .txt.',
     ],
     'plantilla de campus sin campus' => [
         fn (User $admin) => storeImportBatch($admin, 'test-campus-scoped'),
@@ -154,5 +153,13 @@ it('rechaza sin guardar nada lo que no se puede importar', function (Closure $at
     'mapeo de otra plantilla' => [
         fn (User $admin) => storeImportBatch($admin, mapping: ImportMapping::factory()->create(['template' => 'test-campus-scoped'])),
         'mapping', 'El mapeo de columnas es de otra plantilla.',
+    ],
+    'mapeo a campos que la plantilla ya no tiene' => [
+        fn (User $admin) => storeImportBatch($admin, mapping: ImportMapping::factory()->create(['columns' => ['CVE' => 'code', 'TEL' => 'phone']])),
+        'mapping', 'El mapeo de columnas apunta a campos que la plantilla ya no tiene: phone.',
+    ],
+    'mapeo desactivado' => [
+        fn (User $admin) => storeImportBatch($admin, mapping: ImportMapping::factory()->create(['is_active' => false])),
+        'mapping', 'El mapeo de columnas está desactivado.',
     ],
 ]);

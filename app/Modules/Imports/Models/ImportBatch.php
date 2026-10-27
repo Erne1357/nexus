@@ -72,12 +72,12 @@ class ImportBatch extends Model
     }
 
     /**
-     * Filas en el orden del archivo.
+     * Filas del lote, sin orden: quien las lista las ordena por `row_number`.
      *
      * @return HasMany<ImportRow, $this>
      */
     public function rows(): HasMany
     {
-        return $this->hasMany(ImportRow::class, 'batch_id')->orderBy('row_number');
+        return $this->hasMany(ImportRow::class, 'batch_id');
     }
 }

@@ -25,6 +25,7 @@ class ImportMappingFactory extends Factory
             'name' => 'SII '.fake()->unique()->numerify('####'),
             'columns' => ['CVE' => 'code', 'NOMBRE' => 'name', 'MODALIDAD' => 'modality'],
             'created_by' => User::factory(),
+            'is_active' => true,
         ];
     }
 }

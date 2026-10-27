@@ -8,6 +8,7 @@ use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Events\BatchUploaded;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
+use App\Modules\Imports\Readers\SpreadsheetReader;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -22,20 +23,18 @@ use Throwable;
  * validar es ValidateImportBatch, en cola. No sabe de roles: quién sube lo decide la página con
  * ImportBatchPolicy.
  *
- * Rechaza con una ValidationException por campo, sin guardar nada, una plantilla que no existe, un
- * archivo que no es .xlsx ni .csv, una plantilla de campus sin campus (el de la topbar) y un mapeo de
- * otra plantilla. En una plantilla que no es de un campus, el campus no se guarda.
+ * Rechaza con una ValidationException por campo, sin guardar nada: una plantilla que no existe, un
+ * archivo que SpreadsheetReader no lee, una plantilla de campus sin campus (el de la topbar), y un
+ * mapeo de otra plantilla, desactivado o que apunta a campos que la plantilla ya no tiene. En una
+ * plantilla que no es de un campus, el campus no se guarda. Un nombre de archivo de más de 255
+ * caracteres se recorta y conserva su extensión.
  *
- * El archivo se guarda antes de la transacción; si la transacción falla, se borra. Después del
- * commit avisa con BatchUploaded.
+ * El archivo se guarda antes que el lote, para que exista cuando alguien lea el lote. Si esta
+ * transacción o una de afuera que la contenga se revierte, el archivo se borra: trae datos personales
+ * y no debe quedar sin lote. Después del commit avisa con BatchUploaded.
  */
 final class StoreImportBatch
 {
-    /**
-     * Extensiones que SpreadsheetReader sabe leer.
-     */
-    private const array EXTENSIONS = ['csv', 'txt', 'xlsx'];
-
     public function __construct(private readonly TemplateRegistry $templates) {}
 
     /**
@@ -49,8 +48,8 @@ final class StoreImportBatch
 
         $extension = strtolower($file->getClientOriginalExtension());
 
-        if (! in_array($extension, self::EXTENSIONS, true)) {
-            throw ValidationException::withMessages(['file' => 'El archivo debe ser .xlsx o .csv.']);
+        if (! in_array($extension, SpreadsheetReader::EXTENSIONS, true)) {
+            throw ValidationException::withMessages(['file' => 'El archivo debe ser .xlsx, .csv o .txt.']);
         }
 
         $definition = $this->templates->get($template);
@@ -59,15 +58,15 @@ final class StoreImportBatch
             throw ValidationException::withMessages(['campus' => 'Elige en la barra superior el campus al que pertenece el archivo.']);
         }
 
-        if ($mapping !== null && $mapping->template !== $template) {
-            throw ValidationException::withMessages(['mapping' => 'El mapeo de columnas es de otra plantilla.']);
+        if ($mapping !== null) {
+            $this->ensureMappingFits($mapping, $template, array_keys($definition->fields()));
         }
 
         $batch = new ImportBatch([
             'template' => $template,
             'campus_id' => $definition->requiresCampus() ? $campus->id : null,
             'mapping_id' => $mapping?->id,
-            'original_name' => $file->getClientOriginalName(),
+            'original_name' => $this->storedName($file->getClientOriginalName(), $extension),
             'status' => BatchStatus::Uploaded,
             'uploaded_by' => $user->id,
         ]);
@@ -78,7 +77,10 @@ final class StoreImportBatch
         $disk->putFileAs('', $file, $batch->file_path);
 
         try {
-            return DB::transaction(function () use ($batch, $user, $definition): ImportBatch {
+            return DB::transaction(function () use ($batch, $user, $definition, $disk): ImportBatch {
+                // Si una transacción de afuera se revierte después de este commit, el lote desaparece.
+                DB::afterRollBack(fn () => $disk->delete($batch->file_path));
+
                 $batch->save();
 
                 activity()
@@ -97,5 +99,39 @@ final class StoreImportBatch
 
             throw $exception;
         }
+    }
+
+    /**
+     * @param  list<string>  $fields
+     *
+     * @throws ValidationException
+     */
+    private function ensureMappingFits(ImportMapping $mapping, string $template, array $fields): void
+    {
+        if ($mapping->template !== $template) {
+            throw ValidationException::withMessages(['mapping' => 'El mapeo de columnas es de otra plantilla.']);
+        }
+
+        if (! $mapping->is_active) {
+            throw ValidationException::withMessages(['mapping' => 'El mapeo de columnas está desactivado.']);
+        }
+
+        $unknown = array_values(array_diff($mapping->columns, $fields));
+
+        if ($unknown !== []) {
+            throw ValidationException::withMessages(['mapping' => 'El mapeo de columnas apunta a campos que la plantilla ya no tiene: '.implode(', ', $unknown).'.']);
+        }
+    }
+
+    /**
+     * El nombre original en a lo más 255 caracteres (el largo de la columna), con su extensión.
+     */
+    private function storedName(string $name, string $extension): string
+    {
+        if (mb_strlen($name) <= 255) {
+            return $name;
+        }
+
+        return mb_substr(pathinfo($name, PATHINFO_FILENAME), 0, 254 - mb_strlen($extension)).'.'.$extension;
     }
 }
