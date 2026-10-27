@@ -72,7 +72,7 @@ Reglas:
 - **Models** solo tienen relaciones, casts, scopes y accessors. Nada de "si el estado es X entonces…" dentro del modelo; eso va en Actions o Rules.
 - **Livewire** valida entrada, llama Actions o Queries y renderiza. Sin consultas en Blade.
 - Un módulo **no importa clases** de un módulo a su derecha en el mapa de dependencias (ver `docs/dominio/modelo-de-datos.md`). La comunicación en sentido contrario se hace con **eventos** (por ejemplo, `Imports` emite `BatchApplied` y `Students` recalcula progreso al escucharlo).
-- Pruebas de arquitectura en `tests/Arch/ModulesTest.php` hacen cumplir estas reglas: cada carpeta de `app/Modules` está en el mapa y tiene su provider registrado; dependencias solo hacia la izquierda del mapa, con `arch()` para las clases y una revisión de texto de toda la carpeta del módulo para lo que `arch()` no ve (rutas, migraciones y componentes MFC, que son clases anónimas, y Blade), que detecta namespaces, imports agrupados y alias (`scheduling::…`); modelos sin request, sesión ni auth (fachadas, alias globales como `\Auth`, helpers y los contratos `Guard`, `StatefulGuard` y `Factory`); Actions `final`; enums respaldados por string. El mapa está copiado en la prueba y otra prueba lo compara con el diagrama de `docs/dominio/modelo-de-datos.md`: si cambia uno, cambia el otro en el mismo PR.
+- Pruebas de arquitectura en `tests/Arch/ModulesTest.php` hacen cumplir estas reglas: cada carpeta de `app/Modules` está en el mapa y tiene su provider registrado; dependencias solo hacia la izquierda del mapa, con `arch()` para las clases y una revisión de texto de toda la carpeta del módulo para lo que `arch()` no ve (rutas, migraciones y componentes MFC, que son clases anónimas, y Blade), que detecta namespaces, imports agrupados y alias (`scheduling::…`); modelos sin request, sesión ni auth (fachadas, alias globales como `\Auth`, helpers y los contratos `Guard`, `StatefulGuard` y `Factory`); Actions `final`; enums respaldados por string; policies con el trait `UsesScopedContext`. El mapa está copiado en la prueba y otra prueba lo compara con el diagrama de `docs/dominio/modelo-de-datos.md`: si cambia uno, cambia el otro en el mismo PR.
 
 ## Módulos
 
@@ -113,10 +113,25 @@ sequenceDiagram
 
 ## Autorización y alcance
 
-- Los **roles** dicen qué puede hacer alguien; los **alcances** (`role_scopes`) dicen sobre qué campus, departamento o carrera.
-- Cada Policy comprueba ambos. Ejemplo: un `jefe_departamento` puede asignar docente a un grupo solo si el grupo pertenece a un departamento y campus de su alcance.
-- La navegación y los tableros se filtran por alcance desde una Query central en `Core` (`ScopedContext`), para que ninguna pantalla tenga que repetir la lógica.
-- Un `admin` ve todo pero sus acciones quedan en bitácora como las de cualquiera.
+- Los **roles** (spatie, enum `Role`) dicen qué puede hacer alguien; los **alcances** (`role_scopes`, modelo `RoleScope`) dicen sobre qué campus, departamento o carrera. Un rol cuenta solo con el rol de spatie **y** un alcance vigente hoy en Ciudad Juárez (`RoleScope::current()`), en un campus activo y no borrado, que llene lo que exige `Role::scopeColumns()`: campus para `subdireccion` y `docente`, departamento en un campus para los dos jefes, carrera en un campus para `coordinador`. Un usuario inactivo no tiene ningún rol.
+- `admin` tiene todos los roles y lo cubre todo sin alcance, también los campus desactivados o borrados (los reactiva en el CRUD de Campus), pero sus acciones quedan en bitácora como las de cualquiera.
+- `docente` nunca cubre por `covers()`, ni pasando `Role::Docente`: su acceso a su propia carga lo deciden las policies de Staffing y Scheduling por asignación. `has(Role::Docente)` y `canAccessCampus()` sí lo cuentan.
+- Un alcance cubre un objetivo de su campus si no fija departamento o carrera, o si fija los del objetivo: el jefe de D cubre lo de D en cualquier carrera; el coordinador de X, lo de X en cualquier departamento.
+- `ScopedContext` (`Core/Queries`) es la única puerta para preguntar por rol y alcance; el contenedor la registra con `scoped` (una instancia por petición, por Octane) para el usuario autenticado:
+
+| Método | Responde |
+|---|---|
+| `has(Role $role): bool` | ejerce el rol en algún lugar |
+| `covers(Role\|array $roles, Campus\|int $campus, ?int $department = null, ?int $career = null): bool` | con alguno de los roles cubre el campus completo, o el departamento o la carrera dentro de él |
+| `canAccessCampus(Campus\|int $campus): bool` | trabaja en el campus con algún rol, aunque sea sobre una parte |
+| `isAdmin()`, `user()`, `scopes(?Role $role = null)` | admin, usuario activo, alcances vigentes y completos |
+| `campuses()`, `activeCampus()`, `activeTerm()` | campus activos donde trabaja (selector de la topbar), y el campus y periodo activos |
+| `forUser(User $user)` | el contexto de otro usuario, sin su elección de sesión; se recuerda por id en la instancia y no carga los roles del autenticado para compararlo |
+| `refresh(): void` | vuelve a cargar roles y alcances en la misma petición; la llama la Action que los cambie |
+
+- **Policies:** usan el trait `Core\Policies\Concerns\UsesScopedContext` (una prueba arch lo exige) y preguntan con `$this->scope($user)`, que decide por el usuario que recibe la policy aunque no sea el autenticado (`Gate::forUser()`). Ejemplo: `$this->scope($user)->covers([Role::JefeDepartamento, Role::Coordinador], $group->campus_id, department: $group->department_id, career: $group->career_id)`.
+- **Contexto activo:** la Action `SetActiveContext::handle(?Campus $campus, ?Term $term)` lo guarda en la sesión (`ScopedContext::ACTIVE_CAMPUS` y `ACTIVE_TERM`); rechaza con `AuthorizationException` un campus que no esté en `campuses()` y `null` vuelve al de omisión. Por omisión, el campus es el único de `campuses()` (si hay varios, ninguno) y el periodo, el `is_current`. Cada lectura revalida el campus guardado contra el alcance vigente; `campuses()` y `activeTerm()` se recuerdan en la petición.
+- La navegación y los tableros se filtran por alcance con `ScopedContext`, para que ninguna pantalla repita la lógica. Las pruebas usan `User::factory()->admin()` y `User::factory()->withRole(Role::Coordinador, ['campus_id' => …, 'career_id' => …])`, que lanza `InvalidArgumentException` si el alcance no llena lo que exige el rol.
 
 ## Acceso
 
