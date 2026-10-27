@@ -106,22 +106,50 @@ it('no carga el archivo completo: entrega las filas conforme se piden', function
         ->and($rows->count())->toBe(5000);
 });
 
-it('rechaza con un mensaje en español lo que no puede leer', function (string $extension, string $contents, string $message) {
-    (new SpreadsheetReader)->header(spreadsheetFile($extension, $contents));
+it('rechaza con un mensaje en español lo que no puede leer', function (string $path, string $message) {
+    expect(fn () => (new SpreadsheetReader)->header($path))->toThrow(UnreadableFile::class, $message);
 })->with([
-    'Excel antiguo' => ['xls', 'x', 'Guarda el archivo como .xlsx o .csv'],
-    'sin encabezado' => ['csv', '', 'El archivo está vacío'],
-    'encabezado repetido' => ['csv', "clave,clave\nA,B\n", 'La columna «clave» se repite'],
-])->throws(UnreadableFile::class);
+    'Excel antiguo' => [fn () => spreadsheetFile('xls', 'x'), 'Guarda el archivo como .xlsx o .csv para importarlo.'],
+    'sin encabezado' => [fn () => spreadsheetFile('csv', ''), 'El archivo está vacío: no tiene encabezado.'],
+    'encabezado repetido' => [fn () => spreadsheetFile('csv', "clave,clave\nA,B\n"), 'La columna «clave» se repite en el encabezado.'],
+    'archivo que ya no existe' => [fn () => sys_get_temp_dir().'/no-existe.csv', 'No se encontró el archivo que se subió.'],
+]);
 
-it('el mensaje de un archivo ilegible dice qué pasó', function () {
-    try {
-        (new SpreadsheetReader)->header(spreadsheetFile('csv', "clave,clave\nA,B\n"));
-    } catch (UnreadableFile $exception) {
-        expect($exception->getMessage())->toBe('La columna «clave» se repite en el encabezado.');
+it('detecta Windows-1252 aunque el primer acento aparezca después de los primeros 64 KB', function () {
+    $ascii = str_repeat("ISC,Sistemas\n", 7000);
+    $path = spreadsheetFile('csv', "clave,nombre\n".$ascii.mb_convert_encoding("IGE,Núñez\n", 'Windows-1252', 'UTF-8'));
 
-        return;
-    }
+    expect((new SpreadsheetReader)->rows($path)->last())->toBe(['clave' => 'IGE', 'nombre' => 'Núñez']);
+});
 
-    $this->fail('Se esperaba UnreadableFile.');
+it('no confunde un UTF-8 válido con Windows-1252 cuando un acento cae en el borde de un bloque', function () {
+    // "code," mide 5 bytes: el bloque de 64 KB termina a la mitad de una "ó" (2 bytes).
+    $long = str_repeat('ó', 40000);
+    $path = spreadsheetFile('csv', "code,{$long}\nISC,x\n");
+
+    expect((new SpreadsheetReader)->header($path))->toBe(['code', $long]);
+});
+
+it('lee el texto Unicode de Excel (UTF-16 con BOM, separado por tabuladores)', function () {
+    $path = spreadsheetFile('txt', "\xFF\xFE".mb_convert_encoding("clave\tnombre\nIGE\tGestión\n", 'UTF-16LE', 'UTF-8'));
+
+    expect((new SpreadsheetReader)->rows($path)->all())->toBe([2 => ['clave' => 'IGE', 'nombre' => 'Gestión']]);
+});
+
+it('toma el encabezado y el separador de la primera fila que no está vacía', function () {
+    $path = spreadsheetFile('csv', "\n\nclave;nombre\nISC;Sistemas\n");
+
+    expect((new SpreadsheetReader)->rows($path)->all())->toBe([4 => ['clave' => 'ISC', 'nombre' => 'Sistemas']]);
+});
+
+it('salta las filas que solo tienen espacios', function () {
+    $path = spreadsheetFile('csv', "clave,nombre\n , \nISC,Sistemas\n");
+
+    expect((new SpreadsheetReader)->rows($path)->all())->toBe([3 => ['clave' => 'ISC', 'nombre' => 'Sistemas']]);
+});
+
+it('convierte a texto una fecha en el encabezado de un XLSX', function () {
+    $path = xlsxFile([['clave', new DateTimeImmutable('2027-01-15')], ['ISC', 'x']]);
+
+    expect((new SpreadsheetReader)->header($path))->toBe(['clave', '2027-01-15']);
 });
