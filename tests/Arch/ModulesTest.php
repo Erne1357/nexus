@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Policies\Concerns\UsesScopedContext;
 use Illuminate\Support\Str;
 
 /*
@@ -194,3 +195,10 @@ arch('module actions are final')
 arch('module enums are string backed')
     ->expect($layer('Enums'))
     ->toBeStringBackedEnums();
+
+// CLAUDE.md, arquitectura 6: toda policy decide por rol y alcance con ScopedContext, a través del
+// trait, que además usa el usuario que recibe la policy y no siempre el autenticado.
+arch('module policies check role and scope through UsesScopedContext')
+    ->expect($layer('Policies'))
+    ->classes()
+    ->toUseTrait(UsesScopedContext::class);
