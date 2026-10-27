@@ -2,6 +2,8 @@
 
 Guías generadas por Laravel Boost (`boost:install` / `boost:update`) para este proyecto: Laravel 13, Livewire 4, Pest 5 y los paquetes instalados. El bloque siguiente se regenera; no se edita a mano (ver `docs/herramientas/ia-tooling.md`). Las reglas específicas de Nexus están en [CLAUDE.md](CLAUDE.md), que importa este archivo.
 
+Si una guía del bloque siguiente choca con [CLAUDE.md](CLAUDE.md) o con [docs/arquitectura/testing.md](docs/arquitectura/testing.md), mandan esos. En particular: todo comando corre con `docker compose exec` (con `-w` en un worktree), Pint va sin `--dirty` porque el contenedor no tiene git, y la pirámide de pruebas es la de testing.md (base ancha en unit).
+
 <laravel-boost-guidelines>
 === foundation rules ===
 
@@ -63,10 +65,6 @@ Before relying on a package's API, confirm its installed version:
 2. Use `"quoted phrases"` for exact position matching: `"infinite scroll"` requires adjacent words in order.
 3. Combine words and phrases for mixed queries: `middleware "rate limit"`.
 4. Use multiple queries for OR logic: `queries=["authentication", "middleware"]`.
-
-## Project Rules
-
-- This project contains committed, area-grouped rules in `.ai/rules` when that directory exists, including path-scoped framework guidelines under `.ai/rules/boost`. Before you enter plan mode or create/edit any file, you MUST first: open @.ai/rules/index.md (it maps file globs to rule files), read every rule file whose globs cover the path(s) in scope, and run `grep -rin 'keyword' .ai/rules` to catch what a path match alone misses. Do not write code until you have read and are following every matching rule. If `.ai/rules` does not exist, continue without it.
 
 ## Artisan
 

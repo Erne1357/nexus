@@ -30,7 +30,7 @@ Notas de uso:
 - Regenerar las guías cuando cambien las dependencias (`composer require`/`update`): `docker compose exec app php artisan boost:update`, y commitear el cambio de `AGENTS.md`. Para cambiar qué se instala (agentes, paquetes de terceros) se repite `boost:install`; revisa después que `CLAUDE.md` y `.mcp.json` sigan intactos (`git diff`).
 - No se instalan las *skills* de Boost en `.claude/skills/`: el proyecto solo tendrá las tres propias de abajo. Por eso `boost.json` no lista `skills`.
 - Comprobación rápida del servidor (JSON-RPC por stdin): `initialize`, `notifications/initialized` y `tools/list` a `docker compose exec -T app php artisan boost:mcp`. Herramientas actuales: `application-info`, `browser-logs`, `database-connections`, `database-query`, `database-schema`, `get-absolute-url`, `last-error`, `read-log-entries`, `record-rule`, `search-docs`.
-- El servidor del plugin global (`plugin:laravel-boost`) falla con `Executable not found in $PATH: php` porque busca PHP local. No estorba; se puede desactivar en `/plugin` o en `~/.claude/settings.json` (`enabledPlugins`: `"laravel-boost@…": false`) para quitar el error. El que se usa es `boost`, el del proyecto.
+- El servidor del plugin global (`plugin:laravel-boost`) falla con `Executable not found in $PATH: php` porque busca PHP local. No estorba; se puede desactivar en `/plugin` o en `~/.claude/settings.json` (`enabledPlugins`: `"laravel-boost@claude-plugins-official": false`) para quitar el error. El que se usa es `boost`, el del proyecto.
 
 ### Permisos y hooks de Claude Code
 

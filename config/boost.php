@@ -29,7 +29,8 @@ return [
     */
 
     'rules' => [
-        'enabled' => env('BOOST_RULES_ENABLED', true),
+        // Nexus: las decisiones van en docs/decisiones y las convenciones en CLAUDE.md, no en .ai/rules.
+        'enabled' => env('BOOST_RULES_ENABLED', false),
         'scoped_guidelines' => env('BOOST_RULES_SCOPED_GUIDELINES', false),
     ],
 
