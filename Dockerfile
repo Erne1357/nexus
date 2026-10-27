@@ -45,7 +45,9 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
 # ---------------------------------------------------------------------------
 FROM base AS dev
 
-RUN cp "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
+# sockets: lo exige pestphp/pest-plugin-browser (solo dev y CI, no prod)
+RUN cp "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini" \
+    && install-php-extensions sockets
 
 USER app
 
@@ -75,8 +77,9 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY vite.config.js ./
 COPY resources ./resources
-# Tailwind escanea las vistas de paginación de Laravel
+# Tailwind escanea las vistas de paginación de Laravel y los componentes de MaryUI
 COPY --from=vendor /app/vendor/laravel/framework/src/Illuminate/Pagination/resources/views ./vendor/laravel/framework/src/Illuminate/Pagination/resources/views
+COPY --from=vendor /app/vendor/robsontenorio/mary/src/View/Components ./vendor/robsontenorio/mary/src/View/Components
 
 RUN npm run build
 
