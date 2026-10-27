@@ -15,7 +15,7 @@ Nexus es la nueva fuente de verdad académica del Instituto Tecnológico de Ciud
 1. Lee [PLAN.md](PLAN.md) y el archivo de la fase activa en `docs/plan/`.
 2. Toma un issue (`gh issue view <n>`). Cada issue referencia una tarea del plan (por ejemplo `3.2`).
 3. Si la fase está marcada 🟦 (vaga), **no implementes**: primero una sesión de planeación que la vuelva detallada.
-4. Trabaja en una rama `feature/<issue>-<slug>` creada desde `develop`, en un worktree propio.
+4. Trabaja en una rama `feature/<issue>-<slug>` creada desde `develop`, en un worktree propio dentro del repo (`.worktrees/<rama>`; comandos con `docker compose exec -w /app/.worktrees/<rama> app ...`, detalle en [CONTRIBUTING.md](CONTRIBUTING.md)).
 5. Si el issue es claro, ve directo a TDD. Si hay ambigüedad, usa brainstorming y pregunta antes.
 6. Antes de abrir el PR: suite completa verde, Pint, `/code-review`, documentación de la fase actualizada.
 
@@ -27,7 +27,7 @@ Todo corre en Docker. **No hay PHP, Composer ni Node en la máquina local**; nun
 docker compose up -d --build                      # levantar (dev usa compose.override.yaml)
 docker compose exec app php artisan test          # Pest: unit + feature + browser (tests/Browser)
 docker compose exec app php artisan test --filter=NombreDelTest
-docker compose exec app ./vendor/bin/pint --dirty # formato antes de cada commit
+docker compose exec app ./vendor/bin/pint         # formato antes de cada commit (sin --dirty: no hay git en el contenedor)
 docker compose exec app php artisan migrate
 docker compose exec app php artisan make:livewire <ruta>   # genera MFC por defecto
 docker compose logs -f app queue
@@ -42,7 +42,7 @@ docker compose exec app composer require <paquete>         # dependencias siempr
 | Valkey | Caché, sesiones y colas (`redis`) |
 | Fortify (username) + spatie/permission + alcances propios | Sin registro público |
 | spatie/activitylog | Bitácora inmutable |
-| Pest 4 | Unit, feature, browser y arch |
+| Pest 5 | Unit, feature, browser y arch |
 | Laravel Boost (MCP) | Docs exactas de Laravel, Livewire y Pest; ver `docs/herramientas/ia-tooling.md` |
 
 ## 4. Arquitectura en diez líneas
@@ -75,7 +75,7 @@ Detalle: `docs/arquitectura/arquitectura.md`.
 
 ## 6. Pruebas (obligatorio)
 
-TDD: escribe la prueba (rojo), la implementación mínima (verde), refactoriza. Pest 4.
+TDD: escribe la prueba (rojo), la implementación mínima (verde), refactoriza. Pest 5.
 
 - **Unit:** reglas, Actions, Queries, scorers, plantillas de importación.
 - **Feature:** componentes Livewire, jobs, policies y alcance, transiciones de estado, seeders, restricciones de BD.

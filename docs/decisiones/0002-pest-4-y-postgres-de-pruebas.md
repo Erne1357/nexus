@@ -1,6 +1,6 @@
 # ADR-0002 — Pest 4 en tres niveles y PostgreSQL para pruebas
 
-**Estado:** Aceptada · **Fecha:** 2026-10-26
+**Estado:** Aceptada; la versión de Pest la reemplaza [ADR-0011](0011-pest-5.md) · **Fecha:** 2026-10-26
 
 ## Contexto
 Gran parte del código lo escribirá la IA; se requiere TDD y pruebas E2E sin mantener dos ecosistemas.

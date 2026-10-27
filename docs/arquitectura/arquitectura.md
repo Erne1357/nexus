@@ -13,7 +13,7 @@ Nexus es un **monolito modular** en Laravel 13 + Livewire 4. No es hexagonal ni 
 | Caché, sesiones, colas | Valkey 9 (driver `redis`) | Colas para importaciones, recálculos y corridas del motor. |
 | Auth | Laravel Fortify (username + contraseña), spatie/laravel-permission | Sin registro público; los usuarios se crean desde importación o por un admin. |
 | Bitácora | spatie/laravel-activitylog | Inmutable. |
-| Pruebas | Pest 4 (unit, feature, browser) | Ver `docs/arquitectura/testing.md`. |
+| Pruebas | Pest 5 (unit, feature, browser) | Ver `docs/arquitectura/testing.md`. |
 | Motor de horarios | Heurística en PHP (R2) y servicio Python con OR-Tools CP-SAT (R2) | Ver `docs/arquitectura/solver.md`. |
 | Infraestructura | Docker Compose: nginx, app, queue, postgres, valkey, vite (dev); `solver` se añade en R2 | |
 

@@ -50,7 +50,7 @@ Detalles en `docs/dominio/glosario.md` y `docs/dominio/reglas-de-negocio.md`.
 | Arquitectura | Monolito modular (`app/Modules/*`), sin hexagonal ni DDD | Equipo de 3, poco tiempo, módulos repartibles sin ceremonia. Ver `docs/arquitectura/arquitectura.md` |
 | UI | Livewire 4 MFC + MaryUI (daisyUI) + Tailwind 4 | Un solo lenguaje, componentes listos, sin SPA |
 | Auth | Fortify con **username** y contraseña; roles con spatie/laravel-permission y alcances propios | Usuarios vienen del SII con username; sin SSO disponible hoy |
-| Pruebas | TDD con Pest 4: unit, feature y browser; CI en GitHub Actions contra PostgreSQL | Atrapar errores de código generado con IA antes de integrar |
+| Pruebas | TDD con Pest 5: unit, feature y browser; CI en GitHub Actions contra PostgreSQL | Atrapar errores de código generado con IA antes de integrar |
 | Datos | PostgreSQL 18 única fuente; importación por archivos con staging y validación; sin borrado físico; bitácora inmutable | Transparencia y reproducibilidad |
 | Motor | R1 sin motor (validador + edición manual); R2 heurística PHP y luego OR-Tools CP-SAT en Python bajo un contrato JSON | Fecha de R1 muy corta; el algoritmo complejo sí es objetivo |
 | Paralelos | Se reemplazan por cupos por carrera dentro del grupo | Elimina el sobrecupo y simplifica la inscripción |
