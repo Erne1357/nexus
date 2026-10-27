@@ -6,7 +6,8 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Calendario del proceso: ventana de fechas de cada etapa del periodo. `campus_id` nulo aplica
- * a todos los campus.
+ * a todos los campus. Una etapa tiene una sola ventana por periodo y campus, y una sola para
+ * todos los campus (`campus_id` nulo cuenta como un valor más para la unicidad).
  */
 return new class extends Migration
 {
@@ -21,7 +22,7 @@ return new class extends Migration
             $table->date('ends_on');
             $table->timestampsTz();
 
-            $table->index(['term_id', 'stage']);
+            $table->unique(['term_id', 'campus_id', 'stage'])->nullsNotDistinct();
             $table->index('campus_id');
         });
     }
