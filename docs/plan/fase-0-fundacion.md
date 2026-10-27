@@ -72,7 +72,7 @@ Dejar una base sobre la que tres personas puedan trabajar en paralelo desde el 3
 La fase se cerró con todas sus tareas mezcladas en `develop`. Quedan fuera del código:
 
 - **Despliegue en el servidor de pruebas del ITCJ (0.14).** Todo está listo en `compose.prod.yaml` y [docs/operacion/despliegue.md](../operacion/despliegue.md). Falta acceso al servidor y confirmar dominio, DNS, puertos 80/443 y quién copia los respaldos fuera del servidor ([ADR-0013](../decisiones/0013-despliegue-on-premise-itcj.md)).
-- **Supuestos por confirmar con el equipo.** En todos se eligió la opción más restrictiva que no contradice los documentos:
+- **Supuestos confirmados por el equipo el 27 de octubre.** Se habían tomado con la opción más restrictiva que no contradice los documentos y ya no son provisionales:
   - **Alcances:**
     - el docente necesita un alcance por campus y nunca "cubre" gestión;
     - el admin cuenta como si tuviera todos los roles;
@@ -82,13 +82,13 @@ La fase se cerró con todas sus tareas mezcladas en `develop`. Quedan fuera del 
     - el username se compara exacto, con mayúsculas;
     - los accesos no van a la bitácora (solo `last_login_at`);
     - 5 intentos por minuto y contraseña de 8 caracteres con letras y números.
-  - **Campus:** Subdirección edita solo el perfil de flujo de sus campus, y EAD, ENL y TNMV quedan inactivos hasta la fase 10.
-  - **Diseño:** la paleta de colores es provisional, a la espera de la institucional.
+  - **Campus:** Subdirección edita solo el perfil de flujo de sus campus ([reglas-de-negocio.md](../dominio/reglas-de-negocio.md#aprobaciones-y-permisos)), y EAD, ENL y TNMV quedan inactivos hasta la fase 10.
+  - **Inicio:** el admin ve solo el bloque "Administración".
+- **Diseño:** la paleta de colores sigue provisional, a la espera de la institucional.
 - **Decisiones antes de la fase 1:**
-  1. La tarea 1.4 pone a Students a escuchar `BatchApplied` de Imports, pero el mapa lo prohíbe (Imports está a la derecha de Students). Opción: el listener vive en Imports y llama una Action de Students.
+  1. **Resuelta.** Students no escucha `BatchApplied` de Imports, porque el mapa lo prohíbe: las plantillas `students` y `kardex` viven en `Imports/Templates/` y despachan el job de recálculo de Students (tareas 1.1 y 1.4 de [fase-1-catalogos-importacion.md](fase-1-catalogos-importacion.md)).
   2. Cuando Academic agregue las FK de `role_scopes`, las pruebas que usan ids inventados de departamento o carrera tendrán que crear registros reales.
-  3. `reglas-de-negocio.md` no dice quién administra edificios y salones, ni cómo un catálogo con `campus_id` elige su campus: el activo de la topbar o un select.
+  3. **Resuelta.** Edificios y salones los administran `admin` y `subdireccion` de su campus, y todo catálogo con `campus_id` toma el campus del contexto activo de la topbar ([arquitectura.md](../arquitectura/arquitectura.md#autorización-y-alcance)).
 - **Seguridad:**
-  - PHPUnit 13.4.3 tiene un aviso (PKSA-qhjm-rpqc-qkn6) que no se puede corregir mientras Pest 5.3.3 pida `phpunit <=13.4.3`; solo afecta a la cobertura de PHPT;
-  - se neutralizó un XSS almacenado en la ruta `/mary/toogle-sidebar` de MaryUI. Falta decidir si se reporta al proyecto.
-
+  - PHPUnit 13.4.3 tiene un aviso (PKSA-qhjm-rpqc-qkn6) que no se puede corregir mientras Pest 5.3.3 pida `phpunit <=13.4.3`; solo afecta a la cobertura de PHPT. Se decidió esperar a la siguiente versión de Pest, así que `composer audit` lo seguirá mostrando hasta entonces;
+  - se neutralizó un XSS almacenado en la ruta `/mary/toogle-sidebar` de MaryUI y se decidió no reportarlo al proyecto.

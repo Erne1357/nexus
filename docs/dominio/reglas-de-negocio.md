@@ -69,7 +69,8 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 
 | Acción | Quién | Condición |
 |---|---|---|
-| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | |
+| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, solo en sus campus y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin` |
+| Administrar edificios y salones | `admin`, `subdireccion` de su campus | |
 | Importar catálogos | `admin` | |
 | Validar catálogos del departamento | `jefe_departamento` del departamento y campus | |
 | Enviar propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
