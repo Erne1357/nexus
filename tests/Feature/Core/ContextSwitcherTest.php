@@ -5,6 +5,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
 /*
@@ -103,28 +104,91 @@ it('al volver a "Elige un campus" olvida el campus elegido', function () {
         ->and(app(ScopedContext::class)->activeCampus())->toBeNull();
 });
 
-it('rechaza un campus fuera del alcance y no cambia el contexto', function () {
-    $this->actingAs($this->jefe);
+/**
+ * El último toast que el componente mandó mostrar: MaryUI lo evalúa en el navegador como `toast({...})`.
+ *
+ * @return array{type: string, title: string, description: ?string}|null
+ */
+function lastToastOf(Testable $component): ?array
+{
+    $expression = collect($component->effects['xjs'] ?? [])
+        ->pluck('expression')
+        ->last(fn (string $expression): bool => str_starts_with($expression, 'toast('));
 
-    Livewire::test('core::components.context-switcher')
-        ->set('campusId', $this->foreign->id)
-        ->call('apply')
-        ->assertForbidden();
+    return $expression === null ? null : json_decode(substr($expression, 6, -1), true)['toast'];
+}
 
-    expect(session()->has(ScopedContext::ACTIVE_CAMPUS))->toBeFalse()
-        ->and(app(ScopedContext::class)->activeCampus())->toBeNull();
+describe('elección rechazada', function () {
+    beforeEach(function () {
+        $this->actingAs($this->jefe);
+        session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id, ScopedContext::ACTIVE_TERM => $this->previous->id]);
+    });
+
+    it('con un campus fuera del alcance avisa con un toast, regresa la selección y no cambia el contexto', function () {
+        $component = Livewire::test('core::components.context-switcher')
+            ->set('campusId', $this->foreign->id)
+            ->set('termId', $this->current->id)
+            ->call('apply')
+            ->assertOk()
+            ->assertNoRedirect()
+            ->assertSet('campusId', $this->c1->id)
+            ->assertSet('termId', $this->previous->id);
+
+        expect(lastToastOf($component))
+            ->type->toBe('error')
+            ->title->toBe('No se cambió el campus ni el periodo')
+            ->description->toBe('No trabajas en ese campus.')
+            ->and(session(ScopedContext::ACTIVE_CAMPUS))->toBe($this->c1->id)
+            ->and(session(ScopedContext::ACTIVE_TERM))->toBe($this->previous->id);
+    });
+
+    it('con un campus o un periodo que no existen avisa con un toast, regresa la selección y no cambia el contexto', function (string $property) {
+        $component = Livewire::test('core::components.context-switcher')
+            ->set($property, 999_999)
+            ->call('apply')
+            ->assertOk()
+            ->assertNoRedirect()
+            ->assertSet('campusId', $this->c1->id)
+            ->assertSet('termId', $this->previous->id);
+
+        expect(lastToastOf($component))
+            ->type->toBe('error')
+            ->title->toBe('No se cambió el campus ni el periodo')
+            ->description->toBe('El campus o el periodo elegido ya no existe.')
+            ->and(session(ScopedContext::ACTIVE_CAMPUS))->toBe($this->c1->id)
+            ->and(session(ScopedContext::ACTIVE_TERM))->toBe($this->previous->id);
+    })->with(['campusId', 'termId']);
 });
 
-it('rechaza un campus o un periodo que no existen', function (string $property) {
-    $this->actingAs($this->jefe);
+describe('sin periodo activo', function () {
+    beforeEach(function () {
+        $this->current->update(['is_current' => false]);
+        $this->actingAs($this->jefe);
+    });
 
-    Livewire::test('core::components.context-switcher')
-        ->set($property, 999_999)
-        ->call('apply')
-        ->assertNotFound();
+    it('muestra una opción vacía "Sin periodo" en lugar de aparentar que el primero está activo', function () {
+        Livewire::test('core::components.context-switcher')
+            ->assertSet('termId', null)
+            ->assertSeeHtml('<option value="">Sin periodo</option>');
+    });
 
-    expect(session()->has(ScopedContext::ACTIVE_CAMPUS))->toBeFalse();
-})->with(['campusId', 'termId']);
+    it('deja elegir cualquier periodo', function (string $term) {
+        Livewire::test('core::components.context-switcher')
+            ->set('termId', $this->{$term}->id)
+            ->call('apply')
+            ->assertRedirect();
+
+        expect(app(ScopedContext::class)->activeTerm()?->is($this->{$term}))->toBeTrue();
+    })->with(['current', 'previous']);
+
+    it('con un periodo activo no ofrece la opción vacía', function () {
+        $this->current->update(['is_current' => true]);
+
+        Livewire::test('core::components.context-switcher')
+            ->assertSet('termId', $this->current->id)
+            ->assertDontSeeHtml('Sin periodo');
+    });
+});
 
 it('sin sesión no ofrece campus ni periodos', function () {
     Livewire::test('core::components.context-switcher')
