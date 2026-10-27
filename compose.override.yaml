@@ -1,0 +1,43 @@
+# Desarrollo local: código montado como volumen, Octane con --watch y Vite con HMR.
+
+services:
+  app:
+    image: nexus-app:dev
+    build:
+      target: dev
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    # Laravel lee .env desde el volumen; sin variables inyectadas para que
+    # phpunit.xml pueda usar su propio entorno (SQLite en memoria).
+    env_file: !reset []
+    volumes:
+      - .:/app
+
+  queue:
+    image: nexus-app:dev
+    build:
+      target: dev
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    env_file: !reset []
+    # queue:listen arranca un proceso por job: los cambios de código se aplican sin reiniciar
+    command: ["php", "artisan", "queue:listen", "redis", "--tries=3", "--backoff=10", "--sleep=1"]
+    volumes:
+      - .:/app
+
+  postgres:
+    ports:
+      - "${FORWARD_DB_PORT:-5432}:5432"
+
+  vite:
+    image: node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev"]
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    volumes:
+      - .:/app
+    networks: [backend]
