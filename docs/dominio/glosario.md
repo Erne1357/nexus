@@ -8,7 +8,7 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Campus** | `Campus` | Unidad donde se imparte la oferta: Campus I, Campus II, EAD, EnLínea, TecNM Virtual. Cada campus tiene una **modalidad** y un perfil de flujo. |
 | **Modalidad** | `Modality` (enum) | Forma de impartición: `presencial` (Campus I y II), `mixta` (EAD: virtual lunes a jueves, presencial viernes y sábado), `en_linea` (EnLínea), `virtual_tecnm` (TecNM Virtual, docentes del TecNM). Cambia qué pasos del flujo aplican. |
 | **Periodo escolar / semestre** | `Term` | Ciclo (Ene-Jun, Ago-Dic) identificado como `2027-1`, `2027-2`. Toda carga académica pertenece a un periodo. |
-| **Etapa del periodo** | `TermStage` | Ventana de fechas de cada paso del proceso dentro de un periodo (validación de catálogos, propuesta, asignación docente, cierre, publicación, re-análisis). |
+| **Etapa del periodo** | `TermStage` (enum `Stage`) | Ventana de fechas de cada paso del proceso dentro de un periodo (validación de catálogos, propuesta, asignación docente, cierre, publicación, re-análisis). |
 | **Departamento académico** | `Department` | Unidad que agrupa docentes y materias (Sistemas y Computación, Ciencias Básicas, Industrial, Eléctrica-Electrónica, Metal-Mecánica, Económico-Administrativas, etc.). Su **jefe** asigna docentes y salones. |
 | **Jefe de departamento académico** | rol `jefe_departamento` | Responsable de asignar docentes y salones a los grupos de las materias de su departamento, de validar sus catálogos y de cerrar su carga. |
 | **Jefe de proyecto docente** | rol `jefe_proyecto_docente` | Co-responsable, junto al jefe de departamento, de la asignación docente según prioridad de base. |

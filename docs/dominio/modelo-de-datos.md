@@ -36,16 +36,18 @@ Regla: un módulo solo puede depender de los módulos que están a su izquierda 
 
 ## Core
 
+Todas las tablas de Core, incluidas las base de Laravel (`users`, `sessions`, `cache`, `jobs`) y las publicadas de spatie, viven en `app/Modules/Core/Database/Migrations`. Las tablas propias usan `timestamptz` en `created_at`, `updated_at` y `deleted_at`.
+
 | Tabla | Campos clave | Notas |
 |---|---|---|
-| `users` | `username` (único), `name`, `email` (opcional), `password`, `is_active`, `last_login_at` | Login por **username** con Fortify. Un usuario puede o no estar ligado a un `teachers.user_id`. |
-| `roles`, `permissions`, `model_has_roles`, … | (spatie/laravel-permission) | Roles: `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente`, `coordinador`, `docente`; R3 añade `alumno`, `servicios_escolares`. |
-| `role_scopes` | `user_id`, `role`, `campus_id?`, `department_id?`, `career_id?`, `valid_from`, `valid_to` | **Alcance** de un rol: un coordinador lo es de una carrera en un campus; un jefe, de un departamento en un campus. Las policies consultan esta tabla. |
-| `campuses` | `code` (`C1`, `C2`, `EAD`, `ENL`, `TNMV`), `name`, `modality` (enum), `settings` (json), `is_active` | `settings` guarda el **perfil de flujo**: `uses_rooms`, `uses_time_blocks`, `staffing_mode` (`department` / `central`), `block_minutes`, `day_start`, `day_end`, `days`, `requires_subdireccion_approval`. |
-| `terms` | `code` (`2027-1`), `name`, `starts_on`, `ends_on`, `is_current` | Un solo periodo "actual" para capturar carga; se pueden consultar los anteriores. |
-| `term_stages` | `term_id`, `campus_id?`, `stage` (enum), `starts_on`, `ends_on` | Calendario del proceso. `campus_id` nulo aplica a todos. |
-| `settings` | `scope` (`global` / `campus` / `department`), `scope_id?`, `key`, `value` (json) | Parámetros editables sin despliegue: pesos del ranking docente, tolerancia de horas, cupos por defecto. |
-| `activity_log` | (spatie) | Inmutable: sin `update` ni `delete` a nivel de política y de permisos de BD. |
+| `users` | `username` (único), `name`, `email` (opcional), `password`, `is_active`, `must_change_password`, `last_login_at` (timestamptz) | Login por **username** con Fortify. Un usuario nuevo nace activo y con `must_change_password = true`: cambia la contraseña generada en su primer acceso. Un usuario puede o no estar ligado a un `teachers.user_id`. |
+| `roles`, `permissions`, `model_has_roles`, … | (spatie/laravel-permission) | Roles (enum `Role`): `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente`, `coordinador`, `docente`; R3 añade `alumno`, `servicios_escolares`. Sin permisos finos hasta la tarea 0.7. |
+| `role_scopes` | `user_id`, `role`, `campus_id?`, `department_id?`, `career_id?`, `valid_from`, `valid_to?` | **Alcance** de un rol: un coordinador lo es de una carrera en un campus; un jefe, de un departamento en un campus. Las policies consultan esta tabla. `role` es el valor del enum `Role`; `valid_to` nulo es vigente sin fecha de fin. `department_id` y `career_id` van **sin FK** porque Core no depende de Academic: Academic agrega las FK a `departments` y `careers` en su propia migración. |
+| `campuses` | `code` (`C1`, `C2`, `EAD`, `ENL`, `TNMV`, único aun entre borrados), `name`, `modality` (enum `Modality`: `presencial`, `mixta`, `en_linea`, `virtual_tecnm`), `settings` (jsonb), `is_active`, `deleted_at` | `settings` guarda el **perfil de flujo**: `uses_rooms`, `uses_time_blocks`, `staffing_mode` (`department` / `central`), `block_minutes`, `day_start`, `day_end` (`HH:MM`), `days` (1 = lunes a 6 = sábado), `allow_external_teachers`, `requires_subdireccion_approval`. `Campus::profile` lo expone como `CampusProfile` de solo lectura: una clave que falta toma el perfil presencial de PROJECT.md (sin externos y con visto bueno de Subdirección mientras no se confirme) y un valor inválido lanza error. |
+| `terms` | `code` (`2027-1`, único), `name`, `starts_on`, `ends_on`, `is_current` | Un solo periodo "actual" para capturar carga, garantizado con un índice único parcial; se pueden consultar los anteriores. |
+| `term_stages` | `term_id`, `campus_id?`, `stage` (enum `Stage`), `starts_on`, `ends_on` | Calendario del proceso. `campus_id` nulo aplica a todos (`TermStage::appliesTo($campus)`). `stage`: las etapas 2 a 9 de `docs/proceso/proceso-propuesto.md`: `catalog_validation`, `proposal`, `scheduling`, `staffing`, `rooms`, `closing`, `publication`, `reanalysis`. |
+| `settings` | `scope` (enum `SettingScope`: `global` / `campus` / `department`), `scope_id?`, `key`, `value` (jsonb) | Parámetros editables sin despliegue: pesos del ranking docente, tolerancia de horas, cupos por defecto. Una clave es única por alcance (`scope`, `scope_id`, `key`, con nulos no distintos). |
+| `activity_log` | (spatie) | Inmutable: un trigger de PostgreSQL rechaza `UPDATE`, `DELETE` y `TRUNCATE` venga de donde venga; por eso no se usa `activitylog:clean`. Eventos con `timestamptz`. |
 | `notifications` | (Laravel) | Canal `database`; correo opcional después. |
 
 ## Academic
