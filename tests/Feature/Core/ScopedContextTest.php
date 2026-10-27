@@ -9,6 +9,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -105,6 +106,15 @@ describe('alcance por rol', function () {
             ->and($context->covers($management, $this->c2, department: 10, career: 20))->toBeFalse();
     });
 
+    it('un docente nunca cubre por covers(), ni con Role::Docente: su carga se autoriza por asignación', function () {
+        $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+
+        expect($context->covers(Role::Docente, $this->c2))->toBeFalse()
+            ->and($context->covers([Role::Docente, Role::Coordinador], $this->c2, department: 10, career: 20))->toBeFalse()
+            ->and($context->has(Role::Docente))->toBeTrue()
+            ->and($context->canAccessCampus($this->c2))->toBeTrue();
+    });
+
     it('cubre con cualquiera de varios roles el que el usuario sí tiene', function () {
         $context = scopedContextOf(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => 20])->create());
 
@@ -153,6 +163,44 @@ describe('vigencia y coherencia del alcance', function () {
 
         expect(scopedContextOf($endsToday)->has(Role::Docente))->toBeTrue()
             ->and(scopedContextOf($startsTomorrow)->has(Role::Docente))->toBeFalse();
+    });
+
+    it('un alcance en un campus desactivado o borrado no cuenta', function (string $retired) {
+        $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => 20])->create();
+        $retired === 'borrado' ? $this->c2->delete() : $this->c2->update(['is_active' => false]);
+
+        $context = scopedContextOf($user);
+
+        expect($context->has(Role::Coordinador))->toBeFalse()
+            ->and($context->covers(Role::Coordinador, $this->c2->id, career: 20))->toBeFalse()
+            ->and($context->canAccessCampus($this->c2->id))->toBeFalse()
+            ->and($context->scopes())->toBeEmpty();
+    })->with(['desactivado', 'borrado']);
+
+    it('el admin sigue cubriendo los campus desactivados y borrados', function () {
+        $this->c1->update(['is_active' => false]);
+        $this->c2->delete();
+
+        $context = scopedContextOf(User::factory()->admin()->create());
+
+        expect($context->covers(Role::Coordinador, $this->c1->id, career: 20))->toBeTrue()
+            ->and($context->canAccessCampus($this->c2->id))->toBeTrue();
+    });
+
+    it('refresh() vuelve a cargar roles y alcances en la misma petición', function () {
+        $user = User::factory()->create();
+        $context = scopedContextOf($user);
+
+        expect($context->covers(Role::Coordinador, $this->c2, career: 20))->toBeFalse();
+
+        User::find($user->id)->assignRole(Role::Coordinador);
+        RoleScope::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => 20]);
+
+        expect($context->covers(Role::Coordinador, $this->c2, career: 20))->toBeFalse();
+
+        $context->refresh();
+
+        expect($context->covers(Role::Coordinador, $this->c2, career: 20))->toBeTrue();
     });
 
     it('un rol de spatie sin alcance vigente no da acceso', function () {
@@ -222,6 +270,22 @@ describe('campus y periodo activos por omisión', function () {
         $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
 
         expect($context->activeTerm()?->is($current))->toBeTrue();
+    });
+
+    it('recuerda el periodo activo en la petición, pero sigue una elección nueva', function () {
+        $current = Term::factory()->current()->create();
+        $previous = Term::factory()->create();
+        $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        $context->activeTerm();
+
+        DB::enableQueryLog();
+
+        expect($context->activeTerm()?->is($current))->toBeTrue()
+            ->and(DB::getQueryLog())->toBeEmpty();
+
+        app(SetActiveContext::class)->handle(null, $previous);
+
+        expect($context->activeTerm()?->is($previous))->toBeTrue();
     });
 
     it('el campus activo por omisión es el único del alcance', function () {

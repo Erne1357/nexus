@@ -3,6 +3,7 @@
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Tests\Fixtures\Modules\DemoCatalog\Models\Item;
 
@@ -83,4 +84,30 @@ it('decide por el usuario que recibe la policy, no por el autenticado', function
     $this->actingAs($docente);
     expect(Gate::forUser($admin)->allows('update', $this->item))->toBeTrue()
         ->and(Gate::allows('update', $this->item))->toBeFalse();
+});
+
+it('pregunta por otro usuario sin cargar los roles ni alcances del autenticado', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => 20])->create();
+
+    DB::enableQueryLog();
+    Gate::forUser($coordinador)->allows('update', $this->item);
+
+    $scopeQueries = collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'role_scopes'));
+
+    expect($scopeQueries)->toHaveCount(1);
+});
+
+it('recuerda el contexto de otro usuario: repetir la policy no repite consultas', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => 20])->create();
+    Gate::forUser($coordinador)->allows('update', $this->item);
+
+    DB::enableQueryLog();
+
+    foreach (range(1, 5) as $call) {
+        Gate::forUser($coordinador)->allows('update', $this->item);
+    }
+
+    expect(DB::getQueryLog())->toBeEmpty();
 });
