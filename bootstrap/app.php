@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Http\Middleware\EnsurePasswordIsChanged;
 use App\Modules\Core\Http\Middleware\EnsureUserIsActive;
+use App\Modules\Core\Http\Middleware\NormalizeSidebarState;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,11 +20,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
 
         // Para toda ruta web (Core): cierra las demás sesiones cuando cambia la contraseña, la de
-        // un usuario desactivado, y obliga a cambiar la contraseña en el primer acceso.
+        // un usuario desactivado, obliga a cambiar la contraseña en el primer acceso y deja el
+        // estado de la barra lateral de MaryUI en 'true' o 'false'.
         $middleware->web(append: [
             AuthenticateSession::class,
             EnsureUserIsActive::class,
             EnsurePasswordIsChanged::class,
+            NormalizeSidebarState::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

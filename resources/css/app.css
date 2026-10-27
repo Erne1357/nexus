@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 
-@plugin 'daisyui';
+/* Solo los temas de Nexus (abajo); sin los de daisyUI. */
+@plugin 'daisyui' {
+    themes: false;
+}
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -10,4 +13,82 @@
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/*
+| Temas de Nexus (DESIGN.md). Paleta inicial, pendiente de validación institucional: guinda y gris
+| del ITCJ como punto de partida. Razones de contraste WCAG en DESIGN.md, "Tema".
+*/
+@plugin 'daisyui/theme' {
+    name: 'nexus';
+    default: true;
+    prefersdark: false;
+    color-scheme: light;
+
+    --color-base-100: #ffffff;
+    --color-base-200: #f4f4f4;
+    --color-base-300: #e4e4e4;
+    --color-base-content: #1f2122;
+    --color-primary: #691c32;
+    --color-primary-content: #ffffff;
+    --color-secondary: #5f6261;
+    --color-secondary-content: #ffffff;
+    --color-accent: #f3e4e8;
+    --color-accent-content: #691c32;
+    --color-neutral: #3a3c3d;
+    --color-neutral-content: #f4f4f4;
+    --color-info: #0b62a4;
+    --color-info-content: #ffffff;
+    --color-success: #1b7a3a;
+    --color-success-content: #ffffff;
+    --color-warning: #f0b400;
+    --color-warning-content: #2b2100;
+    --color-error: #c62828;
+    --color-error-content: #ffffff;
+
+    --radius-selector: 0.5rem;
+    --radius-field: 0.25rem;
+    --radius-box: 0.5rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 1;
+    --noise: 0;
+}
+
+@plugin 'daisyui/theme' {
+    name: 'nexus-dark';
+    default: false;
+    prefersdark: true;
+    color-scheme: dark;
+
+    --color-base-100: #1c1d1f;
+    --color-base-200: #161718;
+    --color-base-300: #0f1011;
+    --color-base-content: #e6e6e6;
+    --color-primary: #e597aa;
+    --color-primary-content: #2b0a13;
+    --color-secondary: #a9abaa;
+    --color-secondary-content: #1c1d1f;
+    --color-accent: #4a1a28;
+    --color-accent-content: #f2b8c6;
+    --color-neutral: #2e3032;
+    --color-neutral-content: #e6e6e6;
+    --color-info: #6cb8ef;
+    --color-info-content: #06233a;
+    --color-success: #6fcf8c;
+    --color-success-content: #06290f;
+    --color-warning: #f5c84c;
+    --color-warning-content: #2b2100;
+    --color-error: #f48a8a;
+    --color-error-content: #2e0606;
+
+    --radius-selector: 0.5rem;
+    --radius-field: 0.25rem;
+    --radius-box: 0.5rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 1;
+    --noise: 0;
 }

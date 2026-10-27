@@ -1,5 +1,6 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-
-Route::livewire('/', 'pages::home')->middleware('auth')->name('home');
+/*
+| Las rutas web viven en cada módulo: app/Modules/<Modulo>/Routes/web.php, que registra su
+| <Modulo>ServiceProvider (la página de inicio es de Core).
+*/
