@@ -112,7 +112,11 @@ Las actions están fijadas por SHA completo con la versión en un comentario, ig
 
 ### Cobertura
 
-La imagen `dev` trae `pcov`. El job `tests` corre con `--coverage-text` y `.github/scripts/coverage-summary.sh` deja en el resumen del job la cobertura de líneas por módulo de `app/Modules/` y el reporte completo. En la fase 0 es solo informativa (sin `--min`; meta 80 % en `app/Modules/Core`); desde la fase 1 se agrega el mínimo por módulo y pasa a bloquear. Los browser tests no entran al reporte.
+La imagen `dev` trae `pcov`. El job `tests` corre con `--coverage-clover` y `--coverage-text`, y `.github/scripts/coverage-summary.sh` deja en el resumen del job la cobertura de líneas por módulo de `app/Modules/` y el reporte completo. Desde la fase 1 es bloqueante: el paso falla si un módulo queda debajo de 80 % y nombra cuál. Los browser tests no entran al reporte.
+
+- Los totales salen del reporte Clover y no del de texto: el de texto omite las clases sin ninguna línea ejecutada, y un módulo con clases sin pruebas saldría con más cobertura de la real.
+- `phpunit.xml` saca del cálculo los `*.blade.php` y los componentes MFC (`app/Modules/*/Livewire`). Livewire los compila a `storage/framework/views` y ejecuta la copia, así que sobre el archivo fuente la cobertura siempre da cero aunque las pruebas feature los recorran. La lógica que el mínimo debe vigilar vive en Actions, Queries, Policies, Rules, Jobs y Models; los componentes se prueban con feature y browser.
+- Se cuenta todo archivo PHP del módulo, incluidas migraciones y rutas, así que `down()` de una migración que nadie revierte cuenta como no cubierta.
 
 ### Duración
 

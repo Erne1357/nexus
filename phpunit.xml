@@ -22,6 +22,12 @@
         <include>
             <directory>app</directory>
         </include>
+        <!-- Livewire compila Blade y los componentes MFC a storage/: sobre el archivo fuente la cobertura
+             siempre da cero. Los cubren las pruebas feature y browser (docs/arquitectura/testing.md). -->
+        <exclude>
+            <directory suffix=".blade.php">app</directory>
+            <directory>app/Modules/*/Livewire</directory>
+        </exclude>
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>

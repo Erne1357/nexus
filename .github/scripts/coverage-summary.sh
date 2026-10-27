@@ -1,44 +1,58 @@
 #!/usr/bin/env bash
-# Convierte el reporte de texto de PHPUnit (--coverage-text) en Markdown para el
-# resumen del job: cobertura de líneas por módulo de app/Modules/ y el reporte completo.
-# Uso: coverage-summary.sh <coverage.txt>
+# Cobertura de líneas por módulo de app/Modules/ para el resumen del job, con mínimo bloqueante.
+# Los totales salen del reporte Clover, que incluye las clases sin ninguna línea ejecutada
+# (el reporte de texto las omite); el reporte de texto va completo al final, solo para leerlo.
+# Sale con 1 si algún módulo queda debajo del mínimo. Detalle en docs/arquitectura/testing.md.
+# Uso: coverage-summary.sh <clover.xml> <coverage.txt> <mínimo>
 set -euo pipefail
 
+clover="$1"
+text="$2"
+min="$3"
+
+rows="$(mktemp)"
 report="$(mktemp)"
-trap 'rm -f "$report"' EXIT
-sed 's/\x1b\[[0-9;]*m//g' "$1" > "$report"
+trap 'rm -f "$rows" "$report"' EXIT
 
-cat <<'MD'
-### Cobertura de líneas por módulo
-
-Informativa en fase 0 (meta: 80 % en `app/Modules/Core`); bloqueante desde la fase 1.
-
-| Módulo | Líneas | Cubiertas |
-|---|---|---|
-MD
-
-# Cada clase ocupa dos líneas: su nombre completo y, debajo, "Methods: … Lines: … ( cubiertas/total)".
-awk '
-  /^App\\/ {
-    n = split($0, p, /\\/)
-    mod = (p[2] == "Modules" && n >= 3) ? p[3] : "app (fuera de Modules)"
+# PHPUnit escribe por archivo un <file name="..."> y, al cerrarlo, sus <metrics loc=... statements=...
+# coveredstatements=...>; las <metrics> de cada <class> no traen loc y no se cuentan.
+awk -v min="$min" '
+  /<file name="/ {
+    mod = ""
+    if (match($0, /\/app\/Modules\/[^\/]+\//)) {
+      mod = substr($0, RSTART + 13, RLENGTH - 14)
+    }
     next
   }
-  /Lines:/ && mod != "" {
-    s = $0
-    sub(/.*Lines: +[0-9.]+% \( */, "", s)
-    split(s, c, /[\/ )]+/)
-    cov[mod] += c[1]
-    tot[mod] += c[2]
+  /<metrics loc="/ && mod != "" {
+    match($0, / statements="[0-9]+"/);        tot[mod] += substr($0, RSTART + 13, RLENGTH - 14)
+    match($0, / coveredstatements="[0-9]+"/); cov[mod] += substr($0, RSTART + 20, RLENGTH - 21)
     mod = ""
   }
   END {
     for (m in tot) {
-      printf "| %s | %.2f %% | %d/%d |\n", m, (tot[m] ? 100 * cov[m] / tot[m] : 100), cov[m], tot[m]
+      pct = tot[m] ? 100 * cov[m] / tot[m] : 100
+      printf "| %s | %.2f %% | %d/%d | %s |\n", m, pct, cov[m], tot[m], (pct < min ? "❌" : "✅")
     }
   }
-' "$report" | sort
+' "$clover" | sort > "$rows"
 
+cat <<MD
+### Cobertura de líneas por módulo
+
+Mínimo bloqueante: ${min} % por módulo de \`app/Modules/\`.
+
+| Módulo | Líneas | Cubiertas | Mínimo |
+|---|---|---|---|
+MD
+cat "$rows"
+
+sed 's/\x1b\[[0-9;]*m//g' "$text" > "$report"
 printf '\n<details><summary>Reporte completo</summary>\n\n```\n'
 cat "$report"
 printf '```\n\n</details>\n'
+
+if grep -q '❌' "$rows"; then
+  echo "Módulos debajo de ${min} %: $(grep '❌' "$rows" | cut -d'|' -f2 | xargs)" >&2
+  exit 1
+fi
