@@ -113,6 +113,8 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY vite.config.js ./
 COPY resources ./resources
+# Vistas Blade y componentes MFC de los módulos: Tailwind toma de ahí sus clases (resources/css/app.css)
+COPY app/Modules ./app/Modules
 # Tailwind escanea las vistas de paginación de Laravel y los componentes de MaryUI
 COPY --from=vendor /app/vendor/laravel/framework/src/Illuminate/Pagination/resources/views ./vendor/laravel/framework/src/Illuminate/Pagination/resources/views
 COPY --from=vendor /app/vendor/robsontenorio/mary/src/View/Components ./vendor/robsontenorio/mary/src/View/Components
