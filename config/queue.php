@@ -68,7 +68,9 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            // Mayor que el `timeout` del job más largo (validar o aplicar un lote de importación, 30
+            // minutos): si no, la cola entrega otra vez un job que sigue corriendo.
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 1860),
             'block_for' => null,
             'after_commit' => false,
         ],

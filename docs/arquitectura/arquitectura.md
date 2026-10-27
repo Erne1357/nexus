@@ -131,7 +131,9 @@ El lote queda `validated` con sus cuentas, con bitácora y `BatchValidated`. Com
 
 `ApplyImportBatch` toma un lote `validated`. Escribe con `apply()` las filas válidas y con advertencia, en el orden del archivo y de 500 en 500, una transacción por bloque, y salta las filas con error. Antes de escribir cada fila la vuelve a validar, porque el catálogo pudo cambiar desde la validación: la que ya no pasa queda como error y se salta. Pagina por `row_number` y no por offset, porque cada fila sale del filtro al pasar a `applied`. Al terminar corre `afterApply()` y deja **una** entrada de bitácora para el lote, con altas, cambios, filas sin cambios y filas saltadas, más `BatchApplied`. Si una fila no se puede escribir, su bloque se revierte y el lote queda `failed` con la fila y el motivo. Los bloques anteriores se quedan: la bitácora del fallo y `BatchApplied` llevan lo que sí se escribió, y volver a importar es seguro por el upsert.
 
-Las Actions de lote (`StoreImportBatch`, `ValidateImportBatch`, `ApplyImportBatch`) no autorizan: lo hace la página con `ImportBatchPolicy`, que solo deja al admin. Validar y aplicar irán en jobs de cola con progreso (tarea 1.2).
+Las Actions de lote (`StoreImportBatch`, `ValidateImportBatch`, `ApplyImportBatch`) no autorizan: lo hace la página con `ImportBatchPolicy`, que solo deja al admin.
+
+Validar y aplicar corren en la cola con `Jobs/ValidateQueuedBatch` y `Jobs/ApplyQueuedBatch`. Cada bloque de 500 filas suma al lote su avance (`processed_rows`: filas leídas al validar, revisadas al aplicar) y, al aplicar, las altas, cambios y filas sin cambios ya escritas; la pantalla lo lee con `wire:poll`. Cada job hace un solo intento con 30 minutos de tiempo máximo. Si la Action encuentra el lote tomado por otra corrida (`BatchNotReady`, como dos clics en "aplicar"), el job termina sin tocarlo. Si el job falla, su `failed()` despacha `Jobs/InterruptBatch`, que con `InterruptImportBatch` deja fallido el lote que siga "validando" o "aplicando": el proceso murió o pasó del tiempo máximo. Va por la cola y no directo porque, cuando el job pasa del tiempo, el worker llama a `failed()` dentro del proceso que se quedó a media transacción y que está por morir. Una aplicación interrumpida conserva lo escrito y lo dice en su bitácora y en `BatchApplied`.
 
 Pruebas de una plantilla: unit para `normalize()` y lo puro; feature para `validate()` (cada regla con su mensaje y cada clave cruzada) y `apply()` (alta, cambio, aplicar dos veces sin cambios). Copia `tests/Unit/Imports/ImportTemplateTest.php` y `tests/Feature/Imports/ImportTemplateTest.php`.
 
@@ -257,6 +259,8 @@ El modelo `Campus` expone el perfil como `$campus->profile`, un `CampusProfile` 
 ## Colas y trabajos en segundo plano
 
 Todo lo que tarde más de un segundo va a la cola `redis` (servicio `queue`): validar y aplicar lotes de importación, recalcular `student_progress`, `staffing_rankings`, `teacher_term_loads` y `schedule_conflicts`, generar snapshots y exportes, y correr el motor. Las pantallas muestran progreso con polling de Livewire (`wire:poll`) y notificaciones en base de datos.
+
+El `timeout` de un job tiene que quedar por debajo del `retry_after` de la conexión (`config/queue.php`, 31 minutos): si un job dura más, la cola lo entrega otra vez mientras el primero sigue corriendo. Los más largos son los de importación (30 minutos); un job que necesite más sube los dos. En desarrollo, `queue:listen` mata al proceso que pasa de su `--timeout` (`compose.override.yaml`), que también va por encima. Con un solo worker, un lote largo hace esperar a los demás jobs; y al apagar el contenedor (`stop_grace_period` de 60 s) un job que no termina a tiempo muere, y su lote queda fallido cuando vence el `retry_after`.
 
 ## Caché
 

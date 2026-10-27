@@ -14,7 +14,6 @@ use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use LogicException;
 use Throwable;
 
 /**
@@ -23,8 +22,9 @@ use Throwable;
  * filas con error se saltan (reglas-de-negocio.md, "Reglas de datos"). Antes de escribir cada fila la
  * vuelve a validar, porque el catálogo pudo cambiar desde la validación (un registro borrado, una
  * clave cruzada que ya no existe): la que ya no pasa queda como error y se salta. Cada fila escrita
- * pasa a `applied` con el registro que escribió; al terminar corre afterApply() de la plantilla y el
- * lote queda `applied`.
+ * pasa a `applied` con el registro que escribió. Cada bloque suma al lote, en su misma transacción, las
+ * filas revisadas (`processed_rows`, el avance que muestra la pantalla) y las altas, cambios y filas sin
+ * cambios ya escritas. Al terminar corre afterApply() de la plantilla y el lote queda `applied`.
  *
  * Deja **una** entrada de bitácora por lote, a nombre de quien aplica, con altas, cambios, filas sin
  * cambios y filas saltadas, y avisa con BatchApplied después del commit. Los registros del catálogo no
@@ -34,8 +34,8 @@ use Throwable;
  * Si una fila no se puede escribir, su bloque se revierte, el lote queda `failed` con la fila y el
  * motivo, y el error se relanza. Los bloques anteriores se quedan escritos, así que la bitácora del
  * fallo y BatchApplied llevan lo que sí se escribió; volver a importar el archivo corregido es seguro
- * por el upsert por clave natural. Si el worker muere a media aplicación, el job de la tarea 1.2 marca
- * el lote como fallido.
+ * por el upsert por clave natural. Si el proceso de la cola muere a media aplicación, ApplyQueuedBatch
+ * deja el lote fallido con InterruptImportBatch, que lee lo escrito de esas cuentas.
  */
 final class ApplyImportBatch
 {
@@ -44,7 +44,7 @@ final class ApplyImportBatch
     public function __construct(private readonly TemplateRegistry $templates) {}
 
     /**
-     * @throws LogicException si el lote no está `validated` (otra corrida lo tomó o ya se aplicó)
+     * @throws BatchNotReady si el lote no está `validated` (otra corrida lo tomó o ya se aplicó)
      */
     public function handle(ImportBatch $batch, User $user): ImportBatch
     {
@@ -62,9 +62,18 @@ final class ApplyImportBatch
                 ->whereIn('status', [RowStatus::Valid, RowStatus::Warning])
                 // Por row_number y no por offset: cada fila sale del filtro al pasar a `applied`, y un
                 // chunk() por páginas se saltaría la mitad.
-                ->chunkById(self::CHUNK_ROWS, function (Collection $rows) use ($template, $context, &$counts, &$current): void {
-                    $written = DB::transaction(function () use ($rows, $template, $context, &$current): array {
-                        return $this->applyChunk($rows, $template, $context, $current);
+                ->chunkById(self::CHUNK_ROWS, function (Collection $rows) use ($batch, $template, $context, &$counts, &$current): void {
+                    $written = DB::transaction(function () use ($batch, $rows, $template, $context, &$current): array {
+                        $written = $this->applyChunk($rows, $template, $context, $current);
+
+                        ImportBatch::query()->whereKey($batch->id)->incrementEach([
+                            'processed_rows' => $rows->count(),
+                            'created_rows' => $written['created'],
+                            'updated_rows' => $written['updated'],
+                            'unchanged_rows' => $written['unchanged'],
+                        ]);
+
+                        return $written;
                     });
 
                     foreach ($written as $kind => $total) {
@@ -150,7 +159,7 @@ final class ApplyImportBatch
 
     /**
      * Pasa el lote de `validated` a `applying` con el registro bloqueado: dos clics en "aplicar" no
-     * lo aplican dos veces.
+     * lo aplican dos veces. El avance vuelve a cero: al validar contó las filas leídas.
      */
     private function start(ImportBatch $batch): void
     {
@@ -158,10 +167,10 @@ final class ApplyImportBatch
             $locked = ImportBatch::query()->lockForUpdate()->findOrFail($batch->id);
 
             if ($locked->status !== BatchStatus::Validated) {
-                throw new LogicException("El lote {$batch->id} no está validado: está {$locked->status->label()}.");
+                throw new BatchNotReady("El lote {$batch->id} no está validado: está {$locked->status->label()}.");
             }
 
-            $locked->update(['status' => BatchStatus::Applying]);
+            $locked->update(['status' => BatchStatus::Applying, 'processed_rows' => 0]);
             $batch->setRawAttributes($locked->getAttributes(), sync: true);
         });
     }
