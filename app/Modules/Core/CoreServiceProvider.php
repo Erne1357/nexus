@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core;
 
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
@@ -37,6 +38,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
     {
         return [
             new NavigationItem('Inicio', 'home', 'o-home'),
+            new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', ability: 'viewAny', arguments: [Campus::class]),
         ];
     }
 }
