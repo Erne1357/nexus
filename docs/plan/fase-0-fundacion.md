@@ -72,7 +72,7 @@ Dejar una base sobre la que tres personas puedan trabajar en paralelo desde el 3
 
 La fase se cerró con todas sus tareas mezcladas en `develop`. Quedan fuera del código:
 
-- **Despliegue en el servidor de pruebas del ITCJ (0.14).** Todo está listo en `compose.prod.yaml` y [docs/operacion/despliegue.md](../operacion/despliegue.md). Falta acceso al servidor y confirmar dominio, DNS, puertos 80/443 y quién copia los respaldos fuera del servidor ([ADR-0013](../decisiones/0013-despliegue-on-premise-itcj.md)).
+- **Despliegue en el servidor del ITCJ (0.14): postergado hasta nuevo aviso** (decisión del 27 de octubre). Todo está listo en `compose.prod.yaml` y [docs/operacion/despliegue.md](../operacion/despliegue.md). Cuando se retome, falta acceso al servidor y confirmar dominio, DNS, puertos 80/443 y quién copia los respaldos fuera del servidor ([ADR-0013](../decisiones/0013-despliegue-on-premise-itcj.md)).
 - **Supuestos confirmados por el equipo el 27 de octubre.** Se habían tomado con la opción más restrictiva que no contradice los documentos y ya no son provisionales:
   - **Alcances:**
     - el docente necesita un alcance por campus y nunca "cubre" gestión;
