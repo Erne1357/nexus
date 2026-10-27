@@ -145,7 +145,7 @@ it('avisa solo después del commit: si la transacción se revierte, nadie se ent
     expect($heard)->toBe([])
         ->and($this->campus->fresh()->name)->toBe('Campus II');
 
-    updateCampus($this->campus, ['name' => 'Campus Dos']);
+    updateCampus($this->campus->fresh(), ['name' => 'Campus Dos']);
 
     expect($heard)->toHaveCount(1);
 });
