@@ -63,7 +63,7 @@ jobs:
       - name: Cobertura por módulo (mínimo 80 %)
         if: ${{ !cancelled() && hashFiles('storage/logs/clover.xml') != '' }}
         shell: bash
-        run: .github/scripts/coverage-summary.sh storage/logs/clover.xml storage/logs/coverage.txt 99 | tee -a "$GITHUB_STEP_SUMMARY"
+        run: .github/scripts/coverage-summary.sh storage/logs/clover.xml storage/logs/coverage.txt 80 | tee -a "$GITHUB_STEP_SUMMARY"
 
   browser:
     name: browser
