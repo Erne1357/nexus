@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Lote de importación: un archivo del SII subido para una plantilla (`template`, clave de
  * TemplateRegistry). `file_path` es relativo al disco `imports`. No se borra.
  */
-#[Fillable(['template', 'campus_id', 'mapping_id', 'file_path', 'original_name', 'status', 'total_rows', 'valid_rows', 'error_rows', 'processed_rows', 'created_rows', 'updated_rows', 'unchanged_rows', 'failure_reason', 'uploaded_by', 'applied_by', 'applied_at'])]
+#[Fillable(['template', 'campus_id', 'mapping_id', 'file_path', 'original_name', 'status', 'total_rows', 'valid_rows', 'error_rows', 'run_id', 'processed_rows', 'created_rows', 'updated_rows', 'unchanged_rows', 'failure_reason', 'uploaded_by', 'applied_by', 'applied_at'])]
 #[UseFactory(ImportBatchFactory::class)]
 class ImportBatch extends Model
 {

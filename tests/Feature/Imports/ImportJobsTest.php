@@ -9,7 +9,6 @@ use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Events\BatchApplied;
 use App\Modules\Imports\Events\BatchValidated;
 use App\Modules\Imports\Jobs\ApplyQueuedBatch;
-use App\Modules\Imports\Jobs\InterruptBatch;
 use App\Modules\Imports\Jobs\ValidateQueuedBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportRow;
@@ -20,8 +19,8 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 
@@ -80,18 +79,36 @@ it('un job de un lote que otra corrida ya tomó termina sin tocarlo', function (
     'aplicar un lote ya aplicado' => [ApplyQueuedBatch::class, BatchStatus::Applied],
 ]);
 
-it('si el proceso muere a media validación, el lote queda fallido, sin filas y con bitácora', function () {
+it('deja en el lote la corrida que lo tomó', function () {
+    $batch = uploadedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n");
+    $validation = new ValidateQueuedBatch($batch);
+
+    dispatch($validation);
+    $validatedRun = $batch->fresh()->run_id;
+
+    $application = new ApplyQueuedBatch($batch->fresh(), $this->admin);
+    dispatch($application);
+
+    expect($validatedRun)->toBe($validation->run)
+        ->and($batch->fresh()->run_id)->toBe($application->run)
+        ->and($validation->run)->not->toBe($application->run);
+});
+
+it('si el proceso muere a media validación, el lote queda fallido, sin filas ni avance y con bitácora', function () {
     Event::fake([BatchValidated::class]);
-    $batch = ImportBatch::factory()->create(['status' => BatchStatus::Validating, 'uploaded_by' => $this->admin->id]);
+    $batch = ImportBatch::factory()->create(['uploaded_by' => $this->admin->id]);
+    $job = new ValidateQueuedBatch($batch);
+    $batch->update(['status' => BatchStatus::Validating, 'run_id' => $job->run, 'processed_rows' => 500]);
     ImportRow::factory()->for($batch, 'batch')->count(2)->create();
 
-    (new ValidateQueuedBatch($batch))->failed(new MaxAttemptsExceededException('El worker murió.'));
+    $job->failed(new MaxAttemptsExceededException('El worker murió.'));
 
     $entry = Activity::where('event', 'failed')->sole();
 
     expect($batch->fresh())
         ->status->toBe(BatchStatus::Failed)
         ->failure_reason->toBe('La validación se interrumpió antes de terminar: el proceso de la cola se detuvo o pasó del tiempo máximo. Vuelve a subir el archivo; si se repite, avisa al equipo de Nexus.')
+        ->processed_rows->toBe(0)
         ->and(ImportRow::count())->toBe(0)
         ->and($entry->subject->is($batch))->toBeTrue()
         ->and($entry->causer->is($this->admin))->toBeTrue();
@@ -101,11 +118,13 @@ it('si el proceso muere a media validación, el lote queda fallido, sin filas y 
 
 it('si el proceso muere a media aplicación, el lote queda fallido con lo que alcanzó a escribir', function () {
     Event::fake([BatchApplied::class]);
-    $batch = ImportBatch::factory()->create(['status' => BatchStatus::Applying, 'created_rows' => 500, 'updated_rows' => 3, 'unchanged_rows' => 2]);
+    $batch = ImportBatch::factory()->create();
+    $job = new ApplyQueuedBatch($batch, $this->admin);
+    $batch->update(['status' => BatchStatus::Applying, 'run_id' => $job->run, 'created_rows' => 500, 'updated_rows' => 3, 'unchanged_rows' => 2]);
     ImportRow::factory()->for($batch, 'batch')->create(['status' => RowStatus::Applied]);
     ImportRow::factory()->for($batch, 'batch')->create(['status' => RowStatus::Error]);
 
-    (new ApplyQueuedBatch($batch, $this->admin))->failed(new TimeoutExceededException('Pasó del tiempo máximo.'));
+    $job->failed(new TimeoutExceededException('Pasó del tiempo máximo.'));
 
     $entry = Activity::where('event', 'failed')->sole();
     $counts = ['created' => 500, 'updated' => 3, 'unchanged' => 2, 'skipped' => 1];
@@ -120,20 +139,8 @@ it('si el proceso muere a media aplicación, el lote queda fallido con lo que al
     Event::assertDispatched(BatchApplied::class, fn (BatchApplied $event): bool => $event->batch->is($batch) && $event->counts === $counts);
 });
 
-it('el aviso de interrupción sale por la cola: el job que pasó del tiempo pudo quedarse a media transacción', function () {
-    Queue::fake([InterruptBatch::class]);
-    $batch = ImportBatch::factory()->create(['status' => BatchStatus::Applying]);
-
-    (new ApplyQueuedBatch($batch, $this->admin))->failed(new TimeoutExceededException('Pasó del tiempo máximo.'));
-
-    Queue::assertPushed(InterruptBatch::class, fn (InterruptBatch $job): bool => $job->batch->is($batch)
-        && $job->running === BatchStatus::Applying
-        && $job->causer->is($this->admin));
-    expect($batch->fresh()->status)->toBe(BatchStatus::Applying);
-});
-
-it('la interrupción no toca un lote que no está en la etapa del job', function (BatchStatus $status, string $job) {
-    $batch = ImportBatch::factory()->create(['status' => $status]);
+it('el fallo de un job duplicado no toca el lote que otra corrida sigue procesando', function (BatchStatus $status, string $job) {
+    $batch = ImportBatch::factory()->create(['status' => $status, 'run_id' => (string) Str::uuid7()]);
 
     $job === ValidateQueuedBatch::class
         ? (new ValidateQueuedBatch($batch))->failed(new MaxAttemptsExceededException('El worker murió.'))
@@ -142,12 +149,20 @@ it('la interrupción no toca un lote que no está en la etapa del job', function
     expect($batch->fresh()->status)->toBe($status)
         ->and(Activity::where('event', 'failed')->exists())->toBeFalse();
 })->with([
-    'validación de un lote subido' => [BatchStatus::Uploaded, ValidateQueuedBatch::class],
-    'validación de un lote validado' => [BatchStatus::Validated, ValidateQueuedBatch::class],
-    'validación de un lote que se aplica' => [BatchStatus::Applying, ValidateQueuedBatch::class],
-    'aplicación de un lote que se valida' => [BatchStatus::Validating, ApplyQueuedBatch::class],
-    'aplicación de un lote aplicado' => [BatchStatus::Applied, ApplyQueuedBatch::class],
+    'validación' => [BatchStatus::Validating, ValidateQueuedBatch::class],
+    'aplicación' => [BatchStatus::Applying, ApplyQueuedBatch::class],
 ]);
+
+it('la interrupción no toca un lote que su corrida ya terminó', function (BatchStatus $status) {
+    $batch = ImportBatch::factory()->create();
+    $job = new ApplyQueuedBatch($batch, $this->admin);
+    $batch->update(['status' => $status, 'run_id' => $job->run]);
+
+    $job->failed(new MaxAttemptsExceededException('El worker murió.'));
+
+    expect($batch->fresh()->status)->toBe($status)
+        ->and(Activity::where('event', 'failed')->exists())->toBeFalse();
+})->with([BatchStatus::Validated, BatchStatus::Applied, BatchStatus::Failed]);
 
 it('si la aplicación falla con su propio motivo, la interrupción no lo pisa', function () {
     app()->bind(CampusesTemplate::class, fn () => new class extends CampusesTemplate

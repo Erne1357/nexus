@@ -45,14 +45,17 @@ final class ValidateImportBatch
     public function __construct(
         private readonly TemplateRegistry $templates,
         private readonly SpreadsheetReader $reader,
+        private readonly FailImportBatch $failure,
     ) {}
 
     /**
+     * @param  string|null  $run  la corrida de la cola que valida (ValidateQueuedBatch), que queda en el lote
+     *
      * @throws BatchNotReady si el lote ya no está `uploaded` (otra corrida lo tomó)
      */
-    public function handle(ImportBatch $batch): ImportBatch
+    public function handle(ImportBatch $batch, ?string $run = null): ImportBatch
     {
-        $this->start($batch);
+        $this->start($batch, $run);
 
         try {
             $template = $this->templates->get($batch->template);
@@ -98,16 +101,16 @@ final class ValidateImportBatch
      * Pasa el lote de `uploaded` a `validating` con el registro bloqueado: dos corridas del mismo lote
      * no validan dos veces.
      */
-    private function start(ImportBatch $batch): void
+    private function start(ImportBatch $batch, ?string $run): void
     {
-        DB::transaction(function () use ($batch): void {
+        DB::transaction(function () use ($batch, $run): void {
             $locked = ImportBatch::query()->lockForUpdate()->findOrFail($batch->id);
 
             if ($locked->status !== BatchStatus::Uploaded) {
                 throw new BatchNotReady("El lote {$batch->id} ya no está subido: está {$locked->status->label()}.");
             }
 
-            $locked->update(['status' => BatchStatus::Validating]);
+            $locked->update(['status' => BatchStatus::Validating, 'run_id' => $run]);
             $batch->setRawAttributes($locked->getAttributes(), sync: true);
         });
     }
@@ -243,7 +246,8 @@ final class ValidateImportBatch
             ->first();
 
         return DB::transaction(function () use ($batch, $template, $counts): ImportBatch {
-            $batch->update([
+            // Con el avance que sumó cada bloque, que no pasó por este modelo.
+            $batch->refresh()->update([
                 'status' => BatchStatus::Validated,
                 'total_rows' => $counts->total,
                 'valid_rows' => $counts->valid,
@@ -265,22 +269,9 @@ final class ValidateImportBatch
 
     private function fail(ImportBatch $batch, string $reason): ImportBatch
     {
-        return DB::transaction(function () use ($batch, $reason): ImportBatch {
-            // Son staging, no catálogo ni bitácora: un lote fallido no se aplica y sus filas no sirven.
-            ImportRow::query()->where('batch_id', $batch->id)->delete();
-            $batch->update(['status' => BatchStatus::Failed, 'failure_reason' => $reason]);
+        $this->failure->handle($batch, $reason, $batch->uploader);
 
-            activity()
-                ->performedOn($batch)
-                ->causedBy($batch->uploader)
-                ->event('failed')
-                ->withProperties(['failure_reason' => $reason])
-                ->log("No se pudo validar {$batch->original_name}: {$reason}");
-
-            BatchValidated::dispatch($batch);
-
-            return $batch;
-        });
+        return $batch;
     }
 
     private function slug(string $text): string

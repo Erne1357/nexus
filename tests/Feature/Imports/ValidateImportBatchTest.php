@@ -237,8 +237,9 @@ it('lleva la cuenta de las filas leídas, bloque por bloque, para mostrar el ava
 
     $batch = validateBatch(batchWithFile("code,name,modality\n{$lines}\n"));
 
+    // El lote que devuelve ya trae la cuenta, aunque cada bloque la sumó en la base.
     expect(ValidateProbeTemplate::$processedAtProbe)->toBe(500)
-        ->and($batch->fresh()->processed_rows)->toBe(700);
+        ->and($batch->processed_rows)->toBe(700);
 });
 
 it('un lote que falla a la mitad no se queda con filas a medias', function () {

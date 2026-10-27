@@ -178,11 +178,27 @@ it('lleva las cuentas de lo aplicado, bloque por bloque, para mostrar el avance'
     $lines = collect(range(1, 700))->map(fn (int $n): string => $n === 650 ? 'PROBE,Campus,presencial' : "K{$n},Campus {$n},presencial")->implode("\n");
     $batch = validatedCampusBatch($this->admin, "code,name,modality\n{$lines}\n");
 
-    applyCampusBatch($batch, $this->admin);
+    $applied = applyCampusBatch($batch, $this->admin);
 
+    // El lote que devuelve ya trae las cuentas, aunque cada bloque las sumó en la base.
     expect(ApplyProbeTemplate::$countsAtProbe)->toBe(['processed_rows' => 500, 'created_rows' => 499, 'updated_rows' => 1, 'unchanged_rows' => 0])
-        ->and($batch->fresh()->only(['processed_rows', 'created_rows', 'updated_rows', 'unchanged_rows']))
+        ->and($applied->only(['processed_rows', 'created_rows', 'updated_rows', 'unchanged_rows']))
         ->toBe(['processed_rows' => 700, 'created_rows' => 699, 'updated_rows' => 1, 'unchanged_rows' => 0]);
+});
+
+it('si falla el cierre del lote, queda fallido con el motivo y no se queda aplicando', function () {
+    Activity::creating(function (Activity $activity): void {
+        if ($activity->event === 'applied') {
+            throw new RuntimeException('No se pudo escribir la bitácora.');
+        }
+    });
+    $batch = validatedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n");
+
+    expect(fn () => applyCampusBatch($batch, $this->admin))->toThrow(RuntimeException::class, 'No se pudo escribir la bitácora.')
+        ->and($batch->fresh())
+        ->status->toBe(BatchStatus::Failed)
+        ->failure_reason->toBe('La aplicación se interrumpió: No se pudo escribir la bitácora.')
+        ->created_rows->toBe(1);
 });
 
 it('solo aplica un lote validado', function (BatchStatus $status) {
