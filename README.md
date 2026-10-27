@@ -59,6 +59,7 @@ APP_IMAGE_TAG=$(git rev-parse --short HEAD) docker compose -f compose.yaml up -d
 
 ```bash
 docker compose exec app php artisan test
+docker compose exec app php artisan test --testsuite=Browser   # solo browser tests (Chromium)
 ```
 
 ## Documentación
