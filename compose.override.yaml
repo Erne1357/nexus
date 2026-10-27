@@ -9,7 +9,7 @@ services:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
     # Laravel lee .env desde el volumen; sin variables inyectadas para que
-    # phpunit.xml pueda usar su propio entorno (SQLite en memoria).
+    # phpunit.xml pueda usar su propio entorno (PostgreSQL nexus_test).
     env_file: !reset []
     volumes:
       - .:/app
@@ -30,6 +30,9 @@ services:
   postgres:
     ports:
       - "${FORWARD_DB_PORT:-5432}:5432"
+    volumes:
+      # Solo dev: crea nexus_test con el volumen vacío. Producción no necesita base de pruebas.
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro
 
   vite:
     image: node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53

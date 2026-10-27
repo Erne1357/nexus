@@ -58,8 +58,22 @@ APP_IMAGE_TAG=$(git rev-parse --short HEAD) docker compose -f compose.yaml up -d
 ## Tests
 
 ```bash
-docker compose exec app php artisan test
+docker compose exec app php artisan test                       # suite completa
+docker compose exec app php artisan test --filter=Nombre       # una prueba
+docker compose exec app php artisan test --testsuite=Browser   # solo browser tests (Chromium)
+docker compose exec app ./vendor/bin/pint                      # formato antes de cada commit (sin --dirty: no hay git en el contenedor)
 ```
+
+## Laravel Boost (herramientas de IA)
+
+Boost da a la IA documentación exacta de Laravel, Livewire y Pest, y acceso a esquema de BD, logs y tinker. Corre dentro del contenedor; `.mcp.json` ya apunta a él.
+
+```bash
+docker compose exec app php artisan boost:update    # regenerar AGENTS.md tras cambiar dependencias
+docker compose exec app php artisan boost:mcp       # servidor MCP (lo lanza Claude Code, no se usa a mano)
+```
+
+Detalle y precauciones en [docs/herramientas/ia-tooling.md](docs/herramientas/ia-tooling.md).
 
 ## Documentación
 
