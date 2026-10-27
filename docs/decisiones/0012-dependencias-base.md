@@ -15,6 +15,7 @@ La tarea 0.1 instala las dependencias de la fundación. La regla del proyecto es
 | `spatie/laravel-activitylog` ^5 | Bitácora inmutable de toda escritura hecha por Actions | Esta nota |
 | `openspout/openspout` ^5 | Leer y escribir Excel/CSV en streaming | Esta nota; contexto en [ADR-0005](0005-importacion-por-archivos.md) |
 | `laravel/boost` ^2 (solo dev) | Servidor MCP con la documentación exacta de las versiones instaladas | Esta nota |
+| `symfony/yaml` ^8 (solo dev) | Leer los archivos de compose en las pruebas del despliegue de producción (`tests/Unit/Deploy`); ya llegaba transitivo por Boost, se declara para no depender de eso | [ADR-0013](0013-despliegue-on-premise-itcj.md), esta nota |
 | `playwright` (npm, solo dev, versión exacta) | Navegador que controlan los browser tests; lo exige `pest-plugin-browser` | [ADR-0011](0011-pest-5.md), esta nota |
 
 Por qué los nuevos:
