@@ -5,7 +5,7 @@
 
     <x-steps wire:model="step" steps-color="step-primary" stepper-classes="w-full mb-6">
         <x-step step="1" text="Archivo">
-            @if ($step === 1)
+            @if ($currentStep === 1)
                 <x-card shadow>
                     @if ($templates === [])
                         <x-alert
@@ -19,7 +19,7 @@
                             <div class="grid gap-4 md:grid-cols-2">
                                 <x-select label="Plantilla" name="template" wire:model.live="template" :options="$templates" placeholder="Elige qué catálogo importas" />
 
-                                <x-file label="Archivo" name="file" wire:model="file" accept=".xlsx,.csv,.txt" hint="Exportación del SII en .xlsx, .csv o .txt, hasta 20 MB." />
+                                <x-file label="Archivo" name="file" wire:model="file" accept=".xlsx,.csv,.txt" hint="Exportación del SII en .xlsx, .csv o .txt, hasta 19 MB." />
                             </div>
 
                             @if ($definition?->requiresCampus())
@@ -52,8 +52,8 @@
                             {{ $recentBatch->created_at->format('d/m/Y H:i') }}
                         @endscope
 
-                        @scope('cell_template', $recentBatch, $templates)
-                            {{ collect($templates)->firstWhere('id', $recentBatch->template)['name'] ?? $recentBatch->template }}
+                        @scope('cell_template', $recentBatch, $templateLabels)
+                            {{ $templateLabels[$recentBatch->template] ?? $recentBatch->template }}
                         @endscope
 
                         @scope('cell_campus', $recentBatch)
@@ -83,7 +83,7 @@
         </x-step>
 
         <x-step step="2" text="Columnas">
-            @if ($step === 2 && $definition)
+            @if ($currentStep === 2 && $definition)
                 <x-card shadow>
                     <x-form wire:submit="upload" no-separator>
                         <p class="text-sm">
@@ -130,7 +130,7 @@
                                             </td>
                                             <td>
                                                 <x-select
-                                                    wire:model.live="assignments.{{ $field }}"
+                                                    wire:model="assignments.{{ $field }}"
                                                     :options="$columnOptions"
                                                     aria-label="Columna para {{ $label }}"
                                                     data-testid="column-{{ $field }}"
@@ -182,7 +182,17 @@
 
                 @if ($batch->status === BatchStatus::Uploaded)
                     <x-progress class="progress-info h-1" indeterminate />
-                    <p class="mt-3 text-sm">En la cola: la validación empieza en cuanto se libere el proceso.</p>
+                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-sm">En la cola: la validación empieza en cuanto se libere el proceso.</p>
+                        <x-button
+                            label="Validar de nuevo"
+                            icon="o-arrow-path"
+                            class="btn-ghost btn-sm"
+                            wire:click="requeue"
+                            spinner="requeue"
+                            tooltip-left="Si lleva mucho en la cola o la cola no respondió al subirlo."
+                        />
+                    </div>
                 @elseif ($batch->status === BatchStatus::Validating)
                     <x-progress class="progress-info h-1" indeterminate />
                     <p class="mt-3 text-sm">Validando… {{ number_format($batch->processed_rows) }} filas leídas.</p>

@@ -131,9 +131,10 @@ return [
     'temporary_file_upload' => [
         // Las únicas subidas son las exportaciones del SII, con datos personales: también su copia
         // temporal vive en el disco `imports` (storage/app/imports, fuera de git; CLAUDE.md, regla 9).
-        // 20 MB, el mismo límite que PHP, Caddy y nginx (docker/).
+        // 19 MB: con el resto de la petición, cabe en los 20 MB de PHP, Caddy y nginx (docker/), así
+        // que un archivo grande recibe este mensaje y no un 413 del proxy.
         'disk' => env('LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK', 'imports'),
-        'rules' => ['required', 'file', 'max:20480'],
+        'rules' => ['required', 'file', 'max:19000'],
         'directory' => 'tmp',
         'middleware' => null,                                 // Example: 'throttle:5,1'            | Default: 'throttle:60,1'
         'preview_mimes' => [                                  // Supported file types for temporary pre-signed file URLs...

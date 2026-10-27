@@ -6,14 +6,17 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Jobs\ValidateQueuedBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportFileUploads\FileUploadConfiguration;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
@@ -75,6 +78,7 @@ describe('admin', function () {
         wizardWithFile($this->admin)
             ->assertHasNoErrors()
             ->assertSet('step', 2)
+            ->assertSee('Columna del archivo')
             ->assertSet('header', ['clave', 'nombre', 'modalidad', 'extra'])
             ->assertSet('assignments', ['code' => 'clave', 'name' => 'nombre', 'modality' => 'modalidad']);
     });
@@ -140,7 +144,7 @@ describe('admin', function () {
         $component->assertSet('batchId', $batch->id)->assertSet('step', 3);
 
         // La copia temporal de Livewire se borra: el archivo ya vive en el disco `imports` con su lote.
-        expect(Storage::disk('imports')->allFiles('tmp'))->toBe([])
+        expect(livewireTemporaryUploads())->toBe([])
             ->and(Storage::disk('imports')->exists($batch->file_path))->toBeTrue();
     });
 
@@ -223,6 +227,55 @@ describe('admin', function () {
         expect(ImportBatch::count())->toBe(0);
     });
 
+    it('cambiar de archivo o empezar de nuevo borra la copia temporal y su json', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('imports::pages.import-wizard')
+            ->set('file', campusCsv())
+            ->set('file', UploadedFile::fake()->createWithContent('otro.csv', "clave\nC1\n"));
+
+        // Solo queda el segundo archivo, con su json.
+        expect(livewireTemporaryUploads())->toHaveCount(2);
+
+        $page->call('startOver');
+
+        expect(livewireTemporaryUploads())->toBe([]);
+    });
+
+    it('no sube un archivo distinto del que se revisó', function () {
+        wizardWithFile($this->admin)
+            ->set('file', UploadedFile::fake()->createWithContent('otro.csv', "x,y\n1,2\n"))
+            ->call('upload')
+            ->assertHasErrors('file')
+            ->assertSee('El archivo cambió después de revisar sus columnas: vuelve al paso 1 y revísalas otra vez.');
+
+        expect(ImportBatch::count())->toBe(0);
+    });
+
+    it('si la cola no responde al subir, el lote queda subido y abierto en la página', function () {
+        Bus::shouldReceive('dispatch')->once()->andThrow(new RuntimeException('Valkey no responde.'));
+
+        $page = wizardWithFile($this->admin)->call('upload');
+
+        $batch = ImportBatch::sole();
+
+        expect($batch->status)->toBe(BatchStatus::Uploaded)
+            ->and(lastToastOf($page))->type->toBe('error')->title->toBe('La cola no respondió');
+
+        $page->assertSet('batchId', $batch->id)->assertSee('Validar de nuevo');
+    });
+
+    it('vuelve a encolar la validación de un lote que se quedó subido, y de ninguno más', function () {
+        $uploaded = app(StoreImportBatch::class)->handle($this->admin, 'test-campuses', campusCsv());
+
+        wizardForBatchId($this->admin, $uploaded->id)->call('requeue');
+
+        expect($uploaded->fresh()->status)->toBe(BatchStatus::Validated);
+
+        Queue::fake();
+        wizardForBatchId($this->admin, $uploaded->id)->call('requeue');
+        Queue::assertNothingPushed();
+    });
+
     it('volver al paso 1 deja elegir otro archivo', function () {
         wizardWithFile($this->admin)->call('back')->assertSet('step', 1)->assertSet('header', []);
     });
@@ -268,6 +321,21 @@ describe('admin', function () {
     });
 });
 
+/**
+ * Las copias temporales de Livewire: en pruebas, en su propio disco (FileUploadConfiguration::disk()).
+ *
+ * @return list<string>
+ */
+function livewireTemporaryUploads(): array
+{
+    return Storage::disk(FileUploadConfiguration::disk())->allFiles(FileUploadConfiguration::directory());
+}
+
+function wizardForBatchId(User $user, string $batchId): Testable
+{
+    return Livewire::actingAs($user)->withQueryParams(['lote' => $batchId])->test('imports::pages.import-wizard');
+}
+
 function importWizardMenuVisibleTo(User $user): bool
 {
     test()->actingAs($user);
@@ -304,6 +372,7 @@ describe('otros roles', function () {
         'continuar' => ['continue', []],
         'subir' => ['upload', []],
         'abrir un lote' => ['open', ['lote']],
+        'volver a encolar' => ['requeue', []],
     ]);
 
     it('a quien no tiene sesión lo manda al login', function () {

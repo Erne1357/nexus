@@ -15,14 +15,17 @@ use App\Modules\Imports\Templates\ColumnMatcher;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\FileUploadConfiguration;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
+use Mary\Traits\Toast;
 
 /**
  * Asistente de importación (tarea 1.2), en cuatro pasos: archivo, columnas, validación y aplicación.
@@ -32,7 +35,12 @@ use Livewire\WithFileUploads;
  * 2. Propone qué columna va a cada campo con ColumnMatcher, por nombre o con un mapeo guardado, y avisa
  *    las columnas de ese mapeo que el archivo no trae. Si el admin cambia la propuesta, la guarda como
  *    mapeo nuevo con CreateImportMapping (pide un nombre). Al confirmar sube el lote con
- *    StoreImportBatch y lo manda a validar a la cola (ValidateQueuedBatch).
+ *    StoreImportBatch y lo manda a validar a la cola (ValidateQueuedBatch). Si la cola no responde, el
+ *    lote ya quedó abierto y "Validar de nuevo" lo vuelve a encolar: un job de más no lo toca.
+ *
+ * La copia temporal del archivo (una exportación del SII, con datos personales) se borra al subir el
+ * lote, al cambiar de archivo y al empezar de nuevo; si el admin cierra la pestaña, la borra la limpieza
+ * de Livewire a las 24 horas.
  * 3. y 4. Leen el lote de la URL (`?lote=`), así que se retoman al volver a la página o desde los lotes
  *    recientes. Mientras la cola trabaja, la vista se refresca sola con `wire:poll`.
  *
@@ -43,7 +51,7 @@ use Livewire\WithFileUploads;
  */
 new #[Title('Importaciones')] class extends Component
 {
-    use WithFileUploads;
+    use Toast, WithFileUploads;
 
     /** Paso del indicador (MaryUI x-steps); lo recalcula cada render a partir del estado. */
     public int $step = 1;
@@ -56,6 +64,10 @@ new #[Title('Importaciones')] class extends Component
     /** @var list<string> columnas del archivo, leídas en continue() */
     #[Locked]
     public array $header = [];
+
+    /** El archivo temporal cuyas columnas se leyeron: upload() sube ese y no otro. */
+    #[Locked]
+    public string $readFile = '';
 
     /** '' es "por nombre de columna"; si no, el id de un mapeo guardado de la plantilla. */
     public string $mappingId = '';
@@ -97,15 +109,17 @@ new #[Title('Importaciones')] class extends Component
             default => 1,
         };
 
+        $labels = array_map(fn (ImportTemplate $template): string => $template->label(), $templates->all());
+
         return [
+            // La vista recibe las propiedades antes de with(): el paso de este render va aparte.
+            'currentStep' => $this->step,
             'batch' => $batch,
-            'batchTemplate' => $batch === null ? null : ($templates->has($batch->template) ? $templates->get($batch->template)->label() : $batch->template),
+            'batchTemplate' => $batch === null ? null : ($labels[$batch->template] ?? $batch->template),
             'definition' => $definition,
             'campus' => $context->activeCampus(),
-            'templates' => array_values(array_map(fn (ImportTemplate $template): array => [
-                'id' => $template->key(),
-                'name' => $template->label(),
-            ], $templates->all())),
+            'templateLabels' => $labels,
+            'templates' => array_map(fn (string $key, string $label): array => ['id' => $key, 'name' => $label], array_keys($labels), $labels),
             'mappings' => [
                 ['id' => '', 'name' => 'Por nombre de columna'],
                 ...$saved->map(fn (ImportMapping $mapping): array => ['id' => $mapping->id, 'name' => $mapping->name])->all(),
@@ -127,10 +141,7 @@ new #[Title('Importaciones')] class extends Component
     {
         $this->authorize('create', ImportBatch::class);
 
-        $this->validate([
-            'template' => ['required', Rule::in(array_keys($this->templatesByKey($templates)))],
-            'file' => ['required', 'file', 'extensions:xlsx,csv,txt'],
-        ]);
+        $this->validate($this->fileRules($templates));
 
         $definition = $templates->get($this->template);
 
@@ -149,6 +160,7 @@ new #[Title('Importaciones')] class extends Component
         }
 
         $this->header = $header;
+        $this->readFile = $this->file->getFilename();
         $this->reset('mappingId', 'mappingName');
         $this->assignments = $this->assignmentsFrom($definition, $matcher->match($definition, $header));
     }
@@ -169,7 +181,7 @@ new #[Title('Importaciones')] class extends Component
         $definition = $templates->get($this->template);
         $mapping = $this->selectedMapping(app(ImportMappingQuery::class));
 
-        $this->resetValidation('mappingName');
+        $this->resetValidation(['assignments', 'mappingName']);
         $this->assignments = $this->assignmentsFrom($definition, app(ColumnMatcher::class)->match($definition, $this->header, $mapping?->columns));
     }
 
@@ -188,12 +200,17 @@ new #[Title('Importaciones')] class extends Component
         $this->authorize('create', ImportBatch::class);
 
         $this->validate([
-            'template' => ['required', Rule::in(array_keys($this->templatesByKey($templates)))],
-            'file' => ['required', 'file', 'extensions:xlsx,csv,txt'],
+            ...$this->fileRules($templates),
             'assignments' => ['array'],
             'assignments.*' => ['nullable', 'string', Rule::in($this->header)],
             'mappingName' => ['nullable', 'string', 'max:255'],
         ]);
+
+        if ($this->file->getFilename() !== $this->readFile) {
+            $this->addError('file', 'El archivo cambió después de revisar sus columnas: vuelve al paso 1 y revísalas otra vez.');
+
+            return;
+        }
 
         $definition = $templates->get($this->template);
         $columns = $this->columnsFrom($definition);
@@ -241,12 +258,37 @@ new #[Title('Importaciones')] class extends Component
             $mapping,
         ));
 
-        ValidateQueuedBatch::dispatch($batch);
-
-        // El archivo ya vive en el disco `imports` con su lote: la copia temporal trae datos personales.
-        $this->file->delete();
-        $this->reset('file', 'header', 'assignments', 'mappingId', 'mappingName');
+        // El archivo ya vive en el disco `imports` con su lote. Desde aquí la página apunta al lote, para
+        // que un fallo de la cola no lleve a subirlo dos veces.
+        $this->discardUpload();
+        $this->reset('header', 'readFile', 'assignments', 'mappingId', 'mappingName');
         $this->batchId = $batch->id;
+
+        $this->queueValidation($batch);
+    }
+
+    /**
+     * Vuelve a mandar a validar un lote que se quedó subido, por ejemplo porque la cola no respondió.
+     * Un job de más no toca el lote: el primero que lo toma lo valida.
+     */
+    public function requeue(ImportBatchQuery $batches): void
+    {
+        $this->authorize('create', ImportBatch::class);
+
+        $batch = $batches->findOrFail((string) $this->batchId);
+        $this->authorize('view', $batch);
+
+        if ($batch->status === BatchStatus::Uploaded) {
+            $this->queueValidation($batch);
+        }
+    }
+
+    /**
+     * Cambiar de archivo borra la copia temporal del anterior.
+     */
+    public function updatingFile(): void
+    {
+        $this->discardUpload();
     }
 
     /**
@@ -254,7 +296,7 @@ new #[Title('Importaciones')] class extends Component
      */
     public function back(): void
     {
-        $this->reset('header', 'assignments', 'mappingId', 'mappingName');
+        $this->reset('header', 'readFile', 'assignments', 'mappingId', 'mappingName');
         $this->resetValidation();
     }
 
@@ -276,7 +318,8 @@ new #[Title('Importaciones')] class extends Component
      */
     public function startOver(): void
     {
-        $this->reset('template', 'file', 'header', 'assignments', 'mappingId', 'mappingName', 'batchId');
+        $this->discardUpload();
+        $this->reset('template', 'file', 'header', 'readFile', 'assignments', 'mappingId', 'mappingName', 'batchId');
         $this->resetValidation();
     }
 
@@ -287,7 +330,6 @@ new #[Title('Importaciones')] class extends Component
     {
         return [
             'template.required' => 'Elige una plantilla de importación.',
-            'template.in' => 'Elige una plantilla de importación.',
             'file.required' => 'Elige el archivo que exportaste del SII.',
             'file.file' => 'Elige el archivo que exportaste del SII.',
             'file.extensions' => 'El archivo debe ser .xlsx, .csv o .txt.',
@@ -314,17 +356,47 @@ new #[Title('Importaciones')] class extends Component
     }
 
     /**
-     * @return array<string, ImportTemplate>
+     * Plantilla y archivo, en continue() y otra vez en upload(): llegan del navegador.
+     *
+     * @return array<string, list<mixed>>
      */
-    private function templatesByKey(TemplateRegistry $templates): array
+    private function fileRules(TemplateRegistry $templates): array
     {
-        $byKey = [];
+        return [
+            'template' => ['required', 'string', function (string $attribute, mixed $value, Closure $fail) use ($templates): void {
+                if (! $templates->has($value)) {
+                    $fail('Elige una plantilla de importación.');
+                }
+            }],
+            'file' => ['required', 'file', 'extensions:xlsx,csv,txt'],
+        ];
+    }
 
-        foreach ($templates->all() as $template) {
-            $byKey[$template->key()] = $template;
+    private function queueValidation(ImportBatch $batch): void
+    {
+        try {
+            ValidateQueuedBatch::dispatch($batch);
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->error('La cola no respondió', 'El archivo quedó subido: usa «Validar de nuevo» en un momento.');
+        }
+    }
+
+    /**
+     * Borra la copia temporal del archivo subido y su .json, que guarda el nombre original.
+     */
+    private function discardUpload(): void
+    {
+        if ($this->file instanceof TemporaryUploadedFile) {
+            $name = $this->file->getFilename();
+
+            Storage::disk(FileUploadConfiguration::disk())->delete([
+                FileUploadConfiguration::path($name, false),
+                FileUploadConfiguration::path("{$name}.json", false),
+            ]);
         }
 
-        return $byKey;
+        $this->file = null;
     }
 
     /**
