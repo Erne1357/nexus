@@ -20,6 +20,7 @@
             name="term"
             aria-label="Periodo activo"
             :options="$terms"
+            :placeholder="$termId === null ? 'Sin periodo' : null"
             wire:model="termId"
             wire:change="apply"
         />

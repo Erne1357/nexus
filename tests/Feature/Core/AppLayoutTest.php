@@ -64,3 +64,23 @@ it('la barra lateral de MaryUI solo guarda true o false en la sesión', function
     'false' => ['false', 'false'],
     'código en lugar de un booleano' => ['alert(document.cookie)', 'false'],
 ]);
+
+it('reescribe a false un estado de la barra lateral que no sea true o false antes de pintar la página', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->withSession(['mary-sidebar-collapsed' => 'alert(1)'])
+        ->get('/')
+        ->assertOk()
+        ->assertDontSee('alert(1)', false)
+        ->assertSee('collapsed: false,', false);
+
+    expect(session('mary-sidebar-collapsed'))->toBe('false');
+});
+
+it('conserva el estado true de la barra lateral', function () {
+    $this->actingAs(User::factory()->admin()->create())
+        ->withSession(['mary-sidebar-collapsed' => 'true'])
+        ->get('/')
+        ->assertSee('collapsed: true,', false);
+
+    expect(session('mary-sidebar-collapsed'))->toBe('true');
+});
