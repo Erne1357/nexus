@@ -1,6 +1,8 @@
 <?php
 
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 /*
 | Un usuario desactivado no entra (LoginTest) ni conserva la sesión que ya tenía abierta: en
@@ -52,3 +54,27 @@ it('no cierra la sesión de un usuario activo', function () {
 
     $this->assertAuthenticatedAs($user);
 });
+
+it('no deja volver con la cookie de recordarme a un usuario desactivado ni anota su acceso', function () {
+    $user = User::factory()->create(['is_active' => false, 'remember_token' => Str::random(60), 'last_login_at' => null]);
+
+    $this->withCookie(Auth::guard()->getRecallerName(), $user->getKey().'|'.$user->getRememberToken().'|'.$user->password)
+        ->get('/')
+        ->assertRedirect('/login');
+
+    $this->assertGuest();
+    expect($user->fresh()->last_login_at)->toBeNull();
+});
+
+it('responde 401 a una petición JSON o de Livewire de un usuario desactivado y cierra su sesión', function (array $headers) {
+    $this->actingAs(User::factory()->create(['is_active' => false]))
+        ->withHeaders($headers)
+        ->get('/')
+        ->assertUnauthorized()
+        ->assertJson(['message' => 'Tu sesión terminó. Vuelve a iniciar sesión.']);
+
+    $this->assertGuest();
+})->with([
+    'JSON' => [['Accept' => 'application/json']],
+    'Livewire' => [['X-Livewire' => '1']],
+]);

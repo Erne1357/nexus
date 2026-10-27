@@ -53,6 +53,18 @@ it('cambia la contraseña y apaga must_change_password', function () {
         ->and($user->must_change_password)->toBeFalse();
 });
 
+it('rota el remember_token para que las cookies de recordarme anteriores dejen de servir', function () {
+    $before = $this->user->getRememberToken();
+
+    updatePassword($this->user, [
+        'current_password' => 'Inicial-2026',
+        'password' => 'Nueva-clave-2027',
+        'password_confirmation' => 'Nueva-clave-2027',
+    ]);
+
+    expect($this->user->fresh()->getRememberToken())->not->toBeEmpty()->not->toBe($before);
+});
+
 it('exige la contraseña actual', function (array $input) {
     $errors = validationErrors(fn () => updatePassword($this->user, $input + [
         'password' => 'Nueva-clave-2027',
