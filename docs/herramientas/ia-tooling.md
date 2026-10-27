@@ -7,17 +7,30 @@ Qué se usa, para qué, y qué no hace falta. Criterio: lo justo para que tres p
 | Herramienta | Tipo | Uso en Nexus |
 |---|---|---|
 | **superpowers** | Plugin de proceso | Obligatorio. `brainstorming` cuando un issue tiene ambigüedad; `writing-plans` para volver detalladas las fases 🟦; `test-driven-development` en toda implementación; `systematic-debugging` ante cualquier bug; `using-git-worktrees` al iniciar una rama; `requesting-code-review` y `verification-before-completion` antes de abrir PR. |
-| **laravel-boost** | Plugin con servidor MCP | Documentación exacta de Laravel 13, Livewire 4, Pest 5 y paquetes instalados; tinker, esquema de BD, logs y errores del navegador. Hoy **falla al conectar** porque busca PHP local. Solución: instalar Boost en el contenedor y configurar el MCP del proyecto con `docker compose exec` (ver abajo). |
+| **laravel-boost** | Plugin con servidor MCP | Documentación exacta de Laravel 13, Livewire 4, Pest 5 y paquetes instalados; tinker, esquema de BD, logs y errores del navegador. El servidor del plugin global falla al conectar porque busca PHP local; el del proyecto (`.mcp.json`) corre dentro del contenedor (ver abajo). |
 | **playwright** | Plugin con servidor MCP | Exploración manual de la UI por la IA (abrir una pantalla, hacer clic, leer errores de consola) cuando un browser test falla y hay que entender por qué. Los E2E automatizados son de Pest, no de este plugin. |
 | **caveman** | Plugin de estilo | Opcional. Reduce tokens en sesiones largas. No afecta el código. |
 
-## Por configurar en la fase 0
+## Configuración del proyecto
 
 ### Laravel Boost dentro de Docker
 
-1. Instalar en el contenedor: `docker compose exec app composer require laravel/boost --dev` y `docker compose exec app php artisan boost:install` (regenera `AGENTS.md`, que `CLAUDE.md` importa).
-2. El archivo `.mcp.json` del proyecto declara el servidor `boost` ejecutando `docker compose exec -T app php artisan boost:mcp`. Requiere que los contenedores estén arriba.
-3. Desactivar el servidor del plugin global (`plugin:laravel-boost`) en este proyecto para no ver el error de conexión, o dejarlo; no estorba.
+Boost (`laravel/boost`, solo `require-dev`) está instalado en el contenedor y no hay PHP local. Lo que queda versionado:
+
+| Archivo | Para qué |
+|---|---|
+| `.mcp.json` | Servidor `boost`: `docker compose exec -T app php artisan boost:mcp`. No lo reescribas con `boost:install --mcp`: generaría una entrada `laravel-boost` con rutas de PHP local. |
+| `boost.json` | Qué instaló Boost (agente `claude_code`, guías y MCP; sin *skills*). `boost:update` lo lee. |
+| `config/boost.php` | Configuración publicada. Fija `agents.claude_code.guidelines_path = AGENTS.md` para que las guías no se inyecten en `CLAUDE.md`. |
+| `AGENTS.md` | Bloque `<laravel-boost-guidelines>` generado (Laravel 13, Livewire 4, Pest 5, Pint, Octane). `CLAUDE.md` lo importa con `@AGENTS.md`. No se edita a mano. |
+
+Notas de uso:
+
+- El `.mcp.json` ejecuta en `/app`, la carpeta principal montada en el contenedor, no en los worktrees. Para que el MCP funcione, esa carpeta debe estar en `develop` con `composer install` hecho y los contenedores arriba (`docker compose up -d`).
+- Regenerar las guías cuando cambien las dependencias (`composer require`/`update`): `docker compose exec app php artisan boost:update`, y commitear el cambio de `AGENTS.md`. Para cambiar qué se instala (agentes, paquetes de terceros) se repite `boost:install`; revisa después que `CLAUDE.md` y `.mcp.json` sigan intactos (`git diff`).
+- No se instalan las *skills* de Boost en `.claude/skills/`: el proyecto solo tendrá las tres propias de abajo. Por eso `boost.json` no lista `skills`.
+- Comprobación rápida del servidor (JSON-RPC por stdin): `initialize`, `notifications/initialized` y `tools/list` a `docker compose exec -T app php artisan boost:mcp`. Herramientas actuales: `application-info`, `browser-logs`, `database-connections`, `database-query`, `database-schema`, `get-absolute-url`, `last-error`, `read-log-entries`, `record-rule`, `search-docs`.
+- El servidor del plugin global (`plugin:laravel-boost`) falla con `Executable not found in $PATH: php` porque busca PHP local. No estorba; se puede desactivar en `/plugin` o en `~/.claude/settings.json` (`enabledPlugins`: `"laravel-boost@…": false`) para quitar el error. El que se usa es `boost`, el del proyecto.
 
 ### Permisos y hooks de Claude Code
 
