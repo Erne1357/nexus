@@ -96,6 +96,27 @@ El CRUD de Campus de `Core` es la plantilla de todo módulo: cada archivo es el 
 
 Para crear un módulo o agregarle una pantalla de catálogo, una Action, una Query o una Policy, sigue los pasos de `.claude/skills/nexus-module/SKILL.md`, que remite a estos archivos y reúne los errores que ya atraparon las revisiones.
 
+## Plantillas de importación
+
+Cada catálogo que llega del SII se importa con una plantilla: una clase en `app/Modules/Imports/Templates/` que extiende `ImportTemplate` y se agrega a la lista `TEMPLATES` de `ImportsServiceProvider`. Todas viven en Imports, también las de Academic, Faculty, Facilities y Students, porque Imports depende de los catálogos y no al revés (tarea 1.1). El ejemplo para copiar es `tests/Fixtures/ImportTemplates/CampusesTemplate.php`.
+
+| Método | Qué decide |
+|---|---|
+| `key()`, `label()` | Clave (`import_batches.template`) y nombre en la interfaz |
+| `fields()` | Campos que espera, en orden, con su etiqueta en español: a ellos se mapean las columnas del archivo y con ellas se escriben los mensajes de error |
+| `naturalKey()`, `requiresCampus()` | Clave natural de `reglas-de-negocio.md` ("Reglas de datos"); si es por campus, `requiresCampus()` agrega `campus_id` del campus del lote |
+| `model()` | El modelo que escribe |
+| `normalize()` | Recorta, junta espacios y convierte vacíos en null; la plantilla la extiende (claves en mayúsculas, fechas del SII) |
+| `rules()`, `messages()` | Reglas de Laravel por campo sobre la fila normalizada |
+| `check()` | Lo que lee la base (claves cruzadas). La de la base ya marca como error un registro borrado con la misma clave y como advertencia uno inactivo; la plantilla la extiende |
+| `attributes()`, `defaults()` | Lo que se escribe en altas y cambios, y lo que solo se escribe al dar de alta |
+| `apply()` | Alta o cambio por clave natural; nunca cambia `is_active` de un registro existente ni restaura un borrado. La plantilla lo sobrescribe solo si su escritura no es un registro por fila |
+| `afterApply()` | Lo que corre una vez al terminar el lote, como el job de recálculo de progreso de Students (tarea 1.4) |
+
+`validate()` y `keyFor()` son `final`: el motor depende de que se comporten igual en toda plantilla. Una plantilla no guarda estado; `TemplateRegistry` guarda clases y crea una plantilla nueva en cada `get()`, por eso es un singleton seguro con Octane. Lo que cambia por lote (quién lo aplica y el campus) llega en `ImportContext`. `apply()` no deja bitácora: el lote deja una entrada al aplicarse y el detalle por registro queda en `import_rows`.
+
+Pruebas de una plantilla: unit para `normalize()` y lo puro; feature para `validate()` (cada regla con su mensaje y cada clave cruzada) y `apply()` (alta, cambio, aplicar dos veces sin cambios). Copia `tests/Unit/Imports/ImportTemplateTest.php` y `tests/Feature/Imports/ImportTemplateTest.php`.
+
 ## Módulos
 
 | Módulo | Responsabilidad | Entrega |

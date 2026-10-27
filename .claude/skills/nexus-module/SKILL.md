@@ -131,9 +131,10 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 - El nombre debe ser una ruta registrada (`tests/Feature/Core/NavigationTest.php` revisa todas). La entrada entra en el mismo PR que su pantalla, con prueba de quién la ve y quién no.
 - La misma prueba compara listas exactas de etiquetas por rol: una entrada nueva visible para ese rol la rompe. Actualízala en el mismo PR y avísalo en el issue, porque es una prueba de Core.
 
-### 12. Seeder (si aplica)
+### 12. Seeder y plantilla de importación (si aplican)
 
 - `Database/Seeders/<Modelo>Seeder.php`, copia de `Database/Seeders/CampusSeeder.php`: idempotente (`withTrashed()->firstOrCreate()` por clave natural, no pisa lo editado), solo datos documentados, nunca datos personales reales. Llámalo desde `database/seeders/DatabaseSeeder.php` en el orden del mapa. Prueba como `tests/Feature/Core/CoreSeedersTest.php`.
+- Si el catálogo se importa del SII, su plantilla va en `app/Modules/Imports/Templates/<Catalogo>Template.php`, no en el módulo del catálogo, y se agrega a `TEMPLATES` de `ImportsServiceProvider`. Copia `tests/Fixtures/ImportTemplates/CampusesTemplate.php`; el contrato y qué decide cada método están en `docs/arquitectura/arquitectura.md` ("Plantillas de importación"). No escribas bitácora ni cambies `is_active` en `apply()`: el contrato ya lo resuelve.
 
 ### 13. Pruebas
 
