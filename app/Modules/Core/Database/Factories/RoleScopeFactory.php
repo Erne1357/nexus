@@ -29,7 +29,7 @@ class RoleScopeFactory extends Factory
             'campus_id' => Campus::factory(),
             'department_id' => null,
             'career_id' => null,
-            'valid_from' => now(RoleScope::TIMEZONE)->subMonth()->toDateString(),
+            'valid_from' => today()->subMonth()->toDateString(),
             'valid_to' => null,
         ];
     }

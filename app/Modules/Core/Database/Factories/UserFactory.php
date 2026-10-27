@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
@@ -55,9 +56,17 @@ class UserFactory extends Factory
      * dar varios roles o varios alcances del mismo rol.
      *
      * @param  array<string, mixed>  $scope
+     *
+     * @throws InvalidArgumentException si `$scope` no llena Role::scopeColumns() del rol
      */
     public function withRole(Role $role, array $scope = []): static
     {
+        foreach ($role->scopeColumns() as $column) {
+            if (($scope[$column] ?? null) === null) {
+                throw new InvalidArgumentException("El alcance de {$role->value} necesita {$column}.");
+            }
+        }
+
         return $this->afterCreating(function (User $user) use ($role, $scope): void {
             $user->assignRole(SpatieRole::findOrCreate($role->value));
 

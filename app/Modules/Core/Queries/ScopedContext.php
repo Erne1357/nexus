@@ -19,14 +19,17 @@ use Illuminate\Support\Collection;
  * - Un usuario inactivo, o ninguno, no tiene ningún rol.
  * - `admin` (rol de spatie) tiene todos los roles y lo cubre todo, sin alcance.
  * - Cualquier otro rol cuenta solo si el usuario tiene el rol de spatie **y** un alcance vigente
- *   de ese rol (RoleScope::current) que llene las columnas que el rol exige (Role::scopeColumns).
+ *   de ese rol (RoleScope::current), en un campus activo y no borrado, que llene las columnas que
+ *   el rol exige (Role::scopeColumns).
  * - Un alcance cubre un objetivo de su campus si no fija departamento o carrera, o si fija los
  *   del objetivo: el jefe de D cubre lo de D en cualquier carrera; el coordinador de X, lo de X en
  *   cualquier departamento.
+ * - El docente nunca cubre por covers(): su acceso a su propia carga lo deciden las policies de
+ *   Staffing y Scheduling por asignación. has(Role::Docente) y canAccessCampus() sí lo cuentan.
  *
  * El contenedor la registra con `scoped` (una instancia por petición, por Octane) para el usuario
- * autenticado; forUser() da la de otro usuario. Lo cargado se recuerda por usuario: si el usuario
- * autenticado cambia a media petición, se vuelve a cargar.
+ * autenticado; forUser() da, y recuerda en esta instancia, la de otro usuario. Lo cargado se
+ * recuerda por petición: se vuelve a cargar si el usuario autenticado cambia o tras refresh().
  */
 final class ScopedContext
 {
@@ -37,6 +40,8 @@ final class ScopedContext
 
     public const string ACTIVE_TERM = 'core.active_term_id';
 
+    private bool $loaded = false;
+
     private int|string|null $loadedFor = null;
 
     private bool $admin = false;
@@ -46,6 +51,12 @@ final class ScopedContext
 
     /** @var Collection<int, Campus>|null */
     private ?Collection $campuses = null;
+
+    /** @var array<string, Term|null> periodo activo por elección de sesión ('' sin elección) */
+    private array $terms = [];
+
+    /** @var array<int|string, self> contextos de otros usuarios, por id */
+    private array $others = [];
 
     /**
      * @param  Closure(): mixed  $resolveUser  usuario de esta petición; sin sesión, el contexto
@@ -64,7 +75,11 @@ final class ScopedContext
      */
     public function forUser(User $user): self
     {
-        return $this->user()?->is($user) ? $this : new self(fn (): User => $user);
+        if ($this->resolvedUser()?->is($user)) {
+            return $this;
+        }
+
+        return $this->others[$user->getKey()] ??= new self(fn (): User => $user);
     }
 
     /**
@@ -72,14 +87,27 @@ final class ScopedContext
      */
     public function user(): ?User
     {
-        $user = ($this->resolveUser)();
-        $user = $user instanceof User && $user->is_active ? $user : null;
+        $user = $this->resolvedUser();
 
-        if ($user?->getKey() !== $this->loadedFor) {
+        if (! $this->loaded || $user?->getKey() !== $this->loadedFor) {
             $this->load($user);
         }
 
         return $user;
+    }
+
+    /**
+     * Vuelve a cargar roles y alcances, también los de forUser(), en la siguiente pregunta. La
+     * llama la Action que cambie roles o alcances a media petición.
+     */
+    public function refresh(): void
+    {
+        $this->resolvedUser()?->unsetRelation('roles');
+        $this->loaded = false;
+
+        foreach ($this->others as $context) {
+            $context->refresh();
+        }
     }
 
     public function isAdmin(): bool
@@ -99,7 +127,7 @@ final class ScopedContext
 
     /**
      * Si el usuario, con alguno de `$roles`, cubre el objetivo: un campus completo, o un
-     * departamento o una carrera dentro de él. El admin, siempre.
+     * departamento o una carrera dentro de él. El admin, siempre; el docente, nunca.
      *
      * @param  Role|list<Role>  $roles
      */
@@ -109,7 +137,7 @@ final class ScopedContext
             return true;
         }
 
-        $roles = is_array($roles) ? $roles : [$roles];
+        $roles = array_filter(is_array($roles) ? $roles : [$roles], fn (Role $role): bool => $role !== Role::Docente);
         $campusId = $campus instanceof Campus ? $campus->getKey() : $campus;
 
         return $this->scopes()->contains(fn (RoleScope $scope): bool => in_array($scope->role, $roles, true)
@@ -129,7 +157,7 @@ final class ScopedContext
     }
 
     /**
-     * Alcances vigentes y completos, de todos sus roles o solo de `$role`.
+     * Alcances vigentes, completos y en campus activos, de todos sus roles o solo de `$role`.
      *
      * @return Collection<int, RoleScope>
      */
@@ -173,7 +201,7 @@ final class ScopedContext
     }
 
     /**
-     * El periodo elegido o, por omisión, el actual (`is_current`).
+     * El periodo elegido o, por omisión, el actual (`is_current`). Se recuerda por elección.
      */
     public function activeTerm(): ?Term
     {
@@ -182,18 +210,33 @@ final class ScopedContext
         }
 
         $selected = $this->session?->get(self::ACTIVE_TERM);
+        $key = (string) $selected;
 
-        return ($selected === null ? null : Term::find($selected)) ?? Term::current()->first();
+        if (! array_key_exists($key, $this->terms)) {
+            $this->terms[$key] = ($selected === null ? null : Term::find($selected)) ?? Term::current()->first();
+        }
+
+        return $this->terms[$key];
+    }
+
+    private function resolvedUser(): ?User
+    {
+        $user = ($this->resolveUser)();
+
+        return $user instanceof User && $user->is_active ? $user : null;
     }
 
     private function load(?User $user): void
     {
+        $this->loaded = true;
         $this->loadedFor = $user?->getKey();
         $this->campuses = null;
+        $this->terms = [];
         $this->admin = $user?->hasRole(Role::Admin) ?? false;
         $this->scopes = $user === null ? new Collection : $user->roleScopes()
             ->current()
             ->whereIn('role', $user->getRoleNames()->all())
+            ->whereHas('campus', fn (Builder $query) => $query->where('is_active', true))
             ->get()
             ->filter(fn (RoleScope $scope): bool => collect($scope->role->scopeColumns())
                 ->every(fn (string $column): bool => $scope->{$column} !== null))

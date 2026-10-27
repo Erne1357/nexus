@@ -4,8 +4,6 @@ namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Database\Factories\RoleScopeFactory;
 use App\Modules\Core\Enums\Role;
-use Carbon\CarbonImmutable;
-use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -25,11 +23,6 @@ class RoleScope extends Model
 {
     /** @use HasFactory<RoleScopeFactory> */
     use HasFactory;
-
-    /**
-     * Zona de las fechas de vigencia: un alcance vale por días de Ciudad Juárez.
-     */
-    public const string TIMEZONE = 'America/Ciudad_Juarez';
 
     /**
      * @return array<string, string>
@@ -63,15 +56,15 @@ class RoleScope extends Model
     }
 
     /**
-     * Vigentes en `$on` (hoy en Ciudad Juárez si no se da): `valid_from` ≤ día ≤ `valid_to`,
-     * con `valid_to` nulo sin fecha de fin.
+     * Vigentes hoy (`today()` va en America/Ciudad_Juarez por config/app.php):
+     * `valid_from` ≤ hoy ≤ `valid_to`, con `valid_to` nulo sin fecha de fin.
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
-    protected function current(Builder $query, ?CarbonInterface $on = null): void
+    protected function current(Builder $query): void
     {
-        $day = CarbonImmutable::instance($on ?? now())->setTimezone(self::TIMEZONE)->toDateString();
+        $day = today()->toDateString();
 
         $query->where('valid_from', '<=', $day)
             ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $day));
