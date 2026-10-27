@@ -16,6 +16,14 @@ class ItemPolicy
     use UsesScopedContext;
 
     /**
+     * El listado solo lo ve el admin (la navegación de prueba lo pide con la ability `viewAny`).
+     */
+    public function viewAny(User $user): bool
+    {
+        return $this->scope($user)->isAdmin();
+    }
+
+    /**
      * Lo ve quien trabaja en su campus con cualquier rol.
      */
     public function view(User $user, Item $item): bool
