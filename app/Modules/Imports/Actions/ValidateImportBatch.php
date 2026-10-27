@@ -140,13 +140,9 @@ final class ValidateImportBatch
     private function columnsFor(ImportTemplate $template, array $header, ?ImportMapping $mapping): array
     {
         $columns = $this->matcher->match($template, $header, $mapping?->columns);
-        $missing = $this->matcher->missingKey($template, $columns);
 
-        if ($missing !== []) {
-            $fields = $template->fields();
-            $labels = implode(', ', array_map(fn (string $field): string => $fields[$field], $missing));
-
-            throw new UnreadableFile("Falta la columna de {$labels}, que identifica cada registro.");
+        if (($missing = $this->matcher->describeMissingKey($template, $columns)) !== null) {
+            throw new UnreadableFile($missing);
         }
 
         return $columns;

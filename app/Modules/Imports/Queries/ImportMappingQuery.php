@@ -26,8 +26,12 @@ final class ImportMappingQuery
             ->get();
     }
 
-    public function findOrFail(string $id): ImportMapping
+    /**
+     * El mapeo que eligió el admin, solo si es uno activo de la plantilla: el id llega del navegador y
+     * el mapeo pudo desactivarse después de abrir la página.
+     */
+    public function findActiveFor(string $template, string $id): ImportMapping
     {
-        return KeyLookup::findOrFail(ImportMapping::query(), $id);
+        return KeyLookup::findOrFail(ImportMapping::query()->where('template', $template)->where('is_active', true), $id);
     }
 }

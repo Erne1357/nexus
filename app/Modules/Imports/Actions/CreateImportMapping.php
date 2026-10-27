@@ -19,10 +19,11 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * roles: quién guarda lo decide la página con ImportBatchPolicy, porque mapear es parte de importar.
  *
  * Rechaza con una ValidationException por campo, sin guardar: una plantilla que no existe; un nombre
- * vacío o que ya usa otro mapeo de la plantilla, también uno desactivado o borrado (la clave única los
- * incluye); columnas hacia campos que la plantilla no tiene, dos columnas hacia el mismo campo y un
- * mapeo sin la columna de la clave natural, que ValidateImportBatch rechazaría al leer el archivo. El
- * nombre se recorta y junta sus espacios.
+ * vacío, de más de 255 caracteres o que ya usa otro mapeo de la plantilla sin importar mayúsculas,
+ * también uno desactivado o borrado (la clave única los incluye); una columna sin nombre o sin campo,
+ * columnas hacia campos que la plantilla no tiene, varias columnas hacia el mismo campo y un mapeo sin
+ * la columna de la clave natural, que ValidateImportBatch rechazaría al leer el archivo. El nombre se
+ * recorta y junta sus espacios.
  *
  * En una transacción revisa el nombre, escribe y deja bitácora; si otra sesión guarda el mismo nombre
  * entre la revisión y el insert, la restricción única responde con el mismo error. Después del commit
@@ -53,10 +54,15 @@ final class CreateImportMapping
             throw ValidationException::withMessages(['name' => 'Escribe un nombre para el mapeo.']);
         }
 
+        if (mb_strlen($name) > 255) {
+            throw ValidationException::withMessages(['name' => 'El nombre del mapeo no puede pasar de 255 caracteres.']);
+        }
+
         $this->ensureColumnsFit($definition, $columns);
 
         return DB::transaction(function () use ($user, $definition, $template, $name, $columns): ImportMapping {
-            if (ImportMapping::withTrashed()->where('template', $template)->where('name', $name)->exists()) {
+            // Sin importar mayúsculas: en la lista del asistente "SII 2026" y "sii 2026" serían el mismo.
+            if (ImportMapping::withTrashed()->where('template', $template)->whereRaw('lower(name) = lower(?)', [$name])->exists()) {
                 throw $this->nameTaken();
             }
 
@@ -86,35 +92,39 @@ final class CreateImportMapping
     }
 
     /**
-     * @param  array<string, string>  $columns
+     * @param  array<array-key, mixed>  $columns
      *
      * @throws ValidationException
      */
     private function ensureColumnsFit(ImportTemplate $template, array $columns): void
     {
-        $fields = $template->fields();
-        $unknown = array_values(array_diff($columns, array_keys($fields)));
+        foreach ($columns as $source => $field) {
+            if (trim((string) $source) === '' || ! is_string($field) || $field === '') {
+                throw ValidationException::withMessages(['columns' => 'Cada columna del mapeo necesita su nombre y el campo al que va.']);
+            }
+        }
+
+        $unknown = $this->matcher->unknownFields($template, $columns);
 
         if ($unknown !== []) {
             throw ValidationException::withMessages(['columns' => 'El mapeo apunta a campos que la plantilla no tiene: '.implode(', ', $unknown).'.']);
         }
 
-        foreach (array_keys($fields) as $field) {
-            $sources = array_keys($columns, $field, true);
+        $fields = $template->fields();
+        $repeated = [];
 
-            if (count($sources) > 1) {
-                $last = array_pop($sources);
-
-                throw ValidationException::withMessages(['columns' => "El campo {$fields[$field]} tiene dos columnas: ".implode(', ', $sources)." y {$last}."]);
-            }
+        foreach (array_keys(array_filter(array_count_values($columns), fn (int $count): bool => $count > 1)) as $field) {
+            $sources = array_map(strval(...), array_keys($columns, $field, true));
+            $last = array_pop($sources);
+            $repeated[] = "{$fields[$field]} (".implode(', ', $sources)." y {$last})";
         }
 
-        $missing = $this->matcher->missingKey($template, $columns);
+        if ($repeated !== []) {
+            throw ValidationException::withMessages(['columns' => 'Cada campo recibe una sola columna: '.implode('; ', $repeated).'.']);
+        }
 
-        if ($missing !== []) {
-            $labels = implode(', ', array_map(fn (string $field): string => $fields[$field], $missing));
-
-            throw ValidationException::withMessages(['columns' => "Falta la columna de {$labels}, que identifica cada registro."]);
+        if (($missing = $this->matcher->describeMissingKey($template, $columns)) !== null) {
+            throw ValidationException::withMessages(['columns' => $missing]);
         }
     }
 

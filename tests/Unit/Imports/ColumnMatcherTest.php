@@ -42,9 +42,27 @@ it('con un mapeo guardado usa solo el mapeo: sin columnas que no vienen ni campo
     expect($columns)->toBe(['CVE' => 'code']);
 });
 
-it('dice qué campos de la clave natural se quedaron sin columna', function () {
+it('con un mapeo guardado reconoce una columna de nombre numérico, que el json devuelve como número', function () {
+    $mapping = json_decode(json_encode(['2026' => 'code']), true);
+
+    expect((new ColumnMatcher)->match(new CampusesTemplate, ['2026', 'nombre'], $mapping))->toBe(['2026' => 'code']);
+});
+
+it('dice qué columnas de un mapeo guardado no vienen en el archivo', function () {
+    expect((new ColumnMatcher)->absentColumns(['CVE', '2026'], ['CVE' => 'code', 'MOD' => 'modality', 2026 => 'name', 'DESC' => 'name']))
+        ->toBe(['MOD', 'DESC']);
+});
+
+it('dice a qué campos que la plantilla no tiene apuntan unas columnas', function () {
+    expect((new ColumnMatcher)->unknownFields(new CampusesTemplate, ['CVE' => 'code', 'X' => 'retired', 'Y' => 'id', 'Z' => 'retired']))
+        ->toBe(['retired', 'id']);
+});
+
+it('dice qué campos de la clave natural se quedaron sin columna, y lo explica con su etiqueta', function () {
     $matcher = new ColumnMatcher;
 
     expect($matcher->missingKey(new CampusesTemplate, ['nombre' => 'name']))->toBe(['code'])
-        ->and($matcher->missingKey(new CampusesTemplate, ['clave' => 'code']))->toBe([]);
+        ->and($matcher->missingKey(new CampusesTemplate, ['clave' => 'code']))->toBe([])
+        ->and($matcher->describeMissingKey(new CampusesTemplate, ['nombre' => 'name']))->toBe('Falta la columna de clave, que identifica cada registro.')
+        ->and($matcher->describeMissingKey(new CampusesTemplate, ['clave' => 'code']))->toBeNull();
 });

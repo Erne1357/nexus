@@ -55,15 +55,28 @@ it('guarda el mapeo activo de la plantilla con sus columnas y quién lo creó', 
         ->and($mapping->creator->is($this->admin))->toBeTrue();
 });
 
-it('rechaza un nombre vacío o que ya usa otro mapeo de la plantilla, aunque esté borrado', function () {
+it('rechaza un nombre vacío, demasiado largo o que ya usa otro mapeo de la plantilla, aunque esté borrado o cambien las mayúsculas', function () {
     ImportMapping::factory()->create(['template' => 'test-campuses', 'name' => 'Borrado'])->delete();
 
     expect(importMappingErrors(fn () => newImportMapping($this->admin, name: '   ')))
         ->toBe(['name' => ['Escribe un nombre para el mapeo.']])
+        ->and(importMappingErrors(fn () => newImportMapping($this->admin, name: str_repeat('a', 256))))
+        ->toBe(['name' => ['El nombre del mapeo no puede pasar de 255 caracteres.']])
         ->and(importMappingErrors(fn () => newImportMapping($this->admin, name: 'Borrado')))
+        ->toBe(['name' => ['Ya hay un mapeo con ese nombre para esta plantilla.']])
+        ->and(importMappingErrors(fn () => newImportMapping($this->admin, name: 'BORRADO')))
         ->toBe(['name' => ['Ya hay un mapeo con ese nombre para esta plantilla.']])
         ->and(ImportMapping::withTrashed()->count())->toBe(1);
 });
+
+it('rechaza una columna sin nombre o sin un campo de texto', function (array $columns) {
+    expect(importMappingErrors(fn () => newImportMapping($this->admin, $columns)))
+        ->toBe(['columns' => ['Cada columna del mapeo necesita su nombre y el campo al que va.']]);
+})->with([
+    'columna sin nombre' => [['CVE' => 'code', ' ' => 'name']],
+    'campo vacío' => [['CVE' => 'code', 'DESC' => '']],
+    'campo que no es texto' => [['CVE' => 'code', 'DESC' => ['name']]],
+]);
 
 it('deja usar el mismo nombre en otra plantilla', function () {
     ImportMapping::factory()->create(['template' => 'other-template', 'name' => 'SII 2026']);
@@ -81,9 +94,9 @@ it('rechaza columnas hacia campos que la plantilla no tiene', function () {
         ->toBe(['columns' => ['El mapeo apunta a campos que la plantilla no tiene: retired, id.']]);
 });
 
-it('rechaza dos columnas hacia el mismo campo', function () {
-    expect(importMappingErrors(fn () => newImportMapping($this->admin, ['CVE' => 'code', 'DESC' => 'name', 'NOMBRE' => 'name'])))
-        ->toBe(['columns' => ['El campo nombre tiene dos columnas: DESC y NOMBRE.']]);
+it('rechaza varias columnas hacia el mismo campo y dice todas', function () {
+    expect(importMappingErrors(fn () => newImportMapping($this->admin, ['CVE' => 'code', 'DESC' => 'name', 'NOMBRE' => 'name', 'N2' => 'name', 'CLAVE' => 'code'])))
+        ->toBe(['columns' => ['Cada campo recibe una sola columna: clave (CVE y CLAVE); nombre (DESC, NOMBRE y N2).']]);
 });
 
 it('rechaza un mapeo sin la columna de la clave natural', function () {

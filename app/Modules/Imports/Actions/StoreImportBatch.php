@@ -9,6 +9,8 @@ use App\Modules\Imports\Events\BatchUploaded;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
 use App\Modules\Imports\Readers\SpreadsheetReader;
+use App\Modules\Imports\Templates\ColumnMatcher;
+use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +37,10 @@ use Throwable;
  */
 final class StoreImportBatch
 {
-    public function __construct(private readonly TemplateRegistry $templates) {}
+    public function __construct(
+        private readonly TemplateRegistry $templates,
+        private readonly ColumnMatcher $matcher,
+    ) {}
 
     /**
      * @throws ValidationException
@@ -59,7 +64,7 @@ final class StoreImportBatch
         }
 
         if ($mapping !== null) {
-            $this->ensureMappingFits($mapping, $template, array_keys($definition->fields()));
+            $this->ensureMappingFits($mapping, $definition);
         }
 
         $batch = new ImportBatch([
@@ -102,13 +107,11 @@ final class StoreImportBatch
     }
 
     /**
-     * @param  list<string>  $fields
-     *
      * @throws ValidationException
      */
-    private function ensureMappingFits(ImportMapping $mapping, string $template, array $fields): void
+    private function ensureMappingFits(ImportMapping $mapping, ImportTemplate $template): void
     {
-        if ($mapping->template !== $template) {
+        if ($mapping->template !== $template->key()) {
             throw ValidationException::withMessages(['mapping' => 'El mapeo de columnas es de otra plantilla.']);
         }
 
@@ -116,7 +119,7 @@ final class StoreImportBatch
             throw ValidationException::withMessages(['mapping' => 'El mapeo de columnas está desactivado.']);
         }
 
-        $unknown = array_values(array_diff($mapping->columns, $fields));
+        $unknown = $this->matcher->unknownFields($template, $mapping->columns);
 
         if ($unknown !== []) {
             throw ValidationException::withMessages(['mapping' => 'El mapeo de columnas apunta a campos que la plantilla ya no tiene: '.implode(', ', $unknown).'.']);

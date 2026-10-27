@@ -20,10 +20,13 @@ it('lista los mapeos activos de la plantilla, por nombre', function () {
         ->toBe(['Escolares', 'SII 2026']);
 });
 
-it('carga el mapeo elegido por su id y trata un id que no es uuid como uno que no existe', function () {
-    $mapping = ImportMapping::factory()->create();
+it('carga el mapeo elegido solo si es un mapeo activo de la plantilla', function () {
+    $mapping = ImportMapping::factory()->create(['template' => 'test-campuses']);
+    $inactive = ImportMapping::factory()->create(['template' => 'test-campuses', 'is_active' => false]);
     $query = app(ImportMappingQuery::class);
 
-    expect($query->findOrFail($mapping->id)->is($mapping))->toBeTrue()
-        ->and(fn () => $query->findOrFail('1 OR 1=1'))->toThrow(ModelNotFoundException::class);
+    expect($query->findActiveFor('test-campuses', $mapping->id)->is($mapping))->toBeTrue()
+        ->and(fn () => $query->findActiveFor('other-template', $mapping->id))->toThrow(ModelNotFoundException::class)
+        ->and(fn () => $query->findActiveFor('test-campuses', $inactive->id))->toThrow(ModelNotFoundException::class)
+        ->and(fn () => $query->findActiveFor('test-campuses', '1 OR 1=1'))->toThrow(ModelNotFoundException::class);
 });
