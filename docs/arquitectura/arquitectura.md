@@ -21,7 +21,7 @@ Nexus es un **monolito modular** en Laravel 13 + Livewire 4. No es hexagonal ni 
 
 ```
 app/Modules/<Modulo>/
-├── <Modulo>ServiceProvider.php   registra rutas, migraciones, vistas, namespace Livewire y policies
+├── <Modulo>ServiceProvider.php   extiende ModuleServiceProvider (ver "Registro de un módulo")
 ├── Models/                       Eloquent, relaciones, scopes y casts; sin lógica de proceso
 ├── Enums/                        enums PHP respaldados por string
 ├── Actions/                      una clase por caso de uso de escritura (Create…, Assign…, Close…, Publish…)
@@ -37,8 +37,31 @@ app/Modules/<Modulo>/
 │   ├── Migrations/
 │   ├── Factories/
 │   └── Seeders/
+├── Views/                        vistas Blade que no son Livewire (PDF, correos), si hacen falta
 └── Lang/es/                      textos del módulo (opcional; la app corre en español)
 ```
+
+### Registro de un módulo
+
+La clase base abstracta `App\Modules\Core\ModuleServiceProvider` vive en `Core` porque todos los módulos pueden depender de `Core`. Cada `<Modulo>ServiceProvider` la extiende, vive en la raíz de su carpeta y se agrega a `bootstrap/providers.php` en el orden del mapa. Al arrancar registra, a partir de la carpeta del módulo y **solo lo que existe**:
+
+| Carpeta | Qué registra | Cómo se usa |
+|---|---|---|
+| `Routes/web.php` | Rutas con middleware `web`; el prefijo y `auth` los pone el archivo del módulo | `Route::livewire('/campus', 'core::pages.campuses')` |
+| `Database/Migrations/` | Migraciones | `php artisan migrate` |
+| `Views/` | Vistas Blade | `view('core::pdf.horario')` |
+| `Livewire/` | Namespace Livewire para MFC: `pages/<nombre>/<nombre>.php` + `.blade.php` | `core::pages.<nombre>`, `core::components.<nombre>` |
+| `Lang/` | Traducciones | `__('core::campus.title')` |
+| `Policies/` | `Policies/<Modelo>Policy` ↔ `Models/<Modelo>` lo resuelve el auto-descubrimiento de Laravel. Las que no siguen la convención (p. ej. modelos de un paquete) se declaran en `protected array $policies` del provider | `$this->authorize('update', $campus)` |
+
+El alias del módulo es el nombre de su carpeta en kebab-case (`Core` → `core`, `AcademicLoad` → `academic-load`). El namespace Livewire se registra aunque `Livewire/` todavía no exista, para que el primer componente se pueda generar con:
+
+```bash
+docker compose exec app php artisan make:livewire core::pages.campuses      # app/Modules/Core/Livewire/pages/campuses/
+docker compose exec app php artisan make:livewire core::components.campus-badge
+```
+
+Un provider que sobrescriba `boot()` debe llamar a `parent::boot()`. La base no guarda estado estático (Octane). Las factories no se descubren por convención: el modelo las declara con `#[UseFactory(...)]`.
 
 Reglas:
 
@@ -47,7 +70,7 @@ Reglas:
 - **Models** solo tienen relaciones, casts, scopes y accessors. Nada de "si el estado es X entonces…" dentro del modelo; eso va en Actions o Rules.
 - **Livewire** valida entrada, llama Actions o Queries y renderiza. Sin consultas en Blade.
 - Un módulo **no importa clases** de un módulo a su derecha en el mapa de dependencias (ver `docs/dominio/modelo-de-datos.md`). La comunicación en sentido contrario se hace con **eventos** (por ejemplo, `Imports` emite `BatchApplied` y `Students` recalcula progreso al escucharlo).
-- Pruebas de arquitectura con `arch()` de Pest hacen cumplir estas reglas (dependencias entre módulos, que los modelos no usen Facades de request, que las Actions sean `final`).
+- Pruebas de arquitectura en `tests/Arch/ModulesTest.php` hacen cumplir estas reglas: cada carpeta de `app/Modules` está en el mapa y tiene su provider registrado; dependencias solo hacia la izquierda del mapa (con `arch()` para las clases y una revisión de texto para los componentes MFC de `Livewire/`, que `arch()` no ve por ser clases anónimas); modelos sin request, sesión ni auth; Actions `final`; enums respaldados por string. El mapa está copiado ahí: si cambia el diagrama de `docs/dominio/modelo-de-datos.md`, cambia en el mismo PR.
 
 ## Módulos
 
