@@ -32,6 +32,8 @@ app/Modules/<Modulo>/
 │   └── components/               piezas reutilizables del módulo
 ├── Policies/                     autorización por rol y alcance (role_scopes)
 ├── Jobs/  Events/  Listeners/  Notifications/   solo si el módulo los necesita
+├── Http/                         middleware y respuestas HTTP propias (p. ej. las de Fortify), solo si hacen falta
+├── Providers/                    providers adicionales del módulo, registrados en bootstrap/providers.php junto al suyo
 ├── Routes/web.php                rutas del módulo, con middleware de auth y prefijo propio
 ├── Database/
 │   ├── Migrations/
@@ -115,6 +117,12 @@ sequenceDiagram
 - Cada Policy comprueba ambos. Ejemplo: un `jefe_departamento` puede asignar docente a un grupo solo si el grupo pertenece a un departamento y campus de su alcance.
 - La navegación y los tableros se filtran por alcance desde una Query central en `Core` (`ScopedContext`), para que ninguna pantalla tenga que repetir la lógica.
 - Un `admin` ve todo pero sus acciones quedan en bitácora como las de cualquiera.
+
+## Acceso
+
+- **Login** con Fortify por `username` (ADR-0004), configurado en `config/fortify.php` y en `App\Modules\Core\Providers\FortifyServiceProvider`: `authenticateUsing` busca el username tal como viene del SII, rechaza a los inactivos con el mismo mensaje genérico que una credencial incorrecta y tarda lo mismo en ambos casos; el limitador `login` permite 5 intentos por minuto por username e IP; al entrar, la Action `RecordLogin` anota `last_login_at`. Fortify solo expone login, logout, `PUT /user/password` y la confirmación de contraseña: sin registro, recuperación por correo, verificación, perfil, 2FA ni passkeys.
+- **Cambio obligatorio de contraseña:** el middleware `EnsurePasswordIsChanged` va en el grupo `web` (`bootstrap/app.php`), así que cubre las rutas de todos los módulos sin que cada uno lo declare. Mientras `must_change_password` sea true, solo deja pasar `GET /user/password` (`core::auth.change-password`), su `PUT` y el logout. El `PUT` lo atiende Fortify con la Action `UpdateUserPassword` (contrato `UpdatesUserPasswords`): exige la contraseña actual y una nueva confirmada y distinta, conforme a `Password::defaults()` (mínimo 8 caracteres con letras y números), apaga `must_change_password` y registra `password-changed` en la bitácora sin la contraseña.
+- Cada módulo sigue poniendo `auth` en sus rutas (ver "Registro de un módulo"); el cambio obligatorio no lo sustituye.
 
 ## Configuración por campus y modalidad
 
