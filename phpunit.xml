@@ -23,10 +23,13 @@
             <directory>app</directory>
         </include>
         <!-- Livewire compila Blade y los componentes MFC a storage/: sobre el archivo fuente la cobertura
-             siempre da cero. Los cubren las pruebas feature y browser (docs/arquitectura/testing.md). -->
+             siempre da cero. Los cubren las pruebas feature y browser. Migraciones y factories corren en
+             toda prueba y no son lógica del módulo: inflarían su mínimo (docs/arquitectura/testing.md). -->
         <exclude>
             <directory suffix=".blade.php">app</directory>
             <directory>app/Modules/*/Livewire</directory>
+            <directory>app/Modules/*/Database/Migrations</directory>
+            <directory>app/Modules/*/Database/Factories</directory>
         </exclude>
     </source>
     <php>

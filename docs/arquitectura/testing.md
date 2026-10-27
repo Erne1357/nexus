@@ -80,7 +80,7 @@ Estas pruebas se escriben al mismo tiempo que las positivas, en el mismo archivo
 
 ## Cobertura
 
-Mínimo **80 % de líneas por módulo** desde la fase 1, medido en CI con el reporte de cobertura de Pest y verificado por módulo, no solo global. Un módulo nuevo entra al repositorio ya con su cobertura; no hay periodo de gracia. La cobertura es un piso, no un objetivo: 80 % con tests que no afirman nada no cumple el principio de evidencia.
+Mínimo **80 % de líneas por módulo** desde la fase 1, medido en CI con el reporte de cobertura de Pest y verificado por módulo, no solo global. Cuenta el código PHP del módulo salvo Blade, componentes MFC, migraciones y factories (por qué, en "CI → Cobertura"): los componentes no quedan sin pruebas, se cubren con feature y browser. Un módulo nuevo entra al repositorio ya con su cobertura; no hay periodo de gracia. La cobertura es un piso, no un objetivo: 80 % con tests que no afirman nada no cumple el principio de evidencia.
 
 ## CI
 
@@ -116,7 +116,9 @@ La imagen `dev` trae `pcov`. El job `tests` corre con `--coverage-clover` y `--c
 
 - Los totales salen del reporte Clover y no del de texto: el de texto omite las clases sin ninguna línea ejecutada, y un módulo con clases sin pruebas saldría con más cobertura de la real.
 - `phpunit.xml` saca del cálculo los `*.blade.php` y los componentes MFC (`app/Modules/*/Livewire`). Livewire los compila a `storage/framework/views` y ejecuta la copia, así que sobre el archivo fuente la cobertura siempre da cero aunque las pruebas feature los recorran. La lógica que el mínimo debe vigilar vive en Actions, Queries, Policies, Rules, Jobs y Models; los componentes se prueban con feature y browser.
-- Se cuenta todo archivo PHP del módulo, incluidas migraciones y rutas, así que `down()` de una migración que nadie revierte cuenta como no cubierta.
+- También saca migraciones y factories (`app/Modules/*/Database/Migrations` y `Factories`): corren en toda prueba e inflarían el mínimo de un módulo con Actions sin cubrir. Los seeders sí cuentan.
+- El código fuera de `app/Modules/` sale en la tabla como informativo, sin mínimo.
+- El paso también falla si el Clover no trae ningún módulo: un cambio de formato o de rutas no pasa como cobertura suficiente.
 
 ### Duración
 

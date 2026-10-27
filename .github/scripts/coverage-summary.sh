@@ -2,7 +2,8 @@
 # Cobertura de líneas por módulo de app/Modules/ para el resumen del job, con mínimo bloqueante.
 # Los totales salen del reporte Clover, que incluye las clases sin ninguna línea ejecutada
 # (el reporte de texto las omite); el reporte de texto va completo al final, solo para leerlo.
-# Sale con 1 si algún módulo queda debajo del mínimo. Detalle en docs/arquitectura/testing.md.
+# Sale con 1 si algún módulo queda debajo del mínimo o si el Clover no trae ningún módulo.
+# Detalle en docs/arquitectura/testing.md.
 # Uso: coverage-summary.sh <clover.xml> <coverage.txt> <mínimo>
 set -euo pipefail
 
@@ -11,14 +12,14 @@ text="$2"
 min="$3"
 
 rows="$(mktemp)"
-report="$(mktemp)"
-trap 'rm -f "$rows" "$report"' EXIT
+trap 'rm -f "$rows"' EXIT
 
 # PHPUnit escribe por archivo un <file name="..."> y, al cerrarlo, sus <metrics loc=... statements=...
-# coveredstatements=...>; las <metrics> de cada <class> no traen loc y no se cuentan.
+# coveredstatements=...>; las <metrics> de cada <class> no traen loc y no se cuentan. El porcentaje
+# se trunca a dos decimales antes de comparar, para que la tabla nunca muestre 80.00 % junto a ❌.
 awk -v min="$min" '
   /<file name="/ {
-    mod = ""
+    mod = "app (fuera de Modules, informativo)"
     if (match($0, /\/app\/Modules\/[^\/]+\//)) {
       mod = substr($0, RSTART + 13, RLENGTH - 14)
     }
@@ -31,8 +32,9 @@ awk -v min="$min" '
   }
   END {
     for (m in tot) {
-      pct = tot[m] ? 100 * cov[m] / tot[m] : 100
-      printf "| %s | %.2f %% | %d/%d | %s |\n", m, pct, cov[m], tot[m], (pct < min ? "❌" : "✅")
+      pct = tot[m] ? int(10000 * cov[m] / tot[m]) / 100 : 100
+      mark = (m ~ /^app /) ? "—" : (pct < min ? "❌" : "✅")
+      printf "| %s | %.2f %% | %d/%d | %s |\n", m, pct, cov[m], tot[m], mark
     }
   }
 ' "$clover" | sort > "$rows"
@@ -47,10 +49,18 @@ Mínimo bloqueante: ${min} % por módulo de \`app/Modules/\`.
 MD
 cat "$rows"
 
-sed 's/\x1b\[[0-9;]*m//g' "$text" > "$report"
-printf '\n<details><summary>Reporte completo</summary>\n\n```\n'
-cat "$report"
-printf '```\n\n</details>\n'
+if [ -f "$text" ]; then
+  printf '\n<details><summary>Reporte completo</summary>\n\n```\n'
+  sed 's/\x1b\[[0-9;]*m//g' "$text"
+  printf '```\n\n</details>\n'
+fi
+
+# Sin ninguna fila de módulo el mínimo no revisó nada: un cambio de formato del Clover o de rutas
+# no debe pasar como cobertura suficiente.
+if ! grep -q -E '(✅|❌) \|$' "$rows"; then
+  echo "El reporte Clover no trae ningún módulo de app/Modules/: no se pudo revisar el mínimo." >&2
+  exit 1
+fi
 
 if grep -q '❌' "$rows"; then
   echo "Módulos debajo de ${min} %: $(grep '❌' "$rows" | cut -d'|' -f2 | xargs)" >&2
