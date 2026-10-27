@@ -42,6 +42,13 @@ final class FortifyServiceProvider extends ServiceProvider
      */
     private const int FAILED_LOGIN_MICROSECONDS = 200_000;
 
+    /**
+     * Hash señuelo contra el que se compara la contraseña cuando el username no existe. Se
+     * calcula una vez por proceso con el hasher configurado (mismo algoritmo y costo que los
+     * reales) y no cambia después; no depende de ninguna petición.
+     */
+    private ?string $decoyPasswordHash = null;
+
     public function register(): void
     {
         $this->app->singleton(PasswordUpdateResponseContract::class, PasswordUpdateResponse::class);
@@ -69,17 +76,23 @@ final class FortifyServiceProvider extends ServiceProvider
 
     /**
      * Usuario activo cuyo username y contraseña coinciden, o null. Un usuario inactivo recibe
-     * el mismo mensaje genérico (`auth.failed`) que una credencial incorrecta.
+     * el mismo mensaje genérico (`auth.failed`) que una credencial incorrecta. La contraseña se
+     * compara siempre, contra un hash señuelo si el username no existe, para que el tiempo de
+     * respuesta no delate si el usuario existe o está inactivo; el Timebox iguala el resto.
      */
     private function authenticate(Request $request): ?User
     {
         return (new Timebox)->call(function (Timebox $timebox) use ($request): ?User {
             $user = User::query()
                 ->where('username', $request->string(Fortify::username())->value())
-                ->where('is_active', true)
                 ->first();
 
-            if ($user === null || ! Hash::check($request->string('password')->value(), $user->password)) {
+            $passwordMatches = Hash::check(
+                $request->string('password')->value(),
+                $user?->password ?? $this->decoyPasswordHash(),
+            );
+
+            if ($user === null || ! $user->is_active || ! $passwordMatches) {
                 return null;
             }
 
@@ -87,6 +100,11 @@ final class FortifyServiceProvider extends ServiceProvider
 
             return $user;
         }, self::FAILED_LOGIN_MICROSECONDS);
+    }
+
+    private function decoyPasswordHash(): string
+    {
+        return $this->decoyPasswordHash ??= Hash::make(Str::random(40));
     }
 
     /**
