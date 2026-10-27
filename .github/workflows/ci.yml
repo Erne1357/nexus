@@ -1,0 +1,100 @@
+# CI de Nexus: lint, tests (unit, feature, arch) y browser.
+# Todo corre dentro de la imagen `dev` del Dockerfile (la misma que se usa en local),
+# con PostgreSQL y Valkey de compose.yaml. Detalle en docs/arquitectura/testing.md.
+# Los nombres de los jobs (`lint`, `tests`, `browser`) son los checks requeridos de la tarea 0.12:
+# no los renombres sin actualizar la protección de ramas.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  # Al mezclar a develop o main se calienta la caché de la imagen: un PR solo lee
+  # las cachés de su propia rama y de la rama base.
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-ci
+
+      - name: Pint (verificación)
+        run: docker compose run --rm -T --no-deps app ./vendor/bin/pint --test
+
+  tests:
+    name: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-write: "true"
+
+      - name: Levantar PostgreSQL y Valkey
+        run: docker compose up -d --wait postgres valkey
+
+      # Cobertura con pcov, solo informativa en fase 0 (sin --min): el reporte va al resumen del job.
+      - name: Unit, Feature y Arch
+        run: |
+          docker compose run --rm -T app php artisan test \
+            --testsuite=Unit,Feature,Arch --compact \
+            --coverage-text=storage/logs/coverage.txt
+
+      - name: Resumen de cobertura
+        if: ${{ !cancelled() && hashFiles('storage/logs/coverage.txt') != '' }}
+        run: .github/scripts/coverage-summary.sh storage/logs/coverage.txt >> "$GITHUB_STEP_SUMMARY"
+
+  browser:
+    name: browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-ci
+
+      - name: Restaurar caché de npm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ci-npm
+          key: npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-
+
+      # pest-plugin-browser busca node_modules/.bin/playwright; Chromium ya viene en la imagen.
+      - name: Instalar dependencias de npm
+        run: |
+          mkdir -p "$HOME/.cache/ci-npm"
+          docker compose run --rm -T --no-deps \
+            -e npm_config_cache=/npm-cache \
+            -v "$HOME/.cache/ci-npm:/npm-cache" \
+            app npm ci --no-audit --no-fund
+
+      - name: Levantar PostgreSQL y Valkey
+        run: docker compose up -d --wait postgres valkey
+
+      - name: Browser tests
+        run: docker compose run --rm -T app php artisan test --testsuite=Browser --compact
+
+      - name: Subir capturas de los tests que fallaron
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-screenshots
+          path: tests/Browser/Screenshots
+          if-no-files-found: ignore
