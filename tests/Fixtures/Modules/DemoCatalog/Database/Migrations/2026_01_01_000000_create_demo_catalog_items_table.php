@@ -11,6 +11,9 @@ return new class extends Migration
         Schema::create('demo_catalog_items', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->foreignId('campus_id')->nullable();
+            $table->unsignedBigInteger('department_id')->nullable();
+            $table->unsignedBigInteger('career_id')->nullable();
         });
     }
 
