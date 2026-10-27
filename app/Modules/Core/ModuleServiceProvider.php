@@ -35,24 +35,33 @@ abstract class ModuleServiceProvider extends ServiceProvider
      */
     protected array $policies = [];
 
+    /**
+     * Raíz del módulo, calculada una vez por instancia del provider (nunca estática: Octane).
+     */
+    private ?string $moduleRoot = null;
+
     public function boot(): void
     {
-        $this->registerRoutes();
+        $alias = $this->moduleAlias();
+
+        if (is_file($routes = $this->modulePath('Routes/web.php'))) {
+            Route::middleware('web')->group(fn () => $this->loadRoutesFrom($routes));
+        }
 
         if (is_dir($migrations = $this->modulePath('Database/Migrations'))) {
             $this->loadMigrationsFrom($migrations);
         }
 
         if (is_dir($views = $this->modulePath('Views'))) {
-            $this->loadViewsFrom($views, $this->moduleAlias());
+            $this->loadViewsFrom($views, $alias);
         }
 
         // Única excepción a "solo lo que exista": sin el namespace, make:livewire no puede
         // crear el primer componente del módulo. Livewire resuelve con is_dir, así que no cuesta.
-        Livewire::addNamespace($this->moduleAlias(), viewPath: $this->modulePath('Livewire'));
+        Livewire::addNamespace($alias, viewPath: $this->modulePath('Livewire'));
 
         if (is_dir($lang = $this->modulePath('Lang'))) {
-            $this->loadTranslationsFrom($lang, $this->moduleAlias());
+            $this->loadTranslationsFrom($lang, $alias);
         }
 
         foreach ($this->policies as $model => $policy) {
@@ -67,19 +76,8 @@ abstract class ModuleServiceProvider extends ServiceProvider
 
     protected function modulePath(string $path = ''): string
     {
-        $root = dirname((new ReflectionClass(static::class))->getFileName());
+        $this->moduleRoot ??= dirname((new ReflectionClass(static::class))->getFileName());
 
-        return $path === '' ? $root : $root.'/'.$path;
-    }
-
-    private function registerRoutes(): void
-    {
-        $routes = $this->modulePath('Routes/web.php');
-
-        if (! is_file($routes) || $this->app->routesAreCached()) {
-            return;
-        }
-
-        Route::middleware('web')->group($routes);
+        return $path === '' ? $this->moduleRoot : $this->moduleRoot.'/'.$path;
     }
 }
