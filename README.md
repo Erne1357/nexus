@@ -60,3 +60,14 @@ APP_IMAGE_TAG=$(git rev-parse --short HEAD) docker compose -f compose.yaml up -d
 ```bash
 docker compose exec app php artisan test
 ```
+
+## Documentación
+
+| Archivo | Para qué |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | Guía operativa: cómo se trabaja en este repositorio (humanos e IA) |
+| [PROJECT.md](PROJECT.md) | Qué es Nexus, alcance de cada entrega, decisiones, supuestos y riesgos |
+| [PLAN.md](PLAN.md) | Roadmap y estado de cada fase |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Ramas, commits, PRs y definición de hecho |
+| [DESIGN.md](DESIGN.md) | Sistema de diseño (borrador) |
+| `docs/` | Proceso, dominio, arquitectura, fases, herramientas y decisiones |

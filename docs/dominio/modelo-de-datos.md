@@ -1,0 +1,213 @@
+# Modelo de datos
+
+Modelo conceptual por módulo. Describe tablas, campos clave y decisiones; los tipos exactos y los índices se definen en las migraciones de cada módulo (ver `docs/arquitectura/arquitectura.md`). Nombres de tablas y columnas en inglés, `snake_case`, plural. Todos los modelos usan `id` bigint autoincremental y `timestamps`; los catálogos usan **soft deletes** nunca borrado físico.
+
+Convenciones transversales:
+
+- Toda tabla de catálogo tiene `is_active` (lo que el SII llama "inactivo" no se borra, se desactiva) y una **clave natural** única (`code`, `control_number`, `employee_number`) que sirve de llave de upsert en importaciones.
+- Toda tabla que participe en la carga académica lleva `term_id` y `campus_id` explícitos, aunque sean derivables, para que las consultas por periodo y campus sean directas.
+- Los cambios de negocio se registran con `spatie/laravel-activitylog` (tabla `activity_log`, inmutable).
+- Los enums de dominio son enums de PHP respaldados por `string` en la base de datos.
+
+## Mapa de dependencias entre módulos
+
+```mermaid
+flowchart LR
+    Core --> Academic --> Facilities
+    Academic --> Faculty
+    Academic --> Students
+    Core --> Imports
+    Academic --> Imports
+    Faculty --> Imports
+    Facilities --> Imports
+    Students --> Imports
+    Imports --> CatalogValidation
+    Academic --> AcademicLoad
+    Students --> Demand --> AcademicLoad
+    AcademicLoad --> Scheduling
+    Facilities --> Scheduling
+    Faculty --> Staffing --> Scheduling
+    Scheduling --> Solver
+    Scheduling --> Enrollment
+    Students --> Enrollment
+```
+
+Regla: un módulo solo puede depender de los módulos que están a su izquierda en este mapa. `Core` no depende de nadie.
+
+## Core
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `users` | `username` (único), `name`, `email` (opcional), `password`, `is_active`, `last_login_at` | Login por **username** con Fortify. Un usuario puede o no estar ligado a un `teachers.user_id`. |
+| `roles`, `permissions`, `model_has_roles`, … | (spatie/laravel-permission) | Roles: `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente`, `coordinador`, `docente`; R3 añade `alumno`, `servicios_escolares`. |
+| `role_scopes` | `user_id`, `role`, `campus_id?`, `department_id?`, `career_id?`, `valid_from`, `valid_to` | **Alcance** de un rol: un coordinador lo es de una carrera en un campus; un jefe, de un departamento en un campus. Las policies consultan esta tabla. |
+| `campuses` | `code` (`C1`, `C2`, `EAD`, `ENL`, `TNMV`), `name`, `modality` (enum), `settings` (json), `is_active` | `settings` guarda el **perfil de flujo**: `uses_rooms`, `uses_time_blocks`, `staffing_mode` (`department` / `central`), `block_minutes`, `day_start`, `day_end`, `days`, `requires_subdireccion_approval`. |
+| `terms` | `code` (`2027-1`), `name`, `starts_on`, `ends_on`, `is_current` | Un solo periodo "actual" para capturar carga; se pueden consultar los anteriores. |
+| `term_stages` | `term_id`, `campus_id?`, `stage` (enum), `starts_on`, `ends_on` | Calendario del proceso. `campus_id` nulo aplica a todos. |
+| `settings` | `scope` (`global` / `campus` / `department`), `scope_id?`, `key`, `value` (json) | Parámetros editables sin despliegue: pesos del ranking docente, tolerancia de horas, cupos por defecto. |
+| `activity_log` | (spatie) | Inmutable: sin `update` ni `delete` a nivel de política y de permisos de BD. |
+| `notifications` | (Laravel) | Canal `database`; correo opcional después. |
+
+## Academic
+
+```mermaid
+erDiagram
+    DEPARTMENTS ||--o{ SUBJECTS : imparte
+    DEPARTMENTS ||--o{ CAREERS : coordina
+    CAREERS ||--o{ STUDY_PLANS : tiene
+    CAREERS }o--o{ CAMPUSES : se_ofrece_en
+    STUDY_PLANS ||--o{ STUDY_PLAN_SUBJECTS : contiene
+    SUBJECTS ||--o{ STUDY_PLAN_SUBJECTS : aparece_en
+    STUDY_PLANS ||--o{ SPECIALTIES : define
+    STUDY_PLAN_SUBJECTS ||--o{ SUBJECT_PREREQUISITES : seriacion
+```
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `departments` | `code`, `name`, `is_active` | Globales a la institución. |
+| `department_heads` | `department_id`, `campus_id`, `user_id`, `kind` (`jefe` / `jefe_proyecto_docente`), `valid_from`, `valid_to` | Quién dirige cada departamento en cada campus y desde cuándo. |
+| `careers` | `code`, `name`, `department_id`, `is_active` | Carrera; el departamento es el que la coordina administrativamente. |
+| `career_campus` | `career_id`, `campus_id`, `is_active` | En qué campus se ofrece. El coordinador se asigna por `role_scopes`. |
+| `study_plans` | `career_id`, `code`, `name`, `version`, `semesters_count`, `total_credits`, `is_active`, `valid_from` | Una retícula por versión. Las inactivas se conservan porque hay alumnos cursándolas. |
+| `subjects` | `code` (único), `name`, `department_id`, `theory_hours`, `practice_hours`, `credits`, `kind` (enum), `needs_lab`, `is_active` | Materia global; el tronco común se comparte entre carreras. `kind`: `basica`, `especialidad`, `complementaria`, `residencia`, `servicio_social`, `lengua_extranjera`. |
+| `study_plan_subjects` | `study_plan_id`, `subject_id`, `semester`, `specialty_id?`, `is_required` | Posición de la materia en la retícula. Único por plan y materia. |
+| `subject_prerequisites` | `study_plan_id`, `subject_id`, `prerequisite_subject_id`, `kind` (`seriacion` / `correquisito`) | Seriación por plan (la misma materia puede seriarse distinto en planes distintos). |
+| `specialties` | `study_plan_id`, `code`, `name`, `is_active` | Módulo de especialidad. |
+
+## Facilities
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `buildings` | `campus_id`, `code`, `name`, `is_active` | |
+| `rooms` | `building_id`, `code`, `name`, `type` (enum: `aula`, `laboratorio`, `taller`, `sala_computo`, `auditorio`), `capacity`, `department_id?` (dueño), `features` (json), `is_active` | `capacity` es el dato que más cambia y que los jefes validan cada periodo. |
+| `room_blocks` | `room_id`, `term_id?`, `day`, `starts_at`, `ends_at`, `reason` | Bloqueos (mantenimiento, reservado). |
+| `subject_room_defaults` | `subject_id`, `campus_id`, `room_id`, `priority`, `source` (`manual` / `historial`) | Salón por defecto o sugerido. El historial se alimenta de cargas anteriores. |
+
+## Faculty
+
+```mermaid
+erDiagram
+    TEACHERS ||--o{ TEACHER_POSITIONS : plaza
+    TEACHERS ||--o{ TEACHER_AVAILABILITY : disponibilidad
+    TEACHERS ||--o{ TEACHER_EXTERNAL_LOADS : horas_externas
+    TEACHERS ||--o{ TEACHER_SUBJECT_HISTORY : historial
+    TEACHERS ||--o{ TEACHER_SUBJECT_QUALIFICATIONS : perfil
+    TEACHERS ||--o{ TEACHER_EVALUATIONS : evaluacion
+    DEPARTMENTS ||--o{ TEACHERS : pertenece
+```
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `teachers` | `employee_number` (único), `user_id?`, `name`, `email?`, `department_id`, `home_campus_id`, `degree` (enum), `is_active`, `hired_on` | Un docente puede dar clase en varios campus; `home_campus_id` es solo administrativo. |
+| `teacher_positions` | `teacher_id`, `kind` (enum: `tiempo_completo`, `tres_cuartos`, `medio_tiempo`, `asignatura`, `honorarios`), `base_hours`, `valid_from`, `valid_to` | Las **horas base** vigentes en el periodo definen la prioridad. Máximo 40. |
+| `teacher_external_loads` | `teacher_id`, `term_id`, `source` (ej. `TecNM Virtual`), `hours`, `notes` | Se restan de la disponibilidad del docente en ese periodo. |
+| `teacher_availability` | `teacher_id`, `term_id`, `day`, `starts_at`, `ends_at`, `kind` (`unavailable` / `preferred`) | Por defecto todo bloque del campus está disponible; aquí solo excepciones y preferencias. |
+| `teacher_subject_history` | `teacher_id`, `subject_id`, `term_code`, `campus_id?`, `source` (`import` / `nexus`) | Una fila por vez que impartió la materia. Alimenta el desempate. Se importa del SII y Nexus la sigue llenando al publicar cargas. |
+| `teacher_subject_qualifications` | `teacher_id`, `subject_id`, `level` (`apto` / `preferente`), `qualified_by`, `notes` | **Perfil**: el jefe declara qué materias puede dar cada docente. Auditado. |
+| `teacher_evaluations` | `teacher_id`, `term_id`, `kind` (`estudiantil` / `departamental`), `score`, `source` | Puntaje usado en el desempate. Importado. |
+
+## Students
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `students` | `control_number` (único), `name`, `career_id`, `study_plan_id`, `campus_id`, `current_semester`, `status` (enum), `admitted_term_id?`, `is_active` | Solo lectura en R1 y R2 (viene de importación). R3 agrega datos de inscripción. |
+| `kardex_records` | `student_id`, `subject_id`, `term_code`, `grade?`, `result` (enum: `aprobada`, `reprobada`, `cursando`, `baja`), `attempt` | Historial académico. Único por alumno, materia y periodo. |
+| `student_progress` | `student_id`, `study_plan_id`, `credits_approved`, `subjects_approved`, `subjects_pending` (json), `computed_at` | Vista materializada (tabla recalculada por job al terminar una importación). Base para contar alumnos elegibles por materia. |
+
+## Imports
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `import_batches` | `template` (string: `careers`, `study_plans`, `subjects`, `prerequisites`, `teachers`, `positions`, `rooms`, `students`, `kardex`, `teacher_history`, `evaluations`), `campus_id?`, `file_path`, `original_name`, `status` (enum: `uploaded`, `validating`, `validated`, `failed`, `applying`, `applied`), `total_rows`, `valid_rows`, `error_rows`, `uploaded_by`, `applied_at` | Un lote por archivo. Aplicar es idempotente (upsert por clave natural). |
+| `import_rows` | `batch_id`, `row_number`, `raw` (json), `normalized` (json), `errors` (json), `status` (`valid` / `warning` / `error` / `applied`), `target_type?`, `target_id?` | Permite mostrar errores por fila y re-subir solo el archivo corregido. |
+| `import_mappings` | `template`, `name`, `columns` (json: columna origen → campo destino), `created_by` | Cada layout de exportación del SII se mapea una vez y se reutiliza. |
+
+Las **plantillas** (columnas esperadas, reglas de validación, lógica de aplicación) viven en código, una clase por plantilla.
+
+## CatalogValidation
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `catalog_reviews` | `term_id`, `campus_id`, `department_id`, `catalog` (enum: `teachers`, `rooms`, `subjects`, `study_plans`, `careers`), `status` (`pending` / `in_review` / `validated`), `validated_by`, `validated_at`, `notes` | Una fila por catálogo, departamento, campus y periodo. La carga académica no puede pasar de borrador hasta que los catálogos del departamento estén `validated`. |
+| `catalog_review_flags` | `review_id`, `flaggable_type`, `flaggable_id`, `flag` (enum: `inactive`, `wrong_capacity`, `duplicate`, `missing_data`, `other`), `comment`, `resolved_at`, `resolved_by` | Observaciones sobre registros concretos. Las correcciones se hacen en el catálogo y quedan en bitácora. |
+
+## AcademicLoad (orquestador)
+
+```mermaid
+erDiagram
+    TERMS ||--o{ ACADEMIC_LOADS : periodo
+    ACADEMIC_LOADS ||--o{ LOAD_TRANSITIONS : historial
+    ACADEMIC_LOADS ||--o{ LOAD_SNAPSHOTS : versiones
+    TERMS ||--o{ CAREER_PROPOSALS : propuestas
+    CAREER_PROPOSALS ||--o{ PROPOSAL_ITEMS : materias
+    TERMS ||--o{ INTERDEPARTMENTAL_AGREEMENTS : acuerdos
+    GROUPS ||--o{ CHANGE_REQUESTS : solicitudes
+```
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `academic_loads` | `term_id`, `campus_id`, `department_id`, `status` (enum: `draft`, `proposed`, `staffing`, `adjusting`, `closed`, `approved`, `published`, `reanalysis`), `closed_by/at`, `approved_by/at`, `published_by/at`, `current_version` | Unidad de cierre: **departamento en un campus**. Único por periodo, campus y departamento. |
+| `load_transitions` | `academic_load_id`, `from_status`, `to_status`, `user_id`, `comment`, `created_at` | Máquina de estados auditable. |
+| `load_snapshots` | `academic_load_id`, `version`, `payload` (json), `created_by`, `created_at` | Foto completa de grupos, sesiones, docentes y cupos al publicar y en cada re-análisis. Permite diffs. |
+| `career_proposals` | `term_id`, `campus_id`, `career_id`, `status` (`draft` / `submitted` / `accepted` / `returned`), `submitted_by/at` | Propuesta del coordinador. |
+| `proposal_items` | `career_proposal_id`, `subject_id`, `semester`, `eligible_students`, `expected_students`, `requested_groups`, `notes` | `eligible_students` lo calcula Nexus desde `student_progress`; `expected_students` lo ajusta el coordinador (R2: lo sugiere Demand). |
+| `interdepartmental_agreements` | `term_id`, `campus_id`, `kind` (`room_loan` / `shared_group`), `from_department_id`, `to_department_id`, `room_id?`, `group_id?`, `details` (json), `status` (`proposed` / `accepted` / `rejected`), `decided_by/at` | Lo que hoy se acuerda en la junta queda registrado y es verificable por el validador. |
+| `change_requests` | `term_id`, `group_id`, `requested_by`, `kind` (`schedule` / `room` / `teacher`), `current` (json), `proposed` (json), `reason`, `status` (`pending` / `approved` / `rejected` / `applied`), `decided_by/at`, `impact` (json, R2) | Solicitudes de cambio de docentes. R1: flujo simple; R2: impacto calculado por el validador. |
+
+## Scheduling
+
+```mermaid
+erDiagram
+    SUBJECTS ||--o{ GROUPS : oferta
+    GROUPS ||--o{ GROUP_SESSIONS : horario
+    ROOMS ||--o{ GROUP_SESSIONS : salon
+    TEACHERS ||--o{ GROUPS : docente
+    GROUPS ||--o{ GROUP_QUOTAS : cupos
+    CAREERS ||--o{ GROUP_QUOTAS : carrera
+    GROUPS ||--o{ SCHEDULE_CONFLICTS : choques
+```
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `groups` | `term_id`, `campus_id`, `subject_id`, `department_id`, `owner_career_id`, `code`, `teacher_id?`, `capacity`, `semester_label`, `status` (`planned` / `confirmed` / `cancelled`), `notes` | `code` sigue la nomenclatura del SII para que la publicación sea familiar. `department_id` se copia de la materia para consultas por departamento. |
+| `group_sessions` | `group_id`, `day` (1 a 6), `starts_at`, `ends_at`, `room_id?`, `kind` (`teoria` / `practica` / `virtual`) | Bloques consecutivos de 1 hora se guardan como una sesión de inicio a fin. En modalidades sin bloques fijos (`uses_time_blocks = false`) la tabla puede quedar vacía para el grupo. |
+| `group_quotas` | `group_id`, `career_id`, `max_seats`, `is_owner` | Reemplazo del "paralelo": `SUM(max_seats) <= groups.capacity`, validado por el validador y por una restricción en la base de datos. |
+| `schedule_conflicts` | `term_id`, `campus_id`, `kind` (enum), `severity` (`hard` / `soft`), `subject_type/id` (grupo, docente, salón), `related` (json), `message`, `resolved_at` | Se recalculan al guardar cualquier sesión, docente o salón del periodo, y alimentan el tablero de choques. |
+
+En PostgreSQL los empalmes de **salón** y de **docente** se pueden garantizar además con restricciones de exclusión (`EXCLUDE USING gist`) sobre `(room_id, day, timerange)` y `(teacher_id, day, timerange)` por periodo. El validador en PHP sigue siendo la fuente de mensajes para el usuario; la restricción de BD es la red de seguridad.
+
+## Staffing
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `staffing_rankings` | `group_id`, `teacher_id`, `rank`, `score` (decimal), `breakdown` (json: `base_hours`, `history_count`, `qualification`, `evaluation`, `remaining_hours`), `computed_at` | Ranking **visible** por grupo. Se recalcula cuando cambia cualquiera de sus entradas. |
+| `group_teacher_assignments` | `group_id`, `teacher_id`, `assigned_by`, `assigned_at`, `replaced_at?`, `reason`, `ranking_position_at_assignment` | Historial de asignaciones. Si se asigna a alguien que no era el primero del ranking, `reason` es obligatorio. |
+| `teacher_term_loads` | `teacher_id`, `term_id`, `base_hours`, `external_hours`, `assigned_hours`, `remaining_hours`, `computed_at` | Tabla derivada para tableros y validación de horas. |
+
+## Demand (R2)
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `demand_forecasts` | `term_id`, `campus_id`, `career_id`, `subject_id`, `eligible_students`, `historical_pass_rate`, `expected_students`, `suggested_groups`, `method`, `computed_at` | Resultado del análisis automático que precarga `proposal_items`. |
+
+## Solver (R2)
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `solver_runs` | `term_id`, `campus_id`, `department_id?`, `career_id?`, `engine` (`php_heuristic` / `cpsat`), `status` (`queued` / `running` / `done` / `failed` / `applied`), `input` (json o ruta), `output` (json o ruta), `metrics` (json), `created_by`, `applied_at` | Cada corrida es reproducible. El resultado se aplica a `group_sessions` solo cuando el usuario lo acepta. |
+
+El contrato JSON de entrada y salida se define en `docs/arquitectura/solver.md`.
+
+## Enrollment (R3, vaga)
+
+Tablas previstas, a detallar en su fase: `enrollment_orders`, `enrollment_appointments`, `enrollments` (alumno, grupo, estado), `waitlists`. El modelo de `group_quotas` ya deja listo el control de cupo por carrera.
+
+## Decisiones de modelado
+
+1. **Modalidad vive en `campuses.settings`, no en una tabla aparte.** EAD, EnLínea y TecNM Virtual se registran como campus con su modalidad y perfil de flujo. Cuando se levante su proceso, el perfil decide qué etapas y validaciones aplican sin cambiar el esquema.
+2. **Materias globales, seriación por plan.** El tronco común se comparte entre carreras; la posición y la seriación son del plan.
+3. **Cupos por carrera en lugar de paralelos.** Es el cambio de modelo que resuelve el sobrecupo y además simplifica la inscripción de R3.
+4. **Unidad de cierre = departamento en un campus.** Coincide con quien asigna docentes y salones. La propuesta del coordinador es por carrera y alimenta a varios departamentos.
+5. **Tablas derivadas recalculadas por jobs** (`student_progress`, `teacher_term_loads`, `staffing_rankings`, `schedule_conflicts`) en lugar de calcular en cada pantalla. Son la base de tableros rápidos con Octane y Valkey como caché.
+6. **Snapshots en JSON** para publicación y re-análisis en lugar de versionar cada tabla.
+7. **Sin borrado físico en catálogos** y bitácora inmutable: la transparencia del proceso depende de poder reconstruir quién hizo qué.

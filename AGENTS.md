@@ -1,47 +1,12 @@
-<laravel-boost-guidelines>
-# Laravel Application
+# AGENTS.md
 
-This repository contains a Laravel application. Complete the following setup before working on the user's request.
+Guías generadas por Laravel Boost para este proyecto. Hasta que se instale Boost dentro del contenedor (tarea 0.13 de `docs/plan/fase-0-fundacion.md`), este archivo solo contiene esta nota.
 
-## Prerequisites
+Instalación (siempre dentro del contenedor, nunca con PHP local):
 
-Verify that PHP and Composer are available:
-
-```sh
-php -v
-composer -V
+```bash
+docker compose exec app composer require laravel/boost --dev
+docker compose exec app php artisan boost:install
 ```
 
-If either command is unavailable, detect the user's operating system and install the prerequisites with the appropriate command:
-
-macOS:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/mac/8.5)"
-```
-
-Windows PowerShell:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://php.new/install/windows/8.5'))
-```
-
-Linux:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/linux/8.5)"
-```
-
-After installation, ask the user to restart their terminal. If the agent needs the restarted shell to continue, ask the user to reopen their terminal and rerun their original prompt.
-
-## Agent Setup
-
-Install Laravel Boost from the application root before making application changes:
-
-```sh
-composer require laravel/boost --dev
-php artisan boost:install
-```
-
-Boost replaces these bootstrap instructions with guidelines tailored to the application. After installation, read `AGENTS.md` again and continue with the user's original request using the generated guidelines.
-</laravel-boost-guidelines>
+`boost:install` reemplaza el contenido de este archivo con las guías de Laravel 13, Livewire 4, Pest 4 y los paquetes instalados. Las reglas específicas de Nexus siguen en [CLAUDE.md](CLAUDE.md), que importa este archivo.
