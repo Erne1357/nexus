@@ -125,6 +125,21 @@ it('avisa con BatchApplied después de aplicar, con sus cuentas', function () {
         && $event->counts === ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0]);
 });
 
+it('vuelve a revisar cada fila al aplicar: lo que cambió desde la validación se salta como error', function () {
+    $batch = validatedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\nC7,Campus Siete,presencial\n");
+    Campus::factory()->create(['code' => 'C7'])->delete();
+
+    applyCampusBatch($batch, $this->admin);
+
+    $c7 = ImportRow::where('row_number', 3)->sole();
+
+    expect($batch->fresh()->status)->toBe(BatchStatus::Applied)
+        ->and(Campus::where('code', 'C9')->exists())->toBeTrue()
+        ->and($c7->status)->toBe(RowStatus::Error)
+        ->and($c7->errors)->toBe(['code' => ['Hay un registro borrado con esta clave; una importación no lo restaura.']])
+        ->and(Activity::where('event', 'applied')->sole()->properties['skipped'])->toBe(1);
+});
+
 it('volver a importar el mismo archivo no duplica ni cambia nada', function () {
     $csv = "code,name,modality\nC9,Campus Nueve,presencial\nC8,Campus Ocho,mixta\n";
     applyCampusBatch(validatedCampusBatch($this->admin, $csv), $this->admin);
@@ -151,6 +166,38 @@ it('solo aplica un lote validado', function (BatchStatus $status) {
     expect(fn () => applyCampusBatch($batch, $this->admin))->toThrow(LogicException::class, 'no está validado')
         ->and($batch->fresh()->status)->toBe($status);
 })->with([BatchStatus::Uploaded, BatchStatus::Applying, BatchStatus::Applied, BatchStatus::Failed]);
+
+it('si falla un bloque posterior, los anteriores se quedan escritos y la bitácora dice cuánto se escribió', function () {
+    Event::fake([BatchApplied::class]);
+    $lines = collect(range(1, 700))->map(fn (int $n): string => $n === 600 ? 'BOOM,x,presencial' : "K{$n},Campus {$n},presencial")->implode("\n");
+    $batch = validatedCampusBatch($this->admin, "code,name,modality\n{$lines}\n");
+
+    expect(fn () => applyCampusBatch($batch, $this->admin))->toThrow(RuntimeException::class);
+
+    $entry = Activity::where('event', 'failed')->sole();
+
+    expect(Campus::count())->toBe(500)
+        ->and(ImportRow::where('status', RowStatus::Applied)->count())->toBe(500)
+        ->and($batch->fresh()->failure_reason)->toBe('La aplicación se interrumpió en la fila 601: El catálogo rechazó la fila.')
+        ->and($entry->causer->is($this->admin))->toBeTrue()
+        ->and($entry->properties->only(['created', 'updated', 'unchanged'])->all())->toBe(['created' => 500, 'updated' => 0, 'unchanged' => 0]);
+
+    Event::assertDispatched(BatchApplied::class, fn (BatchApplied $event): bool => $event->counts['created'] === 500);
+});
+
+it('si falla afterApply, el motivo no culpa a ninguna fila', function () {
+    app()->bind(CampusesTemplate::class, fn () => new class extends ApplyProbeTemplate
+    {
+        public function afterApply(ImportContext $context): void
+        {
+            throw new RuntimeException('No se pudo despachar el recálculo.');
+        }
+    });
+    $batch = validatedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n");
+
+    expect(fn () => applyCampusBatch($batch, $this->admin))->toThrow(RuntimeException::class)
+        ->and($batch->fresh()->failure_reason)->toBe('La aplicación se interrumpió: No se pudo despachar el recálculo.');
+});
 
 it('si una fila no se puede escribir, el lote queda fallido con la fila y su bloque no se escribe', function () {
     $batch = validatedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\nBOOM,Explota,presencial\n");

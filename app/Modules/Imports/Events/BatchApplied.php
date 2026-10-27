@@ -8,8 +8,9 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Se aplicó un lote de importación (ApplyImportBatch). Sale después del commit. Es como Imports avisa
- * a los módulos de su derecha en el mapa (CatalogValidation, fase 2) que un catálogo cambió.
+ * Se aplicó un lote de importación (ApplyImportBatch), entero o hasta donde llegó si falló a la
+ * mitad: lo escrito se queda, y `counts` dice cuánto fue. Sale después del commit. Es como Imports
+ * avisa a los módulos de su derecha en el mapa (CatalogValidation, fase 2) que un catálogo cambió.
  */
 final class BatchApplied implements ShouldDispatchAfterCommit
 {
