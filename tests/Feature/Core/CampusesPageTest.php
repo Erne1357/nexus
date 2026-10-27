@@ -67,7 +67,7 @@ describe('admin', function () {
     });
 
     it('da de alta un campus desde el modal y lo confirma con un toast', function () {
-        Livewire::actingAs($this->admin)
+        $page = Livewire::actingAs($this->admin)
             ->test('core::pages.campuses')
             ->call('create')
             ->assertSet('showModal', true)
@@ -88,11 +88,11 @@ describe('admin', function () {
             ->modality->toBe(Modality::Mixta)
             ->and($campus->profile->blockMinutes)->toBe(30)
             ->and($campus->profile->days)->toBe([1, 2, 3, 4, 5, 6])
-            ->and(session('mary.toast.title'))->toBe('Campus creado');
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Campus creado')->description->toBe('C3 · Campus III');
     });
 
     it('edita los datos y el perfil de flujo de un campus', function () {
-        Livewire::actingAs($this->admin)
+        $page = Livewire::actingAs($this->admin)
             ->test('core::pages.campuses')
             ->call('edit', $this->c2->id)
             ->assertSet('showModal', true)
@@ -109,7 +109,7 @@ describe('admin', function () {
         expect($this->c2->fresh())
             ->name->toBe('Campus Dos')
             ->profile->usesRooms->toBeFalse()
-            ->and(session('mary.toast.title'))->toBe('Campus actualizado');
+            ->and(lastToastOf($page)['title'])->toBe('Campus actualizado');
     });
 
     it('desactiva y reactiva un campus', function () {
@@ -117,11 +117,11 @@ describe('admin', function () {
 
         $page->call('toggleActive', $this->c2->id);
         expect($this->c2->fresh()->is_active)->toBeFalse()
-            ->and(session('mary.toast.title'))->toBe('Campus desactivado');
+            ->and(lastToastOf($page)['title'])->toBe('Campus desactivado');
 
         $page->call('toggleActive', $this->c2->id);
         expect($this->c2->fresh()->is_active)->toBeTrue()
-            ->and(session('mary.toast.title'))->toBe('Campus activado');
+            ->and(lastToastOf($page)['title'])->toBe('Campus activado');
     });
 
     it('muestra en español los errores de validación del formulario', function () {
@@ -216,19 +216,28 @@ describe('subdirección', function () {
     });
 
     it('no da de alta campus aunque llame directo al componente', function () {
-        $page = Livewire::actingAs($this->subdireccion)->test('core::pages.campuses');
+        Livewire::actingAs($this->subdireccion)->test('core::pages.campuses')
+            ->call('create')
+            ->assertForbidden();
 
-        $page->call('create')->assertForbidden();
-
-        $page->set('code', 'C9')->set('name', 'Campus nuevo')->call('save')->assertForbidden();
+        Livewire::actingAs($this->subdireccion)->test('core::pages.campuses')
+            ->set('code', 'C9')
+            ->set('name', 'Campus nuevo')
+            ->call('save')
+            ->assertForbidden();
 
         expect(Campus::count())->toBe(3);
     });
 
     it('la de C1 no ve ni edita C2, ni con la página que otra sesión dejó abierta en C2', function () {
-        $own = Livewire::actingAs($this->subdireccion)->test('core::pages.campuses');
-        $own->call('edit', $this->c2->id)->assertForbidden();
-        $own->call('toggleActive', $this->c2->id)->assertForbidden();
+        Livewire::actingAs($this->subdireccion)->test('core::pages.campuses')
+            ->assertViewHas('campuses', listsCampuses(['C1']))
+            ->call('edit', $this->c2->id)
+            ->assertForbidden();
+
+        Livewire::actingAs($this->subdireccion)->test('core::pages.campuses')
+            ->call('toggleActive', $this->c2->id)
+            ->assertForbidden();
 
         $opened = Livewire::actingAs($this->admin)->test('core::pages.campuses')->call('edit', $this->c2->id);
         $this->actingAs($this->subdireccion);
