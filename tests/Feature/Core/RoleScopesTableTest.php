@@ -42,3 +42,16 @@ it('rechaza un alcance de un usuario o campus que no existe', function (string $
     expect(fn () => DB::table('role_scopes')->insert([...$row, $column => 999_999]))
         ->toThrow(QueryException::class, 'foreign key');
 })->with(['user_id', 'campus_id']);
+
+it('rechaza una vigencia que termina antes de empezar y acepta una de un solo día', function () {
+    $row = [
+        'user_id' => User::factory()->create()->id,
+        'role' => Role::Docente->value,
+        'valid_from' => '2026-08-01',
+    ];
+
+    DB::table('role_scopes')->insert([...$row, 'valid_to' => '2026-08-01']);
+
+    expect(fn () => DB::table('role_scopes')->insert([...$row, 'valid_to' => '2026-07-31']))
+        ->toThrow(QueryException::class, 'role_scopes_validity_check');
+});

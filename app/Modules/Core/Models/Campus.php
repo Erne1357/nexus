@@ -42,7 +42,9 @@ class Campus extends Model
      */
     protected function profile(): Attribute
     {
-        return Attribute::get(fn (): CampusProfile => CampusProfile::fromArray($this->settings ?? []));
+        // Sin caché de objeto: si cambia `settings`, el siguiente acceso arma el perfil nuevo.
+        return Attribute::get(fn (): CampusProfile => CampusProfile::fromArray($this->settings ?? []))
+            ->withoutObjectCaching();
     }
 
     /**

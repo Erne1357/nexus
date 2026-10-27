@@ -2,12 +2,14 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
  * Calendario del proceso: ventana de fechas de cada etapa del periodo. `campus_id` nulo aplica
  * a todos los campus. Una etapa tiene una sola ventana por periodo y campus, y una sola para
- * todos los campus (`campus_id` nulo cuenta como un valor más para la unicidad).
+ * todos los campus (`campus_id` nulo cuenta como un valor más para la unicidad). Una ventana no
+ * termina antes de empezar.
  */
 return new class extends Migration
 {
@@ -25,6 +27,8 @@ return new class extends Migration
             $table->unique(['term_id', 'campus_id', 'stage'])->nullsNotDistinct();
             $table->index('campus_id');
         });
+
+        DB::statement('alter table term_stages add constraint term_stages_dates_check check (ends_on >= starts_on)');
     }
 
     public function down(): void

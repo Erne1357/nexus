@@ -4,6 +4,7 @@ use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 it('aplica a todos los campus una etapa sin campus y a uno solo la que tiene campus', function () {
@@ -51,4 +52,9 @@ it('permite la misma etapa para todos los campus y para un campus en particular'
     $term->stages()->create(['stage' => Stage::Proposal, 'campus_id' => $campus->id, 'starts_on' => '2026-11-23', 'ends_on' => '2026-11-27']);
 
     expect($term->stages()->count())->toBe(2);
+});
+
+it('rechaza una etapa que termina antes de empezar', function () {
+    expect(fn () => Term::factory()->create()->stages()->create(['stage' => Stage::Closing, 'starts_on' => '2026-12-11', 'ends_on' => '2026-12-07']))
+        ->toThrow(QueryException::class, 'term_stages_dates_check');
 });

@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Models\Term;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 it('no permite dos periodos con el mismo código', function () {
@@ -28,4 +29,9 @@ it('encuentra el periodo actual con su scope', function () {
     $current = Term::factory()->current()->create();
 
     expect(Term::current()->sole()->is($current))->toBeTrue();
+});
+
+it('rechaza un periodo que termina antes de empezar', function () {
+    expect(fn () => Term::factory()->create(['starts_on' => '2027-06-11', 'ends_on' => '2027-01-18']))
+        ->toThrow(QueryException::class, 'terms_dates_check');
 });

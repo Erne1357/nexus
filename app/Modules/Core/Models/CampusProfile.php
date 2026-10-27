@@ -64,18 +64,24 @@ final readonly class CampusProfile
     {
         $settings += self::DEFAULTS;
 
+        $blockMinutes = self::blockMinutes($settings['block_minutes']);
         $dayStart = self::time($settings, 'day_start');
         $dayEnd = self::time($settings, 'day_end');
+        $dayMinutes = self::minutesOf($dayEnd) - self::minutesOf($dayStart);
 
-        if ($dayEnd <= $dayStart) {
+        if ($dayMinutes <= 0) {
             throw self::invalid('day_end', 'debe ser posterior a day_start');
+        }
+
+        if ($dayMinutes % $blockMinutes !== 0) {
+            throw self::invalid('block_minutes', 'debe dividir exacto la jornada de day_start a day_end');
         }
 
         return new self(
             usesRooms: self::bool($settings, 'uses_rooms'),
             usesTimeBlocks: self::bool($settings, 'uses_time_blocks'),
             staffingMode: self::staffingMode($settings['staffing_mode']),
-            blockMinutes: self::blockMinutes($settings['block_minutes']),
+            blockMinutes: $blockMinutes,
             dayStart: $dayStart,
             dayEnd: $dayEnd,
             days: self::days($settings['days']),
@@ -142,11 +148,16 @@ final readonly class CampusProfile
     {
         $value = $settings[$key];
 
-        if (! is_string($value) || preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value) !== 1) {
+        if (! is_string($value) || preg_match('/^([01]\d|2[0-3]):[0-5]\d$/D', $value) !== 1) {
             throw self::invalid($key, 'debe tener el formato HH:MM de 00:00 a 23:59');
         }
 
         return $value;
+    }
+
+    private static function minutesOf(string $time): int
+    {
+        return (int) substr($time, 0, 2) * 60 + (int) substr($time, 3, 2);
     }
 
     /**

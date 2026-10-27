@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Setting;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 it('no repite una clave global', function () {
@@ -34,3 +35,12 @@ it('guarda valores json escalares y compuestos', function () {
         ->and($scalar->value)->toBe(2)
         ->and($weights->value)->toBe(['history' => 0.6, 'evaluation' => 0.4]);
 });
+
+it('exige scope_id solo cuando el alcance no es global', function (SettingScope $scope, ?int $scopeId) {
+    expect(fn () => Setting::create(['scope' => $scope, 'scope_id' => $scopeId, 'key' => 'default_quota', 'value' => 35]))
+        ->toThrow(QueryException::class, 'settings_scope_id_matches_scope');
+})->with([
+    'global con scope_id' => [SettingScope::Global, 1],
+    'campus sin scope_id' => [SettingScope::Campus, null],
+    'departamento sin scope_id' => [SettingScope::Department, null],
+]);
