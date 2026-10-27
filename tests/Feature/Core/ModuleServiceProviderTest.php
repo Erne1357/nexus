@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\Fixtures\Modules\Bare\BareServiceProvider;
@@ -71,9 +72,21 @@ it('arranca un módulo sin carpetas sin registrar rutas, vistas ni traducciones'
         ->and(app('translator')->getLoader()->namespaces())->not->toHaveKey('bare');
 });
 
-it('registra el namespace Livewire aunque falte la carpeta, para que make:livewire cree el primer componente', function () {
-    $this->app->register(BareServiceProvider::class);
+it('permite crear con make:livewire el primer componente MFC de un módulo sin carpeta Livewire', function () {
+    $livewire = base_path('tests/Fixtures/Modules/Bare/Livewire');
+    File::deleteDirectory($livewire);
 
-    expect(app('livewire.finder')->resolveMultiFileComponentPathForCreation('bare::pages.first', useEmoji: false))
-        ->toBe(base_path('tests/Fixtures/Modules/Bare/Livewire/pages/first'));
+    try {
+        $this->app->register(BareServiceProvider::class);
+
+        $this->artisan('make:livewire', ['name' => 'bare::pages.first', '--no-interaction' => true])
+            ->assertSuccessful();
+
+        expect("{$livewire}/pages/first/first.php")->toBeFile()
+            ->and("{$livewire}/pages/first/first.blade.php")->toBeFile();
+
+        Livewire::test('bare::pages.first')->assertOk();
+    } finally {
+        File::deleteDirectory($livewire);
+    }
 });
