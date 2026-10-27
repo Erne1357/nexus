@@ -62,7 +62,7 @@ it('filtra por rol: admin, coordinador y docente ven menús distintos', function
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => 20])->create();
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
-    expect(navigationLabelsFor($admin))->toBe(['Inicio', 'Saludo', 'Elementos'])
+    expect(navigationLabelsFor($admin))->toBe(['Inicio', 'Campus', 'Saludo', 'Elementos'])
         ->and(navigationLabelsFor($coordinador))->toBe(['Inicio', 'Saludo'])
         ->and(navigationLabelsFor($docente))->toBe(['Inicio']);
 });
