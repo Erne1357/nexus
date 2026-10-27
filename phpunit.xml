@@ -24,6 +24,9 @@
         </include>
     </source>
     <php>
+        <!-- La suite completa (unit, feature, arch y browser) corre en un proceso y acumula memoria
+             entre pruebas: con los 128 MB de la imagen dev no llega a los browser tests. -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_LOCALE" value="es"/>
         <env name="APP_FAKER_LOCALE" value="es_MX"/>

@@ -41,6 +41,8 @@ Las pruebas corren contra **PostgreSQL** en la base `nexus_test` (creada por el 
 
 El script `docker/postgres/10-create-test-database.sh` se monta solo en `compose.override.yaml` (desarrollo): producción no tiene base de pruebas. Corre únicamente con el volumen vacío; con un volumen existente se crea a mano con `docker compose exec -T postgres createdb -U nexus nexus_test`. Para correr pruebas en paralelo desde varios worktrees, cada uno usa su propia base con `-e DB_DATABASE=nexus_test_<x>` (ver `CONTRIBUTING.md`).
 
+`phpunit.xml` sube `memory_limit` a 512 MB. `php artisan test` corre unit, feature, arch y browser en un solo proceso, y cada prueba de Laravel deja algo de memoria: hacia la prueba 570 ya iban 121 MB y los browser tests no arrancaban con los 128 MB de la imagen `dev`. En CI cada job corre en su propio proceso.
+
 No se usa SQLite porque Nexus depende de comportamiento propio de PostgreSQL: restricciones de exclusión para empalmes, `jsonb` en perfiles y snapshots, rangos de tiempo, y detalles de ordenamiento y colación. Probar en un motor distinto al de producción deja pasar justo los errores que más cuestan en el piloto.
 
 ## Browser tests en Docker
