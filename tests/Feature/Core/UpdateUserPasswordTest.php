@@ -110,7 +110,7 @@ it('muestra en español los errores de la contraseña nueva', function () {
         'password' => 'Nueva-clave-2027',
     ]));
 
-    expect($errors['password'])->toContain('El campo contraseña debe coincidir con la confirmación.');
+    expect($errors['password'])->toContain('La confirmación de contraseña no coincide.');
 });
 
 it('registra el cambio en la bitácora sin guardar la contraseña', function () {
