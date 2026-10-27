@@ -81,6 +81,10 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && /tmp/playwright/node_modules/.bin/playwright install --with-deps --only-shell chromium \
     && rm -rf /tmp/playwright /tmp/playwright-version /root/.npm /var/lib/apt/lists/*
 
+# pcov: driver de cobertura para el reporte de CI (`--coverage`). Va en su propia
+# capa, después de Chromium, para no invalidarla. Solo se carga cuando se pide cobertura.
+RUN install-php-extensions pcov
+
 USER app
 
 CMD ["php", "artisan", "octane:frankenphp", "--host=0.0.0.0", "--port=8000", "--workers=2", "--max-requests=250", "--watch"]

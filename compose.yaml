@@ -1,5 +1,7 @@
 # Stack base (imágenes inmutables). En local se combina automáticamente con
-# compose.override.yaml; para producción: `docker compose -f compose.yaml up -d`.
+# compose.override.yaml. Producción lo combina con compose.prod.yaml (HTTPS con
+# Caddy, respaldos, valores seguros): ver docs/operacion/despliegue.md y ADR-0013.
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d
 
 name: nexus
 

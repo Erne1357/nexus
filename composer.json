@@ -28,7 +28,8 @@
         "pestphp/pest": "^5.3",
         "pestphp/pest-plugin-browser": "^5.1",
         "pestphp/pest-plugin-laravel": "^5.0",
-        "pestphp/pest-plugin-livewire": "^5.0"
+        "pestphp/pest-plugin-livewire": "^5.0",
+        "symfony/yaml": "^8.1"
     },
     "autoload": {
         "psr-4": {

@@ -1,0 +1,128 @@
+# Producción on-premise (ADR-0013). Se combina con el stack base; NO se usa
+# compose.override.yaml (es solo de desarrollo):
+#
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d
+#
+# Requiere un .env con permisos 600 (plantilla: .env.production.example).
+# Runbook: docs/operacion/despliegue.md
+
+name: nexus
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Valores que producción siempre fuerza, aunque el .env traiga los de desarrollo.
+x-app-environment: &app-environment
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_URL: https://${APP_DOMAIN:?Define APP_DOMAIN en .env (nombre público del servidor)}
+  SESSION_SECURE_COOKIE: "true"
+  LOG_CHANNEL: stderr
+
+services:
+  # El proxy nginx del stack base es solo para desarrollo: en producción lo
+  # reemplaza Caddy. El perfil evita que arranque sin tocar compose.yaml.
+  nginx:
+    profiles: [dev-only]
+
+  caddy:
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Define APP_DOMAIN en .env (nombre público del servidor)}
+      ACME_EMAIL: ${ACME_EMAIL:?Define ACME_EMAIL en .env (aviso de vencimiento de Let's Encrypt)}
+      CADDY_GLOBAL_OPTIONS: ${CADDY_GLOBAL_OPTIONS:-}
+    volumes:
+      # Carpeta, no archivo: un archivo montado solo se queda con la versión anterior
+      # cuando `git checkout` lo reemplaza al actualizar.
+      - ./docker/caddy:/etc/caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+    networks: [frontend, backend]
+
+  app:
+    environment:
+      <<: *app-environment
+      RUN_MIGRATIONS: "true"
+    volumes:
+      - app-storage:/app/storage/app
+    # Las migraciones corren en el entrypoint antes de servir: start_period amplio.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/up"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: ${APP_START_PERIOD:-120s}
+    logging: *logging
+
+  queue:
+    environment:
+      <<: *app-environment
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - app-storage:/app/storage/app
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
+  postgres:
+    logging: *logging
+
+  valkey:
+    logging: *logging
+
+  # pg_dump diario en formato custom hacia BACKUP_DIR del servidor, con retención.
+  # La imagen debe ser idéntica a la de postgres (mismo pg_dump que el servidor).
+  backup:
+    image: postgres:18.6-alpine3.24@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    restart: unless-stopped
+    user: "${BACKUP_UID:-0}:${BACKUP_GID:-0}"
+    entrypoint: ["/bin/sh", "/opt/backup/backup.sh"]
+    command: ["daemon"]
+    environment:
+      TZ: America/Ciudad_Juarez
+      PGHOST: postgres
+      PGDATABASE: ${DB_DATABASE}
+      PGUSER: ${DB_USERNAME}
+      PGPASSWORD: ${DB_PASSWORD}
+      BACKUP_TIME: ${BACKUP_TIME:-03:00}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-14}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-8}
+    volumes:
+      - ${BACKUP_DIR:-/var/backups/nexus}:/backups
+      - ./docker/backup:/opt/backup:ro
+    healthcheck:
+      test: ["CMD", "/bin/sh", "/opt/backup/backup.sh", "check"]
+      interval: 10m
+      timeout: 10s
+      retries: 1
+      start_period: 5m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+    networks: [backend]
+
+volumes:
+  # Archivos que comparten app y queue (importaciones y exportes en proceso).
+  app-storage:
+  caddy-data:
+  caddy-config:
