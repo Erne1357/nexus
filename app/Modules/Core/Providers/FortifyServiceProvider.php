@@ -52,6 +52,7 @@ final class FortifyServiceProvider extends ServiceProvider
         Password::defaults(fn (): Password => Password::min(8)->letters()->numbers());
 
         Fortify::loginView(fn () => view('core::auth.login'));
+        Fortify::confirmPasswordView(fn () => view('core::auth.confirm-password'));
         Fortify::authenticateUsing($this->authenticate(...));
         Fortify::updateUserPasswordsUsing(UpdateUserPassword::class);
 

@@ -23,11 +23,12 @@ it('cierra la sesión de un usuario desactivado en su siguiente petición y lo m
 });
 
 it('invalida la sesión y regenera el token CSRF del usuario desactivado', function () {
-    $user = User::factory()->create(['is_active' => false]);
+    $user = User::factory()->create();
 
-    $this->actingAs($user)->withSession(['campus_id' => 2])->get('/');
+    $this->actingAs($user)->withSession(['campus_id' => 2])->get('/')->assertOk();
     $token = session()->token();
 
+    $user->update(['is_active' => false]);
     $this->get('/');
 
     expect(session()->has('campus_id'))->toBeFalse()

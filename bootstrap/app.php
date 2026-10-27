@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Http\Middleware\EnsurePasswordIsChanged;
+use App\Modules\Core\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,8 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // La app solo es accesible a través de nginx dentro de la red de Docker.
         $middleware->trustProxies(at: '*');
 
-        // Cambio obligatorio de contraseña en el primer acceso, para toda ruta web (Core).
-        $middleware->web(append: [EnsurePasswordIsChanged::class]);
+        // Para toda ruta web (Core): cierra la sesión de un usuario desactivado y obliga a
+        // cambiar la contraseña en el primer acceso.
+        $middleware->web(append: [EnsureUserIsActive::class, EnsurePasswordIsChanged::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
