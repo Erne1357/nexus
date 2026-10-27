@@ -21,7 +21,6 @@ Aplicación construida con **Laravel 13** y **Livewire 4**.
 |---|---|---|
 | `nginx` | nginx 1.30.6 (stable) | Reverse proxy público (`:80`) |
 | `app` | FrankenPHP 1.13.4 · PHP 8.5 + Laravel Octane | App en worker mode (`:8000` interno) |
-| `pgbouncer` | PgBouncer 1.26.1 | Pool de conexiones (modo `transaction`) |
 | `postgres` | PostgreSQL 18.6 | Base de datos |
 | `valkey` | Valkey 9.1.2 | Cache, sesiones y colas (driver `redis`) |
 | `queue` | misma imagen que `app` | Worker de colas (`queue:work`; en dev `queue:listen` para recargar código) |
@@ -29,7 +28,7 @@ Aplicación construida con **Laravel 13** y **Livewire 4**.
 
 Todas las imágenes están fijadas por versión exacta **y digest** (`@sha256:…`). Para actualizar una, cambia ambos: `docker buildx imagetools inspect <imagen>:<tag>`.
 
-La app se conecta a Postgres **siempre a través de PgBouncer** (`DB_HOST=pgbouncer`).
+Sin pooler de conexiones: con Octane cada worker mantiene una conexión persistente a Postgres, así que el total es aprox. `workers × réplicas + workers de queue`. Si en el futuro se escala a varias réplicas/servidores o muchos workers, conviene añadir PgBouncer delante de `postgres`.
 
 ### Desarrollo
 
