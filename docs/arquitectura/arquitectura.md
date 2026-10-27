@@ -76,6 +76,22 @@ Reglas:
 - Un módulo **no importa clases** de un módulo a su derecha en el mapa de dependencias (ver `docs/dominio/modelo-de-datos.md`). La comunicación en sentido contrario se hace con **eventos** (por ejemplo, `Imports` emite `BatchApplied` y `Students` recalcula progreso al escucharlo).
 - Pruebas de arquitectura en `tests/Arch/ModulesTest.php` hacen cumplir estas reglas: cada carpeta de `app/Modules` está en el mapa y tiene su provider registrado; dependencias solo hacia la izquierda del mapa, con `arch()` para las clases y una revisión de texto de toda la carpeta del módulo para lo que `arch()` no ve (rutas, migraciones y componentes MFC, que son clases anónimas, y Blade), que detecta namespaces, imports agrupados y alias (`scheduling::…`); modelos sin request, sesión ni auth (fachadas, alias globales como `\Auth`, helpers y los contratos `Guard`, `StatefulGuard` y `Factory`); Actions `final`; enums respaldados por string; policies con el trait `UsesScopedContext`. El mapa está copiado en la prueba y otra prueba lo compara con el diagrama de `docs/dominio/modelo-de-datos.md`: si cambia uno, cambia el otro en el mismo PR.
 
+## Módulo de referencia: Campus
+
+El CRUD de Campus de `Core` es la plantilla de todo módulo: cada archivo es el ejemplo de un tipo de clase. Un módulo nuevo copia su forma, no la reinventa (skill `nexus-module`). Rutas relativas a `app/Modules/Core/`.
+
+| Tipo | Archivo | Qué muestra |
+|---|---|---|
+| Policy | `Policies/CampusPolicy.php` | `final`, trait `UsesScopedContext`. Una ability por permiso de `docs/dominio/reglas-de-negocio.md` ("Aprobaciones y permisos"), citado en el docblock: `viewAny` y `create` por rol; `view`, `update` y `updateProfile` por campus con `covers()`, que ya incluye al admin. Sin `delete`: un catálogo se desactiva. |
+| Action de alta | `Actions/CreateCampus.php` | `final`, `handle(array $data)` con datos ya validados en forma. Hace cumplir las reglas del modelo (código en mayúsculas, sin espacios y único también entre borrados; perfil aceptado por `CampusProfile`) y las rechaza con `ValidationException` en la clave del campo, que Livewire muestra junto a él. Escribe y registra en la bitácora (`created`, `withChanges(['attributes' => …])`) en la misma transacción. |
+| Action de cambio | `Actions/UpdateCampus.php` | Cambia solo las claves que recibe, con las mismas reglas. Sin cambios no escribe, no registra ni avisa (compara el perfil normalizado: PostgreSQL reordena el jsonb). Bitácora `updated` con `attributes` y `old` de lo que cambió, y evento. No sabe de roles: qué claves le llegan lo decide la página con la policy. |
+| Evento | `Events/CampusUpdated.php` | `ShouldDispatchAfterCommit`: sale después del commit y lleva las columnas que cambiaron. Es como Core avisa a quien dependa del campus (caché del perfil, módulos de la derecha). Un alta no avisa: nada depende aún de un campus nuevo. |
+| Query | `Queries/CampusQuery.php` | `forTable(ScopedContext, $search, $active, $perPage)`: lista solo lo que la policy deja ver (admin, todos; subdirección, su alcance), busca con `whereLike`, filtra por estado, ordena y pagina. |
+| Página MFC | `Livewire/pages/campuses/campuses.{php,blade.php}` | `mount()` autoriza `viewAny` y cada acción vuelve a autorizar (una petición puede traer una página que abrió otra sesión). Valida la forma con mensajes y atributos en español, convierte tipos y llama la Action o la Query. `#[Locked]` en lo que el navegador no debe cambiar, `#[Session]` en los filtros, toast de MaryUI con texto escapado. `x-table` con paginación, `x-modal` con `x-form`; lo que el rol no permite se muestra deshabilitado con su motivo. |
+| Ruta y menú | `Routes/web.php`, `CoreServiceProvider::navigation()` | `Route::livewire('/campus', 'core::pages.campuses')->name('core.campuses')` bajo `auth`; `NavigationItem` con `ability: 'viewAny'` y `arguments: [Campus::class]`. |
+| Factory | `Database/Factories/CampusFactory.php` | Estado con nombre del dominio: `inactive()`. |
+| Pruebas | `tests/Feature/Core/CampusPolicyTest.php`, `CreateCampusTest.php`, `UpdateCampusTest.php`, `CampusQueryTest.php`, `CampusesPageTest.php`; `tests/Browser/Core/CampusesTest.php` | Policy por rol y por campus. Actions con sus reglas, bitácora y evento (feature, porque necesitan la base; lo puro, como `CampusProfile`, va en unit). Query por rol. Página: lo que hace cada rol, errores en español, negativas por rol y por campus llamando cada método de Livewire directo, y quién ve la entrada del menú. Un flujo de navegador: el admin da de alta y edita; el coordinador no ve la opción. |
+
 ## Módulos
 
 | Módulo | Responsabilidad | Entrega |
@@ -116,7 +132,7 @@ sequenceDiagram
 ## Autorización y alcance
 
 - Los **roles** (spatie, enum `Role`) dicen qué puede hacer alguien; los **alcances** (`role_scopes`, modelo `RoleScope`) dicen sobre qué campus, departamento o carrera. Un rol cuenta solo con el rol de spatie **y** un alcance vigente hoy en Ciudad Juárez (`RoleScope::current()`), en un campus activo y no borrado, que llene lo que exige `Role::scopeColumns()`: campus para `subdireccion` y `docente`, departamento en un campus para los dos jefes, carrera en un campus para `coordinador`. Un usuario inactivo no tiene ningún rol.
-- `admin` tiene todos los roles y lo cubre todo sin alcance, también los campus desactivados o borrados (los reactiva en el CRUD de Campus), pero sus acciones quedan en bitácora como las de cualquiera.
+- `admin` tiene todos los roles y lo cubre todo sin alcance, también los campus desactivados o borrados (reactiva los desactivados en el CRUD de Campus), pero sus acciones quedan en bitácora como las de cualquiera.
 - `docente` nunca cubre por `covers()`, ni pasando `Role::Docente`: su acceso a su propia carga lo deciden las policies de Staffing y Scheduling por asignación. `has(Role::Docente)` y `canAccessCampus()` sí lo cuentan.
 - Un alcance cubre un objetivo de su campus si no fija departamento o carrera, o si fija los del objetivo: el jefe de D cubre lo de D en cualquier carrera; el coordinador de X, lo de X en cualquier departamento.
 - `ScopedContext` (`Core/Queries`) es la única puerta para preguntar por rol y alcance; el contenedor la registra con `scoped` (una instancia por petición, por Octane) para el usuario autenticado:
@@ -140,7 +156,7 @@ sequenceDiagram
 La barra lateral del layout (`resources/views/layouts/app.blade.php`) la arma Core, pero las entradas las declara cada módulo, así que Core no conoce a los módulos de su derecha:
 
 ```php
-// app/Modules/Core/CoreServiceProvider.php (la 0.9 agrega "Campus" así)
+// app/Modules/Core/CoreServiceProvider.php
 public function navigation(): array
 {
     return [
