@@ -29,6 +29,6 @@ final class TermQuery
      */
     public function findOrFail(string $id): Term
     {
-        return FindByKey::orFail(Term::query(), $id);
+        return KeyLookup::findOrFail(Term::query(), $id);
     }
 }

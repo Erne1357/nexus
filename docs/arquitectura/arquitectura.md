@@ -139,10 +139,10 @@ Todo modelo de Nexus usa UUIDv7 como llave primaria ([ADR-0014](../decisiones/00
 
 - **Migración:** `$table->uuid('id')->primary()->default(DB::raw('uuidv7()'));`, `foreignUuid()` para las llaves foráneas y `nullableUuidMorphs()` para las polimórficas. El default cubre los inserts que no pasan por el modelo, como las importaciones en bloque.
 - **Modelo:** `use HasUuids;`, que genera el UUIDv7 en la app antes de insertar.
-- **Ids que llegan del cliente:** una propiedad de Livewire, un argumento de `wire:click` o un segmento de ruta pueden traer algo que no es uuid, y PostgreSQL lo rechaza con un error. Las Queries buscan con `FindByKey::orFail($query, $id)` (`Core/Queries`), que lo trata como un registro que no existe (`ModelNotFoundException`). Las propiedades de id son `?string`; un select vacío llega como `''`, así que se pregunta con `blank()`.
+- **Ids que llegan del cliente:** una propiedad de Livewire, un argumento de `wire:click` o un segmento de ruta pueden traer algo que no es uuid, y PostgreSQL lo rechaza con un error. Las Queries buscan con `KeyLookup::findOrFail($query, $id)` (`Core/Queries`), que lo trata como un registro que no existe (`ModelNotFoundException`), o con `KeyLookup::find()`, que devuelve `null` (así lee `ScopedContext` el periodo guardado en la sesión). Una prueba de texto prohíbe `find()` y `findOrFail()` del modelo en Queries y componentes. Las propiedades de id son `?string`; un select vacío llega como `''`, así que se pregunta con `blank()`.
 - **Blade:** el id va entre comillas en las expresiones que Livewire evalúa: `wire:click="edit('{{ $campus->id }}')"` y `spinner="edit('{{ $campus->id }}')"`.
 - **Orden:** los listados ordenan por una columna del dominio (código, nombre, fecha), no por `id`.
-- **Infraestructura:** `jobs`, `failed_jobs`, `roles`, `permissions` y `activity_log` conservan su llave bigint; no son entidades de Nexus.
+- **Infraestructura:** `jobs`, `failed_jobs`, `roles`, `permissions` y `activity_log` conservan su llave bigint; no son entidades de Nexus. Por eso el sujeto de la bitácora es siempre un modelo de Nexus: un cambio de rol se registra sobre el usuario, no sobre el `Role` de spatie.
 
 ## Autorización y alcance
 

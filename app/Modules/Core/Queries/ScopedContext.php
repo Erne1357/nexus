@@ -213,7 +213,7 @@ final class ScopedContext
         $key = (string) $selected;
 
         if (! array_key_exists($key, $this->terms)) {
-            $this->terms[$key] = ($selected === null ? null : Term::find($selected)) ?? Term::current()->first();
+            $this->terms[$key] = KeyLookup::find(Term::query(), $selected) ?? Term::current()->first();
         }
 
         return $this->terms[$key];

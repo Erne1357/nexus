@@ -288,6 +288,15 @@ describe('campus y periodo activos por omisión', function () {
         expect($context->activeTerm()?->is($previous))->toBeTrue();
     });
 
+    // ADR-0014: una sesión de antes del cambio a UUID guarda el id entero del periodo.
+    it('con un periodo guardado que no es uuid usa el actual', function () {
+        $current = Term::factory()->current()->create();
+        $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        session([ScopedContext::ACTIVE_TERM => 3]);
+
+        expect($context->activeTerm()?->is($current))->toBeTrue();
+    });
+
     it('el campus activo por omisión es el único del alcance', function () {
         $context = scopedContextOf(User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => fakeKey(10)])->create());
 

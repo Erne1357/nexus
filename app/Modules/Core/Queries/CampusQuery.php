@@ -41,6 +41,6 @@ final class CampusQuery
      */
     public function findOrFail(string $id): Campus
     {
-        return FindByKey::orFail(Campus::query(), $id);
+        return KeyLookup::findOrFail(Campus::query(), $id);
     }
 }
