@@ -25,6 +25,16 @@ docker compose exec -w /app/.worktrees/feature-<issue>-<slug> app php artisan te
 
 Nunca corras `docker compose up` desde un worktree: comparte el nombre de proyecto con el repo principal y lo pisaría. Los contenedores `app` y `queue` sirven siempre el código de la carpeta principal: en un worktree se prueba con `php artisan test`, no en el navegador. El `.env` copiado comparte base de datos, Valkey y cola con el repo principal, así que no corras `migrate` de una rama sin mezclar contra la base de desarrollo.
 
+**Pruebas en paralelo.** `RefreshDatabase` migra y revierte sobre una sola base, así que dos worktrees corriendo pruebas a la vez sobre `nexus_test` se pisan. Dale a cada worktree su propia base de pruebas y selecciónala con `DB_DATABASE` (`phpunit.xml` lo permite porque no lo fuerza):
+
+```bash
+docker compose exec -T postgres createdb -U nexus nexus_test_<x>
+docker compose exec -T -e DB_DATABASE=nexus_test_<x> -w /app/.worktrees/feature-<issue>-<slug> app php artisan test
+docker compose exec -T postgres dropdb -U nexus nexus_test_<x>   # al cerrar el worktree
+```
+
+**Volumen de Postgres que ya existe.** El script de `docker/postgres/` solo corre cuando el volumen está vacío. Si ya levantaste el stack antes de la tarea 0.3, crea la base a mano una vez: `docker compose exec -T postgres createdb -U nexus nexus_test`.
+
 ## Commits
 
 Formato convencional en inglés, con el módulo como alcance:

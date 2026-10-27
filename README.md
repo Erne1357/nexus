@@ -58,9 +58,10 @@ APP_IMAGE_TAG=$(git rev-parse --short HEAD) docker compose -f compose.yaml up -d
 ## Tests
 
 ```bash
-docker compose exec app php artisan test                    # suite completa
-docker compose exec app php artisan test --filter=Nombre    # una prueba
-docker compose exec app ./vendor/bin/pint --dirty           # formato antes de cada commit
+docker compose exec app php artisan test                       # suite completa
+docker compose exec app php artisan test --filter=Nombre       # una prueba
+docker compose exec app php artisan test --testsuite=Browser   # solo browser tests (Chromium)
+docker compose exec app ./vendor/bin/pint                      # formato antes de cada commit (sin --dirty: no hay git en el contenedor)
 ```
 
 ## Laravel Boost (herramientas de IA)
