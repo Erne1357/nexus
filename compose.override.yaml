@@ -13,6 +13,8 @@ services:
     env_file: !reset []
     volumes:
       - .:/app
+      # Límite de subida de las importaciones, el mismo que prod.ini.
+      - ./docker/php/dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
 
   queue:
     image: nexus-app:dev
