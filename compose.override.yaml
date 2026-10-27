@@ -14,6 +14,19 @@ services:
     volumes:
       - .:/app
 
+  queue:
+    image: nexus-app:dev
+    build:
+      target: dev
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    env_file: !reset []
+    # queue:listen arranca un proceso por job: los cambios de código se aplican sin reiniciar
+    command: ["php", "artisan", "queue:listen", "redis", "--tries=3", "--backoff=10", "--sleep=1"]
+    volumes:
+      - .:/app
+
   postgres:
     ports:
       - "${FORWARD_DB_PORT:-5432}:5432"

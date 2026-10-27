@@ -24,6 +24,7 @@ Aplicación construida con **Laravel 13** y **Livewire 4**.
 | `pgbouncer` | PgBouncer 1.26.1 | Pool de conexiones (modo `transaction`) |
 | `postgres` | PostgreSQL 18.6 | Base de datos |
 | `valkey` | Valkey 9.1.2 | Cache, sesiones y colas (driver `redis`) |
+| `queue` | misma imagen que `app` | Worker de colas (`queue:work`; en dev `queue:listen` para recargar código) |
 | `vite` *(solo dev)* | Node 24.22.1 LTS | Vite + HMR (`:5173`) |
 
 Todas las imágenes están fijadas por versión exacta **y digest** (`@sha256:…`). Para actualizar una, cambia ambos: `docker buildx imagetools inspect <imagen>:<tag>`.

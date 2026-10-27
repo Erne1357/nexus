@@ -33,6 +33,14 @@ services:
   app:
     <<: *app
 
+  queue:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "redis", "--tries=3", "--backoff=10", "--max-time=3600", "--sleep=1"]
+    # queue:work termina el job en curso al recibir SIGTERM (requiere pcntl)
+    stop_grace_period: 60s
+    healthcheck:
+      disable: true
+
   postgres:
     image: postgres:18.6-alpine3.24@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
     restart: unless-stopped
