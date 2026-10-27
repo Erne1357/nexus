@@ -120,9 +120,9 @@ erDiagram
 
 | Tabla | Campos clave | Notas |
 |---|---|---|
-| `import_batches` | `template` (string: `careers`, `study_plans`, `subjects`, `prerequisites`, `teachers`, `positions`, `rooms`, `students`, `kardex`, `teacher_history`, `evaluations`), `campus_id?`, `file_path`, `original_name`, `status` (enum: `uploaded`, `validating`, `validated`, `failed`, `applying`, `applied`), `total_rows`, `valid_rows`, `error_rows`, `uploaded_by`, `applied_at` | Un lote por archivo. Aplicar es idempotente (upsert por clave natural). |
-| `import_rows` | `batch_id`, `row_number`, `raw` (json), `normalized` (json), `errors` (json), `status` (`valid` / `warning` / `error` / `applied`), `target_type?`, `target_id?` | Permite mostrar errores por fila y re-subir solo el archivo corregido. |
-| `import_mappings` | `template`, `name`, `columns` (json: columna origen → campo destino), `created_by` | Cada layout de exportación del SII se mapea una vez y se reutiliza. |
+| `import_batches` | `template` (string: `careers`, `study_plans`, `subjects`, `prerequisites`, `teachers`, `positions`, `rooms`, `students`, `kardex`, `teacher_history`, `evaluations`), `campus_id?`, `mapping_id?`, `file_path`, `original_name`, `status` (enum: `uploaded`, `validating`, `validated`, `failed`, `applying`, `applied`), `total_rows`, `valid_rows`, `error_rows`, `failure_reason?`, `uploaded_by`, `applied_by?`, `applied_at` | Un lote por archivo. Aplicar es idempotente (upsert por clave natural). `file_path` es relativo al disco `imports` (`storage/app/imports`, fuera de git). `campus_id` solo en las plantillas de un campus. `valid_rows` cuenta las filas sin error, también las que traen advertencia. `failure_reason` dice por qué quedó `failed`. No se borra. |
+| `import_rows` | `batch_id`, `row_number`, `raw` (json), `normalized` (json), `errors` (json), `warnings` (json), `status` (`valid` / `warning` / `error` / `applied`), `target_type?`, `target_id?` | Permite mostrar errores por fila y re-subir solo el archivo corregido. `row_number` es el del archivo, único en el lote; `errors` y `warnings` van por campo. Es el detalle por registro de una importación: la bitácora guarda una entrada por lote. |
+| `import_mappings` | `template`, `name`, `columns` (json: columna origen → campo destino), `created_by` | Cada layout de exportación del SII se mapea una vez y se reutiliza. `name` es único por plantilla. |
 
 Las **plantillas** (columnas esperadas, reglas de validación, lógica de aplicación) viven en código, una clase por plantilla.
 

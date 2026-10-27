@@ -38,6 +38,15 @@ return [
             'report' => false,
         ],
 
+        // Archivos del SII subidos para importar (módulo Imports). Traen datos personales: viven fuera
+        // de git (storage/app/.gitignore) y nunca se sirven por HTTP (CLAUDE.md, regla dura 9).
+        'imports' => [
+            'driver' => 'local',
+            'root' => storage_path('app/imports'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
