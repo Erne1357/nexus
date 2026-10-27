@@ -38,6 +38,8 @@ La base es ancha en unit: las reglas de negocio son lo que más cambia y lo más
 
 Las pruebas corren contra **PostgreSQL** en la base `nexus_test` (creada por el script de inicialización de `docker/postgres/`), con `RefreshDatabase` para aislar cada test. Las pruebas unitarias no tocan base de datos.
 
+El script `docker/postgres/10-create-test-database.sh` se monta solo en `compose.override.yaml` (desarrollo): producción no tiene base de pruebas. Corre únicamente con el volumen vacío; con un volumen existente se crea a mano con `docker compose exec -T postgres createdb -U nexus nexus_test`. Para correr pruebas en paralelo desde varios worktrees, cada uno usa su propia base con `-e DB_DATABASE=nexus_test_<x>` (ver `CONTRIBUTING.md`).
+
 No se usa SQLite porque Nexus depende de comportamiento propio de PostgreSQL: restricciones de exclusión para empalmes, `jsonb` en perfiles y snapshots, rangos de tiempo, y detalles de ordenamiento y colación. Probar en un motor distinto al de producción deja pasar justo los errores que más cuestan en el piloto.
 
 ## Browser tests en Docker
