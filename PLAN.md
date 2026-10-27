@@ -1,0 +1,74 @@
+# Nexus — Plan maestro
+
+> Archivo de estado. Se actualiza en cada PR que cierre o abra tareas de una fase. Contexto en [PROJECT.md](PROJECT.md); reglas de trabajo en [CLAUDE.md](CLAUDE.md).
+
+**Última actualización:** 2026-10-26 · **Fase activa:** 0 · **Entrega en curso:** R1
+
+## Estados
+
+| Símbolo | Significado |
+|---|---|
+| ⬜ | Pendiente, detallada (lista para ejecutar) |
+| 🟨 | En curso |
+| ✅ | Terminada y en `develop` |
+| 🟦 | Vaga: necesita sesión de planeación detallada antes de iniciar |
+| ⛔ | Bloqueada (ver nota) |
+
+## Fases
+
+| # | Fase | Entrega | Ventana | Modo | Estado | Detalle |
+|---|---|---|---|---|---|---|
+| 0 | Fundación | R1 | 27 oct – 2 nov 2026 | Individual | 🟨 | [fase-0-fundacion.md](docs/plan/fase-0-fundacion.md) |
+| 1 | Catálogos e importación | R1 | 3 – 14 nov 2026 | 3 en paralelo | ⬜ | [fase-1-catalogos-importacion.md](docs/plan/fase-1-catalogos-importacion.md) |
+| 2 | Validación de catálogos y periodo | R1 | 10 – 19 nov 2026 | 3 en paralelo | ⬜ | [fase-2-validacion-y-periodo.md](docs/plan/fase-2-validacion-y-periodo.md) |
+| 3 | Captura de carga: grupos, horarios, docentes, salones | R1 | 17 nov – 4 dic 2026 | 3 en paralelo | ⬜ | [fase-3-captura-de-carga.md](docs/plan/fase-3-captura-de-carga.md) |
+| 4 | Cierre, publicación y piloto Campus II | R1 | 30 nov – 18 dic 2026 | 3 en paralelo | ⬜ | [fase-4-cierre-publicacion-piloto.md](docs/plan/fase-4-cierre-publicacion-piloto.md) |
+| 5 | Proyección de demanda | R2 | feb 2027 | Paralelo | ⬜ | [fase-5-demanda.md](docs/plan/fase-5-demanda.md) |
+| 6 | Heurística de horarios y contrato del motor | R2 | feb – mar 2027 | Paralelo | ⬜ | [fase-6-heuristica-y-contrato.md](docs/plan/fase-6-heuristica-y-contrato.md) |
+| 7 | Solver CP-SAT (Python + OR-Tools) | R2 | mar – abr 2027 | Paralelo | ⬜ | [fase-7-solver-cpsat.md](docs/plan/fase-7-solver-cpsat.md) |
+| 8 | Re-análisis, impacto de cambios y junta digital | R2 | abr 2027 | Paralelo | ⬜ | [fase-8-reanalisis.md](docs/plan/fase-8-reanalisis.md) |
+| 9 | Inscripción Campus II | R3 | may – jul 2027 | Paralelo | 🟦 | [fase-9-inscripcion-campus-ii.md](docs/plan/fase-9-inscripcion-campus-ii.md) |
+| 10 | Otras modalidades: EAD, EnLínea, TecNM Virtual | R4 | por definir | — | 🟦 | [fase-10-otras-modalidades.md](docs/plan/fase-10-otras-modalidades.md) |
+
+Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el **4 de diciembre** y carga de Campus II publicada a mediados de diciembre. Las fases de R1 se traslapan a propósito: cuando una persona termina su parte de la fase N, arranca la fase N+1 sin esperar a las demás.
+
+## Hitos de R1
+
+| Hito | Fecha | Criterio |
+|---|---|---|
+| H1 Fundación lista | 2 nov | Login por username, roles y alcances, layout, módulo de referencia con pruebas unit/feature/browser, CI verde en PR a `develop` |
+| H2 Catálogos reales cargados | 14 nov | Exportaciones del SII de Campus II importadas sin errores bloqueantes; `student_progress` calculado |
+| H3 Catálogos validados por jefes | 19 nov | Jefes de departamento de Campus II validan sus catálogos en Nexus; periodo `2027-1` abierto |
+| H4 Carga capturada | 4 dic | Grupos, horarios, cupos, docentes y salones de Campus II sin choques duros; ranking visible |
+| H5 Carga publicada | 18 dic | Cierre por departamento, (visto bueno), snapshot, consulta pública y exportes PDF/Excel; exportación al SII |
+
+## Módulos y su estado
+
+| Módulo | Fase que lo crea | Estado |
+|---|---|---|
+| Core | 0 | 🟨 |
+| Academic | 1 | ⬜ |
+| Facilities | 1 | ⬜ |
+| Faculty | 1 | ⬜ |
+| Students | 1 | ⬜ |
+| Imports | 1 | ⬜ |
+| CatalogValidation | 2 | ⬜ |
+| AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | ⬜ |
+| Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
+| Staffing | 3 | ⬜ |
+| Demand | 5 | ⬜ |
+| Solver | 6 (contrato y cliente), 7 (servicio Python) | ⬜ |
+| Enrollment | 9 | 🟦 |
+
+## Cómo se actualiza este archivo
+
+1. Al abrir una fase: cambiar su estado a 🟨 y poner la fecha en "Última actualización".
+2. Al cerrar una fase: estado ✅, y en el archivo de la fase marcar cada tarea con su PR.
+3. Si una fase 🟦 va a iniciar: primero una sesión de planeación (brainstorming + writing-plans) que la convierta en ⬜ con tareas, pruebas y criterios de aceptación; después se ejecuta.
+4. Cualquier cambio de alcance o fecha se anota en `docs/decisiones/` con fecha y motivo, y se refleja aquí.
+
+## Registro de cambios del plan
+
+| Fecha | Cambio |
+|---|---|
+| 2026-10-26 | Plan inicial. Fecha de R1 fijada para la carga de Campus II Ene-Jun 2027. Motor de sugerencia movido a R2. |

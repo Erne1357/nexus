@@ -1,0 +1,44 @@
+name: Tarea del plan
+description: Trabajo planeado en una fase (docs/plan/fase-N.md)
+title: "[F?·?.?] "
+labels: ["type:task"]
+body:
+  - type: input
+    id: plan
+    attributes:
+      label: Tarea del plan
+      description: Fase y número de tarea, por ejemplo "Fase 3 · 3.2"
+    validations:
+      required: true
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Qué hay que lograr
+    validations:
+      required: true
+  - type: textarea
+    id: donde
+    attributes:
+      label: Dónde y por qué
+      description: Módulo, clases o pantallas que se tocan y la razón. Sin código.
+  - type: textarea
+    id: pruebas
+    attributes:
+      label: Pruebas
+      description: Qué se prueba en unit, feature y browser. Nombra las reglas HC/SC que cubre.
+    validations:
+      required: true
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptación
+      value: |
+        - [ ] Pruebas escritas primero y verdes en CI
+        - [ ] Pruebas negativas de alcance por rol (si hay pantalla)
+        - [ ] Documentación de la fase actualizada con el PR
+        - [ ] Revisado y mezclado en develop
+  - type: input
+    id: dependencias
+    attributes:
+      label: Dependencias
+      description: Issues que deben cerrarse antes.

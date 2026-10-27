@@ -1,0 +1,31 @@
+name: Bug
+description: Algo no funciona como dice el plan o las reglas de negocio
+labels: ["bug"]
+body:
+  - type: textarea
+    id: que
+    attributes:
+      label: Qué pasa
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué debería pasar
+      description: Cita la regla (HC-xx, SC-xx) o el criterio de aceptación si aplica.
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Cómo reproducirlo
+      description: Rol, campus, periodo, pantalla y pasos. Sin datos personales reales.
+    validations:
+      required: true
+  - type: dropdown
+    id: donde
+    attributes:
+      label: Dónde
+      options: [Local, Servidor de pruebas, Piloto]
+    validations:
+      required: true
