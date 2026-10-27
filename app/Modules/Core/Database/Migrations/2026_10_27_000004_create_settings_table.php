@@ -15,9 +15,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('settings', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary()->default(DB::raw('uuidv7()'));
             $table->string('scope');
-            $table->unsignedBigInteger('scope_id')->nullable();
+            $table->uuid('scope_id')->nullable();
             $table->string('key');
             $table->jsonb('value');
             $table->timestampsTz();

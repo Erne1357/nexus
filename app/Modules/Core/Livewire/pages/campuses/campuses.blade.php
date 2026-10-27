@@ -50,20 +50,20 @@
                 <div class="flex justify-end gap-1">
                     <x-button
                         icon="o-pencil-square"
-                        wire:click="edit({{ $campus->id }})"
+                        wire:click="edit('{{ $campus->id }}')"
                         aria-label="Editar {{ $campus->code }}"
                         data-testid="edit-{{ $campus->code }}"
                         class="btn-ghost btn-sm"
-                        spinner="edit({{ $campus->id }})"
+                        spinner="edit('{{ $campus->id }}')"
                     />
 
                     @can('update', $campus)
                         <x-button
                             :label="$campus->is_active ? 'Desactivar' : 'Activar'"
-                            wire:click="toggleActive({{ $campus->id }})"
+                            wire:click="toggleActive('{{ $campus->id }}')"
                             wire:confirm="{{ $campus->is_active ? '¿Desactivar el campus '.$campus->code.'? Nadie podrá trabajar en él hasta que se reactive.' : '¿Activar el campus '.$campus->code.'?' }}"
                             class="btn-ghost btn-sm"
-                            spinner="toggleActive({{ $campus->id }})"
+                            spinner="toggleActive('{{ $campus->id }}')"
                         />
                     @else
                         <span class="tooltip tooltip-left" data-tip="Solo el administrador activa o desactiva campus.">

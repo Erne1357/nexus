@@ -68,6 +68,7 @@ Detalle: `docs/arquitectura/arquitectura.md`.
 - **Nombres:** Actions = verbo + sustantivo (`AssignTeacher`, `CloseLoad`); Queries = sustantivo + `Query`; reglas = `Rules/Constraints/<Nombre>` con el id de la regla en el docblock.
 - **Livewire MFC:** una carpeta por componente con `<nombre>.php` (clase anónima) y `<nombre>.blade.php`; namespace `<modulo>::pages.<nombre>` o `<modulo>::components.<nombre>`.
 - **Migraciones:** dentro del módulo. Una migración mezclada en `develop` no se edita; se crea otra.
+- **Llaves:** UUIDv7 en todo modelo (`HasUuids`, `foreignUuid`, `default uuidv7()`); los ids del cliente se buscan con `FindByKey` ([ADR-0014](docs/decisiones/0014-uuidv7-como-llave-primaria.md)).
 - **Enums** PHP respaldados por string. Eventos con `timestamptz`; horas de sesión con `time`. Zona `America/Ciudad_Juarez`.
 - **Catálogos:** soft deletes + `is_active`; nunca borrado físico. Bitácora: nunca se edita ni se borra.
 - **UI:** componentes MaryUI; Tailwind utilitario; tokens de tema en [DESIGN.md](DESIGN.md). Sin CSS a mano salvo tokens.

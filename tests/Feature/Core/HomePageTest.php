@@ -16,7 +16,7 @@ beforeEach(function () {
 
 it('saluda al usuario y muestra el bloque de cada rol que ejerce', function () {
     $user = User::factory()
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => 10])
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => fakeKey(10)])
         ->withRole(Role::Docente, ['campus_id' => $this->campus->id])
         ->create(['name' => 'Ana López']);
 
@@ -31,7 +31,7 @@ it('saluda al usuario y muestra el bloque de cada rol que ejerce', function () {
 });
 
 it('al coordinador le muestra solo el bloque de coordinación de carrera', function () {
-    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => 20])->create())
+    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create())
         ->get('/')
         ->assertOk()
         ->assertSee('Coordinador de carrera')
@@ -50,7 +50,7 @@ it('al admin le muestra el bloque de administración y no uno por cada rol', fun
 });
 
 it('a quien no tiene un rol vigente le dice que pida uno', function () {
-    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => 20])->create();
+    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create();
     RoleScope::where('user_id', $user->id)->update(['valid_to' => today()->subDay()]);
 
     $this->actingAs($user)

@@ -17,12 +17,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('role_scopes', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained();
+            $table->uuid('id')->primary()->default(DB::raw('uuidv7()'));
+            $table->foreignUuid('user_id')->constrained();
             $table->string('role');
-            $table->foreignId('campus_id')->nullable()->constrained();
-            $table->unsignedBigInteger('department_id')->nullable();
-            $table->unsignedBigInteger('career_id')->nullable();
+            $table->foreignUuid('campus_id')->nullable()->constrained();
+            $table->uuid('department_id')->nullable();
+            $table->uuid('career_id')->nullable();
             $table->date('valid_from');
             $table->date('valid_to')->nullable();
             $table->timestampsTz();

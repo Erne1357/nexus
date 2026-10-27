@@ -99,8 +99,8 @@ it('a quien no administra campus no le lista ninguno, aunque trabaje en uno', fu
 
     expect(campusCodesFor($user))->toBe([]);
 })->with([
-    'coordinador' => [Role::Coordinador, ['career_id' => 20]],
-    'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => 10]],
+    'coordinador' => [Role::Coordinador, ['career_id' => fakeKey(20)]],
+    'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => fakeKey(10)]],
     'docente' => [Role::Docente, []],
 ]);
 
@@ -111,3 +111,8 @@ it('carga el campus que se va a editar, y no uno borrado', function () {
 
     expect(fn () => app(CampusQuery::class)->findOrFail($this->c2->id))->toThrow(ModelNotFoundException::class);
 });
+
+// ADR-0014: el id llega del cliente; uno que no es uuid no debe llegar a PostgreSQL, que lo rechaza con un error.
+it('no encuentra un campus con un id que no es uuid', function (string $id) {
+    expect(fn () => app(CampusQuery::class)->findOrFail($id))->toThrow(ModelNotFoundException::class);
+})->with(['número' => '999999', 'texto' => 'no-es-un-uuid', 'vacío' => '']);

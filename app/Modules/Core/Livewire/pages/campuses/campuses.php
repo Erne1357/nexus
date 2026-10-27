@@ -43,7 +43,7 @@ new #[Title('Campus')] class extends Component
 
     /** El campus que se edita; null es un alta. El navegador no lo puede cambiar. */
     #[Locked]
-    public ?int $editingId = null;
+    public ?string $editingId = null;
 
     /** Si el formulario deja cambiar código, nombre y modalidad; save() lo vuelve a decidir con la policy. */
     #[Locked]
@@ -109,7 +109,7 @@ new #[Title('Campus')] class extends Component
         $this->showModal = true;
     }
 
-    public function edit(int $id, CampusQuery $campuses): void
+    public function edit(string $id, CampusQuery $campuses): void
     {
         $campus = $campuses->findOrFail($id);
         $this->authorize('updateProfile', $campus);
@@ -154,7 +154,7 @@ new #[Title('Campus')] class extends Component
         $this->showModal = false;
     }
 
-    public function toggleActive(int $id, CampusQuery $campuses, UpdateCampus $updateCampus): void
+    public function toggleActive(string $id, CampusQuery $campuses, UpdateCampus $updateCampus): void
     {
         $campus = $campuses->findOrFail($id);
         $this->authorize('update', $campus);

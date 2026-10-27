@@ -64,9 +64,9 @@ it('niega todo a los demás roles de R1, aun en su propio campus', function (Rol
         ->and($user->can('update', $this->c1))->toBeFalse()
         ->and($user->can('updateProfile', $this->c1))->toBeFalse();
 })->with([
-    'coordinador' => [Role::Coordinador, ['career_id' => 20]],
-    'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => 10]],
-    'jefe de proyecto docente' => [Role::JefeProyectoDocente, ['department_id' => 10]],
+    'coordinador' => [Role::Coordinador, ['career_id' => fakeKey(20)]],
+    'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => fakeKey(10)]],
+    'jefe de proyecto docente' => [Role::JefeProyectoDocente, ['department_id' => fakeKey(10)]],
     'docente' => [Role::Docente, []],
 ]);
 

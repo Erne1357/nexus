@@ -73,3 +73,4 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 |---|---|
 | 2026-10-26 | Plan inicial. Fecha de R1 fijada para la carga de Campus II Ene-Jun 2027. Motor de sugerencia movido a R2. |
 | 2026-10-27 | Fase 0 cerrada (PRs #72 a #85). Pest 5 en lugar de Pest 4 ([ADR-0011](docs/decisiones/0011-pest-5.md)); despliegue on-premise en el ITCJ con dominio público ([ADR-0013](docs/decisiones/0013-despliegue-on-premise-itcj.md)). Pendientes al cierre en [fase-0-fundacion.md](docs/plan/fase-0-fundacion.md#pendientes-al-cierre). |
+| 2026-10-27 | Tarea 0.15 agregada al cierre de la fase 0: UUIDv7 como llave primaria en todo modelo, editando por única vez las migraciones de la fase 0 ([ADR-0014](docs/decisiones/0014-uuidv7-como-llave-primaria.md)). |

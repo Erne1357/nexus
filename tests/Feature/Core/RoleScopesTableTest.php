@@ -18,16 +18,16 @@ it('guarda el alcance de un rol en un campus, departamento y carrera', function 
         'user_id' => $user->id,
         'role' => Role::Coordinador->value,
         'campus_id' => $campus->id,
-        'department_id' => 7,
-        'career_id' => 12,
+        'department_id' => fakeKey(7),
+        'career_id' => fakeKey(12),
         'valid_from' => '2026-08-01',
         'valid_to' => null,
     ]);
 
     expect(DB::table('role_scopes')->where('user_id', $user->id)->first())
         ->campus_id->toBe($campus->id)
-        ->department_id->toBe(7)
-        ->career_id->toBe(12)
+        ->department_id->toBe(fakeKey(7))
+        ->career_id->toBe(fakeKey(12))
         ->valid_to->toBeNull();
 });
 
@@ -39,7 +39,7 @@ it('rechaza un alcance de un usuario o campus que no existe', function (string $
         'valid_from' => '2026-08-01',
     ];
 
-    expect(fn () => DB::table('role_scopes')->insert([...$row, $column => 999_999]))
+    expect(fn () => DB::table('role_scopes')->insert([...$row, $column => fakeKey(999_999)]))
         ->toThrow(QueryException::class, 'foreign key');
 })->with(['user_id', 'campus_id']);
 

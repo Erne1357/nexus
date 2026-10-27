@@ -4,6 +4,7 @@ namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Enums\SettingScope;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Model;
 #[Fillable(['scope', 'scope_id', 'key', 'value'])]
 class Setting extends Model
 {
+    use HasUuids;
+
     /**
      * @return array<string, string>
      */

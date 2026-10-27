@@ -2,6 +2,8 @@
 
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /*
@@ -202,3 +204,24 @@ arch('module policies check role and scope through UsesScopedContext')
     ->expect($layer('Policies'))
     ->classes()
     ->toUseTrait(UsesScopedContext::class);
+
+// ADR-0014: todo modelo de Nexus usa UUIDv7 como llave primaria. Models/ también tiene value
+// objects (CampusProfile), que no son modelos y no cuentan.
+test('module models use UUIDv7 primary keys', function (string $module) use ($filesIn, $namespace, $root) {
+    $violations = [];
+
+    foreach ($filesIn("{$root}/app/Modules/{$module}/Models") as $file) {
+        $relative = substr($file->getPathname(), strlen("{$root}/app/Modules/{$module}/Models/"), -strlen('.php'));
+        $class = $namespace($module).'\\Models\\'.str_replace('/', '\\', $relative);
+
+        if (! is_subclass_of($class, Model::class)) {
+            continue;
+        }
+
+        if (! in_array(HasUuids::class, class_uses_recursive($class), true) || ! Str::isUuid((new $class)->newUniqueId(), 7)) {
+            $violations[] = $class;
+        }
+    }
+
+    expect($violations)->toBeEmpty(implode(PHP_EOL, $violations));
+})->with(array_keys($leftOf));

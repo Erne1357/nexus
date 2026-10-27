@@ -24,3 +24,12 @@ function lastToastOf(Testable $component): ?array
 
     return $expression === null ? null : json_decode(substr($expression, 6, -1), true)['toast'];
 }
+
+/**
+ * Un uuid fijo para un registro que la prueba no crea: `fakeKey(10)` siempre da el mismo valor. Lo
+ * usan los departamentos y carreras de los alcances mientras Academic no tenga sus tablas (fase 1).
+ */
+function fakeKey(int $number): string
+{
+    return sprintf('00000000-0000-7000-8000-%012d', $number);
+}
