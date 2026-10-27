@@ -87,6 +87,10 @@ new #[Title('Importaciones')] class extends Component
     /** Nombre del mapeo nuevo, cuando el admin cambia la propuesta. */
     public string $mappingName = '';
 
+    /** Si esta página ya mandó a aplicar el lote y espera a que la cola lo tome. */
+    #[Locked]
+    public bool $applyQueued = false;
+
     /** Qué filas del lote se listan: un valor de RowIssue. */
     public string $issues = RowIssue::Errors->value;
 
@@ -122,21 +126,27 @@ new #[Title('Importaciones')] class extends Component
         };
 
         $labels = array_map(fn (ImportTemplate $template): string => $template->label(), $templates->all());
-        $batchTemplate = $batch !== null && $templates->has($batch->template) ? $templates->get($batch->template) : null;
+        $batchDefinition = $batch !== null && $templates->has($batch->template) ? $templates->get($batch->template) : null;
         // Con la validación terminada hay filas que revisar; mientras la cola trabaja, solo el avance.
         $reviewing = $batch !== null && ! $batch->status->inProgress() && $batch->total_rows > 0;
         $applied = $reviewing && $this->step === 4 ? $batches->appliedCounts($batch) : null;
         $errorRows = $applied['skipped'] ?? $batch?->error_rows ?? 0;
         $errorsReady = $reviewing && $errorRows > 0 && $batches->errorsFileReady($batch);
+        $errorsPending = $reviewing && $errorRows > 0 && ! $errorsReady;
+        // La cola lo escribe en segundos; si no llega, no se espera para siempre.
+        $errorsLost = $errorsPending && $batch->updated_at->lt(now()->subMinutes(10));
+        $applyQueued = $this->applyQueued && $batch?->status === BatchStatus::Validated;
 
         return [
             // La vista recibe las propiedades antes de with(): el paso de este render va aparte.
             'currentStep' => $this->step,
             'batch' => $batch,
             'batchTemplate' => $batch === null ? null : ($labels[$batch->template] ?? $batch->template),
-            'batchFields' => $batchTemplate?->fields() ?? [],
-            'batchKey' => $batchTemplate?->naturalKey() ?? [],
-            'polling' => $batch !== null && ($batch->status->inProgress() || ($reviewing && $errorRows > 0 && ! $errorsReady)),
+            'batchFields' => $batchDefinition?->fields() ?? [],
+            'batchKey' => $batchDefinition?->naturalKey() ?? [],
+            'polling' => $batch !== null && ($batch->status->inProgress() || $applyQueued || ($errorsPending && ! $errorsLost)),
+            'applyQueued' => $applyQueued,
+            'errorsLost' => $errorsLost,
             'warningRows' => $reviewing && $this->step === 3 ? $batches->warningRows($batch) : 0,
             'applied' => $applied,
             'errorRows' => $errorRows,
@@ -346,7 +356,16 @@ new #[Title('Importaciones')] class extends Component
             return;
         }
 
-        ApplyQueuedBatch::dispatch($batch, $context->user());
+        try {
+            ApplyQueuedBatch::dispatch($batch, $context->user());
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->error('La cola no respondió', 'El lote sigue validado: intenta aplicarlo otra vez en un momento.');
+
+            return;
+        }
+
+        $this->applyQueued = true;
     }
 
     /**
@@ -369,7 +388,7 @@ new #[Title('Importaciones')] class extends Component
         $this->authorize('view', $batch);
 
         $this->batchId = $batch->id;
-        $this->reset('issues');
+        $this->reset('issues', 'applyQueued');
         $this->resetPage();
     }
 
@@ -379,7 +398,7 @@ new #[Title('Importaciones')] class extends Component
     public function startOver(): void
     {
         $this->discardUpload();
-        $this->reset('template', 'file', 'header', 'readFile', 'assignments', 'mappingId', 'mappingName', 'batchId', 'issues');
+        $this->reset('template', 'file', 'header', 'readFile', 'assignments', 'mappingId', 'mappingName', 'batchId', 'issues', 'applyQueued');
         $this->resetPage();
         $this->resetValidation();
     }

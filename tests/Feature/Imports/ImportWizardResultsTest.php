@@ -13,6 +13,7 @@ use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportTesting\Testable;
@@ -93,6 +94,45 @@ describe('admin', function () {
 
         $page->assertSet('step', 4)
             ->assertSeeInOrder(['Altas', '1', 'Cambios', '1', 'Sin cambios', '0', 'Con error, sin aplicar', '1']);
+    });
+
+    it('después de mandar a aplicar dice que está en la cola y se refresca hasta que la cola lo toma', function () {
+        Queue::fake();
+
+        wizardForBatch($this->admin, $this->batch)
+            ->call('apply')
+            ->assertSee('En la cola: la aplicación empieza en cuanto se libere el proceso.')
+            ->assertSeeHtml('wire:poll')
+            ->assertDontSee('Aplicar 2 filas');
+
+        Queue::assertPushed(ApplyQueuedBatch::class, fn (ApplyQueuedBatch $job): bool => $job->batch->is($this->batch) && $job->user->is($this->admin));
+    });
+
+    it('si la cola no responde al aplicar lo dice y deja intentarlo otra vez', function () {
+        Bus::shouldReceive('dispatch')->once()->andThrow(new RuntimeException('Valkey no responde.'));
+
+        $page = wizardForBatch($this->admin, $this->batch)->call('apply');
+
+        expect(lastToastOf($page))->type->toBe('error')->title->toBe('La cola no respondió');
+        $page->assertSee('Aplicar 2 filas');
+    });
+
+    it('no ofrece el archivo de errores mientras la cola no lo rehace', function () {
+        // Al empezar a aplicar, el archivo de la validación deja de valer hasta que la cola lo rehace.
+        $this->batch->update(['errors_exported_at' => null]);
+
+        wizardForBatch($this->admin, $this->batch)
+            ->assertSee('Preparando el archivo de errores…')
+            ->assertDontSee(route('imports.batch-errors', $this->batch->id));
+    });
+
+    it('si el archivo de errores no llega en diez minutos deja de esperarlo y lo dice', function () {
+        Storage::disk('imports')->delete($this->batch->errors_path);
+        $this->travel(11)->minutes();
+
+        wizardForBatch($this->admin, $this->batch)
+            ->assertSee('No se pudo preparar el archivo de errores.')
+            ->assertDontSeeHtml('wire:poll');
     });
 
     it('no aplica un lote que ya no está validado ni uno sin filas válidas', function (array $attributes, string $message) {

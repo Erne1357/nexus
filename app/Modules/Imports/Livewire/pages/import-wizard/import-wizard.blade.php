@@ -203,6 +203,11 @@
                     <x-alert :title="$batch->failure_reason" icon="o-x-circle" class="alert-error" />
                 @endif
 
+                @if ($applyQueued)
+                    <x-progress class="progress-primary h-1" indeterminate />
+                    <p class="mt-3 mb-4 text-sm">En la cola: la aplicación empieza en cuanto se libere el proceso.</p>
+                @endif
+
                 @if ($currentStep === 3 && $batch->status === BatchStatus::Validated)
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <x-stat title="Filas" :value="number_format($batch->total_rows)" icon="o-table-cells" />
@@ -235,6 +240,8 @@
                                 class="btn-outline"
                                 tooltip-left="Las filas con error como vinieron, para corregirlas y volver a subir el archivo."
                             />
+                        @elseif ($errorsLost)
+                            <span class="text-sm text-base-content/70">No se pudo preparar el archivo de errores. Avisa al equipo de Nexus.</span>
                         @else
                             <span class="text-sm text-base-content/70">Preparando el archivo de errores…</span>
                         @endif
@@ -255,7 +262,7 @@
                         @endscope
 
                         @scope('cell_key', $row, $batchKey)
-                            {{ implode(' · ', array_map(fn (string $field): string => (string) ($row->normalized[$field] ?? '—'), $batchKey)) }}
+                            {{ implode(' · ', array_map(fn (string $field): string => is_scalar($value = $row->normalized[$field] ?? '—') ? (string) $value : json_encode($value), $batchKey)) }}
                         @endscope
 
                         @scope('cell_messages', $row, $batchFields)
@@ -284,7 +291,7 @@
                 <x-slot:actions>
                     <x-button label="Importar otro archivo" icon="o-arrow-up-tray" wire:click="startOver" />
 
-                    @if ($currentStep === 3 && $batch->status === BatchStatus::Validated)
+                    @if ($currentStep === 3 && $batch->status === BatchStatus::Validated && ! $applyQueued)
                         @if ($batch->valid_rows > 0)
                             <x-button
                                 :label="$batch->valid_rows === 1 ? 'Aplicar 1 fila' : 'Aplicar '.number_format($batch->valid_rows).' filas'"

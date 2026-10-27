@@ -171,7 +171,8 @@ final class ApplyImportBatch
                 throw new BatchNotReady("El lote {$batch->id} no está validado: está {$locked->status->label()}.");
             }
 
-            $locked->update(['status' => BatchStatus::Applying, 'run_id' => $run, 'processed_rows' => 0]);
+            // El archivo de errores de la validación deja de valer: la cola lo rehace al terminar.
+            $locked->update(['status' => BatchStatus::Applying, 'run_id' => $run, 'processed_rows' => 0, 'errors_exported_at' => null]);
             $batch->setRawAttributes($locked->getAttributes(), sync: true);
         });
     }

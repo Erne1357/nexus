@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Storage;
  * La llaman los jobs de la cola al terminar de validar y de aplicar (la aplicación puede sumar filas
  * con error): un kardex mal mapeado puede traer cientos de miles, y armarlo en la petición pasaría del
  * segundo que la arquitectura permite. Escribe aparte y reemplaza el archivo al final, así que una
- * descarga nunca ve uno a medias. No deja bitácora: no cambia el lote ni el catálogo.
+ * descarga nunca ve uno a medias; después anota en el lote cuándo quedó listo (`errors_exported_at`),
+ * que ApplyImportBatch borra al empezar. No deja bitácora: no cambia los datos del lote ni el catálogo.
  *
  * Un texto que empieza con `=`, `+`, `-` o `@` y no es un número sale con un apóstrofo delante, para
  * que Excel no lo ejecute como fórmula.
@@ -64,6 +65,11 @@ final class ExportBatchErrors
 
         fclose($output);
         rename($temporary, $disk->path($batch->errors_path));
+
+        // Sin tocar updated_at: es una marca del archivo, no un cambio del lote.
+        $exportedAt = now();
+        ImportBatch::query()->whereKey($batch->id)->toBase()->update(['errors_exported_at' => $exportedAt]);
+        $batch->forceFill(['errors_exported_at' => $exportedAt])->syncOriginalAttribute('errors_exported_at');
     }
 
     /**

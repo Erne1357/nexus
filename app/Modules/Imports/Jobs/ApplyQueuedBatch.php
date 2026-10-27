@@ -45,6 +45,11 @@ final class ApplyQueuedBatch implements ShouldQueue
         } catch (BatchNotReady) {
             // Ya no está validado: otra corrida lo tomó, ya terminó o falló.
             return;
+        } catch (Throwable $exception) {
+            // Lo que alcanzó a pasar a error antes del fallo también va al archivo.
+            $export->handle($this->batch->refresh());
+
+            throw $exception;
         }
 
         // Al aplicar, una fila que el catálogo ya no acepta pasa a error: el archivo se rehace.

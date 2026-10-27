@@ -85,11 +85,12 @@ final class ImportBatchQuery
     }
 
     /**
-     * Si la cola ya dejó el CSV de errores del lote (ExportBatchErrors) para descargarlo.
+     * Si la cola ya dejó el CSV de errores del lote (ExportBatchErrors) para su último estado: el de la
+     * validación deja de valer en cuanto el lote se empieza a aplicar, hasta que la cola lo rehace.
      */
     public function errorsFileReady(ImportBatch $batch): bool
     {
-        return Storage::disk('imports')->exists($batch->errors_path);
+        return $batch->errors_exported_at !== null && Storage::disk('imports')->exists($batch->errors_path);
     }
 
     /**

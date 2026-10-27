@@ -72,8 +72,10 @@ beforeEach(function () {
 function validatedCampusBatch(User $admin, string $csv): ImportBatch
 {
     $batch = app(StoreImportBatch::class)->handle($admin, 'test-campuses', UploadedFile::fake()->createWithContent('campus.csv', $csv));
+    $batch = app(ValidateImportBatch::class)->handle($batch);
+    $batch->update(['errors_exported_at' => now()]);
 
-    return app(ValidateImportBatch::class)->handle($batch);
+    return $batch;
 }
 
 function applyCampusBatch(ImportBatch $batch, User $admin): ImportBatch
@@ -93,6 +95,8 @@ it('sube, valida y aplica un CSV: escribe las válidas y con advertencia, y salt
         ->status->toBe(BatchStatus::Applied)
         ->applied_at->not->toBeNull()
         ->processed_rows->toBe(2)
+        // El archivo de errores de la validación deja de valer: lo rehace la cola al terminar.
+        ->errors_exported_at->toBeNull()
         ->and($batch->fresh()->applier->is($this->admin))->toBeTrue()
         ->and(Campus::where('code', 'C9')->sole())
         ->name->toBe('Campus Nueve')

@@ -17,6 +17,7 @@ beforeEach(function () {
     $this->admin = User::factory()->admin()->create();
     $this->batch = ImportBatch::factory()->create(['original_name' => 'campus 2026.csv']);
     Storage::disk('imports')->put($this->batch->errors_path, "\u{FEFF}\"Fila del archivo\",\"Errores en Nexus\"\n");
+    $this->batch->update(['errors_exported_at' => now()]);
 });
 
 it('descarga el CSV de errores con el nombre del archivo original', function () {
@@ -27,8 +28,13 @@ it('descarga el CSV de errores con el nombre del archivo original', function () 
         ->assertDownload('campus 2026 - errores.csv');
 });
 
-it('responde 404 mientras la cola no termina el archivo', function () {
+it('responde 404 mientras la cola no termina el archivo o mientras lo rehace al aplicar', function () {
     Storage::disk('imports')->delete($this->batch->errors_path);
+
+    $this->actingAs($this->admin)->get(route('imports.batch-errors', $this->batch->id))->assertNotFound();
+
+    Storage::disk('imports')->put($this->batch->errors_path, 'el de la validación');
+    $this->batch->update(['errors_exported_at' => null]);
 
     $this->actingAs($this->admin)->get(route('imports.batch-errors', $this->batch->id))->assertNotFound();
 });
