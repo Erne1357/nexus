@@ -5,6 +5,7 @@ namespace App\Modules\Core\Actions;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\UpdatesUserPasswords;
@@ -16,8 +17,10 @@ use Laravel\Fortify\Contracts\UpdatesUserPasswords;
  *
  * A diferencia de las demás Actions, valida su entrada: el controlador de Fortify le pasa la
  * petición sin validar. Exige la contraseña actual y una nueva confirmada, distinta de la actual
- * y conforme a Password::defaults() (FortifyServiceProvider de Core). La bitácora registra el
- * cambio, nunca la contraseña.
+ * y conforme a Password::defaults() (FortifyServiceProvider de Core). Rota el remember token,
+ * así que ninguna cookie de "recordarme" anterior vuelve a servir; las demás sesiones abiertas
+ * las cierra AuthenticateSession en su siguiente petición. La bitácora registra el cambio, nunca
+ * la contraseña.
  */
 final class UpdateUserPassword implements UpdatesUserPasswords
 {
@@ -37,7 +40,9 @@ final class UpdateUserPassword implements UpdatesUserPasswords
             $user->forceFill([
                 'password' => $validated['password'],
                 'must_change_password' => false,
-            ])->save();
+            ]);
+            $user->setRememberToken(Str::random(60));
+            $user->save();
 
             activity()
                 ->performedOn($user)

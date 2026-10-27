@@ -1,5 +1,9 @@
 <x-core::layouts.guest title="Cambiar contraseña">
     <x-card title="Cambia tu contraseña" subtitle="Al menos 8 caracteres, con letras y números" shadow separator class="w-full max-w-sm">
+        @if (session('status') === 'password-updated')
+            <x-alert title="Tu contraseña se actualizó." icon="o-check-circle" class="alert-success mb-4" />
+        @endif
+
         @if (auth()->user()->must_change_password)
             <x-alert
                 title="Es tu primer acceso: elige una contraseña propia para continuar."

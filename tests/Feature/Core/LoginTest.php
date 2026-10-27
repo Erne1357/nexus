@@ -3,6 +3,7 @@
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -57,6 +58,46 @@ it('no deja entrar a un usuario inactivo y responde igual que a una credencial i
         ->assertSessionHasErrors(['username' => __('auth.failed')]);
 
     $this->assertGuest();
+});
+
+/**
+ * Espía Hash::check (Hash::make sigue siendo el real) y devuelve los hashes contra los que se
+ * comparó la contraseña.
+ *
+ * @return ArrayObject<int, string>
+ */
+function spyPasswordChecks(): ArrayObject
+{
+    $real = app('hash');
+    $compared = new ArrayObject;
+
+    Hash::spy()->shouldReceive('make')->andReturnUsing(fn (...$arguments) => $real->make(...$arguments));
+    Hash::shouldReceive('check')->andReturnUsing(function (string $value, ?string $hash) use ($compared): bool {
+        $compared[] = $hash;
+
+        return false;
+    });
+
+    return $compared;
+}
+
+it('compara la contraseña contra un hash señuelo del mismo costo cuando el username no existe', function () {
+    $existing = User::factory()->create();
+    $compared = spyPasswordChecks();
+
+    $this->post('/login', ['username' => '19119999', 'password' => 'password']);
+
+    expect($compared)->toHaveCount(1)
+        ->and(password_get_info($compared[0]))->toBe(password_get_info($existing->password));
+});
+
+it('compara la contraseña aunque el usuario esté inactivo', function () {
+    $inactive = User::factory()->create(['username' => '19110001', 'is_active' => false]);
+    $compared = spyPasswordChecks();
+
+    $this->post('/login', ['username' => '19110001', 'password' => 'password']);
+
+    expect($compared->getArrayCopy())->toBe([$inactive->password]);
 });
 
 it('entra con un username con mayúsculas tal como viene del SII', function () {

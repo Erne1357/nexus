@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 
@@ -124,3 +125,67 @@ it('deja pasar a la página de inicio a quien ya cambió su contraseña', functi
         ->get('/')
         ->assertOk();
 });
+
+it('cierra las demás sesiones del usuario al cambiar la contraseña', function () {
+    $user = User::factory()->create(['password' => 'Inicial-2026']);
+    $otherDevice = [Auth::guard()->getName() => $user->getKey(), 'password_hash_web' => $user->password];
+
+    $this->withSession($otherDevice)->get('/')->assertOk();
+
+    Auth::forgetGuards();
+    $this->flushSession();
+    $this->actingAs($user)->put(route('user-password.update'), [
+        'current_password' => 'Inicial-2026',
+        'password' => 'Nueva-clave-2027',
+        'password_confirmation' => 'Nueva-clave-2027',
+    ]);
+
+    Auth::forgetGuards();
+    $this->flushSession();
+    $this->withSession($otherDevice)->get('/')->assertRedirect('/login');
+
+    $this->assertGuest();
+});
+
+it('mantiene activa la sesión desde la que se cambió la contraseña', function () {
+    $user = User::factory()->create(['username' => '19110001', 'password' => 'Inicial-2026']);
+
+    $this->post('/login', ['username' => '19110001', 'password' => 'Inicial-2026']);
+    $this->from(route('user-password.edit'))->put(route('user-password.update'), [
+        'current_password' => 'Inicial-2026',
+        'password' => 'Nueva-clave-2027',
+        'password_confirmation' => 'Nueva-clave-2027',
+    ]);
+
+    Auth::forgetGuards();
+    $this->get('/')->assertOk();
+
+    $this->assertAuthenticatedAs($user);
+});
+
+it('en un cambio voluntario regresa a la pantalla de cambio y avisa que la contraseña se actualizó', function () {
+    $user = User::factory()->create(['password' => 'Inicial-2026']);
+
+    $this->actingAs($user)
+        ->from(route('user-password.edit'))
+        ->put(route('user-password.update'), [
+            'current_password' => 'Inicial-2026',
+            'password' => 'Nueva-clave-2027',
+            'password_confirmation' => 'Nueva-clave-2027',
+        ])
+        ->assertRedirect(route('user-password.edit'))
+        ->assertSessionHas('status', 'password-updated');
+
+    $this->get(route('user-password.edit'))->assertSee('Tu contraseña se actualizó.');
+});
+
+it('responde 403 a una petición JSON o de Livewire mientras la contraseña siga pendiente', function (array $headers) {
+    $this->actingAs(firstAccessUser())
+        ->withHeaders($headers)
+        ->get('/')
+        ->assertForbidden()
+        ->assertJson(['message' => 'Cambia tu contraseña para continuar.']);
+})->with([
+    'JSON' => [['Accept' => 'application/json']],
+    'Livewire' => [['X-Livewire' => '1']],
+]);
