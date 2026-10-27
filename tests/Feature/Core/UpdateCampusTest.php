@@ -13,8 +13,9 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | UpdateCampus cambia solo lo que recibe (datos, estado o perfil de flujo) con las mismas reglas que
-| CreateCampus, deja en la bitácora el valor anterior y el nuevo de lo que cambió y, después del
-| commit, avisa con CampusUpdated. Si nada cambió, no escribe, no registra ni avisa.
+| CreateCampus (CampusRules). Dentro de la transacción lee el campus con bloqueo, deja en la
+| bitácora el valor anterior confirmado y el nuevo de lo que cambió y, después del commit, avisa con
+| CampusUpdated. Si nada cambió, no escribe, no registra ni avisa.
 */
 
 beforeEach(function () {
@@ -148,4 +149,57 @@ it('avisa solo después del commit: si la transacción se revierte, nadie se ent
     updateCampus($this->campus->fresh(), ['name' => 'Campus Dos']);
 
     expect($heard)->toHaveCount(1);
+});
+
+describe('con el perfil guardado inválido', function () {
+    beforeEach(function () {
+        $this->broken = ['block_minutes' => 45];
+        DB::table('campuses')->where('id', $this->campus->id)->update(['settings' => json_encode($this->broken)]);
+        $this->campus = $this->campus->fresh();
+    });
+
+    it('activa, desactiva y cambia nombre o código sin error', function () {
+        updateCampus($this->campus, ['is_active' => false]);
+        updateCampus($this->campus, ['is_active' => true, 'name' => 'Campus Dos', 'code' => 'C22']);
+
+        expect($this->campus->fresh())
+            ->is_active->toBeTrue()
+            ->name->toBe('Campus Dos')
+            ->code->toBe('C22')
+            ->settings->toBe($this->broken);
+    });
+
+    it('se repara guardando un perfil válido, y la bitácora conserva el perfil roto como valor anterior', function () {
+        updateCampus($this->campus, ['settings' => CampusProfile::DEFAULTS]);
+
+        expect($this->campus->fresh()->profile->toArray())->toBe(CampusProfile::DEFAULTS)
+            ->and(Activity::sole()->attribute_changes['old'])->toBe(['settings' => $this->broken]);
+    });
+});
+
+it('si otro guarda el mismo código entre la validación y la escritura, responde con el error de código', function () {
+    Campus::updating(fn () => DB::table('campuses')->insert(['code' => 'C1', 'name' => 'Otra sesión', 'modality' => 'presencial']));
+
+    expect(fn () => updateCampus($this->campus, ['code' => 'C1']))
+        ->toThrow(ValidationException::class, 'Ya existe un campus con el código C1');
+
+    expect($this->campus->fresh()->code)->toBe('C2')
+        ->and(Activity::count())->toBe(0);
+});
+
+it('registra como valor anterior el confirmado en la base, leído con bloqueo dentro de la transacción', function () {
+    $stale = $this->campus;
+    DB::table('campuses')->where('id', $stale->id)->update(['name' => 'Campus 2']);
+    DB::enableQueryLog();
+
+    updateCampus($stale, ['name' => 'Campus Dos']);
+
+    $locked = collect(DB::getQueryLog())->contains(fn (array $query): bool => str_contains($query['query'], 'from "campuses"')
+        && str_contains($query['query'], 'for update'));
+
+    expect($locked)->toBeTrue()
+        ->and(Activity::sole()->attribute_changes->toArray())->toBe([
+            'attributes' => ['name' => 'Campus Dos'],
+            'old' => ['name' => 'Campus 2'],
+        ]);
 });

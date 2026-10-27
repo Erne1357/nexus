@@ -8,6 +8,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
@@ -122,6 +123,32 @@ describe('admin', function () {
         $page->call('toggleActive', $this->c2->id);
         expect($this->c2->fresh()->is_active)->toBeTrue()
             ->and(lastToastOf($page)['title'])->toBe('Campus activado');
+    });
+
+    it('edita un campus con el perfil guardado inválido: precarga los valores por omisión, avisa y lo repara al guardar', function () {
+        DB::table('campuses')->where('id', $this->c2->id)->update(['settings' => json_encode(['block_minutes' => 45])]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.campuses')
+            ->call('edit', $this->c2->id)
+            ->assertSet('showModal', true)
+            ->assertSet('settings', CampusProfile::DEFAULTS)
+            ->assertSee('El perfil de flujo guardado no es válido; se cargaron los valores por omisión. Revísalos y guarda para repararlo.')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        expect($this->c2->fresh()->profile->toArray())->toBe(CampusProfile::DEFAULTS);
+    });
+
+    it('manda los días a la Action como lista aunque lleguen con huecos', function () {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.campuses')
+            ->call('edit', $this->c2->id)
+            ->set('settings.days', [0 => '1', 2 => '3'])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        expect($this->c2->fresh()->profile->days)->toBe([1, 3]);
     });
 
     it('muestra en español los errores de validación del formulario', function () {
@@ -252,6 +279,7 @@ describe('subdirección', function () {
         Livewire::actingAs($this->subdireccion)
             ->test('core::pages.campuses')
             ->assertSee('Solo el administrador da de alta campus.')
+            ->assertSee('Solo el administrador ve los campus inactivos.')
             ->assertSee('Solo el administrador activa o desactiva campus.')
             ->call('edit', $this->c1->id)
             ->assertSee('Solo el administrador cambia código, nombre y modalidad.');
