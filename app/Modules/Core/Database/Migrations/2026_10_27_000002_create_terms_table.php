@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Periodos escolares (`2027-1`). Hay un solo periodo actual para capturar carga
- * (docs/dominio/modelo-de-datos.md); un índice único parcial lo garantiza.
+ * (docs/dominio/modelo-de-datos.md); un índice único parcial lo garantiza. Un periodo no termina
+ * antes de empezar.
  */
 return new class extends Migration
 {
@@ -24,6 +25,7 @@ return new class extends Migration
         });
 
         DB::statement('create unique index terms_single_current_unique on terms (is_current) where is_current');
+        DB::statement('alter table terms add constraint terms_dates_check check (ends_on >= starts_on)');
     }
 
     public function down(): void
