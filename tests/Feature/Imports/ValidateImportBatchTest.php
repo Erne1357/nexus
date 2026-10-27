@@ -9,9 +9,12 @@ use App\Modules\Imports\Events\BatchValidated;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
 use App\Modules\Imports\Models\ImportRow;
+use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Writer;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 
@@ -35,6 +38,28 @@ function batchWithFile(string $contents, string $extension = 'csv', array $attri
     Storage::disk('imports')->put($batch->file_path, $contents);
 
     return $batch;
+}
+
+/**
+ * El contenido de un XLSX con las filas dadas.
+ *
+ * @param  list<list<mixed>>  $rows
+ */
+function campusXlsx(array $rows): string
+{
+    $path = tempnam(sys_get_temp_dir(), 'nexus-xlsx');
+    $writer = new Writer;
+    $writer->openToFile($path);
+
+    foreach ($rows as $row) {
+        $writer->addRow(Row::fromValues($row));
+    }
+
+    $writer->close();
+    $contents = (string) file_get_contents($path);
+    unlink($path);
+
+    return $contents;
 }
 
 function validateBatch(ImportBatch $batch): ImportBatch
@@ -181,4 +206,108 @@ it('un lote fallido también deja bitácora con el motivo y avisa', function () 
         ->description->toBe('No se pudo validar campus.xls: Guarda el archivo como .xlsx o .csv para importarlo.');
 
     Event::assertDispatched(BatchValidated::class);
+});
+
+/**
+ * Plantilla de prueba que truena al normalizar la clave BOOM, como un archivo que se corta a la mitad.
+ */
+class ValidateProbeTemplate extends CampusesTemplate
+{
+    public function normalize(array $row): array
+    {
+        if (($row['code'] ?? null) === 'BOOM') {
+            throw new RuntimeException('El archivo se cortó.');
+        }
+
+        return parent::normalize($row);
+    }
+}
+
+it('un lote que falla a la mitad no se queda con filas a medias', function () {
+    app()->bind(CampusesTemplate::class, ValidateProbeTemplate::class);
+    $lines = collect(range(1, 700))->map(fn (int $n): string => $n === 650 ? 'BOOM,x,presencial' : "K{$n},Campus {$n},presencial")->implode("\n");
+
+    $batch = batchWithFile("code,name,modality\n{$lines}\n");
+
+    expect(fn () => validateBatch($batch))->toThrow(RuntimeException::class, 'El archivo se cortó.')
+        ->and($batch->fresh()->status)->toBe(BatchStatus::Failed)
+        ->and(ImportRow::count())->toBe(0);
+});
+
+it('usa el mapeo del lote aunque después se haya desactivado o borrado', function () {
+    $mapping = ImportMapping::factory()->create(['template' => 'test-campuses', 'columns' => ['CVE' => 'code', 'DESC' => 'name', 'MOD' => 'modality']]);
+    $batch = batchWithFile("CVE,DESC,MOD\nC9,Campus Nueve,presencial\n", attributes: ['mapping_id' => $mapping->id]);
+    $mapping->update(['is_active' => false]);
+    $mapping->delete();
+
+    expect(validateBatch($batch)->rows()->sole()->normalized['code'])->toBe('C9');
+});
+
+it('un texto con UTF-8 inválido es error de su fila y no tumba el lote', function () {
+    // El lector convierte a UTF-8 todo archivo que no lo es; esto cubre una plantilla que lo produzca.
+    app()->bind(CampusesTemplate::class, fn () => new class extends CampusesTemplate
+    {
+        public function normalize(array $row): array
+        {
+            $row = parent::normalize($row);
+
+            return $row['code'] === 'C8' ? [...$row, 'name' => "Ingenier\xEDa"] : $row;
+        }
+    });
+
+    $batch = validateBatch(batchWithFile("code,name,modality\nC9,Campus Nueve,presencial\nC8,Campus Ocho,presencial\n"));
+
+    expect($batch->fresh())
+        ->status->toBe(BatchStatus::Validated)
+        ->valid_rows->toBe(1)
+        ->error_rows->toBe(1)
+        ->and(validatedRows($batch)[3]['errors'])
+        ->toBe(['name' => ['El texto no es UTF-8 válido: guarda el archivo en UTF-8 o vuelve a exportarlo.']]);
+});
+
+it('la bitácora de la validación es de quien subió el lote', function () {
+    $batch = validateBatch(batchWithFile("code,name,modality\nC9,Campus Nueve,presencial\n"));
+
+    expect(Activity::sole()->causer->is($this->admin))->toBeTrue();
+});
+
+it('una fila con error no cuenta como la primera de su clave', function () {
+    $batch = validateBatch(batchWithFile("code,name,modality\nC9,,presencial\nC9,Campus Nueve,presencial\n"));
+
+    expect(validatedRows($batch)[3]['status'])->toBe(RowStatus::Valid)
+        ->and(validatedRows($batch)[2]['status'])->toBe(RowStatus::Error);
+});
+
+it('detecta la clave repetida aunque una venga como número y otra como texto', function () {
+    app()->bind(CampusesTemplate::class, fn () => new class extends CampusesTemplate
+    {
+        public function normalize(array $row): array
+        {
+            // La normalización base, sin las mayúsculas de CampusesTemplate: la clave numérica sigue siendo número.
+            return ImportTemplate::normalize($row);
+        }
+
+        public function rules(): array
+        {
+            return [...parent::rules(), 'code' => ['required', 'max:10']];
+        }
+    });
+
+    $batch = validateBatch(batchWithFile(campusXlsx([['code', 'name', 'modality'], [20111234, 'Uno', 'presencial'], ['20111234', 'Dos', 'presencial']]), 'xlsx'));
+
+    expect(validatedRows($batch)[3]['errors'])->toBe(['code' => ['La clave se repite: ya viene en la fila 2.']]);
+});
+
+it('una columna con el nombre de un campo gana sobre la etiqueta de otro campo', function () {
+    app()->bind(CampusesTemplate::class, fn () => new class extends CampusesTemplate
+    {
+        public function fields(): array
+        {
+            return ['code' => 'clave', 'name' => 'code', 'modality' => 'modalidad'];
+        }
+    });
+
+    $batch = validateBatch(batchWithFile("code,name,modality\nC9,Campus Nueve,presencial\n"));
+
+    expect($batch->rows()->sole()->normalized)->toBe(['code' => 'C9', 'name' => 'Campus Nueve', 'modality' => 'presencial']);
 });

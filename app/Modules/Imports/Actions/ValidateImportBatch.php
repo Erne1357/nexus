@@ -26,14 +26,17 @@ use Throwable;
  * etiqueta sin importar mayúsculas, acentos ni espacios), normaliza y valida cada fila con la
  * plantilla y la guarda en `import_rows`, de 500 en 500, con sus errores y advertencias.
  *
- * Una fila que repite la clave natural de otra anterior del mismo archivo es error y dice en qué fila
- * está la primera; se encuentra en SQL por `key_hash`, para no tener en memoria las claves de un
- * kardex completo. Al terminar, el lote queda `validated` con sus cuentas (las filas con advertencia
- * cuentan como válidas).
+ * Una fila sin error que repite la clave natural de otra anterior sin error del mismo archivo es error
+ * y dice en qué fila está la primera: la que se aplica. Se encuentra en SQL por `key_hash` (la clave
+ * como texto, así que 20111234 número y "20111234" texto son la misma), para no tener en memoria las
+ * claves de un kardex completo. Al terminar, el lote queda `validated` con sus cuentas (las filas con
+ * advertencia cuentan como válidas).
  *
  * Un archivo que no se puede leer, o sin la columna de la clave natural, deja el lote `failed` con el
- * motivo que verá el admin, sin filas. Cualquier otro error lo deja `failed` y se relanza para que el
- * job lo registre. Deja bitácora del resultado y avisa con BatchValidated después del commit.
+ * motivo que verá el admin. Cualquier otro error lo deja `failed` y se relanza para que el job lo
+ * registre. Un lote fallido no se queda con filas a medias. La bitácora del resultado es de quien subió
+ * el lote, y avisa con BatchValidated después del commit. Si el worker muere a media validación, el job
+ * de la tarea 1.2 marca el lote como fallido.
  */
 final class ValidateImportBatch
 {
@@ -55,7 +58,9 @@ final class ValidateImportBatch
             $template = $this->templates->get($batch->template);
             $context = new ImportContext($batch->uploader, $batch->campus);
             $path = Storage::disk('imports')->path($batch->file_path);
-            $columns = $this->columnsFor($template, $this->reader->header($path), $batch->mapping);
+            // Con borrados: el mapeo que eligió el admin al subir manda aunque después se haya retirado.
+            $mapping = $batch->mapping()->withTrashed()->first();
+            $columns = $this->columnsFor($template, $this->reader->header($path), $mapping);
 
             $pending = [];
 
@@ -78,7 +83,12 @@ final class ValidateImportBatch
         } catch (UnreadableFile $exception) {
             return $this->fail($batch, $exception->getMessage());
         } catch (Throwable $exception) {
-            $this->fail($batch, 'La validación se interrumpió por un error inesperado. Vuelve a subir el archivo; si se repite, avisa al equipo de Nexus.');
+            try {
+                $this->fail($batch, 'La validación se interrumpió por un error inesperado. Vuelve a subir el archivo; si se repite, avisa al equipo de Nexus.');
+            } catch (Throwable $failure) {
+                // Si la base ya no acepta escrituras (transacción abortada), manda el error original.
+                report($failure);
+            }
 
             throw $exception;
         }
@@ -122,11 +132,15 @@ final class ValidateImportBatch
                 }
             }
         } else {
+            // Primero las etiquetas y después los nombres de campo, que ganan si un slug coincide con los dos.
             $bySlug = [];
 
             foreach ($fields as $field => $label) {
-                $bySlug[$this->slug($field)] = $field;
                 $bySlug[$this->slug($label)] = $field;
+            }
+
+            foreach (array_keys($fields) as $field) {
+                $bySlug[$this->slug($field)] = $field;
             }
 
             foreach ($header as $source) {
@@ -181,7 +195,7 @@ final class ValidateImportBatch
             'errors' => $this->json((object) $issues->errors),
             'warnings' => $this->json((object) $issues->warnings),
             'status' => $status->value,
-            'key_hash' => in_array(null, $key, true) ? null : hash('sha256', $this->json(array_values($key))),
+            'key_hash' => in_array(null, $key, true) ? null : hash('sha256', $this->json(array_map(strval(...), array_values($key)))),
             'created_at' => now(),
             'updated_at' => now(),
         ];
@@ -201,10 +215,10 @@ final class ValidateImportBatch
             FROM (
                 SELECT id, row_number, min(row_number) OVER (PARTITION BY key_hash) AS first_row
                 FROM import_rows
-                WHERE batch_id = ? AND key_hash IS NOT NULL
+                WHERE batch_id = ? AND key_hash IS NOT NULL AND status <> ?
             ) AS d
             WHERE r.id = d.id AND d.row_number <> d.first_row
-            SQL, [RowStatus::Error->value, $template->naturalKey()[0], $template->naturalKey()[0], $batch->id]);
+            SQL, [RowStatus::Error->value, $template->naturalKey()[0], $template->naturalKey()[0], $batch->id, RowStatus::Error->value]);
     }
 
     private function finish(ImportBatch $batch, ImportTemplate $template): ImportBatch
@@ -225,6 +239,7 @@ final class ValidateImportBatch
 
             activity()
                 ->performedOn($batch)
+                ->causedBy($batch->uploader)
                 ->event('validated')
                 ->withProperties(['total_rows' => $batch->total_rows, 'valid_rows' => $batch->valid_rows, 'error_rows' => $batch->error_rows])
                 ->log("Validó {$batch->original_name} para importar {$template->label()}: {$batch->valid_rows} de {$batch->total_rows} filas válidas");
@@ -238,10 +253,13 @@ final class ValidateImportBatch
     private function fail(ImportBatch $batch, string $reason): ImportBatch
     {
         return DB::transaction(function () use ($batch, $reason): ImportBatch {
+            // Son staging, no catálogo ni bitácora: un lote fallido no se aplica y sus filas no sirven.
+            ImportRow::query()->where('batch_id', $batch->id)->delete();
             $batch->update(['status' => BatchStatus::Failed, 'failure_reason' => $reason]);
 
             activity()
                 ->performedOn($batch)
+                ->causedBy($batch->uploader)
                 ->event('failed')
                 ->withProperties(['failure_reason' => $reason])
                 ->log("No se pudo validar {$batch->original_name}: {$reason}");
@@ -263,6 +281,7 @@ final class ValidateImportBatch
             $value = array_map(fn (mixed $cell): mixed => $cell instanceof DateTimeInterface ? $cell->format(DATE_ATOM) : $cell, $value);
         }
 
-        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        // Un texto con UTF-8 inválido ya es error de su fila (validate()); aquí se sustituye para guardarla.
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
     }
 }

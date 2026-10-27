@@ -106,7 +106,7 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 - Importar nunca borra ni reactiva: si un registro no viene en el archivo, se marca `is_active = false` solo cuando el admin elige explícitamente "desactivar faltantes" para ese lote.
   - Un registro existente inactivo se actualiza con los datos del archivo, pero sigue inactivo; la fila lleva una advertencia.
   - Un registro borrado con la misma clave natural no se restaura: la fila es un error.
-- Dentro de un mismo archivo, una fila que repite la clave natural de otra anterior es error ("ya viene en la fila N"); la primera se aplica. Supuesto por confirmar: el más restrictivo, para no aplicar dos versiones del mismo registro en un lote.
+- Dentro de un mismo archivo, una fila que repite la clave natural de otra fila anterior es error ("ya viene en la fila N") y solo se aplica la primera. Una fila que ya tenía error no cuenta como la primera. Supuesto por confirmar: el más restrictivo, para no aplicar dos versiones del mismo registro en un lote.
 - Al aplicar un lote se escriben las filas válidas y las que traen advertencia; las que traen error se saltan. El admin descarga los errores, corrige el archivo y lo vuelve a subir: como se aplica por clave natural, repetir la importación no duplica nada (confirmado el 27 de octubre de 2026).
 - Una importación deja **una entrada de bitácora por lote aplicado** (quién, plantilla, altas y cambios); el detalle por registro queda en `import_rows` (fila original, normalizada y registro destino). No hay una entrada por registro importado (confirmado el 27 de octubre de 2026).
 - Fechas y horas en zona `America/Ciudad_Juarez`; en base de datos `time` sin zona para sesiones y `timestamptz` para eventos.
