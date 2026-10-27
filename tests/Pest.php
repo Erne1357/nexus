@@ -3,7 +3,8 @@
 use Tests\TestCase;
 
 /*
-| Feature corre con la aplicación de Laravel arrancada; Unit y Arch, sin ella.
+| Feature y Browser corren con la aplicación de Laravel arrancada; Unit y
+| Arch, sin ella.
 */
 
-pest()->extend(TestCase::class)->in('Feature');
+pest()->extend(TestCase::class)->in('Feature', 'Browser');
