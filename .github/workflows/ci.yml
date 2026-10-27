@@ -7,10 +7,11 @@
 name: CI
 
 on:
+  # Todo PR, sin importar su rama base: un PR encadenado (base en otra feature/*)
+  # también debe pasar los tres checks antes de revisarse.
   pull_request:
-    branches: [develop, main]
   # Al mezclar a develop o main se calienta la caché de la imagen: un PR solo lee
-  # las cachés de su propia rama y de la rama base.
+  # las cachés de su propia rama, de su rama base y de main.
   push:
     branches: [develop, main]
   workflow_dispatch:

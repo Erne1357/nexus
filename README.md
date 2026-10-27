@@ -74,7 +74,7 @@ docker compose exec app ./vendor/bin/pint                      # formato antes d
 
 ### CI
 
-Cada PR a `develop` y `main` corre en GitHub Actions tres checks: `lint` (Pint), `tests` (unit, feature y arquitectura, con reporte de cobertura) y `browser` (Chromium). Usan la misma imagen `dev` y los mismos servicios de compose que el desarrollo local. Detalle y tiempos en [docs/arquitectura/testing.md](docs/arquitectura/testing.md#ci).
+Cada PR, sin importar su rama base, corre en GitHub Actions tres checks: `lint` (Pint), `tests` (unit, feature y arquitectura, con reporte de cobertura) y `browser` (Chromium). Usan la misma imagen `dev` y los mismos servicios de compose que el desarrollo local. Detalle y tiempos en [docs/arquitectura/testing.md](docs/arquitectura/testing.md#ci).
 
 ## Laravel Boost (herramientas de IA)
 

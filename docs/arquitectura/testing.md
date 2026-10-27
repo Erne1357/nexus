@@ -84,7 +84,7 @@ Mínimo **80 % de líneas por módulo** desde la fase 1, medido en CI con el rep
 
 ## CI
 
-Workflow: `.github/workflows/ci.yml`. Se ejecuta en cada PR a `develop` y a `main`, a mano (`workflow_dispatch`) y en cada push a esas dos ramas (esto último solo para calentar la caché de la imagen: un PR lee las cachés de su rama y de la rama base). Una corrida nueva sobre el mismo PR cancela la anterior.
+Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su rama base (también los encadenados sobre otra `feature/*`), a mano (`workflow_dispatch`) y en cada push a `develop` y `main`. El push solo calienta la caché de la imagen: un PR lee las cachés de su rama, de su rama base y de `main`, así que un PR encadenado no encuentra la de `develop` y su primera corrida construye la imagen completa (unos 5 minutos, ver "Duración"). Una corrida nueva sobre el mismo PR cancela la anterior.
 
 | Job | Contenido | Bloquea el merge |
 |---|---|---|
