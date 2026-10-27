@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\User;
+use App\Modules\Core\Models\User;
 
 return [
 
@@ -113,5 +113,18 @@ return [
     */
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Contraseña inicial del admin
+    |--------------------------------------------------------------------------
+    |
+    | La usa AdminUserSeeder (Core) solo al crear el usuario `admin`, que debe
+    | cambiarla en su primer acceso. Obligatoria fuera de local y testing; si
+    | falta en local o testing, el seeder genera una aleatoria y la muestra.
+    |
+    */
+
+    'admin_initial_password' => env('ADMIN_INITIAL_PASSWORD'),
 
 ];
