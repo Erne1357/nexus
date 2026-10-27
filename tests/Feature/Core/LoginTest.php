@@ -111,13 +111,17 @@ it('vuelve a dejar entrar cuando pasa el minuto del bloqueo', function () {
     $this->assertAuthenticatedAs($user);
 });
 
-it('actualiza last_login_at al entrar', function () {
-    Carbon::setTestNow('2026-11-02 08:15:00');
+it('actualiza last_login_at al entrar sin tocar updated_at', function () {
+    Carbon::setTestNow('2026-11-02 08:00:00');
     $user = User::factory()->create(['username' => '19110001', 'last_login_at' => null]);
 
+    Carbon::setTestNow('2026-11-02 08:15:00');
     $this->post('/login', ['username' => '19110001', 'password' => 'password']);
 
-    expect($user->fresh()->last_login_at->toDateTimeString())->toBe('2026-11-02 08:15:00');
+    $user = $user->fresh();
+
+    expect($user->last_login_at->toDateTimeString())->toBe('2026-11-02 08:15:00')
+        ->and($user->updated_at->toDateTimeString())->toBe('2026-11-02 08:00:00');
 });
 
 it('no cambia last_login_at cuando el acceso falla', function () {

@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route;
 
 /*
 | Cambio obligatorio de contraseña en el primer acceso (supuesto 2 de PROJECT.md): mientras
@@ -48,16 +49,17 @@ it('deja cerrar la sesión sin cambiar la contraseña', function () {
     $this->assertGuest();
 });
 
-it('cambia la contraseña, apaga must_change_password y lleva a la página que se pidió', function () {
+it('cambia la contraseña, apaga must_change_password y lleva a la página de inicio', function () {
     $user = firstAccessUser();
 
-    $this->actingAs($user)->get('/');
-
-    $this->put(route('user-password.update'), [
-        'current_password' => 'Inicial-2026',
-        'password' => 'Nueva-clave-2027',
-        'password_confirmation' => 'Nueva-clave-2027',
-    ])->assertRedirect('/');
+    $this->actingAs($user)
+        ->from(route('user-password.edit'))
+        ->put(route('user-password.update'), [
+            'current_password' => 'Inicial-2026',
+            'password' => 'Nueva-clave-2027',
+            'password_confirmation' => 'Nueva-clave-2027',
+        ])
+        ->assertRedirect('/');
 
     $user->refresh();
 
@@ -65,6 +67,22 @@ it('cambia la contraseña, apaga must_change_password y lleva a la página que s
         ->and(Hash::check('Nueva-clave-2027', $user->password))->toBeTrue();
 
     $this->get('/')->assertOk();
+});
+
+it('después del cambio lleva a la página que había pedido', function () {
+    Route::middleware(['web', 'auth'])->get('/carga-de-prueba', fn () => 'carga');
+
+    $this->actingAs(firstAccessUser())
+        ->get('/carga-de-prueba')
+        ->assertRedirect(route('user-password.edit'));
+
+    $this->from(route('user-password.edit'))
+        ->put(route('user-password.update'), [
+            'current_password' => 'Inicial-2026',
+            'password' => 'Nueva-clave-2027',
+            'password_confirmation' => 'Nueva-clave-2027',
+        ])
+        ->assertRedirect('/carga-de-prueba');
 });
 
 it('rechaza el cambio si la contraseña actual no es correcta', function () {
