@@ -52,6 +52,13 @@ Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`. Un commit por
 ## Issues
 
 - Todo trabajo nace de un issue con la plantilla correspondiente (tarea, bug, épica). El issue referencia la tarea del plan (`Fase 3 · 3.2`) y lleva etiquetas `type:*`, `module:*`, `release:*` y `priority:*`, y el milestone de su fase.
+- Los issues de tarea salen de la tabla *Tareas* del archivo de la fase, con `.github/scripts/plan-issues.py` (Python 3 y `gh`, desde la raíz del repo). El script crea las etiquetas y milestones que falten, un issue por tarea hasta la fase de `--tasks-through` (4 por defecto, las de R1) y una épica por cada fase posterior, y salta los títulos que ya existen. Corre primero `--dry`, que no escribe nada, y después `--apply`. Al detallar una fase de R2, sube `--tasks-through` a esa fase.
+
+  ```bash
+  python3 -I .github/scripts/plan-issues.py --dry docs/plan/fase-*.md
+  python3 -I .github/scripts/plan-issues.py --apply --tasks-through 5 docs/plan/fase-5-demanda.md
+  ```
+
 - Si descubres trabajo no planeado, abre un issue; no lo metas en el PR actual.
 - Las incidencias del piloto llevan la etiqueta `piloto` y se atienden antes que cualquier otra cosa.
 
@@ -65,6 +72,33 @@ Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`. Un commit por
 6. Menos de 400 líneas netas cuando sea posible; si no, explica por qué.
 7. Corre `/code-review` antes de pedir revisión y atiende lo que encuentre.
 8. Si el PR cambia el modelo de datos, incluye el cambio en `docs/dominio/modelo-de-datos.md`. Si agrega una dependencia, incluye la nota en `docs/decisiones/`.
+
+### PRs encadenados
+
+Una tarea que no cabe en 400 líneas se parte en una cadena: el primer PR sale de `develop` y cada uno de los siguientes tiene como base la rama del anterior (por ejemplo, #94 a #98 de la tarea 1.1). El CI corre en todos. Solo el último lleva `Closes #<issue>`; los demás dicen `Parte de #<issue>`.
+
+- Mientras una rama no se ha subido, se puede rebasar sobre su base. Una vez subida, los cambios de la base (por ejemplo, correcciones de la revisión) entran con `git merge <base>`, nunca con rebase y `push --force`.
+- `merge` de `origin/<base>` y no de la rama local, para no traer algo que no se ha subido.
+
+**Mezclar la cadena.** `develop` exige que la rama esté al día y con CI verde, así que se mezcla un PR a la vez, del primero al último, con squash. El squash deja en `develop` un commit nuevo con el contenido de la rama de base; si después se mezcla `develop` en el siguiente PR sin más, git ve el mismo cambio dos veces y da conflictos falsos en todo lo que ese PR modificó encima. El primero se pone al día con `git merge origin/develop`, como cualquier PR. Para cada uno de los siguientes, con `<n-base>` el número del PR anterior:
+
+```bash
+git fetch origin
+squash=$(gh pr view <n-base> --json mergeCommit --jq .mergeCommit.oid)
+git diff --quiet "$squash" origin/<rama-base> && echo ok   # el squash tiene el mismo contenido que la base
+git merge origin/<rama-base>          # lo último de la base, si trae algo
+git merge -s ours "$squash"           # el squash ya está en la rama: solo se registra como mezclado
+git merge origin/develop              # lo que haya entrado a develop después, de otros PRs
+gh api -X PATCH repos/Erne1357/nexus/pulls/<n> -f base=develop
+git push
+```
+
+- Si la comprobación del `git diff` no imprime `ok`, el `-s ours` no es seguro: detente y revisa qué le falta a la rama.
+- `-s ours` solo va contra el commit del squash, nunca contra `origin/develop`. Si a `develop` entró otro PR, `-s ours` sobre `develop` haría que el squash de este PR revirtiera ese otro.
+- Un conflicto real en el último `merge` se resuelve por bloque, conservando los dos lados. No tomes el archivo completo de un lado: borrarías lo que trajo el otro.
+- `gh pr edit --base` falla en este repo por la baja de Projects clásico; por eso la base se cambia con `gh api`.
+- Antes del squash, compara el diff del PR con el que tenía: deben ser los mismos archivos y líneas.
+- `Closes #<issue>` no cierra el issue al mezclar a `develop`, solo a `main`: ciérralo a mano y mueve la tarjeta a **Hecho**.
 
 ## Definición de hecho
 
