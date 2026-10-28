@@ -10,13 +10,13 @@ use App\Modules\Imports\Models\ImportMapping;
 use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Readers\SpreadsheetReader;
 use App\Modules\Imports\Readers\UnreadableFile;
+use App\Modules\Imports\Templates\ColumnMatcher;
 use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -45,6 +45,7 @@ final class ValidateImportBatch
     public function __construct(
         private readonly TemplateRegistry $templates,
         private readonly SpreadsheetReader $reader,
+        private readonly ColumnMatcher $matcher,
         private readonly FailImportBatch $failure,
     ) {}
 
@@ -129,7 +130,7 @@ final class ValidateImportBatch
     }
 
     /**
-     * Columna del archivo → campo de la plantilla.
+     * Columna del archivo → campo de la plantilla, con el mapeo del lote o, sin él, por nombre.
      *
      * @param  list<string>  $header
      * @return array<string, string>
@@ -138,40 +139,10 @@ final class ValidateImportBatch
      */
     private function columnsFor(ImportTemplate $template, array $header, ?ImportMapping $mapping): array
     {
-        $fields = $template->fields();
-        $columns = [];
+        $columns = $this->matcher->match($template, $header, $mapping?->columns);
 
-        if ($mapping !== null) {
-            foreach ($mapping->columns as $source => $field) {
-                if (in_array($source, $header, true) && isset($fields[$field])) {
-                    $columns[$source] = $field;
-                }
-            }
-        } else {
-            // Primero las etiquetas y después los nombres de campo, que ganan si un slug coincide con los dos.
-            $bySlug = [];
-
-            foreach ($fields as $field => $label) {
-                $bySlug[$this->slug($label)] = $field;
-            }
-
-            foreach (array_keys($fields) as $field) {
-                $bySlug[$this->slug($field)] = $field;
-            }
-
-            foreach ($header as $source) {
-                if (($field = $bySlug[$this->slug($source)] ?? null) !== null && ! in_array($field, $columns, true)) {
-                    $columns[$source] = $field;
-                }
-            }
-        }
-
-        $missing = array_diff($template->naturalKey(), $columns);
-
-        if ($missing !== []) {
-            $labels = implode(', ', array_map(fn (string $field): string => $fields[$field], $missing));
-
-            throw new UnreadableFile("Falta la columna de {$labels}, que identifica cada registro.");
+        if (($missing = $this->matcher->describeMissingKey($template, $columns)) !== null) {
+            throw new UnreadableFile($missing);
         }
 
         return $columns;
@@ -272,11 +243,6 @@ final class ValidateImportBatch
         $this->failure->handle($batch, $reason, $batch->uploader);
 
         return $batch;
-    }
-
-    private function slug(string $text): string
-    {
-        return trim((string) preg_replace('/[^a-z0-9]+/', '_', Str::lower(Str::ascii($text))), '_');
     }
 
     private function json(mixed $value): string
