@@ -29,7 +29,7 @@
 |---|---|---|
 | Listado con filtros, tabla y acción principal | Todos los catálogos | Densidad de fila |
 | Formulario en modal (crear y editar) | Catálogos | Cuándo usar página completa en lugar de modal |
-| Asistente de pasos | Importación | Indicador de progreso |
+| Asistente de pasos | Importación | **Decidido (tarea 1.2):** `x-steps` de MaryUI como indicador, con los pasos hechos en `primary`; el contenido de cada paso en una `x-card` debajo. Lo que corre en la cola se muestra en la misma tarjeta con `x-progress` (indeterminado si no se sabe el total) y su texto, y la URL guarda en qué va (`?lote=`) para retomarlo |
 | Checklist con contadores | Validación de catálogos | Cómo mostrar diferencias contra el periodo anterior |
 | Cuadrícula día x hora | Editor de horarios, disponibilidad docente, vista por salón | Interacción por clic o arrastrar; colores por carrera o por estado |
 | Ranking con desglose | Asignación docente | Cómo presentar el desglose sin exponer evaluaciones a quien no debe |

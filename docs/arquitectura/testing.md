@@ -57,6 +57,8 @@ docker compose exec app php artisan test --testsuite=Browser
 - La versión de Chromium de la imagen se lee de `package-lock.json` al construir, así que siempre coincide con el paquete `playwright`. Al subir la versión basta con `npm install -D --save-exact playwright@<x>` y reconstruir la imagen.
 - Hay que reconstruir la imagen (`docker compose up -d --build`) después de mezclar un cambio del `Dockerfile` o de la versión de `playwright`.
 - Los tests visitan rutas con `visit('/ruta')`; el servidor HTTP lo levanta el propio plugin dentro del contenedor, no hace falta `nginx` ni `app`.
+- Ese servidor no sirve para subir archivos con Livewire: deja plano el campo `files[]` con que Livewire los manda (`LaravelHttpServer::parseMultipartBody` del plugin) y la subida nunca llega. Una pantalla con subida se prueba en el navegador desde un estado ya subido, y la subida misma con una prueba feature (`Livewire::test()->set('file', UploadedFile::fake()...)`), como el asistente de importación.
+- `TestCase` llama a `withoutVite()`, así que en los browser tests la página no carga CSS ni JS de Vite. Para ver una pantalla con estilos en una captura, una prueba puede llamar a `$this->withVite()` antes de `visit()`.
 
 ## Pruebas de rendimiento
 

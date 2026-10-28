@@ -3,6 +3,8 @@
 namespace App\Modules\Imports;
 
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Contracts\Foundation\Application;
@@ -21,6 +23,13 @@ final class ImportsServiceProvider extends ModuleServiceProvider
     {
         // Singleton porque es inmutable: guarda clases, y cada get() crea una plantilla nueva.
         $this->app->singleton(TemplateRegistry::class, fn (): TemplateRegistry => new TemplateRegistry(self::TEMPLATES));
+    }
+
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Importaciones', 'imports.wizard', 'o-arrow-up-tray', ability: 'viewAny', arguments: [ImportBatch::class]),
+        ];
     }
 
     public function boot(): void
