@@ -51,7 +51,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Facilities | 1 | ⬜ |
 | Faculty | 1 | ⬜ |
 | Students | 1 | ⬜ |
-| Imports | 1 | 🟨 (contrato de plantilla, #94) |
+| Imports | 1 | 🟨 (1.1 hecha: motor #94 a #98) |
 | CatalogValidation | 2 | ⬜ |
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | ⬜ |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |

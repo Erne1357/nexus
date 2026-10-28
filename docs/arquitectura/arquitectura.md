@@ -129,6 +129,10 @@ El motor lee el archivo con `Imports/Readers/SpreadsheetReader`, en streaming co
 
 El lote queda `validated` con sus cuentas, con bitácora y `BatchValidated`. Como la fila normalizada se guarda en JSON y `apply()` la lee de ahí, `normalize()` pasa las fechas a texto ISO.
 
+`ApplyImportBatch` toma un lote `validated`. Escribe con `apply()` las filas válidas y con advertencia, en el orden del archivo y de 500 en 500, una transacción por bloque, y salta las filas con error. Antes de escribir cada fila la vuelve a validar, porque el catálogo pudo cambiar desde la validación: la que ya no pasa queda como error y se salta. Pagina por `row_number` y no por offset, porque cada fila sale del filtro al pasar a `applied`. Al terminar corre `afterApply()` y deja **una** entrada de bitácora para el lote, con altas, cambios, filas sin cambios y filas saltadas, más `BatchApplied`. Si una fila no se puede escribir, su bloque se revierte y el lote queda `failed` con la fila y el motivo. Los bloques anteriores se quedan: la bitácora del fallo y `BatchApplied` llevan lo que sí se escribió, y volver a importar es seguro por el upsert.
+
+Las Actions de lote (`StoreImportBatch`, `ValidateImportBatch`, `ApplyImportBatch`) no autorizan: lo hace la página con `ImportBatchPolicy`, que solo deja al admin. Validar y aplicar irán en jobs de cola con progreso (tarea 1.2).
+
 Pruebas de una plantilla: unit para `normalize()` y lo puro; feature para `validate()` (cada regla con su mensaje y cada clave cruzada) y `apply()` (alta, cambio, aplicar dos veces sin cambios). Copia `tests/Unit/Imports/ImportTemplateTest.php` y `tests/Feature/Imports/ImportTemplateTest.php`.
 
 ## Módulos
