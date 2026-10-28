@@ -209,19 +209,38 @@ it('un lote fallido también deja bitácora con el motivo y avisa', function () 
 });
 
 /**
- * Plantilla de prueba que truena al normalizar la clave BOOM, como un archivo que se corta a la mitad.
+ * Plantilla de prueba que truena al normalizar la clave BOOM, como un archivo que se corta a la mitad, y
+ * anota cuántas filas llevaba leídas el lote al llegar a la clave PROBE.
  */
 class ValidateProbeTemplate extends CampusesTemplate
 {
+    public static ?int $processedAtProbe = null;
+
     public function normalize(array $row): array
     {
         if (($row['code'] ?? null) === 'BOOM') {
             throw new RuntimeException('El archivo se cortó.');
         }
 
+        if (($row['code'] ?? null) === 'PROBE') {
+            self::$processedAtProbe = ImportBatch::query()->sole()->processed_rows;
+        }
+
         return parent::normalize($row);
     }
 }
+
+it('lleva la cuenta de las filas leídas, bloque por bloque, para mostrar el avance', function () {
+    app()->bind(CampusesTemplate::class, ValidateProbeTemplate::class);
+    ValidateProbeTemplate::$processedAtProbe = null;
+    $lines = collect(range(1, 700))->map(fn (int $n): string => $n === 650 ? 'PROBE,Campus,presencial' : "K{$n},Campus {$n},presencial")->implode("\n");
+
+    $batch = validateBatch(batchWithFile("code,name,modality\n{$lines}\n"));
+
+    // El lote que devuelve ya trae la cuenta, aunque cada bloque la sumó en la base.
+    expect(ValidateProbeTemplate::$processedAtProbe)->toBe(500)
+        ->and($batch->processed_rows)->toBe(700);
+});
 
 it('un lote que falla a la mitad no se queda con filas a medias', function () {
     app()->bind(CampusesTemplate::class, ValidateProbeTemplate::class);

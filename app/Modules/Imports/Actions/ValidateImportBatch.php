@@ -17,14 +17,14 @@ use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use LogicException;
 use Throwable;
 
 /**
  * Valida un lote recién subido sin escribir en el catálogo. Lee el archivo en streaming, mapea sus
  * columnas a los campos de la plantilla (con el mapeo del lote o, sin él, por nombre de campo o
  * etiqueta sin importar mayúsculas, acentos ni espacios), normaliza y valida cada fila con la
- * plantilla y la guarda en `import_rows`, de 500 en 500, con sus errores y advertencias.
+ * plantilla y la guarda en `import_rows`, de 500 en 500, con sus errores y advertencias. Con cada
+ * bloque suma `processed_rows`, el avance que la pantalla muestra mientras corre en la cola.
  *
  * Una fila sin error que repite la clave natural de otra anterior sin error del mismo archivo es error
  * y dice en qué fila está la primera: la que se aplica. Se encuentra en SQL por `key_hash` (la clave
@@ -35,8 +35,8 @@ use Throwable;
  * Un archivo que no se puede leer, o sin la columna de la clave natural, deja el lote `failed` con el
  * motivo que verá el admin. Cualquier otro error lo deja `failed` y se relanza para que el job lo
  * registre. Un lote fallido no se queda con filas a medias. La bitácora del resultado es de quien subió
- * el lote, y avisa con BatchValidated después del commit. Si el worker muere a media validación, el job
- * de la tarea 1.2 marca el lote como fallido.
+ * el lote, y avisa con BatchValidated después del commit. Si el proceso de la cola muere a media
+ * validación, ValidateQueuedBatch deja el lote fallido con InterruptImportBatch.
  */
 final class ValidateImportBatch
 {
@@ -45,14 +45,17 @@ final class ValidateImportBatch
     public function __construct(
         private readonly TemplateRegistry $templates,
         private readonly SpreadsheetReader $reader,
+        private readonly FailImportBatch $failure,
     ) {}
 
     /**
-     * @throws LogicException si el lote ya no está `uploaded` (otra corrida lo tomó)
+     * @param  string|null  $run  la corrida de la cola que valida (ValidateQueuedBatch), que queda en el lote
+     *
+     * @throws BatchNotReady si el lote ya no está `uploaded` (otra corrida lo tomó)
      */
-    public function handle(ImportBatch $batch): ImportBatch
+    public function handle(ImportBatch $batch, ?string $run = null): ImportBatch
     {
-        $this->start($batch);
+        $this->start($batch, $run);
 
         try {
             $template = $this->templates->get($batch->template);
@@ -68,13 +71,13 @@ final class ValidateImportBatch
                 $pending[] = $this->stagedRow($batch, $template, $context, $columns, $number, $values);
 
                 if (count($pending) === self::CHUNK_ROWS) {
-                    ImportRow::insert($pending);
+                    $this->stage($batch, $pending);
                     $pending = [];
                 }
             }
 
             if ($pending !== []) {
-                ImportRow::insert($pending);
+                $this->stage($batch, $pending);
             }
 
             $this->markRepeatedKeys($batch, $template);
@@ -98,17 +101,30 @@ final class ValidateImportBatch
      * Pasa el lote de `uploaded` a `validating` con el registro bloqueado: dos corridas del mismo lote
      * no validan dos veces.
      */
-    private function start(ImportBatch $batch): void
+    private function start(ImportBatch $batch, ?string $run): void
     {
-        DB::transaction(function () use ($batch): void {
+        DB::transaction(function () use ($batch, $run): void {
             $locked = ImportBatch::query()->lockForUpdate()->findOrFail($batch->id);
 
             if ($locked->status !== BatchStatus::Uploaded) {
-                throw new LogicException("El lote {$batch->id} ya no está subido: está {$locked->status->label()}.");
+                throw new BatchNotReady("El lote {$batch->id} ya no está subido: está {$locked->status->label()}.");
             }
 
-            $locked->update(['status' => BatchStatus::Validating]);
+            $locked->update(['status' => BatchStatus::Validating, 'run_id' => $run]);
             $batch->setRawAttributes($locked->getAttributes(), sync: true);
+        });
+    }
+
+    /**
+     * Guarda un bloque de filas y suma su avance al lote, juntos.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function stage(ImportBatch $batch, array $rows): void
+    {
+        DB::transaction(function () use ($batch, $rows): void {
+            ImportRow::insert($rows);
+            ImportBatch::query()->whereKey($batch->id)->increment('processed_rows', count($rows));
         });
     }
 
@@ -230,7 +246,8 @@ final class ValidateImportBatch
             ->first();
 
         return DB::transaction(function () use ($batch, $template, $counts): ImportBatch {
-            $batch->update([
+            // Con el avance que sumó cada bloque, que no pasó por este modelo.
+            $batch->refresh()->update([
                 'status' => BatchStatus::Validated,
                 'total_rows' => $counts->total,
                 'valid_rows' => $counts->valid,
@@ -252,22 +269,9 @@ final class ValidateImportBatch
 
     private function fail(ImportBatch $batch, string $reason): ImportBatch
     {
-        return DB::transaction(function () use ($batch, $reason): ImportBatch {
-            // Son staging, no catálogo ni bitácora: un lote fallido no se aplica y sus filas no sirven.
-            ImportRow::query()->where('batch_id', $batch->id)->delete();
-            $batch->update(['status' => BatchStatus::Failed, 'failure_reason' => $reason]);
+        $this->failure->handle($batch, $reason, $batch->uploader);
 
-            activity()
-                ->performedOn($batch)
-                ->causedBy($batch->uploader)
-                ->event('failed')
-                ->withProperties(['failure_reason' => $reason])
-                ->log("No se pudo validar {$batch->original_name}: {$reason}");
-
-            BatchValidated::dispatch($batch);
-
-            return $batch;
-        });
+        return $batch;
     }
 
     private function slug(string $text): string

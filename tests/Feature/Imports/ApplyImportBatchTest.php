@@ -28,16 +28,24 @@ use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 */
 
 /**
- * Plantilla de prueba que cuenta cuántas veces corre afterApply() y falla al escribir la clave BOOM.
+ * Plantilla de prueba que cuenta cuántas veces corre afterApply(), falla al escribir la clave BOOM y
+ * anota las cuentas del lote al llegar a la clave PROBE.
  */
 class ApplyProbeTemplate extends CampusesTemplate
 {
     public static int $afterApplyCalls = 0;
 
+    /** @var array<string, int>|null */
+    public static ?array $countsAtProbe = null;
+
     public function apply(array $row, ImportContext $context): Model
     {
         if ($row['code'] === 'BOOM') {
             throw new RuntimeException('El catálogo rechazó la fila.');
+        }
+
+        if ($row['code'] === 'PROBE') {
+            self::$countsAtProbe = ImportBatch::query()->sole()->only(['processed_rows', 'created_rows', 'updated_rows', 'unchanged_rows']);
         }
 
         return parent::apply($row, $context);
@@ -52,6 +60,7 @@ class ApplyProbeTemplate extends CampusesTemplate
 beforeEach(function () {
     Storage::fake('imports');
     ApplyProbeTemplate::$afterApplyCalls = 0;
+    ApplyProbeTemplate::$countsAtProbe = null;
     app()->bind(CampusesTemplate::class, ApplyProbeTemplate::class);
     app()->instance(TemplateRegistry::class, new TemplateRegistry([CampusesTemplate::class]));
     $this->admin = User::factory()->admin()->create();
@@ -83,6 +92,7 @@ it('sube, valida y aplica un CSV: escribe las válidas y con advertencia, y salt
     expect($batch->fresh())
         ->status->toBe(BatchStatus::Applied)
         ->applied_at->not->toBeNull()
+        ->processed_rows->toBe(2)
         ->and($batch->fresh()->applier->is($this->admin))->toBeTrue()
         ->and(Campus::where('code', 'C9')->sole())
         ->name->toBe('Campus Nueve')
@@ -133,7 +143,10 @@ it('vuelve a revisar cada fila al aplicar: lo que cambió desde la validación s
 
     $c7 = ImportRow::where('row_number', 3)->sole();
 
-    expect($batch->fresh()->status)->toBe(BatchStatus::Applied)
+    expect($batch->fresh())
+        ->status->toBe(BatchStatus::Applied)
+        ->processed_rows->toBe(2)
+        ->created_rows->toBe(1)
         ->and(Campus::where('code', 'C9')->exists())->toBeTrue()
         ->and($c7->status)->toBe(RowStatus::Error)
         ->and($c7->errors)->toBe(['code' => ['Hay un registro borrado con esta clave; una importación no lo restaura.']])
@@ -160,6 +173,34 @@ it('corre afterApply de la plantilla una sola vez, al terminar el lote', functio
         ->and(Campus::count())->toBe(700);
 });
 
+it('lleva las cuentas de lo aplicado, bloque por bloque, para mostrar el avance', function () {
+    Campus::factory()->create(['code' => 'K1', 'name' => 'Viejo']);
+    $lines = collect(range(1, 700))->map(fn (int $n): string => $n === 650 ? 'PROBE,Campus,presencial' : "K{$n},Campus {$n},presencial")->implode("\n");
+    $batch = validatedCampusBatch($this->admin, "code,name,modality\n{$lines}\n");
+
+    $applied = applyCampusBatch($batch, $this->admin);
+
+    // El lote que devuelve ya trae las cuentas, aunque cada bloque las sumó en la base.
+    expect(ApplyProbeTemplate::$countsAtProbe)->toBe(['processed_rows' => 500, 'created_rows' => 499, 'updated_rows' => 1, 'unchanged_rows' => 0])
+        ->and($applied->only(['processed_rows', 'created_rows', 'updated_rows', 'unchanged_rows']))
+        ->toBe(['processed_rows' => 700, 'created_rows' => 699, 'updated_rows' => 1, 'unchanged_rows' => 0]);
+});
+
+it('si falla el cierre del lote, queda fallido con el motivo y no se queda aplicando', function () {
+    Activity::creating(function (Activity $activity): void {
+        if ($activity->event === 'applied') {
+            throw new RuntimeException('No se pudo escribir la bitácora.');
+        }
+    });
+    $batch = validatedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n");
+
+    expect(fn () => applyCampusBatch($batch, $this->admin))->toThrow(RuntimeException::class, 'No se pudo escribir la bitácora.')
+        ->and($batch->fresh())
+        ->status->toBe(BatchStatus::Failed)
+        ->failure_reason->toBe('La aplicación se interrumpió: No se pudo escribir la bitácora.')
+        ->created_rows->toBe(1);
+});
+
 it('solo aplica un lote validado', function (BatchStatus $status) {
     $batch = ImportBatch::factory()->create(['status' => $status]);
 
@@ -178,6 +219,7 @@ it('si falla un bloque posterior, los anteriores se quedan escritos y la bitáco
 
     expect(Campus::count())->toBe(500)
         ->and(ImportRow::where('status', RowStatus::Applied)->count())->toBe(500)
+        ->and($batch->fresh()->only(['processed_rows', 'created_rows']))->toBe(['processed_rows' => 500, 'created_rows' => 500])
         ->and($batch->fresh()->failure_reason)->toBe('La aplicación se interrumpió en la fila 601: El catálogo rechazó la fila.')
         ->and($entry->causer->is($this->admin))->toBeTrue()
         ->and($entry->properties->only(['created', 'updated', 'unchanged'])->all())->toBe(['created' => 500, 'updated' => 0, 'unchanged' => 0]);

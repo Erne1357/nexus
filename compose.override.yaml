@@ -22,8 +22,9 @@ services:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
     env_file: !reset []
-    # queue:listen arranca un proceso por job: los cambios de código se aplican sin reiniciar
-    command: ["php", "artisan", "queue:listen", "redis", "--tries=3", "--backoff=10", "--sleep=1"]
+    # queue:listen arranca un proceso por job: los cambios de código se aplican sin reiniciar. Mata
+    # al proceso que pasa de --timeout, así que va por encima del job más largo (importación, 30 min).
+    command: ["php", "artisan", "queue:listen", "redis", "--tries=3", "--backoff=10", "--sleep=1", "--timeout=1830"]
     volumes:
       - .:/app
 
