@@ -50,16 +50,20 @@ jobs:
       - name: Levantar PostgreSQL y Valkey
         run: docker compose up -d --wait postgres valkey
 
-      # Cobertura con pcov, solo informativa en fase 0 (sin --min): el reporte va al resumen del job.
+      # Cobertura con pcov: Clover para el mínimo por módulo, texto para leer el detalle.
       - name: Unit, Feature y Arch
         run: |
           docker compose run --rm -T app php artisan test \
             --testsuite=Unit,Feature,Arch --compact \
+            --coverage-clover=storage/logs/clover.xml \
             --coverage-text=storage/logs/coverage.txt
 
-      - name: Resumen de cobertura
-        if: ${{ !cancelled() && hashFiles('storage/logs/coverage.txt') != '' }}
-        run: .github/scripts/coverage-summary.sh storage/logs/coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
+      # Bloqueante desde la fase 1: falla si un módulo de app/Modules/ queda debajo de 80 %.
+      # `shell: bash` activa pipefail, para que el código de salida del script no se pierda en el tee.
+      - name: Cobertura por módulo (mínimo 80 %)
+        if: ${{ !cancelled() && hashFiles('storage/logs/clover.xml') != '' }}
+        shell: bash
+        run: .github/scripts/coverage-summary.sh storage/logs/clover.xml storage/logs/coverage.txt 80 | tee -a "$GITHUB_STEP_SUMMARY"
 
   browser:
     name: browser
