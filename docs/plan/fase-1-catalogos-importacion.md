@@ -1,6 +1,6 @@
 # Fase 1 — Catálogos e importación
 
-**Entrega:** R1 · **Ventana:** 3 – 14 nov 2026 · **Modo:** 3 en paralelo · **Estado:** ⬜ · **Milestone:** `Fase 1 — Catálogos e importación`
+**Entrega:** R1 · **Ventana:** 3 – 14 nov 2026 · **Modo:** 3 en paralelo · **Estado:** 🟨 · **Milestone:** `Fase 1 — Catálogos e importación`
 
 ## Objetivo
 
