@@ -82,11 +82,23 @@ Mientras llegan, cada módulo trabaja con factories y un `DemoSeeder` que reprod
 
 | Persona | Módulos | Carga |
 |---|---|---|
-| A | Imports, Students | Motor primero (días 1 a 4), luego alumnos |
-| B | Academic | Modelos y retícula; es el módulo con más pantallas |
-| C | Faculty, Facilities | Docentes primero (los necesita fase 3), salones al final |
+| A | Imports, Students | Motor primero (1.1 y 1.2, ya en `develop`), luego 1.3 y alumnos cuando esté la 1.7 |
+| B | Academic | Modelos primero (1.7, los necesitan A y C), luego CRUD y retícula; es el módulo con más pantallas |
+| C | Faculty, Facilities | Edificios mientras llega la 1.7, luego docentes (los necesita fase 3), salones al final |
 
-Dependencia entre personas: B y C necesitan el contrato de plantilla de A desde el día 2. A publica el contrato y una plantilla de ejemplo en un PR el primer día; mientras, B y C avanzan con modelos y CRUD.
+Dependencias entre personas:
+
+- **Contrato de plantilla (1.1, A).** B y C lo necesitan para sus plantillas (1.9, 1.13 y 1.15). Ya está en `develop`; la plantilla de ejemplo para copiar es `tests/Fixtures/ImportTemplates/CampusesTemplate.php`.
+- **Modelos de Academic (1.7, B).** Cuatro tareas no pueden escribir sus migraciones sin las tablas de Academic, porque llevan llaves foráneas a ellas:
+
+  | Tarea | Persona | Necesita |
+  |---|---|---|
+  | 1.4 | A | `students.career_id` y `study_plan_id`; `kardex_records.subject_id` |
+  | 1.11 | C | `teachers.department_id`; `subject_id` en el historial y el perfil docente |
+  | 1.14 | C | `department_heads` para dar el rol y el alcance de los jefes |
+  | 1.15 | C | `rooms.department_id` (dueño); `subject_room_defaults.subject_id` |
+
+  B hace la 1.7 antes que el CRUD y la mezcla a más tardar el día 2. Basta con las migraciones, los modelos y las factories, para que las pruebas de A y C creen filas reales. Mientras, A trabaja en la 1.3 y C en `buildings` y su CRUD (parte de la 1.15), que solo dependen de `campuses`.
 
 ## Riesgos y notas
 
