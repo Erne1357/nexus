@@ -168,6 +168,20 @@ it('la interrupción no toca un lote que su corrida ya terminó', function (Batc
         ->and(Activity::where('event', 'failed')->exists())->toBeFalse();
 })->with([BatchStatus::Validated, BatchStatus::Applied, BatchStatus::Failed]);
 
+it('si la aplicación falla, igual rehace el archivo de errores', function () {
+    app()->bind(CampusesTemplate::class, fn () => new class extends CampusesTemplate
+    {
+        public function apply(array $row, ImportContext $context): Model
+        {
+            throw new RuntimeException('El catálogo rechazó la fila.');
+        }
+    });
+    $batch = app(ValidateImportBatch::class)->handle(uploadedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n"));
+
+    expect(fn () => ApplyQueuedBatch::dispatch($batch, $this->admin))->toThrow(RuntimeException::class)
+        ->and(Storage::disk('imports')->exists($batch->errors_path))->toBeTrue();
+});
+
 it('si la aplicación falla con su propio motivo, la interrupción no lo pisa', function () {
     app()->bind(CampusesTemplate::class, fn () => new class extends CampusesTemplate
     {

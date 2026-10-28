@@ -61,6 +61,18 @@ it('un texto que Excel tomaría por fórmula sale como texto; los números negat
     expect(exportedBatchErrors($this->batch))->toContain("2,\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\",'+A1,'@SUM(A1),-5,'-x,");
 });
 
+it('anota en el lote cuándo quedó listo el archivo, sin tocar su última modificación', function () {
+    $this->travelTo(now()->subHour(), fn () => $this->batch->touch());
+    $updatedAt = $this->batch->fresh()->updated_at;
+
+    app(ExportBatchErrors::class)->handle($this->batch);
+
+    expect($this->batch->fresh())
+        ->errors_exported_at->not->toBeNull()
+        ->updated_at->toEqual($updatedAt)
+        ->and($this->batch->errors_exported_at)->not->toBeNull();
+});
+
 it('sin filas con error deja solo el encabezado y reemplaza un archivo anterior', function () {
     Storage::disk('imports')->put($this->batch->errors_path, 'viejo');
 

@@ -11,6 +11,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\LazyCollection;
 
 /**
@@ -81,6 +82,15 @@ final class ImportBatchQuery
             'unchanged' => $batch->unchanged_rows,
             'skipped' => ImportRow::query()->where('batch_id', $batch->id)->where('status', RowStatus::Error)->count(),
         ];
+    }
+
+    /**
+     * Si la cola ya dejó el CSV de errores del lote (ExportBatchErrors) para su último estado: el de la
+     * validación deja de valer en cuanto el lote se empieza a aplicar, hasta que la cola lo rehace.
+     */
+    public function errorsFileReady(ImportBatch $batch): bool
+    {
+        return $batch->errors_exported_at !== null && Storage::disk('imports')->exists($batch->errors_path);
     }
 
     /**
