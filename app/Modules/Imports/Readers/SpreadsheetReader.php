@@ -30,6 +30,11 @@ use OpenSpout\Reader\XLSX\Reader as XlsxReader;
 final class SpreadsheetReader
 {
     /**
+     * Extensiones que sabe leer; StoreImportBatch rechaza las demás al subir.
+     */
+    public const array EXTENSIONS = ['csv', 'txt', 'xlsx'];
+
+    /**
      * Bytes por bloque al revisar la codificación, y de muestra para el separador.
      */
     private const int CHUNK_BYTES = 65536;
