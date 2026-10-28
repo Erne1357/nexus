@@ -41,26 +41,30 @@ function uploadedCampusBatch(User $admin, string $csv): ImportBatch
     return app(StoreImportBatch::class)->handle($admin, 'test-campuses', UploadedFile::fake()->createWithContent('campus.csv', $csv));
 }
 
-it('valida en la cola el lote subido', function () {
-    $batch = uploadedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n");
+it('valida en la cola el lote subido y deja listo el archivo de errores', function () {
+    $batch = uploadedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\nC8,,presencial\n");
 
     ValidateQueuedBatch::dispatch($batch);
 
     expect($batch->fresh())
         ->status->toBe(BatchStatus::Validated)
-        ->total_rows->toBe(1);
+        ->total_rows->toBe(2)
+        ->and(Storage::disk('imports')->get($batch->errors_path))->toContain("\n3,C8,,");
 });
 
-it('aplica en la cola el lote validado, a nombre de quien lo aplica', function () {
-    $batch = app(ValidateImportBatch::class)->handle(uploadedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n"));
+it('aplica en la cola el lote validado, a nombre de quien lo aplica, y rehace el archivo de errores', function () {
+    $batch = app(ValidateImportBatch::class)->handle(uploadedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\nC7,Campus Siete,presencial\n"));
+    Campus::factory()->create(['code' => 'C7'])->delete();
     $applier = User::factory()->admin()->create();
 
     ApplyQueuedBatch::dispatch($batch, $applier);
 
+    // C7 pasó a error al aplicar: el catálogo cambió desde la validación.
     expect($batch->fresh())
         ->status->toBe(BatchStatus::Applied)
         ->and($batch->fresh()->applier->is($applier))->toBeTrue()
-        ->and(Campus::where('code', 'C9')->exists())->toBeTrue();
+        ->and(Campus::where('code', 'C9')->exists())->toBeTrue()
+        ->and(Storage::disk('imports')->get($batch->errors_path))->toContain("\n3,C7,");
 });
 
 it('un job de un lote que otra corrida ya tomó termina sin tocarlo', function (string $job, BatchStatus $status) {

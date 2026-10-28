@@ -3,8 +3,10 @@
 namespace App\Modules\Imports\Jobs;
 
 use App\Modules\Imports\Actions\BatchNotReady;
+use App\Modules\Imports\Actions\ExportBatchErrors;
 use App\Modules\Imports\Actions\InterruptImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
+use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Models\ImportBatch;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -12,9 +14,10 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Valida en la cola un lote recién subido (ValidateImportBatch): un kardex puede tener cientos de miles
- * de filas. Un solo intento, porque la Action no se puede repetir sobre el mismo lote. Si el lote ya no
- * está subido (otra corrida lo tomó, ya terminó o falló), termina sin tocarlo.
+ * Valida en la cola un lote recién subido (ValidateImportBatch) y deja listo el CSV de sus filas con
+ * error (ExportBatchErrors): un kardex puede tener cientos de miles de filas. Un solo intento, porque la
+ * Action no se puede repetir sobre el mismo lote. Si el lote ya no está subido (otra corrida lo tomó,
+ * ya terminó o falló), termina sin tocarlo.
  *
  * `run` identifica esta corrida: viaja en el payload, así que es el mismo si la cola entrega el job otra
  * vez, y queda en el lote al empezar. Si el job falla, failed() deja el lote fallido con
@@ -44,12 +47,17 @@ final class ValidateQueuedBatch implements ShouldQueue
         $this->run = (string) Str::uuid7();
     }
 
-    public function handle(ValidateImportBatch $validate): void
+    public function handle(ValidateImportBatch $validate, ExportBatchErrors $export): void
     {
         try {
-            $validate->handle($this->batch, $this->run);
+            $batch = $validate->handle($this->batch, $this->run);
         } catch (BatchNotReady) {
             // Ya no está subido: otra corrida lo tomó, ya terminó o falló.
+            return;
+        }
+
+        if ($batch->status === BatchStatus::Validated) {
+            $export->handle($batch);
         }
     }
 

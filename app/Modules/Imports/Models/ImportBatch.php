@@ -8,6 +8,7 @@ use App\Modules\Imports\Database\Factories\ImportBatchFactory;
 use App\Modules\Imports\Enums\BatchStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -41,6 +42,16 @@ class ImportBatch extends Model
             'unchanged_rows' => 'integer',
             'applied_at' => 'datetime',
         ];
+    }
+
+    /**
+     * El CSV con las filas con error del lote en el disco `imports`, que escribe ExportBatchErrors.
+     *
+     * @return Attribute<string, never>
+     */
+    protected function errorsPath(): Attribute
+    {
+        return Attribute::get(fn (): string => "{$this->id}-errores.csv");
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Modules\Imports\Jobs;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\Actions\ApplyImportBatch;
 use App\Modules\Imports\Actions\BatchNotReady;
+use App\Modules\Imports\Actions\ExportBatchErrors;
 use App\Modules\Imports\Actions\InterruptImportBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,13 +38,17 @@ final class ApplyQueuedBatch implements ShouldQueue
         $this->run = (string) Str::uuid7();
     }
 
-    public function handle(ApplyImportBatch $apply): void
+    public function handle(ApplyImportBatch $apply, ExportBatchErrors $export): void
     {
         try {
-            $apply->handle($this->batch, $this->user, $this->run);
+            $batch = $apply->handle($this->batch, $this->user, $this->run);
         } catch (BatchNotReady) {
             // Ya no está validado: otra corrida lo tomó, ya terminó o falló.
+            return;
         }
+
+        // Al aplicar, una fila que el catálogo ya no acepta pasa a error: el archivo se rehace.
+        $export->handle($batch);
     }
 
     public function failed(?Throwable $exception): void
