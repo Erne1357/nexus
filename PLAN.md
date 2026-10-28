@@ -2,7 +2,7 @@
 
 > Archivo de estado. Se actualiza en cada PR que cierre o abra tareas de una fase. Contexto en [PROJECT.md](PROJECT.md); reglas de trabajo en [CLAUDE.md](CLAUDE.md).
 
-**Última actualización:** 2026-10-27 · **Fase activa:** 1 (arranca el 3 de noviembre) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
+**Última actualización:** 2026-10-27 · **Fase activa:** 1 (A arrancó el 27 de octubre; B y C arrancan el 3 de noviembre) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
 
 ## Estados
 
@@ -19,7 +19,7 @@
 | # | Fase | Entrega | Ventana | Modo | Estado | Detalle |
 |---|---|---|---|---|---|---|
 | 0 | Fundación | R1 | 27 oct – 2 nov 2026 | Individual | ✅ | [fase-0-fundacion.md](docs/plan/fase-0-fundacion.md) |
-| 1 | Catálogos e importación | R1 | 3 – 14 nov 2026 | 3 en paralelo | ⬜ | [fase-1-catalogos-importacion.md](docs/plan/fase-1-catalogos-importacion.md) |
+| 1 | Catálogos e importación | R1 | 3 – 14 nov 2026 | 3 en paralelo | 🟨 | [fase-1-catalogos-importacion.md](docs/plan/fase-1-catalogos-importacion.md) |
 | 2 | Validación de catálogos y periodo | R1 | 10 – 19 nov 2026 | 3 en paralelo | ⬜ | [fase-2-validacion-y-periodo.md](docs/plan/fase-2-validacion-y-periodo.md) |
 | 3 | Captura de carga: grupos, horarios, docentes, salones | R1 | 17 nov – 4 dic 2026 | 3 en paralelo | ⬜ | [fase-3-captura-de-carga.md](docs/plan/fase-3-captura-de-carga.md) |
 | 4 | Cierre, publicación y piloto Campus II | R1 | 30 nov – 18 dic 2026 | 3 en paralelo | ⬜ | [fase-4-cierre-publicacion-piloto.md](docs/plan/fase-4-cierre-publicacion-piloto.md) |
@@ -51,7 +51,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Facilities | 1 | ⬜ |
 | Faculty | 1 | ⬜ |
 | Students | 1 | ⬜ |
-| Imports | 1 | 🟨 (motor de la 1.1 en revisión: #94 a #98) |
+| Imports | 1 | 🟨 (1.1 hecha: motor #94 a #98) |
 | CatalogValidation | 2 | ⬜ |
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | ⬜ |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
@@ -76,3 +76,4 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | 2026-10-27 | Supuestos de la fase 0 confirmados. Antes de la fase 1: las plantillas de importación viven en Imports (tareas 1.1 y 1.4), edificios y salones son de `admin` y `subdireccion` de su campus (1.15) y los catálogos con `campus_id` usan el campus activo. |
 | 2026-10-27 | Tarea 0.15 agregada al cierre de la fase 0: UUIDv7 como llave primaria en todo modelo, editando por única vez las migraciones de la fase 0 ([ADR-0014](docs/decisiones/0014-uuidv7-como-llave-primaria.md)). |
 | 2026-10-27 | Despliegue al servidor del ITCJ postergado hasta nuevo aviso: la integración de la tarea 1.16 se hace en local mientras tanto. Si sigue postergado al iniciar la fase 4 (30 de noviembre), la tarea 4.7 y el hito H5 quedan en riesgo. El CI corre en todo PR, también en los encadenados sobre otra rama `feature/*`. |
+| 2026-10-27 | Fase 1 abierta: A empieza antes, el 27 de octubre, con la tarea 1.1, para que el contrato de plantilla esté publicado cuando B y C arranquen el 3 de noviembre; la ventana de la fase no cambia. En CI, la cobertura mínima de 80 % por módulo pasa a bloquear ([testing.md](docs/arquitectura/testing.md#cobertura-1)). |
