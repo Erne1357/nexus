@@ -121,6 +121,14 @@ Cada catálogo que llega del SII se importa con una plantilla: una clase en `app
 
 El motor lee el archivo con `Imports/Readers/SpreadsheetReader`, en streaming con openspout. Toma la primera hoja de un CSV o XLSX y usa la primera fila que no está vacía como encabezado. En un CSV detecta el separador (coma, punto y coma o tabulador) y la codificación: UTF-16 por su BOM, que es el "Texto Unicode" de Excel; si no, UTF-8 o Windows-1252, revisando el archivo completo por bloques. Las filas se numeran como en el archivo, para que los errores digan "fila 12". Un archivo que no se puede importar tal cual (`.xls` antiguo, sin encabezado, columna repetida) lanza `UnreadableFile` con el mensaje que ve el admin.
 
+`ValidateImportBatch` toma un lote `uploaded` y no escribe en el catálogo:
+1. Mapea las columnas con el mapeo del lote o, sin él, por nombre de campo o por etiqueta, sin importar mayúsculas, acentos ni espacios. Sin la columna de la clave natural, el lote queda `failed`.
+2. Por cada fila llama a `normalize()`, `validate()` y `keyFor()`.
+3. Guarda las filas en `import_rows` de 500 en 500.
+4. Marca en SQL, por `key_hash`, las filas que repiten la clave de una anterior.
+
+El lote queda `validated` con sus cuentas, con bitácora y `BatchValidated`. Como la fila normalizada se guarda en JSON y `apply()` la lee de ahí, `normalize()` pasa las fechas a texto ISO.
+
 Pruebas de una plantilla: unit para `normalize()` y lo puro; feature para `validate()` (cada regla con su mensaje y cada clave cruzada) y `apply()` (alta, cambio, aplicar dos veces sin cambios). Copia `tests/Unit/Imports/ImportTemplateTest.php` y `tests/Feature/Imports/ImportTemplateTest.php`.
 
 ## Módulos

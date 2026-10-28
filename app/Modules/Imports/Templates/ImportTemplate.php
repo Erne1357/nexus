@@ -2,6 +2,7 @@
 
 namespace App\Modules\Imports\Templates;
 
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -93,8 +94,10 @@ abstract class ImportTemplate
     /**
      * Normaliza una fila ya mapeada: deja solo los campos de fields(), en su orden, con null en los
      * que faltan; recorta el texto, junta los espacios repetidos y convierte el texto vacío en null.
-     * Lo que no es texto (números y fechas de un Excel) pasa igual. Una plantilla la extiende para lo
-     * propio de su catálogo, como poner las claves en mayúsculas, llamando primero a la de aquí.
+     * Las fechas de un Excel pasan a texto ISO (`2027-01-15`, o con hora si la trae) porque la fila
+     * normalizada se guarda en JSON y apply() la lee de ahí: lo validado y lo aplicado tienen que ser
+     * iguales. Los números pasan igual. Una plantilla la extiende para lo propio de su catálogo, como
+     * poner las claves en mayúsculas, llamando primero a la de aquí.
      *
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>
@@ -105,6 +108,10 @@ abstract class ImportTemplate
 
         foreach (array_keys($this->fields()) as $field) {
             $value = $row[$field] ?? null;
+
+            if ($value instanceof DateTimeInterface) {
+                $value = $value->format($value->format('H:i:s') === '00:00:00' ? 'Y-m-d' : 'Y-m-d H:i:s');
+            }
 
             if (is_string($value)) {
                 // Con UTF-8 inválido preg_replace da null: el valor sigue tal cual y validate() lo reporta.

@@ -41,13 +41,14 @@ describe('normalize', function () {
         expect($row)->toBe(['code' => 'C2', 'name' => 'Campus Dos', 'modality' => null]);
     });
 
-    it('no toca los valores que no son texto', function () {
-        $date = new DateTimeImmutable('2027-01-15');
+    it('deja los números como vienen y pasa las fechas a texto ISO, como se guardan en la fila', function () {
+        $row = (new CampusesTemplate)->normalize([
+            'code' => new DateTimeImmutable('2027-01-15 00:00:00'),
+            'name' => 12,
+            'modality' => new DateTimeImmutable('2027-01-15 08:30:00'),
+        ]);
 
-        $row = (new CampusesTemplate)->normalize(['code' => 'C2', 'name' => 12, 'modality' => $date]);
-
-        expect($row['name'])->toBe(12)
-            ->and($row['modality'])->toBe($date);
+        expect($row)->toBe(['code' => '2027-01-15', 'name' => 12, 'modality' => '2027-01-15 08:30:00']);
     });
 });
 
