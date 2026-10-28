@@ -37,7 +37,7 @@ Las fases de R1 se traslapan: quien termina su parte de la fase N arranca la N+1
 
 Cada fase empieza con un **PR pequeño de contratos** que publica lo que otros necesitan para avanzar sin esperar la implementación completa:
 
-- Fase 1: contrato de plantilla de importación y una plantilla de ejemplo (A, día 1); eventos `BatchApplied` y `TermOpened`; `EligibleStudentsQuery` como interfaz con una implementación provisional.
+- Fase 1: contrato de plantilla de importación y una plantilla de ejemplo (A, día 1); migraciones, modelos y factories de Academic (B, tarea 1.7, a más tardar el día 2), porque Students, Faculty y Facilities tienen llaves foráneas a sus tablas; eventos `BatchApplied` y `TermOpened`; `EligibleStudentsQuery` como interfaz con una implementación provisional.
 - Fase 2: Actions de transición de `academic_loads` con sus firmas y guardas vacías (A); evento de propuesta enviada.
 - Fase 3: interfaz del validador de restricciones y una regla de ejemplo (A, antes del día 4), para que el editor (B) y la asignación (C) lo consuman desde el inicio; `RoomSuggestionQuery` como interfaz.
 - Siempre: `ScopedContext` de `Core` es el único punto de alcance; si alguien necesita un método nuevo ahí, lo pide por issue a A y se agrega en un PR aparte.
