@@ -77,6 +77,7 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 | Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, solo en sus campus y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin` |
 | Administrar edificios y salones | `admin`, `subdireccion` de su campus | |
 | Importar catálogos | `admin` | |
+| Consultar alumnos (listado y ficha) | `admin`, `subdireccion`, `jefe_departamento`, `coordinador` | `subdireccion`, los de su campus; `jefe_departamento`, los de las carreras de su departamento en su campus; `coordinador`, los de su carrera en su campus. Solo lectura: vienen del SII (confirmado el 29 de octubre de 2026) |
 | Validar catálogos del departamento | `jefe_departamento` del departamento y campus | |
 | Enviar propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
