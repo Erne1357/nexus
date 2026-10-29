@@ -13,7 +13,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Periodo escolar (`2027-1`, `2027-2`). Solo uno es el actual para capturar carga.
+ * Periodo escolar con el código del SII (`20271` Ene-Jun, `20272` verano, `20273` Ago-Dic). Solo uno es
+ * el actual para capturar carga.
  */
 #[Fillable(['code', 'name', 'starts_on', 'ends_on', 'is_current'])]
 #[UseFactory(TermFactory::class)]

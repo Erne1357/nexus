@@ -32,7 +32,7 @@ flowchart LR
 ### 0. Preparar periodo (admin, Subdirección)
 
 - Entrada: fechas del semestre y de cada etapa por campus.
-- Acción: crear el periodo (`2027-1`), su calendario de etapas y revisar el perfil de flujo de cada campus (bloques, horario, si requiere visto bueno de Subdirección).
+- Acción: crear el periodo (`20271`), su calendario de etapas y revisar el perfil de flujo de cada campus (bloques, horario, si requiere visto bueno de Subdirección).
 - Salida: periodo abierto; cada departamento recibe su `academic_load` en estado `draft` y sus `catalog_reviews` en `pending`.
 
 ### 1. Importar catálogos (admin)

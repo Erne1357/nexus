@@ -4,13 +4,13 @@
 
 ## Objetivo
 
-Que Nexus calcule, antes de que el coordinador abra su propuesta, cuántos alumnos van a necesitar cada materia en el siguiente periodo y cuántos grupos conviene abrir, usando el avance reticular y el comportamiento histórico de cada materia en cada campus. El coordinador pasa de capturar desde cero a corregir una propuesta ya calculada. La proyección se mide contra la carga real de `2027-1` para saber cuánto confiar en ella.
+Que Nexus calcule, antes de que el coordinador abra su propuesta, cuántos alumnos van a necesitar cada materia en el siguiente periodo y cuántos grupos conviene abrir, usando el avance reticular y el comportamiento histórico de cada materia en cada campus. El coordinador pasa de capturar desde cero a corregir una propuesta ya calculada. La proyección se mide contra la carga real de `20271` para saber cuánto confiar en ella.
 
 ## Dependencias
 
 - Fase 1: `student_progress` y `EligibleStudentsQuery` en `Students`; kardex de varios periodos importado (al menos los `demand.history_terms` anteriores).
 - Fase 2: `career_proposals` y `proposal_items` en `AcademicLoad`; acción `OpenTerm`.
-- Fase 4: snapshot publicado de `2027-1` (grupos abiertos, cupos y ocupación real) como referencia para medir el error.
+- Fase 4: snapshot publicado de `20271` (grupos abiertos, cupos y ocupación real) como referencia para medir el error.
 - Retrospectiva de R1 (tarea 4.11) con los ajustes que los coordinadores hicieron a mano sobre los elegibles.
 
 ## Alcance
@@ -40,7 +40,7 @@ Que Nexus calcule, antes de que el coordinador abra su propuesta, cuántos alumn
 | 5.6 | Pantalla del coordinador: en la propuesta de carrera, por materia, columnas de elegibles, esperados por Nexus, esperados capturados, grupos sugeridos y grupos pedidos, más el histórico de los últimos periodos (grupos abiertos, cupo y ocupación real desde los snapshots); resaltar diferencias grandes entre sugerido y capturado | AcademicLoad | Extiende `career-proposal` de la fase 2. El coordinador necesita ver la evidencia para confiar o corregir, no solo un número. La ocupación histórica sale de `load_snapshots` de R1 (y de la importación de grupos del SII si se decide cargarla). | Feature: columnas correctas por alcance; browser: corregir un esperado y pedir un grupo más | B |
 | 5.7 | Tablero de demanda del departamento: por materia que imparte el departamento, demanda agregada de todas las carreras y campus (elegibles, esperados, grupos sugeridos vs. pedidos), para dimensionar docentes y laboratorios antes de que lleguen las propuestas | Demand | `Demand/Livewire/pages/department-demand`. Hoy el jefe se entera materia por materia cuando cada coordinador manda su Excel; aquí ve el total de una vez. | Feature: agregación por materia respeta alcance de departamento y campus | B |
 | 5.8 | Parámetros editables por campus en `settings`: `demand.history_terms`, `demand.target_group_size` por tipo de materia, umbral de diferencia para resaltar; pantalla de parámetros en `Core` | Core, Demand | Reutiliza la tabla `settings` de la fase 0. Que Subdirección pueda ajustar el tamaño objetivo sin despliegue. | Feature: cambiar el parámetro altera `suggested_groups` en la siguiente corrida | C |
-| 5.9 | Medición del error: comando y reporte que compara la proyección calculada "como si" se hubiera corrido antes de `2027-1` contra los grupos realmente abiertos y la ocupación del snapshot publicado; error absoluto medio por materia y por carrera | Demand | `Demand/Console/EvaluateForecast`. Sin esta medición no hay forma de saber si la fórmula sirve; el resultado decide si R2 confía en la precarga o la muestra solo como referencia. | Feature con fixture del snapshot de R1: el reporte produce las métricas esperadas | C |
+| 5.9 | Medición del error: comando y reporte que compara la proyección calculada "como si" se hubiera corrido antes de `20271` contra los grupos realmente abiertos y la ocupación del snapshot publicado; error absoluto medio por materia y por carrera | Demand | `Demand/Console/EvaluateForecast`. Sin esta medición no hay forma de saber si la fórmula sirve; el resultado decide si R2 confía en la precarga o la muestra solo como referencia. | Feature con fixture del snapshot de R1: el reporte produce las métricas esperadas | C |
 | 5.10 | Pruebas con datos sintéticos y con el historial real: seeder de kardex histórico de varios periodos para el `DemoSeeder`; corrida completa sobre los datos reales de Campus II en el servidor de pruebas | Demand, Students | Los datos reales son la única prueba de que las tasas tienen sentido. | Reporte de 5.9 generado con datos reales y revisado con un coordinador | A, C |
 
 ## Pruebas de la fase
@@ -48,14 +48,14 @@ Que Nexus calcule, antes de que el coordinador abra su propuesta, cuántos alumn
 - **Unit:** `DemandForecaster` (fórmula pura), `HistoricalRatesQuery` con kardex sintético, redondeos y tamaños objetivo.
 - **Feature:** job por eventos, precarga de propuestas, tablero del departamento, parámetros.
 - **Browser:** coordinador revisa una propuesta precargada, corrige y envía.
-- **Datos reales:** comando de evaluación contra la carga publicada de `2027-1`.
+- **Datos reales:** comando de evaluación contra la carga publicada de `20271`.
 - **Arquitectura:** `Demand` depende solo de `Core`, `Academic` y `Students`; `AcademicLoad` depende de `Demand`, nunca al revés.
 
 ## Criterios de aceptación
 
 1. Al abrir un periodo, cada carrera de cada campus presencial tiene su `demand_forecasts` calculado y su propuesta nace precargada.
 2. El coordinador ve, por materia, elegibles, esperados, grupos sugeridos e histórico, y puede corregir cualquier valor; lo sugerido y lo capturado se guardan por separado.
-3. El error de la proyección medido contra `2027-1` queda documentado en `docs/decisiones/` con la decisión de si se muestra como sugerencia fuerte o como referencia.
+3. El error de la proyección medido contra `20271` queda documentado en `docs/decisiones/` con la decisión de si se muestra como sugerencia fuerte o como referencia.
 4. Cambiar un parámetro de demanda en `settings` altera la siguiente corrida sin despliegue.
 5. CI verde con cobertura mínima de 80 % en `Demand`.
 

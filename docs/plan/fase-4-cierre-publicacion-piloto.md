@@ -38,7 +38,7 @@ Cerrar la carga de cada departamento de Campus II con todas sus condiciones veri
 | 4.7 | Despliegue: imagen `prod` en el servidor, HTTPS, variables, migraciones, `pg_dump` diario con retención, restauración probada; `main` recibe el primer PR desde `develop` | — | README de operación en `docs/operacion.md`. Sin restauración probada no hay piloto. | Restauración de un respaldo en el servidor de pruebas | A |
 | 4.8 | Endurecimiento: límites de intentos de login, cabeceras de seguridad, políticas revisadas en todas las pantallas (`/security-review`), revisión de que ningún dato de otro campus se filtre | Core | Checklist en `CONTRIBUTING.md`. | Feature: pruebas negativas de alcance por rol en cada módulo | C |
 | 4.9 | Piloto: sesión de arranque con jefes y coordinadores de Campus II, guía de una página por rol, canal de soporte, triage diario de incidencias en issues con etiqueta `piloto`, corrección en PRs pequeños | — | Las incidencias del piloto se atienden antes que cualquier tarea de R2. | Incidencias críticas en cero antes de publicar | A, B, C |
-| 4.10 | Publicar la carga de Campus II `2027-1` desde Nexus (hito H5) y entregar el exporte al SII | — | | Carga publicada, consultable y exportada | A, B, C |
+| 4.10 | Publicar la carga de Campus II `20271` desde Nexus (hito H5) y entregar el exporte al SII | — | | Carga publicada, consultable y exportada | A, B, C |
 | 4.11 | Retrospectiva de R1 y planeación detallada de R2 (fases 5 a 8) con lo aprendido; actualizar `PLAN.md` | — | Convierte las fases 5 a 8 de "detalladas en papel" a "detalladas con datos reales". | `PLAN.md` actualizado | A, B, C |
 
 ## Pruebas de la fase

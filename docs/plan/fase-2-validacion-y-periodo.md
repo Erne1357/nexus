@@ -4,7 +4,7 @@
 
 ## Objetivo
 
-Que cada jefe de departamento de Campus II revise, corrija y valide sus catálogos dentro de Nexus, que exista el periodo `2027-1` con su calendario, y que cada coordinador pueda enviar su propuesta de materias y grupos con los elegibles calculados. Al terminar, hito H3.
+Que cada jefe de departamento de Campus II revise, corrija y valide sus catálogos dentro de Nexus, que exista el periodo `20271` con su calendario, y que cada coordinador pueda enviar su propuesta de materias y grupos con los elegibles calculados. Al terminar, hito H3.
 
 ## Dependencias
 
@@ -45,7 +45,7 @@ Que cada jefe de departamento de Campus II revise, corrija y valide sus catálog
 
 ## Criterios de aceptación
 
-1. Con el periodo `2027-1` abierto, cada jefe de Campus II ve solo sus catálogos, puede corregir y validar, y el tablero refleja el avance.
+1. Con el periodo `20271` abierto, cada jefe de Campus II ve solo sus catálogos, puede corregir y validar, y el tablero refleja el avance.
 2. Un coordinador de Campus II envía su propuesta con elegibles reales y el departamento la acepta; la carga del departamento queda en `proposed`.
 3. Ninguna transición es posible desde una pantalla sin pasar por su Action y quedar en `load_transitions`.
 
