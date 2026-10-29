@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Enums\PrerequisiteKind;
+use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Students\Queries\PlanGridQuery;
@@ -41,4 +42,18 @@ it('deja fuera las materias y seriaciones que se quitaron, y las materias borrad
 
     expect(array_keys($grid->credits))->toEqualCanonicalizing([$a->id, $b->id])
         ->and($grid->seriation)->toBe([]);
+});
+
+it('trae la especialidad de cada materia de especialidad, y las materias inactivas del catálogo', function () {
+    $plan = StudyPlan::factory()->create();
+    $specialty = Specialty::factory()->for($plan)->create();
+    $common = Subject::factory()->inactive()->create();
+    $network = Subject::factory()->create();
+    placeInPlan($plan, $common);
+    placeInPlan($plan, $network, 7, $specialty);
+
+    $grid = app(PlanGridQuery::class)->forPlan($plan->id);
+
+    expect(array_keys($grid->credits))->toBe([$common->id, $network->id])
+        ->and($grid->specialtyOf)->toBe([$network->id => $specialty->id]);
 });

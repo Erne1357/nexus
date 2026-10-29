@@ -1,6 +1,6 @@
 <?php
 
-use App\Modules\Students\Progress\PlanGrid;
+use App\Modules\Students\Queries\PlanGrid;
 
 /*
 | Cálculo de progreso con seriación (tarea 1.4): a partir de la retícula de un plan (materias con sus créditos
@@ -62,4 +62,34 @@ it('una seriación con una materia que ya no está en la retícula no bloquea', 
     $grid = new PlanGrid(credits: ['A' => 5, 'B' => 5], seriation: ['B' => ['A', 'X']]);
 
     expect($grid->progressFor(['A'])['subjects_available'])->toBe(['B']);
+});
+
+describe('especialidades', function () {
+    /**
+     * Tronco común (A) y dos especialidades: Redes (R1, R2) y Software (S1).
+     */
+    function specialtyGrid(): PlanGrid
+    {
+        return new PlanGrid(
+            credits: ['A' => 5, 'R1' => 4, 'R2' => 4, 'S1' => 4],
+            specialtyOf: ['R1' => 'redes', 'R2' => 'redes', 'S1' => 'software'],
+        );
+    }
+
+    it('mientras no toma ninguna materia de especialidad, cuentan las de todas: puede elegir cualquiera', function () {
+        expect(specialtyGrid()->progressFor(['A']))
+            ->toMatchArray(['subjects_pending' => ['R1', 'R2', 'S1'], 'subjects_available' => ['R1', 'R2', 'S1']]);
+    });
+
+    it('la especialidad sale de lo que aprobó o está cursando: las de las otras ya no cuentan', function (array $approved, array $taken, array $pending) {
+        expect(specialtyGrid()->progressFor($approved, $taken)['subjects_pending'])->toBe($pending);
+    })->with([
+        'aprobó una de Redes' => [['A', 'R1'], [], ['R2']],
+        'está cursando una de Software' => [['A'], ['S1'], ['S1']],
+    ]);
+
+    it('los créditos de lo aprobado cuentan aunque sea de otra especialidad', function () {
+        expect(specialtyGrid()->progressFor(['A', 'R1', 'S1']))
+            ->toMatchArray(['credits_approved' => 13, 'subjects_pending' => ['R2']]);
+    });
 });

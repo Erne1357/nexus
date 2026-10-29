@@ -62,6 +62,8 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 ## Elegibilidad y demanda
 
 - Un alumno es **elegible** para una materia de su plan si aprobó todas sus seriaciones y no la ha aprobado. Solo el resultado `aprobada` aprueba: quien está cursando la materia o su seriación todavía no la tiene aprobada (la proyección de quienes están cursando es de R2). Los correquisitos no bloquean; las seriaciones de otro plan no cuentan (confirmado el 29 de octubre de 2026).
+- La especialidad de un alumno sale de su kardex: si aprobó o está cursando materias de una especialidad de su plan, las materias de las otras especialidades ya no le faltan ni cuentan para sus elegibles. Mientras no toma ninguna, cuentan las de todas, porque puede elegir cualquiera (confirmado el 29 de octubre de 2026).
+- Una materia de la retícula del alumno cuenta aunque esté inactiva en el catálogo: el plan se ata al alumno al inscribirse. Por eso no se desactiva una materia que sigue en un plan con alumnos que la necesitan (lo revisa la tarea 1.8; confirmado el 29 de octubre de 2026).
 - R1: `eligible_students` por materia, carrera y campus se calcula desde `student_progress` al importar kardex.
 - R2: `expected_students = eligible_students x (1 - tasa_de_no_inscripción) + repetidores_esperados`, con tasas históricas por materia y campus (`demand.history_terms`, por defecto 4). `suggested_groups = ceil(expected_students / tamaño_objetivo)`, con tamaño objetivo configurable por tipo de materia (`demand.target_group_size`, por defecto 35; laboratorios 25).
 

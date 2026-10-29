@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Students\Actions\RefreshStudentProgress;
@@ -7,6 +8,7 @@ use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentProgress;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Queue;
 
 /*
@@ -86,7 +88,8 @@ it('volver a calcular reescribe el avance sin duplicarlo, también si el alumno 
         ->subjects_pending->toBe([]);
 });
 
-it('no calcula el avance de un alumno borrado', function () {
+it('no calcula el avance de un alumno borrado, y borra el que ya tenía: es una tabla derivada', function () {
+    app(RefreshStudentProgress::class)->handle();
     $this->student->delete();
 
     app(RefreshStudentProgress::class)->handle();
@@ -94,15 +97,47 @@ it('no calcula el avance de un alumno borrado', function () {
     expect(StudentProgress::count())->toBe(0);
 });
 
-it('el job lo recalcula en la cola, con un solo intento y su tiempo máximo', function () {
+it('un alumno cuyo plan todavía no tiene retícula no tiene avance, en lugar de uno en ceros', function () {
+    $empty = StudyPlan::factory()->for($this->plan->career)->create();
+    $student = Student::factory()->for($empty)->create(['career_id' => $this->plan->career_id]);
+
+    app(RefreshStudentProgress::class)->handle();
+
+    expect(StudentProgress::where('student_id', $student->id)->exists())->toBeFalse()
+        ->and(StudentProgress::where('student_id', $this->student->id)->exists())->toBeTrue();
+});
+
+it('la especialidad del alumno sale de lo que está cursando', function () {
+    $networks = Specialty::factory()->for($this->plan)->create();
+    $software = Specialty::factory()->for($this->plan)->create();
+    $r1 = Subject::factory()->create(['code' => 'R-7']);
+    $s1 = Subject::factory()->create(['code' => 'S-7']);
+    placeInPlan($this->plan, $r1, 7, $networks);
+    placeInPlan($this->plan, $s1, 7, $software);
+    KardexRecord::factory()->for($this->student)->for($r1)->inProgress()->create();
+
+    app(RefreshStudentProgress::class)->handle();
+
+    expect(StudentProgress::where('student_id', $this->student->id)->sole()->subjects_pending)
+        ->toBe([$this->a->id, $this->f->id, $this->b->id, $r1->id]);
+});
+
+it('el job lo recalcula en la cola sin encimar dos corridas, y se reintenta solo mientras espera a la otra', function () {
     kardexOf($this->student, $this->a);
 
     RecomputeStudentProgress::dispatch();
 
+    $job = new RecomputeStudentProgress;
+    $middleware = $job->middleware();
+
     expect(StudentProgress::where('student_id', $this->student->id)->sole()->credits_approved)->toBe(5)
-        ->and(new RecomputeStudentProgress)
-        ->tries->toBe(1)
-        ->timeout->toBe(1800);
+        ->and($job)
+        ->maxExceptions->toBe(1)
+        ->timeout->toBe(1800)
+        ->uniqueFor->toBe(3600)
+        ->and($job->retryUntil()->greaterThan(now()->addMinutes(59)))->toBeTrue()
+        ->and($middleware)->toHaveCount(1)
+        ->and($middleware[0])->toBeInstanceOf(WithoutOverlapping::class);
 });
 
 it('espera un solo recálculo en la cola aunque lleguen varias importaciones', function () {
