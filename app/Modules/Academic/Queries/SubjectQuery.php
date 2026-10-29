@@ -2,7 +2,6 @@
 
 namespace App\Modules\Academic\Queries;
 
-use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
@@ -41,24 +40,6 @@ final class SubjectQuery
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
             ->orderBy('code')
             ->paginate($perPage);
-    }
-
-    /**
-     * Los departamentos sin borrar para el filtro y el formulario, por clave, como opciones de
-     * x-select («SIS · Sistemas y Computación»; los inactivos lo dicen).
-     *
-     * @return list<array{id: string, name: string}>
-     */
-    public function departmentOptions(): array
-    {
-        return Department::query()
-            ->orderBy('code')
-            ->get(['id', 'code', 'name', 'is_active'])
-            ->map(fn (Department $department): array => [
-                'id' => $department->id,
-                'name' => "{$department->code} · {$department->name}".($department->is_active ? '' : ' (inactivo)'),
-            ])
-            ->all();
     }
 
     /**

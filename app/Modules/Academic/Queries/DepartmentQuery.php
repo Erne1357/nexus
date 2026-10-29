@@ -33,6 +33,25 @@ final class DepartmentQuery
     }
 
     /**
+     * Los departamentos sin borrar, por clave, como opciones de x-select para los filtros y los
+     * formularios de las pantallas de Academic (Carreras, Materias): «SIS · Sistemas y Computación»;
+     * los inactivos también, porque una carrera o materia puede seguir en uno, y lo dicen.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function options(): array
+    {
+        return Department::query()
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'is_active'])
+            ->map(fn (Department $department): array => [
+                'id' => $department->id,
+                'name' => "{$department->code} · {$department->name}".($department->is_active ? '' : ' (inactivo)'),
+            ])
+            ->all();
+    }
+
+    /**
      * El departamento que se va a editar o borrar, sin los borrados.
      *
      * @throws ModelNotFoundException<Department>

@@ -4,6 +4,7 @@ use App\Modules\Academic\Actions\CreateSubject;
 use App\Modules\Academic\Actions\UpdateSubject;
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Academic\Queries\SubjectQuery;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -78,9 +79,9 @@ new #[Title('Materias')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(SubjectQuery $subjects): array
+    public function with(SubjectQuery $subjects, DepartmentQuery $departmentQuery): array
     {
-        $departments = $subjects->departmentOptions();
+        $departments = $departmentQuery->options();
         $kinds = array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases());
         $kindFilters = [...$kinds, ['id' => SubjectQuery::WITHOUT_KIND, 'name' => 'Sin tipo']];
         $this->forgetFiltersOutside($departments, $kindFilters);
