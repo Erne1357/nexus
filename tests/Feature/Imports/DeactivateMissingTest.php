@@ -12,19 +12,15 @@ use App\Modules\Imports\Events\BatchApplied;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportDeactivation;
 use App\Modules\Imports\Templates\ImportContext;
-use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
+use Tests\Fixtures\ImportTemplates\TestRoom;
+use Tests\Fixtures\ImportTemplates\TestRoomsTemplate;
 
 /*
 | "Desactivar faltantes" al aplicar un lote (tarea 1.3, reglas-de-negocio.md, "Reglas de datos"): solo
@@ -34,61 +30,6 @@ use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 | campus, y nunca desactiva más de los que el admin confirmó. Cuáles desactivó queda en
 | `import_deactivations`; la bitácora sigue con una entrada por lote.
 */
-
-/**
- * Un catálogo de un campus para la prueba, como `rooms`: Core no tiene ninguno.
- */
-class DeactivationRoom extends Model
-{
-    use HasUuids, SoftDeletes;
-
-    protected $table = 'test_deactivation_rooms';
-
-    protected $fillable = ['code', 'name', 'is_active'];
-
-    protected function casts(): array
-    {
-        return ['is_active' => 'boolean'];
-    }
-}
-
-class DeactivationRoomsTemplate extends ImportTemplate
-{
-    public function key(): string
-    {
-        return 'test-rooms';
-    }
-
-    public function label(): string
-    {
-        return 'Salones (prueba)';
-    }
-
-    public function fields(): array
-    {
-        return ['code' => 'clave', 'name' => 'nombre'];
-    }
-
-    public function naturalKey(): array
-    {
-        return ['code'];
-    }
-
-    public function rules(): array
-    {
-        return ['code' => ['required', 'string'], 'name' => ['required', 'string']];
-    }
-
-    public function model(): string
-    {
-        return DeactivationRoom::class;
-    }
-
-    public function requiresCampus(): bool
-    {
-        return true;
-    }
-}
 
 /**
  * Plantilla de prueba cuyo afterApply() falla, para ver qué queda si la aplicación se corta después de
@@ -104,7 +45,7 @@ class FailingAfterDeactivationTemplate extends CampusesTemplate
 
 beforeEach(function () {
     Storage::fake('imports');
-    app()->instance(TemplateRegistry::class, new TemplateRegistry([CampusesTemplate::class, DeactivationRoomsTemplate::class]));
+    app()->instance(TemplateRegistry::class, new TemplateRegistry([CampusesTemplate::class, TestRoomsTemplate::class]));
     $this->admin = User::factory()->admin()->create();
 });
 
@@ -124,31 +65,6 @@ function validatedBatchFor(User $admin, string $template, string $csv, ?Campus $
 function applyDeactivatingMissing(ImportBatch $batch, User $admin, int $confirmed): ImportBatch
 {
     return app(ApplyImportBatch::class)->handle($batch, $admin, confirmedMissing: $confirmed);
-}
-
-/**
- * La tabla del catálogo de salones de prueba; `code` puede ser de otro tipo para ver qué pasa cuando
- * la base guarda la clave distinto de como vino.
- */
-function createDeactivationRoomsTable(string $codeType = 'string'): void
-{
-    Schema::create('test_deactivation_rooms', function (Blueprint $table) use ($codeType) {
-        $table->uuid('id')->primary()->default(DB::raw('uuidv7()'));
-        $table->foreignUuid('campus_id')->constrained('campuses');
-        $table->{$codeType}('code');
-        $table->string('name');
-        $table->boolean('is_active')->default(true);
-        $table->timestampsTz();
-        $table->softDeletesTz();
-    });
-}
-
-function deactivationRoom(Campus $campus, string $code): DeactivationRoom
-{
-    $room = (new DeactivationRoom)->forceFill(['campus_id' => $campus->id, 'code' => $code, 'name' => "Salón {$code}"]);
-    $room->save();
-
-    return $room;
 }
 
 it('sin la opción, aplicar no desactiva lo que no viene en el archivo', function () {
@@ -219,12 +135,12 @@ it('no toca los registros que ya estaban inactivos ni los borrados', function ()
 });
 
 it('en una plantilla de un campus solo desactiva los faltantes de ese campus', function () {
-    createDeactivationRoomsTable();
+    TestRoom::createTable();
     $c1 = Campus::factory()->create(['code' => 'C1']);
     $c2 = Campus::factory()->create(['code' => 'C2']);
-    $kept = deactivationRoom($c2, 'A1');
-    $missing = deactivationRoom($c2, 'A2');
-    $otherCampus = deactivationRoom($c1, 'A2');
+    $kept = TestRoom::in($c2, 'A1');
+    $missing = TestRoom::in($c2, 'A2');
+    $otherCampus = TestRoom::in($c1, 'A2');
 
     $batch = validatedBatchFor($this->admin, 'test-rooms', "code,name\nA1,Salón A1\n", $c2);
     applyDeactivatingMissing($batch, $this->admin, 1);
@@ -236,9 +152,9 @@ it('en una plantilla de un campus solo desactiva los faltantes de ese campus', f
 });
 
 it('una fila aplicada protege el registro que escribió, aunque la base guarde su clave distinto', function () {
-    createDeactivationRoomsTable('integer');
+    TestRoom::createTable('integer');
     $c2 = Campus::factory()->create(['code' => 'C2']);
-    $room = deactivationRoom($c2, '7');
+    $room = TestRoom::in($c2, '7');
 
     // "007" encuentra y actualiza el salón 7: la base convierte la clave a número.
     $batch = validatedBatchFor($this->admin, 'test-rooms', "code,name\n007,Salón siete\n", $c2);

@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
+use Tests\Fixtures\ImportTemplates\TestRoom;
+use Tests\Fixtures\ImportTemplates\TestRoomsTemplate;
 
 /*
 | "Desactivar faltantes" en el asistente de importación (tarea 1.3): en el paso 3 el admin ve cuántos de
@@ -123,6 +125,77 @@ describe('admin', function () {
 
         Queue::assertPushed(ApplyQueuedBatch::class, fn (ApplyQueuedBatch $job): bool => $job->confirmedMissing === null);
     });
+
+    it('no manda a aplicar si la página no trae la cifra que vio el admin, y lo dice', function () {
+        Queue::fake();
+
+        // Encendió la opción y apretó «Aplicar» antes de que la página mostrara cuántos se desactivan.
+        $page = deactivationWizard($this->admin, $this->batch)->set('deactivateMissing', true)->call('apply');
+
+        expect(lastToastOf($page))->type->toBe('error')->title->toBe('Revisa los que se desactivan')
+            ->description->toBe('Ahora son 2 registros que no vienen en el archivo: revisa la lista y vuelve a aplicar.');
+        Queue::assertNothingPushed();
+    });
+
+    it('si al aplicar hay más faltantes de los que vio el admin, no lo manda y muestra la cifra nueva', function () {
+        Queue::fake();
+        $page = deactivationWizard($this->admin, $this->batch)->set('deactivateMissing', true);
+        Campus::factory()->create(['code' => 'C4', 'name' => 'Campus Cuatro']);
+
+        $page->call('apply', 2);
+
+        expect(lastToastOf($page))->description->toBe('Ahora son 3 registros que no vienen en el archivo: revisa la lista y vuelve a aplicar.');
+        Queue::assertNothingPushed();
+        $page->assertSee('Aplicar 2 filas y desactivar 3');
+    });
+
+    it('en una plantilla de un campus solo cuenta y lista los del campus del lote', function () {
+        TestRoom::createTable();
+        app()->instance(TemplateRegistry::class, new TemplateRegistry([CampusesTemplate::class, TestRoomsTemplate::class]));
+        TestRoom::in($this->c2, 'A1');
+        TestRoom::in($this->c2, 'A2');
+        TestRoom::in(Campus::where('code', 'C1')->sole(), 'B7');
+        $batch = app(ValidateImportBatch::class)->handle(app(StoreImportBatch::class)->handle(
+            $this->admin,
+            'test-rooms',
+            UploadedFile::fake()->createWithContent('salones.csv', "code,name\nA1,Salón A1\n"),
+            $this->c2,
+        ));
+
+        deactivationWizard($this->admin, $batch)
+            ->assertSee('1 de 2 registros activos de Salones (prueba) en C2 no viene en el archivo.')
+            ->set('deactivateMissing', true)
+            ->assertSee('A2')
+            ->assertDontSee('B7');
+    });
+
+    it('un lote de un campus que después se retiró se sigue revisando', function () {
+        TestRoom::createTable();
+        app()->instance(TemplateRegistry::class, new TemplateRegistry([CampusesTemplate::class, TestRoomsTemplate::class]));
+        TestRoom::in($this->c2, 'A2');
+        $batch = app(ValidateImportBatch::class)->handle(app(StoreImportBatch::class)->handle(
+            $this->admin,
+            'test-rooms',
+            UploadedFile::fake()->createWithContent('salones.csv', "code,name\nA1,Salón A1\n"),
+            $this->c2,
+        ));
+        $this->c2->delete();
+
+        deactivationWizard($this->admin, $batch)
+            ->assertOk()
+            ->assertSee('1 de 1 registros activos de Salones (prueba) en C2 no viene en el archivo.');
+    });
+
+    it('retomar otro lote o empezar de nuevo vuelve a la primera página de las listas', function (string $method) {
+        $other = validatedWizardBatch($this->admin, "code,name,modality\nC1,Campus Uno,presencial\n");
+        $page = deactivationWizard($this->admin, $this->batch)
+            ->call('setPage', 3, 'faltantes')
+            ->call('setPage', 2, 'desactivados');
+
+        $method === 'open' ? $page->call('open', $other->id) : $page->call('startOver');
+
+        $page->assertSet('paginators.faltantes', 1)->assertSet('paginators.desactivados', 1);
+    })->with(['startOver', 'open']);
 
     it('empezar de nuevo o retomar otro lote apaga la opción', function (string $method) {
         $other = validatedWizardBatch($this->admin, "code,name,modality\nC1,Campus Uno,presencial\n");

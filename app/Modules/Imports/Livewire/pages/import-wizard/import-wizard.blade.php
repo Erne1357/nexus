@@ -220,9 +220,9 @@
                         {{-- Con wire:key propio: sin él, Livewire transforma esta tabla en la de desactivados del paso 4 y el x-table de MaryUI se reinicia sin su x-ref de encabezados. --}}
                         <div class="mt-6 space-y-3 border-t border-base-300 pt-4" wire:key="missing-records" data-testid="missing-records">
                             @if ($missing['missing'] === 0)
-                                <p class="text-sm text-base-content/70">Todos los registros activos de {{ $batchTemplate }}{{ $batch->campus ? ' en '.$batch->campus->code : '' }} vienen en el archivo.</p>
+                                <p class="text-sm text-base-content/70">Todos los registros activos de {{ $missingScope }} vienen en el archivo.</p>
                             @else
-                                <p class="text-sm">{{ number_format($missing['missing']) }} de {{ number_format($missing['active']) }} registros activos de {{ $batchTemplate }}{{ $batch->campus ? ' en '.$batch->campus->code : '' }} {{ $missing['missing'] === 1 ? 'no viene' : 'no vienen' }} en el archivo.</p>
+                                <p class="text-sm">{{ number_format($missing['missing']) }} de {{ number_format($missing['active']) }} registros activos de {{ $missingScope }} {{ $missing['missing'] === 1 ? 'no viene' : 'no vienen' }} en el archivo.</p>
 
                                 <x-toggle
                                     label="Desactivar los que no vienen en el archivo"

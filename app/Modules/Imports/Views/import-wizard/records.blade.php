@@ -13,7 +13,7 @@
     class="mt-2"
 >
     @scope('cell_natural_key', $record, $batchKey)
-        <span class="font-mono">{{ implode(' · ', array_map(fn (string $field): string => (string) $record->getAttribute($field), $batchKey)) }}</span>
+        <span class="font-mono">{{ implode(' · ', array_map(fn (string $field): string => is_scalar($value = $record->getAttribute($field)) ? (string) $value : json_encode($value), $batchKey)) }}</span>
     @endscope
 
     @scope('cell_name', $record)

@@ -2,7 +2,7 @@
 
 > Archivo de estado. Se actualiza en cada PR que cierre o abra tareas de una fase. Contexto en [PROJECT.md](PROJECT.md); reglas de trabajo en [CLAUDE.md](CLAUDE.md).
 
-**Última actualización:** 2026-10-27 · **Fase activa:** 1 (A arrancó el 27 de octubre; B y C arrancan el 3 de noviembre) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
+**Última actualización:** 2026-10-29 · **Fase activa:** 1 (A arrancó el 27 de octubre; B y C arrancan el 3 de noviembre) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
 
 ## Estados
 
@@ -51,7 +51,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Facilities | 1 | ⬜ |
 | Faculty | 1 | ⬜ |
 | Students | 1 | ⬜ |
-| Imports | 1 | 🟨 (1.1 y 1.2 hechas: motor #94 a #98, asistente #99 a #103) |
+| Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115) |
 | CatalogValidation | 2 | ⬜ |
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | ⬜ |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |

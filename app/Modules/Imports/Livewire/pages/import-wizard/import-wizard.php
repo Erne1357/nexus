@@ -161,6 +161,8 @@ new #[Title('Importaciones')] class extends Component
             'warningRows' => $reviewing && $this->step === 3 ? $batches->warningRows($batch) : 0,
             'applied' => $applied,
             'missing' => $missing,
+            // De qué registros se habla: el catálogo y, si es de un campus, cuál.
+            'missingScope' => $missing === null ? null : $labels[$batch->template].($batch->campus ? " en {$batch->campus->code}" : ''),
             'deactivating' => $deactivating,
             'missingRows' => $deactivating ? $batches->missingRecords($batch, $batchDefinition, $importContext) : null,
             'deactivatedRows' => $applied !== null && $batch->deactivate_missing && $batchDefinition !== null ? $batches->deactivatedRecords($batch, $batchDefinition) : null,
@@ -356,7 +358,9 @@ new #[Title('Importaciones')] class extends Component
     /**
      * Paso 3 → 4: manda a aplicar en la cola un lote validado con filas válidas. Las filas con error
      * se saltan (reglas-de-negocio.md, "Reglas de datos"). Desactiva faltantes solo si el admin lo eligió
-     * y el catálogo lo ofrece, y nunca más de los que vio y confirmó: el botón manda esa cifra.
+     * y el catálogo lo ofrece, y nunca más de los que vio y confirmó: el botón manda esa cifra. Si no la
+     * trae (apretó antes de que la página la mostrara) o ahora son más, no lo manda y pide revisar; la
+     * página ya muestra la cifra nueva. La cola vuelve a revisarlo al desactivar.
      *
      * @param  int|null  $confirmedMissing  cuántos faltantes mostraba la página al confirmar
      */
@@ -379,13 +383,21 @@ new #[Title('Importaciones')] class extends Component
             return;
         }
 
-        $deactivates = $this->deactivateMissing
-            && $confirmedMissing !== null
-            && $templates->has($batch->template)
-            && $templates->get($batch->template)->deactivatesMissing();
+        $template = $templates->has($batch->template) ? $templates->get($batch->template) : null;
+        $deactivates = $this->deactivateMissing && $template?->deactivatesMissing();
+
+        if ($deactivates) {
+            $missing = $batches->missingSummary($batch, $template, new ImportContext($context->user(), $batch->campus))['missing'];
+
+            if ($confirmedMissing === null || $missing > $confirmedMissing) {
+                $this->error('Revisa los que se desactivan', e("Ahora son {$missing} registros que no vienen en el archivo: revisa la lista y vuelve a aplicar."));
+
+                return;
+            }
+        }
 
         try {
-            ApplyQueuedBatch::dispatch($batch, $context->user(), $deactivates ? max(0, $confirmedMissing) : null);
+            ApplyQueuedBatch::dispatch($batch, $context->user(), $deactivates ? $confirmedMissing : null);
         } catch (Throwable $exception) {
             report($exception);
             $this->error('La cola no respondió', 'El lote sigue validado: intenta aplicarlo otra vez en un momento.');
@@ -417,7 +429,7 @@ new #[Title('Importaciones')] class extends Component
 
         $this->batchId = $batch->id;
         $this->reset('issues', 'applyQueued', 'deactivateMissing');
-        $this->resetPage();
+        $this->resetPages();
     }
 
     /**
@@ -427,7 +439,7 @@ new #[Title('Importaciones')] class extends Component
     {
         $this->discardUpload();
         $this->reset('template', 'file', 'header', 'readFile', 'assignments', 'mappingId', 'mappingName', 'batchId', 'issues', 'applyQueued', 'deactivateMissing');
-        $this->resetPage();
+        $this->resetPages();
         $this->resetValidation();
     }
 
@@ -451,6 +463,16 @@ new #[Title('Importaciones')] class extends Component
     protected function validationAttributes(): array
     {
         return ['mappingName' => 'nombre del mapeo'];
+    }
+
+    /**
+     * Las tres listas del lote vuelven a su primera página: las filas, los faltantes y los desactivados.
+     */
+    private function resetPages(): void
+    {
+        $this->resetPage();
+        $this->resetPage('faltantes');
+        $this->resetPage('desactivados');
     }
 
     private function stepFor(ImportBatch $batch): int

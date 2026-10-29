@@ -41,9 +41,13 @@ final class ImportBatchQuery
             ->get();
     }
 
+    /**
+     * El lote con su campus aunque se haya retirado: una plantilla de un campus lo necesita para revisar
+     * el lote.
+     */
     public function findOrFail(string $id): ImportBatch
     {
-        return KeyLookup::findOrFail(ImportBatch::query(), $id);
+        return KeyLookup::findOrFail(ImportBatch::query()->with(['campus' => fn (BelongsTo $campus) => $campus->withTrashed()]), $id);
     }
 
     /**
