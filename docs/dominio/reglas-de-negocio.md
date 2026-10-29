@@ -89,6 +89,8 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 | Publicar | `subdireccion`, o `jefe_departamento` si el campus no exige visto bueno | carga `closed` o `approved` |
 | Re-análisis | `coordinador`, `jefe_departamento` | nueva importación de kardex (R2) |
 
+Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se borra. Si solo se desactiva, sigue contando, porque una carrera inactiva puede tener todavía alumnos y grupos que atender, igual que un plan inactivo (confirmado el 29 de octubre de 2026). Core no depende de Academic, así que lo resuelve la tarea 1.8 al borrar.
+
 ## Parámetros por campus (perfil de flujo)
 
 | Clave | Presencial (C1, C2) | Notas para otras modalidades |
