@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Templates\ImportContext;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 
@@ -70,4 +71,22 @@ describe('keyFor', function () {
     it('sin campus en el contexto, una plantilla que lo requiere es un error de programación', function () {
         campusScopedImportTemplate()->keyFor(['code' => 'LC1'], importContextFor());
     })->throws(LogicException::class, 'necesita un campus');
+});
+
+describe('deactivatesMissing', function () {
+    it('un catálogo con is_active ofrece desactivar faltantes', function () {
+        expect((new CampusesTemplate)->deactivatesMissing())->toBeTrue();
+    });
+
+    it('un modelo sin is_active, como el kardex, no lo ofrece', function () {
+        $template = new class extends CampusesTemplate
+        {
+            public function model(): string
+            {
+                return ImportRow::class;
+            }
+        };
+
+        expect($template->deactivatesMissing())->toBeFalse();
+    });
 });

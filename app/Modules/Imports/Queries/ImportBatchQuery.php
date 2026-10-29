@@ -69,10 +69,11 @@ final class ImportBatchQuery
     }
 
     /**
-     * Lo que la aplicación del lote lleva escrito (las cuentas que ApplyImportBatch suma en cada bloque)
-     * y las filas con error que no se aplican. Lo usan la bitácora, BatchApplied y la pantalla.
+     * Lo que la aplicación del lote lleva escrito (las cuentas que ApplyImportBatch suma en cada bloque),
+     * las filas con error que no se aplican y lo que desactivó por no venir en el archivo. Lo usan la
+     * bitácora, BatchApplied y la pantalla.
      *
-     * @return array{created: int, updated: int, unchanged: int, skipped: int}
+     * @return array{created: int, updated: int, unchanged: int, skipped: int, deactivated: int}
      */
     public function appliedCounts(ImportBatch $batch): array
     {
@@ -81,6 +82,7 @@ final class ImportBatchQuery
             'updated' => $batch->updated_rows,
             'unchanged' => $batch->unchanged_rows,
             'skipped' => ImportRow::query()->where('batch_id', $batch->id)->where('status', RowStatus::Error)->count(),
+            'deactivated' => $batch->deactivated_rows,
         ];
     }
 

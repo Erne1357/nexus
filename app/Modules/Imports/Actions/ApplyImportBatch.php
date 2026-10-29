@@ -7,6 +7,7 @@ use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Events\BatchApplied;
 use App\Modules\Imports\Models\ImportBatch;
+use App\Modules\Imports\Models\ImportDeactivation;
 use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Queries\ImportBatchQuery;
 use App\Modules\Imports\Templates\ImportContext;
@@ -15,6 +16,7 @@ use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use LogicException;
 use Throwable;
 
 /**
@@ -27,10 +29,16 @@ use Throwable;
  * filas revisadas (`processed_rows`, el avance que muestra la pantalla) y las altas, cambios y filas sin
  * cambios ya escritas. Al terminar corre afterApply() de la plantilla y el lote queda `applied`.
  *
+ * Si el admin eligió "desactivar faltantes" para el lote (tarea 1.3), después del último bloque, y solo
+ * si todos se escribieron, desactiva en su propia transacción los registros que no vienen en el archivo
+ * (ImportTemplate::missing()), guarda cuáles fueron en `import_deactivations` y suma `deactivated_rows`.
+ * Es como un último bloque: si después algo falla, lo desactivado se queda y el fallo lo cuenta. Solo
+ * cambia `is_active`, sin pasar por el modelo, así que los registros no reciben bitácora propia.
+ *
  * Deja **una** entrada de bitácora por lote, a nombre de quien aplica, con altas, cambios, filas sin
- * cambios y filas saltadas, y avisa con BatchApplied después del commit. Los registros del catálogo no
- * reciben entrada propia (decisión del 27 de octubre de 2026). No sabe de roles: quién aplica lo decide
- * la página con ImportBatchPolicy.
+ * cambios, filas saltadas y, si se eligió, cuántos desactivó, y avisa con BatchApplied después del
+ * commit. Los registros del catálogo no reciben entrada propia (decisión del 27 de octubre de 2026). No
+ * sabe de roles: quién aplica lo decide la página con ImportBatchPolicy.
  *
  * Si una fila no se puede escribir, su bloque se revierte, el lote queda `failed` con la fila y el
  * motivo, y el error se relanza. Los bloques anteriores se quedan escritos, así que la bitácora del
@@ -51,14 +59,22 @@ final class ApplyImportBatch
 
     /**
      * @param  string|null  $run  la corrida de la cola que aplica (ApplyQueuedBatch), que queda en el lote
+     * @param  bool  $deactivateMissing  si el admin eligió "desactivar faltantes" para este lote
      *
      * @throws BatchNotReady si el lote no está `validated` (otra corrida lo tomó, ya se aplicó o falló)
+     * @throws LogicException si se pide desactivar faltantes con una plantilla que no lo ofrece; el lote
+     *                        sigue validado
      */
-    public function handle(ImportBatch $batch, User $user, ?string $run = null): ImportBatch
+    public function handle(ImportBatch $batch, User $user, ?string $run = null, bool $deactivateMissing = false): ImportBatch
     {
-        $this->start($batch, $run);
-
         $template = $this->templates->get($batch->template);
+
+        if ($deactivateMissing && ! $template->deactivatesMissing()) {
+            throw new LogicException("La plantilla {$template->key()} no desactiva faltantes.");
+        }
+
+        $this->start($batch, $run, $deactivateMissing);
+
         $context = new ImportContext($user, $batch->campus);
         $current = null;
 
@@ -83,6 +99,11 @@ final class ApplyImportBatch
                 }, 'row_number');
 
             $current = null;
+
+            if ($batch->deactivate_missing) {
+                $this->deactivateMissing($batch, $template, $context);
+            }
+
             $template->afterApply($context);
 
             return $this->finish($batch, $user, $template);
@@ -159,12 +180,36 @@ final class ApplyImportBatch
     }
 
     /**
-     * Pasa el lote de `validated` a `applying` con el registro bloqueado: dos clics en "aplicar" no
-     * lo aplican dos veces. El avance vuelve a cero: al validar contó las filas leídas.
+     * Desactiva lo que no vino en el archivo y anota cuáles fueron, en una transacción.
      */
-    private function start(ImportBatch $batch, ?string $run): void
+    private function deactivateMissing(ImportBatch $batch, ImportTemplate $template, ImportContext $context): void
     {
-        DB::transaction(function () use ($batch, $run): void {
+        DB::transaction(function () use ($batch, $template, $context): void {
+            $missing = $template->missing($batch, $context);
+            $model = $missing->getModel();
+            $key = $missing->getQuery()->getGrammar()->wrap($model->getQualifiedKeyName());
+
+            ImportDeactivation::query()->insertUsing(
+                ['batch_id', 'target_type', 'target_id'],
+                $missing->toBase()->selectRaw("?::uuid, ?, {$key}", [$batch->id, $model->getMorphClass()]),
+            );
+
+            $deactivated = $model->newQuery()
+                ->whereIn($model->getQualifiedKeyName(), ImportDeactivation::query()->where('batch_id', $batch->id)->select('target_id'))
+                ->update(['is_active' => false]);
+
+            ImportBatch::query()->whereKey($batch->id)->update(['deactivated_rows' => $deactivated]);
+        });
+    }
+
+    /**
+     * Pasa el lote de `validated` a `applying` con el registro bloqueado: dos clics en "aplicar" no
+     * lo aplican dos veces. El avance vuelve a cero: al validar contó las filas leídas. Queda en el lote
+     * si el admin eligió desactivar faltantes.
+     */
+    private function start(ImportBatch $batch, ?string $run, bool $deactivateMissing): void
+    {
+        DB::transaction(function () use ($batch, $run, $deactivateMissing): void {
             $locked = ImportBatch::query()->lockForUpdate()->findOrFail($batch->id);
 
             if ($locked->status !== BatchStatus::Validated) {
@@ -172,7 +217,13 @@ final class ApplyImportBatch
             }
 
             // El archivo de errores de la validación deja de valer: la cola lo rehace al terminar.
-            $locked->update(['status' => BatchStatus::Applying, 'run_id' => $run, 'processed_rows' => 0, 'errors_exported_at' => null]);
+            $locked->update([
+                'status' => BatchStatus::Applying,
+                'run_id' => $run,
+                'processed_rows' => 0,
+                'errors_exported_at' => null,
+                'deactivate_missing' => $deactivateMissing,
+            ]);
             $batch->setRawAttributes($locked->getAttributes(), sync: true);
         });
     }
@@ -191,12 +242,17 @@ final class ApplyImportBatch
                 'applied_at' => now(),
             ]);
 
+            $summary = "{$counts['created']} altas, {$counts['updated']} cambios, {$counts['unchanged']} sin cambios";
+            $summary .= $batch->deactivate_missing
+                ? ", {$counts['skipped']} filas con error sin aplicar y {$counts['deactivated']} desactivados por no venir en el archivo"
+                : " y {$counts['skipped']} filas con error sin aplicar";
+
             activity()
                 ->performedOn($batch)
                 ->causedBy($user)
                 ->event('applied')
-                ->withProperties(['template' => $batch->template, 'campus_id' => $batch->campus_id, ...$counts])
-                ->log("Aplicó {$batch->original_name} en {$template->label()}: {$counts['created']} altas, {$counts['updated']} cambios, {$counts['unchanged']} sin cambios y {$counts['skipped']} filas con error sin aplicar");
+                ->withProperties(['template' => $batch->template, 'campus_id' => $batch->campus_id, 'deactivate_missing' => $batch->deactivate_missing, ...$counts])
+                ->log("Aplicó {$batch->original_name} en {$template->label()}: {$summary}");
 
             BatchApplied::dispatch($batch, $counts);
 

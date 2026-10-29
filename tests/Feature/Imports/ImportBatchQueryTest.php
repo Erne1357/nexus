@@ -81,12 +81,12 @@ it('lista las filas que se aplican con advertencia, también las ya aplicadas, y
         ->and($this->query->warningRows($batch))->toBe(2);
 });
 
-it('da lo que la aplicación lleva escrito y las filas con error que se saltan', function () {
-    $batch = ImportBatch::factory()->create(['created_rows' => 5, 'updated_rows' => 2, 'unchanged_rows' => 1]);
+it('da lo que la aplicación lleva escrito, lo que desactivó y las filas con error que se saltan', function () {
+    $batch = ImportBatch::factory()->create(['created_rows' => 5, 'updated_rows' => 2, 'unchanged_rows' => 1, 'deactivated_rows' => 4]);
     importRowOf($batch, 2, RowStatus::Error);
     importRowOf($batch, 3, RowStatus::Applied);
 
-    expect($this->query->appliedCounts($batch))->toBe(['created' => 5, 'updated' => 2, 'unchanged' => 1, 'skipped' => 1]);
+    expect($this->query->appliedCounts($batch))->toBe(['created' => 5, 'updated' => 2, 'unchanged' => 1, 'skipped' => 1, 'deactivated' => 4]);
 });
 
 it('recorre las filas con error en el orden del archivo, de a poco, con la fila como vino', function () {

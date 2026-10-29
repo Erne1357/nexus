@@ -67,6 +67,18 @@ it('aplica en la cola el lote validado, a nombre de quien lo aplica, y rehace el
         ->and(Storage::disk('imports')->get($batch->errors_path))->toContain("\n3,C7,");
 });
 
+it('aplica en la cola con «desactivar faltantes» cuando el admin lo eligió', function () {
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $batch = app(ValidateImportBatch::class)->handle(uploadedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n"));
+
+    ApplyQueuedBatch::dispatch($batch, $this->admin, deactivateMissing: true);
+
+    expect($batch->fresh())
+        ->status->toBe(BatchStatus::Applied)
+        ->deactivate_missing->toBeTrue()
+        ->and($c2->fresh()->is_active)->toBeFalse();
+});
+
 it('un job de un lote que otra corrida ya tomó termina sin tocarlo', function (string $job, BatchStatus $status) {
     $batch = ImportBatch::factory()->create(['status' => $status]);
 
@@ -131,7 +143,7 @@ it('si el proceso muere a media aplicación, el lote queda fallido con lo que al
     $job->failed(new TimeoutExceededException('Pasó del tiempo máximo.'));
 
     $entry = Activity::where('event', 'failed')->sole();
-    $counts = ['created' => 500, 'updated' => 3, 'unchanged' => 2, 'skipped' => 1];
+    $counts = ['created' => 500, 'updated' => 3, 'unchanged' => 2, 'skipped' => 1, 'deactivated' => 0];
 
     expect($batch->fresh())
         ->status->toBe(BatchStatus::Failed)
