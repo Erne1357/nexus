@@ -82,6 +82,7 @@ final class ValidateImportBatch
             }
 
             $this->markRepeatedKeys($batch, $template);
+            $this->markInconsistentRows($batch, $template);
 
             return $this->finish($batch, $template);
         } catch (UnreadableFile $exception) {
@@ -206,6 +207,47 @@ final class ValidateImportBatch
             ) AS d
             WHERE r.id = d.id AND d.row_number <> d.first_row
             SQL, [RowStatus::Error->value, $template->naturalKey()[0], $template->naturalKey()[0], $batch->id, RowStatus::Error->value]);
+    }
+
+    /**
+     * Revisa lo que la plantilla pide que coincida entre filas del mismo registro (consistentAcrossRows()):
+     * contra la primera fila sin error de su grupo, una posterior que no coincide en un campo de `errors` pasa a
+     * error; en uno de `warnings`, avisa y toma el valor de la primera, para que aplicarla no lo cambie.
+     */
+    private function markInconsistentRows(ImportBatch $batch, ImportTemplate $template): void
+    {
+        $rule = $template->consistentAcrossRows();
+
+        if ($rule === null) {
+            return;
+        }
+
+        $partition = implode(', ', array_fill(0, count($rule['group']), 'normalized -> ?'));
+
+        foreach (['errors' => true, 'warnings' => false] as $kind => $isError) {
+            foreach ($rule[$kind] as $field) {
+                $set = $isError
+                    ? "status = ?, errors = jsonb_set(r.errors, ARRAY[?], COALESCE(r.errors -> ?, '[]'::jsonb) || to_jsonb(format('No coincide con la fila %s, que trae «%s».', d.first_row, d.first_value ->> 0)))"
+                    : "status = CASE WHEN r.status = ? THEN ? ELSE r.status END, warnings = jsonb_set(r.warnings, ARRAY[?], COALESCE(r.warnings -> ?, '[]'::jsonb) || to_jsonb(format('No coincide con la fila %s: se queda «%s».', d.first_row, d.first_value ->> 0))), normalized = jsonb_set(r.normalized, ARRAY[?], d.first_value)";
+                $setBindings = $isError
+                    ? [RowStatus::Error->value, $field, $field]
+                    : [RowStatus::Valid->value, RowStatus::Warning->value, $field, $field, $field];
+
+                DB::update(<<<SQL
+                    UPDATE import_rows AS r
+                    SET {$set}, updated_at = now()
+                    FROM (
+                        SELECT id, row_number, normalized -> ? AS value,
+                            first_value(row_number) OVER w AS first_row,
+                            first_value(normalized -> ?) OVER w AS first_value
+                        FROM import_rows
+                        WHERE batch_id = ? AND status <> ?
+                        WINDOW w AS (PARTITION BY {$partition} ORDER BY row_number)
+                    ) AS d
+                    WHERE r.id = d.id AND d.row_number <> d.first_row AND d.value IS DISTINCT FROM d.first_value
+                    SQL, [...$setBindings, $field, $field, $batch->id, RowStatus::Error->value, ...$rule['group']]);
+            }
+        }
     }
 
     private function finish(ImportBatch $batch, ImportTemplate $template): ImportBatch
