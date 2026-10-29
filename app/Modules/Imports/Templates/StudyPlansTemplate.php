@@ -10,8 +10,8 @@ use Illuminate\Support\Str;
 /**
  * Planes de estudio del SII (tarea 1.9): clave, carrera, versión y si está vigente. La clave es la natural. La
  * exportación no trae nombre: si el archivo no lo trae, el plan se llama como su clave hasta que se capture.
- * «Vigente» se reconoce sin importar mayúsculas ni acentos (sí, s, vigente; no, n, no vigente), y un plan que no
- * lo está nace inactivo.
+ * «Vigente» se reconoce sin importar mayúsculas ni acentos (sí, s, vigente; no, n, no vigente; 1 y 0, también como
+ * número de Excel), y un plan que no lo está, o de una carrera inactiva, nace inactivo.
  *
  * Como todo lo importado, no desactiva: un plan activo que el SII ya no marca vigente sigue activo, con
  * advertencia. Un plan tampoco cambia de carrera por importación, porque la llave compuesta de `students` haría
@@ -108,6 +108,11 @@ class StudyPlansTemplate extends ImportTemplate
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
         $issues = parent::check($row, $context, $issues);
+
+        if ($issues->hasErrors()) {
+            return $issues;
+        }
+
         $career = $this->career($row['career']);
 
         if ($career === null) {
@@ -139,7 +144,7 @@ class StudyPlansTemplate extends ImportTemplate
             'career_id' => $this->career($row['career'])?->id,
             'name' => $row['name'],
             'version' => $row['version'],
-            'is_active' => $row['current'] ?? true,
+            'is_active' => ($row['current'] ?? true) && (bool) $this->career($row['career'])?->is_active,
         ];
     }
 
@@ -148,11 +153,13 @@ class StudyPlansTemplate extends ImportTemplate
      */
     private function current(mixed $value): mixed
     {
-        if (! is_string($value) && ! is_int($value) && ! is_bool($value)) {
+        $value = is_bool($value) ? (string) (int) $value : self::asText($value);
+
+        if (! is_string($value)) {
             return $value;
         }
 
-        $slug = self::slug((string) (is_bool($value) ? (int) $value : $value));
+        $slug = self::slug($value);
 
         return match (true) {
             in_array($slug, self::CURRENT, true) => true,

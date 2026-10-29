@@ -35,20 +35,31 @@ it('está registrada en Imports con su clave y su nombre', function () {
         ->label()->toBe('Planes de estudio');
 });
 
-it('reconoce si está vigente sin importar mayúsculas ni acentos; un valor que no reconoce es error', function (mixed $value, ?bool $current) {
+it('reconoce si está vigente sin importar mayúsculas ni acentos, también como número de Excel', function (mixed $value, ?bool $current) {
     $row = studyPlanRow(['current' => $value]);
 
-    expect($row['current'])->toBe($current ?? $row['current'])
-        ->and($this->template->validate($row, $this->context)->errors === [])->toBe($current !== null || $value === null);
+    expect($row['current'])->toBe($current)
+        ->and($this->template->validate($row, $this->context)->errors)->toBe([]);
 })->with([
     'Sí' => ['Sí', true],
     'S' => ['s', true],
     'Vigente' => ['VIGENTE', true],
+    'uno' => [1, true],
+    'uno de Excel' => [1.0, true],
+    'verdadero' => [true, true],
     'No' => ['no', false],
     'No vigente' => ['No vigente', false],
+    'cero como texto' => ['0', false],
+    'cero de Excel' => [0.0, false],
     'vacío' => [null, null],
-    'otro' => ['Quizá', null],
 ]);
+
+it('un valor de vigente que no reconoce es error', function () {
+    $row = studyPlanRow(['current' => 'Quizá']);
+
+    expect($row['current'])->toBe('Quizá')
+        ->and($this->template->validate($row, $this->context)->errors)->toHaveKey('current');
+});
 
 it('revisa contra la base la carrera, y avisa si está inactiva', function () {
     Career::factory()->inactive()->create(['code' => 'IIND']);
@@ -91,6 +102,23 @@ it('un plan no cambia de carrera por importación: sus alumnos cambiarían de ca
 
     expect($this->template->validate(studyPlanRow(['career' => 'IIND']), $this->context)->errors)
         ->toBe(['career' => ['El plan ISIC-2010-224 es de la carrera ISIC; cambiarlo de carrera es una edición a mano.']]);
+});
+
+it('el plan de una carrera inactiva nace inactivo', function () {
+    Career::factory()->inactive()->create(['code' => 'IIND']);
+
+    expect($this->template->apply(studyPlanRow(['code' => 'IIND-2010-227', 'career' => 'IIND']), $this->context)->fresh()->is_active)->toBeFalse();
+});
+
+it('un plan inactivo se actualiza y sigue inactivo, y uno borrado es solo error de borrado, sin más avisos', function () {
+    StudyPlan::factory()->for($this->career)->inactive()->create(['code' => 'ISIC-2010-224']);
+    StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2004-296'])->delete();
+    Career::factory()->create(['code' => 'IIND']);
+
+    expect($this->template->validate(studyPlanRow(), $this->context)->warnings)
+        ->toBe(['code' => ['El registro está inactivo: se actualizan sus datos, pero sigue inactivo.']])
+        ->and($this->template->validate(studyPlanRow(['code' => 'ISIC-2004-296', 'career' => 'IIND']), $this->context)->errors)
+        ->toBe(['code' => ['Hay un registro borrado con esta clave; una importación no lo restaura.']]);
 });
 
 it('no ofrece desactivar faltantes: los planes son globales y la exportación puede ser de un campus', function () {
