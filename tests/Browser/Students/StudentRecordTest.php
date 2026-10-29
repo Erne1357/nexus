@@ -45,3 +45,30 @@ it('el coordinador abre la ficha de un alumno desde el listado y pasa al kárdex
         ->assertSee('1 · ordinaria')
         ->assertNoJavaScriptErrors();
 });
+
+it('al tocar una materia resalta su cadena y dice qué pide y qué abre; Esc la quita y la leyenda resalta la cadena completa', function () {
+    $student = Student::where('control_number', '24111234')->sole();
+    $focused = "document.querySelector('[data-testid=student-grid]').hasAttribute('data-focus')";
+    $onChain = fn (string $code): string => "document.querySelector('[data-subject=\"{$code}\"]').hasAttribute('data-on-chain')";
+
+    $page = visit('/login')
+        ->fill('username', '19110002')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/students/'.$student->id)
+        ->click('[data-subject="ACF-0902"]')
+        ->assertSee('ACF-0902 Cálculo Integral: pide ACF-0901 Cálculo Diferencial · no abre ninguna')
+        ->assertScript($focused, true)
+        ->assertScript($onChain('ACF-0901'), true);
+
+    $page->script("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
+
+    $page->assertScript($focused, false)
+        ->assertSee('Toca una materia o una cadena para resaltarla; Esc la quita.')
+        ->click('[data-chain-chip][data-chain="0"]')
+        ->assertSee('Cadena de Cálculo Diferencial: 2 materias.')
+        ->assertScript($onChain('ACF-0901'), true)
+        ->assertScript($onChain('ACF-0902'), true)
+        ->assertNoJavaScriptErrors();
+});

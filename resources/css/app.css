@@ -31,8 +31,8 @@
 }
 
 /*
-| Colores propios de Nexus que no son de daisyUI (banda, texto sobre la banda y texto secundario sobre
-| gris polvo). Cada tema los define abajo; aquí se exponen como utilidades: bg-band, text-band-content,
+| Colores propios de Nexus que no son de daisyUI (banda, texto sobre la banda, texto secundario sobre
+| gris polvo y las cadenas de seriación). Cada tema los define abajo; aquí se exponen como utilidades: bg-band, text-band-content,
 | text-band-muted, text-secondary-muted.
 */
 @theme inline {
@@ -40,6 +40,20 @@
     --color-band-content: var(--nexus-band-content);
     --color-band-muted: var(--nexus-band-muted);
     --color-secondary-muted: var(--nexus-secondary-muted);
+
+    /* Cadenas de seriación de la retícula del alumno (DESIGN.md, "Retícula del alumno"): chain-1 a chain-12. */
+    --color-chain-1: var(--nexus-chain-1);
+    --color-chain-2: var(--nexus-chain-2);
+    --color-chain-3: var(--nexus-chain-3);
+    --color-chain-4: var(--nexus-chain-4);
+    --color-chain-5: var(--nexus-chain-5);
+    --color-chain-6: var(--nexus-chain-6);
+    --color-chain-7: var(--nexus-chain-7);
+    --color-chain-8: var(--nexus-chain-8);
+    --color-chain-9: var(--nexus-chain-9);
+    --color-chain-10: var(--nexus-chain-10);
+    --color-chain-11: var(--nexus-chain-11);
+    --color-chain-12: var(--nexus-chain-12);
 }
 
 /*
@@ -89,6 +103,19 @@
     --nexus-band-content: #ffffff;
     --nexus-band-muted: #b4c3d1;
     --nexus-secondary-muted: #59585a;
+
+    --nexus-chain-1: #6d4fc2;
+    --nexus-chain-2: #0f7c8c;
+    --nexus-chain-3: #b0457f;
+    --nexus-chain-4: #c2661a;
+    --nexus-chain-5: #3b56b8;
+    --nexus-chain-6: #6b7a1f;
+    --nexus-chain-7: #1f86c7;
+    --nexus-chain-8: #8a5a3c;
+    --nexus-chain-9: #4d6b7a;
+    --nexus-chain-10: #9c4fd1;
+    --nexus-chain-11: #2f8f5b;
+    --nexus-chain-12: #c24f9b;
 }
 
 @plugin 'daisyui/theme' {
@@ -131,6 +158,19 @@
     --nexus-band-content: #ffffff;
     --nexus-band-muted: #9fb2c4;
     --nexus-secondary-muted: #9aa6b2;
+
+    --nexus-chain-1: #b19cf0;
+    --nexus-chain-2: #5cc8d6;
+    --nexus-chain-3: #e88cc0;
+    --nexus-chain-4: #f0a565;
+    --nexus-chain-5: #8ea6f5;
+    --nexus-chain-6: #bfd06a;
+    --nexus-chain-7: #6cc0f2;
+    --nexus-chain-8: #d4a585;
+    --nexus-chain-9: #a3b9c6;
+    --nexus-chain-10: #d29cf5;
+    --nexus-chain-11: #7fd6a4;
+    --nexus-chain-12: #f29ad0;
 }
 
 /*

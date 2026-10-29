@@ -385,3 +385,105 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 });
+
+/*
+| studentGrid: las cadenas de seriación de la retícula del alumno (DESIGN.md, "Retícula del alumno"). Al
+| tocar una materia se resalta su cadena (lo que pide y lo que abre, hasta el final) y se atenúa lo demás;
+| al tocar una cadena de la leyenda, todas sus materias. Tocar lo mismo otra vez o Esc lo quita. Solo con
+| clic, no al pasar el cursor (decidido por el usuario el 29 de octubre de 2026). La seriación viene en
+| data-prereqs de cada materia; el resaltado se pinta con data-focus en la retícula y data-me / data-on-chain
+| en las materias, que leen las utilidades de Tailwind.
+*/
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('studentGrid', () => ({
+        /** { code } de una materia, { chain } de una cadena, o null. */
+        selected: null,
+        hint: '',
+
+        init() {
+            this.hint = this.$refs.info.textContent.trim();
+        },
+
+        tiles() {
+            return [...this.$root.querySelectorAll('[data-subject]')];
+        },
+
+        toggleSubject(tile) {
+            const code = tile.dataset.subject;
+            this.select(this.selected?.code === code ? null : { code });
+        },
+
+        toggleChain(chain) {
+            this.select(this.selected?.chain === chain ? null : { chain });
+        },
+
+        clear() {
+            if (this.selected !== null) {
+                this.select(null);
+            }
+        },
+
+        select(selection) {
+            this.selected = selection;
+            const tiles = this.tiles();
+            const byCode = Object.fromEntries(tiles.map((tile) => [tile.dataset.subject, tile]));
+            const pre = {};
+            const post = {};
+
+            for (const tile of tiles) {
+                for (const prerequisite of (tile.dataset.prereqs ?? '').split(' ').filter((code) => byCode[code])) {
+                    (pre[tile.dataset.subject] ??= []).push(prerequisite);
+                    (post[prerequisite] ??= []).push(tile.dataset.subject);
+                }
+            }
+
+            const walk = (graph, start) => {
+                const seen = new Set();
+                const pending = [start];
+
+                while (pending.length) {
+                    for (const next of graph[pending.pop()] ?? []) {
+                        if (!seen.has(next)) {
+                            seen.add(next);
+                            pending.push(next);
+                        }
+                    }
+                }
+
+                return seen;
+            };
+
+            let chain = new Set();
+            let text = this.hint;
+
+            if (selection?.code) {
+                const name = (code) => `${code} ${byCode[code].dataset.name}`;
+                const requires = pre[selection.code] ?? [];
+                const opens = post[selection.code] ?? [];
+                chain = new Set([selection.code, ...walk(pre, selection.code), ...walk(post, selection.code)]);
+                text = `${name(selection.code)}: `
+                    + (requires.length ? `pide ${requires.map(name).join(', ')}` : 'no pide seriación')
+                    + ' · '
+                    + (opens.length ? `abre ${opens.map(name).join(', ')}` : 'no abre ninguna');
+            } else if (selection?.chain !== undefined) {
+                const members = tiles.filter((tile) => tile.dataset.chain === selection.chain);
+                chain = new Set(members.map((tile) => tile.dataset.subject));
+                text = `Cadena de ${members[0]?.dataset.name ?? ''}: ${members.length} materias.`;
+            }
+
+            this.$refs.grid.toggleAttribute('data-focus', selection !== null);
+
+            for (const tile of tiles) {
+                tile.toggleAttribute('data-on-chain', chain.has(tile.dataset.subject));
+                tile.toggleAttribute('data-me', selection?.code === tile.dataset.subject);
+                tile.setAttribute('aria-pressed', selection?.code === tile.dataset.subject ? 'true' : 'false');
+            }
+
+            for (const chip of this.$root.querySelectorAll('[data-chain-chip]')) {
+                chip.setAttribute('aria-pressed', selection?.chain === chip.dataset.chain ? 'true' : 'false');
+            }
+
+            this.$refs.info.textContent = text;
+        },
+    }));
+});
