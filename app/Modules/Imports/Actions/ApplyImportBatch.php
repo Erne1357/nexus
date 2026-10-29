@@ -32,8 +32,10 @@ use Throwable;
  * Si el admin eligió "desactivar faltantes" para el lote (tarea 1.3), después del último bloque, y solo
  * si todos se escribieron, desactiva en su propia transacción los registros que no vienen en el archivo
  * (ImportTemplate::missing()), guarda cuáles fueron en `import_deactivations` y suma `deactivated_rows`.
- * Es como un último bloque: si después algo falla, lo desactivado se queda y el fallo lo cuenta. Solo
- * cambia `is_active`, sin pasar por el modelo, así que los registros no reciben bitácora propia.
+ * Nunca desactiva más de los que el admin confirmó: si el catálogo cambió y ahora son más, no desactiva
+ * ninguno y el lote falla con MissingRecordsChanged. Es como un último bloque: si después algo falla, lo
+ * desactivado se queda y el fallo lo cuenta. Cambia `is_active` y `updated_at` con una sola consulta,
+ * no registro por registro, así que los registros no reciben bitácora propia.
  *
  * Deja **una** entrada de bitácora por lote, a nombre de quien aplica, con altas, cambios, filas sin
  * cambios, filas saltadas y, si se eligió, cuántos desactivó, y avisa con BatchApplied después del
@@ -59,21 +61,19 @@ final class ApplyImportBatch
 
     /**
      * @param  string|null  $run  la corrida de la cola que aplica (ApplyQueuedBatch), que queda en el lote
-     * @param  bool  $deactivateMissing  si el admin eligió "desactivar faltantes" para este lote
+     * @param  int|null  $confirmedMissing  con "desactivar faltantes", cuántos registros confirmó desactivar
+     *                                      el admin; null si no lo eligió
      *
      * @throws BatchNotReady si el lote no está `validated` (otra corrida lo tomó, ya se aplicó o falló)
      * @throws LogicException si se pide desactivar faltantes con una plantilla que no lo ofrece; el lote
      *                        sigue validado
+     * @throws MissingRecordsChanged si al desactivar hay más faltantes de los confirmados; el lote falla
      */
-    public function handle(ImportBatch $batch, User $user, ?string $run = null, bool $deactivateMissing = false): ImportBatch
+    public function handle(ImportBatch $batch, User $user, ?string $run = null, ?int $confirmedMissing = null): ImportBatch
     {
         $template = $this->templates->get($batch->template);
 
-        if ($deactivateMissing && ! $template->deactivatesMissing()) {
-            throw new LogicException("La plantilla {$template->key()} no desactiva faltantes.");
-        }
-
-        $this->start($batch, $run, $deactivateMissing);
+        $this->start($batch, $run, $template, $confirmedMissing !== null);
 
         $context = new ImportContext($user, $batch->campus);
         $current = null;
@@ -100,8 +100,8 @@ final class ApplyImportBatch
 
             $current = null;
 
-            if ($batch->deactivate_missing) {
-                $this->deactivateMissing($batch, $template, $context);
+            if ($confirmedMissing !== null) {
+                $this->deactivateMissing($batch, $template, $context, $confirmedMissing);
             }
 
             $template->afterApply($context);
@@ -180,19 +180,27 @@ final class ApplyImportBatch
     }
 
     /**
-     * Desactiva lo que no vino en el archivo y anota cuáles fueron, en una transacción.
+     * Desactiva lo que no vino en el archivo y anota cuáles fueron, en una transacción. Si son más de los
+     * confirmados, la revierte.
+     *
+     * @throws MissingRecordsChanged
      */
-    private function deactivateMissing(ImportBatch $batch, ImportTemplate $template, ImportContext $context): void
+    private function deactivateMissing(ImportBatch $batch, ImportTemplate $template, ImportContext $context, int $confirmed): void
     {
-        DB::transaction(function () use ($batch, $template, $context): void {
+        DB::transaction(function () use ($batch, $template, $context, $confirmed): void {
             $missing = $template->missing($batch, $context);
             $model = $missing->getModel();
             $key = $missing->getQuery()->getGrammar()->wrap($model->getQualifiedKeyName());
 
-            ImportDeactivation::query()->insertUsing(
+            // select([]) quita las columnas que el modelo o sus scopes ya agregaron (como $withCount).
+            $found = ImportDeactivation::query()->insertUsing(
                 ['batch_id', 'target_type', 'target_id'],
-                $missing->toBase()->selectRaw("?::uuid, ?, {$key}", [$batch->id, $model->getMorphClass()]),
+                $missing->toBase()->select([])->selectRaw("?::uuid, ?, {$key}", [$batch->id, $model->getMorphClass()]),
             );
+
+            if ($found > $confirmed) {
+                throw MissingRecordsChanged::between($confirmed, $found);
+            }
 
             $deactivated = $model->newQuery()
                 ->whereIn($model->getQualifiedKeyName(), ImportDeactivation::query()->where('batch_id', $batch->id)->select('target_id'))
@@ -205,15 +213,19 @@ final class ApplyImportBatch
     /**
      * Pasa el lote de `validated` a `applying` con el registro bloqueado: dos clics en "aplicar" no
      * lo aplican dos veces. El avance vuelve a cero: al validar contó las filas leídas. Queda en el lote
-     * si el admin eligió desactivar faltantes.
+     * si el admin eligió desactivar faltantes, que la plantilla tiene que ofrecer.
      */
-    private function start(ImportBatch $batch, ?string $run, bool $deactivateMissing): void
+    private function start(ImportBatch $batch, ?string $run, ImportTemplate $template, bool $deactivateMissing): void
     {
-        DB::transaction(function () use ($batch, $run, $deactivateMissing): void {
+        DB::transaction(function () use ($batch, $run, $template, $deactivateMissing): void {
             $locked = ImportBatch::query()->lockForUpdate()->findOrFail($batch->id);
 
             if ($locked->status !== BatchStatus::Validated) {
                 throw new BatchNotReady("El lote {$batch->id} no está validado: está {$locked->status->label()}.");
+            }
+
+            if ($deactivateMissing) {
+                $template->ensureDeactivatesMissing();
             }
 
             // El archivo de errores de la validación deja de valer: la cola lo rehace al terminar.

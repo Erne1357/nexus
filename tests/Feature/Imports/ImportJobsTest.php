@@ -71,7 +71,7 @@ it('aplica en la cola con «desactivar faltantes» cuando el admin lo eligió', 
     $c2 = Campus::factory()->create(['code' => 'C2']);
     $batch = app(ValidateImportBatch::class)->handle(uploadedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\n"));
 
-    ApplyQueuedBatch::dispatch($batch, $this->admin, deactivateMissing: true);
+    ApplyQueuedBatch::dispatch($batch, $this->admin, confirmedMissing: 1);
 
     expect($batch->fresh())
         ->status->toBe(BatchStatus::Applied)

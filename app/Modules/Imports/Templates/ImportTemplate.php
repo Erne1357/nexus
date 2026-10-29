@@ -179,11 +179,7 @@ abstract class ImportTemplate
             return $key;
         }
 
-        if ($context->campus === null) {
-            throw new LogicException("La plantilla {$this->key()} necesita un campus en el contexto del lote.");
-        }
-
-        return [...$key, 'campus_id' => $context->campus->getKey()];
+        return [...$key, 'campus_id' => $this->campusKey($context)];
     }
 
     /**
@@ -222,8 +218,9 @@ abstract class ImportTemplate
 
     /**
      * Si el catálogo ofrece "desactivar faltantes" al aplicar un lote (tarea 1.3). Por omisión, si su
-     * modelo tiene `is_active`, como todo catálogo; el kardex, el historial docente y las evaluaciones
-     * no lo tienen y no lo ofrecen. Una plantilla cuyo archivo no trae el catálogo completo lo apaga.
+     * modelo convierte `is_active` en casts(), como todo catálogo; el kardex, el historial docente y las
+     * evaluaciones no lo tienen y no lo ofrecen. Una plantilla cuyo archivo no trae el catálogo completo
+     * lo apaga.
      */
     public function deactivatesMissing(): bool
     {
@@ -231,31 +228,70 @@ abstract class ImportTemplate
     }
 
     /**
-     * Los registros que "desactivar faltantes" desactivaría con este lote: activos, sin borrar, del
-     * campus del lote si la plantilla es de un campus, y cuya clave natural no viene en ninguna fila del
-     * archivo. Cuenta también la fila con error, porque igual dice que el registro sigue en el SII; una
-     * fila sin clave no protege a ninguno (reglas-de-negocio.md, "Reglas de datos", confirmado el 29 de
-     * octubre de 2026). La clave se compara como texto, como `key_hash`, y la fila normalizada guarda
-     * los campos con el nombre de la columna que escribe apply().
-     *
-     * La pantalla la usa para mostrar cuáles serían y ApplyImportBatch para desactivarlos.
+     * @throws LogicException si la plantilla no desactiva faltantes
+     */
+    final public function ensureDeactivatesMissing(): void
+    {
+        if (! $this->deactivatesMissing()) {
+            throw new LogicException("La plantilla {$this->key()} no desactiva faltantes.");
+        }
+    }
+
+    /**
+     * Los registros que "desactivar faltantes" podría tocar: los activos y sin borrar del catálogo, y
+     * solo los del campus del lote si la plantilla es de un campus. Contra ellos se cuentan los que no
+     * vienen en el archivo (missing()).
      *
      * @return Builder<Model>
      *
      * @throws LogicException si la plantilla no desactiva faltantes, o si requiere campus y el contexto
      *                        no lo trae
      */
-    final public function missing(ImportBatch $batch, ImportContext $context): Builder
+    final public function deactivationScope(ImportContext $context): Builder
     {
-        if (! $this->deactivatesMissing()) {
-            throw new LogicException("La plantilla {$this->key()} no desactiva faltantes.");
-        }
+        $this->ensureDeactivatesMissing();
 
         $query = $this->model()::query();
         $model = $query->getModel();
+        $query->where($model->qualifyColumn('is_active'), true);
+
+        if ($this->requiresCampus()) {
+            $query->where($model->qualifyColumn('campus_id'), $this->campusKey($context));
+        }
+
+        return $query;
+    }
+
+    /**
+     * Los registros que "desactivar faltantes" desactivaría con este lote: los de deactivationScope()
+     * que ninguna fila del archivo menciona (reglas-de-negocio.md, "Reglas de datos", confirmado el 29
+     * de octubre de 2026). Una fila ya aplicada protege el registro que escribió (`target`). Cualquier
+     * otra, también la que trae error, protege el registro con su clave natural, porque igual dice que
+     * sigue en el SII; una fila sin clave no protege a ninguno.
+     *
+     * La clave se compara como texto: la columna, tal como la guarda la base, contra el valor de la fila
+     * normalizada, que guarda los campos con el nombre de la columna que escribe apply(). Las claves
+     * naturales de Nexus son texto; una columna que convierte la clave (un número) solo queda protegida
+     * por su fila aplicada.
+     *
+     * ImportBatchQuery la usa para mostrar cuáles serían y ApplyImportBatch para desactivarlos.
+     *
+     * @return Builder<Model>
+     *
+     * @throws LogicException como deactivationScope()
+     */
+    final public function missing(ImportBatch $batch, ImportContext $context): Builder
+    {
+        $query = $this->deactivationScope($context);
+        $model = $query->getModel();
         $grammar = $query->getQuery()->getGrammar();
 
-        $query->where($model->qualifyColumn('is_active'), true)
+        return $query
+            ->whereNotExists(fn (QueryBuilder $rows) => $rows->selectRaw('1')
+                ->from('import_rows')
+                ->where('import_rows.batch_id', $batch->id)
+                ->where('import_rows.target_type', $model->getMorphClass())
+                ->whereColumn('import_rows.target_id', $model->getQualifiedKeyName()))
             ->whereNotExists(function (QueryBuilder $rows) use ($batch, $model, $grammar): void {
                 $rows->selectRaw('1')->from('import_rows')->where('import_rows.batch_id', $batch->id);
 
@@ -263,13 +299,6 @@ abstract class ImportTemplate
                     $rows->whereRaw("import_rows.normalized ->> ?::text = {$grammar->wrap($model->qualifyColumn($field))}::text", [$field]);
                 }
             });
-
-        if ($this->requiresCampus()) {
-            $key = $this->keyFor([], $context);
-            $query->where($model->qualifyColumn('campus_id'), $key['campus_id']);
-        }
-
-        return $query;
     }
 
     /**
@@ -337,6 +366,20 @@ abstract class ImportTemplate
     protected function defaults(ImportContext $context): array
     {
         return [];
+    }
+
+    /**
+     * El campus del lote, para una plantilla de un campus.
+     *
+     * @throws LogicException si el contexto no lo trae
+     */
+    private function campusKey(ImportContext $context): mixed
+    {
+        if ($context->campus === null) {
+            throw new LogicException("La plantilla {$this->key()} necesita un campus en el contexto del lote.");
+        }
+
+        return $context->campus->getKey();
     }
 
     /**
