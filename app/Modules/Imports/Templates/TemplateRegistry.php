@@ -4,6 +4,7 @@ namespace App\Modules\Imports\Templates;
 
 use Illuminate\Container\Container;
 use InvalidArgumentException;
+use ReflectionMethod;
 
 /**
  * Plantillas de importación por clave. Se arma una vez con la lista de ImportsServiceProvider y
@@ -55,6 +56,10 @@ final class TemplateRegistry
 
             if ($reserved = array_intersect($fields, self::RESERVED_FIELDS)) {
                 throw new InvalidArgumentException("{$class} no puede importar ".implode(', ', $reserved).': las pone el sistema.');
+            }
+
+            if ($template->deactivatesMissing() && (new ReflectionMethod($template, 'recordKey'))->getDeclaringClass()->getName() !== ImportTemplate::class) {
+                throw new InvalidArgumentException("{$class} traduce su clave con recordKey() y no puede ofrecer desactivar faltantes: missing() compara la clave natural como columnas. Apaga deactivatesMissing().");
             }
 
             $byKey[$key] = $class;

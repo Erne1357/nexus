@@ -32,6 +32,13 @@ describe('students', function () {
         ]);
     });
 
+    it('pasa a texto las claves que un Excel lee como número', function () {
+        $row = (new StudentsTemplate)->normalize(['control_number' => 20111234.0, 'career' => 123, 'study_plan' => 456, 'campus' => 2]);
+
+        expect(array_intersect_key($row, array_flip(['control_number', 'career', 'study_plan', 'campus'])))
+            ->toBe(['control_number' => '20111234', 'career' => '123', 'study_plan' => '456', 'campus' => '2']);
+    });
+
     it('reconoce el estatus sin importar mayúsculas, acentos ni espacios, y deja tal cual el que no conoce', function (string $raw, string $status) {
         expect((new StudentsTemplate)->normalize(['status' => $raw])['status'])->toBe($status);
     })->with([
@@ -61,6 +68,11 @@ describe('kardex', function () {
             'result' => 'aprobada',
             'attempt' => 2,
         ]);
+    });
+
+    it('pasa a texto la clave de materia y el número de control que un Excel lee como número', function () {
+        expect(array_intersect_key((new KardexTemplate)->normalize(['control_number' => 20111234.0, 'subject_code' => 901]), array_flip(['control_number', 'subject_code'])))
+            ->toBe(['control_number' => '20111234', 'subject_code' => '901']);
     });
 
     it('lleva el periodo al código del SII: año y 1, 2 o 3, sin guión', function (string|int $raw, string $term) {

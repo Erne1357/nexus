@@ -19,10 +19,18 @@ use Illuminate\Validation\Rule;
  * El periodo se guarda con el código del SII (`20251` Ene-Jun, `20252` verano, `20253` Ago-Dic); se aceptan
  * también `2025-1` y `2025/1`. Todavía no hay una exportación real: el resultado se reconoce con sus variantes
  * comunes (aprobado, AC, acreditada, NA, no acreditada, en curso) y se ajusta en la integración 1.16
- * (confirmado el 29 de octubre de 2026). Al terminar el lote despacha el recálculo del progreso.
+ * (confirmado el 29 de octubre de 2026). Busca cada alumno y cada materia una vez por corrida: un kardex trae
+ * cientos de miles de filas con los mismos alumnos y materias. Al terminar el lote despacha el recálculo del
+ * progreso.
  */
 class KardexTemplate extends ImportTemplate
 {
+    /** @var array<string, string|null> id de alumno por número de control, en esta corrida */
+    private array $students = [];
+
+    /** @var array<string, string|null> id de materia por clave, en esta corrida */
+    private array $subjects = [];
+
     /**
      * Variantes del resultado, ya sin acentos, en minúsculas y con guiones bajos.
      */
@@ -86,8 +94,8 @@ class KardexTemplate extends ImportTemplate
     {
         $row = parent::normalize($row);
 
-        foreach (['control_number', 'term_code'] as $field) {
-            $row[$field] = is_int($row[$field]) ? (string) $row[$field] : $row[$field];
+        foreach (['control_number', 'subject_code', 'term_code'] as $field) {
+            $row[$field] = self::asText($row[$field]);
         }
 
         $row['subject_code'] = is_string($row['subject_code']) ? Str::upper($row['subject_code']) : $row['subject_code'];
@@ -119,11 +127,11 @@ class KardexTemplate extends ImportTemplate
 
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
-        if (! Student::query()->where('control_number', $row['control_number'])->exists()) {
+        if ($this->studentId($row['control_number']) === null) {
             $issues = $issues->withError('control_number', "No hay un alumno con el número de control {$row['control_number']}.");
         }
 
-        if (! Subject::query()->where('code', $row['subject_code'])->exists()) {
+        if ($this->subjectId($row['subject_code']) === null) {
             $issues = $issues->withError('subject_code', "No hay una materia con la clave {$row['subject_code']}.");
         }
 
@@ -132,8 +140,8 @@ class KardexTemplate extends ImportTemplate
 
     protected function recordKey(array $row, ImportContext $context): ?array
     {
-        $student = Student::query()->where('control_number', $row['control_number'])->value('id');
-        $subject = Subject::query()->where('code', $row['subject_code'])->value('id');
+        $student = $this->studentId($row['control_number']);
+        $subject = $this->subjectId($row['subject_code']);
 
         return $student === null || $subject === null
             ? null
@@ -154,8 +162,22 @@ class KardexTemplate extends ImportTemplate
      */
     private function result(string $value): string
     {
-        $slug = Str::of($value)->ascii()->lower()->replaceMatches('/[^a-z]+/', '_')->trim('_')->value();
+        $slug = self::slug($value);
 
         return KardexResult::tryFrom($slug)?->value ?? self::RESULT_ALIASES[$slug] ?? $value;
+    }
+
+    private function studentId(string $controlNumber): ?string
+    {
+        return array_key_exists($controlNumber, $this->students)
+            ? $this->students[$controlNumber]
+            : $this->students[$controlNumber] = Student::query()->where('control_number', $controlNumber)->value('id');
+    }
+
+    private function subjectId(string $code): ?string
+    {
+        return array_key_exists($code, $this->subjects)
+            ? $this->subjects[$code]
+            : $this->subjects[$code] = Subject::query()->where('code', $code)->value('id');
     }
 }

@@ -10,6 +10,7 @@ use App\Modules\Imports\Templates\TemplateRegistry;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\Student;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 
 /*
@@ -70,15 +71,37 @@ it('revisa contra la base la carrera, el plan y el campus', function (array $cha
     'campus que no existe' => [['campus' => 'C9'], 'campus', 'No hay un campus con la clave C9.'],
 ]);
 
-it('un estatus que Nexus no conoce es advertencia: el alumno entra sin estatus', function () {
+it('un estatus que Nexus no conoce es advertencia: el alumno queda sin estatus, también si ya tenía uno', function (bool $existing) {
+    if ($existing) {
+        $this->template->apply(studentRow(), $this->context);
+    }
     $row = studentRow(['status' => 'SUSPENDIDO']);
 
     $issues = $this->template->validate($row, $this->context);
     $student = $this->template->apply($row, $this->context);
 
     expect($issues->errors)->toBe([])
-        ->and($issues->warnings)->toBe(['status' => ['El estatus «SUSPENDIDO» no está en Nexus: el alumno se importa sin estatus.']])
-        ->and($student->fresh()->status)->toBeNull();
+        ->and($issues->warnings)->toBe(['status' => ['El estatus «SUSPENDIDO» no está en Nexus: el alumno queda sin estatus.']])
+        ->and($student->fresh()->status)->toBeNull()
+        ->and(Student::count())->toBe(1);
+})->with(['alta' => false, 'cambio' => true]);
+
+it('no ofrece desactivar faltantes: un archivo suele ser de un campus y el número de control es de todo el Tec', function () {
+    expect($this->template->deactivatesMissing())->toBeFalse();
+});
+
+it('busca cada carrera, plan y campus una sola vez por corrida', function () {
+    DB::enableQueryLog();
+
+    foreach (['19111234', '19111235', '19111236'] as $number) {
+        $row = studentRow(['control_number' => $number]);
+        $this->template->validate($row, $this->context);
+        $this->template->apply($row, $this->context);
+    }
+
+    $lookups = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => preg_match('/from "(careers|study_plans|campuses)"/', $sql) === 1);
+
+    expect($lookups)->toHaveCount(3);
 });
 
 it('da de alta y actualiza por número de control, con la carrera, el plan y el campus de la base', function () {

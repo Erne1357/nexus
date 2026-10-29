@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use LogicException;
 
 /**
@@ -303,10 +304,34 @@ abstract class ImportTemplate
     }
 
     /**
-     * Corre una vez después de aplicar el lote completo, por ejemplo para despachar un job de
-     * recálculo (tarea 1.4: `RecomputeStudentProgress`).
+     * Corre una vez al terminar de aplicar el lote, por ejemplo para despachar un job de recálculo (tarea
+     * 1.4: `RecomputeStudentProgress`). También corre si la aplicación falló después de escribir algo,
+     * porque lo escrito se queda; no corre si no se escribió nada.
      */
     public function afterApply(ImportContext $context): void {}
+
+    /**
+     * Un texto sin acentos, en minúsculas y con guiones bajos en lugar de espacios y signos: con él se
+     * comparan los encabezados del archivo (ColumnMatcher) y los valores que una plantilla reconoce, como el
+     * estatus del alumno o el resultado del kardex.
+     */
+    final public static function slug(string $text): string
+    {
+        return trim((string) preg_replace('/[^a-z0-9]+/', '_', Str::lower(Str::ascii($text))), '_');
+    }
+
+    /**
+     * Una clave que un Excel leyó como número (el número de control, la clave de una carrera) como texto; lo
+     * demás pasa igual, y `rules()` lo revisa.
+     */
+    protected static function asText(mixed $value): mixed
+    {
+        return match (true) {
+            is_int($value) => (string) $value,
+            is_float($value) && floor($value) === $value => (string) (int) $value,
+            default => $value,
+        };
+    }
 
     /**
      * Mensajes propios de rules(); los demás salen de lang/es/validation.php.

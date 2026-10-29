@@ -16,6 +16,7 @@ use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentProgress;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
@@ -84,6 +85,21 @@ it('escribe la fila con el alumno y la materia de la base, y al reaplicarla la a
         ->grade->toBe('90.00')
         ->result->toBe(KardexResult::Aprobada)
         ->attempt->toBe(1);
+});
+
+it('busca al alumno y la materia una sola vez por corrida, aunque se repitan en muchas filas', function () {
+    DB::enableQueryLog();
+
+    foreach (['20251', '20252', '20253'] as $term) {
+        $row = kardexRow(['term_code' => $term]);
+        $this->template->validate($row, $this->context);
+        $this->template->apply($row, $this->context);
+    }
+
+    $lookups = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => preg_match('/from "(students|subjects)"/', $sql) === 1);
+
+    expect($lookups)->toHaveCount(2)
+        ->and(KardexRecord::count())->toBe(3);
 });
 
 /**

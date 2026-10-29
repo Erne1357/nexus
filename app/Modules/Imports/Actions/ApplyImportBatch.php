@@ -27,7 +27,8 @@ use Throwable;
  * clave cruzada que ya no existe): la que ya no pasa queda como error y se salta. Cada fila escrita
  * pasa a `applied` con el registro que escribió. Cada bloque suma al lote, en su misma transacción, las
  * filas revisadas (`processed_rows`, el avance que muestra la pantalla) y las altas, cambios y filas sin
- * cambios ya escritas. Al terminar corre afterApply() de la plantilla y el lote queda `applied`.
+ * cambios ya escritas. Al terminar corre afterApply() de la plantilla y el lote queda `applied`; si falla
+ * después de escribir algo, afterApply() corre igual, porque lo escrito se queda.
  *
  * Si el admin eligió "desactivar faltantes" para el lote (tarea 1.3), después del último bloque, y solo
  * si todos se escribieron, desactiva en su propia transacción los registros que no vienen en el archivo
@@ -77,6 +78,7 @@ final class ApplyImportBatch
 
         $context = new ImportContext($user, $batch->campus);
         $current = null;
+        $afterApplying = false;
 
         try {
             ImportRow::query()
@@ -104,7 +106,9 @@ final class ApplyImportBatch
                 $this->deactivateMissing($batch, $template, $context, $confirmedMissing);
             }
 
+            $afterApplying = true;
             $template->afterApply($context);
+            $afterApplying = false;
 
             return $this->finish($batch, $user, $template);
         } catch (Throwable $exception) {
@@ -117,8 +121,27 @@ final class ApplyImportBatch
                 report($failure);
             }
 
+            // Lo que alcanzó a escribirse se queda: lo que corre al terminar (un recálculo) también corre.
+            if (! $afterApplying && $this->wroteSomething($batch)) {
+                try {
+                    $template->afterApply($context);
+                } catch (Throwable $afterApply) {
+                    report($afterApply);
+                }
+            }
+
             throw $exception;
         }
+    }
+
+    /**
+     * Si la aplicación ya dejó algo en el catálogo: altas, cambios o desactivados, leídos de la base.
+     */
+    private function wroteSomething(ImportBatch $batch): bool
+    {
+        $counts = ImportBatch::query()->whereKey($batch->id)->first(['created_rows', 'updated_rows', 'deactivated_rows']);
+
+        return $counts !== null && $counts->created_rows + $counts->updated_rows + $counts->deactivated_rows > 0;
     }
 
     /**

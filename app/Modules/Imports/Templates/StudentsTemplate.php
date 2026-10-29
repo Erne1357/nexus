@@ -8,6 +8,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\Student;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
@@ -16,13 +17,25 @@ use Illuminate\Support\Str;
  * barra superior. La carrera, el plan (de esa carrera) y el campus se buscan por su clave.
  *
  * Todavía no hay una exportación real: el estatus se reconoce sin importar mayúsculas, acentos ni espacios, y
- * uno que Nexus no conoce no detiene la importación. El alumno entra sin estatus (o conserva el que tenía) y
- * con advertencia, y lo que vino queda en `import_rows` para agregar al enum los que se repitan (confirmado el
- * 29 de octubre de 2026).
- * Al terminar el lote despacha el recálculo del progreso.
+ * uno que Nexus no conoce no detiene la importación. El alumno queda sin estatus, también si ya tenía uno,
+ * para que no siga contando como activo, con advertencia; lo que vino queda en `import_rows` para agregar al
+ * enum los que se repitan (confirmado el 29 de octubre de 2026).
+ *
+ * No ofrece "desactivar faltantes": una exportación suele ser de un campus y el número de control es de todo el
+ * Tec, así que desactivaría a los alumnos de los demás campus; las bajas llegan en el estatus. Busca cada
+ * carrera, plan y campus una vez por corrida. Al terminar el lote despacha el recálculo del progreso.
  */
 class StudentsTemplate extends ImportTemplate
 {
+    /** @var array<string, Career|null> carrera por clave, en esta corrida */
+    private array $careers = [];
+
+    /** @var array<string, StudyPlan|null> plan por clave, en esta corrida */
+    private array $plans = [];
+
+    /** @var array<string, string|null> id de campus por clave, en esta corrida */
+    private array $campuses = [];
+
     public function key(): string
     {
         return 'students';
@@ -56,6 +69,11 @@ class StudentsTemplate extends ImportTemplate
         return Student::class;
     }
 
+    public function deactivatesMissing(): bool
+    {
+        return false;
+    }
+
     public function rules(): array
     {
         return [
@@ -73,7 +91,9 @@ class StudentsTemplate extends ImportTemplate
     {
         $row = parent::normalize($row);
 
-        $row['control_number'] = $row['control_number'] === null ? null : (string) $row['control_number'];
+        foreach (['control_number', 'career', 'study_plan', 'campus'] as $field) {
+            $row[$field] = self::asText($row[$field]);
+        }
 
         foreach (['career', 'study_plan', 'campus'] as $field) {
             $row[$field] = is_string($row[$field]) ? Str::upper($row[$field]) : $row[$field];
@@ -85,6 +105,21 @@ class StudentsTemplate extends ImportTemplate
         return $row;
     }
 
+    /**
+     * Como la base, pero un estatus que Nexus no conoce deja al alumno sin estatus también en un cambio: el
+     * cambio no pisa con null lo que el archivo trae vacío, y aquí el archivo sí trajo un estatus.
+     */
+    public function apply(array $row, ImportContext $context): Model
+    {
+        $student = parent::apply($row, $context);
+
+        if ($row['status'] !== null && StudentStatus::tryFrom($row['status']) === null && $student->getAttribute('status') !== null) {
+            $student->forceFill(['status' => null])->save();
+        }
+
+        return $student;
+    }
+
     public function afterApply(ImportContext $context): void
     {
         RecomputeStudentProgress::dispatch();
@@ -93,13 +128,13 @@ class StudentsTemplate extends ImportTemplate
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
         $issues = parent::check($row, $context, $issues);
-        $career = Career::query()->where('code', $row['career'])->first();
+        $career = $this->career($row['career']);
 
         if ($career === null) {
             $issues = $issues->withError('career', "No hay una carrera con la clave {$row['career']}.");
         }
 
-        $plan = StudyPlan::query()->where('code', $row['study_plan'])->first();
+        $plan = $this->plan($row['study_plan']);
 
         if ($plan === null) {
             $issues = $issues->withError('study_plan', "No hay un plan con la clave {$row['study_plan']}.");
@@ -107,12 +142,12 @@ class StudentsTemplate extends ImportTemplate
             $issues = $issues->withError('study_plan', "El plan {$row['study_plan']} no es de la carrera {$row['career']}.");
         }
 
-        if (! Campus::query()->where('code', $row['campus'])->exists()) {
+        if ($this->campus($row['campus']) === null) {
             $issues = $issues->withError('campus', "No hay un campus con la clave {$row['campus']}.");
         }
 
         if ($row['status'] !== null && StudentStatus::tryFrom($row['status']) === null) {
-            $issues = $issues->withWarning('status', "El estatus «{$row['status']}» no está en Nexus: el alumno se importa sin estatus.");
+            $issues = $issues->withWarning('status', "El estatus «{$row['status']}» no está en Nexus: el alumno queda sin estatus.");
         }
 
         return $issues;
@@ -122,9 +157,9 @@ class StudentsTemplate extends ImportTemplate
     {
         return [
             'name' => $row['name'],
-            'career_id' => Career::query()->where('code', $row['career'])->value('id'),
-            'study_plan_id' => StudyPlan::query()->where('code', $row['study_plan'])->value('id'),
-            'campus_id' => Campus::query()->where('code', $row['campus'])->value('id'),
+            'career_id' => $this->career($row['career'])?->id,
+            'study_plan_id' => $this->plan($row['study_plan'])?->id,
+            'campus_id' => $this->campus($row['campus']),
             'current_semester' => $row['semester'],
             'status' => StudentStatus::tryFrom((string) $row['status']),
         ];
@@ -135,8 +170,21 @@ class StudentsTemplate extends ImportTemplate
      */
     private function status(string $value): string
     {
-        $slug = Str::of($value)->ascii()->lower()->replaceMatches('/[^a-z]+/', '_')->trim('_')->value();
+        return StudentStatus::tryFrom(self::slug($value))?->value ?? $value;
+    }
 
-        return StudentStatus::tryFrom($slug)?->value ?? $value;
+    private function career(string $code): ?Career
+    {
+        return array_key_exists($code, $this->careers) ? $this->careers[$code] : $this->careers[$code] = Career::query()->where('code', $code)->first(['id']);
+    }
+
+    private function plan(string $code): ?StudyPlan
+    {
+        return array_key_exists($code, $this->plans) ? $this->plans[$code] : $this->plans[$code] = StudyPlan::query()->where('code', $code)->first(['id', 'career_id']);
+    }
+
+    private function campus(string $code): ?string
+    {
+        return array_key_exists($code, $this->campuses) ? $this->campuses[$code] : $this->campuses[$code] = Campus::query()->where('code', $code)->value('id');
     }
 }

@@ -226,7 +226,9 @@ it('si falla un bloque posterior, los anteriores se quedan escritos y la bitáco
         ->and($batch->fresh()->only(['processed_rows', 'created_rows']))->toBe(['processed_rows' => 500, 'created_rows' => 500])
         ->and($batch->fresh()->failure_reason)->toBe('La aplicación se interrumpió en la fila 601: El catálogo rechazó la fila.')
         ->and($entry->causer->is($this->admin))->toBeTrue()
-        ->and($entry->properties->only(['created', 'updated', 'unchanged'])->all())->toBe(['created' => 500, 'updated' => 0, 'unchanged' => 0]);
+        ->and($entry->properties->only(['created', 'updated', 'unchanged'])->all())->toBe(['created' => 500, 'updated' => 0, 'unchanged' => 0])
+        // Lo escrito se queda, así que lo que corre al terminar (el recálculo de progreso) también corre.
+        ->and(ApplyProbeTemplate::$afterApplyCalls)->toBe(1);
 
     Event::assertDispatched(BatchApplied::class, fn (BatchApplied $event): bool => $event->counts['created'] === 500);
 });

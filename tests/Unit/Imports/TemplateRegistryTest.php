@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Models\Campus;
+use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
 
@@ -99,3 +100,15 @@ it('rechaza una plantilla cuya clave natural no sale de sus campos', function (s
 it('rechaza una plantilla que importa columnas que solo maneja el sistema', function () {
     templateRegistryWith(ReservedFieldTemplate::class);
 })->throws(InvalidArgumentException::class, 'deleted_at');
+
+it('rechaza una plantilla que traduce su clave y ofrece desactivar faltantes: missing() compara la clave natural como columnas', function () {
+    $template = new class extends CampusesTemplate
+    {
+        protected function recordKey(array $row, ImportContext $context): ?array
+        {
+            return ['id' => $row['code']];
+        }
+    };
+
+    new TemplateRegistry([$template::class]);
+})->throws(InvalidArgumentException::class, 'traduce su clave con recordKey()');
