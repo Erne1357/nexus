@@ -235,7 +235,7 @@ describe('admin', function () {
             ->and(lastToastOf($page))
             ->type->toBe('error')
             ->title->toBe('No se pudo desactivar ACF-0901')
-            ->description->toBe('La necesitan 1 alumnos (activos o en baja temporal) de los planes ISIC-2010-224.');
+            ->description->toBe('La necesita 1 alumno (activo o en baja temporal) del plan ISIC-2010-224.');
     });
 
     it('un id que no es uuid es una materia que no existe', function () {

@@ -47,12 +47,19 @@ it('registra sus listeners en StudentsServiceProvider', function () {
 });
 
 describe('veto al desactivar una materia', function () {
-    it('con un alumno que la necesita, rechaza con cuántos y de qué planes en is_active, y no la desactiva', function () {
+    it('con un alumno que la necesita, rechaza con cuántos y de qué plan en is_active, y no la desactiva', function () {
         Student::factory()->for($this->isc)->create(['career_id' => $this->isc->career_id]);
 
         expect(deactivationErrors($this->calculo))->toBe([
-            'is_active' => ['La necesitan 1 alumnos (activos o en baja temporal) de los planes ISIC-2010-224.'],
+            'is_active' => ['La necesita 1 alumno (activo o en baja temporal) del plan ISIC-2010-224.'],
         ])->and($this->calculo->fresh()->is_active)->toBeTrue();
+    });
+
+    it('el número de alumnos y el de planes van en plural cada uno por su lado', function () {
+        Student::factory()->for($this->isc)->count(3)->create(['career_id' => $this->isc->career_id]);
+
+        expect(deactivationErrors($this->calculo)['is_active'][0])
+            ->toBe('La necesitan 3 alumnos (activos o en baja temporal) del plan ISIC-2010-224.');
     });
 
     it('junta a los alumnos de todos los planes que la tienen', function () {
