@@ -1,0 +1,62 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/model-pick.html"
+        ],
+        "createdAt": "2026-10-28T22:19:35.995Z",
+        "reason": "Claude: boceto desechable de la ronda de dirección; el hallazgo cae en el recuadro de LOGO de relleno y en las pestañas de altura completa del mundo denso, no en UI que se entrega"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-dense.html"
+        ],
+        "createdAt": "2026-10-28T22:19:36.011Z",
+        "reason": "Claude: boceto desechable de la ronda de dirección; el hallazgo cae en el recuadro de LOGO de relleno y en las pestañas de altura completa del mundo denso, no en UI que se entrega"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/canon.html"
+        ],
+        "createdAt": "2026-10-28T22:19:36.027Z",
+        "reason": "Claude: boceto desechable de la ronda de dirección; el hallazgo cae en el recuadro de LOGO de relleno y en las pestañas de altura completa del mundo denso, no en UI que se entrega"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/combo-erp-grafito.html"
+        ],
+        "createdAt": "2026-10-29T00:18:54.647Z",
+        "reason": "Claude: boceto de decisión; el aviso cae en el buscador de la maqueta (cursor de 22 px centrado en un campo de 48 px), que en la app será el input de MaryUI"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/combo-erp-roja.html"
+        ],
+        "createdAt": "2026-10-29T00:18:54.664Z",
+        "reason": "Claude: boceto de decisión; el aviso cae en el buscador de la maqueta (cursor de 22 px centrado en un campo de 48 px), que en la app será el input de MaryUI"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/combo-erp-petroleo.html"
+        ],
+        "createdAt": "2026-10-29T04:05:47.042Z",
+        "reason": "Claude: boceto de decisión; el aviso cae en el buscador de la maqueta (cursor centrado), que en la app será el input de MaryUI"
+      }
+    ]
+  }
+}
