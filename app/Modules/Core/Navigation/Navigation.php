@@ -84,12 +84,13 @@ final readonly class Navigation
 
     /**
      * La entrada declarada para una ruta, la vea o no el usuario (p. ej. para mostrar
-     * «área › pantalla»); la primera si varias declaran la misma, y null si ninguna la declara.
+     * «área › pantalla»): la que la declara como suya o como pantalla hija (`childRoutes`), la
+     * primera si varias, y null si ninguna. No adivina por el prefijo del nombre.
      */
     public function forRoute(string $route): ?NavigationItem
     {
         foreach ($this->items as $item) {
-            if ($item->route === $route) {
+            if ($item->owns($route)) {
                 return $item;
             }
         }

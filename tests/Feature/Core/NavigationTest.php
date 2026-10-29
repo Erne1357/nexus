@@ -167,6 +167,17 @@ describe('entrada de una ruta', function () {
         expect(handBuiltNavigation()->forRoute('home')->label)->toBe('Cargas');
     });
 
+    it('a una ruta hija que la entrada declara le da esa entrada: la ficha de un alumno es de Alumnos', function () {
+        expect(app(Navigation::class)->forRoute('students.show'))
+            ->label->toBe('Alumnos')
+            ->area->toBe(NavigationArea::ServiciosEscolares);
+    });
+
+    it('no adivina por el prefijo: una ruta que ninguna entrada declara no es de ninguna', function () {
+        expect(app(Navigation::class)->forRoute('core.users'))->toBeNull()
+            ->and(app(Navigation::class)->forRoute('students.import'))->toBeNull();
+    });
+
     it('no da ninguna para una ruta que no está en el menú', function () {
         expect(app(Navigation::class)->forRoute('login'))->toBeNull()
             ->and(app(Navigation::class)->forRoute('no.existe'))->toBeNull();
@@ -328,6 +339,15 @@ describe('menú', function () {
             ->and(textOf($current->item(0)))->toBe('Importaciones');
     });
 
+    it('en una pantalla hija, marca la entrada de su listado como ubicación y no como la página', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $page = domOf(Livewire::test('core::components.navigation', ['route' => 'students.show']));
+
+        expect($page->querySelectorAll('#nexus-menu [aria-current="page"]'))->toHaveCount(0)
+            ->and(textOf($page->querySelector('#nexus-menu [aria-current="true"]')))->toBe('Alumnos');
+    });
+
     it('el área actual es la de la pantalla; si la pantalla no está en el menú, la primera', function (string $route, string $area) {
         $this->actingAs(User::factory()->admin()->create());
 
@@ -340,6 +360,7 @@ describe('menú', function () {
         'Campus' => ['core.campuses', 'Académico'],
         'Importaciones' => ['imports.wizard', 'Datos'],
         'Alumnos' => ['students.index', 'Servicios escolares'],
+        'la ficha de un alumno, hija de Alumnos' => ['students.show', 'Servicios escolares'],
         'fuera del menú' => ['user-password.edit', 'Académico'],
     ]);
 

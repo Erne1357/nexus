@@ -70,6 +70,12 @@
                     @include('students::status-badge', ['status' => $student->status])
                 @endscope
 
+                @scope('actions', $student)
+                    <a href="{{ route('students.show', $student) }}" wire:navigate class="btn btn-ghost btn-sm" aria-label="Ver la ficha de {{ $student->control_number }}" data-testid="show-{{ $student->control_number }}">
+                        <x-icon name="o-eye" class="size-4" /><span class="max-[1200px]:hidden">Ver ficha</span>
+                    </a>
+                @endscope
+
                 <x-slot:empty>
                     <x-icon name="o-academic-cap" :label="$filtered ? 'Ningún alumno coincide con la búsqueda.' : 'Este campus todavía no tiene alumnos: llegan con la importación de alumnos del SII.'" />
                 </x-slot:empty>
@@ -87,6 +93,9 @@
                             <span class="font-mono">{{ $student->career->code }}</span> · semestre <span class="font-mono">{{ $student->current_semester ?? '—' }}</span>
                             @if ($student->progress) · <span class="font-mono">{{ $student->progress->credits_approved }}</span> créditos @endif
                         </div>
+                        <a href="{{ route('students.show', $student) }}" wire:navigate class="btn btn-ghost btn-sm -ml-3">
+                            <x-icon name="o-eye" class="size-4" />Ver ficha
+                        </a>
                     </li>
                 @empty
                     <li class="px-4 py-6 text-center text-neutral">{{ $filtered ? 'Ningún alumno coincide con la búsqueda.' : 'Este campus todavía no tiene alumnos: llegan con la importación de alumnos del SII.' }}</li>

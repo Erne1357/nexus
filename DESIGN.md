@@ -231,12 +231,33 @@ La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php
 | Listado con filtros, tabla y acción principal | Todos los catálogos | **Decidido:** la anatomía de arriba |
 | Formulario en modal | Catálogos | **Decidido:** modal para crear y editar; página completa si no cabe o tiene pasos |
 | Asistente de pasos | Importación | **Decidido (tarea 1.2):** `x-steps` de MaryUI como indicador, con los pasos hechos en `primary`; el contenido de cada paso en una `x-card` debajo. Lo que corre en la cola se muestra en la misma tarjeta con `x-progress` (indeterminado si no se sabe el total) y su texto, y la URL guarda en qué va (`?lote=`) para retomarlo |
+| Retícula del alumno | Ficha del alumno; propuesta del coordinador (fase 2) | **Decidido (tarea 1.6):** ver "Retícula del alumno", abajo |
 | Inicio por rol | Inicio | Palabra gigante y mosaicos vivos (por diseñar) |
 | Checklist con contadores | Validación de catálogos | Cómo mostrar diferencias contra el periodo anterior |
 | Cuadrícula día x hora | Editor de horarios, disponibilidad docente, vista por salón | Interacción por clic o arrastrar; colores por carrera o por estado |
 | Ranking con desglose | Asignación docente | Cómo presentar el desglose sin exponer evaluaciones a quien no debe |
 | Tablero de estado | Choques, avance de validación, carga por docente | Jerarquía visual de duro vs blando |
 | Consulta pública | Horarios publicados | Impresión y PDF |
+
+### Retícula del alumno
+La ficha del alumno muestra su retícula como la del SII, que es la que conocen alumnos y coordinadores (aprobado el 29 de octubre de 2026, maquetas de la tarea 1.6):
+
+- **Columnas por semestre**, lado a lado; caben las nueve a 1440 px. Entre 768 y 1199 px se desplazan de lado, y debajo de 768 px los semestres se apilan con sus materias en dos columnas. El semestre del alumno lleva fondo `bg-base-200` y la nota «Su semestre»; los que pasan de su semestre y dos más, «Fuera de su avance».
+- **Cada materia** es un mosaico con la clave en Mono, el icono de su estado, el nombre, sus créditos y, si la acreditó, la calificación y la oportunidad. Lo que todavía no puede cursar dice qué le falta («Pide ACF-0902», «Pide 80 % de los créditos»).
+- **Estados**, con los nombres del SII (`SubjectStanding`; reglas-de-negocio.md, "Retícula del alumno"). Su relleno, borde e icono salen de `SubjectStanding::tileClasses()` y `icon()`, y el estado va en texto para lectores de pantalla:
+
+| Estado | Tono | Borde | Icono |
+|---|---|---|---|
+| Acreditada | `success` | filete del tono | `o-check-circle` |
+| Cursando | `info` | filete del tono | `o-clock` |
+| Sin calificar | `info` | punteado | `o-question-mark-circle` |
+| Reprobada · prioridad | `warning` | filete del tono | `o-arrow-path` |
+| A curso especial | `warning` | doble | `o-exclamation-triangle` |
+| Curso especial reprobado | `error` | filete del tono | `o-x-circle` |
+| Puede seleccionarla | `primary` sobre blanco | doble | `o-arrow-right-circle` |
+| No permitida aún | `neutral` sobre `base-200` | punteado | `o-lock-closed` |
+
+- Arriba de la retícula, la leyenda de los estados y hasta qué semestre puede seleccionar. La pestaña **Kárdex** muestra el historial por periodo, con el resultado en su insignia.
 
 ## Elevation & Depth
 
@@ -288,7 +309,7 @@ Los de MaryUI: 40 px en barras de herramientas y 44 px en la credencial y en cel
 
 ### Navigation
 - **Entrada de menú:** su nombre, como en la pantalla de referencia; el icono de la entrada no se pinta (lo llevan las áreas). La activa lleva fondo gris polvo, peso 700, el punto rojo y `aria-current="page"`. Las cifras de registros irán a la derecha en Mono cuando haya de dónde salgan; hoy no se muestran.
-- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; si la pantalla no está en el menú, la primera. Con el menú cerrado, un clic en un icono de área abre el menú completo (el botón accesible es la liebre).
+- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; una pantalla hija sin entrada propia (la ficha de un alumno, `students.show`) se declara en `childRoutes` de la entrada de su listado, que la ubica con `aria-current="true"` (la página misma lleva `"page"`); si la pantalla no está en el menú, la primera. Con el menú cerrado, un clic en un icono de área abre el menú completo (el botón accesible es la liebre).
 
 ### El menú que se transforma (firma)
 Un solo menú, no dos:

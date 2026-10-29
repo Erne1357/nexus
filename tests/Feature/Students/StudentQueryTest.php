@@ -10,6 +10,7 @@ use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Queries\StudentQuery;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /*
 | StudentQuery: el listado de alumnos de un campus (tarea 1.6), por número de control y paginado, con búsqueda
@@ -139,4 +140,14 @@ it('ofrece en los filtros solo las carreras y los planes de los alumnos que ve',
     expect(array_column($options['careers'], 'name'))->toBe(["ISC · {$this->isc->name}"])
         ->and(array_column($options['plans'], 'name'))->toBe(['ISC-2010'])
         ->and(array_column($options['semesters'], 'id'))->toBe([3, 5]);
+});
+
+it('carga al alumno de la ficha por su id; uno que no es uuid o un alumno borrado no existe', function () {
+    $student = $this->students['21000001'];
+    $deleted = $this->students['21000004'];
+    $deleted->delete();
+
+    expect(app(StudentQuery::class)->findOrFail($student->id)->is($student))->toBeTrue()
+        ->and(fn () => app(StudentQuery::class)->findOrFail('no-es-un-uuid'))->toThrow(ModelNotFoundException::class)
+        ->and(fn () => app(StudentQuery::class)->findOrFail($deleted->id))->toThrow(ModelNotFoundException::class);
 });

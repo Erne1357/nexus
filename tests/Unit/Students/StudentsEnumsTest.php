@@ -32,3 +32,12 @@ it('cada estatus de alumno tiene el tono y el icono de su insignia', function (S
     [StudentStatus::BajaDefinitiva, StatusTone::Neutral, null],
     [StudentStatus::Egresado, StatusTone::Info, 'o-academic-cap'],
 ]);
+
+it('cada resultado del kardex tiene el tono de su insignia', function (KardexResult $result, StatusTone $tone) {
+    expect($result->tone())->toBe($tone);
+})->with([
+    [KardexResult::Aprobada, StatusTone::Success],
+    [KardexResult::Reprobada, StatusTone::Error],
+    [KardexResult::Cursando, StatusTone::Info],
+    [KardexResult::Baja, StatusTone::Neutral],
+]);

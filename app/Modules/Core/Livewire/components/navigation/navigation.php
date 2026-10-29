@@ -42,7 +42,7 @@ new class extends Component
     }
 
     /**
-     * @return array{areas: list<array{area: NavigationArea, current: bool, style: string, entries: list<array{item: NavigationItem, active: bool, style: string}>}>}
+     * @return array{areas: list<array{area: NavigationArea, current: bool, style: string, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string}>}>}
      */
     public function with(Navigation $navigation, ScopedContext $context): array
     {
@@ -70,6 +70,8 @@ new class extends Component
                 $entries[] = [
                     'item' => $item,
                     'active' => $item === $routeItem,
+                    // La entrada es la página misma, o el listado de la pantalla hija en que se está.
+                    'page' => $item === $routeItem && $item->route === $this->route,
                     'style' => sprintf('%s; --i: %d; %s', $number, $index + 1, $tablet),
                 ];
             }

@@ -7,6 +7,7 @@ use App\Modules\Students\Database\Factories\KardexRecordFactory;
 use App\Modules\Students\Enums\KardexResult;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -34,6 +35,32 @@ class KardexRecord extends Model
             'result' => KardexResult::class,
             'attempt' => 'integer',
         ];
+    }
+
+    /**
+     * La calificación como se lee en la ficha: sin ceros de más y sin redondear (`88.00` es «88»; `69.60`,
+     * «69.6»); null si no trae.
+     *
+     * @return Attribute<string|null, never>
+     */
+    protected function gradeLabel(): Attribute
+    {
+        return Attribute::get(fn (): ?string => $this->grade === null ? null : rtrim(rtrim((string) $this->grade, '0'), '.'));
+    }
+
+    /**
+     * La oportunidad con su nombre: 1 ordinaria, 2 repetición, 3 curso especial (reglas-de-negocio.md,
+     * "Retícula del alumno").
+     *
+     * @return Attribute<string, never>
+     */
+    protected function attemptLabel(): Attribute
+    {
+        return Attribute::get(fn (): string => $this->attempt.' · '.match ($this->attempt) {
+            1 => 'ordinaria',
+            2 => 'repetición',
+            default => 'curso especial',
+        });
     }
 
     /**

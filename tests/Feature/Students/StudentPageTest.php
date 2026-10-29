@@ -1,0 +1,97 @@
+<?php
+
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\User;
+use App\Modules\Students\Models\KardexRecord;
+use App\Modules\Students\Models\Student;
+use Livewire\Livewire;
+
+/*
+| Ficha del alumno (`/students/{alumno}`, students::pages.student; tarea 1.6): sus datos y cifras, su retícula por
+| semestre con el estado de cada materia como lo nombra el SII y su kárdex por periodo. Solo lectura. La ve quien
+| puede verlo según StudentPolicy (reglas-de-negocio.md, "Consultar alumnos"); nadie más, ni con el enlace.
+*/
+
+beforeEach(function () {
+    $this->campus = Campus::factory()->create(['code' => 'C2']);
+    $this->department = Department::factory()->create();
+    $this->career = Career::factory()->for($this->department)->create(['code' => 'ISIC', 'name' => 'Ingeniería en Sistemas']);
+    $plan = StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2010-224', 'total_credits' => 260]);
+    $this->calculus = Subject::factory()->create(['code' => 'ACF-0901', 'name' => 'Cálculo Diferencial', 'credits' => 5]);
+    $this->integral = Subject::factory()->create(['code' => 'ACF-0902', 'name' => 'Cálculo Integral', 'credits' => 5]);
+    $this->circuits = Subject::factory()->create(['code' => 'SCD-1018', 'name' => 'Principios Eléctricos', 'credits' => 5]);
+    placeInPlan($plan, $this->calculus);
+    placeInPlan($plan, $this->integral, 2);
+    placeInPlan($plan, $this->circuits, 4);
+    seriate($plan, $this->integral, $this->calculus);
+    $this->student = Student::factory()->for($plan)->create(['control_number' => '24111234', 'name' => 'Daniela Ortiz', 'campus_id' => $this->campus->id, 'current_semester' => 1]);
+    KardexRecord::factory()->for($this->student)->for($this->calculus)->create(['term_code' => '20253', 'grade' => 88]);
+
+    $this->coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])->create();
+});
+
+it('muestra los datos del alumno, sus cifras y su retícula con el estado de cada materia', function () {
+    Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id])
+        ->assertSee('Daniela Ortiz')
+        ->assertSee('24111234')
+        ->assertSee('ISIC-2010-224')
+        ->assertSee('Semestre 1')
+        ->assertSee('Semestre 4')
+        ->assertSeeInOrder(['ACF-0901', 'Cálculo Diferencial', 'Acreditada'])
+        ->assertSeeInOrder(['ACF-0902', 'Cálculo Integral', 'Puede seleccionarla'])
+        ->assertSeeInOrder(['SCD-1018', 'No permitida aún', 'Fuera de su avance'])
+        ->assertSeeInOrder(['Puede seleccionar materias hasta el semestre', '3', 'el suyo y dos más.']);
+});
+
+it('dice qué le falta a una materia que todavía no puede cursar', function () {
+    KardexRecord::query()->delete();
+
+    Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id])
+        ->assertSeeInOrder(['ACF-0902', 'Pide', 'ACF-0901']);
+});
+
+it('en la pestaña Kárdex, que va en la URL, muestra el historial por periodo', function () {
+    Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id])
+        ->assertDontSee('Ago-Dic 2025');
+
+    Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'kardex'])->test('students::pages.student', ['student' => $this->student->id])
+        ->assertSeeInOrder(['20253', 'Ago-Dic 2025', 'ACF-0901', 'Cálculo Diferencial', '88', 'Aprobada', '1 · ordinaria']);
+});
+
+it('una pestaña que no existe en la URL muestra la retícula', function () {
+    Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'otra'])->test('students::pages.student', ['student' => $this->student->id])
+        ->assertSet('tab', 'reticula')
+        ->assertSee('Cálculo Integral')
+        ->assertDontSee('Ago-Dic 2025');
+});
+
+it('el listado lleva a la ficha de cada alumno', function () {
+    $this->actingAs($this->coordinator)->get(route('students.index'))
+        ->assertOk()
+        ->assertSee(route('students.show', $this->student));
+});
+
+describe('sin acceso', function () {
+    it('no la ve quien no cubre al alumno, ni con el enlace: :dataset', function (Closure $user) {
+        $this->actingAs($user($this))->get(route('students.show', $this->student))->assertForbidden();
+    })->with([
+        'el coordinador de otra carrera' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->campus->id, 'career_id' => Career::factory()->create()->id])->create()],
+        'la subdirección de otro campus' => [fn ($test) => User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])->create()],
+        'el jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->campus->id, 'department_id' => $test->department->id])->create()],
+    ]);
+
+    it('un id que no es de un alumno, o uno borrado, no existe', function () {
+        $this->actingAs($this->coordinator)->get('/students/no-es-un-uuid')->assertNotFound();
+        $this->student->delete();
+        $this->actingAs($this->coordinator)->get(route('students.show', $this->student->id))->assertNotFound();
+    });
+
+    it('manda al invitado a iniciar sesión', function () {
+        $this->get(route('students.show', $this->student))->assertRedirect(route('login'));
+    });
+});

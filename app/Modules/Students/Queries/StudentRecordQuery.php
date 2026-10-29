@@ -69,7 +69,7 @@ final class StudentRecordQuery
                 semester: $semester,
                 specialty: isset($grid->specialtyOf[$subjectId]) ? $specialties[$grid->specialtyOf[$subjectId]] : null,
                 standing: $standing,
-                grade: $shownRow?->grade,
+                grade: $shownRow?->grade_label,
                 termCode: $shownRow?->term_code,
                 attempt: $shownRow?->attempt,
                 prerequisites: $this->codes($prerequisites, $subjects),
@@ -92,6 +92,7 @@ final class StudentRecordQuery
             taking: count(array_filter($cells, fn (GridCell $cell): bool => $cell->standing === SubjectStanding::Cursando)),
             selectable: count(array_filter($cells, fn (GridCell $cell): bool => $cell->standing->countsAsSelectable() && isset($available[$cell->subjectId]))),
             reachSemester: $reach,
+            approvedBySemester: array_map(fn (array $semesterCells): int => count(array_filter($semesterCells, fn (GridCell $cell): bool => $cell->standing === SubjectStanding::Acreditada)), $semesters),
             semesters: $semesters,
             chains: $chains,
             kardex: $this->kardex($records),
@@ -173,14 +174,27 @@ final class StudentRecordQuery
 
     /**
      * @param  Collection<int, KardexRecord>  $records
-     * @return list<array{term: string, records: list<KardexRecord>}>
+     * @return list<array{term: string, label: string, records: list<KardexRecord>}>
      */
     private function kardex(Collection $records): array
     {
         return $records->sortBy([['term_code', 'desc'], fn (KardexRecord $a, KardexRecord $b): int => strcmp($a->subject->code, $b->subject->code)])
             ->groupBy('term_code')
-            ->map(fn (Collection $rows, string $term): array => ['term' => $term, 'records' => $rows->values()->all()])
+            ->map(fn (Collection $rows, string $term): array => ['term' => $term, 'label' => self::termLabel($term), 'records' => $rows->values()->all()])
             ->values()
             ->all();
+    }
+
+    /**
+     * El nombre de un periodo del SII como lo escribe Core (`terms.name`): `20253` es «Ago-Dic 2025»; el último
+     * dígito es 1 Ene-Jun, 2 verano y 3 Ago-Dic.
+     */
+    private static function termLabel(string $code): string
+    {
+        return match (substr($code, -1)) {
+            '1' => 'Ene-Jun',
+            '2' => 'Verano',
+            default => 'Ago-Dic',
+        }.' '.substr($code, 0, 4);
     }
 }
