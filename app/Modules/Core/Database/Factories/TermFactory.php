@@ -22,7 +22,7 @@ class TermFactory extends Factory
         $year = fake()->unique()->numberBetween(2000, 2099);
 
         return [
-            'code' => "{$year}-1",
+            'code' => "{$year}1",
             'name' => "Ene-Jun {$year}",
             'starts_on' => "{$year}-01-18",
             'ends_on' => "{$year}-06-11",

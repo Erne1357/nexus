@@ -38,7 +38,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 |---|---|---|
 | H1 Fundación lista ✅ (27 oct) | 2 nov | Login por username, roles y alcances, layout, módulo de referencia con pruebas unit/feature/browser, CI verde en PR a `develop` |
 | H2 Catálogos reales cargados | 14 nov | Exportaciones del SII de Campus II importadas sin errores bloqueantes; `student_progress` calculado |
-| H3 Catálogos validados por jefes | 19 nov | Jefes de departamento de Campus II validan sus catálogos en Nexus; periodo `2027-1` abierto |
+| H3 Catálogos validados por jefes | 19 nov | Jefes de departamento de Campus II validan sus catálogos en Nexus; periodo `20271` abierto |
 | H4 Carga capturada | 4 dic | Grupos, horarios, cupos, docentes y salones de Campus II sin choques duros; ranking visible |
 | H5 Carga publicada | 18 dic | Cierre por departamento, (visto bueno), snapshot, consulta pública y exportes PDF/Excel; exportación al SII |
 

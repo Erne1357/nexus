@@ -5,9 +5,9 @@ use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 it('no permite dos periodos con el mismo código', function () {
-    Term::factory()->create(['code' => '2027-1']);
+    Term::factory()->create(['code' => '20271']);
 
-    expect(fn () => Term::factory()->create(['code' => '2027-1']))
+    expect(fn () => Term::factory()->create(['code' => '20271']))
         ->toThrow(UniqueConstraintViolationException::class);
 });
 

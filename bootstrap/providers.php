@@ -4,6 +4,7 @@ use App\Modules\Academic\AcademicServiceProvider;
 use App\Modules\Core\CoreServiceProvider;
 use App\Modules\Core\Providers\FortifyServiceProvider;
 use App\Modules\Imports\ImportsServiceProvider;
+use App\Modules\Students\StudentsServiceProvider;
 use App\Providers\AppServiceProvider;
 
 return [
@@ -13,5 +14,6 @@ return [
     CoreServiceProvider::class,
     FortifyServiceProvider::class, // login de Core (ADR-0004)
     AcademicServiceProvider::class,
+    StudentsServiceProvider::class,
     ImportsServiceProvider::class,
 ];

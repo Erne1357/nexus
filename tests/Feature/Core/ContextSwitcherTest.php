@@ -17,8 +17,8 @@ beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->foreign = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus ajeno']);
 
-    $this->current = Term::factory()->current()->create(['code' => '2027-1', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
-    $this->previous = Term::factory()->create(['code' => '2026-2', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    $this->current = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
+    $this->previous = Term::factory()->create(['code' => '20263', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
 
     $this->jefe = User::factory()
         ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
