@@ -215,6 +215,28 @@
                         <x-stat title="Con advertencia" :value="number_format($warningRows)" icon="o-exclamation-triangle" />
                         <x-stat title="Con error" :value="number_format($batch->error_rows)" icon="o-x-circle" />
                     </div>
+
+                    @if ($missing !== null)
+                        {{-- Con wire:key propio: sin él, Livewire transforma esta tabla en la de desactivados del paso 4 y el x-table de MaryUI se reinicia sin su x-ref de encabezados. --}}
+                        <div class="mt-6 space-y-3 border-t border-base-300 pt-4" wire:key="missing-records" data-testid="missing-records">
+                            @if ($missing['missing'] === 0)
+                                <p class="text-sm text-base-content/70">Todos los registros activos de {{ $batchTemplate }}{{ $batch->campus ? ' en '.$batch->campus->code : '' }} vienen en el archivo.</p>
+                            @else
+                                <p class="text-sm">{{ number_format($missing['missing']) }} de {{ number_format($missing['active']) }} registros activos de {{ $batchTemplate }}{{ $batch->campus ? ' en '.$batch->campus->code : '' }} {{ $missing['missing'] === 1 ? 'no viene' : 'no vienen' }} en el archivo.</p>
+
+                                <x-toggle
+                                    label="Desactivar los que no vienen en el archivo"
+                                    wire:model.live="deactivateMissing"
+                                    hint="Se marcan como inactivos, no se borran; se reactivan a mano en el catálogo."
+                                    data-testid="deactivate-missing"
+                                />
+
+                                @if ($missingRows !== null)
+                                    @include('imports::import-wizard.records', ['records' => $missingRows])
+                                @endif
+                            @endif
+                        </div>
+                    @endif
                 @elseif ($applied !== null)
                     <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <x-stat title="Altas" :value="number_format($applied['created'])" icon="o-plus-circle" />
@@ -222,6 +244,17 @@
                         <x-stat title="Sin cambios" :value="number_format($applied['unchanged'])" icon="o-minus-circle" />
                         <x-stat title="Con error, sin aplicar" :value="number_format($applied['skipped'])" icon="o-x-circle" />
                     </div>
+
+                    @if ($deactivatedRows !== null)
+                        <div class="mt-6 border-t border-base-300 pt-4" wire:key="deactivated-records" data-testid="deactivated-records">
+                            @if ($applied['deactivated'] === 0)
+                                <p class="text-sm text-base-content/70">No se desactivó ningún registro.</p>
+                            @else
+                                <p class="text-sm font-medium">{{ $applied['deactivated'] === 1 ? '1 registro desactivado' : number_format($applied['deactivated']).' registros desactivados' }} por no venir en el archivo</p>
+                                @include('imports::import-wizard.records', ['records' => $deactivatedRows])
+                            @endif
+                        </div>
+                    @endif
                 @endif
 
                 @if ($issueRows !== null)
@@ -288,18 +321,19 @@
                     </x-table>
                 @endif
 
-                <x-slot:actions>
+                {{-- Con wrap: a 390 px «Aplicar … y desactivar …» no cabe junto a «Importar otro archivo». --}}
+                <x-slot:actions class="flex-wrap">
                     <x-button label="Importar otro archivo" icon="o-arrow-up-tray" wire:click="startOver" />
 
                     @if ($currentStep === 3 && $batch->status === BatchStatus::Validated && ! $applyQueued)
                         @if ($batch->valid_rows > 0)
                             <x-button
-                                :label="$batch->valid_rows === 1 ? 'Aplicar 1 fila' : 'Aplicar '.number_format($batch->valid_rows).' filas'"
+                                :label="($batch->valid_rows === 1 ? 'Aplicar 1 fila' : 'Aplicar '.number_format($batch->valid_rows).' filas').($deactivating ? ' y desactivar '.number_format($missing['missing']) : '')"
                                 icon="o-check"
                                 class="btn-primary"
-                                wire:click="apply"
+                                wire:click="{{ $deactivating ? 'apply('.$missing['missing'].')' : 'apply' }}"
                                 spinner="apply"
-                                wire:confirm="Se escribirán {{ number_format($batch->valid_rows) }} filas en {{ $batchTemplate }}.{{ $batch->error_rows > 0 ? ' Las '.number_format($batch->error_rows).' filas con error se saltan.' : '' }}"
+                                wire:confirm="Se escribirán {{ number_format($batch->valid_rows) }} filas en {{ $batchTemplate }}.{{ $batch->error_rows > 0 ? ' Las '.number_format($batch->error_rows).' filas con error se saltan.' : '' }}{{ ! $deactivating ? '' : ($missing['missing'] === 1 ? ' Se desactivará 1 registro que no viene en el archivo; no se borra y se reactiva a mano en el catálogo.' : ' Se desactivarán '.number_format($missing['missing']).' registros que no vienen en el archivo; no se borran y se reactivan a mano en el catálogo.') }}"
                             />
                         @else
                             <span class="tooltip tooltip-left" data-tip="No hay filas válidas que aplicar.">
