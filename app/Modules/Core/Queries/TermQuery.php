@@ -12,7 +12,7 @@ use Illuminate\Support\Collection;
 final class TermQuery
 {
     /**
-     * Los periodos que ofrece el selector de la topbar: todos los existentes, del más reciente al
+     * Los periodos que ofrece el selector de la credencial: todos los existentes, del más reciente al
      * más antiguo.
      *
      * @return Collection<int, Term>
@@ -23,7 +23,7 @@ final class TermQuery
     }
 
     /**
-     * El periodo elegido en la topbar.
+     * El periodo elegido en la credencial.
      *
      * @throws ModelNotFoundException<Term>
      */

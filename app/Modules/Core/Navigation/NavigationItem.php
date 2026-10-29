@@ -8,7 +8,7 @@ use Closure;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Una entrada de la barra lateral. La declara un módulo en navigation() de su provider, siempre
+ * Una entrada del menú. La declara un módulo en navigation() de su provider, siempre
  * con el área del menú a la que pertenece.
  *
  * Quién la ve se decide con ScopedContext (`visible`), con una ability de Gate y la policy del

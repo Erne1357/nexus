@@ -65,7 +65,7 @@ docker compose exec app php artisan make:livewire core::components.campus-badge
 
 Un provider que sobrescriba `boot()` debe llamar a `parent::boot()`. La base no guarda estado estático (Octane). Las factories no se descubren por convención: el modelo las declara con `#[UseFactory(...)]`.
 
-Las entradas de la barra lateral del módulo se declaran en el método `navigation()` de su provider (ver "Navegación").
+Las entradas del menú del módulo se declaran en el método `navigation()` de su provider (ver "Navegación").
 
 Reglas:
 
@@ -202,21 +202,22 @@ Todo modelo de Nexus usa UUIDv7 como llave primaria ([ADR-0014](../decisiones/00
 | Método | Responde |
 |---|---|
 | `has(Role $role): bool` | ejerce el rol en algún lugar |
+| `roles(): list<Role>` | los roles que ejerce, en el orden del enum; el admin, solo `Admin` (la credencial muestra el primero y la página de inicio, uno por bloque) |
 | `covers(Role\|array $roles, Campus\|string $campus, ?string $department = null, ?string $career = null): bool` | con alguno de los roles cubre el campus completo, o el departamento o la carrera dentro de él |
 | `canAccessCampus(Campus\|string $campus): bool` | trabaja en el campus con algún rol, aunque sea sobre una parte |
 | `isAdmin()`, `user()`, `scopes(?Role $role = null)` | admin, usuario activo, alcances vigentes y completos |
-| `campuses()`, `activeCampus()`, `activeTerm()` | campus activos donde trabaja (selector de la topbar), y el campus y periodo activos |
+| `campuses()`, `activeCampus()`, `activeTerm()` | campus activos donde trabaja (selector de la credencial), y el campus y periodo activos |
 | `forUser(User $user)` | el contexto de otro usuario, sin su elección de sesión; se recuerda por id en la instancia y no carga los roles del autenticado para compararlo |
 | `refresh(): void` | vuelve a cargar roles y alcances en la misma petición; la llama la Action que los cambie |
 
 - **Policies:** usan el trait `Core\Policies\Concerns\UsesScopedContext` (una prueba arch lo exige) y preguntan con `$this->scope($user)`, que decide por el usuario que recibe la policy aunque no sea el autenticado (`Gate::forUser()`). Ejemplo: `$this->scope($user)->covers([Role::JefeDepartamento, Role::Coordinador], $group->campus_id, department: $group->department_id, career: $group->career_id)`.
 - **Contexto activo:** la Action `SetActiveContext::handle(?Campus $campus, ?Term $term)` lo guarda en la sesión (`ScopedContext::ACTIVE_CAMPUS` y `ACTIVE_TERM`); rechaza con `AuthorizationException` un campus que no esté en `campuses()` y `null` vuelve al de omisión. Por omisión, el campus es el único de `campuses()` (si hay varios, ninguno) y el periodo, el `is_current`. Cada lectura revalida el campus guardado contra el alcance vigente; `campuses()` y `activeTerm()` se recuerdan en la petición.
-- **Catálogos de un campus** (salones, carrera-campus, todo lo que tenga `campus_id`): el listado filtra por `activeCampus()` y el alta usa ese campus; los formularios no llevan un select de campus. Sin campus activo, la pantalla pide elegir uno en la topbar.
+- **Catálogos de un campus** (salones, carrera-campus, todo lo que tenga `campus_id`): el listado filtra por `activeCampus()` y el alta usa ese campus; los formularios no llevan un select de campus. Sin campus activo, la pantalla pide elegir uno en la credencial.
 - La navegación y los tableros se filtran por alcance con `ScopedContext`, para que ninguna pantalla repita la lógica. Las pruebas usan `User::factory()->admin()` y `User::factory()->withRole(Role::Coordinador, ['campus_id' => …, 'career_id' => …])`, que lanza `InvalidArgumentException` si el alcance no llena lo que exige el rol.
 
 ## Navegación
 
-La barra lateral del layout (`resources/views/layouts/app.blade.php`) la arma Core, pero las entradas las declara cada módulo, así que Core no conoce a los módulos de su derecha:
+El menú del layout (`resources/views/layouts/app.blade.php`) lo arma Core, pero las entradas las declara cada módulo, así que Core no conoce a los módulos de su derecha:
 
 ```php
 // app/Modules/Core/CoreServiceProvider.php
@@ -242,9 +243,21 @@ public function navigation(): array
 - `NavigationItem` (`Core/Navigation`): etiqueta en español, **nombre** de una ruta del módulo, icono Heroicon de MaryUI, **área** del menú (cuarto argumento, obligatorio) y quién la ve. "Quién" es `visible` (una función que recibe `ScopedContext`), una ability de Gate con su argumento (`ability` y `arguments`, que reutilizan la policy del módulo) o ambas, y entonces debe cumplir las dos; sin ninguna, la ve cualquier usuario activo. Nunca se decide por el código del campus.
 - `NavigationArea` (`Core/Enums`, ADR-0015) son las áreas del menú, cada una con `label()` e `icon()`: Académico, Servicios escolares, Recursos humanos, Recursos financieros y Datos. **El orden de sus casos es el del menú**; toda entrada declara la suya. Un área nueva es un caso nuevo del enum, en el lugar donde debe aparecer, y cambia ADR-0015: se acuerda antes. Hoy Inicio y Campus van en Académico, e Importaciones en Datos.
 - `Navigation` (`Core/Navigation`) es el registro: junta las entradas de todos los `ModuleServiceProvider` en el orden de `bootstrap/providers.php` y, dentro de un módulo, en el que las declara. Es un singleton **inmutable** (clases `final readonly`, lo exige `tests/Arch/NavigationTest.php`) que Core arma en `booted`, cuando ya arrancaron todos los módulos: con Octane se crea una vez por worker. Lo que depende del usuario se calcula en cada petición, sin guardarlo: `visibleTo(ScopedContext)` da la lista plana y `visibleByArea(ScopedContext)` la agrupa (`list<array{area: NavigationArea, items: non-empty-list<NavigationItem>}>`), con las áreas en el orden del enum, solo las que tienen alguna entrada visible y, dentro de cada una, las entradas en el orden del registro. `forRoute(string $route)` da la entrada declarada para una ruta, la vea o no el usuario (la primera si varias la declaran; `null` si ninguna), para mostrar «área › pantalla».
-- `core::components.navigation` muestra `visibleByArea()` del usuario: una lista por área, con su nombre (`aria-label`) y su icono. Ninguna entrada puede apuntar a una ruta inexistente: `tests/Feature/Core/NavigationTest.php` lo verifica para todas las declaradas. Una entrada se agrega en el mismo PR que su pantalla, con una prueba de quién la ve y quién no.
+- `core::components.navigation` es el menú que se transforma (DESIGN.md): muestra `visibleByArea()` del usuario, cada área como un grupo con su nombre (`aria-label`), su icono y sus entradas. El **área actual** es la de la entrada de la pantalla (`forRoute()` con el nombre de la ruta) si el usuario la ve; si no, la primera que ve. La **entrada activa** es esa misma entrada y lleva `aria-current="page"`. Cada elemento lleva su lugar en la retícula del menú abierto como variables CSS (`--c`, `--i`, `--col-t`, `--base-t`), que calcula el componente. Ninguna entrada puede apuntar a una ruta inexistente: `tests/Feature/Core/NavigationTest.php` lo verifica para todas las declaradas. Una entrada se agrega en el mismo PR que su pantalla, con una prueba de quién la ve y quién no.
 
-La topbar lleva `core::components.context-switcher`: ofrece `ScopedContext::campuses()` (fijo si solo hay uno) y los periodos de `TermQuery::selectable()`, y guarda la elección con `SetActiveContext`; elegir el periodo actual deja el de omisión para seguirlo cuando cambie, y sin periodo activo muestra "Sin periodo". Si el campus o el periodo no existen o no se permiten, avisa con un toast de error y regresa la selección al contexto vigente, sin el error de Livewire. No hace falta middleware: `ScopedContext` lee la sesión en cada petición. El middleware `NormalizeSidebarState` (grupo `web`) reescribe a `'false'` cualquier valor de `mary-sidebar-collapsed` que no sea `'true'` o `'false'`, porque `<x-main>` de MaryUI lo imprime dentro de `x-data`. La página de inicio (`/`, `core::pages.home`) muestra un bloque por cada rol que el usuario ejerce según `ScopedContext::has()`; el admin, solo el suyo.
+### Layout (shell)
+
+`resources/views/layouts/app.blade.php` es el layout de toda página MFC. Con sesión pinta, en este orden:
+
+1. `core::components.band`: la banda con la liebre (el botón del menú completo), «Nexus», la ruta (el área de `forRoute()` y el `#[Title]` de la página, que el layout le pasa), «Buscar o ir a… Ctrl K» y la credencial. La credencial muestra el nombre, las iniciales, el primer rol de `ScopedContext::roles()` con `Role::label()`, y el campus y el periodo activos; se abre como tarjeta con `core::components.context-switcher`, el tema (el `x-theme-toggle` de MaryUI, que lo aplica y lo recuerda en `localStorage`; los botones Claro y Oscuro solo le piden cambiarlo), «Cambiar contraseña» y «Cerrar sesión».
+2. `core::components.navigation`: el menú.
+3. `<main id="nexus-content">`, el contenido, y los toasts de MaryUI (`<x-toast />`).
+
+Sin sesión, solo el contenido. El layout ya no usa `x-nav` ni el cajón de `x-main` de MaryUI.
+
+El estado y el movimiento los lleva el componente Alpine `nexusShell` (`resources/js/app.js`, registrado en `alpine:init`; Alpine viene con Livewire), puesto en `<body>`. El menú abierto o cerrado vive en `<body data-menu="open|closed">` y las utilidades de la banda y del menú lo leen con la variante `in-data-[menu=open]:`; la geometría por ancho (`--shell-top`, `--menu-w`, `--panel-w`, `--panel-clip`) la declara `<body>` con `max-desktop:` y `max-md:`. El breakpoint `desktop` (1200 px) es un token de `resources/css/app.css`. La única regla del shell escrita a mano en ese archivo bloquea el desplazamiento de la página con el menú abierto, con el candado de daisyUI que usan los modales, porque vive en `:root` y una utilidad no llega ahí. Antes de que Livewire cambie de página (`livewire:navigating`), `nexusShell` cierra todo sin animar, así la página que guarda para el botón de atrás queda cerrada; la página nueva llega cerrada del servidor.
+
+La tarjeta de la credencial lleva `core::components.context-switcher`: ofrece `ScopedContext::campuses()` (fijo si solo hay uno) y los periodos de `TermQuery::selectable()`, y guarda la elección con `SetActiveContext`; elegir el periodo actual deja el de omisión para seguirlo cuando cambie, y sin periodo activo muestra "Sin periodo". Si el campus o el periodo no existen o no se permiten, avisa con un toast de error y regresa la selección al contexto vigente, sin el error de Livewire. No hace falta middleware: `ScopedContext` lee la sesión en cada petición. El middleware `NormalizeSidebarState` (grupo `web`) reescribe a `'false'` cualquier valor de `mary-sidebar-collapsed` que no sea `'true'` o `'false'`, porque `<x-main>` de MaryUI lo imprime dentro de `x-data`; el shell ya no usa `<x-main>`, pero la ruta de MaryUI que guarda ese valor sigue registrada. La página de inicio (`/`, `core::pages.home`) muestra un bloque por cada rol de `ScopedContext::roles()`, con su `Role::label()`; el admin, solo el suyo.
 
 ## Acceso
 

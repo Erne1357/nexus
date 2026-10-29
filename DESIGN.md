@@ -182,22 +182,23 @@ Fondo `#0a1826`, superficies `#0f2133`, banda `#071a2b`, selección `#26384a`, f
   - **Izquierda:** la liebre en un cuadro rojo de 72 px, que es el botón del menú completo; luego «Nexus» y la ruta (área › pantalla).
   - **Derecha:** el buscador «Buscar o ir a… Ctrl K», que abre el menú con el cursor en su buscador, y **la credencial**.
   - Debajo, la **franja roja** de 3 px.
-- **La credencial** es un botón con avatar, nombre y, debajo, «rol · campus · periodo». Se abre como tarjeta con:
+- **La credencial** es un botón con avatar (las iniciales), nombre y, debajo, «rol · campus · periodo»: el primer rol que ejerce, en el orden del enum `Role` y con su `label()`; sin campus elegido, solo el rol y el periodo. Se abre como tarjeta (Esc o un clic fuera la cierran) con:
   - encabezado azul y su franja roja;
   - selectores de **campus** y **periodo** (los de `core::components.context-switcher`, con `SetActiveContext`);
   - **tema** claro u oscuro;
   - **Cambiar contraseña** y **Cerrar sesión**.
 - **Menú cerrado** de 288 px: franja de iconos de área (64 px, gris polvo) y las secciones del área actual (224 px, blanco). Solo aparecen las áreas con al menos una entrada visible para el usuario.
 - **Contenido** a la derecha del menú, sobre platino, con un margen de 32 px. Llega hasta 1680 px de ancho; en monitores más anchos queda alineado al menú y el resto es fondo.
+- **Dónde vive:** `resources/views/layouts/app.blade.php` con `core::components.band` (banda y credencial) y `core::components.navigation` (menú); el detalle está en `docs/arquitectura/arquitectura.md`, "Layout (shell)".
 
 ### Responsivo
 | Ancho | Banda | Menú | Tabla |
 |---|---|---|---|
-| ≥ 1200 px | Completa; el buscador crece de 260 a 520 px | Iconos + secciones; abierto en 5 columnas (hasta 1480 px) | Todas las columnas |
-| 768–1199 px | Sin el área en la ruta; credencial con avatar y nombre | Solo iconos (64 px); abierto en 3 columnas | Se ocultan las columnas descriptivas largas; las acciones secundarias quedan como icono con nombre accesible |
-| < 768 px | 56 px: liebre, «Nexus», lupa y avatar | Oculto; la liebre lo baja como hoja con buscador y todas las áreas en una columna (renglones de 44 px) | Renglones apilados: clave, nombre y estado; luego el detalle; luego las acciones |
+| ≥ 1200 px (`desktop:`) | Completa; el buscador crece de 260 a 520 px | Iconos + secciones; abierto en 5 columnas (hasta 1480 px) | Todas las columnas |
+| 768–1199 px (`max-desktop:`) | Sin el área en la ruta; credencial con avatar y nombre | Solo iconos (64 px); abierto en 3 columnas, y las áreas de la cuarta en adelante debajo de la más larga | Se ocultan las columnas descriptivas largas; las acciones secundarias quedan como icono con nombre accesible |
+| < 768 px (`max-md:`) | 56 px: liebre, «Nexus», lupa y avatar | Oculto; la liebre lo baja como hoja con buscador y todas las áreas en una columna (renglones de 44 px) | Renglones apilados: clave, nombre y estado; luego el detalle; luego las acciones |
 
-La captura pesada (editor de horarios, asignación) se diseña para escritorio, pero ninguna pantalla se rompe en celular. Se revisa sin desbordes a 390, 768, 1024, 1440, 1920 y 2560 px.
+La captura pesada (editor de horarios, asignación) se diseña para escritorio, pero ninguna pantalla se rompe en celular. Se revisa sin desbordes a 390, 768, 1024, 1440, 1920 y 2560 px. El corte de 1200 px es el breakpoint `desktop` de `resources/css/app.css`; el de 768 px es `md` de Tailwind.
 
 ### Anatomía de una pantalla de catálogo
 La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php), que copian todos los catálogos:
@@ -242,8 +243,8 @@ La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php
 Plano. La profundidad la dan las superficies (blanco sobre platino) y los filetes, no las sombras.
 
 ### Shadow Vocabulary
-- **Flotante** `0 16px 40px rgba(9,45,72,.24), 0 2px 6px rgba(9,45,72,.12)`: solo lo que flota sobre el contenido (la tarjeta de la credencial, menús desplegables, modales).
-- **Velo** `rgba(9,45,72,.35)` detrás del menú abierto y de los modales.
+- **Flotante** `0 16px 40px rgba(9,45,72,.24), 0 2px 6px rgba(9,45,72,.12)` (`shadow-float`): solo lo que flota sobre el contenido (la tarjeta de la credencial, menús desplegables, modales).
+- **Velo** `rgba(9,45,72,.35)` (`bg-band/35`) detrás del menú abierto y de los modales.
 
 ### Named Rules
 - **Sin tarjetas con sombra para agrupar.** Una tabla o un formulario va en una superficie blanca con filete; nunca tarjetas dentro de tarjetas.
@@ -279,8 +280,8 @@ Los contadores (por ejemplo, «12 filas») van en `badge-neutral badge-soft` con
 Los de MaryUI: 40 px en barras de herramientas y 44 px en la credencial y en celular. Borde de filete, fondo blanco y foco visible. Las etiquetas van arriba, en español, con el error asociado debajo.
 
 ### Navigation
-- **Entrada de menú:** icono y nombre. La activa lleva fondo gris polvo, peso 700 y el punto rojo. Las cifras de registros van a la derecha en Mono.
-- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015).
+- **Entrada de menú:** su nombre, como en la pantalla de referencia; el icono de la entrada no se pinta (lo llevan las áreas). La activa lleva fondo gris polvo, peso 700, el punto rojo y `aria-current="page"`. Las cifras de registros irán a la derecha en Mono cuando haya de dónde salgan; hoy no se muestran.
+- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; si la pantalla no está en el menú, la primera. Con el menú cerrado, un clic en un icono de área abre el menú completo (el botón accesible es la liebre).
 
 ### El menú que se transforma (firma)
 Un solo menú, no dos:
@@ -289,7 +290,9 @@ Un solo menú, no dos:
   2. el buscador entra de inmediato, con el cursor;
   3. los iconos de área viajan a los encabezados de sus columnas y las secciones del área actual a la suya;
   4. cuando cada icono aterriza, aparecen su nombre y sus secciones.
-- **Al cerrar** (Esc, la liebre o un clic fuera): lo de las otras áreas se va primero, la cortina se recoge y todo regresa a su lugar.
+- **Al cerrar** (Esc, la liebre o un clic fuera): lo de las otras áreas se va primero, la cortina se recoge y todo regresa a su lugar. El foco regresa a la liebre.
+- **El buscador** filtra las entradas por su nombre, sin importar mayúsculas ni acentos; las que quedan suben en su columna, las áreas sin ninguna se ocultan y, si no queda nada, dice «Sin resultados». Enter abre la primera. Por ahora solo busca pantallas del menú, así que dice «Busca una pantalla…».
+- **Al ir a otra pantalla** desde el menú, la página nueva llega con el menú cerrado.
 
 Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 
@@ -302,6 +305,8 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 
 - Solo se anima `transform`, `opacity` y `clip-path`.
 - Con `prefers-reduced-motion`, todo cambia sin animar.
+- Nunca dos movimientos del menú encimados: lo que se pide mientras uno corre (Esc justo después de abrir) se hace al terminar.
+- **Implementación:** el componente Alpine `nexusShell` (`resources/js/app.js`) hace el FLIP del menú con la Web Animations API; la cortina, el velo y la tarjeta son transiciones de utilidades de Tailwind. El estado vive en `<body data-menu>` y las utilidades lo leen con `in-data-[menu=open]:`; la geometría por ancho son variables que declara `<body>`. La única regla del shell escrita a mano en `resources/css/app.css` bloquea el desplazamiento con el menú abierto (el candado de daisyUI vive en `:root`, donde no llega una utilidad).
 - La palabra gigante y los mosaicos vivos son para los inicios por rol, nunca para pantallas de captura.
 
 ### La liebre

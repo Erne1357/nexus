@@ -10,7 +10,7 @@ use Illuminate\Contracts\Session\Session;
 
 /**
  * Fija en la sesión el campus y el periodo activos del usuario autenticado (selector de la
- * topbar). El campus debe estar entre los que ScopedContext::campuses() le ofrece; cualquier
+ * credencial). El campus debe estar entre los que ScopedContext::campuses() le ofrece; cualquier
  * periodo vale. `null` olvida la elección y deja el de omisión. Solo escribe en la sesión, así que
  * no abre transacción ni deja bitácora.
  */

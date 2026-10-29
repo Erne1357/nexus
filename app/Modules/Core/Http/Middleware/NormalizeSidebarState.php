@@ -10,7 +10,8 @@ use Symfony\Component\HttpFoundation\Response;
  * MaryUI guarda en la sesión si la barra lateral está colapsada y <x-main> imprime ese valor dentro
  * de x-data, donde Alpine lo ejecuta. Antes de pintar cualquier página, todo valor distinto de
  * 'true' o 'false' se reescribe a 'false', venga de donde venga (la ruta de MaryUI ya está
- * reemplazada en Core/Routes/web.php). Va en el grupo `web` (bootstrap/app.php).
+ * reemplazada en Core/Routes/web.php). Va en el grupo `web` (bootstrap/app.php). El shell de Nexus
+ * ya no usa <x-main>, pero la ruta de MaryUI sigue registrada y una pantalla podría volver a usarlo.
  */
 final class NormalizeSidebarState
 {
