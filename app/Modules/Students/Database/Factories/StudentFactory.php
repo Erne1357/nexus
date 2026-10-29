@@ -29,7 +29,7 @@ class StudentFactory extends Factory
             'name' => fake()->name(),
             'study_plan_id' => StudyPlan::factory(),
             // La carrera de su plan; con un plan que no existe (una prueba de llaves), otra cualquiera.
-            'career_id' => fn (array $attributes): string|CareerFactory => StudyPlan::query()->whereKey($attributes['study_plan_id'])->value('career_id') ?? Career::factory(),
+            'career_id' => fn (array $attributes): string|CareerFactory => StudyPlan::withTrashed()->whereKey($attributes['study_plan_id'])->value('career_id') ?? Career::factory(),
             'campus_id' => Campus::factory(),
             'current_semester' => 1,
             'status' => StudentStatus::Activo,

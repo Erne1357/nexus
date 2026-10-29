@@ -16,13 +16,14 @@ use App\Modules\Students\Models\StudentProgress;
 it('un alumno da su carrera, su plan, su campus, su kardex y su progreso', function () {
     $student = Student::factory()->create(['status' => StudentStatus::BajaTemporal]);
     $record = KardexRecord::factory()->for($student)->create();
-    $progress = StudentProgress::factory()->for($student)->create(['study_plan_id' => $student->study_plan_id]);
+    $progress = StudentProgress::factory()->for($student)->create();
 
     expect($student->studyPlan->career_id)->toBe($student->career_id)
         ->and($student->career->is($student->studyPlan->career))->toBeTrue()
         ->and($student->campus)->toBeInstanceOf(Campus::class)
         ->and($student->kardexRecords->modelKeys())->toBe([$record->id])
         ->and($student->progress->is($progress))->toBeTrue()
+        ->and($progress->study_plan_id)->toBe($student->study_plan_id)
         ->and($student->fresh()->status)->toBe(StudentStatus::BajaTemporal);
 });
 

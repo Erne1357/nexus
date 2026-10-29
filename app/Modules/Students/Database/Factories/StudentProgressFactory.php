@@ -22,7 +22,7 @@ class StudentProgressFactory extends Factory
     {
         return [
             'student_id' => Student::factory(),
-            'study_plan_id' => fn (array $attributes): string => Student::query()->findOrFail($attributes['student_id'])->study_plan_id,
+            'study_plan_id' => fn (array $attributes): string => Student::withTrashed()->findOrFail($attributes['student_id'])->study_plan_id,
             'credits_approved' => 0,
             'subjects_approved' => 0,
             'subjects_pending' => [],

@@ -1,5 +1,9 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
+use App\Modules\Core\Models\Term;
+use App\Modules\Students\Enums\KardexResult;
+use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentProgress;
@@ -25,6 +29,25 @@ describe('alumnos', function () {
     it('un alumno necesita carrera, plan y campus que existan', function (string $column) {
         expect(fn () => Student::factory()->create([$column => (string) Str::uuid7()]))->toThrow(QueryException::class, 'foreign key');
     })->with(['career_id', 'study_plan_id', 'campus_id']);
+
+    it('el plan de un alumno es de su carrera', function () {
+        $student = Student::factory()->create();
+
+        expect(fn () => $student->update(['career_id' => Career::factory()->create()->id]))->toThrow(QueryException::class, 'foreign key');
+    });
+
+    it('si el plan cambia de carrera, sus alumnos cambian con él', function () {
+        $student = Student::factory()->create();
+        $career = Career::factory()->create();
+
+        $student->studyPlan->update(['career_id' => $career->id]);
+
+        expect($student->fresh()->career_id)->toBe($career->id);
+    });
+
+    it('acepta cada estatus del enum: si se agrega uno, también va en la restricción de la base', function (StudentStatus $status) {
+        expect(Student::factory()->create(['status' => $status])->fresh()->status)->toBe($status);
+    })->with(StudentStatus::cases());
 
     it('el semestre actual empieza en 1 y puede faltar, como en un egresado', function () {
         Student::factory()->create(['current_semester' => null]);
@@ -71,9 +94,21 @@ describe('kardex', function () {
         'resultado desconocido' => [['result' => 'AC'], 'kardex_records_result_check'],
     ]);
 
+    it('acepta cada resultado del enum: si se agrega uno, también va en la restricción de la base', function (KardexResult $result) {
+        expect(KardexRecord::factory()->create(['result' => $result])->fresh()->result)->toBe($result);
+    })->with(KardexResult::cases());
+
     it('una fila de kardex necesita un alumno y una materia que existan', function (string $column) {
         expect(fn () => KardexRecord::factory()->create([$column => (string) Str::uuid7()]))->toThrow(QueryException::class, 'foreign key');
     })->with(['student_id', 'subject_id']);
+});
+
+describe('periodos', function () {
+    it('un periodo de Nexus lleva el código del SII: año y 1, 2 o 3, sin guión', function () {
+        Term::factory()->create(['code' => '20272']);
+
+        expect(fn () => Term::factory()->create(['code' => '2027-1']))->toThrow(QueryException::class, 'terms_code_check');
+    });
 });
 
 describe('progreso', function () {
@@ -82,4 +117,11 @@ describe('progreso', function () {
 
         expect(fn () => StudentProgress::factory()->for($progress->student)->create())->toThrow(UniqueConstraintViolationException::class);
     });
+
+    it('las cuentas de créditos y materias no son negativas', function (string $column, string $constraint) {
+        expect(fn () => StudentProgress::factory()->create([$column => -1]))->toThrow(QueryException::class, $constraint);
+    })->with([
+        ['credits_approved', 'student_progress_credits_approved_check'],
+        ['subjects_approved', 'student_progress_subjects_approved_check'],
+    ]);
 });

@@ -9,8 +9,9 @@ use Illuminate\Support\Facades\Schema;
  * Avance reticular de cada alumno en su plan, que recalcula el job RecomputeStudentProgress al terminar una
  * importación (decisión de modelado 5). Uno por alumno. `subjects_pending` son las materias del plan que no
  * ha aprobado y `subjects_available` las que de esas ya puede cursar, con toda su seriación aprobada: con el
- * índice GIN, contar elegibles por materia es una consulta de contención (tarea 1.5). Tabla derivada: se
- * reescribe, sin borrado lógico.
+ * índice GIN, contar elegibles por materia es una consulta de contención (tarea 1.5). `study_plan_id` es el
+ * plan con que se calculó: si el alumno cambió de plan, la fila vale hasta el siguiente recálculo, así que quien
+ * la lea la cruza con `students.study_plan_id`. Tabla derivada: se reescribe, sin borrado lógico.
  */
 return new class extends Migration
 {
@@ -31,6 +32,8 @@ return new class extends Migration
         });
 
         DB::statement('create index student_progress_subjects_available_index on student_progress using gin (subjects_available jsonb_path_ops)');
+        DB::statement('alter table student_progress add constraint student_progress_credits_approved_check check (credits_approved >= 0)');
+        DB::statement('alter table student_progress add constraint student_progress_subjects_approved_check check (subjects_approved >= 0)');
     }
 
     public function down(): void
