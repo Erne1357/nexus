@@ -45,7 +45,7 @@
             data-testid="menu-search-trigger"
             aria-controls="nexus-menu"
             x-on:click="openMenu()"
-            class="flex h-10 w-[clamp(260px,26vw,520px)] cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-band-content/18 bg-band-content/8 px-3 whitespace-nowrap text-band-muted transition-opacity duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-desktop:w-[220px] max-md:hidden in-data-[menu=open]:pointer-events-none in-data-[menu=open]:opacity-0"
+            class="flex h-10 w-[clamp(260px,26vw,520px)] cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-band-content/18 bg-band-content/8 px-3 whitespace-nowrap text-band-muted transition-[opacity,visibility] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-desktop:w-[220px] max-md:hidden in-data-[menu=open]:pointer-events-none in-data-[menu=open]:invisible in-data-[menu=open]:opacity-0"
         >
             <x-icon name="o-magnifying-glass" class="size-[18px] flex-none" />
             Buscar o ir a…
@@ -57,7 +57,7 @@
             aria-label="Buscar"
             aria-controls="nexus-menu"
             x-on:click="openMenu()"
-            class="hidden size-11 flex-none cursor-pointer place-items-center rounded-lg border border-band-content/20 transition-opacity duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-md:grid in-data-[menu=open]:pointer-events-none in-data-[menu=open]:opacity-0"
+            class="hidden size-11 flex-none cursor-pointer place-items-center rounded-lg border border-band-content/20 transition-[opacity,visibility] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-md:grid in-data-[menu=open]:pointer-events-none in-data-[menu=open]:invisible in-data-[menu=open]:opacity-0"
         >
             <x-icon name="o-magnifying-glass" class="size-[18px]" />
         </button>
