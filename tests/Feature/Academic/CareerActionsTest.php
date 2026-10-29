@@ -239,10 +239,30 @@ describe('SetCareerOffering', function () {
         $c1 = Campus::factory()->create(['code' => 'C1']);
 
         app(SetCareerOffering::class)->handle($this->career, $this->c2, true);
+        app(SetCareerOffering::class)->handle($this->career, $c1, true);
         app(SetCareerOffering::class)->handle($this->career, $c1, false);
 
         expect(CareerCampus::where('campus_id', $this->c2->id)->sole()->is_active)->toBeTrue()
             ->and(CareerCampus::where('campus_id', $c1->id)->sole()->is_active)->toBeFalse();
+    });
+
+    it('dejar de ofrecer una carrera que nunca se ofreció no crea nada ni deja bitácora', function () {
+        Event::fake([CareerOfferingChanged::class]);
+
+        $result = app(SetCareerOffering::class)->handle($this->career, $this->c2, false);
+
+        expect($result)->toBeNull()->and(CareerCampus::withTrashed()->count())->toBe(0)->and(Activity::count())->toBe(0);
+        Event::assertNotDispatched(CareerOfferingChanged::class);
+    });
+
+    it('dejar de ofrecer cuando la única fila está borrada no la toca', function () {
+        $deleted = CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $this->c2->id]);
+        $deleted->delete();
+
+        $result = app(SetCareerOffering::class)->handle($this->career, $this->c2, false);
+
+        expect($result)->toBeNull()->and($deleted->fresh())->not->toBeNull()
+            ->and(CareerCampus::withTrashed()->find($deleted->id)->trashed())->toBeTrue()->and(Activity::count())->toBe(0);
     });
 
     it('una carrera inactiva se puede ofrecer pero la oferta nace inactiva', function () {

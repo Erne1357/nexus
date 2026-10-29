@@ -167,7 +167,9 @@ new #[Title('Carreras')] class extends Component
         $offering = $setCareerOffering->handle($career, $campus, ! $offeredNow);
         $description = e("{$career->code} · {$campus->code}");
 
-        if ($offeredNow) {
+        if ($offering === null) {
+            $this->info('Sin cambios', e("{$career->code} no se ofrece en {$campus->code}."));
+        } elseif ($offeredNow) {
             $this->success('Carrera fuera de la oferta', $description);
         } elseif (! $offering->is_active && $existed) {
             $this->info('Sin cambios', e("Sin cambios: {$career->code} está inactiva y su oferta en {$campus->code} sigue inactiva."));

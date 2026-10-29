@@ -21,15 +21,15 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * En una transacción lee la fila con bloqueo, también la borrada. Si nada cambia, no escribe,
  * no registra ni avisa; si algo cambia, deja la bitácora sobre la oferta con el valor anterior y,
  * después del commit, avisa con CareerOfferingChanged. Dejar de ofrecer lo que nunca se ofreció
- * deja una fila inactiva, para devolver siempre la oferta. Ofrecer nunca desactiva: una oferta activa
+ * (sin fila, o con la única fila borrada) no hace nada y devuelve null. Ofrecer nunca desactiva: una oferta activa
  * de una carrera inactiva se queda activa. Si otra sesión crea la primera fila al mismo tiempo, la lee
  * y sigue con ella.
  */
 final class SetCareerOffering
 {
-    public function handle(Career $career, Campus $campus, bool $offered): CareerCampus
+    public function handle(Career $career, Campus $campus, bool $offered): ?CareerCampus
     {
-        return DB::transaction(function () use ($career, $campus, $offered): CareerCampus {
+        return DB::transaction(function () use ($career, $campus, $offered): ?CareerCampus {
             $find = fn (): ?CareerCampus => CareerCampus::withTrashed()
                 ->where('career_id', $career->id)
                 ->where('campus_id', $campus->id)
@@ -37,6 +37,10 @@ final class SetCareerOffering
                 ->first();
 
             $offering = $find();
+
+            if ($offering === null && ! $offered) {
+                return null;
+            }
 
             if ($offering === null) {
                 $isActive = $offered && $career->is_active;
