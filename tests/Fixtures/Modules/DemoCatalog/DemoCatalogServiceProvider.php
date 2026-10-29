@@ -2,6 +2,7 @@
 
 namespace Tests\Fixtures\Modules\DemoCatalog;
 
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
@@ -27,12 +28,14 @@ final class DemoCatalogServiceProvider extends ModuleServiceProvider
                 label: 'Saludo',
                 route: 'demo-catalog.greeting',
                 icon: 'o-hand-raised',
+                area: NavigationArea::ServiciosEscolares,
                 visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador),
             ),
             new NavigationItem(
                 label: 'Elementos',
                 route: 'demo-catalog.ping',
                 icon: 'o-rectangle-stack',
+                area: NavigationArea::RecursosHumanos,
                 ability: 'viewAny',
                 arguments: [Item::class],
             ),

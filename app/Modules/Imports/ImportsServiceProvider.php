@@ -2,6 +2,7 @@
 
 namespace App\Modules\Imports;
 
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Imports\Models\ImportBatch;
@@ -28,7 +29,8 @@ final class ImportsServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Importaciones', 'imports.wizard', 'o-arrow-up-tray', ability: 'viewAny', arguments: [ImportBatch::class]),
+            new NavigationItem('Importaciones', 'imports.wizard', 'o-arrow-up-tray', NavigationArea::Datos,
+                ability: 'viewAny', arguments: [ImportBatch::class]),
         ];
     }
 

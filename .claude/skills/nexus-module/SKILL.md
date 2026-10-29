@@ -126,8 +126,9 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 ### 11. Navegación
 
 - En `navigation()` del provider, como `CoreServiceProvider::navigation()`:
-  `new NavigationItem('Departamentos', 'academic.departments', 'o-…', ability: 'viewAny', arguments: [Department::class])`.
+  `new NavigationItem('Departamentos', 'academic.departments', 'o-…', NavigationArea::Academico, ability: 'viewAny', arguments: [Department::class])`.
   Si depende del rol y no de una policy: `visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador)`. Siempre `static` y sin estado: el registro es inmutable y se comparte entre peticiones.
+- Toda entrada declara su área (`Core\Enums\NavigationArea`, cuarto argumento, obligatorio): Académico, Servicios escolares, Recursos humanos, Recursos financieros o Datos. El orden de las áreas en el menú es el de los casos del enum, no el de los módulos; dentro de un área, las entradas van en el orden de `bootstrap/providers.php` y de su `navigation()`. Un área nueva es un caso nuevo del enum, en el lugar donde debe aparecer, y cambia ADR-0015: se acuerda antes.
 - El nombre debe ser una ruta registrada (`tests/Feature/Core/NavigationTest.php` revisa todas). La entrada entra en el mismo PR que su pantalla, con prueba de quién la ve y quién no.
 - La misma prueba compara listas exactas de etiquetas por rol: una entrada nueva visible para ese rol la rompe. Actualízala en el mismo PR y avísalo en el issue, porque es una prueba de Core.
 
