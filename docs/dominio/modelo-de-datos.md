@@ -114,9 +114,9 @@ erDiagram
 
 | Tabla | Campos clave | Notas |
 |---|---|---|
-| `students` | `control_number` (único), `name`, `career_id`, `study_plan_id`, `campus_id`, `current_semester`, `status` (enum), `admitted_term_id?`, `is_active` | Solo lectura en R1 y R2 (viene de importación). R3 agrega datos de inscripción. |
-| `kardex_records` | `student_id`, `subject_id`, `term_code`, `grade?`, `result` (enum: `aprobada`, `reprobada`, `cursando`, `baja`), `attempt` | Historial académico. Único por alumno, materia y periodo. |
-| `student_progress` | `student_id`, `study_plan_id`, `credits_approved`, `subjects_approved`, `subjects_pending` (json), `computed_at` | Vista materializada (tabla recalculada por job al terminar una importación). Base para contar alumnos elegibles por materia. |
+| `students` | `control_number` (único), `name`, `career_id`, `study_plan_id`, `campus_id`, `current_semester?`, `status?` (enum: `activo`, `baja_temporal`, `baja_definitiva`, `egresado`), `admitted_term_id?`, `is_active` | Solo lectura en R1 y R2 (viene de importación). R3 agrega datos de inscripción. El número de control es único en todo el Tec, así que el campus sale del archivo y no forma parte de la clave. `current_semester` ≥ 1 o vacío (un egresado). `status` queda vacío si el SII trae un estatus que Nexus no conoce; los que se repitan en las exportaciones reales se agregan al enum (confirmado el 29 de octubre de 2026). |
+| `kardex_records` | `student_id`, `subject_id`, `term_code`, `grade?`, `result` (enum: `aprobada`, `reprobada`, `cursando`, `baja`), `attempt` | Historial académico. Único por alumno, materia y periodo, también contra una fila borrada; repetir la materia en otro periodo es otra fila. `term_code` lleva el código del SII (año y 1, 2 o 3, CHECK) y no es llave a `terms`, porque el kardex trae periodos de décadas anteriores. La materia puede no estar en el plan del alumno. `grade` de 0 a 100; `attempt` es la oportunidad, de 1 en adelante. |
+| `student_progress` | `student_id` (único), `study_plan_id`, `credits_approved`, `subjects_approved`, `subjects_pending` (json), `subjects_available` (json), `computed_at` | Vista materializada (tabla recalculada por job al terminar una importación). `subjects_pending` son las materias del plan que el alumno no ha aprobado; `subjects_available`, las que de esas ya puede cursar porque aprobó toda su seriación. Con su índice GIN, contar alumnos elegibles por materia es una consulta de contención (tarea 1.5). Créditos y materias aprobadas cuentan solo las del plan. |
 
 ## Imports
 
