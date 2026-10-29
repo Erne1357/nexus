@@ -62,7 +62,7 @@
             <x-icon name="o-magnifying-glass" class="size-[18px]" />
         </button>
 
-        <div x-on:click.outside="closeCard(false)" class="min-w-0">
+        <div x-on:click.outside="closeCard(false)" x-on:focusout="onCardFocusOut($event)" class="min-w-0">
             <button
                 type="button"
                 id="nexus-credential-toggle"
@@ -90,9 +90,10 @@
                 id="nexus-credential"
                 role="dialog"
                 aria-label="Tu credencial"
+                tabindex="-1"
                 data-open="false"
                 x-bind:data-open="cardOpen ? 'true' : 'false'"
-                class="pointer-events-none invisible fixed end-5 top-[74px] z-[8] w-[340px] origin-top-right -translate-y-1.5 scale-[.94] overflow-hidden rounded-[10px] bg-base-100 text-base-content opacity-0 shadow-float transition-[opacity,scale,translate,visibility] duration-300 ease-settle motion-reduce:transition-none data-[open=true]:pointer-events-auto data-[open=true]:visible data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:duration-[400ms] data-[open=true]:ease-open max-md:inset-x-2 max-md:top-[66px] max-md:w-auto"
+                class="pointer-events-none invisible fixed end-5 outline-none top-[74px] z-[8] w-[340px] origin-top-right -translate-y-1.5 scale-[.94] overflow-hidden rounded-[10px] bg-base-100 text-base-content opacity-0 shadow-float transition-[opacity,scale,translate,visibility] duration-300 ease-settle motion-reduce:transition-none data-[open=true]:pointer-events-auto data-[open=true]:visible data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:transition-[opacity,scale,translate] data-[open=true]:duration-[400ms] data-[open=true]:ease-open max-md:inset-x-2 max-md:top-[66px] max-md:w-auto"
             >
                 <div data-testid="credential-header" class="flex items-center gap-3 bg-band p-4 text-band-content">
                     <span aria-hidden="true" class="grid size-[46px] flex-none place-items-center rounded-full bg-secondary text-base font-bold text-secondary-content">{{ $initials }}</span>

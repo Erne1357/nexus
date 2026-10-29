@@ -182,7 +182,7 @@ Fondo `#0a1826`, superficies `#0f2133`, banda `#071a2b`, selección `#26384a`, f
   - **Izquierda:** la liebre en un cuadro rojo de 72 px, que es el botón del menú completo; luego «Nexus» y la ruta (área › pantalla).
   - **Derecha:** el buscador «Buscar o ir a… Ctrl K», que abre el menú con el cursor en su buscador, y **la credencial**.
   - Debajo, la **franja roja** de 3 px.
-- **La credencial** es un botón con avatar (las iniciales), nombre y, debajo, «rol · campus · periodo»: el primer rol que ejerce, en el orden del enum `Role` y con su `label()`; sin campus elegido, solo el rol y el periodo. Se abre como tarjeta (Esc o un clic fuera la cierran) con:
+- **La credencial** es un botón con avatar (las iniciales), nombre y, debajo, «rol · campus · periodo»: el primer rol que ejerce, en el orden del enum `Role` y con su `label()`; sin campus elegido, solo el rol y el periodo. Se abre como tarjeta, con el foco dentro (Esc, un clic fuera o salir de ella con Tab la cierran), con:
   - encabezado azul y su franja roja;
   - selectores de **campus** y **periodo** (los de `core::components.context-switcher`, con `SetActiveContext`);
   - **tema** claro u oscuro;
@@ -312,7 +312,7 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 
 - Solo se anima `transform`, `opacity` y `clip-path`.
 - Con `prefers-reduced-motion`, todo cambia sin animar.
-- Nunca dos movimientos del menú encimados: lo que se pide mientras uno corre (Esc justo después de abrir) se hace al terminar.
+- Nunca dos movimientos del menú encimados: lo que se pide mientras uno corre (Esc justo después de abrir) se hace al terminar. Esc cierra solo la capa de arriba: la credencial si está abierta sobre el menú; si no, el menú.
 - **Implementación:** el componente Alpine `nexusShell` (`resources/js/app.js`) hace el FLIP del menú con la Web Animations API; la cortina, el velo y la tarjeta son transiciones de utilidades de Tailwind. El estado vive en `<body data-menu>` y las utilidades lo leen con `in-data-[menu=open]:`; la geometría por ancho son variables que declara `<body>`. La única regla del shell escrita a mano en `resources/css/app.css` bloquea el desplazamiento con el menú abierto (el candado de daisyUI vive en `:root`, donde no llega una utilidad).
 - La palabra gigante y los mosaicos vivos son para los inicios por rol, nunca para pantallas de captura.
 

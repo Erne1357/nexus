@@ -11,22 +11,40 @@
 | regresa con la curva de asentar, sin rebote. Con prefers-reduced-motion todo cambia sin animar.
 */
 
-const OPEN_EASING = 'cubic-bezier(.3, 1.06, .5, 1)';
-const SETTLE_EASING = 'cubic-bezier(.22, 1, .36, 1)';
-
 /** Lo que tarda el menú en asentarse; un abrir o cerrar pedido mientras espera a que termine. */
 const SETTLE_MS = 440;
 
 /** El buscador recibe el cursor cuando ya entró. */
 const FOCUS_SEARCH_MS = 260;
 
-const matches = (query) => window.matchMedia(query).matches;
-const reducedMotion = () => matches('(prefers-reduced-motion: reduce)');
-const isPhone = () => matches('(width < 48rem)');
-const isTablet = () => !isPhone() && matches('(width < 75rem)');
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** Las curvas de DESIGN.md, de los tokens ease-open y ease-settle de resources/css/app.css. */
+const easing = (token, fallback) => getComputedStyle(document.documentElement).getPropertyValue(token).trim() || fallback;
+const openEasing = () => easing('--ease-open', 'cubic-bezier(.3, 1.06, .5, 1)');
+const settleEasing = () => easing('--ease-settle', 'cubic-bezier(.22, 1, .36, 1)');
+
+/**
+ * El ancho del menú cerrado que declara <body> por breakpoint (--menu-w) dice en qué disposición
+ * está: 0 en el celular, la franja de 64 px en tableta y 288 px en escritorio. Así el JS no repite
+ * los breakpoints del CSS.
+ */
+const closedMenuWidth = () => parseFloat(getComputedStyle(document.body).getPropertyValue('--menu-w')) || 0;
+const isPhone = () => closedMenuWidth() === 0;
+const isTablet = () => closedMenuWidth() > 0 && closedMenuWidth() <= 64;
 
 /** Para buscar sin importar mayúsculas ni acentos: «Académico» y «academico» son iguales. */
 const normalize = (text) => text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('es');
+
+/** El nombre normalizado de cada entrada, para no repetirlo en cada tecla. */
+const searchableLabels = new WeakMap();
+const searchableLabel = (entry) => {
+    if (!searchableLabels.has(entry)) {
+        searchableLabels.set(entry, normalize(entry.dataset.label ?? ''));
+    }
+
+    return searchableLabels.get(entry);
+};
 
 const isRendered = (element) => element.getClientRects().length > 0;
 
@@ -35,6 +53,9 @@ const numberFrom = (element, property) => Number(element.style.getPropertyValue(
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('nexusShell', () => ({
         menuOpen: false,
+
+        /** Hacia dónde va el menú: cambia al empezar un movimiento, antes de que el menú cambie. */
+        menuTarget: false,
         cardOpen: false,
         busy: false,
         queued: null,
@@ -52,12 +73,17 @@ document.addEventListener('alpine:init', () => {
             this.timers.forEach((timer) => clearTimeout(timer));
         },
 
+        /** Hacia dónde quedará el menú: lo último que se pidió, aunque espere a que termine un movimiento. */
+        intendedOpen() {
+            return this.queued ?? this.menuTarget;
+        },
+
         toggleMenu() {
-            this.setMenu(!this.menuOpen);
+            this.setMenu(!this.intendedOpen());
         },
 
         openMenu() {
-            if (this.menuOpen) {
+            if (this.intendedOpen()) {
                 this.focusSearch();
             } else {
                 this.setMenu(true);
@@ -68,11 +94,24 @@ document.addEventListener('alpine:init', () => {
             this.setMenu(false);
         },
 
+        /** Al abrir, el foco entra a la tarjeta (es un diálogo) para que el lector de pantalla la anuncie. */
         toggleCard() {
             if (this.cardOpen) {
                 this.closeCard();
-            } else {
-                this.cardOpen = true;
+
+                return;
+            }
+
+            this.cardOpen = true;
+            this.$nextTick(() => document.getElementById('nexus-credential')?.focus());
+        },
+
+        /** Si el foco sale de la credencial con el teclado, la tarjeta se cierra. */
+        onCardFocusOut(event) {
+            const credential = event.currentTarget;
+
+            if (event.relatedTarget && !credential.contains(event.relatedTarget)) {
+                this.closeCard(false);
             }
         },
 
@@ -88,10 +127,14 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        /** Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el menú. */
         onKeydown(event) {
             if (event.key === 'Escape') {
-                this.closeCard();
-                this.closeMenu();
+                if (this.cardOpen) {
+                    this.closeCard();
+                } else {
+                    this.closeMenu();
+                }
             }
 
             // Sin key, como el keydown que manda el autocompletado de Chrome, no es un atajo.
@@ -111,11 +154,12 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            if (!menu || open === this.menuOpen) {
+            if (!menu || open === this.menuTarget) {
                 return;
             }
 
             this.busy = true;
+            this.menuTarget = open;
             this.cardOpen = false;
 
             const reduce = reducedMotion();
@@ -130,7 +174,8 @@ document.addEventListener('alpine:init', () => {
                     { duration: 110, delay: (leaving.length - index) * 3, easing: 'ease-in', fill: 'forwards' },
                 ).finished.catch(() => {})));
 
-                if (!this.menuOpen) {
+                // reset() lo cerró sin animar mientras se desvanecía.
+                if (!this.busy) {
                     return;
                 }
             }
@@ -164,7 +209,7 @@ document.addEventListener('alpine:init', () => {
             const queued = this.queued;
             this.queued = null;
 
-            if (queued !== null && queued !== this.menuOpen) {
+            if (queued !== null && queued !== this.menuTarget) {
                 this.setMenu(queued);
             }
         },
@@ -176,10 +221,16 @@ document.addEventListener('alpine:init', () => {
          */
         play(items, first, open) {
             const phone = isPhone();
+            const spring = openEasing();
+            const settle = settleEasing();
+
+            // Primero todas las lecturas y después todas las animaciones, para no forzar el layout
+            // en cada elemento.
+            const last = new Map(items.map((item) => [item, item.getBoundingClientRect()]));
 
             items.forEach((item, order) => {
                 const from = first.get(item);
-                const to = item.getBoundingClientRect();
+                const to = last.get(item);
 
                 if (!to.width) {
                     return;
@@ -195,7 +246,7 @@ document.addEventListener('alpine:init', () => {
 
                     item.animate(
                         [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }],
-                        { duration: 320, delay, easing: OPEN_EASING, fill: 'backwards' },
+                        { duration: 320, delay, easing: spring, fill: 'backwards' },
                     );
 
                     return;
@@ -211,8 +262,8 @@ document.addEventListener('alpine:init', () => {
                 item.animate(
                     [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
                     open
-                        ? { duration: 580, delay: area * 30 + index * 14, easing: OPEN_EASING }
-                        : { duration: 420, delay: index * 6, easing: SETTLE_EASING },
+                        ? { duration: 580, delay: area * 30 + index * 14, easing: spring }
+                        : { duration: 420, delay: index * 6, easing: settle },
                 );
             });
         },
@@ -247,7 +298,7 @@ document.addEventListener('alpine:init', () => {
         hop() {
             document.querySelector('#nexus-hare [data-hare-mark]')?.animate(
                 [{ transform: 'none' }, { transform: 'translate(1px, -4px) rotate(-4deg)', offset: 0.4 }, { transform: 'none' }],
-                { duration: 500, easing: OPEN_EASING },
+                { duration: 500, easing: openEasing() },
             );
         },
 
@@ -274,7 +325,7 @@ document.addEventListener('alpine:init', () => {
                 let shown = 0;
 
                 area.querySelectorAll('[data-menu-entry]').forEach((entry) => {
-                    const match = needle === '' || normalize(entry.dataset.label).includes(needle);
+                    const match = needle === '' || searchableLabel(entry).includes(needle);
 
                     entry.hidden = !match;
 
@@ -318,6 +369,7 @@ document.addEventListener('alpine:init', () => {
             this.timers = [];
             document.querySelectorAll('#nexus-menu [data-menu-flip]').forEach((item) => item.getAnimations().forEach((animation) => animation.cancel()));
             this.apply(false);
+            this.menuTarget = false;
             this.cardOpen = false;
             this.busy = false;
             this.queued = null;

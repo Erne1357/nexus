@@ -80,6 +80,7 @@ it('la credencial se abre como tarjeta con el campus y el periodo, y Esc la cier
         ->assertMissing('select[name="campus"]')
         ->click('@credential')
         ->assertAttribute('@credential', 'aria-expanded', 'true')
+        ->assertScript('document.activeElement.id', 'nexus-credential')
         ->assertVisible('select[name="campus"]')
         ->assertVisible('select[name="term"]')
         ->assertSee('Cambiar contraseña')
@@ -111,5 +112,32 @@ it('en el celular, la liebre baja el menú como hoja con todas las áreas', func
         ->assertPathIs('/imports')
         ->assertMissing('#nexus-menu')
         ->assertScript('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        ->assertNoJavaScriptErrors();
+});
+
+it('Esc cierra solo la capa de arriba, y lo que se pide a medio movimiento se hace al terminar', function () {
+    $page = signInToShell()
+        ->click('@hare')
+        ->assertScript('document.activeElement.id', 'nexus-menu-search')
+        ->click('@credential')
+        ->assertScript('document.activeElement.id', 'nexus-credential')
+        ->keys('#nexus-credential', 'Escape')
+        ->assertAttribute('@credential', 'aria-expanded', 'false')
+        ->assertScript('document.activeElement.id', 'nexus-credential-toggle')
+        ->assertScript('document.body.dataset.menu', 'open')
+        ->assertScript('Alpine.$data(document.body).busy === false');
+
+    // Se cierra y, mientras lo que se va se desvanece, se vuelve a tocar la liebre.
+    $page->script('(() => {
+        window.menuStates = [];
+        new MutationObserver(() => window.menuStates.push(document.body.dataset.menu))
+            .observe(document.body, { attributeFilter: ["data-menu"] });
+        const shell = Alpine.$data(document.body);
+        shell.closeMenu();
+        setTimeout(() => shell.toggleMenu(), 50);
+    })()');
+
+    $page->assertScript('window.menuStates.join(",")', 'closed,open')
+        ->assertScript('document.activeElement.id', 'nexus-menu-search')
         ->assertNoJavaScriptErrors();
 });
