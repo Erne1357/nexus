@@ -60,13 +60,14 @@ final class StudentQuery
     }
 
     /**
-     * El alumno de la ficha, sin los borrados. El id llega de la ruta: uno que no es uuid no existe (ADR-0014).
+     * El alumno de la ficha, sin los borrados y con su carrera, que usan StudentPolicy y la ficha. El id llega
+     * de la ruta: uno que no es uuid no existe (ADR-0014).
      *
      * @throws ModelNotFoundException<Student>
      */
     public function findOrFail(string $id): Student
     {
-        return KeyLookup::findOrFail(Student::query(), $id);
+        return KeyLookup::findOrFail(Student::query()->with(['career' => fn (BelongsTo $career) => $career->withTrashed()]), $id);
     }
 
     /**

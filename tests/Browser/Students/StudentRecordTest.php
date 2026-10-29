@@ -41,7 +41,7 @@ it('el coordinador abre la ficha de un alumno desde el listado y pasa al kárdex
         ->assertSee('Cálculo Integral')
         ->assertSee('Puede seleccionarla')
         ->click('@tab-kardex')
-        ->assertSee('Ago–Dic 2025')
+        ->assertSee('Ago-Dic 2025')
         ->assertSee('1 · ordinaria')
         ->assertNoJavaScriptErrors();
 });

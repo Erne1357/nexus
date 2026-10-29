@@ -68,7 +68,7 @@ it('da el estado de cada materia como el SII, desde su kardex', function () {
     $record = recordOf($this->student);
 
     expect(array_keys($record->semesters))->toBe([1, 2, 4])
-        ->and(cellOf($record, 'A'))->standing->toBe(SubjectStanding::Acreditada)->grade->toBe('85.00')->termCode->toBe('20253')
+        ->and(cellOf($record, 'A'))->standing->toBe(SubjectStanding::Acreditada)->grade->toBe('85')->termCode->toBe('20253')
         ->and(cellOf($record, 'F')->standing)->toBe(SubjectStanding::ReprobadaPrioridad)
         ->and(cellOf($record, 'Q')->standing)->toBe(SubjectStanding::ACursoEspecial)
         ->and(cellOf($record, 'C')->standing)->toBe(SubjectStanding::Cursando)
@@ -106,7 +106,7 @@ it('una materia reprobada muestra su última oportunidad, y la del curso especia
 
     $record = recordOf($this->student);
 
-    expect(cellOf($record, 'Q'))->standing->toBe(SubjectStanding::CursoEspecialReprobado)->attempt->toBe(3)->grade->toBe('40.00')->termCode->toBe('20253')
+    expect(cellOf($record, 'Q'))->standing->toBe(SubjectStanding::CursoEspecialReprobado)->attempt->toBe(3)->grade->toBe('40')->termCode->toBe('20253')
         ->and($record->selectable)->toBe(4);
 });
 
@@ -157,7 +157,8 @@ it('resume los créditos, las materias acreditadas, lo que cursa y lo que puede 
         ->subjectsInGrid->toBe(8)
         ->taking->toBe(1)
         ->selectable->toBe(4)
-        ->reachSemester->toBe(3);
+        ->reachSemester->toBe(3)
+        ->approvedBySemester->toBe([1 => 1, 2 => 0, 4 => 0]);
 });
 
 it('el kárdex va por periodo, del más reciente al más antiguo, también con materias de fuera del plan y sin las filas borradas', function () {
@@ -170,6 +171,17 @@ it('el kárdex va por periodo, del más reciente al más antiguo, también con m
     $kardex = recordOf($this->student)->kardex;
 
     expect(array_column($kardex, 'term'))->toBe(['20253', '20251'])
-        ->and(array_column($kardex, 'label'))->toBe(['Ago–Dic 2025', 'Ene–Jun 2025'])
+        ->and(array_column($kardex, 'label'))->toBe(['Ago-Dic 2025', 'Ene-Jun 2025'])
         ->and(collect($kardex[0]['records'])->map(fn (KardexRecord $row): string => "{$row->subject->code} {$row->attempt}")->all())->toBe(['A-1 2', 'Z-9 1']);
+});
+
+it('muestra la calificación sin ceros de más, sin redondearla, y la oportunidad con su nombre', function () {
+    $passed = recordKardex($this->student, $this->subjects['A'], 'aprobada', '20253', 2, 69.6);
+    $first = recordKardex($this->student, $this->subjects['F'], 'aprobada', '20253', grade: 88);
+    $special = recordKardex($this->student, $this->subjects['Q'], 'reprobada', '20253', 3, 40);
+
+    expect(cellOf(recordOf($this->student), 'A')->grade)->toBe('69.6')
+        ->and($passed->fresh())->grade_label->toBe('69.6')->attempt_label->toBe('2 · repetición')
+        ->and($first->fresh())->grade_label->toBe('88')->attempt_label->toBe('1 · ordinaria')
+        ->and($special->fresh()->attempt_label)->toBe('3 · curso especial');
 });

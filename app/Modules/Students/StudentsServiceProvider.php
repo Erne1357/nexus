@@ -17,7 +17,7 @@ final class StudentsServiceProvider extends ModuleServiceProvider
     {
         return [
             new NavigationItem('Alumnos', 'students.index', 'o-academic-cap', NavigationArea::ServiciosEscolares,
-                ability: 'viewAny', arguments: [Student::class]),
+                ability: 'viewAny', arguments: [Student::class], childRoutes: ['students.show']),
         ];
     }
 }

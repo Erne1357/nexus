@@ -309,7 +309,7 @@ Los de MaryUI: 40 px en barras de herramientas y 44 px en la credencial y en cel
 
 ### Navigation
 - **Entrada de menú:** su nombre, como en la pantalla de referencia; el icono de la entrada no se pinta (lo llevan las áreas). La activa lleva fondo gris polvo, peso 700, el punto rojo y `aria-current="page"`. Las cifras de registros irán a la derecha en Mono cuando haya de dónde salgan; hoy no se muestran.
-- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; una pantalla hija sin entrada propia (la ficha de un alumno, `students.show`) toma la de su listado (`students.index`); si la pantalla no está en el menú, la primera. Con el menú cerrado, un clic en un icono de área abre el menú completo (el botón accesible es la liebre).
+- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; una pantalla hija sin entrada propia (la ficha de un alumno, `students.show`) se declara en `childRoutes` de la entrada de su listado, que la ubica con `aria-current="true"` (la página misma lleva `"page"`); si la pantalla no está en el menú, la primera. Con el menú cerrado, un clic en un icono de área abre el menú completo (el botón accesible es la liebre).
 
 ### El menú que se transforma (firma)
 Un solo menú, no dos:

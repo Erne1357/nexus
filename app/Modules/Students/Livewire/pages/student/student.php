@@ -19,7 +19,7 @@ new #[Title('Ficha del alumno')] class extends Component
     #[Locked]
     public string $studentId;
 
-    /** 'reticula' o 'kardex'; va en la URL para volver a la misma pestaña. */
+    /** 'reticula' o 'kardex'; va en la URL para volver a la misma pestaña, y otro valor muestra la retícula. */
     #[Url]
     public string $tab = 'reticula';
 
@@ -28,6 +28,15 @@ new #[Title('Ficha del alumno')] class extends Component
         $model = $students->findOrFail($student);
         $this->authorize('view', $model);
         $this->studentId = $model->id;
+        $this->updatedTab();
+    }
+
+    /**
+     * Una pestaña que no existe (un enlace viejo o mal escrito) muestra la retícula.
+     */
+    public function updatedTab(): void
+    {
+        $this->tab = $this->tab === 'kardex' ? 'kardex' : 'reticula';
     }
 
     /**
@@ -38,13 +47,9 @@ new #[Title('Ficha del alumno')] class extends Component
         $student = $students->findOrFail($this->studentId);
         $this->authorize('view', $student);
 
-        $record = $records->forStudent($student);
-
         return [
-            'record' => $record,
-            'approvedBySemester' => array_map(fn (array $cells): int => count(array_filter($cells, fn ($cell): bool => $cell->standing === SubjectStanding::Acreditada)), $record->semesters),
+            'record' => $records->forStudent($student),
             'standings' => SubjectStanding::cases(),
-            'attempts' => [1 => 'ordinaria', 2 => 'repetición', 3 => 'curso especial'],
         ];
     }
 };

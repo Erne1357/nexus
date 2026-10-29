@@ -19,6 +19,9 @@ use Illuminate\Support\Facades\Gate;
  *         ability: 'viewAny', arguments: [Campus::class])
  *     new NavigationItem('Propuestas', 'academic-load.proposals', 'o-document-text', NavigationArea::Academico,
  *         visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador))
+ *
+ * Una pantalla hija que no va en el menú (la ficha de un alumno) se declara en `childRoutes` de la entrada
+ * de su listado: así el menú y la banda la ubican en esa entrada.
  */
 final readonly class NavigationItem
 {
@@ -29,6 +32,7 @@ final readonly class NavigationItem
      * @param  NavigationArea  $area  área del menú; el orden de las áreas es el del enum
      * @param  (Closure(ScopedContext): bool)|null  $visible  sin estado: el registro se comparte entre peticiones
      * @param  array<int, mixed>  $arguments  argumentos de la ability (p. ej. `[Campus::class]`)
+     * @param  list<string>  $childRoutes  rutas de las pantallas hijas que no van en el menú (`students.show`)
      */
     public function __construct(
         public string $label,
@@ -38,7 +42,16 @@ final readonly class NavigationItem
         public ?Closure $visible = null,
         public ?string $ability = null,
         public array $arguments = [],
+        public array $childRoutes = [],
     ) {}
+
+    /**
+     * Si la ruta es la de la entrada o la de una de sus pantallas hijas.
+     */
+    public function owns(string $route): bool
+    {
+        return $this->route === $route || in_array($route, $this->childRoutes, true);
+    }
 
     public function isVisibleTo(ScopedContext $context): bool
     {

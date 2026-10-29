@@ -45,7 +45,7 @@
         <button type="button" role="tab" @class(['tab', 'tab-active font-bold' => $tab === 'kardex']) aria-selected="{{ $tab === 'kardex' ? 'true' : 'false' }}" wire:click="$set('tab', 'kardex')" data-testid="tab-kardex">Kárdex</button>
     </div>
 
-    @if ($tab === 'reticula')
+    @if ($tab !== 'kardex')
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-neutral">
             @foreach ($standings as $standing)
                 <span class="inline-flex items-center gap-1.5">
@@ -68,7 +68,7 @@
                     ]) aria-label="Semestre {{ $semester }}">
                         <h3 class="px-0.5 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral max-md:col-span-2">
                             Semestre {{ $semester }}
-                            <span class="block font-mono text-xs normal-case tracking-normal">{{ $approvedBySemester[$semester] }} de {{ count($cells) }}</span>
+                            <span class="block font-mono text-xs normal-case tracking-normal">{{ $record->approvedBySemester[$semester] }} de {{ count($cells) }}</span>
                             @if ($semester === $record->student->current_semester)
                                 <span class="block text-xs font-semibold normal-case tracking-normal text-base-content">Su semestre</span>
                             @elseif ($record->reachSemester !== null && $semester > $record->reachSemester)
@@ -101,7 +101,7 @@
                                     <span class="font-mono">{{ $cell->credits }} cr</span>
                                     <span class="flex gap-1.5 font-mono">
                                         @if ($cell->attempt !== null && $cell->attempt > 1)<span>{{ $cell->attempt }}.ª</span>@endif
-                                        @if ($cell->grade !== null)<span>{{ (int) $cell->grade }}</span>@endif
+                                        @if ($cell->grade !== null)<span>{{ $cell->grade }}</span>@endif
                                     </span>
                                 </span>
                             </div>
@@ -122,9 +122,9 @@
                     <div class="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-base-300 px-5 py-2.5 md:grid-cols-[6.5rem_minmax(0,1fr)_4rem_9rem_9rem]">
                         <span class="font-mono font-semibold">{{ $row->subject->code }}</span>
                         <span>{{ $row->subject->name }}</span>
-                        <span class="text-right font-mono tabular-nums max-md:hidden">{{ $row->grade }}</span>
+                        <span class="text-right font-mono tabular-nums max-md:hidden">{{ $row->grade_label }}</span>
                         <x-core::status-badge :tone="$row->result->tone()" :label="$row->result->label()" />
-                        <span class="text-neutral max-md:col-span-3">{{ $row->attempt }} · {{ $attempts[$row->attempt] ?? 'curso especial' }}</span>
+                        <span class="text-neutral max-md:col-span-3">{{ $row->attempt_label }}</span>
                     </div>
                 @endforeach
             @empty

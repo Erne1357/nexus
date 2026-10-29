@@ -57,10 +57,17 @@ it('dice qué le falta a una materia que todavía no puede cursar', function () 
 
 it('en la pestaña Kárdex, que va en la URL, muestra el historial por periodo', function () {
     Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id])
-        ->assertDontSee('Ago–Dic 2025');
+        ->assertDontSee('Ago-Dic 2025');
 
     Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'kardex'])->test('students::pages.student', ['student' => $this->student->id])
-        ->assertSeeInOrder(['20253', 'Ago–Dic 2025', 'ACF-0901', 'Cálculo Diferencial', '88.00', 'Aprobada', '1 · ordinaria']);
+        ->assertSeeInOrder(['20253', 'Ago-Dic 2025', 'ACF-0901', 'Cálculo Diferencial', '88', 'Aprobada', '1 · ordinaria']);
+});
+
+it('una pestaña que no existe en la URL muestra la retícula', function () {
+    Livewire::actingAs($this->coordinator)->withQueryParams(['tab' => 'otra'])->test('students::pages.student', ['student' => $this->student->id])
+        ->assertSet('tab', 'reticula')
+        ->assertSee('Cálculo Integral')
+        ->assertDontSee('Ago-Dic 2025');
 });
 
 it('el listado lleva a la ficha de cada alumno', function () {
