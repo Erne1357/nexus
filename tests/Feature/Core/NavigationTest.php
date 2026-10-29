@@ -345,7 +345,9 @@ describe('menú', function () {
         $page = domOf(Livewire::test('core::components.navigation', ['route' => 'students.show']));
 
         expect($page->querySelectorAll('#nexus-menu [aria-current="page"]'))->toHaveCount(0)
-            ->and(textOf($page->querySelector('#nexus-menu [aria-current="true"]')))->toBe('Alumnos');
+            ->and(textOf($page->querySelector('#nexus-menu [aria-current="true"]')))->toBe('Alumnos')
+            // Se ve igual que la entrada activa: fondo, negritas y el punto de «estás aquí».
+            ->and($page->querySelector('#nexus-menu [aria-current="true"]')->hasAttribute('data-active'))->toBeTrue();
     });
 
     it('el área actual es la de la pantalla; si la pantalla no está en el menú, la primera', function (string $route, string $area) {

@@ -3,6 +3,7 @@
     retícula va en columnas por semestre, como la del SII, y en celular los semestres se apilan. Cada materia
     lleva el relleno, el borde y el icono de su estado, y el estado en texto para lectores de pantalla.
 --}}
+@use('App\Modules\Students\Enums\ChainColor')
 @use('App\Modules\Students\Enums\SubjectStanding')
 <div class="space-y-5">
     <a href="{{ route('students.index') }}" wire:navigate class="inline-flex items-center gap-1.5 font-medium text-primary">
@@ -58,8 +59,25 @@
             <p class="text-neutral">Puede seleccionar materias hasta el semestre <span class="font-mono">{{ $record->reachSemester }}</span>, el suyo y dos más.</p>
         @endif
 
+        {{-- wire:ignore: el resaltado vive en Alpine, y volver a pintar la página no debe borrarlo. --}}
+        <div x-data="studentGrid" wire:ignore @keydown.escape.window="clearUnlessLayerOpen()" class="space-y-3">
+        @if ($record->chains !== [])
+            <div class="flex flex-wrap items-center gap-1.5" data-testid="chain-legend">
+                <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Cadenas de seriación</span>
+                @foreach ($record->chains as $chain)
+                    <button type="button" data-chain-chip data-chain="{{ $chain['index'] }}" data-name="{{ $chain['name'] }}" aria-pressed="false" @click="toggleChain('{{ $chain['index'] }}')"
+                        class="inline-flex h-7 items-center gap-1.5 rounded-field border border-base-300 bg-base-100 px-2 text-[12.5px] aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary">
+                        <span @class(['size-3.5 rounded-sm border-[3px]', ChainColor::forChain($chain['index'])->swatchClasses()]) aria-hidden="true"></span>
+                        {{ $chain['name'] }}
+                        <span class="font-mono text-neutral">{{ $chain['size'] }}</span>
+                    </button>
+                @endforeach
+            </div>
+        @endif
+        <p class="min-h-6 text-neutral" x-ref="info" aria-live="polite" data-testid="chain-info">Toca una materia o una cadena para resaltarla; Esc la quita.</p>
+
         <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100 max-md:overflow-visible max-md:border-0 max-md:bg-transparent">
-            <div class="flex min-w-max max-md:min-w-0 max-md:flex-col max-md:gap-3 md:min-w-full" data-testid="student-grid">
+            <div class="group/grid flex min-w-max max-md:min-w-0 max-md:flex-col max-md:gap-3 md:min-w-full" data-testid="student-grid" x-ref="grid">
                 @foreach ($record->semesters as $semester => $cells)
                     <section @class([
                         'flex min-w-28 flex-1 basis-0 flex-col gap-2 border-base-300 px-1.5 pt-2.5 pb-3 md:[&:not(:first-child)]:border-l',
@@ -76,7 +94,14 @@
                             @endif
                         </h3>
                         @foreach ($cells as $cell)
-                            <div @class(['flex min-h-24 flex-col gap-1 rounded-field border px-2.5 py-2', $cell->standing->tileClasses()]) title="{{ $cell->standing->label() }}" data-subject="{{ $cell->code }}">
+                            <button type="button" @class([
+                                'flex min-h-24 flex-col gap-1 rounded-field border px-2.5 py-2 text-left transition-opacity motion-reduce:transition-none',
+                                'group-data-[focus]/grid:not-data-[on-chain]:opacity-20 group-data-[focus]/grid:not-data-[on-chain]:grayscale',
+                                'data-[me]:ring-2 data-[me]:ring-primary data-[me]:ring-offset-2 data-[me]:ring-offset-base-100',
+                                $cell->standing->tileClasses(),
+                                $cell->chain === null ? '' : ChainColor::forChain($cell->chain)->stripeClasses().' pl-3.5',
+                            ]) title="{{ $cell->standing->label() }}" aria-pressed="false" @click="toggleSubject($el)"
+                                data-subject="{{ $cell->code }}" data-name="{{ $cell->name }}" data-prereqs="{{ implode(' ', $cell->prerequisites) }}" @if ($cell->chain !== null) data-chain="{{ $cell->chain }}" @endif>
                                 <span class="flex items-center justify-between gap-1.5">
                                     <span class="whitespace-nowrap font-mono text-[12.5px] font-semibold">{{ $cell->code }}</span>
                                     <x-icon :name="$cell->standing->icon()" class="size-4 shrink-0" aria-hidden="true" />
@@ -87,9 +112,9 @@
                                     <span class="text-[11.5px] text-neutral">Esp. {{ $cell->specialty }}</span>
                                 @endif
                                 @if ($cell->standing === SubjectStanding::NoPermitida)
-                                    <span class="whitespace-nowrap text-[11.5px] text-neutral">
+                                    <span class="text-[11.5px] leading-snug text-neutral">
                                         @if ($cell->missing !== [])
-                                            Pide <span class="font-mono font-semibold">{{ implode(', ', $cell->missing) }}</span>
+                                            Pide <span class="whitespace-nowrap font-mono font-semibold">{{ implode(', ', $cell->missing) }}</span>
                                         @elseif ($cell->beyondReach)
                                             Fuera de su avance
                                         @elseif ($cell->creditShare !== null)
@@ -104,11 +129,12 @@
                                         @if ($cell->grade !== null)<span>{{ $cell->grade }}</span>@endif
                                     </span>
                                 </span>
-                            </div>
+                            </button>
                         @endforeach
                     </section>
                 @endforeach
             </div>
+        </div>
         </div>
     @else
         <p class="text-neutral">Cada materia que ha cursado, por periodo, como viene en la última importación de kárdex.</p>

@@ -48,6 +48,19 @@ it('muestra los datos del alumno, sus cifras y su retícula con el estado de cad
         ->assertSeeInOrder(['Puede seleccionar materias hasta el semestre', '3', 'el suyo y dos más.']);
 });
 
+it('cada cadena de seriación tiene su color en la franja de sus materias y en la leyenda, con su nombre', function () {
+    $page = domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id]));
+    $tile = fn (string $code) => $page->querySelector('[data-subject="'.$code.'"]');
+
+    expect(textOf($page->querySelector('[data-testid="chain-legend"] [data-chain="0"]')))->toBe('Cálculo Diferencial 2')
+        ->and($tile('ACF-0901')->getAttribute('data-chain'))->toBe('0')
+        ->and($tile('ACF-0902')->getAttribute('data-chain'))->toBe('0')
+        ->and($tile('ACF-0902')->getAttribute('data-prereqs'))->toBe('ACF-0901')
+        ->and($tile('ACF-0901')->getAttribute('class'))->toContain('shadow-[inset_5px_0_0_var(--color-chain-1)]')
+        ->and($tile('SCD-1018')->hasAttribute('data-chain'))->toBeFalse()
+        ->and($tile('SCD-1018')->getAttribute('class'))->not->toContain('--color-chain-');
+});
+
 it('dice qué le falta a una materia que todavía no puede cursar', function () {
     KardexRecord::query()->delete();
 

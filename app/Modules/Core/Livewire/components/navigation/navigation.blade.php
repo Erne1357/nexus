@@ -92,9 +92,9 @@
                         data-menu-entry
                         data-label="{{ $entry['item']->label }}"
                         @if ($area['current']) data-keep @endif
-                        @if ($entry['active']) aria-current="{{ $entry['page'] ? 'page' : 'true' }}" @endif
+                        @if ($entry['active']) data-active aria-current="{{ $entry['page'] ? 'page' : 'true' }}" @endif
                         style="{{ $entry['style'] }}"
-                        class="mx-3 my-0.5 hidden min-w-0 items-center gap-2.5 rounded-md px-2.5 whitespace-nowrap text-base-content [grid-column:2] [grid-row:calc(var(--i)_+_1)] [--open-col:var(--c)] [--open-row:calc(3_+_var(--i))] hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary aria-[current=page]:bg-secondary aria-[current=page]:font-bold aria-[current=page]:before:size-1.5 aria-[current=page]:before:flex-none aria-[current=page]:before:rounded-full aria-[current=page]:before:bg-accent desktop:in-data-current:flex max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:calc(var(--base-t)_+_var(--i))] in-data-[menu=open]:m-0 in-data-[menu=open]:flex in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] max-md:col-span-full max-md:min-h-11 max-md:px-3 max-md:[grid-row:auto]"
+                        class="mx-3 my-0.5 hidden min-w-0 items-center gap-2.5 rounded-md px-2.5 whitespace-nowrap text-base-content [grid-column:2] [grid-row:calc(var(--i)_+_1)] [--open-col:var(--c)] [--open-row:calc(3_+_var(--i))] hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary data-active:bg-secondary data-active:font-bold data-active:before:size-1.5 data-active:before:flex-none data-active:before:rounded-full data-active:before:bg-accent desktop:in-data-current:flex max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:calc(var(--base-t)_+_var(--i))] in-data-[menu=open]:m-0 in-data-[menu=open]:flex in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] max-md:col-span-full max-md:min-h-11 max-md:px-3 max-md:[grid-row:auto]"
                     >
                         <span class="truncate">{{ $entry['item']->label }}</span>
                     </a>

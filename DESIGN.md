@@ -258,6 +258,23 @@ La ficha del alumno muestra su retícula como la del SII, que es la que conocen 
 | No permitida aún | `neutral` sobre `base-200` | punteado | `o-lock-closed` |
 
 - Arriba de la retícula, la leyenda de los estados y hasta qué semestre puede seleccionar. La pestaña **Kárdex** muestra el historial por periodo, con el resultado en su insignia.
+- **Cadenas de seriación.** Cada grupo de materias unidas por su seriación tiene su color, que se ve siempre como una **franja a la izquierda** de cada materia: una sombra interior, que no toca el borde del estado (`ChainColor::stripeClasses()`). Una leyenda nombra cada cadena por su primera materia y dice cuántas tiene. Tocar una materia resalta su cadena completa (lo que pide y lo que abre) y atenúa lo demás, y una línea dice qué pide y qué abre; tocar una cadena de la leyenda resalta todas sus materias; tocar lo mismo otra vez o Esc lo quita. Solo al tocar, no al pasar el cursor, y sin líneas entre materias (decidido por el usuario el 29 de octubre de 2026). Lo hace el componente Alpine `studentGrid` (`resources/js/app.js`).
+- **Tokens de las cadenas** (`--color-chain-1` a `--color-chain-12`, utilidades `chain-N`). Son elementos gráficos, así que piden 3:1; la razón es la mínima contra los rellenos de la retícula (blanco, `base-200` y los tintes al 10 % de cada tono). Con más de doce cadenas los colores se repiten, y la leyenda las distingue:
+
+| Token | Claro · mínima | Oscuro · mínima |
+|---|---|---|
+| `chain-1` | `#6d4fc2` · 5.02 | `#b19cf0` · 5.58 |
+| `chain-2` | `#0f7c8c` · 4.16 | `#5cc8d6` · 6.71 |
+| `chain-3` | `#b0457f` · 4.45 | `#e88cc0` · 5.62 |
+| `chain-4` | `#c2661a` · 3.42 | `#f0a565` · 6.45 |
+| `chain-5` | `#3b56b8` · 5.55 | `#8ea6f5` · 5.61 |
+| `chain-6` | `#6b7a1f` · 4.02 | `#bfd06a` · 7.82 |
+| `chain-7` | `#1f86c7` · 3.37 | `#6cc0f2` · 6.57 |
+| `chain-8` | `#8a5a3c` · 4.94 | `#d4a585` · 5.98 |
+| `chain-9` | `#4d6b7a` · 4.81 | `#a3b9c6` · 6.48 |
+| `chain-10` | `#9c4fd1` · 4.0 | `#d29cf5` · 6.17 |
+| `chain-11` | `#2f8f5b` · 3.42 | `#7fd6a4` · 7.57 |
+| `chain-12` | `#c24f9b` · 3.65 | `#f29ad0` · 6.48 |
 
 ## Elevation & Depth
 
