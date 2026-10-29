@@ -56,6 +56,78 @@
         ],
         "createdAt": "2026-10-29T04:05:47.042Z",
         "reason": "Claude: boceto de decisión; el aviso cae en el buscador de la maqueta (cursor centrado), que en la app será el input de MaryUI"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.200Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/model-pick.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.217Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-dense.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.235Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/canon.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.253Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/mosaico.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.271Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/cartelera.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.288Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/combo-animado-tec.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.305Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/bandas-tec.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.322Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
       }
     ]
   }
