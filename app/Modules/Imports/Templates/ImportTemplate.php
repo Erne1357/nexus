@@ -329,6 +329,19 @@ abstract class ImportTemplate
     }
 
     /**
+     * El campo de nombre y el de clave cuyas filas se comparan en un mismo archivo: si una fila trae el mismo
+     * nombre que una anterior, sin importar mayúsculas, con otra clave, avisa sin unificarlas (las materias que el
+     * SII da con claves distintas). ValidateImportBatch lo revisa en SQL al terminar; null, como por omisión, no
+     * revisa nada.
+     *
+     * @return array{name: string, key: string}|null
+     */
+    public function twinsAcrossRows(): ?array
+    {
+        return null;
+    }
+
+    /**
      * Corre una vez al terminar de aplicar el lote, por ejemplo para despachar un job de recálculo (tarea
      * 1.4: `RecomputeStudentProgress`). También corre si la aplicación falló después de escribir algo,
      * porque lo escrito se queda; no corre si no se escribió nada.

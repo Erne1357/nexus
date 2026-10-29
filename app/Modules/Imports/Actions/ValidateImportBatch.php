@@ -83,6 +83,7 @@ final class ValidateImportBatch
 
             $this->markRepeatedKeys($batch, $template);
             $this->markInconsistentRows($batch, $template);
+            $this->markTwinRows($batch, $template);
 
             return $this->finish($batch, $template);
         } catch (UnreadableFile $exception) {
@@ -248,6 +249,41 @@ final class ValidateImportBatch
                     SQL, [...$setBindings, $field, $field, $batch->id, RowStatus::Error->value, ...$rule['group']]);
             }
         }
+    }
+
+    /**
+     * Avisa en cada fila que trae el mismo nombre que una anterior sin error con otra clave (twinsAcrossRows()),
+     * con la primera de esas filas.
+     */
+    private function markTwinRows(ImportBatch $batch, ImportTemplate $template): void
+    {
+        $rule = $template->twinsAcrossRows();
+
+        if ($rule === null) {
+            return;
+        }
+
+        DB::update(<<<'SQL'
+            UPDATE import_rows AS r
+            SET status = CASE WHEN r.status = ? THEN ? ELSE r.status END,
+                warnings = jsonb_set(r.warnings, ARRAY[?], COALESCE(r.warnings -> ?, '[]'::jsonb) || to_jsonb(format('La fila %s trae el mismo nombre con otra clave (%s); no se unifican.', d.row_number, d.twin))),
+                updated_at = now()
+            FROM (
+                SELECT DISTINCT ON (later.id) later.id AS target, earlier.row_number, earlier.normalized ->> ? AS twin
+                FROM import_rows AS later
+                JOIN import_rows AS earlier ON earlier.batch_id = later.batch_id
+                    AND earlier.row_number < later.row_number
+                    AND lower(earlier.normalized ->> ?) = lower(later.normalized ->> ?)
+                    AND earlier.normalized ->> ? <> later.normalized ->> ?
+                WHERE later.batch_id = ? AND later.status <> ? AND earlier.status <> ?
+                ORDER BY later.id, earlier.row_number
+            ) AS d
+            WHERE r.id = d.target
+            SQL, [
+            RowStatus::Valid->value, RowStatus::Warning->value, $rule['name'], $rule['name'],
+            $rule['key'], $rule['name'], $rule['name'], $rule['key'], $rule['key'],
+            $batch->id, RowStatus::Error->value, RowStatus::Error->value,
+        ]);
     }
 
     private function finish(ImportBatch $batch, ImportTemplate $template): ImportBatch
