@@ -90,6 +90,11 @@ jobs:
             -v "$HOME/.cache/ci-npm:/npm-cache" \
             app npm ci --no-audit --no-fund
 
+      # Los browser tests cargan el CSS y el JS compilados: la banda, la credencial y el menú no
+      # funcionan sin ellos (tests/Pest.php).
+      - name: Compilar CSS y JS
+        run: docker compose run --rm -T --no-deps app npm run build
+
       - name: Levantar PostgreSQL y Valkey
         run: docker compose up -d --wait postgres valkey
 

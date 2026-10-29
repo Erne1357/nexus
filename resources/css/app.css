@@ -22,6 +22,12 @@
 
     --ease-open: cubic-bezier(0.3, 1.06, 0.5, 1);
     --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Escritorio desde 1200 px (DESIGN.md, "Responsivo"): desktop: y max-desktop:. La tableta empieza en md (768 px). */
+    --breakpoint-desktop: 75rem;
+
+    /* Sombra «Flotante» (DESIGN.md, "Elevation & Depth"): solo lo que flota sobre el contenido. */
+    --shadow-float: 0 16px 40px rgb(9 45 72 / 0.24), 0 2px 6px rgb(9 45 72 / 0.12);
 }
 
 /*
@@ -126,3 +132,17 @@
     --nexus-band-muted: #9fb2c4;
     --nexus-secondary-muted: #9aa6b2;
 }
+
+/*
+| Shell (DESIGN.md, "El menú que se transforma"). Con el menú abierto la página no se desplaza: se usa el
+| candado de daisyUI que también usan los modales (--page-scroll-lock), que además reserva el canal de la
+| barra de desplazamiento para que la banda y el contenido no brinquen. Es la única regla del shell
+| escrita a mano porque el candado vive en :root y una utilidad no llega ahí: MaryUI reescribe el
+| atributo class de <html> al cambiar el tema. Todo lo demás del shell son utilidades en su Blade.
+*/
+@layer base {
+    :root:has(body[data-menu='open']) {
+        --page-scroll-lock: ;
+    }
+}
+

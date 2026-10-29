@@ -38,7 +38,8 @@ function signInToImports(string $username)
         ->fill('username', $username)
         ->fill('password', 'password')
         ->press('Entrar')
-        ->assertPathIs('/');
+        ->assertPathIs('/')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false');
 }
 
 it('el admin retoma un lote validado desde el menú, revisa sus errores y lo aplica', function () {
@@ -50,7 +51,9 @@ it('el admin retoma un lote validado desde el menú, revisa sus errores y lo apl
     app(ValidateImportBatch::class)->handle($batch);
     app(ExportBatchErrors::class)->handle($batch);
 
+    // Importaciones es del área Datos: se llega abriendo el menú completo con la liebre.
     $page = signInToImports('admin')
+        ->click('@hare')
         ->click('Importaciones')
         ->assertPathIs('/imports')
         ->assertSee('Lotes recientes')
@@ -75,6 +78,9 @@ it('el admin retoma un lote validado desde el menú, revisa sus errores y lo apl
 it('un coordinador no ve la entrada Importaciones en el menú', function () {
     signInToImports('19110001')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->click('@hare')
+        ->assertVisible('[data-menu-area="academico"] [data-menu-flip="name"]')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Importaciones')
+        ->assertNotPresent('[data-menu-area="datos"]')
         ->assertNoJavaScriptErrors();
 });

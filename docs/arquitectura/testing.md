@@ -58,7 +58,8 @@ docker compose exec app php artisan test --testsuite=Browser
 - Hay que reconstruir la imagen (`docker compose up -d --build`) después de mezclar un cambio del `Dockerfile` o de la versión de `playwright`.
 - Los tests visitan rutas con `visit('/ruta')`; el servidor HTTP lo levanta el propio plugin dentro del contenedor, no hace falta `nginx` ni `app`.
 - Ese servidor no sirve para subir archivos con Livewire: deja plano el campo `files[]` con que Livewire los manda (`LaravelHttpServer::parseMultipartBody` del plugin) y la subida nunca llega. Una pantalla con subida se prueba en el navegador desde un estado ya subido, y la subida misma con una prueba feature (`Livewire::test()->set('file', UploadedFile::fake()...)`), como el asistente de importación.
-- `TestCase` llama a `withoutVite()`, así que en los browser tests la página no carga CSS ni JS de Vite. Para ver una pantalla con estilos en una captura, una prueba puede llamar a `$this->withVite()` antes de `visit()`.
+- `TestCase` llama a `withoutVite()` para unit y feature, pero los browser tests cargan el CSS y el JS compilados (`tests/Pest.php` llama a `withVite()` en `tests/Browser`): la banda, la credencial y el menú del shell no funcionan sin ellos. Antes de correrlos hay que compilar con `docker compose exec vite npm run build` (en un worktree, con `-w /app/.worktrees/<rama>`); sin `public/build/manifest.json` fallan con "Vite manifest not found". Usan siempre ese manifiesto, aunque el contenedor `vite` esté sirviendo en modo desarrollo, porque Chromium, dentro de `app`, no llega a su servidor. CI compila en el job `browser` antes de las pruebas.
+- Una prueba que use el teclado o el shell justo al entrar espera a que Alpine arranque (`assertScript('window.Alpine?.$data(document.body).menuOpen === false')`): un atajo que llega antes no tiene quién lo escuche.
 
 ## Pruebas de rendimiento
 

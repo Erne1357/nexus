@@ -9,7 +9,9 @@ use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 
 /*
 | Layout en el navegador. DemoCatalog (tests/Fixtures/Modules) agrega "Saludo", para coordinadores,
-| y "Elementos", solo para el admin, a la entrada "Inicio" de Core.
+| en Servicios escolares, y "Elementos", solo para el admin, en Recursos humanos, a "Inicio" de Core
+| (Académico). Cerrado, el menú muestra el área de la pantalla; las demás se ven al abrirlo con la
+| liebre. El campus, el periodo y el tema están en la tarjeta de la credencial.
 */
 
 beforeEach(function () {
@@ -34,15 +36,20 @@ function signInFromBrowser(string $username)
         ->fill('username', $username)
         ->fill('password', 'password')
         ->press('Entrar')
-        ->assertPathIs('/');
+        ->assertPathIs('/')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false');
 }
 
 it('navegación muestra solo lo permitido por rol', function () {
     $page = signInFromBrowser('19110001')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->assertMissing('a[data-label="Saludo"]')
+        ->click('@hare')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Saludo')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Elementos')
         ->assertSee('Coordinador de carrera')
+        ->keys('#nexus-menu-search', 'Escape')
+        ->assertScript('document.body.dataset.menu', 'closed')
         ->assertNoJavaScriptErrors();
 
     $page->click('Carlos Coordinador')
@@ -51,23 +58,28 @@ it('navegación muestra solo lo permitido por rol', function () {
 
     signInFromBrowser('admin')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->click('@hare')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Saludo')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Elementos')
         ->assertSee('Administración')
         ->assertNoJavaScriptErrors();
 });
 
-it('cambia el campus activo desde la topbar y lo confirma con un toast', function () {
+it('cambia el campus activo desde la credencial y lo confirma con un toast', function () {
     $page = signInFromBrowser('admin')
         ->assertSelected('campus', '')
+        ->click('@credential')
         ->select('campus', (string) $this->c1->id)
         ->waitForText('Campus I · Ene-Jun 2027')
         ->assertSee('Contexto actualizado')
         ->refresh()
         ->assertSelected('campus', (string) $this->c1->id)
+        ->assertSeeIn('@credential', 'Administración · Campus I · Ene-Jun 2027')
         ->assertNoJavaScriptErrors();
 
-    $page->select('campus', (string) $this->c2->id)
+    $page->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
+        ->click('@credential')
+        ->select('campus', (string) $this->c2->id)
         ->waitForText('Campus II · Ene-Jun 2027')
         ->refresh()
         ->assertSelected('campus', (string) $this->c2->id);
@@ -75,18 +87,25 @@ it('cambia el campus activo desde la topbar y lo confirma con un toast', functio
 
 it('el coordinador ve fijo su único campus', function () {
     signInFromBrowser('19110001')
-        ->assertSee('Campus II')
+        ->assertSeeIn('@credential', 'Coordinador de carrera · Campus II · Ene-Jun 2027')
+        ->click('@credential')
+        ->assertSeeIn('#nexus-credential', 'Campus II')
         ->assertNotPresent('select[name="campus"]');
 });
 
-it('cambia entre el tema claro y el oscuro', function () {
+it('cambia entre el tema claro y el oscuro desde la credencial', function () {
     $page = signInFromBrowser('admin')
         ->assertScript('document.documentElement.dataset.theme', 'nexus')
-        ->click('@theme-toggle')
+        ->click('@credential')
+        ->assertVisible('@theme-toggle')
+        ->radio('nexus-theme', 'nexus-dark')
         ->assertScript('document.documentElement.dataset.theme', 'nexus-dark');
 
     $page->refresh()
         ->assertScript('document.documentElement.dataset.theme', 'nexus-dark')
-        ->click('@theme-toggle')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
+        ->click('@credential')
+        ->assertRadioSelected('nexus-theme', 'nexus-dark')
+        ->radio('nexus-theme', 'nexus')
         ->assertScript('document.documentElement.dataset.theme', 'nexus');
 });

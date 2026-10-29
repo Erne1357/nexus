@@ -14,12 +14,13 @@ use Livewire\Livewire;
 use Mary\Traits\Toast;
 
 /**
- * Selector de campus y periodo activos de la topbar. Ofrece los campus de ScopedContext::campuses()
- * (fijo si solo hay uno) y todos los periodos, y guarda la elección con SetActiveContext, que
- * rechaza un campus ajeno. Elegir el periodo actual deja el de omisión, para seguirlo cuando cambie.
- * Sin periodo activo, el selector muestra "Sin periodo". Después lo confirma con un toast y recarga la
- * página para que todo lo que depende del contexto lo use. Si el campus o el periodo no existen o no
- * se permiten, avisa con un toast de error y regresa la selección al contexto vigente.
+ * Selector de campus y periodo activos, en la tarjeta de la credencial de la banda. Ofrece los
+ * campus de ScopedContext::campuses() (fijo si solo hay uno) y todos los periodos, y guarda la
+ * elección con SetActiveContext, que rechaza un campus ajeno. Elegir el periodo actual deja el de
+ * omisión, para seguirlo cuando cambie. Sin periodo activo, el selector muestra "Sin periodo".
+ * Después lo confirma con un toast y recarga la página para que todo lo que depende del contexto lo
+ * use. Si el campus o el periodo no existen o no se permiten, avisa con un toast de error y regresa
+ * la selección al contexto vigente.
  */
 new class extends Component
 {
