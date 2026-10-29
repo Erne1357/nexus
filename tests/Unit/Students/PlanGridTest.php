@@ -142,6 +142,12 @@ describe('requisito de créditos', function () {
             ->and(residencyGrid()->progressFor(['A', 'B', 'S'])['subjects_available'])->toBe(['R']);
     });
 
+    it('sin créditos que medir (un total en cero), una materia que pide un porcentaje no queda disponible', function () {
+        $grid = new PlanGrid(credits: ['S' => 0], creditShare: ['S' => 70], totalCredits: 0);
+
+        expect($grid->progressFor([])['subjects_available'])->toBe([]);
+    });
+
     it('el porcentaje es de los créditos totales del plan cuando están capturados', function () {
         expect(residencyGrid(totalCredits: 200)->progressFor(['A', 'B'])['subjects_available'])->toBe([]);
     });

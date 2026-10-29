@@ -70,10 +70,10 @@ final readonly class PlanGrid
             $pending[] = $subject;
         }
 
-        $total = $this->totalCredits ?? $this->gridCredits($chosen);
+        $total = $this->creditShare === [] ? 0 : $this->totalCredits ?? $this->gridCredits($chosen);
         $available = array_values(array_filter($pending, fn (string $subject): bool => $this->seriationPassed($subject, $passed)
             && $this->withinReach($subject, $semester)
-            && $credits * 100 >= ($this->creditShare[$subject] ?? 0) * $total));
+            && $this->creditsReached($subject, $credits, $total)));
 
         return [
             'credits_approved' => $credits,
@@ -122,6 +122,16 @@ final readonly class PlanGrid
         $candidates = $chosen === [] ? $bySpecialty : array_intersect_key($bySpecialty, $chosen);
 
         return $common + ($candidates === [] ? 0 : max($candidates));
+    }
+
+    /**
+     * Sin créditos que medir (un total en cero) no da por cumplido el porcentaje.
+     */
+    private function creditsReached(string $subject, int $credits, int $total): bool
+    {
+        $share = $this->creditShare[$subject] ?? 0;
+
+        return $share === 0 || ($total > 0 && $credits * 100 >= $share * $total);
     }
 
     private function withinReach(string $subject, ?int $semester): bool

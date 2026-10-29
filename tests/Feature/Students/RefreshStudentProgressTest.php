@@ -107,6 +107,7 @@ it('recalcula todo en una transacción: si falla a la mitad, el avance se queda 
 it('cada alumno puede cursar hasta dos semestres después del suyo, según el semestre que trae el SII', function () {
     $g = Subject::factory()->create(['code' => 'G-4']);
     placeInPlan($this->plan, $g, 4);
+    $this->student->update(['current_semester' => 1]);
     $ahead = Student::factory()->for($this->plan)->create(['current_semester' => 2]);
 
     app(RefreshStudentProgress::class)->handle();
