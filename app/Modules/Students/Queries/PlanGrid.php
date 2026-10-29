@@ -84,6 +84,17 @@ final readonly class PlanGrid
     }
 
     /**
+     * Los créditos totales del plan para un alumno que aprobó o cursa `$subjects`: los capturados en el plan o,
+     * si no están, los de la retícula con su especialidad (o la de más créditos si todavía no elige).
+     *
+     * @param  list<string>  $subjects
+     */
+    public function totalFor(array $subjects): int
+    {
+        return $this->totalCredits ?? $this->gridCredits($this->specialtiesOf($subjects));
+    }
+
+    /**
      * @param  list<string>  $subjects
      * @return array<string, true> las especialidades de las materias de especialidad que tomó
      */
