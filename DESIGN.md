@@ -280,7 +280,7 @@ Los de MaryUI: 40 px en barras de herramientas y 44 px en la credencial y en cel
 
 ### Navigation
 - **Entrada de menú:** icono y nombre. La activa lleva fondo gris polvo, peso 700 y el punto rojo. Las cifras de registros van a la derecha en Mono.
-- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `Area` (ADR-0015).
+- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015).
 
 ### El menú que se transforma (firma)
 Un solo menú, no dos:

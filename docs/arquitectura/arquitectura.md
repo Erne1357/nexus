@@ -90,7 +90,7 @@ El CRUD de Campus de `Core` es la plantilla de todo módulo: cada archivo es el 
 | Query | `Queries/CampusQuery.php` | `forTable(ScopedContext, $search, $active, $perPage)`: al admin, todo; a los demás, `ScopedContext::campuses()` filtrado por la ability `view` de la policy, sin repetir el alcance. Busca con `TextSearch`, filtra por estado, ordena y pagina. `findOrFail($id)` carga lo que se edita: el componente no lee con Eloquent. |
 | Búsqueda | `Queries/TextSearch.php` | `TextSearch::apply($query, ['code', 'name'], $search)`, para todos los listados: "contiene", sin distinguir mayúsculas, con `%`, `_` y `\` literales; un término vacío no filtra. |
 | Página MFC | `Livewire/pages/campuses/campuses.{php,blade.php}` | `mount()` autoriza `viewAny`; cada acción carga con la Query y vuelve a autorizar (una petición puede traer una página que abrió otra sesión). Valida la forma con mensajes y atributos en español, convierte tipos (números, días como lista) y llama la Action. `#[Locked]` en lo que el navegador no debe cambiar, `#[Session]` en los filtros, toast de MaryUI con texto escapado. `x-table` con paginación, `x-modal` con `x-form`; lo que el rol no permite (alta, datos, estado, filtro de inactivos) se muestra deshabilitado con su motivo, y un perfil guardado inválido se edita desde los valores por omisión con un aviso. |
-| Ruta y menú | `Routes/web.php`, `CoreServiceProvider::navigation()` | `Route::livewire('/campus', 'core::pages.campuses')->name('core.campuses')` bajo `auth`; `NavigationItem` con `ability: 'viewAny'` y `arguments: [Campus::class]`. |
+| Ruta y menú | `Routes/web.php`, `CoreServiceProvider::navigation()` | `Route::livewire('/campus', 'core::pages.campuses')->name('core.campuses')` bajo `auth`; `NavigationItem` en el área `NavigationArea::Academico`, con `ability: 'viewAny'` y `arguments: [Campus::class]`. |
 | Factory | `Database/Factories/CampusFactory.php` | Estado con nombre del dominio: `inactive()`. |
 | Pruebas | `tests/Feature/Core/CampusPolicyTest.php`, `CampusRulesTest.php`, `CreateCampusTest.php`, `UpdateCampusTest.php`, `CampusQueryTest.php`, `CampusesPageTest.php`; `tests/Unit/Core/TextSearchTest.php`; `tests/Browser/Core/CampusesTest.php` | Policy por rol y por campus. Reglas y Actions con bitácora, evento después del commit, carrera del código (un duplicado insertado entre la revisión y la escritura) y bloqueo (feature, porque necesitan la base o el contenedor; lo puro, como `CampusProfile` o `TextSearch::escape`, va en unit). Query por rol. Página: lo que hace cada rol, errores en español, negativas por rol y por campus llamando cada método de Livewire directo, y quién ve la entrada del menú. Un flujo de navegador: el admin da de alta y edita; el coordinador no ve la opción. |
 
@@ -223,8 +223,9 @@ La barra lateral del layout (`resources/views/layouts/app.blade.php`) la arma Co
 public function navigation(): array
 {
     return [
-        new NavigationItem('Inicio', 'home', 'o-home'),
-        new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', ability: 'viewAny', arguments: [Campus::class]),
+        new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
+        new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Academico,
+            ability: 'viewAny', arguments: [Campus::class]),
     ];
 }
 
@@ -232,15 +233,16 @@ public function navigation(): array
 public function navigation(): array
 {
     return [
-        new NavigationItem('Propuestas', 'academic-load.proposals', 'o-document-text',
+        new NavigationItem('Propuestas', 'academic-load.proposals', 'o-document-text', NavigationArea::Academico,
             visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador)),
     ];
 }
 ```
 
-- `NavigationItem` (`Core/Navigation`): etiqueta en español, **nombre** de una ruta del módulo, icono Heroicon de MaryUI y quién la ve. "Quién" es `visible` (una función que recibe `ScopedContext`), una ability de Gate con su argumento (`ability` y `arguments`, que reutilizan la policy del módulo) o ambas, y entonces debe cumplir las dos; sin ninguna, la ve cualquier usuario activo. Nunca se decide por el código del campus.
-- `Navigation` (`Core/Navigation`) es el registro: junta las entradas de todos los `ModuleServiceProvider` en el orden de `bootstrap/providers.php` y, dentro de un módulo, en el que las declara. Es un singleton **inmutable** (clases `final readonly`, lo exige `tests/Arch/NavigationTest.php`) que Core arma en `booted`, cuando ya arrancaron todos los módulos: con Octane se crea una vez por worker. Lo que depende del usuario se calcula en `visibleTo(ScopedContext)` en cada petición, sin guardarlo.
-- `core::components.navigation` muestra `visibleTo()` del usuario. Ninguna entrada puede apuntar a una ruta inexistente: `tests/Feature/Core/NavigationTest.php` lo verifica para todas las declaradas. Una entrada se agrega en el mismo PR que su pantalla, con una prueba de quién la ve y quién no.
+- `NavigationItem` (`Core/Navigation`): etiqueta en español, **nombre** de una ruta del módulo, icono Heroicon de MaryUI, **área** del menú (cuarto argumento, obligatorio) y quién la ve. "Quién" es `visible` (una función que recibe `ScopedContext`), una ability de Gate con su argumento (`ability` y `arguments`, que reutilizan la policy del módulo) o ambas, y entonces debe cumplir las dos; sin ninguna, la ve cualquier usuario activo. Nunca se decide por el código del campus.
+- `NavigationArea` (`Core/Enums`, ADR-0015) son las áreas del menú, cada una con `label()` e `icon()`: Académico, Servicios escolares, Recursos humanos, Recursos financieros y Datos. **El orden de sus casos es el del menú**; toda entrada declara la suya. Un área nueva es un caso nuevo del enum, en el lugar donde debe aparecer, y cambia ADR-0015: se acuerda antes. Hoy Inicio y Campus van en Académico, e Importaciones en Datos.
+- `Navigation` (`Core/Navigation`) es el registro: junta las entradas de todos los `ModuleServiceProvider` en el orden de `bootstrap/providers.php` y, dentro de un módulo, en el que las declara. Es un singleton **inmutable** (clases `final readonly`, lo exige `tests/Arch/NavigationTest.php`) que Core arma en `booted`, cuando ya arrancaron todos los módulos: con Octane se crea una vez por worker. Lo que depende del usuario se calcula en cada petición, sin guardarlo: `visibleTo(ScopedContext)` da la lista plana y `visibleByArea(ScopedContext)` la agrupa (`list<array{area: NavigationArea, items: non-empty-list<NavigationItem>}>`), con las áreas en el orden del enum, solo las que tienen alguna entrada visible y, dentro de cada una, las entradas en el orden del registro. `forRoute(string $route)` da la entrada declarada para una ruta, la vea o no el usuario (la primera si varias la declaran; `null` si ninguna), para mostrar «área › pantalla».
+- `core::components.navigation` muestra `visibleByArea()` del usuario: una lista por área, con su nombre (`aria-label`) y su icono. Ninguna entrada puede apuntar a una ruta inexistente: `tests/Feature/Core/NavigationTest.php` lo verifica para todas las declaradas. Una entrada se agrega en el mismo PR que su pantalla, con una prueba de quién la ve y quién no.
 
 La topbar lleva `core::components.context-switcher`: ofrece `ScopedContext::campuses()` (fijo si solo hay uno) y los periodos de `TermQuery::selectable()`, y guarda la elección con `SetActiveContext`; elegir el periodo actual deja el de omisión para seguirlo cuando cambie, y sin periodo activo muestra "Sin periodo". Si el campus o el periodo no existen o no se permiten, avisa con un toast de error y regresa la selección al contexto vigente, sin el error de Livewire. No hace falta middleware: `ScopedContext` lee la sesión en cada petición. El middleware `NormalizeSidebarState` (grupo `web`) reescribe a `'false'` cualquier valor de `mary-sidebar-collapsed` que no sea `'true'` o `'false'`, porque `<x-main>` de MaryUI lo imprime dentro de `x-data`. La página de inicio (`/`, `core::pages.home`) muestra un bloque por cada rol que el usuario ejerce según `ScopedContext::has()`; el admin, solo el suyo.
 
