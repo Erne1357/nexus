@@ -68,6 +68,26 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 - R1: `eligible_students` por materia, carrera y campus se cuenta al leerlo desde `student_progress` (`EligibleStudentsQuery`), que se recalcula al importar alumnos o kardex. El estatus del alumno cuenta desde que se importa; un cambio de plan, desde el recálculo.
 - R2: `expected_students = eligible_students x (1 - tasa_de_no_inscripción) + repetidores_esperados`, con tasas históricas por materia y campus (`demand.history_terms`, por defecto 4). `suggested_groups = ceil(expected_students / tamaño_objetivo)`, con tamaño objetivo configurable por tipo de materia (`demand.target_group_size`, por defecto 35; laboratorios 25).
 
+## Retícula del alumno
+
+La ficha del alumno muestra cada materia de su retícula con el estado que usa el SII (confirmado el 29 de octubre de 2026). Sale de sus filas de kardex de esa materia y de su avance ("Elegibilidad y demanda"):
+
+| Estado | Cuándo |
+|---|---|
+| Acreditada | La aprobó, en cualquier oportunidad. |
+| Cursando | La cursa en el periodo más reciente del kardex importado. |
+| Sin calificar | La cursó en un periodo anterior y el kardex no trae su calificación. |
+| Reprobada · prioridad | La reprobó en la oportunidad 1 (ordinaria): tiene prioridad para seleccionarla. |
+| A curso especial | La reprobó en la oportunidad 2 (repetición): solo puede cursarla en curso especial. |
+| Curso especial reprobado | La reprobó en la oportunidad 3 (curso especial). |
+| Puede seleccionarla | Ya puede cursarla según su avance. |
+| No permitida aún | Le falta seriación, créditos o avance. |
+
+- La oportunidad es la de `kardex_records.attempt`: 1 ordinaria, 2 repetición, 3 curso especial. Una baja no gasta oportunidad.
+- «Seleccionada solamente», que también muestra el SII, llega con la inscripción (R3).
+- Una vez elegida la especialidad, la retícula ya no muestra las materias de las otras.
+- La ficha calcula el avance al leerla, desde el kardex del alumno, para no esperar al siguiente recálculo de `student_progress`.
+
 ## Aprobaciones y permisos
 
 | Acción | Quién | Condición |
