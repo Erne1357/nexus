@@ -3,10 +3,12 @@
 namespace App\Modules\Students;
 
 use App\Modules\Academic\Events\CurriculumChanged;
+use App\Modules\Academic\Events\PlanCareerChanging;
 use App\Modules\Academic\Events\SubjectDeactivating;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Students\Listeners\BlockPlanCareerChangeWithStudents;
 use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
 use App\Modules\Students\Models\Student;
@@ -26,6 +28,7 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         Event::listen(SubjectDeactivating::class, BlockSubjectDeactivationWhileNeeded::class);
+        Event::listen(PlanCareerChanging::class, BlockPlanCareerChangeWithStudents::class);
         Event::listen(CurriculumChanged::class, RecomputeProgressOnCurriculumChange::class);
     }
 

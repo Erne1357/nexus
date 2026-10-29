@@ -1,12 +1,16 @@
 <?php
 
+use App\Modules\Academic\Actions\UpdateStudyPlan;
 use App\Modules\Academic\Actions\UpdateSubject;
 use App\Modules\Academic\Events\CurriculumChanged;
+use App\Modules\Academic\Events\PlanCareerChanging;
 use App\Modules\Academic\Events\SubjectDeactivating;
+use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
+use App\Modules\Students\Listeners\BlockPlanCareerChangeWithStudents;
 use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
 use App\Modules\Students\Models\KardexRecord;
@@ -43,6 +47,7 @@ it('registra sus listeners en StudentsServiceProvider', function () {
     Event::fake();
 
     Event::assertListening(SubjectDeactivating::class, BlockSubjectDeactivationWhileNeeded::class);
+    Event::assertListening(PlanCareerChanging::class, BlockPlanCareerChangeWithStudents::class);
     Event::assertListening(CurriculumChanged::class, RecomputeProgressOnCurriculumChange::class);
 });
 
@@ -117,5 +122,37 @@ describe('recálculo del avance', function () {
         app(UpdateSubject::class)->handle($this->calculo, ['name' => 'Cálculo']);
 
         Queue::assertNothingPushed();
+    });
+});
+
+describe('veto al cambiar la carrera de un plan', function () {
+    it('con alumnos en el plan rechaza con cuántos en career_id y no cambia la carrera', function () {
+        $otra = Career::factory()->create();
+        Student::factory()->for($this->isc)->count(3)->create(['career_id' => $this->isc->career_id]);
+
+        try {
+            app(UpdateStudyPlan::class)->handle($this->isc, ['career_id' => $otra->id]);
+            test()->fail('Debió rechazar el cambio de carrera.');
+        } catch (ValidationException $exception) {
+            expect($exception->errors())->toBe(['career_id' => ['Tiene 3 alumnos inscritos en este plan.']]);
+        }
+
+        expect($this->isc->fresh()->career_id)->not->toBe($otra->id);
+    });
+
+    it('sin alumnos en el plan no bloquea', function () {
+        $otra = Career::factory()->create();
+
+        app(UpdateStudyPlan::class)->handle($this->isc, ['career_id' => $otra->id]);
+
+        expect($this->isc->fresh()->career_id)->toBe($otra->id);
+    });
+
+    it('cambiar los créditos totales del plan encola el recálculo después del commit', function () {
+        Queue::fake();
+
+        app(UpdateStudyPlan::class)->handle($this->isc, ['total_credits' => 999]);
+
+        Queue::assertPushed(RecomputeStudentProgress::class, 1);
     });
 });

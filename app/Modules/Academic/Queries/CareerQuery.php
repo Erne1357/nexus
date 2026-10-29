@@ -46,6 +46,25 @@ final class CareerQuery
     }
 
     /**
+     * Las carreras sin borrar, por clave, como opciones de x-select para los filtros y formularios
+     * de las pantallas de Academic (Planes): «ISC · Ingeniería en Sistemas»; las inactivas también,
+     * porque un plan puede seguir en una, y lo dicen.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function options(): array
+    {
+        return Career::query()
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'is_active'])
+            ->map(fn (Career $career): array => [
+                'id' => $career->id,
+                'name' => "{$career->code} · {$career->name}".($career->is_active ? '' : ' (inactiva)'),
+            ])
+            ->all();
+    }
+
+    /**
      * La carrera que se va a editar, ofrecer o borrar, sin las borradas.
      *
      * @throws ModelNotFoundException<Career>
