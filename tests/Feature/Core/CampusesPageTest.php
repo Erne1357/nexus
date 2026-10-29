@@ -166,6 +166,20 @@ describe('admin', function () {
             ->assertDontSee('Ir a la página 2');
     });
 
+    it('en una página que quedó vacía (por desactivar el último o un enlace viejo) deja volver a las otras', function () {
+        foreach (range(1, 15) as $number) {
+            Campus::factory()->create(['code' => sprintf('X%02d', $number)]);
+        }
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.campuses')
+            ->call('gotoPage', 3)
+            ->assertSee('Ningún campus coincide con la búsqueda.')
+            ->assertDontSeeText('Campus C1 a')
+            ->assertSee('Ir a la página 1')
+            ->assertSee('Ir a la página 2');
+    });
+
     it('marca el perfil de flujo guardado que no es válido en lugar de romper la tabla', function () {
         DB::table('campuses')->where('id', $this->c2->id)->update(['settings' => json_encode(['block_minutes' => 45])]);
 

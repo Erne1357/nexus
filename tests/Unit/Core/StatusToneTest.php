@@ -7,29 +7,23 @@ use App\Modules\Core\Enums\StatusTone;
 | daisyUI y el icono de Heroicons de la tabla, iguales en toda la aplicación.
 */
 
-it('da a cada tono las clases y el icono de la tabla de DESIGN.md', function (StatusTone $tone, string $classes, ?string $icon) {
-    expect($tone->classes())->toBe($classes)
-        ->and($tone->icon())->toBe($icon);
-})->with([
-    'activo, validado' => [StatusTone::Success, 'badge-success badge-soft', 'o-check-circle'],
-    'publicado' => [StatusTone::SuccessSolid, 'badge-success', 'o-check-circle'],
-    'inactivo' => [StatusTone::Neutral, 'badge-neutral badge-soft', 'o-minus-circle'],
-    'borrador' => [StatusTone::Draft, 'badge-dash', 'o-pencil'],
-    'en revisión' => [StatusTone::Info, 'badge-info badge-soft', 'o-eye'],
-    'pendiente' => [StatusTone::Warning, 'badge-warning badge-soft', 'o-clock'],
-    'con error, choque' => [StatusTone::Error, 'badge-error badge-soft', 'o-x-circle'],
-    'periodo actual' => [StatusTone::Primary, 'badge-primary', null],
-]);
+$designTable = [
+    'activo, validado' => [StatusTone::Success, 'success', 'badge-success badge-soft', 'o-check-circle'],
+    'publicado' => [StatusTone::SuccessSolid, 'success-solid', 'badge-success', 'o-check-circle'],
+    'inactivo' => [StatusTone::Neutral, 'neutral', 'badge-neutral badge-soft', 'o-minus-circle'],
+    'borrador' => [StatusTone::Draft, 'draft', 'badge-dash', 'o-pencil'],
+    'en revisión' => [StatusTone::Info, 'info', 'badge-info badge-soft', 'o-eye'],
+    'pendiente' => [StatusTone::Warning, 'warning', 'badge-warning badge-soft', 'o-clock'],
+    'con error, choque' => [StatusTone::Error, 'error', 'badge-error badge-soft', 'o-x-circle'],
+    'periodo actual' => [StatusTone::Primary, 'primary', 'badge-primary', null],
+];
 
-it('cubre todos los tonos con la tabla de arriba', function () {
-    expect(array_map(fn (StatusTone $tone): string => $tone->value, StatusTone::cases()))->toBe([
-        'success',
-        'success-solid',
-        'neutral',
-        'draft',
-        'info',
-        'warning',
-        'error',
-        'primary',
-    ]);
+it('da a cada tono su valor para tone="…", las clases y el icono de la tabla de DESIGN.md', function (StatusTone $tone, string $value, string $classes, ?string $icon) {
+    expect($tone->value)->toBe($value)
+        ->and($tone->classes())->toBe($classes)
+        ->and($tone->icon())->toBe($icon);
+})->with($designTable);
+
+it('no tiene tonos fuera de la tabla de DESIGN.md', function () use ($designTable) {
+    expect(array_column($designTable, 0))->toBe(StatusTone::cases());
 });

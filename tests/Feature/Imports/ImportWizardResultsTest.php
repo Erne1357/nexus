@@ -78,18 +78,18 @@ describe('admin', function () {
     });
 
     it('pinta el estado del lote y el tipo de cada mensaje con la insignia de estado de DESIGN.md', function () {
-        $badges = fn (Testable $page): array => collect(HTMLDocument::createFromString('<!DOCTYPE html><body>'.$page->html().'</body>', LIBXML_NOERROR)->querySelectorAll('.badge'))
-            ->mapWithKeys(fn (Element $badge): array => [trim($badge->textContent) => iterator_to_array($badge->classList, false)])
+        $badgeClasses = fn (Testable $page, string $text): array => collect(HTMLDocument::createFromString('<!DOCTYPE html><body>'.$page->html().'</body>', LIBXML_NOERROR)->querySelectorAll('.badge'))
+            ->filter(fn (Element $badge): bool => trim($badge->textContent) === $text)
+            ->map(fn (Element $badge): array => iterator_to_array($badge->classList, false))
+            ->values()
             ->all();
 
         $page = wizardForBatch($this->admin, $this->batch);
 
-        expect($badges($page))
-            ->Validado->toContain('badge-success', 'badge-soft')
-            ->Error->toContain('badge-error', 'badge-soft');
+        expect($badgeClasses($page, 'Validado'))->toHaveCount(1)->each->toContain('badge-success', 'badge-soft')
+            ->and($badgeClasses($page, 'Error'))->not->toBeEmpty()->each->toContain('badge-error', 'badge-soft');
 
-        expect($badges($page->set('issues', 'warnings')))
-            ->Advertencia->toContain('badge-warning', 'badge-soft');
+        expect($badgeClasses($page->set('issues', 'warnings'), 'Advertencia'))->not->toBeEmpty()->each->toContain('badge-warning', 'badge-soft');
     });
 
     it('sin filas con error no ofrece descargar errores', function () {

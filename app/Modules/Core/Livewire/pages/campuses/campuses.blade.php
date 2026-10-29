@@ -52,7 +52,7 @@
             :headers="$headers"
             :rows="$campuses"
             :row-decoration="$rowDecoration"
-            class="max-md:hidden [&_th]:text-xs [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-widest [&_th]:text-neutral [&_thead]:bg-secondary/40"
+            class="max-md:hidden [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
         >
             @scope('cell_code', $campus)
                 <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $campus->is_active])>{{ $campus->code }}</span>
@@ -71,40 +71,11 @@
             @endscope
 
             @scope('cell_is_active', $campus)
-                @if ($campus->is_active)
-                    <x-core::status-badge tone="success" label="Activo" />
-                @else
-                    <x-core::status-badge tone="neutral" label="Inactivo" />
-                @endif
+                <x-core::status-badge :tone="$campus->is_active ? 'success' : 'neutral'" :label="$campus->is_active ? 'Activo' : 'Inactivo'" />
             @endscope
 
             @scope('actions', $campus)
-                <div class="flex justify-end gap-1">
-                    <x-button
-                        icon="o-pencil-square"
-                        wire:click="edit('{{ $campus->id }}')"
-                        aria-label="Editar {{ $campus->code }}"
-                        data-testid="edit-{{ $campus->code }}"
-                        class="btn-ghost btn-sm"
-                        spinner="edit('{{ $campus->id }}')"
-                    >
-                        <span class="max-[1200px]:hidden">Editar</span>
-                    </x-button>
-
-                    @can('update', $campus)
-                        <x-button
-                            :label="$campus->is_active ? 'Desactivar' : 'Activar'"
-                            wire:click="toggleActive('{{ $campus->id }}')"
-                            wire:confirm="{{ $campus->is_active ? '¿Desactivar el campus '.$campus->code.'? Nadie podrá trabajar en él hasta que se reactive.' : '¿Activar el campus '.$campus->code.'?' }}"
-                            class="btn-ghost btn-sm"
-                            spinner="toggleActive('{{ $campus->id }}')"
-                        />
-                    @else
-                        <span class="tooltip tooltip-left" data-tip="Solo el administrador activa o desactiva campus.">
-                            <x-button :label="$campus->is_active ? 'Desactivar' : 'Activar'" class="btn-ghost btn-sm" disabled />
-                        </span>
-                    @endcan
-                </div>
+                @include('core::campuses.row-actions', ['campus' => $campus, 'inTable' => true])
             @endscope
 
             <x-slot:empty>
@@ -119,11 +90,7 @@
                         <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $campus->is_active])>{{ $campus->code }}</span>
                         <span @class(['min-w-0 flex-1', 'font-semibold' => $campus->is_active])>{{ $campus->name }}</span>
 
-                        @if ($campus->is_active)
-                            <x-core::status-badge tone="success" label="Activo" />
-                        @else
-                            <x-core::status-badge tone="neutral" label="Inactivo" />
-                        @endif
+                        <x-core::status-badge :tone="$campus->is_active ? 'success' : 'neutral'" :label="$campus->is_active ? 'Activo' : 'Inactivo'" />
                     </div>
 
                     <div class="text-neutral">
@@ -135,37 +102,16 @@
                         @endif
                     </div>
 
-                    <div class="-ms-3 flex gap-1">
-                        <x-button
-                            label="Editar"
-                            icon="o-pencil-square"
-                            wire:click="edit('{{ $campus->id }}')"
-                            aria-label="Editar {{ $campus->code }}"
-                            class="btn-ghost btn-sm"
-                            spinner="edit('{{ $campus->id }}')"
-                        />
-
-                        @can('update', $campus)
-                            <x-button
-                                :label="$campus->is_active ? 'Desactivar' : 'Activar'"
-                                wire:click="toggleActive('{{ $campus->id }}')"
-                                wire:confirm="{{ $campus->is_active ? '¿Desactivar el campus '.$campus->code.'? Nadie podrá trabajar en él hasta que se reactive.' : '¿Activar el campus '.$campus->code.'?' }}"
-                                class="btn-ghost btn-sm"
-                                spinner="toggleActive('{{ $campus->id }}')"
-                            />
-                        @else
-                            <span class="tooltip tooltip-right" data-tip="Solo el administrador activa o desactiva campus.">
-                                <x-button :label="$campus->is_active ? 'Desactivar' : 'Activar'" class="btn-ghost btn-sm" disabled />
-                            </span>
-                        @endcan
-                    </div>
+                    @include('core::campuses.row-actions', ['campus' => $campus, 'inTable' => false])
                 </li>
             @endforeach
         </ul>
 
-        @if ($campuses->isNotEmpty())
+        @if ($campuses->isNotEmpty() || $campuses->hasPages())
             <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
-                <p>Campus <span class="font-mono">{{ $campuses->first()->code }}</span>@if ($campuses->count() > 1) a <span class="font-mono">{{ $campuses->last()->code }}</span> · <span class="font-mono">{{ $campuses->firstItem() }}–{{ $campuses->lastItem() }}</span>@else · <span class="font-mono">{{ $campuses->firstItem() }}</span>@endif de <span class="font-mono">{{ $campuses->total() }}</span></p>
+                @if ($campuses->isNotEmpty())
+                    <p>Campus <span class="font-mono">{{ $campuses->first()->code }}</span>@if ($campuses->count() > 1) a <span class="font-mono">{{ $campuses->last()->code }}</span> · <span class="font-mono">{{ $campuses->firstItem() }}–{{ $campuses->lastItem() }}</span>@else · <span class="font-mono">{{ $campuses->firstItem() }}</span>@endif de <span class="font-mono">{{ $campuses->total() }}</span></p>
+                @endif
 
                 {{ $campuses->onEachSide(1)->links(data: ['scrollTo' => false]) }}
             </div>
