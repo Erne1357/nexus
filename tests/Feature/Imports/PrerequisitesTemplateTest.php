@@ -9,10 +9,12 @@ use App\Modules\Imports\Actions\ApplyImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
 use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Models\ImportBatch;
+use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\PrerequisitesTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
@@ -100,24 +102,52 @@ it('una seriación borrada no se restaura', function () {
         ->toBe(['subject' => ['Hay un registro borrado con esta clave; una importación no lo restaura.']]);
 });
 
-it('un ciclo entre renglones del mismo archivo se rechaza al aplicar: el renglón posterior queda con error', function () {
+/**
+ * Valida un archivo de seriación con estos renglones y da las filas por número.
+ *
+ * @param  list<string>  $lines
+ * @return array{0: ImportBatch, 1: Collection<int, ImportRow>}
+ */
+function validatedPrerequisites(User $admin, array $lines): array
+{
     Storage::fake('imports');
-    $batch = ImportBatch::factory()->create(['template' => 'prerequisites', 'uploaded_by' => $this->context->user->id]);
+    $batch = ImportBatch::factory()->create(['template' => 'prerequisites', 'uploaded_by' => $admin->id]);
     $batch->update(['file_path' => "{$batch->id}.csv"]);
-    Storage::disk('imports')->put($batch->file_path, implode("\n", [
-        'clave de plan,materia,materia requisito',
-        'ISIC-2010-224,ACF-0902,ACF-0901',
-        'ISIC-2010-224,ACF-0901,ACF-0902',
-    ]));
+    Storage::disk('imports')->put($batch->file_path, implode("\n", ['clave de plan,materia,materia requisito,tipo', ...$lines]));
 
     app(ValidateImportBatch::class)->handle($batch);
-    app(ApplyImportBatch::class)->handle($batch->fresh(), $this->context->user);
-    $rows = $batch->rows()->orderBy('row_number')->get()->keyBy('row_number');
 
-    expect($rows[2]->status)->toBe(RowStatus::Applied)
+    return [$batch, $batch->rows()->orderBy('row_number')->get()->keyBy('row_number')];
+}
+
+it('un ciclo entre renglones del mismo archivo ya es error al validar, y al aplicar solo entra el primero', function () {
+    [$batch, $rows] = validatedPrerequisites($this->context->user, ['ISIC-2010-224,ACF-0902,ACF-0901,', 'ISIC-2010-224,ACF-0901,ACF-0902,']);
+
+    app(ApplyImportBatch::class)->handle($batch->fresh(), $this->context->user);
+
+    expect($rows[2]->status)->toBe(RowStatus::Valid)
         ->and($rows[3])->status->toBe(RowStatus::Error)
         ->errors->toBe(['prerequisite' => ['Cierra un ciclo de seriación: ACF-0902 ya pide, en cadena, a ACF-0901.']])
         ->and(SubjectPrerequisite::count())->toBe(1);
+});
+
+it('un renglón que vuelve correquisito una seriación cuenta para los renglones que siguen', function () {
+    seriate($this->plan, $this->B, $this->A);
+
+    [, $rows] = validatedPrerequisites($this->context->user, ['ISIC-2010-224,ACF-0902,ACF-0901,correquisito', 'ISIC-2010-224,ACF-0901,ACF-0902,']);
+
+    expect($rows[2]->status)->toBe(RowStatus::Valid)
+        ->and($rows[3]->status)->toBe(RowStatus::Valid);
+});
+
+it('avisa si el plan está inactivo, y dice si una materia de la retícula está borrada del catálogo', function () {
+    StudyPlan::factory()->inactive()->create(['code' => 'ISIC-2004-296']);
+    $this->C->delete();
+
+    expect($this->template->validate(prerequisiteRow(['plan' => 'ISIC-2004-296']), $this->context)->warnings)->toHaveKey('plan')
+        ->and($this->template->validate(prerequisiteRow(['plan' => 'ISIC-2004-296']), $this->context)->warnings['plan'])->toBe(['El plan ISIC-2004-296 está inactivo.'])
+        ->and($this->template->validate(prerequisiteRow(['subject' => 'ACF-0903']), $this->context)->errors)
+        ->toBe(['subject' => ['La materia ACF-0903 está borrada del catálogo.']]);
 });
 
 it('al terminar el lote recalcula el avance de los alumnos, porque cambió la seriación', function () {

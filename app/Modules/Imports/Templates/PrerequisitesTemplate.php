@@ -5,9 +5,11 @@ namespace App\Modules\Imports\Templates;
 use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Seriación del SII (tarea 1.9): clave de plan, materia y materia requisito, con un tipo opcional. Sin tipo es
@@ -15,10 +17,10 @@ use Illuminate\Support\Str;
  * de octubre de 2026). La seriación es de cada plan: la clave del archivo es la materia, su requisito y el plan.
  *
  * Es error si alguna de las dos materias no está en la retícula del plan, si una materia se pide a sí misma o si
- * una seriación cierra un ciclo con la que ya tiene el plan (confirmado el 29 de octubre de 2026). Un ciclo entre
- * renglones del mismo archivo se rechaza al aplicar, porque ApplyImportBatch vuelve a validar cada fila con lo
- * que las anteriores ya escribieron; por eso la seriación del plan se lee en cada fila. Los correquisitos no
- * bloquean, así que no forman ciclos.
+ * una seriación cierra un ciclo con la que ya tiene el plan o con renglones anteriores del archivo (confirmado el
+ * 29 de octubre de 2026). Para eso guarda la seriación de cada plan en la corrida y le suma cada renglón válido:
+ * así un ciclo dentro del archivo ya es error al validar, y un renglón que vuelve correquisito una seriación
+ * cuenta para los que siguen. Los correquisitos no bloquean, así que no forman ciclos.
  *
  * Como todo lo importado, una seriación borrada no se restaura. No ofrece "desactivar faltantes": quitar una
  * seriación cambia el avance de los alumnos y se hace a mano. Al terminar el lote recalcula el avance.
@@ -30,6 +32,9 @@ class PrerequisitesTemplate extends ImportTemplate
 
     /** @var array<string, array<string, string>> plan → clave de materia → id, de su retícula, en esta corrida */
     private array $grids = [];
+
+    /** @var array<string, array<string, array<string, true>>> plan → materia → materias que pide en seriación, en esta corrida */
+    private array $seriations = [];
 
     public function key(): string
     {
@@ -72,13 +77,13 @@ class PrerequisitesTemplate extends ImportTemplate
             'plan' => ['required', 'string'],
             'subject' => ['required', 'string'],
             'prerequisite' => ['required', 'string'],
-            'kind' => ['required', 'string', 'in:'.PrerequisiteKind::Seriacion->value.','.PrerequisiteKind::Correquisito->value],
+            'kind' => ['string', Rule::enum(PrerequisiteKind::class)],
         ];
     }
 
     protected function messages(): array
     {
-        return ['kind.in' => 'El tipo debe ser seriación o correquisito.'];
+        return ['kind.enum' => 'El tipo debe ser seriación o correquisito.'];
     }
 
     public function normalize(array $row): array
@@ -112,11 +117,17 @@ class PrerequisitesTemplate extends ImportTemplate
             return $issues->withError('plan', "No hay un plan con la clave {$row['plan']}.");
         }
 
+        if (! $plan->is_active) {
+            $issues = $issues->withWarning('plan', "El plan {$row['plan']} está inactivo.");
+        }
+
         $grid = $this->grid($plan);
 
         foreach (['subject', 'prerequisite'] as $field) {
             if (! isset($grid[$row[$field]])) {
-                $issues = $issues->withError($field, "La materia {$row[$field]} no está en la retícula del plan {$row['plan']}.");
+                $issues = $issues->withError($field, Subject::onlyTrashed()->where('code', $row[$field])->exists()
+                    ? "La materia {$row[$field]} está borrada del catálogo."
+                    : "La materia {$row[$field]} no está en la retícula del plan {$row['plan']}.");
             }
         }
 
@@ -129,10 +140,21 @@ class PrerequisitesTemplate extends ImportTemplate
         }
 
         $issues = parent::check($row, $context, $issues);
+        $subject = $grid[$row['subject']];
+        $prerequisite = $grid[$row['prerequisite']];
+        $seriation = $row['kind'] === PrerequisiteKind::Seriacion->value;
 
-        if (! $issues->hasErrors() && $row['kind'] === PrerequisiteKind::Seriacion->value
-            && $this->requiresTransitively($plan, $grid[$row['prerequisite']], $grid[$row['subject']])) {
+        if (! $issues->hasErrors() && $seriation && $this->requiresTransitively($plan, $prerequisite, $subject)) {
             return $issues->withError('prerequisite', "Cierra un ciclo de seriación: {$row['prerequisite']} ya pide, en cadena, a {$row['subject']}.");
+        }
+
+        if (! $issues->hasErrors()) {
+            $this->seriation($plan);
+            unset($this->seriations[$plan->getKey()][$subject][$prerequisite]);
+
+            if ($seriation) {
+                $this->seriations[$plan->getKey()][$subject][$prerequisite] = true;
+            }
         }
 
         return $issues;
@@ -156,24 +178,17 @@ class PrerequisitesTemplate extends ImportTemplate
     }
 
     /**
-     * Si la materia `$from` pide, directa o en cadena, a la materia `$to`, según la seriación que el plan tiene
-     * hoy (sin correquisitos ni lo borrado).
+     * Si la materia `$from` pide, directa o en cadena, a la materia `$to`, según la seriación del plan (sin
+     * correquisitos ni lo borrado) más la de los renglones válidos anteriores de esta corrida.
      */
     private function requiresTransitively(StudyPlan $plan, string $from, string $to): bool
     {
-        $requires = SubjectPrerequisite::query()
-            ->where('study_plan_id', $plan->getKey())
-            ->where('kind', PrerequisiteKind::Seriacion)
-            ->toBase()
-            ->get(['subject_id', 'prerequisite_subject_id'])
-            ->groupBy('subject_id')
-            ->map(fn ($rows): array => $rows->pluck('prerequisite_subject_id')->all());
-
+        $requires = $this->seriation($plan);
         $seen = [];
         $pending = [$from];
 
         while ($pending !== []) {
-            foreach ($requires->get(array_pop($pending), []) as $prerequisite) {
+            foreach (array_keys($requires[array_pop($pending)] ?? []) as $prerequisite) {
                 if ($prerequisite === $to) {
                     return true;
                 }
@@ -188,9 +203,27 @@ class PrerequisitesTemplate extends ImportTemplate
         return false;
     }
 
+    /**
+     * La seriación del plan como la deja esta corrida: la de la base al empezar, con cada renglón válido encima.
+     *
+     * @return array<string, array<string, true>>
+     */
+    private function seriation(StudyPlan $plan): array
+    {
+        if (! isset($this->seriations[$plan->getKey()])) {
+            $this->seriations[$plan->getKey()] = [];
+
+            foreach (SubjectPrerequisite::query()->where('study_plan_id', $plan->getKey())->where('kind', PrerequisiteKind::Seriacion)->toBase()->get(['subject_id', 'prerequisite_subject_id']) as $edge) {
+                $this->seriations[$plan->getKey()][$edge->subject_id][$edge->prerequisite_subject_id] = true;
+            }
+        }
+
+        return $this->seriations[$plan->getKey()];
+    }
+
     private function plan(string $code): ?StudyPlan
     {
-        return array_key_exists($code, $this->plans) ? $this->plans[$code] : $this->plans[$code] = StudyPlan::query()->where('code', $code)->first(['id']);
+        return array_key_exists($code, $this->plans) ? $this->plans[$code] : $this->plans[$code] = StudyPlan::query()->where('code', $code)->first(['id', 'is_active']);
     }
 
     /**
