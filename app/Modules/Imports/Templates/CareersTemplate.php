@@ -22,11 +22,14 @@ use Illuminate\Support\Str;
  */
 class CareersTemplate extends ImportTemplate
 {
-    /** @var array<string, string|null> id de departamento por clave, en esta corrida */
+    /** @var array<string, Department|null> departamento por clave, en esta corrida */
     private array $departments = [];
 
-    /** @var array<string, string|null> id de campus por clave, en esta corrida */
+    /** @var array<string, Campus|null> campus por clave, en esta corrida */
     private array $campuses = [];
+
+    /** @var array<string, true> carreras cuya última fila aplicada solo agregó una oferta */
+    private array $offeringOnly = [];
 
     public function key(): string
     {
@@ -63,6 +66,15 @@ class CareersTemplate extends ImportTemplate
         return false;
     }
 
+    /**
+     * Los renglones de una misma carrera deben traer el mismo departamento, que decide qué jefe la ve y la
+     * valida; un nombre distinto solo avisa y se queda el del primero (confirmado el 29 de octubre de 2026).
+     */
+    public function consistentAcrossRows(): ?array
+    {
+        return ['group' => ['code'], 'errors' => ['department'], 'warnings' => ['name']];
+    }
+
     public function rules(): array
     {
         return [
@@ -86,26 +98,43 @@ class CareersTemplate extends ImportTemplate
     }
 
     /**
-     * Como la base, y además la oferta de la carrera en el campus del renglón, si todavía no la tiene.
+     * Como la base, y además la oferta de la carrera en el campus del renglón, si todavía no la tiene. La oferta
+     * nace con el estado de la carrera: importar no ofrece una carrera inactiva. Un renglón que solo agrega la
+     * oferta cuenta como cambio de la carrera.
      */
     public function apply(array $row, ImportContext $context): Model
     {
         $career = parent::apply($row, $context);
 
-        CareerCampus::withTrashed()->firstOrCreate(
-            ['career_id' => $career->getKey(), 'campus_id' => $this->campus($row['campus'])],
-            ['is_active' => true],
+        $offering = CareerCampus::withTrashed()->firstOrCreate(
+            ['career_id' => $career->getKey(), 'campus_id' => $this->campus($row['campus'])?->getKey()],
+            ['is_active' => (bool) $career->getAttribute('is_active')],
         );
 
+        unset($this->offeringOnly[$career->getKey()]);
+
+        if ($offering->wasRecentlyCreated && ! $career->wasRecentlyCreated && ! $career->wasChanged()) {
+            $this->offeringOnly[$career->getKey()] = true;
+        }
+
         return $career;
+    }
+
+    public function wroteAlongside(Model $model): bool
+    {
+        return isset($this->offeringOnly[$model->getKey()]);
     }
 
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
         $issues = parent::check($row, $context, $issues);
 
-        if ($this->department($row['department']) === null) {
+        $department = $this->department($row['department']);
+
+        if ($department === null) {
             $issues = $issues->withError('department', "No hay un departamento con la clave {$row['department']}.");
+        } elseif (! $department->is_active) {
+            $issues = $issues->withWarning('department', "El departamento {$row['department']} está inactivo.");
         }
 
         $campus = $this->campus($row['campus']);
@@ -114,8 +143,12 @@ class CareersTemplate extends ImportTemplate
             return $issues->withError('campus', "No hay un campus con la clave {$row['campus']}.");
         }
 
+        if (! $campus->is_active) {
+            $issues = $issues->withWarning('campus', "El campus {$row['campus']} está inactivo.");
+        }
+
         $offering = CareerCampus::withTrashed()
-            ->where('campus_id', $campus)
+            ->where('campus_id', $campus->getKey())
             ->whereIn('career_id', Career::withTrashed()->where('code', $row['code'])->select('id'))
             ->first();
 
@@ -136,17 +169,17 @@ class CareersTemplate extends ImportTemplate
     {
         return [
             'name' => $row['name'],
-            'department_id' => $this->department($row['department']),
+            'department_id' => $this->department($row['department'])?->getKey(),
         ];
     }
 
-    private function department(string $code): ?string
+    private function department(string $code): ?Department
     {
-        return array_key_exists($code, $this->departments) ? $this->departments[$code] : $this->departments[$code] = Department::query()->where('code', $code)->value('id');
+        return array_key_exists($code, $this->departments) ? $this->departments[$code] : $this->departments[$code] = Department::query()->where('code', $code)->first(['id', 'is_active']);
     }
 
-    private function campus(string $code): ?string
+    private function campus(string $code): ?Campus
     {
-        return array_key_exists($code, $this->campuses) ? $this->campuses[$code] : $this->campuses[$code] = Campus::query()->where('code', $code)->value('id');
+        return array_key_exists($code, $this->campuses) ? $this->campuses[$code] : $this->campuses[$code] = Campus::query()->where('code', $code)->first(['id', 'is_active']);
     }
 }

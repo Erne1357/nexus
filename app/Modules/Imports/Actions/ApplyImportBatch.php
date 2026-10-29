@@ -169,7 +169,7 @@ final class ApplyImportBatch
 
             $written[match (true) {
                 $target->wasRecentlyCreated => 'created',
-                $target->wasChanged() => 'updated',
+                $target->wasChanged(), $template->wroteAlongside($target) => 'updated',
                 default => 'unchanged',
             }]++;
 

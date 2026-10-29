@@ -5,10 +5,14 @@ use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Imports\Actions\ValidateImportBatch;
+use App\Modules\Imports\Enums\RowStatus;
+use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /*
 | Plantilla `careers` (tarea 1.9): las carreras del SII por clave, con su departamento y el campus donde se
@@ -110,4 +114,58 @@ it('busca cada departamento y campus una sola vez por corrida', function () {
     $lookups = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => preg_match('/from "(departments|campuses)"/', $sql) === 1);
 
     expect($lookups)->toHaveCount(2);
+});
+
+it('un renglón que solo agrega la oferta en otro campus cuenta como cambio de la carrera; repetirlo, no', function () {
+    $this->template->apply(careerRow(), $this->context);
+
+    $career = $this->template->apply(careerRow(['campus' => 'C1']), $this->context);
+    $alongside = $this->template->wroteAlongside($career);
+    $again = $this->template->apply(careerRow(['campus' => 'C1']), $this->context);
+
+    expect($career->wasRecentlyCreated)->toBeFalse()
+        ->and($career->wasChanged())->toBeFalse()
+        ->and($alongside)->toBeTrue()
+        ->and($this->template->wroteAlongside($again))->toBeFalse();
+});
+
+it('avisa si el departamento o el campus están inactivos, y la oferta de una carrera inactiva nace inactiva', function () {
+    Department::factory()->inactive()->create(['code' => 'CB']);
+    $this->c1->update(['is_active' => false]);
+    Career::factory()->for($this->department)->inactive()->create(['code' => 'ISIC']);
+
+    $issues = $this->template->validate(careerRow(['department' => 'CB', 'campus' => 'C1']), $this->context);
+    $this->template->apply(careerRow(), $this->context);
+
+    expect($issues->errors)->toBe([])
+        ->and($issues->warnings)->toBe([
+            'code' => ['El registro está inactivo: se actualizan sus datos, pero sigue inactivo.'],
+            'department' => ['El departamento CB está inactivo.'],
+            'campus' => ['El campus C1 está inactivo.'],
+        ])
+        ->and(CareerCampus::sole()->is_active)->toBeFalse();
+});
+
+it('en un archivo, el departamento de una carrera debe coincidir en todos sus renglones; el nombre solo avisa y se queda el del primero', function () {
+    Storage::fake('imports');
+    Department::factory()->create(['code' => 'CB']);
+    Campus::factory()->create(['code' => 'C3']);
+    $batch = ImportBatch::factory()->create(['template' => 'careers', 'uploaded_by' => $this->context->user->id]);
+    $batch->update(['file_path' => "{$batch->id}.csv"]);
+    Storage::disk('imports')->put($batch->file_path, implode("\n", [
+        'clave,nombre,departamento,campus',
+        'ISIC,Ingeniería en Sistemas,SC,C2',
+        'ISIC,Ingeniería en Sistemas,CB,C1',
+        'ISIC,Sistemas Computacionales,SC,C3',
+    ]));
+
+    app(ValidateImportBatch::class)->handle($batch);
+    $rows = $batch->rows()->orderBy('row_number')->get()->keyBy('row_number');
+
+    expect($rows[2]->status)->toBe(RowStatus::Valid)
+        ->and($rows[3])->status->toBe(RowStatus::Error)
+        ->errors->toBe(['department' => ['No coincide con la fila 2, que trae «SC».']])
+        ->and($rows[4])->status->toBe(RowStatus::Warning)
+        ->warnings->toBe(['name' => ['No coincide con la fila 2: se queda «Ingeniería en Sistemas».']])
+        ->and($rows[4]->normalized['name'])->toBe('Ingeniería en Sistemas');
 });

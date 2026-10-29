@@ -29,7 +29,7 @@ Tener en Nexus todos los catálogos del proceso presencial cargados desde export
 | Exportación | Campos mínimos | Plantilla |
 |---|---|---|
 | Departamentos | clave, nombre | `departments` |
-| Carreras | clave, nombre, departamento, campus donde se ofrece | `careers` | (un renglón por campus)
+| Carreras | clave, nombre, departamento, campus donde se ofrece (un renglón por campus) | `careers` |
 | Planes de estudio | clave de plan, carrera, versión, vigente | `study_plans` |
 | Materias por plan | clave de plan, clave de materia, nombre, semestre, horas teoría, horas práctica, créditos, departamento que imparte, especialidad | `subjects` y `study_plans` |
 | Seriación | clave de plan, materia, materia requisito | `prerequisites` |

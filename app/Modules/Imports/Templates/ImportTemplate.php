@@ -304,6 +304,31 @@ abstract class ImportTemplate
     }
 
     /**
+     * Si al aplicar la última fila de este registro también escribió algo fuera de él (la oferta de una carrera
+     * en un campus). ApplyImportBatch cuenta entonces la fila como cambio aunque el registro no haya cambiado,
+     * para que la bitácora del lote no lo calle. Por omisión, no.
+     */
+    public function wroteAlongside(Model $model): bool
+    {
+        return false;
+    }
+
+    /**
+     * Lo que deben traer igual las filas de un mismo archivo que hablan del mismo registro aunque su clave
+     * natural sea otra: una carrera en un renglón por campus, una materia en un renglón por plan. `group` son
+     * los campos que identifican el registro; si una fila posterior no coincide con la primera del grupo en un
+     * campo de `errors`, es error y no se aplica; en uno de `warnings`, avisa y se queda con el valor de la
+     * primera (confirmado el 29 de octubre de 2026). ValidateImportBatch lo revisa en SQL al terminar; null,
+     * como por omisión, no revisa nada.
+     *
+     * @return array{group: list<string>, errors: list<string>, warnings: list<string>}|null
+     */
+    public function consistentAcrossRows(): ?array
+    {
+        return null;
+    }
+
+    /**
      * Corre una vez al terminar de aplicar el lote, por ejemplo para despachar un job de recálculo (tarea
      * 1.4: `RecomputeStudentProgress`). También corre si la aplicación falló después de escribir algo,
      * porque lo escrito se queda; no corre si no se escribió nada.
