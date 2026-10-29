@@ -10,6 +10,7 @@ use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\KardexTemplate;
+use App\Modules\Imports\Templates\PrerequisitesTemplate;
 use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\StudyPlansTemplate;
 use App\Modules\Imports\Templates\SubjectsTemplate;
@@ -29,6 +30,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         CareersTemplate::class,
         StudyPlansTemplate::class,
         SubjectsTemplate::class,
+        PrerequisitesTemplate::class,
         StudentsTemplate::class,
         KardexTemplate::class,
     ];
