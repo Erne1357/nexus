@@ -20,36 +20,41 @@ enum SubjectStanding: string
     case NoPermitida = 'no_permitida';
 
     /**
-     * El estado de una materia con estas filas de kardex. Lo aprobado manda; luego lo que cursa (en el periodo
-     * más reciente del kardex, o sin calificar si es de uno anterior); luego la oportunidad más alta que
-     * reprobó: la 1 es ordinaria, la 2 repetición y la 3 curso especial. Una baja no gasta oportunidad.
+     * El estado de una materia con estas filas de kardex. Lo aprobado manda; si no, decide la fila más reciente
+     * (por periodo y oportunidad) que no sea una baja, porque una baja no gasta oportunidad: si la cursa desde el
+     * periodo en curso, cursando; si es de uno anterior, sin calificar; si la reprobó, según la oportunidad: la 1
+     * es ordinaria, la 2 repetición y la 3 curso especial.
      *
      * @param  list<array{result: KardexResult, attempt: int, term: string}>  $attempts
      * @param  bool  $available  si ya puede cursarla según su avance
-     * @param  string  $latestTerm  el periodo más reciente del kardex importado
+     * @param  string|null  $termInProgress  el periodo en curso de su campus (TermInProgressQuery), si lo hay
      */
-    public static function of(array $attempts, bool $available, string $latestTerm): self
+    public static function of(array $attempts, bool $available, ?string $termInProgress): self
     {
-        $results = array_column($attempts, 'result');
-
-        if (in_array(KardexResult::Aprobada, $results, true)) {
+        if (in_array(KardexResult::Aprobada, array_column($attempts, 'result'), true)) {
             return self::Acreditada;
         }
 
-        $taking = array_filter($attempts, fn (array $attempt): bool => $attempt['result'] === KardexResult::Cursando);
-
-        if ($taking !== []) {
-            return in_array($latestTerm, array_column($taking, 'term'), true) ? self::Cursando : self::SinCalificar;
-        }
-
-        $failed = array_column(array_filter($attempts, fn (array $attempt): bool => $attempt['result'] === KardexResult::Reprobada), 'attempt');
+        $counted = array_values(array_filter($attempts, fn (array $attempt): bool => $attempt['result'] !== KardexResult::Baja));
+        usort($counted, fn (array $a, array $b): int => [$a['term'], $a['attempt']] <=> [$b['term'], $b['attempt']]);
+        $last = end($counted);
 
         return match (true) {
-            $failed === [] => $available ? self::PuedeSeleccionarla : self::NoPermitida,
-            max($failed) >= 3 => self::CursoEspecialReprobado,
-            max($failed) === 2 => self::ACursoEspecial,
+            $last === false => $available ? self::PuedeSeleccionarla : self::NoPermitida,
+            $last['result'] === KardexResult::Cursando => $termInProgress === null || $last['term'] >= $termInProgress ? self::Cursando : self::SinCalificar,
+            $last['attempt'] >= 3 => self::CursoEspecialReprobado,
+            $last['attempt'] === 2 => self::ACursoEspecial,
             default => self::ReprobadaPrioridad,
         };
+    }
+
+    /**
+     * Si la materia cuenta para «Puede seleccionar» cuando su avance la deja cursar. Reprobar el curso especial
+     * da de baja al alumno, así que esa ya no cuenta (reglas-de-negocio.md, "Retícula del alumno").
+     */
+    public function countsAsSelectable(): bool
+    {
+        return in_array($this, [self::PuedeSeleccionarla, self::ReprobadaPrioridad, self::ACursoEspecial], true);
     }
 
     public function label(): string

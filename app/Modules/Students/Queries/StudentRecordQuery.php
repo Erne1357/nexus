@@ -20,7 +20,10 @@ use Illuminate\Support\Collection;
  */
 final class StudentRecordQuery
 {
-    public function __construct(private readonly PlanGridQuery $grids) {}
+    public function __construct(
+        private readonly PlanGridQuery $grids,
+        private readonly TermInProgressQuery $terms,
+    ) {}
 
     public function forStudent(Student $student): StudentRecord
     {
@@ -40,7 +43,7 @@ final class StudentRecordQuery
         $subjects = Subject::withTrashed()->whereIn('id', array_keys($grid->credits))->get(['id', 'code', 'name'])->keyBy('id');
         $specialties = Specialty::withTrashed()->whereIn('id', array_values($grid->specialtyOf))->pluck('name', 'id');
         [$chainOf, $chains] = $this->chains($shown, $grid->seriation, $subjects);
-        $latestTerm = (string) KardexRecord::query()->max('term_code');
+        $termInProgress = $this->terms->forCampus($student->campus_id);
         $reach = $student->current_semester === null ? null : $student->current_semester + 2;
         $bySubject = $records->groupBy('subject_id');
         $passed = array_flip($approved);
@@ -52,7 +55,7 @@ final class StudentRecordQuery
             $standing = SubjectStanding::of(
                 $rows->map(fn (KardexRecord $row): array => ['result' => $row->result, 'attempt' => $row->attempt, 'term' => $row->term_code])->values()->all(),
                 isset($available[$subjectId]),
-                $latestTerm,
+                $termInProgress,
             );
             $shownRow = $this->shownRow($rows, $standing);
             $prerequisites = array_values(array_filter($grid->seriation[$subjectId] ?? [], fn (string $id): bool => isset($grid->credits[$id])));
@@ -78,6 +81,7 @@ final class StudentRecordQuery
         }
 
         ksort($semesters);
+        $cells = array_merge(...array_values($semesters));
 
         return new StudentRecord(
             student: $student,
@@ -85,8 +89,8 @@ final class StudentRecordQuery
             totalCredits: $grid->totalFor([...$approved, ...$taking]),
             subjectsApproved: $progress['subjects_approved'],
             subjectsInGrid: count($shown),
-            taking: count(array_filter(array_merge(...array_values($semesters)), fn (GridCell $cell): bool => $cell->standing === SubjectStanding::Cursando)),
-            selectable: count(array_diff_key($available, array_flip($taking))),
+            taking: count(array_filter($cells, fn (GridCell $cell): bool => $cell->standing === SubjectStanding::Cursando)),
+            selectable: count(array_filter($cells, fn (GridCell $cell): bool => $cell->standing->countsAsSelectable() && isset($available[$cell->subjectId]))),
             reachSemester: $reach,
             semesters: $semesters,
             chains: $chains,
@@ -95,7 +99,8 @@ final class StudentRecordQuery
     }
 
     /**
-     * La fila de kardex que la ficha muestra en la materia: la que la acreditó o la que la cursa.
+     * La fila de kardex que explica el estado de la materia: la que la acreditó, la que la cursa o la última
+     * oportunidad que reprobó.
      *
      * @param  Collection<int, KardexRecord>  $rows
      */
@@ -104,10 +109,11 @@ final class StudentRecordQuery
         $result = match ($standing) {
             SubjectStanding::Acreditada => KardexResult::Aprobada,
             SubjectStanding::Cursando, SubjectStanding::SinCalificar => KardexResult::Cursando,
+            SubjectStanding::ReprobadaPrioridad, SubjectStanding::ACursoEspecial, SubjectStanding::CursoEspecialReprobado => KardexResult::Reprobada,
             default => null,
         };
 
-        return $result === null ? null : $rows->where('result', $result)->sortByDesc('term_code')->first();
+        return $result === null ? null : $rows->where('result', $result)->sortBy([['term_code', 'desc'], ['attempt', 'desc']])->first();
     }
 
     /**

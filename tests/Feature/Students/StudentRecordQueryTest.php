@@ -4,6 +4,8 @@ use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Students\Actions\RefreshStudentProgress;
 use App\Modules\Students\Enums\SubjectStanding;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
@@ -74,6 +76,38 @@ it('da el estado de cada materia como el SII, desde su kardex', function () {
         ->and(cellOf($record, 'B')->standing)->toBe(SubjectStanding::PuedeSeleccionarla)
         ->and(cellOf($record, 'H'))->standing->toBe(SubjectStanding::NoPermitida)->missing->toBe(['F-1'])
         ->and(cellOf($record, 'G'))->standing->toBe(SubjectStanding::NoPermitida)->beyondReach->toBeTrue();
+});
+
+it('el periodo en curso es el más reciente del kardex de su campus, sin contar verano', function () {
+    $neighbor = Student::factory()->for($this->plan)->create(['campus_id' => $this->student->campus_id]);
+    $elsewhere = Student::factory()->for($this->plan)->create(['campus_id' => Campus::factory()->create()->id]);
+    recordKardex($this->student, $this->subjects['C'], 'cursando', '20261');
+    recordKardex($neighbor, $this->subjects['A'], 'cursando', '20262');
+    recordKardex($elsewhere, $this->subjects['A'], 'cursando', '20263');
+
+    expect(cellOf(recordOf($this->student), 'C')->standing)->toBe(SubjectStanding::Cursando);
+});
+
+it('guarda el periodo en curso hasta el siguiente recálculo del avance, que corre con cada importación', function () {
+    recordKardex($this->student, $this->subjects['C'], 'cursando', '20261');
+    recordOf($this->student);
+    $neighbor = Student::factory()->for($this->plan)->create(['campus_id' => $this->student->campus_id]);
+    recordKardex($neighbor, $this->subjects['A'], 'cursando', '20263');
+
+    expect(cellOf(recordOf($this->student), 'C')->standing)->toBe(SubjectStanding::Cursando);
+
+    app(RefreshStudentProgress::class)->handle();
+
+    expect(cellOf(recordOf($this->student), 'C')->standing)->toBe(SubjectStanding::SinCalificar);
+});
+
+it('una materia reprobada muestra su última oportunidad, y la del curso especial ya no cuenta para seleccionar', function () {
+    recordKardex($this->student, $this->subjects['Q'], 'reprobada', '20253', 3, 40);
+
+    $record = recordOf($this->student);
+
+    expect(cellOf($record, 'Q'))->standing->toBe(SubjectStanding::CursoEspecialReprobado)->attempt->toBe(3)->grade->toBe('40.00')->termCode->toBe('20253')
+        ->and($record->selectable)->toBe(4);
 });
 
 it('dice el porcentaje de créditos que pide una materia que todavía no puede cursar', function () {

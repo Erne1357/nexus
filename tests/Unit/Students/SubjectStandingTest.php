@@ -18,12 +18,14 @@ function take(KardexResult $result, int $attempt = 1, string $term = '20253'): a
 }
 
 it('da el estado de la materia según su kardex: :dataset', function (array $attempts, bool $available, SubjectStanding $standing) {
-    expect(SubjectStanding::of($attempts, $available, latestTerm: '20263'))->toBe($standing);
+    expect(SubjectStanding::of($attempts, $available, termInProgress: '20263'))->toBe($standing);
 })->with([
     'aprobada, aunque antes la reprobó' => [[take(KardexResult::Reprobada), take(KardexResult::Aprobada, 2, '20261')], false, SubjectStanding::Acreditada],
     'cursando en el periodo más reciente' => [[take(KardexResult::Cursando, 1, '20263')], true, SubjectStanding::Cursando],
     'cursando de nuevo después de reprobarla' => [[take(KardexResult::Reprobada), take(KardexResult::Cursando, 2, '20263')], true, SubjectStanding::Cursando],
     'cursando en un periodo anterior, sin calificación' => [[take(KardexResult::Cursando, 1, '20261')], true, SubjectStanding::SinCalificar],
+    'cursando en un verano después del periodo en curso' => [[take(KardexResult::Cursando, 1, '20272')], true, SubjectStanding::Cursando],
+    'una fila vieja sin calificar no tapa una reprobada posterior' => [[take(KardexResult::Cursando, 1, '20251'), take(KardexResult::Reprobada, 2, '20253')], true, SubjectStanding::ACursoEspecial],
     'reprobada una vez' => [[take(KardexResult::Reprobada)], true, SubjectStanding::ReprobadaPrioridad],
     'reprobada en repetición' => [[take(KardexResult::Reprobada), take(KardexResult::Reprobada, 2, '20261')], true, SubjectStanding::ACursoEspecial],
     'reprobada en curso especial' => [[take(KardexResult::Reprobada, 3, '20261')], true, SubjectStanding::CursoEspecialReprobado],
@@ -45,4 +47,21 @@ it('cada estado lleva el nombre del SII y su icono', function (SubjectStanding $
     [SubjectStanding::CursoEspecialReprobado, 'Curso especial reprobado', 'o-x-circle'],
     [SubjectStanding::PuedeSeleccionarla, 'Puede seleccionarla', 'o-arrow-right-circle'],
     [SubjectStanding::NoPermitida, 'No permitida aún', 'o-lock-closed'],
+]);
+
+it('sin periodo en curso conocido (su campus no tiene kardex), lo que cursa cuenta como cursando', function () {
+    expect(SubjectStanding::of([take(KardexResult::Cursando, 1, '20251')], true, termInProgress: null))->toBe(SubjectStanding::Cursando);
+});
+
+it('solo las que puede cursar y no agotó cuentan para seleccionar: reprobar el curso especial da de baja al alumno', function (SubjectStanding $standing, bool $selectable) {
+    expect($standing->countsAsSelectable())->toBe($selectable);
+})->with([
+    [SubjectStanding::PuedeSeleccionarla, true],
+    [SubjectStanding::ReprobadaPrioridad, true],
+    [SubjectStanding::ACursoEspecial, true],
+    [SubjectStanding::CursoEspecialReprobado, false],
+    [SubjectStanding::Acreditada, false],
+    [SubjectStanding::Cursando, false],
+    [SubjectStanding::SinCalificar, false],
+    [SubjectStanding::NoPermitida, false],
 ]);

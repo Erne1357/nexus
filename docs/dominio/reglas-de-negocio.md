@@ -77,15 +77,17 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Estado | Cuándo |
 |---|---|
 | Acreditada | La aprobó, en cualquier oportunidad. |
-| Cursando | La cursa en el periodo más reciente del kardex importado. |
-| Sin calificar | La cursó en un periodo anterior y el kardex no trae su calificación. |
+| Cursando | La cursa en el periodo en curso de su campus o después. |
+| Sin calificar | La cursó en un periodo anterior al en curso y el kardex no trae su calificación. |
 | Reprobada · prioridad | La reprobó en la oportunidad 1 (ordinaria): tiene prioridad para seleccionarla. |
 | A curso especial | La reprobó en la oportunidad 2 (repetición): solo puede cursarla en curso especial. |
-| Curso especial reprobado | La reprobó en la oportunidad 3 (curso especial). |
+| Curso especial reprobado | La reprobó en la oportunidad 3 (curso especial): el alumno se da de baja en automático. |
 | Puede seleccionarla | Ya puede cursarla según su avance. |
 | No permitida aún | Le falta seriación, créditos o avance. |
 
-- La oportunidad es la de `kardex_records.attempt`: 1 ordinaria, 2 repetición, 3 curso especial. Una baja no gasta oportunidad.
+- Si no la acreditó, decide la fila más reciente del kardex, por periodo y oportunidad. La oportunidad es la de `kardex_records.attempt`: 1 ordinaria, 2 repetición, 3 curso especial. Una baja no gasta oportunidad.
+- El periodo en curso es el más reciente del kardex de los alumnos de su campus, sin contar verano, que solo cursan algunos. El periodo de captura (`terms.is_current`) no sirve: es el que se planea. Se recalcula con cada importación de kardex (confirmado el 29 de octubre de 2026).
+- Una materia reprobada conserva su estado aunque hoy no pueda cursarla, y la retícula dice qué le falta. Cuenta para «Puede seleccionar» solo si su avance la deja cursar; la del curso especial reprobado ya no cuenta, porque el alumno se da de baja. A veces se cambian de carrera o a EAD antes de que se refleje (confirmado el 29 de octubre de 2026).
 - «Seleccionada solamente», que también muestra el SII, llega con la inscripción (R3).
 - Una vez elegida la especialidad, la retícula ya no muestra las materias de las otras.
 - La ficha calcula el avance al leerla, desde el kardex del alumno, para no esperar al siguiente recálculo de `student_progress`.
