@@ -353,13 +353,13 @@ describe('otros roles', function () {
         expect(importWizardMenuVisibleTo($user))->toBeFalse();
     })->with([
         'subdirección' => [Role::Subdireccion, []],
-        'coordinador' => [Role::Coordinador, ['career_id' => fakeKey(20)]],
-        'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => fakeKey(10)]],
+        'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
+        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
         'docente' => [Role::Docente, []],
     ]);
 
     it('no pueden llamar las acciones del asistente aunque la página la haya abierto el admin', function (string $method, array $arguments) {
-        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create();
+        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
         $batch = ImportBatch::factory()->create();
         $component = wizardWithFile($this->admin);
 

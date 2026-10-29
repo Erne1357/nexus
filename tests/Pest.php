@@ -1,7 +1,10 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
 use Dom\Element;
 use Dom\HTMLDocument;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
 use Illuminate\Testing\TestResponse;
@@ -40,12 +43,45 @@ function lastToastOf(Testable $component): ?array
 }
 
 /**
- * Un uuid fijo para un registro que la prueba no crea: `fakeKey(10)` siempre da el mismo valor. Lo
- * usan los departamentos y carreras de los alcances mientras Academic no tenga sus tablas (fase 1).
+ * Un uuid fijo: `fakeKey(10)` siempre da el mismo valor. Sirve para un registro que la prueba no crea,
+ * o, con departmentKey() y careerKey(), para comparar contra el que sí crea.
  */
 function fakeKey(int $number): string
 {
     return sprintf('00000000-0000-7000-8000-%012d', $number);
+}
+
+/**
+ * El id de un departamento con el uuid de fakeKey($number), que se crea la primera vez: los alcances de
+ * las pruebas solo necesitan que exista, y las pruebas comparan contra fakeKey($number).
+ */
+function departmentKey(int $number): string
+{
+    return fixedKeyOf(Department::class, $number);
+}
+
+/**
+ * El id de una carrera con el uuid de fakeKey($number), que se crea la primera vez (ver departmentKey()).
+ */
+function careerKey(int $number): string
+{
+    return fixedKeyOf(Career::class, $number);
+}
+
+/**
+ * Crea con su factory, si no existe, el registro del modelo con el uuid de fakeKey($number), y da ese uuid.
+ *
+ * @param  class-string<Model>  $model
+ */
+function fixedKeyOf(string $model, int $number): string
+{
+    $id = fakeKey($number);
+
+    if (! $model::query()->withTrashed()->whereKey($id)->exists()) {
+        $model::factory()->create(['id' => $id]);
+    }
+
+    return $id;
 }
 
 /**

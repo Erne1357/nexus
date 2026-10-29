@@ -16,7 +16,7 @@ it('withRole() rechaza un alcance que no llena lo que exige el rol', function (R
 it('withRole() da el rol y el alcance cuando el alcance está completo', function () {
     $campus = Campus::factory()->create();
 
-    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => fakeKey(20)])->create();
+    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(20)])->create();
 
     expect($user->hasRole(Role::Coordinador))->toBeTrue()
         ->and($user->roleScopes()->sole())

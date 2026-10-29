@@ -35,9 +35,9 @@ it('niega todo a los demás roles, aun en el campus del lote', function (Role $r
         ->and($user->can('apply', $this->batch))->toBeFalse();
 })->with([
     'subdirección' => [Role::Subdireccion, []],
-    'coordinador' => [Role::Coordinador, ['career_id' => fakeKey(20)]],
-    'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => fakeKey(10)]],
-    'jefe de proyecto docente' => [Role::JefeProyectoDocente, ['department_id' => fakeKey(10)]],
+    'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
+    'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
+    'jefe de proyecto docente' => [Role::JefeProyectoDocente, fn () => ['department_id' => departmentKey(10)]],
     'docente' => [Role::Docente, []],
 ]);
 

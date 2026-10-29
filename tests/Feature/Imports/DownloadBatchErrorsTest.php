@@ -47,8 +47,8 @@ it('solo deja descargar al admin, y a nadie más le dice si el lote existe', fun
     $this->actingAs($user)->get(route('imports.batch-errors', '01900000-0000-7000-8000-000000000000'))->assertForbidden();
 })->with([
     'subdirección' => [Role::Subdireccion, []],
-    'coordinador' => [Role::Coordinador, ['career_id' => fakeKey(20)]],
-    'jefe de departamento' => [Role::JefeDepartamento, ['department_id' => fakeKey(10)]],
+    'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
+    'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
     'docente' => [Role::Docente, []],
 ]);
 

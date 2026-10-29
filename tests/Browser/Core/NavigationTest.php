@@ -26,7 +26,7 @@ beforeEach(function () {
 
     User::factory()->admin()->create(['username' => 'admin', 'name' => 'Ana Admin']);
     User::factory()
-        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
         ->create(['username' => '19110001', 'name' => 'Carlos Coordinador']);
 });
 

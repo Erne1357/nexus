@@ -15,8 +15,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Alcance de un rol (ADR-0004): sobre qué campus, departamento o carrera ejerce `user` el rol
- * `role`, y desde cuándo. `department_id` y `career_id` son enteros sin relación porque Core no
- * depende de Academic. Quién cubre qué lo decide ScopedContext, no este modelo.
+ * `role`, y desde cuándo. `department_id` y `career_id` tienen FK a `departments` y `careers`
+ * (las agrega Academic), pero sin relación en el modelo porque Core no depende de Academic. Quién
+ * cubre qué lo decide ScopedContext, no este modelo.
  */
 #[Fillable(['user_id', 'role', 'campus_id', 'department_id', 'career_id', 'valid_from', 'valid_to'])]
 #[UseFactory(RoleScopeFactory::class)]
