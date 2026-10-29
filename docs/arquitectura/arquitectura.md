@@ -110,10 +110,11 @@ Cada catálogo que llega del SII se importa con una plantilla: una clase en `app
 | `rules()`, `messages()` | Reglas de Laravel por campo sobre la fila normalizada |
 | `check()` | Lo que lee la base (claves cruzadas). La de la base ya marca como error un registro borrado con la misma clave y como advertencia uno inactivo; la plantilla la extiende |
 | `attributes()`, `defaults()` | Lo que se escribe en altas y cambios, y lo que solo se escribe al dar de alta |
+| `recordKey()` | La clave con que se busca el registro en la base; por omisión la de `keyFor()`. La traduce una plantilla cuyo archivo identifica el registro con claves de otros catálogos (el kardex trae el número de control y la clave de materia; la tabla guarda `student_id` y `subject_id`, tarea 1.4). Devuelve null si la fila apunta a algo que no existe, y `check()` lo reporta |
 | `apply()` | Alta o cambio por clave natural. En un cambio no pisa con null lo que el archivo trae vacío y nunca cambia `is_active`; un borrado no se restaura. La plantilla lo sobrescribe solo si su escritura no es un registro por fila |
 | `afterApply()` | Lo que corre una vez al terminar el lote, como el job de recálculo de progreso de Students (tarea 1.4) |
 
-`validate()` y `keyFor()` son `final`: el motor depende de que se comporten igual en toda plantilla. `validate()` también rechaza el texto que no es UTF-8 válido.
+`validate()` y `keyFor()` son `final`: el motor depende de que se comporten igual en toda plantilla. `keyFor()` da la clave tal como viene en el archivo, con la que el motor encuentra filas repetidas; `apply()` y `check()` buscan el registro con `recordKey()`. `validate()` también rechaza el texto que no es UTF-8 válido.
 
 `TemplateRegistry` se arma al arrancar, como `Navigation`. Ahí rechaza claves repetidas, una clave natural fuera de los campos y los campos que pone el sistema (`id`, `deleted_at`, marcas de tiempo). Guarda clases y pide una plantilla nueva al contenedor en cada `get()`, por eso es un singleton seguro con Octane. Una plantilla no guarda estado del lote: quién lo aplica y el campus llegan en `ImportContext`.
 

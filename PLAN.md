@@ -50,8 +50,8 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Academic | 1 | 🟨 (1.7 hecha por A, acordado en #22: modelos #116 y #117; CRUD, plantillas y seeder siguen con B) |
 | Facilities | 1 | ⬜ |
 | Faculty | 1 | ⬜ |
-| Students | 1 | ⬜ |
-| Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115) |
+| Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
+| Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120) |
 | CatalogValidation | 2 | ⬜ |
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | ⬜ |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
