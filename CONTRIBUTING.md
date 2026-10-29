@@ -33,6 +33,8 @@ docker compose exec -T -e DB_DATABASE=nexus_test_<x> -w /app/.worktrees/feature-
 docker compose exec -T postgres dropdb -U nexus nexus_test_<x>   # al cerrar el worktree
 ```
 
+La base también separa los discos falsos: `tests/TestCase.php` guarda los de `Storage::fake()` y las copias temporales de Livewire en `storage/framework/testing/disks/<disco>_test_<base>`. Así, dos corridas a la vez en el mismo worktree, cada una con su base, no se borran los archivos.
+
 **Volumen de Postgres que ya existe.** El script de `docker/postgres/` solo corre cuando el volumen está vacío. Si ya levantaste el stack antes de la tarea 0.3, crea la base a mano una vez: `docker compose exec -T postgres createdb -U nexus nexus_test`.
 
 ## Commits
