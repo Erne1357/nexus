@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Enums\PrerequisiteKind;
+use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
@@ -56,4 +57,30 @@ it('trae la especialidad de cada materia de especialidad, y las materias inactiv
 
     expect(array_keys($grid->credits))->toBe([$common->id, $network->id])
         ->and($grid->specialtyOf)->toBe([$network->id => $specialty->id]);
+});
+
+it('trae el semestre de cada materia, el total del plan y los créditos que piden Servicio Social y Residencia', function () {
+    $plan = StudyPlan::factory()->create(['total_credits' => 240]);
+    $a = Subject::factory()->create(['code' => 'A-1']);
+    $service = Subject::factory()->create(['code' => 'SS-9', 'kind' => SubjectKind::ServicioSocial]);
+    $residency = Subject::factory()->create(['code' => 'RP-9', 'kind' => SubjectKind::Residencia]);
+    placeInPlan($plan, $a);
+    placeInPlan($plan, $service, 9);
+    placeInPlan($plan, $residency, 9);
+    seriate($plan, $residency, $a);
+
+    $grid = app(PlanGridQuery::class)->forPlan($plan->id);
+
+    // Residencia pide también el servicio social acreditado, además de su propia seriación.
+    expect($grid->semesterOf)->toBe([$a->id => 1, $residency->id => 9, $service->id => 9])
+        ->and($grid->creditShare)->toBe([$residency->id => 80, $service->id => 70])
+        ->and($grid->seriation)->toBe([$residency->id => [$a->id, $service->id]])
+        ->and($grid->totalCredits)->toBe(240);
+});
+
+it('un plan sin créditos totales capturados deja el total vacío', function () {
+    $plan = StudyPlan::factory()->create(['total_credits' => null]);
+    placeInPlan($plan, Subject::factory()->create());
+
+    expect(app(PlanGridQuery::class)->forPlan($plan->id)->totalCredits)->toBeNull();
 });

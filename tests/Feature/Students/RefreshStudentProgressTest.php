@@ -104,6 +104,18 @@ it('recalcula todo en una transacción: si falla a la mitad, el avance se queda 
         ->and(StudentProgress::where('student_id', $this->student->id)->sole()->credits_approved)->toBe(0);
 });
 
+it('cada alumno puede cursar hasta dos semestres después del suyo, según el semestre que trae el SII', function () {
+    $g = Subject::factory()->create(['code' => 'G-4']);
+    placeInPlan($this->plan, $g, 4);
+    $this->student->update(['current_semester' => 1]);
+    $ahead = Student::factory()->for($this->plan)->create(['current_semester' => 2]);
+
+    app(RefreshStudentProgress::class)->handle();
+
+    expect(StudentProgress::where('student_id', $this->student->id)->sole()->subjects_available)->toBe([$this->a->id, $this->f->id])
+        ->and(StudentProgress::where('student_id', $ahead->id)->sole()->subjects_available)->toBe([$this->a->id, $this->f->id, $g->id]);
+});
+
 it('no calcula el avance de un alumno borrado, y borra el que ya tenía: es una tabla derivada', function () {
     app(RefreshStudentProgress::class)->handle();
     $this->student->delete();

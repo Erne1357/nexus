@@ -95,6 +95,17 @@ it('un repetidor sigue elegible para la materia que reprobó, y deja de serlo al
     ]));
 });
 
+it('no cuenta a un alumno para una materia más allá de su semestre y dos más', function () {
+    $g = Subject::factory()->create(['code' => 'G-4']);
+    placeInPlan($this->plan, $g, 4);
+    eligibilityStudent($this->plan, $this->campus, ['current_semester' => 1]);
+    eligibilityStudent($this->plan, $this->campus, ['current_semester' => 2]);
+
+    app(RefreshStudentProgress::class)->handle();
+
+    expect(eligibleCounts($this->plan, $this->campus))->toBe(sortedCounts([$this->a->id => 2, $this->f->id => 2, $g->id => 1]));
+});
+
 it('no cuenta a un alumno que no está activo: :dataset', function (array $attributes) {
     eligibilityStudent($this->plan, $this->campus);
     eligibilityStudent($this->plan, $this->campus, $attributes);
