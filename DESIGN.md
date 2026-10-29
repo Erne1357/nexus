@@ -260,18 +260,25 @@ Radios contenidos: insignias 4 px, campos y botones 6 px, tablas y superficies 8
 - **Deshabilitada:** se muestra con su motivo en un tooltip («Solo el administrador da de alta campus.»), no desaparece.
 
 ### Insignias de estado
-Rectangulares, de 26 px, con icono y texto, iguales en toda la aplicación:
+Rectangulares, de 26 px, con icono y texto, iguales en toda la aplicación. Se pintan siempre con el componente de Core `<x-core::status-badge>`, nunca con `x-badge` y clases sueltas: su `tone` (el enum `StatusTone` de Core o su valor) pone las clases y el icono de la tabla, `label` es obligatorio porque el color nunca va solo, el icono queda oculto a los lectores de pantalla y `icon` lo cambia cuando la tabla da dos.
 
-| Estado | Clases | Icono |
-|---|---|---|
-| Activo, Validado | `badge badge-success badge-soft` | `o-check-circle` |
-| Publicado | `badge badge-success` | `o-check-circle` |
-| Inactivo | `badge badge-neutral badge-soft`; además la fila entera pasa a `text-neutral` y peso normal | `o-minus-circle` |
-| Borrador | `badge badge-dash` | `o-pencil` |
-| En revisión, en cola | `badge badge-info badge-soft` | `o-eye` / `o-clock` |
-| Pendiente, Con advertencia | `badge badge-warning badge-soft` | `o-clock` / `o-exclamation-triangle` |
-| Con error, Choque | `badge badge-error badge-soft` | `o-x-circle` |
-| Periodo actual | `badge badge-primary` | — |
+```blade
+<x-core::status-badge tone="success" label="Activo" />
+<x-core::status-badge tone="warning" label="Con advertencia" icon="o-exclamation-triangle" />
+```
+
+Un módulo con estados propios los traduce a un tono con `tone()` en su enum, como `BatchStatus` de Imports: `<x-core::status-badge :tone="$batch->status->tone()" :label="$batch->status->label()" :icon="$batch->status->icon()" />`.
+
+| Estado | `tone` | Clases | Icono |
+|---|---|---|---|
+| Activo, Validado | `success` | `badge badge-success badge-soft` | `o-check-circle` |
+| Publicado | `success-solid` | `badge badge-success` | `o-check-circle` |
+| Inactivo | `neutral` | `badge badge-neutral badge-soft`; además la fila entera pasa a `text-neutral` y peso normal | `o-minus-circle` |
+| Borrador | `draft` | `badge badge-dash` | `o-pencil` |
+| En revisión, en cola | `info` | `badge badge-info badge-soft` | `o-eye` / `o-clock` |
+| Pendiente, Con advertencia | `warning` | `badge badge-warning badge-soft` | `o-clock` / `o-exclamation-triangle` |
+| Con error, Choque | `error` | `badge badge-error badge-soft` | `o-x-circle` |
+| Periodo actual | `primary` | `badge badge-primary` | — |
 
 Los contadores (por ejemplo, «12 filas») van en `badge-neutral badge-soft` con cifra Mono.
 

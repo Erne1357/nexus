@@ -8,6 +8,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\ScopedContext;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
@@ -72,20 +73,27 @@ new #[Title('Campus')] class extends Component
      */
     public function with(CampusQuery $campuses, ScopedContext $context): array
     {
+        $page = $campuses->forTable($context, $this->search, match ($this->status) {
+            'active' => true,
+            'inactive' => false,
+            default => null,
+        });
+
         return [
-            'campuses' => $campuses->forTable($context, $this->search, match ($this->status) {
-                'active' => true,
-                'inactive' => false,
-                default => null,
-            }),
+            'campuses' => $page,
+            'profiles' => $this->profileSummaries($page),
             'canCreate' => Gate::allows('create', Campus::class),
             'canSeeInactive' => $context->isAdmin(),
+            // El perfil es la columna descriptiva larga: se oculta debajo de 1200 px (DESIGN.md, "Responsivo").
             'headers' => [
                 ['key' => 'code', 'label' => 'Código'],
                 ['key' => 'name', 'label' => 'Nombre'],
                 ['key' => 'modality', 'label' => 'Modalidad'],
-                ['key' => 'is_active', 'label' => 'Activo'],
+                ['key' => 'profile', 'label' => 'Perfil de flujo', 'class' => 'max-[1200px]:hidden'],
+                ['key' => 'is_active', 'label' => 'Estado'],
             ],
+            // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
+            'rowDecoration' => ['text-neutral' => fn (Campus $campus): bool => ! $campus->is_active],
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
             'modalities' => array_map(fn (Modality $modality): array => ['id' => $modality->value, 'name' => $modality->label()], Modality::cases()),
             'staffingModes' => array_map(fn (StaffingMode $mode): array => ['id' => $mode->value, 'name' => $mode->label()], StaffingMode::cases()),
@@ -270,6 +278,28 @@ new #[Title('Campus')] class extends Component
             'allow_external_teachers' => (bool) $settings['allow_external_teachers'],
             'requires_subdireccion_approval' => (bool) $settings['requires_subdireccion_approval'],
         ];
+    }
+
+    /**
+     * El perfil de cada campus de la página en una línea, por id; null si el guardado no es válido: la
+     * tabla lo marca y el modal lo repara al editar.
+     *
+     * @param  LengthAwarePaginator<int, Campus>  $campuses
+     * @return array<string, ?string>
+     */
+    private function profileSummaries(LengthAwarePaginator $campuses): array
+    {
+        $summaries = [];
+
+        foreach ($campuses as $campus) {
+            try {
+                $summaries[$campus->id] = $campus->profile->summary();
+            } catch (InvalidArgumentException) {
+                $summaries[$campus->id] = null;
+            }
+        }
+
+        return $summaries;
     }
 
     /**
