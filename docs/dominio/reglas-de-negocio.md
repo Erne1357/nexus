@@ -64,6 +64,7 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 - Un alumno es **elegible** para una materia de su plan si aprobó todas sus seriaciones y no la ha aprobado. Solo el resultado `aprobada` aprueba: quien está cursando la materia o su seriación todavía no la tiene aprobada (la proyección de quienes están cursando es de R2). Los correquisitos no bloquean; las seriaciones de otro plan no cuentan (confirmado el 29 de octubre de 2026).
 - La especialidad de un alumno sale de su kardex: si aprobó o está cursando materias de una especialidad de su plan, las materias de las otras especialidades ya no le faltan ni cuentan para sus elegibles. Mientras no toma ninguna, cuentan las de todas, porque puede elegir cualquiera (confirmado el 29 de octubre de 2026).
 - Una materia de la retícula del alumno cuenta aunque esté inactiva en el catálogo: el plan se ata al alumno al inscribirse. Por eso no se desactiva una materia que sigue en un plan con alumnos que la necesitan (lo revisa la tarea 1.8; confirmado el 29 de octubre de 2026).
+- Una materia no se borra, se desactiva, y no se desactiva mientras alguien **la necesita**: un alumno no borrado, activo, con estatus `activo` o `baja_temporal`, cuyo plan la tiene en su retícula y que no la ha acreditado. No cuentan los egresados, las bajas definitivas, los alumnos sin estatus ni los desactivados. Se cuenta con el kárdex del momento, no con `student_progress`, para no esperar al recálculo, y el rechazo dice cuántos alumnos son y de qué planes (confirmado el 29 de octubre de 2026). Respeta la especialidad igual que el avance: si el alumno ya eligió otra especialidad, una materia de especialidad ajena no la necesita (supuesto por confirmar, S3).
 - Un alumno puede cursar materias de su semestre y de hasta dos semestres más, y siempre las de semestres anteriores que le faltan. Su semestre es el que trae el SII (`students.current_semester`); sin semestre (un egresado) no hay límite. Cuenta para la retícula y para los elegibles (confirmado el 29 de octubre de 2026).
 - Servicio Social pide el 70 % de los créditos del plan y Residencia Profesional el 80 % y el servicio social acreditado, como marcan los lineamientos del TecNM. Se reconocen por su tipo (`subjects.kind`), que la exportación del SII no trae: mientras no se capture, no piden créditos. El porcentaje es de `study_plans.total_credits`; si no está capturado, de la suma de la retícula con la especialidad del alumno o, si todavía no elige, con la de más créditos (confirmado el 29 de octubre de 2026).
 - Solo cuentan como elegibles los alumnos con estatus `activo`: no cuentan los de baja temporal o definitiva, los egresados, los que quedaron sin estatus porque el SII trajo uno que Nexus no conoce, ni un alumno desactivado (confirmado el 29 de octubre de 2026).
@@ -99,6 +100,7 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, solo en sus campus y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin` |
 | Administrar edificios y salones | `admin`, `subdireccion` de su campus | |
 | Importar catálogos | `admin` | |
+| Administrar catálogos de Academic (departamentos, carreras, materias, planes y su retícula) | `admin` | En la fase 2 se abren a los jefes para validar (confirmado el 29 de octubre de 2026) |
 | Consultar alumnos (listado y ficha) | `admin`, `subdireccion`, `jefe_departamento`, `coordinador` | `subdireccion`, los de su campus; `jefe_departamento`, los de las carreras de su departamento en su campus; `coordinador`, los de su carrera en su campus. Solo lectura: vienen del SII (confirmado el 29 de octubre de 2026) |
 | Validar catálogos del departamento | `jefe_departamento` del departamento y campus | |
 | Enviar propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
@@ -115,6 +117,12 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Re-análisis | `coordinador`, `jefe_departamento` | nueva importación de kardex (R2) |
 
 Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se borra. Si solo se desactiva, sigue contando, porque una carrera inactiva puede tener todavía alumnos y grupos que atender, igual que un plan inactivo (confirmado el 29 de octubre de 2026). Core no depende de Academic, así que lo resuelve la tarea 1.8 al borrar.
+
+Borrar departamentos (confirmado el 29 de octubre de 2026): un departamento solo se borra, de forma lógica, si no tiene carreras ni materias sin borrar; si no, se desactiva. Al borrarlo se cierran los alcances de sus jefes: los vigentes que empezaron antes de hoy terminan ayer y los que empiezan hoy o después se eliminan, porque `valid_to` no puede ser anterior a `valid_from`; cada cambio queda en la bitácora sobre el usuario (supuesto por confirmar, S2).
+
+Borrar carreras (confirmado el 29 de octubre de 2026): una carrera solo se borra, de forma lógica, si no tiene planes de estudio, ni siquiera borrados; si no, se desactiva. Al borrarla dejan de contar los alcances de sus coordinadores (supuesto por confirmar, S2: igual que con los departamentos).
+
+Oferta por campus: la oferta de una carrera inactiva nace inactiva (confirmado el 29 de octubre de 2026, la misma regla de la importación). Ofrecer crea, restaura o activa la fila de `career_campus` del campus y dejar de ofrecer la desactiva; ofrecer nunca desactiva una oferta activa (supuesto por confirmar).
 
 ## Parámetros por campus (perfil de flujo)
 
