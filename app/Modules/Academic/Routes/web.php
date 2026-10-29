@@ -10,4 +10,5 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth')->prefix('academic')->name('academic.')->group(function () {
     Route::livewire('/departments', 'academic::pages.departments')->name('departments');
     Route::livewire('/careers', 'academic::pages.careers')->name('careers');
+    Route::livewire('/subjects', 'academic::pages.subjects')->name('subjects');
 });

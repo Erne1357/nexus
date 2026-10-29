@@ -6,6 +6,7 @@ use App\Modules\Academic\Actions\SetCareerOffering;
 use App\Modules\Academic\Actions\UpdateCareer;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Queries\CareerQuery;
+use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -62,11 +63,11 @@ new #[Title('Carreras')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(CareerQuery $careers, ScopedContext $context): array
+    public function with(CareerQuery $careers, DepartmentQuery $departmentQuery, ScopedContext $context): array
     {
         $campus = $context->activeCampus();
-        $departments = $careers->departmentOptions();
-        $filter = $departments->contains('id', $this->department) ? $this->department : null;
+        $departments = $departmentQuery->options();
+        $filter = in_array($this->department, array_column($departments, 'id'), true) ? $this->department : null;
 
         return [
             'careers' => $careers->forTable($campus, $this->search, $filter, match ($this->status) {
@@ -86,7 +87,7 @@ new #[Title('Carreras')] class extends Component
             // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
             'rowDecoration' => ['text-neutral' => fn (Career $career): bool => ! $career->is_active],
             'statuses' => [['id' => 'active', 'name' => 'Activas'], ['id' => 'inactive', 'name' => 'Inactivas']],
-            'departmentOptions' => $departments->map(fn ($department): array => ['id' => $department->id, 'name' => "{$department->code} · {$department->name}"])->all(),
+            'departmentOptions' => $departments,
         ];
     }
 

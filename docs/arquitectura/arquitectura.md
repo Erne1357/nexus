@@ -286,6 +286,11 @@ Un evento normal avisa a los módulos de la derecha de lo que ya pasó. Cuando u
 - El evento usa el trait `Core\Events\Concerns\CanBeVetoed`: el listener llama `$event->block('motivo')` (varios bloqueos juntan sus motivos en orden) y la Action lee `blocked()` y `reasons()`. Si hubo veto lanza `ValidationException::withMessages([...])` con los motivos, y la transacción no escribe nada.
 - El evento lleva el registro y, por convención, el nombre en gerundio (`DepartmentDeleting`); el aviso posterior al commit sigue siendo el evento normal (`DepartmentDeleted`).
 - Los listeners se registran en el provider del módulo que los escucha.
+- Ejemplos: `DepartmentDeleting` (todavía sin listeners; Faculty y Facilities lo usarán) y `SubjectDeactivating`, que Students veta con `BlockSubjectDeactivationWhileNeeded` cuando hay alumnos que todavía necesitan la materia (`SubjectDemandQuery`, desde el kárdex del momento).
+
+### Cambios en la retícula
+
+Lo que entra en el avance de los alumnos (la retícula de un plan, su especialidad y su seriación, los créditos totales del plan, los créditos o el tipo de una materia) es de Academic, pero `student_progress` es de Students. Cada Action de Academic que lo cambia despacha `Academic\Events\CurriculumChanged` con el plan afectado, la materia o los dos (al menos uno). Es `ShouldDispatchAfterCommit`, así que un cambio que se revierte no avisa. Students lo escucha (`RecomputeProgressOnCurriculumChange`, registrado en `StudentsServiceProvider`) y encola `RecomputeStudentProgress`, que es único en la cola y siempre recalcula completo: varios cambios seguidos esperan un solo recálculo. Hoy lo despacha `UpdateSubject` cuando cambian los créditos o el tipo; las Actions de planes y retícula de la tarea 1.8 lo usarán igual.
 
 ## Colas y trabajos en segundo plano
 

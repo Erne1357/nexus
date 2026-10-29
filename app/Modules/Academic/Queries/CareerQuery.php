@@ -3,13 +3,11 @@
 namespace App\Modules\Academic\Queries;
 
 use App\Modules\Academic\Models\Career;
-use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
@@ -45,16 +43,6 @@ final class CareerQuery
         }
 
         return $page;
-    }
-
-    /**
-     * Los departamentos sin borrar, por clave, para el filtro y el selector del modal.
-     *
-     * @return Collection<int, Department>
-     */
-    public function departmentOptions(): Collection
-    {
-        return Department::query()->orderBy('code')->get(['id', 'code', 'name']);
     }
 
     /**
