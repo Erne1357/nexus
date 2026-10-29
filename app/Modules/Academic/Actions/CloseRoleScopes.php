@@ -68,7 +68,14 @@ final class CloseRoleScopes
                 activity()
                     ->performedOn($scope->user)
                     ->event(ActivityEvent::Deleted)
-                    ->withChanges(['old' => $scope->only(['role', 'campus_id', 'department_id', 'career_id', 'valid_from', 'valid_to'])])
+                    ->withChanges(['old' => [
+                        'role' => $scope->role->value,
+                        'campus_id' => $scope->campus_id,
+                        'department_id' => $scope->department_id,
+                        'career_id' => $scope->career_id,
+                        'valid_from' => $scope->valid_from->toDateString(),
+                        'valid_to' => $scope->valid_to?->toDateString(),
+                    ]])
                     ->log($description);
             }
 

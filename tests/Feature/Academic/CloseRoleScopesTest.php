@@ -48,7 +48,17 @@ it('elimina un alcance que empieza hoy o mañana', function (int $daysFromToday)
 
     expect(app(CloseRoleScopes::class)->handle('department_id', $this->department->id))->toBe(1);
 
-    expect(RoleScope::find($scope->id))->toBeNull();
+    $entry = Activity::sole();
+
+    expect(RoleScope::find($scope->id))->toBeNull()
+        ->and($entry->event)->toBe('deleted')
+        ->and($entry->description)->toBe('Cerró el alcance de '.Role::JefeDepartamento->label().' por borrar el departamento SIS')
+        ->and($entry->attribute_changes['old'])->toMatchArray([
+            'role' => 'jefe_departamento',
+            'department_id' => $this->department->id,
+            'valid_from' => today()->addDays($daysFromToday)->toDateString(),
+            'valid_to' => null,
+        ]);
 })->with(['hoy' => 0, 'mañana' => 1]);
 
 it('no toca un alcance que ya venció', function () {

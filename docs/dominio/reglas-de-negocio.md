@@ -117,7 +117,7 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 
 Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se borra. Si solo se desactiva, sigue contando, porque una carrera inactiva puede tener todavía alumnos y grupos que atender, igual que un plan inactivo (confirmado el 29 de octubre de 2026). Core no depende de Academic, así que lo resuelve la tarea 1.8 al borrar.
 
-Borrar departamentos (confirmado el 29 de octubre de 2026): un departamento solo se borra, de forma lógica, si no tiene carreras ni materias sin borrar; si no, se desactiva. Otro módulo puede vetar el borrado (`DepartmentDeleting`). Al borrarlo se cierran los alcances de sus jefes: los vigentes que empezaron antes de hoy terminan ayer y los que empiezan hoy o después se eliminan, porque `valid_to` no puede ser anterior a `valid_from`; cada cambio queda en la bitácora sobre el usuario (supuesto por confirmar, S2).
+Borrar departamentos (confirmado el 29 de octubre de 2026): un departamento solo se borra, de forma lógica, si no tiene carreras ni materias sin borrar; si no, se desactiva. Al borrarlo se cierran los alcances de sus jefes: los vigentes que empezaron antes de hoy terminan ayer y los que empiezan hoy o después se eliminan, porque `valid_to` no puede ser anterior a `valid_from`; cada cambio queda en la bitácora sobre el usuario (supuesto por confirmar, S2).
 
 ## Parámetros por campus (perfil de flujo)
 
