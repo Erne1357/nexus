@@ -12,6 +12,7 @@ use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\KardexTemplate;
 use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\StudyPlansTemplate;
+use App\Modules\Imports\Templates\SubjectsTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Contracts\Foundation\Application;
 
@@ -27,6 +28,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         DepartmentsTemplate::class,
         CareersTemplate::class,
         StudyPlansTemplate::class,
+        SubjectsTemplate::class,
         StudentsTemplate::class,
         KardexTemplate::class,
     ];
