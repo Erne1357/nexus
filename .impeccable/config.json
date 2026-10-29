@@ -1,0 +1,134 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/model-pick.html"
+        ],
+        "createdAt": "2026-10-28T22:19:35.995Z",
+        "reason": "Claude: boceto desechable de la ronda de dirección; el hallazgo cae en el recuadro de LOGO de relleno y en las pestañas de altura completa del mundo denso, no en UI que se entrega"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-dense.html"
+        ],
+        "createdAt": "2026-10-28T22:19:36.011Z",
+        "reason": "Claude: boceto desechable de la ronda de dirección; el hallazgo cae en el recuadro de LOGO de relleno y en las pestañas de altura completa del mundo denso, no en UI que se entrega"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/canon.html"
+        ],
+        "createdAt": "2026-10-28T22:19:36.027Z",
+        "reason": "Claude: boceto desechable de la ronda de dirección; el hallazgo cae en el recuadro de LOGO de relleno y en las pestañas de altura completa del mundo denso, no en UI que se entrega"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/combo-erp-grafito.html"
+        ],
+        "createdAt": "2026-10-29T00:18:54.647Z",
+        "reason": "Claude: boceto de decisión; el aviso cae en el buscador de la maqueta (cursor de 22 px centrado en un campo de 48 px), que en la app será el input de MaryUI"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/combo-erp-roja.html"
+        ],
+        "createdAt": "2026-10-29T00:18:54.664Z",
+        "reason": "Claude: boceto de decisión; el aviso cae en el buscador de la maqueta (cursor de 22 px centrado en un campo de 48 px), que en la app será el input de MaryUI"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/combo-erp-petroleo.html"
+        ],
+        "createdAt": "2026-10-29T04:05:47.042Z",
+        "reason": "Claude: boceto de decisión; el aviso cae en el buscador de la maqueta (cursor centrado), que en la app será el input de MaryUI"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.200Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/model-pick.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.217Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-dense.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.235Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/canon.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.253Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/mosaico.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.271Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/cartelera.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.288Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/combo-animado-tec.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.305Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/bandas-tec.html"
+        ],
+        "createdAt": "2026-10-29T05:46:27.322Z",
+        "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      }
+    ]
+  }
+}

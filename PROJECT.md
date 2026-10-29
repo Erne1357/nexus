@@ -89,7 +89,7 @@ Tres desarrolladores. En GitHub están `Erne1357` (owner) y `Deig0l`; falta agre
 |---|---|
 | [CLAUDE.md](CLAUDE.md) | Cómo trabajar en este repo (humanos e IA) |
 | [PLAN.md](PLAN.md) | Roadmap y estado de cada fase |
-| [DESIGN.md](DESIGN.md) | Sistema de diseño (en borrador) |
+| [DESIGN.md](DESIGN.md) | Sistema de diseño: la norma para hacer pantallas |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Flujo de git, PRs, definición de hecho |
 | `docs/proceso/` | Proceso actual, deficiencias y proceso propuesto |
 | `docs/dominio/` | Glosario, modelo de datos, reglas de negocio |

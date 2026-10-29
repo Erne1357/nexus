@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-29T07:00:00Z",
+  "title": "Design System: Nexus",
+  "extensions": {
+    "colorMeta": {
+      "azul-espacio": { "role": "primary", "displayName": "Azul espacio profundo", "tonalRamp": ["#04182a", "#092d48", "#1d4566", "#3a6184", "#6386a6", "#93adc6", "#c3d3e2", "#e6edf4"] },
+      "rojo-tec": { "role": "accent", "displayName": "Rojo Tec", "tonalRamp": ["#5c0e0d", "#8e1715", "#c2201e", "#d84a45", "#e57873", "#efa5a1", "#f6cfcc", "#fbebea"] },
+      "platino": { "role": "neutral", "displayName": "Platino (fondo)" },
+      "gris-polvo": { "role": "secondary", "displayName": "Gris polvo (navegación y selección)" },
+      "gris-tenue": { "role": "neutral", "displayName": "Gris tenue (texto secundario)" },
+      "gris-sobre-polvo": { "role": "neutral", "displayName": "Texto secundario sobre gris polvo" }
+    },
+    "typographyMeta": {
+      "titulo": { "displayName": "Título de pantalla", "purpose": "El título de x-header en cada pantalla." },
+      "cuerpo": { "displayName": "Cuerpo", "purpose": "Texto de tablas y de la aplicación." },
+      "etiqueta": { "displayName": "Etiqueta", "purpose": "Encabezados de tabla y campos de la credencial, en mayúsculas." },
+      "clave": { "displayName": "Clave", "purpose": "Claves, cifras y horarios en Mono con cifras tabulares." },
+      "palabra-de-inicio": { "displayName": "Palabra de inicio", "purpose": "Solo en los inicios por rol; nunca en pantallas de captura." }
+    },
+    "shadows": [
+      { "name": "flotante", "value": "0 16px 40px rgba(9,45,72,.24), 0 2px 6px rgba(9,45,72,.12)", "purpose": "Solo lo que flota: la credencial abierta, desplegables y modales." },
+      { "name": "velo", "value": "rgba(9,45,72,.35)", "purpose": "Detrás del menú abierto y de los modales." }
+    ],
+    "motion": [
+      { "name": "abrir", "value": "cubic-bezier(.3, 1.06, .5, 1) 550ms", "purpose": "Abrir el menú y la credencial; rebote apenas perceptible." },
+      { "name": "cerrar", "value": "cubic-bezier(.22, 1, .36, 1) 420ms", "purpose": "Cerrar y regresar a su lugar, sin rebote." },
+      { "name": "salir", "value": "ease-in 110ms", "purpose": "Lo que no viaja se va antes de que el menú se cierre." }
+    ],
+    "breakpoints": [
+      { "name": "celular", "value": "< 768px" },
+      { "name": "tableta", "value": "768px – 1199px" },
+      { "name": "escritorio", "value": ">= 1200px" },
+      { "name": "contenido-maximo", "value": "1680px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Banda con la liebre",
+      "kind": "nav",
+      "refersTo": "banda",
+      "description": "Barra superior: la liebre abre el menú, la ruta dice dónde estás y la credencial a la derecha.",
+      "html": "<header class=\"ds-band\"><button class=\"ds-hare\" aria-label=\"Abrir el menú completo\"><span></span></button><b class=\"ds-word\">Nexus</b><span class=\"ds-crumb\">Académico › <b>Campus</b></span><button class=\"ds-cred\"><span class=\"ds-av\">LM</span><span><b>Laura Medina</b><small>Administración · Campus II · Ene–Jun 2027</small></span></button></header><div class=\"ds-stripe\"></div>",
+      "css": ".ds-band{height:64px;background:#092d48;color:#fff;display:flex;align-items:center;gap:18px;padding-right:16px;font-family:'Atkinson Hyperlegible Next',system-ui,sans-serif}.ds-hare{width:72px;height:64px;background:#c2201e;border:0;display:grid;place-items:center;cursor:pointer}.ds-hare span{width:30px;height:30px;border-radius:50% 50% 40% 40%;background:#fff}.ds-hare:focus-visible{outline:2px solid #fff;outline-offset:-7px}.ds-word{font-size:20px}.ds-crumb{color:#b4c3d1;font-size:15px}.ds-crumb b{color:#fff;font-weight:500}.ds-cred{margin-left:auto;display:flex;align-items:center;gap:10px;height:46px;padding:0 12px 0 6px;border-radius:999px;border:1px solid rgba(255,255,255,.2);background:none;color:#fff;text-align:left;cursor:pointer}.ds-cred:hover{background:rgba(255,255,255,.1)}.ds-cred small{display:block;color:#b4c3d1;font-size:12.5px}.ds-av{width:34px;height:34px;border-radius:50%;background:#e6dedb;color:#092d48;display:grid;place-items:center;font-weight:700;font-size:13px}.ds-stripe{height:3px;background:#c2201e}"
+    },
+    {
+      "name": "Botón principal",
+      "kind": "button",
+      "refersTo": "boton-principal",
+      "description": "La única acción principal de la pantalla.",
+      "html": "<button class=\"ds-btn\">Nuevo campus</button>",
+      "css": ".ds-btn{height:40px;padding:0 16px;border-radius:6px;border:0;background:#092d48;color:#fff;font:500 14px 'Atkinson Hyperlegible Next',system-ui,sans-serif;cursor:pointer;transition:background .2s}.ds-btn:hover{background:#1d4566}.ds-btn:focus-visible{outline:2px solid #092d48;outline-offset:2px}"
+    },
+    {
+      "name": "Campo de búsqueda",
+      "kind": "input",
+      "refersTo": "campo",
+      "description": "Búsqueda y campos de formulario.",
+      "html": "<input class=\"ds-input\" placeholder=\"Buscar por código o nombre\">",
+      "css": ".ds-input{height:40px;padding:0 12px;border:1px solid #cfcac8;border-radius:6px;background:#fff;color:#092d48;font:400 14px 'Atkinson Hyperlegible Next',system-ui,sans-serif}.ds-input::placeholder{color:#666567}.ds-input:focus-visible{outline:2px solid #092d48;outline-offset:1px}"
+    },
+    {
+      "name": "Insignias de estado",
+      "kind": "chip",
+      "refersTo": "insignia-exito",
+      "description": "Estado con icono y texto; el color nunca va solo.",
+      "html": "<span class=\"ds-bdg ds-ok\">✓ Activo</span> <span class=\"ds-bdg ds-neu\">− Inactivo</span> <span class=\"ds-bdg ds-warn\">! Pendiente</span> <span class=\"ds-bdg ds-err\">✕ Choque</span>",
+      "css": ".ds-bdg{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:4px;border:1px solid;font:500 12.5px 'Atkinson Hyperlegible Next',system-ui,sans-serif}.ds-ok{color:#1f6f4f;background:#e6f3ec;border-color:#b5d9c6}.ds-neu{color:#59585a;background:#f1efee;border-color:#d9d4d2}.ds-warn{color:#7a4d00;background:#fdf2d8;border-color:#efd08a}.ds-err{color:#b42318;background:#fdeceb;border-color:#f3b7b1}"
+    },
+    {
+      "name": "Entrada de menú",
+      "kind": "nav",
+      "refersTo": "menu-entrada-activa",
+      "description": "La activa lleva gris polvo, peso 700 y el punto rojo; la cifra en Mono a la derecha.",
+      "html": "<a class=\"ds-nav ds-on\" href=\"#\">Campus<small>5</small></a><a class=\"ds-nav\" href=\"#\">Docentes<small>548</small></a>",
+      "css": ".ds-nav{display:flex;align-items:center;gap:10px;width:200px;height:36px;padding:0 10px;border-radius:6px;color:#092d48;text-decoration:none;font:400 14px 'Atkinson Hyperlegible Next',system-ui,sans-serif}.ds-nav small{margin-left:auto;color:#59585a;font-family:'Atkinson Hyperlegible Mono',monospace}.ds-nav:hover{background:#f3f4f7}.ds-on{background:#e6dedb;font-weight:700}.ds-on::before{content:'';width:6px;height:6px;border-radius:50%;background:#c2201e}"
+    }
+  ],
+  "narrative": {
+    "northStar": "La credencial con áreas",
+    "overview": "La sesión porta su credencial: una banda azul con la liebre del Tec, la ruta y la credencial de quien trabaja. Un solo menú por áreas se despliega en su lugar al tocar la liebre. Las pantallas de trabajo son tablas densas y formularios de MaryUI: moderno, serio e institucional.",
+    "keyCharacteristics": ["Azul espacio como casa, rojo Tec como firma", "Atkinson Hyperlegible, legible en proyector", "Insignias con icono y texto", "Un menú que se transforma", "Responsivo del celular a 2560 px"],
+    "rules": [
+      { "name": "El rojo es firma, no mensaje", "body": "El rojo Tec solo en la liebre, la franja y el punto de estás aquí; nunca en texto, insignias ni botones.", "section": "colors" },
+      { "name": "El color nunca va solo", "body": "Todo estado lleva icono y texto.", "section": "colors" },
+      { "name": "Claves en Mono", "body": "Claves, cifras y horarios en Mono con cifras tabulares.", "section": "typography" },
+      { "name": "Plano", "body": "Profundidad por superficies y filetes; sombra solo en lo que flota.", "section": "elevation" }
+    ],
+    "dos": ["Usa solo componentes de MaryUI y clases de tokens", "Deja visible y deshabilitado lo que el rol no permite, con el motivo", "Revisa a 390, 768 y 1440 px y en oscuro"],
+    "donts": ["No uses el rojo Tec fuera de la liebre, la franja y el punto", "No agrupes con tarjetas con sombra", "No escribas colores en hexadecimal ni CSS por pantalla"]
+  }
+}
