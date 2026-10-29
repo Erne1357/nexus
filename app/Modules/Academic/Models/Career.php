@@ -51,6 +51,16 @@ class Career extends Model
     }
 
     /**
+     * Las filas de `career_campus` de la carrera, sin las borradas (activas o no).
+     *
+     * @return HasMany<CareerCampus, $this>
+     */
+    public function offerings(): HasMany
+    {
+        return $this->hasMany(CareerCampus::class);
+    }
+
+    /**
      * Los campus donde se ofrece, con `pivot.is_active`; sin las filas de `career_campus` borradas. Solo para
      * leer: attach(), detach() y sync() borrarían filas de verdad o chocarían con una borrada. Ofrecer o quitar
      * una carrera en un campus va por CareerCampus, con borrado lógico y restore().

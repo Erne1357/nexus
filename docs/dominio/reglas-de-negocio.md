@@ -119,6 +119,8 @@ Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se
 
 Borrar departamentos (confirmado el 29 de octubre de 2026): un departamento solo se borra, de forma lógica, si no tiene carreras ni materias sin borrar; si no, se desactiva. Al borrarlo se cierran los alcances de sus jefes: los vigentes que empezaron antes de hoy terminan ayer y los que empiezan hoy o después se eliminan, porque `valid_to` no puede ser anterior a `valid_from`; cada cambio queda en la bitácora sobre el usuario (supuesto por confirmar, S2).
 
+Borrar carreras (confirmado el 29 de octubre de 2026): una carrera solo se borra, de forma lógica, si no tiene planes de estudio, ni siquiera borrados, porque los alumnos referencian sus planes; si no, se desactiva. Al borrarla se cierran los alcances de sus coordinadores igual que con los departamentos (supuesto por confirmar, S2). Ofrecer una carrera en un campus crea, restaura o activa su fila de `career_campus`; dejar de ofrecerla la desactiva. La oferta de una carrera inactiva nace inactiva, igual que en la importación.
+
 ## Parámetros por campus (perfil de flujo)
 
 | Clave | Presencial (C1, C2) | Notas para otras modalidades |
