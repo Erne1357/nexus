@@ -74,8 +74,9 @@ abstract class ModuleServiceProvider extends ServiceProvider
     }
 
     /**
-     * Entradas de la barra lateral que aporta el módulo, en el orden en que se muestran. Core las
-     * junta, en el orden de bootstrap/providers.php, en el registro inmutable Navigation.
+     * Entradas de la barra lateral que aporta el módulo, cada una con su área, en el orden en que se
+     * muestran dentro de ella. Core las junta, en el orden de bootstrap/providers.php, en el registro
+     * inmutable Navigation.
      *
      * @return list<NavigationItem>
      */

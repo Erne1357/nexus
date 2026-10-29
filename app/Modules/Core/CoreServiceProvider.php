@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core;
 
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
@@ -37,8 +38,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Inicio', 'home', 'o-home'),
-            new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', ability: 'viewAny', arguments: [Campus::class]),
+            new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
+            new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Academico,
+                ability: 'viewAny', arguments: [Campus::class]),
         ];
     }
 }
