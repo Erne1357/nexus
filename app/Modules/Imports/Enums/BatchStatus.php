@@ -2,6 +2,8 @@
 
 namespace App\Modules\Imports\Enums;
 
+use App\Modules\Core\Enums\StatusTone;
+
 /**
  * Estado de un lote de importación (docs/dominio/modelo-de-datos.md, `import_batches`):
  * uploaded → validating → validated → applying → applied. `failed` es terminal: el archivo no se pudo
@@ -37,14 +39,26 @@ enum BatchStatus: string
     }
 
     /**
-     * Clase de la insignia de estado, con la semántica de colores de DESIGN.md.
+     * Tono de la insignia de estado (DESIGN.md, "Insignias de estado"): lo que la cola trabaja va en
+     * info, lo validado en éxito suave, lo aplicado en éxito sólido (ya está en el catálogo, como lo
+     * publicado) y lo que falló en error.
      */
-    public function badgeClass(): string
+    public function tone(): StatusTone
     {
         return match ($this) {
-            self::Uploaded, self::Validating, self::Applying => 'badge-info badge-soft',
-            self::Validated, self::Applied => 'badge-success badge-soft',
-            self::Failed => 'badge-error badge-soft',
+            self::Uploaded, self::Validating, self::Applying => StatusTone::Info,
+            self::Validated => StatusTone::Success,
+            self::Applied => StatusTone::SuccessSolid,
+            self::Failed => StatusTone::Error,
         };
+    }
+
+    /**
+     * Icono de la insignia cuando no es el de su tono: lo que espera en la cola o se aplica lleva el
+     * reloj de «en cola»; null deja el del tono.
+     */
+    public function icon(): ?string
+    {
+        return in_array($this, [self::Uploaded, self::Applying], true) ? 'o-clock' : null;
     }
 }

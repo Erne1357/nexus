@@ -61,7 +61,7 @@
                         @endscope
 
                         @scope('cell_status', $recentBatch)
-                            <x-badge :value="$recentBatch->status->label()" :class="$recentBatch->status->badgeClass()" />
+                            <x-core::status-badge :tone="$recentBatch->status->tone()" :label="$recentBatch->status->label()" :icon="$recentBatch->status->icon()" />
                         @endscope
 
                         @scope('actions', $recentBatch)
@@ -177,7 +177,7 @@
         <div @if ($polling) wire:poll.2s @endif data-testid="batch-status">
             <x-card :title="$batch->original_name" :subtitle="$batchTemplate" shadow separator>
                 <x-slot:menu>
-                    <x-badge :value="$batch->status->label()" :class="$batch->status->badgeClass()" />
+                    <x-core::status-badge :tone="$batch->status->tone()" :label="$batch->status->label()" :icon="$batch->status->icon()" />
                 </x-slot:menu>
 
                 @if ($batch->status === BatchStatus::Uploaded)
@@ -269,13 +269,13 @@
                             <ul class="space-y-1">
                                 @foreach ($row->errors as $field => $messages)
                                     <li class="flex items-start gap-2">
-                                        <x-badge value="Error" class="badge-error badge-sm shrink-0" />
+                                        <x-core::status-badge tone="error" label="Error" class="shrink-0" />
                                         <span>{{ $batchFields[$field] ?? $field }}: {{ implode(' ', $messages) }}</span>
                                     </li>
                                 @endforeach
                                 @foreach ($row->warnings as $field => $messages)
                                     <li class="flex items-start gap-2">
-                                        <x-badge value="Advertencia" class="badge-warning badge-sm shrink-0" />
+                                        <x-core::status-badge tone="warning" label="Advertencia" icon="o-exclamation-triangle" class="shrink-0" />
                                         <span>{{ $batchFields[$field] ?? $field }}: {{ implode(' ', $messages) }}</span>
                                     </li>
                                 @endforeach
