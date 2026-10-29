@@ -102,7 +102,7 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 
 ## Reglas de datos
 
-- Claves naturales únicas: `subjects.code`, `careers.code`, `study_plans.code`, `teachers.employee_number`, `students.control_number`, `rooms.code` por campus, `groups.code` por periodo y campus. También `departments.code` y una carrera por campus en `career_campus` (confirmado el 29 de octubre de 2026).
+- Claves naturales únicas: `subjects.code`, `careers.code`, `study_plans.code`, `teachers.employee_number`, `students.control_number`, `rooms.code` por campus, `groups.code` por periodo y campus. También `departments.code`, una carrera por campus en `career_campus`, `specialties.code` dentro de su plan, una materia por plan en `study_plan_subjects` y una seriación por plan, materia y requisito en `subject_prerequisites` (confirmado el 29 de octubre de 2026).
 - En Academic nada se borra físicamente: departamentos, jefes, carreras, carrera-campus, planes, materias, especialidades, retícula y seriación llevan borrado lógico (confirmado el 29 de octubre de 2026).
 - Un departamento tiene un solo jefe vigente por campus; de jefe de proyecto docente puede haber varios a la vez. En Campus II el organigrama oficial tiene un solo departamento, así que sus jefes por departamento son de hecho (confirmado el 29 de octubre de 2026).
 - Importar nunca borra ni reactiva: si un registro no viene en el archivo, se marca `is_active = false` solo cuando el admin elige explícitamente "desactivar faltantes" para ese lote.

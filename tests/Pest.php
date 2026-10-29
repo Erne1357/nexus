@@ -1,7 +1,13 @@
 <?php
 
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Specialty;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectPrerequisite;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Model;
@@ -82,6 +88,28 @@ function fixedKeyOf(string $model, int $number): string
     }
 
     return $id;
+}
+
+/**
+ * Pone una materia en la retícula de un plan (Academic, tarea 1.7): para las pruebas de retícula, progreso
+ * y elegibles.
+ */
+function placeInPlan(StudyPlan $plan, Subject $subject, int $semester = 1, ?Specialty $specialty = null): StudyPlanSubject
+{
+    return StudyPlanSubject::factory()->for($plan)->for($subject)->create(['semester' => $semester, 'specialty_id' => $specialty?->id]);
+}
+
+/**
+ * Seria una materia con su requisito en un plan; las dos tienen que estar en su retícula (placeInPlan()).
+ */
+function seriate(StudyPlan $plan, Subject $subject, Subject $prerequisite, PrerequisiteKind $kind = PrerequisiteKind::Seriacion): SubjectPrerequisite
+{
+    return SubjectPrerequisite::factory()->create([
+        'study_plan_id' => $plan->id,
+        'subject_id' => $subject->id,
+        'prerequisite_subject_id' => $prerequisite->id,
+        'kind' => $kind,
+    ]);
 }
 
 /**
