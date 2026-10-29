@@ -6,6 +6,8 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Imports\Models\ImportBatch;
+use App\Modules\Imports\Templates\CareersTemplate;
+use App\Modules\Imports\Templates\DepartmentsTemplate;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\KardexTemplate;
 use App\Modules\Imports\Templates\StudentsTemplate;
@@ -21,6 +23,8 @@ final class ImportsServiceProvider extends ModuleServiceProvider
      * @var list<class-string<ImportTemplate>>
      */
     private const array TEMPLATES = [
+        DepartmentsTemplate::class,
+        CareersTemplate::class,
         StudentsTemplate::class,
         KardexTemplate::class,
     ];
