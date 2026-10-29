@@ -161,12 +161,16 @@ new #[Title('Carreras')] class extends Component
             return;
         }
 
-        $offeredNow = $career->offerings()->where('campus_id', $campus->id)->where('is_active', true)->exists();
+        $existing = $career->offerings()->where('campus_id', $campus->id)->pluck('is_active');
+        $offeredNow = $existing->contains(true);
+        $existed = $existing->isNotEmpty();
         $offering = $setCareerOffering->handle($career, $campus, ! $offeredNow);
         $description = e("{$career->code} · {$campus->code}");
 
         if ($offeredNow) {
             $this->success('Carrera fuera de la oferta', $description);
+        } elseif (! $offering->is_active && $existed) {
+            $this->info('Sin cambios', e("Sin cambios: {$career->code} está inactiva y su oferta en {$campus->code} sigue inactiva."));
         } elseif (! $offering->is_active) {
             $this->warning('Oferta registrada, inactiva', e("{$career->code} está inactiva en {$campus->code}: la oferta cuenta hasta que se active y se vuelva a ofrecer."));
         } else {

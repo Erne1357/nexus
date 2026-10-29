@@ -6,7 +6,9 @@ use App\Modules\Academic\Events\CareerOfferingChanged;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Core\Models\Campus;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -19,29 +21,42 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * En una transacción lee la fila con bloqueo, también la borrada. Si nada cambia, no escribe,
  * no registra ni avisa; si algo cambia, deja la bitácora sobre la oferta con el valor anterior y,
  * después del commit, avisa con CareerOfferingChanged. Dejar de ofrecer lo que nunca se ofreció
- * deja una fila inactiva, para devolver siempre la oferta.
+ * deja una fila inactiva, para devolver siempre la oferta. Ofrecer nunca desactiva: una oferta activa
+ * de una carrera inactiva se queda activa. Si otra sesión crea la primera fila al mismo tiempo, la lee
+ * y sigue con ella.
  */
 final class SetCareerOffering
 {
     public function handle(Career $career, Campus $campus, bool $offered): CareerCampus
     {
         return DB::transaction(function () use ($career, $campus, $offered): CareerCampus {
-            $isActive = $offered && $career->is_active;
-
-            $offering = CareerCampus::withTrashed()
+            $find = fn (): ?CareerCampus => CareerCampus::withTrashed()
                 ->where('career_id', $career->id)
                 ->where('campus_id', $campus->id)
                 ->lockForUpdate()
                 ->first();
 
-            if ($offering === null) {
-                $offering = CareerCampus::create(['career_id' => $career->id, 'campus_id' => $campus->id, 'is_active' => $isActive]);
+            $offering = $find();
 
-                return $this->record($offering, ActivityEvent::Created, "Ofreció la carrera {$career->code} en {$campus->code}", ['attributes' => $offering->only(['is_active'])]);
+            if ($offering === null) {
+                $isActive = $offered && $career->is_active;
+
+                try {
+                    $offering = DB::transaction(fn (): CareerCampus => CareerCampus::create(['career_id' => $career->id, 'campus_id' => $campus->id, 'is_active' => $isActive]));
+                } catch (UniqueConstraintViolationException) {
+                    $offering = $find() ?? throw new LogicException('La oferta debería existir tras el choque de unicidad.');
+                }
+
+                if ($offering->wasRecentlyCreated) {
+                    return $this->record($offering, ActivityEvent::Created, "Ofreció la carrera {$career->code} en {$campus->code}", ['attributes' => $offering->only(['is_active'])]);
+                }
             }
 
             $wasTrashed = $offering->trashed();
             $wasActive = $offering->is_active;
+
+            // Ofrecer nunca desactiva: una oferta activa de una carrera inactiva se queda como está.
+            $isActive = $offered && ($career->is_active || ($wasActive && ! $wasTrashed));
 
             if (! $wasTrashed && $wasActive === $isActive) {
                 return $offering;

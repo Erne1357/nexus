@@ -209,6 +209,15 @@ describe('admin', function () {
             ->and(lastToastOf($page))->type->toBe('warning')->title->toBe('Oferta registrada, inactiva');
     });
 
+    it('ofrecer una carrera inactiva con oferta inactiva ya registrada no cambia nada y lo dice sin advertencia', function () {
+        $this->iel->update(['is_active' => false]);
+        CareerCampus::factory()->inactive()->create(['career_id' => $this->iel->id, 'campus_id' => $this->c2->id]);
+
+        $page = Livewire::actingAs($this->admin)->test('academic::pages.careers')->call('toggleOffering', $this->iel->id);
+
+        expect(lastToastOf($page))->type->toBe('info')->title->toBe('Sin cambios');
+    });
+
     it('sin campus activo no ofrece nada y lo dice', function () {
         Campus::factory()->create(['code' => 'C1']);
 

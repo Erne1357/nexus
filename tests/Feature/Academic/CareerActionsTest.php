@@ -254,6 +254,15 @@ describe('SetCareerOffering', function () {
             ->and(Activity::sole()->description)->toBe('Ofreció la carrera ISC en C2');
     });
 
+    it('una carrera inactiva con oferta activa: ofrecerla no la desactiva', function () {
+        $existing = CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $this->c2->id]);
+        $this->career->update(['is_active' => false]);
+
+        $offering = app(SetCareerOffering::class)->handle($this->career, $this->c2, true);
+
+        expect($offering->is($existing))->toBeTrue()->and($existing->fresh()->is_active)->toBeTrue()->and(Activity::count())->toBe(0);
+    });
+
     it('una carrera inactiva no reactiva una oferta existente inactiva', function () {
         CareerCampus::factory()->inactive()->create(['career_id' => $this->career->id, 'campus_id' => $this->c2->id]);
         $this->career->update(['is_active' => false]);
