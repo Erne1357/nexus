@@ -75,6 +75,36 @@ it('el admin retoma un lote validado desde el menú, revisa sus errores y lo apl
         ->and(Campus::where('code', 'C8')->exists())->toBeFalse();
 });
 
+it('el admin aplica un lote desactivando lo que no viene en el archivo, con la cifra en la confirmación', function () {
+    $c5 = Campus::factory()->create(['code' => 'C5', 'name' => 'Campus Cinco']);
+    $batch = app(StoreImportBatch::class)->handle(
+        $this->admin,
+        'test-campuses',
+        UploadedFile::fake()->createWithContent('campus.csv', "clave,nombre,modalidad\nC9,Campus Nueve,presencial\nC2,Campus II,presencial\n"),
+    );
+    app(ValidateImportBatch::class)->handle($batch);
+
+    $page = signInToImports('admin')
+        ->navigate("/imports?lote={$batch->id}")
+        ->waitForText('1 de 2 registros activos de Campus (prueba) no viene en el archivo.')
+        ->assertDontSee('Campus Cinco')
+        ->click('Desactivar los que no vienen en el archivo')
+        ->waitForText('Campus Cinco')
+        ->assertSee('Aplicar 2 filas y desactivar 1');
+
+    // Playwright descarta los diálogos: se guarda el texto del wire:confirm y se acepta.
+    $page->script('window.confirm = (message) => { window.confirmed = message; return true; }');
+
+    $page->press('Aplicar 2 filas y desactivar 1')
+        ->waitForText('1 registro desactivado por no venir en el archivo')
+        ->assertScript('window.confirmed.includes("Se desactivará 1 registro que no viene en el archivo")')
+        ->assertSee('Campus Cinco')
+        ->assertNoJavaScriptErrors();
+
+    expect($c5->fresh()->is_active)->toBeFalse()
+        ->and($this->c2->fresh()->is_active)->toBeTrue();
+});
+
 it('un coordinador no ve la entrada Importaciones en el menú', function () {
     signInToImports('19110001')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')

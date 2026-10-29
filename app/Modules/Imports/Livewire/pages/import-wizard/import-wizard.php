@@ -14,6 +14,7 @@ use App\Modules\Imports\Queries\ImportMappingQuery;
 use App\Modules\Imports\Readers\SpreadsheetReader;
 use App\Modules\Imports\Readers\UnreadableFile;
 use App\Modules\Imports\Templates\ColumnMatcher;
+use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -41,9 +42,12 @@ use Mary\Traits\Toast;
  *    StoreImportBatch y lo manda a validar a la cola (ValidateQueuedBatch). Si la cola no responde, el
  *    lote ya quedó abierto y "Validar de nuevo" lo vuelve a encolar: un job de más no lo toca.
  * 3. Muestra las cuentas de la validación y las filas con error o con advertencia, con sus mensajes, y
- *    ofrece el CSV de errores cuando la cola lo termina (ExportBatchErrors). "Aplicar" manda el lote a
- *    la cola (ApplyQueuedBatch) si sigue validado y tiene filas válidas.
- * 4. Muestra el avance de la aplicación y, al terminar, lo que escribió y las filas que se saltaron.
+ *    ofrece el CSV de errores cuando la cola lo termina (ExportBatchErrors). Si el catálogo lo ofrece,
+ *    dice cuántos de sus registros activos no vienen en el archivo y deja elegir "desactivar faltantes"
+ *    (tarea 1.3); elegido, los lista, y el botón y la confirmación repiten la cifra. "Aplicar" manda el
+ *    lote a la cola (ApplyQueuedBatch) si sigue validado y tiene filas válidas.
+ * 4. Muestra el avance de la aplicación y, al terminar, lo que escribió, las filas que se saltaron y,
+ *    si se eligió, cuántos registros desactivó y cuáles.
  *
  * Los pasos 3 y 4 leen el lote de la URL (`?lote=`), así que se retoman al volver a la página o desde
  * los lotes recientes. Mientras la cola trabaja, o prepara el archivo de errores, la vista se refresca
@@ -91,6 +95,9 @@ new #[Title('Importaciones')] class extends Component
     #[Locked]
     public bool $applyQueued = false;
 
+    /** Si el admin eligió desactivar lo que no viene en el archivo al aplicar el lote. */
+    public bool $deactivateMissing = false;
+
     /** Qué filas del lote se listan: un valor de RowIssue. */
     public string $issues = RowIssue::Errors->value;
 
@@ -136,6 +143,10 @@ new #[Title('Importaciones')] class extends Component
         // La cola lo escribe en segundos; si no llega, no se espera para siempre.
         $errorsLost = $errorsPending && $batch->updated_at->lt(now()->subMinutes(10));
         $applyQueued = $this->applyQueued && $batch?->status === BatchStatus::Validated;
+        $importContext = $batch === null ? null : new ImportContext($context->user(), $batch->campus);
+        $offersDeactivation = $reviewing && $this->step === 3 && $batch->status === BatchStatus::Validated && $batchDefinition?->deactivatesMissing();
+        $missing = $offersDeactivation ? $batches->missingSummary($batch, $batchDefinition, $importContext) : null;
+        $deactivating = $this->deactivateMissing && ($missing['missing'] ?? 0) > 0;
 
         return [
             // La vista recibe las propiedades antes de with(): el paso de este render va aparte.
@@ -149,6 +160,12 @@ new #[Title('Importaciones')] class extends Component
             'errorsLost' => $errorsLost,
             'warningRows' => $reviewing && $this->step === 3 ? $batches->warningRows($batch) : 0,
             'applied' => $applied,
+            'missing' => $missing,
+            // De qué registros se habla: el catálogo y, si es de un campus, cuál.
+            'missingScope' => $missing === null ? null : $labels[$batch->template].($batch->campus ? " en {$batch->campus->code}" : ''),
+            'deactivating' => $deactivating,
+            'missingRows' => $deactivating ? $batches->missingRecords($batch, $batchDefinition, $importContext) : null,
+            'deactivatedRows' => $applied !== null && $batch->deactivate_missing && $batchDefinition !== null ? $batches->deactivatedRecords($batch, $batchDefinition) : null,
             'errorRows' => $errorRows,
             'errorsReady' => $errorsReady,
             'issueKinds' => array_map(fn (RowIssue $kind): array => ['id' => $kind->value, 'name' => $kind->label()], RowIssue::cases()),
@@ -333,11 +350,21 @@ new #[Title('Importaciones')] class extends Component
         $this->resetPage();
     }
 
+    public function updatedDeactivateMissing(): void
+    {
+        $this->resetPage('faltantes');
+    }
+
     /**
      * Paso 3 → 4: manda a aplicar en la cola un lote validado con filas válidas. Las filas con error
-     * se saltan (reglas-de-negocio.md, "Reglas de datos").
+     * se saltan (reglas-de-negocio.md, "Reglas de datos"). Desactiva faltantes solo si el admin lo eligió
+     * y el catálogo lo ofrece, y nunca más de los que vio y confirmó: el botón manda esa cifra. Si no la
+     * trae (apretó antes de que la página la mostrara) o ahora son más, no lo manda y pide revisar; la
+     * página ya muestra la cifra nueva. La cola vuelve a revisarlo al desactivar.
+     *
+     * @param  int|null  $confirmedMissing  cuántos faltantes mostraba la página al confirmar
      */
-    public function apply(ImportBatchQuery $batches, ScopedContext $context): void
+    public function apply(ImportBatchQuery $batches, ScopedContext $context, TemplateRegistry $templates, ?int $confirmedMissing = null): void
     {
         $this->authorize('viewAny', ImportBatch::class);
 
@@ -356,8 +383,21 @@ new #[Title('Importaciones')] class extends Component
             return;
         }
 
+        $template = $templates->has($batch->template) ? $templates->get($batch->template) : null;
+        $deactivates = $this->deactivateMissing && $template?->deactivatesMissing();
+
+        if ($deactivates) {
+            $missing = $batches->missingSummary($batch, $template, new ImportContext($context->user(), $batch->campus))['missing'];
+
+            if ($confirmedMissing === null || $missing > $confirmedMissing) {
+                $this->error('Revisa los que se desactivan', e("Ahora son {$missing} registros que no vienen en el archivo: revisa la lista y vuelve a aplicar."));
+
+                return;
+            }
+        }
+
         try {
-            ApplyQueuedBatch::dispatch($batch, $context->user());
+            ApplyQueuedBatch::dispatch($batch, $context->user(), $deactivates ? $confirmedMissing : null);
         } catch (Throwable $exception) {
             report($exception);
             $this->error('La cola no respondió', 'El lote sigue validado: intenta aplicarlo otra vez en un momento.');
@@ -388,8 +428,8 @@ new #[Title('Importaciones')] class extends Component
         $this->authorize('view', $batch);
 
         $this->batchId = $batch->id;
-        $this->reset('issues', 'applyQueued');
-        $this->resetPage();
+        $this->reset('issues', 'applyQueued', 'deactivateMissing');
+        $this->resetPages();
     }
 
     /**
@@ -398,8 +438,8 @@ new #[Title('Importaciones')] class extends Component
     public function startOver(): void
     {
         $this->discardUpload();
-        $this->reset('template', 'file', 'header', 'readFile', 'assignments', 'mappingId', 'mappingName', 'batchId', 'issues', 'applyQueued');
-        $this->resetPage();
+        $this->reset('template', 'file', 'header', 'readFile', 'assignments', 'mappingId', 'mappingName', 'batchId', 'issues', 'applyQueued', 'deactivateMissing');
+        $this->resetPages();
         $this->resetValidation();
     }
 
@@ -423,6 +463,16 @@ new #[Title('Importaciones')] class extends Component
     protected function validationAttributes(): array
     {
         return ['mappingName' => 'nombre del mapeo'];
+    }
+
+    /**
+     * Las tres listas del lote vuelven a su primera página: las filas, los faltantes y los desactivados.
+     */
+    private function resetPages(): void
+    {
+        $this->resetPage();
+        $this->resetPage('faltantes');
+        $this->resetPage('desactivados');
     }
 
     private function stepFor(ImportBatch $batch): int

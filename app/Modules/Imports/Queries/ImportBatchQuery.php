@@ -6,11 +6,16 @@ use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Imports\Enums\RowIssue;
 use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Models\ImportBatch;
+use App\Modules\Imports\Models\ImportDeactivation;
 use App\Modules\Imports\Models\ImportRow;
+use App\Modules\Imports\Templates\ImportContext;
+use App\Modules\Imports\Templates\ImportTemplate;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\LazyCollection;
 
@@ -36,9 +41,13 @@ final class ImportBatchQuery
             ->get();
     }
 
+    /**
+     * El lote con su campus aunque se haya retirado: una plantilla de un campus lo necesita para revisar
+     * el lote.
+     */
     public function findOrFail(string $id): ImportBatch
     {
-        return KeyLookup::findOrFail(ImportBatch::query(), $id);
+        return KeyLookup::findOrFail(ImportBatch::query()->with(['campus' => fn (BelongsTo $campus) => $campus->withTrashed()]), $id);
     }
 
     /**
@@ -87,6 +96,50 @@ final class ImportBatchQuery
     }
 
     /**
+     * Lo que "desactivar faltantes" haría con el lote: cuántos registros activos tiene el catálogo (los
+     * del campus del lote si es de un campus) y cuántos de ellos no vienen en el archivo. Solo para una
+     * plantilla que lo ofrece (ImportTemplate::deactivatesMissing()).
+     *
+     * @return array{active: int, missing: int}
+     */
+    public function missingSummary(ImportBatch $batch, ImportTemplate $template, ImportContext $context): array
+    {
+        return [
+            'active' => $template->deactivationScope($context)->count(),
+            'missing' => $template->missing($batch, $context)->count(),
+        ];
+    }
+
+    /**
+     * Los registros que "desactivar faltantes" desactivaría con el lote, por clave natural.
+     *
+     * @return LengthAwarePaginator<int, Model>
+     */
+    public function missingRecords(ImportBatch $batch, ImportTemplate $template, ImportContext $context, int $perPage = 10): LengthAwarePaginator
+    {
+        return $this->byNaturalKey($template->missing($batch, $context), $template)->paginate($perPage, pageName: 'faltantes');
+    }
+
+    /**
+     * Los registros que el lote desactivó por no venir en el archivo, por clave natural; también si
+     * después se borraron.
+     *
+     * @return LengthAwarePaginator<int, Model>
+     */
+    public function deactivatedRecords(ImportBatch $batch, ImportTemplate $template, int $perPage = 10): LengthAwarePaginator
+    {
+        $query = $template->model()::query()->withoutGlobalScope(SoftDeletingScope::class);
+        $model = $query->getModel();
+
+        $query->whereIn($model->getQualifiedKeyName(), ImportDeactivation::query()
+            ->where('batch_id', $batch->id)
+            ->where('target_type', $model->getMorphClass())
+            ->select('target_id'));
+
+        return $this->byNaturalKey($query, $template)->paginate($perPage, pageName: 'desactivados');
+    }
+
+    /**
      * Si la cola ya dejó el CSV de errores del lote (ExportBatchErrors) para su último estado: el de la
      * validación deja de valer en cuanto el lote se empieza a aplicar, hasta que la cola lo rehace.
      */
@@ -108,6 +161,19 @@ final class ImportBatchQuery
             ->where('batch_id', $batch->id)
             ->where('status', RowStatus::Error)
             ->lazyById(1000, 'row_number');
+    }
+
+    /**
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
+     */
+    private function byNaturalKey(Builder $query, ImportTemplate $template): Builder
+    {
+        foreach ($template->naturalKey() as $field) {
+            $query->orderBy($query->getModel()->qualifyColumn($field));
+        }
+
+        return $query->orderBy($query->getModel()->getQualifiedKeyName());
     }
 
     /**
