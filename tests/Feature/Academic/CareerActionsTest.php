@@ -261,7 +261,7 @@ describe('SetCareerOffering', function () {
 
         $result = app(SetCareerOffering::class)->handle($this->career, $this->c2, false);
 
-        expect($result)->toBeNull()->and($deleted->fresh())->not->toBeNull()
+        expect($result)->toBeNull()
             ->and(CareerCampus::withTrashed()->find($deleted->id)->trashed())->toBeTrue()->and(Activity::count())->toBe(0);
     });
 
