@@ -8,7 +8,9 @@ use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentProgress;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 
 /*
@@ -86,6 +88,20 @@ it('volver a calcular reescribe el avance sin duplicarlo, también si el alumno 
         ->study_plan_id->toBe($other->id)
         ->credits_approved->toBe(5)
         ->subjects_pending->toBe([]);
+});
+
+it('recalcula todo en una transacción: si falla a la mitad, el avance se queda como estaba', function () {
+    app(RefreshStudentProgress::class)->handle();
+    kardexOf($this->student, $this->a);
+    // Falla el último paso, después de escribir el avance nuevo.
+    DB::listen(function (QueryExecuted $query): void {
+        if (str_starts_with($query->sql, 'delete from "student_progress"') && str_contains($query->sql, 'not exists')) {
+            throw new RuntimeException('Se perdió la conexión.');
+        }
+    });
+
+    expect(fn () => app(RefreshStudentProgress::class)->handle())->toThrow(RuntimeException::class, 'Se perdió la conexión.')
+        ->and(StudentProgress::where('student_id', $this->student->id)->sole()->credits_approved)->toBe(0);
 });
 
 it('no calcula el avance de un alumno borrado, y borra el que ya tenía: es una tabla derivada', function () {
