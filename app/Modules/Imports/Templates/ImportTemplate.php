@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use LogicException;
 
 /**
@@ -184,7 +185,8 @@ abstract class ImportTemplate
 
     /**
      * Escribe una fila válida y devuelve el registro: alta si nadie tiene su clave natural, cambio si
-     * ya existe. La clave (con `campus_id`) se fija aunque el modelo no la deje asignar en masa. El
+     * ya existe. Lo busca con recordKey(), y esa clave (con `campus_id`) se fija aunque el modelo no la
+     * deje asignar en masa. El
      * alta suma defaults(); el cambio solo escribe lo que da attributes() sin los null y nunca cambia
      * `is_active`, así que no reactiva. El motor lee `wasRecentlyCreated` y `wasChanged()` para
      * contar altas y cambios del lote.
@@ -195,7 +197,7 @@ abstract class ImportTemplate
      */
     public function apply(array $row, ImportContext $context): Model
     {
-        $key = $this->keyFor($row, $context);
+        $key = $this->recordKey($row, $context) ?? throw new LogicException("La plantilla {$this->key()} no encontró a qué registro apunta una fila válida.");
         $model = $this->query()->where($key)->first() ?? (new ($this->model()))->forceFill($key);
 
         if ($this->isTrashed($model)) {
@@ -302,10 +304,34 @@ abstract class ImportTemplate
     }
 
     /**
-     * Corre una vez después de aplicar el lote completo, por ejemplo para despachar un job de
-     * recálculo (tarea 1.4: `RecomputeStudentProgress`).
+     * Corre una vez al terminar de aplicar el lote, por ejemplo para despachar un job de recálculo (tarea
+     * 1.4: `RecomputeStudentProgress`). También corre si la aplicación falló después de escribir algo,
+     * porque lo escrito se queda; no corre si no se escribió nada.
      */
     public function afterApply(ImportContext $context): void {}
+
+    /**
+     * Un texto sin acentos, en minúsculas y con guiones bajos en lugar de espacios y signos: con él se
+     * comparan los encabezados del archivo (ColumnMatcher) y los valores que una plantilla reconoce, como el
+     * estatus del alumno o el resultado del kardex.
+     */
+    final public static function slug(string $text): string
+    {
+        return trim((string) preg_replace('/[^a-z0-9]+/', '_', Str::lower(Str::ascii($text))), '_');
+    }
+
+    /**
+     * Una clave que un Excel leyó como número (el número de control, la clave de una carrera) como texto; lo
+     * demás pasa igual, y `rules()` lo revisa.
+     */
+    protected static function asText(mixed $value): mixed
+    {
+        return match (true) {
+            is_int($value) => (string) $value,
+            is_float($value) && floor($value) === $value => (string) (int) $value,
+            default => $value,
+        };
+    }
 
     /**
      * Mensajes propios de rules(); los demás salen de lang/es/validation.php.
@@ -326,7 +352,8 @@ abstract class ImportTemplate
      */
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
-        $existing = $this->query()->where($this->keyFor($row, $context))->first();
+        $key = $this->recordKey($row, $context);
+        $existing = $key === null ? null : $this->query()->where($key)->first();
 
         if ($existing === null) {
             return $issues;
@@ -343,6 +370,23 @@ abstract class ImportTemplate
         }
 
         return $issues;
+    }
+
+    /**
+     * La clave con que se busca en la base el registro de una fila: por omisión la de keyFor(), porque los
+     * campos de la clave natural se llaman como sus columnas. Una plantilla cuyo archivo identifica el
+     * registro con claves de otros catálogos la traduce aquí: el kardex trae el número de control y la clave
+     * de materia, y la tabla guarda `student_id` y `subject_id`. Devuelve null si la fila apunta a algo que no
+     * existe; check() de la plantilla reporta ese error. keyFor() sigue dando la clave del archivo, con la que
+     * el motor encuentra filas repetidas. "Desactivar faltantes" (missing()) compara la clave natural como
+     * columnas: una plantilla que la traduce y tiene `is_active` tiene que apagar deactivatesMissing().
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>|null
+     */
+    protected function recordKey(array $row, ImportContext $context): ?array
+    {
+        return $this->keyFor($row, $context);
     }
 
     /**

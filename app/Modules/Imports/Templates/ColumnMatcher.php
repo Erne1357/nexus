@@ -2,8 +2,6 @@
 
 namespace App\Modules\Imports\Templates;
 
-use Illuminate\Support\Str;
-
 /**
  * Qué columna del archivo va a qué campo de la plantilla. Con un mapeo guardado (`import_mappings.columns`)
  * usa solo lo que el mapeo dice; sin él reconoce cada columna por nombre de campo o por etiqueta, sin
@@ -113,6 +111,6 @@ final class ColumnMatcher
 
     private function slug(string $text): string
     {
-        return trim((string) preg_replace('/[^a-z0-9]+/', '_', Str::lower(Str::ascii($text))), '_');
+        return ImportTemplate::slug($text);
     }
 }

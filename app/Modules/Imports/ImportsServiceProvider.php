@@ -7,6 +7,8 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Templates\ImportTemplate;
+use App\Modules\Imports\Templates\KardexTemplate;
+use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Contracts\Foundation\Application;
 
@@ -18,7 +20,10 @@ final class ImportsServiceProvider extends ModuleServiceProvider
      *
      * @var list<class-string<ImportTemplate>>
      */
-    private const array TEMPLATES = [];
+    private const array TEMPLATES = [
+        StudentsTemplate::class,
+        KardexTemplate::class,
+    ];
 
     public function register(): void
     {
