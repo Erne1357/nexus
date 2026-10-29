@@ -173,14 +173,27 @@ final class StudentRecordQuery
 
     /**
      * @param  Collection<int, KardexRecord>  $records
-     * @return list<array{term: string, records: list<KardexRecord>}>
+     * @return list<array{term: string, label: string, records: list<KardexRecord>}>
      */
     private function kardex(Collection $records): array
     {
         return $records->sortBy([['term_code', 'desc'], fn (KardexRecord $a, KardexRecord $b): int => strcmp($a->subject->code, $b->subject->code)])
             ->groupBy('term_code')
-            ->map(fn (Collection $rows, string $term): array => ['term' => $term, 'records' => $rows->values()->all()])
+            ->map(fn (Collection $rows, string $term): array => ['term' => $term, 'label' => self::termLabel($term), 'records' => $rows->values()->all()])
             ->values()
             ->all();
+    }
+
+    /**
+     * El nombre de un periodo del SII: `20253` es «Ago–Dic 2025»; el último dígito es 1 Ene-Jun, 2 verano y 3
+     * Ago-Dic.
+     */
+    private static function termLabel(string $code): string
+    {
+        return match (substr($code, -1)) {
+            '1' => 'Ene–Jun',
+            '2' => 'Verano',
+            default => 'Ago–Dic',
+        }.' '.substr($code, 0, 4);
     }
 }

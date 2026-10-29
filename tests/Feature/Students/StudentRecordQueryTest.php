@@ -170,5 +170,6 @@ it('el kárdex va por periodo, del más reciente al más antiguo, también con m
     $kardex = recordOf($this->student)->kardex;
 
     expect(array_column($kardex, 'term'))->toBe(['20253', '20251'])
+        ->and(array_column($kardex, 'label'))->toBe(['Ago–Dic 2025', 'Ene–Jun 2025'])
         ->and(collect($kardex[0]['records'])->map(fn (KardexRecord $row): string => "{$row->subject->code} {$row->attempt}")->all())->toBe(['A-1 2', 'Z-9 1']);
 });

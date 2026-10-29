@@ -17,7 +17,7 @@ final readonly class StudentRecord
      * @param  int|null  $reachSemester  hasta qué semestre puede seleccionar; sin semestre, sin límite
      * @param  array<int, list<GridCell>>  $semesters  semestre → sus materias, en orden de clave
      * @param  list<array{index: int, name: string, size: int}>  $chains  cadenas de seriación, por su primera materia
-     * @param  list<array{term: string, records: list<KardexRecord>}>  $kardex  del periodo más reciente al más antiguo
+     * @param  list<array{term: string, label: string, records: list<KardexRecord>}>  $kardex  del periodo más reciente al más antiguo
      */
     public function __construct(
         public Student $student,

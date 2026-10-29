@@ -167,6 +167,12 @@ describe('entrada de una ruta', function () {
         expect(handBuiltNavigation()->forRoute('home')->label)->toBe('Cargas');
     });
 
+    it('a una ruta hija sin entrada propia le da la de su listado: la ficha de un alumno es de Alumnos', function () {
+        expect(app(Navigation::class)->forRoute('students.show'))
+            ->label->toBe('Alumnos')
+            ->area->toBe(NavigationArea::ServiciosEscolares);
+    });
+
     it('no da ninguna para una ruta que no está en el menú', function () {
         expect(app(Navigation::class)->forRoute('login'))->toBeNull()
             ->and(app(Navigation::class)->forRoute('no.existe'))->toBeNull();
@@ -340,6 +346,7 @@ describe('menú', function () {
         'Campus' => ['core.campuses', 'Académico'],
         'Importaciones' => ['imports.wizard', 'Datos'],
         'Alumnos' => ['students.index', 'Servicios escolares'],
+        'la ficha de un alumno, hija de Alumnos' => ['students.show', 'Servicios escolares'],
         'fuera del menú' => ['user-password.edit', 'Académico'],
     ]);
 

@@ -84,12 +84,22 @@ final readonly class Navigation
 
     /**
      * La entrada declarada para una ruta, la vea o no el usuario (p. ej. para mostrar
-     * «área › pantalla»); la primera si varias declaran la misma, y null si ninguna la declara.
+     * «área › pantalla»); la primera si varias declaran la misma. Una ruta hija sin entrada propia
+     * toma la de su listado: `students.show` (la ficha) es de la entrada de `students.index`, porque
+     * comparten `students.`. Null si ninguna la declara.
      */
     public function forRoute(string $route): ?NavigationItem
     {
         foreach ($this->items as $item) {
             if ($item->route === $route) {
+                return $item;
+            }
+        }
+
+        $parent = str_contains($route, '.') ? substr($route, 0, strrpos($route, '.') + 1) : null;
+
+        foreach ($parent === null ? [] : $this->items as $item) {
+            if (str_starts_with($item->route, $parent)) {
                 return $item;
             }
         }

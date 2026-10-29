@@ -87,4 +87,23 @@ enum SubjectStanding: string
             self::NoPermitida => 'o-lock-closed',
         };
     }
+
+    /**
+     * Clases del mosaico de la materia en la retícula: el relleno y el borde de su tono (DESIGN.md, "Retícula del
+     * alumno"); lo que todavía no se puede cursar lleva borde punteado. Van completas, sin armar, para que
+     * Tailwind las encuentre.
+     */
+    public function tileClasses(): string
+    {
+        return match ($this) {
+            self::Acreditada => 'border-success/40 bg-success/10 text-success',
+            self::Cursando => 'border-info/40 bg-info/10 text-info',
+            self::SinCalificar => 'border-dashed border-info bg-info/5 text-info',
+            self::ReprobadaPrioridad => 'border-warning/40 bg-warning/10 text-warning',
+            self::ACursoEspecial => 'border-2 border-warning bg-warning/10 text-warning',
+            self::CursoEspecialReprobado => 'border-error/40 bg-error/10 text-error',
+            self::PuedeSeleccionarla => 'border-2 border-primary bg-base-100 text-primary',
+            self::NoPermitida => 'border-dashed border-base-content/25 bg-base-200 text-neutral',
+        };
+    }
 }

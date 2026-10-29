@@ -6,12 +6,14 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Policies\StudentPolicy;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
@@ -55,6 +57,16 @@ final class StudentQuery
                 : $query->where('status', $status))
             ->orderBy('control_number')
             ->paginate($perPage);
+    }
+
+    /**
+     * El alumno de la ficha, sin los borrados. El id llega de la ruta: uno que no es uuid no existe (ADR-0014).
+     *
+     * @throws ModelNotFoundException<Student>
+     */
+    public function findOrFail(string $id): Student
+    {
+        return KeyLookup::findOrFail(Student::query(), $id);
     }
 
     /**
