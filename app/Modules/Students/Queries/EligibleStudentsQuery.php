@@ -10,11 +10,12 @@ use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Los alumnos elegibles por materia de una carrera en un campus (tarea 1.5): los que ya pueden cursarla porque
- * aprobaron toda su seriación y no la han aprobado, según `student_progress` (reglas-de-negocio.md,
- * "Elegibilidad y demanda"). Solo cuentan los alumnos activos, y solo con el avance calculado con su plan
- * actual: un alumno que cambió de plan no cuenta mientras su avance no se recalcule. Si la carrera tiene varios
- * planes, una materia suma a los alumnos de todos. La usan la propuesta del coordinador y Demand.
+ * Los alumnos elegibles por materia de una carrera en un campus (tarea 1.5): los que no la han aprobado y ya
+ * pueden cursarla, según `student_progress`: aprobaron toda su seriación, está a su alcance (su semestre y dos
+ * más) y cumplen el porcentaje de créditos que pide (reglas-de-negocio.md, "Elegibilidad y demanda"). Solo
+ * cuentan los alumnos activos, y solo con el avance calculado con su plan actual: un alumno que cambió de plan
+ * no cuenta mientras su avance no se recalcule. Si la carrera tiene varios planes, una materia suma a los
+ * alumnos de todos. La usan la propuesta del coordinador y Demand.
  */
 final class EligibleStudentsQuery
 {

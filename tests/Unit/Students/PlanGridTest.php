@@ -93,3 +93,75 @@ describe('especialidades', function () {
             ->toMatchArray(['credits_approved' => 13, 'subjects_pending' => ['R2']]);
     });
 });
+
+describe('avance por semestre', function () {
+    /**
+     * A (1.º), B (2.º, pide A), H (3.º) y G (4.º).
+     */
+    function semesterGrid(): PlanGrid
+    {
+        return new PlanGrid(
+            credits: ['A' => 5, 'B' => 5, 'H' => 4, 'G' => 4],
+            seriation: ['B' => ['A']],
+            semesterOf: ['A' => 1, 'B' => 2, 'H' => 3, 'G' => 4],
+        );
+    }
+
+    it('puede cursar materias de su semestre y de hasta dos más; las de más adelante no, aunque no pidan seriación', function () {
+        expect(semesterGrid()->progressFor(['A'], semester: 1))
+            ->toMatchArray(['subjects_pending' => ['B', 'H', 'G'], 'subjects_available' => ['B', 'H']]);
+    });
+
+    it('las de semestres anteriores que no ha aprobado siempre las puede cursar', function () {
+        expect(semesterGrid()->progressFor([], semester: 4)['subjects_available'])->toBe(['A', 'H', 'G']);
+    });
+
+    it('sin semestre (un egresado) no hay límite', function () {
+        expect(semesterGrid()->progressFor(['A'])['subjects_available'])->toBe(['B', 'H', 'G']);
+    });
+});
+
+describe('requisito de créditos', function () {
+    /**
+     * A (40) y B (30), Servicio Social (S, 10, pide el 70 %) y Residencia (R, 20, pide el 80 % y S): 100
+     * créditos.
+     */
+    function residencyGrid(?int $totalCredits = null): PlanGrid
+    {
+        return new PlanGrid(
+            credits: ['A' => 40, 'B' => 30, 'S' => 10, 'R' => 20],
+            seriation: ['R' => ['S']],
+            creditShare: ['S' => 70, 'R' => 80],
+            totalCredits: $totalCredits,
+        );
+    }
+
+    it('una materia que pide un porcentaje de créditos queda disponible al llegar a él', function () {
+        expect(residencyGrid()->progressFor(['A'])['subjects_available'])->toBe(['B'])
+            ->and(residencyGrid()->progressFor(['A', 'B'])['subjects_available'])->toBe(['S'])
+            ->and(residencyGrid()->progressFor(['A', 'B', 'S'])['subjects_available'])->toBe(['R']);
+    });
+
+    it('sin créditos que medir (un total en cero), una materia que pide un porcentaje no queda disponible', function () {
+        $grid = new PlanGrid(credits: ['S' => 0], creditShare: ['S' => 70], totalCredits: 0);
+
+        expect($grid->progressFor([])['subjects_available'])->toBe([]);
+    });
+
+    it('el porcentaje es de los créditos totales del plan cuando están capturados', function () {
+        expect(residencyGrid(totalCredits: 200)->progressFor(['A', 'B'])['subjects_available'])->toBe([]);
+    });
+
+    it('sin total capturado, el total es la retícula con la especialidad del alumno, o con la de más créditos si no ha elegido', function () {
+        // Tronco común A (60) y S (10, pide el 70 %); Redes (R1, 30) y Software (W1, 10).
+        $grid = new PlanGrid(
+            credits: ['A' => 60, 'S' => 10, 'R1' => 30, 'W1' => 10],
+            specialtyOf: ['R1' => 'redes', 'W1' => 'software'],
+            creditShare: ['S' => 70],
+        );
+
+        // Sin especialidad, 60 de 100 (con Redes) no llega; con Software, 60 de 80 sí.
+        expect($grid->progressFor(['A'])['subjects_available'])->toBe(['R1', 'W1'])
+            ->and($grid->progressFor(['A'], ['W1'])['subjects_available'])->toBe(['S', 'W1']);
+    });
+});
