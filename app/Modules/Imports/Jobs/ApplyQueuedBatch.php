@@ -18,7 +18,8 @@ use Throwable;
  * ValidateQueuedBatch: un solo intento con su corrida (`run`), termina sin tocar el lote si ya no está
  * validado (dos clics en "aplicar", o un lote que ya terminó o falló), y si falla deja el lote fallido
  * con InterruptImportBatch, que conserva lo que alcanzó a escribirse. La página revisa que el lote esté
- * validado antes de despachar.
+ * validado antes de despachar, y le pasa cuántos registros confirmó desactivar el admin si eligió
+ * "desactivar faltantes" (tarea 1.3).
  */
 final class ApplyQueuedBatch implements ShouldQueue
 {
@@ -33,7 +34,11 @@ final class ApplyQueuedBatch implements ShouldQueue
 
     public string $run;
 
-    public function __construct(public ImportBatch $batch, public User $user)
+    /**
+     * @param  int|null  $confirmedMissing  con "desactivar faltantes", cuántos registros confirmó desactivar
+     *                                      el admin; null si no lo eligió
+     */
+    public function __construct(public ImportBatch $batch, public User $user, public ?int $confirmedMissing = null)
     {
         $this->run = (string) Str::uuid7();
     }
@@ -41,7 +46,7 @@ final class ApplyQueuedBatch implements ShouldQueue
     public function handle(ApplyImportBatch $apply, ExportBatchErrors $export): void
     {
         try {
-            $batch = $apply->handle($this->batch, $this->user, $this->run);
+            $batch = $apply->handle($this->batch, $this->user, $this->run, $this->confirmedMissing);
         } catch (BatchNotReady) {
             // Ya no está validado: otra corrida lo tomó, ya terminó o falló.
             return;

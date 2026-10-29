@@ -18,8 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Lote de importación: un archivo del SII subido para una plantilla (`template`, clave de
  * TemplateRegistry). `file_path` es relativo al disco `imports`. No se borra.
+ * `deactivate_missing` dice si el admin eligió "desactivar faltantes" al aplicarlo (tarea 1.3).
  */
-#[Fillable(['template', 'campus_id', 'mapping_id', 'file_path', 'original_name', 'status', 'total_rows', 'valid_rows', 'error_rows', 'run_id', 'processed_rows', 'created_rows', 'updated_rows', 'unchanged_rows', 'errors_exported_at', 'failure_reason', 'uploaded_by', 'applied_by', 'applied_at'])]
+#[Fillable(['template', 'campus_id', 'mapping_id', 'file_path', 'original_name', 'status', 'total_rows', 'valid_rows', 'error_rows', 'run_id', 'processed_rows', 'created_rows', 'updated_rows', 'unchanged_rows', 'deactivate_missing', 'deactivated_rows', 'errors_exported_at', 'failure_reason', 'uploaded_by', 'applied_by', 'applied_at'])]
 #[UseFactory(ImportBatchFactory::class)]
 class ImportBatch extends Model
 {
@@ -40,6 +41,8 @@ class ImportBatch extends Model
             'created_rows' => 'integer',
             'updated_rows' => 'integer',
             'unchanged_rows' => 'integer',
+            'deactivate_missing' => 'boolean',
+            'deactivated_rows' => 'integer',
             'applied_at' => 'datetime',
             'errors_exported_at' => 'datetime',
         ];
@@ -95,5 +98,15 @@ class ImportBatch extends Model
     public function rows(): HasMany
     {
         return $this->hasMany(ImportRow::class, 'batch_id');
+    }
+
+    /**
+     * Los registros del catálogo que el lote desactivó por no venir en el archivo.
+     *
+     * @return HasMany<ImportDeactivation, $this>
+     */
+    public function deactivations(): HasMany
+    {
+        return $this->hasMany(ImportDeactivation::class, 'batch_id');
     }
 }

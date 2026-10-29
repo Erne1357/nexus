@@ -17,7 +17,7 @@ final class BatchApplied implements ShouldDispatchAfterCommit
     use Dispatchable, SerializesModels;
 
     /**
-     * @param  array{created: int, updated: int, unchanged: int, skipped: int}  $counts
+     * @param  array{created: int, updated: int, unchanged: int, skipped: int, deactivated: int}  $counts
      */
     public function __construct(
         public ImportBatch $batch,

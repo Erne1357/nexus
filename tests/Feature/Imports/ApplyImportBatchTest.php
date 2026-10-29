@@ -136,7 +136,7 @@ it('avisa con BatchApplied después de aplicar, con sus cuentas', function () {
     applyCampusBatch($batch, $this->admin);
 
     Event::assertDispatched(BatchApplied::class, fn (BatchApplied $event): bool => $event->batch->is($batch)
-        && $event->counts === ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0]);
+        && $event->counts === ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'deactivated' => 0]);
 });
 
 it('vuelve a revisar cada fila al aplicar: lo que cambió desde la validación se salta como error', function () {
