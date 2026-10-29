@@ -14,7 +14,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Seriación de una materia en un plan: su requisito (`prerequisite`) y si es seriación o correquisito. Las dos
- * materias están en la retícula del plan (la base lo garantiza).
+ * materias tienen fila en la retícula del plan (la base lo garantiza; quitar una materia de la retícula quita
+ * sus seriaciones en la misma Action).
  */
 #[Fillable(['study_plan_id', 'subject_id', 'prerequisite_subject_id', 'kind'])]
 #[UseFactory(SubjectPrerequisiteFactory::class)]

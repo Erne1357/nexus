@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Schema;
  * Materia global, con el departamento que la imparte: el tronco común se comparte entre carreras, y su
  * posición y su seriación son de cada plan (decisión de modelado 2). Catálogo: soft deletes e `is_active`; el
  * código es la clave natural y sigue reservado aunque la materia se borre. La exportación del SII no trae el
- * tipo (`kind`): queda vacío hasta que se capture.
+ * tipo (`kind`): queda vacío hasta que se capture, y si viene solo acepta los valores de SubjectKind, porque
+ * el modelo lo lee como enum.
  */
 return new class extends Migration
 {
@@ -34,6 +35,7 @@ return new class extends Migration
 
         DB::statement('alter table subjects add constraint subjects_hours_check check (theory_hours >= 0 and practice_hours >= 0)');
         DB::statement('alter table subjects add constraint subjects_credits_check check (credits >= 0)');
+        DB::statement("alter table subjects add constraint subjects_kind_check check (kind in ('basica', 'especialidad', 'complementaria', 'residencia', 'servicio_social', 'lengua_extranjera'))");
     }
 
     public function down(): void

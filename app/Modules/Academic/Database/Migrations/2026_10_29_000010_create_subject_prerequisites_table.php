@@ -7,10 +7,12 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Seriación por plan: la misma materia puede seriarse distinto en planes distintos (decisión de modelado 2).
- * La materia y su requisito tienen que estar en la retícula de ese plan: las dos llaves compuestas los buscan
- * en `study_plan_subjects` por (`study_plan_id`, `subject_id`). Una materia no es requisito de sí misma. Una
- * vez por plan, materia y requisito, también contra una fila borrada; quitarla es borrado lógico (confirmado el
- * 29 de octubre de 2026).
+ * La materia y su requisito tienen fila en la retícula de ese plan: las dos llaves compuestas las buscan en
+ * `study_plan_subjects` por (`study_plan_id`, `subject_id`). Una llave foránea también acepta una fila borrada,
+ * así que quitar una materia de la retícula tiene que quitar sus seriaciones en la misma transacción (la Action
+ * de la tarea 1.8). Una materia no es requisito de sí misma; los ciclos (A pide B y B pide A) los rechazan la
+ * Action de la 1.8 y la plantilla de la 1.9. Una vez por plan, materia y requisito, también contra una fila
+ * borrada; quitarla es borrado lógico (confirmado el 29 de octubre de 2026).
  */
 return new class extends Migration
 {
@@ -32,6 +34,7 @@ return new class extends Migration
         });
 
         DB::statement('alter table subject_prerequisites add constraint subject_prerequisites_not_itself_check check (subject_id <> prerequisite_subject_id)');
+        DB::statement("alter table subject_prerequisites add constraint subject_prerequisites_kind_check check (kind in ('seriacion', 'correquisito'))");
     }
 
     public function down(): void

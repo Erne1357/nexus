@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /*
@@ -17,24 +18,6 @@ use Illuminate\Support\Str;
 | en la retícula del plan y que la especialidad de una materia es de su mismo plan. Las claves naturales son
 | únicas también contra un registro borrado, y nada se borra físicamente (confirmado el 29 de octubre de 2026).
 */
-
-/**
- * Pone una materia en la retícula de un plan.
- */
-function placeInPlan(StudyPlan $plan, Subject $subject, int $semester = 1, ?Specialty $specialty = null): StudyPlanSubject
-{
-    return StudyPlanSubject::factory()->for($plan)->for($subject)->create(['semester' => $semester, 'specialty_id' => $specialty?->id]);
-}
-
-function seriate(StudyPlan $plan, Subject $subject, Subject $prerequisite, PrerequisiteKind $kind = PrerequisiteKind::Seriacion): SubjectPrerequisite
-{
-    return SubjectPrerequisite::factory()->create([
-        'study_plan_id' => $plan->id,
-        'subject_id' => $subject->id,
-        'prerequisite_subject_id' => $prerequisite->id,
-        'kind' => $kind,
-    ]);
-}
 
 describe('claves naturales', function () {
     it('la clave de un plan es única, también contra uno borrado', function () {
@@ -144,6 +127,20 @@ describe('valores', function () {
         'horas de teoría negativas' => [fn () => Subject::factory()->create(['theory_hours' => -1]), 'subjects_hours_check'],
         'horas de práctica negativas' => [fn () => Subject::factory()->create(['practice_hours' => -1]), 'subjects_hours_check'],
         'créditos negativos' => [fn () => Subject::factory()->create(['credits' => -1]), 'subjects_credits_check'],
+    ]);
+
+    it('solo acepta los tipos conocidos de materia y de seriación, aunque la escritura no pase por el modelo', function (string $table, string $constraint) {
+        $placement = StudyPlanSubject::factory()->create();
+        $prerequisite = placeInPlan($placement->studyPlan, Subject::factory()->create());
+        $rows = [
+            'subjects' => ['code' => 'X-1', 'name' => 'X', 'department_id' => $placement->subject->department_id, 'theory_hours' => 1, 'practice_hours' => 1, 'credits' => 2, 'kind' => 'basico'],
+            'subject_prerequisites' => ['study_plan_id' => $placement->study_plan_id, 'subject_id' => $placement->subject_id, 'prerequisite_subject_id' => $prerequisite->subject_id, 'kind' => 'Seriación'],
+        ];
+
+        expect(fn () => DB::table($table)->insert($rows[$table]))->toThrow(QueryException::class, $constraint);
+    })->with([
+        'materia' => ['subjects', 'subjects_kind_check'],
+        'seriación' => ['subject_prerequisites', 'subject_prerequisites_kind_check'],
     ]);
 
     it('guarda una materia sin tipo y un plan sin semestres, créditos ni fecha de inicio: la exportación del SII no los trae', function () {
