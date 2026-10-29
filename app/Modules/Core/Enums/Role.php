@@ -16,6 +16,22 @@ enum Role: string
     case Docente = 'docente';
 
     /**
+     * Nombre para la interfaz (la credencial y la página de inicio), como lo nombran PROJECT.md y el
+     * glosario.
+     */
+    public function label(): string
+    {
+        return match ($this) {
+            self::Admin => 'Administración',
+            self::Subdireccion => 'Subdirección Académica',
+            self::JefeDepartamento => 'Jefe de departamento académico',
+            self::JefeProyectoDocente => 'Jefe de proyecto docente',
+            self::Coordinador => 'Coordinador de carrera',
+            self::Docente => 'Docente',
+        };
+    }
+
+    /**
      * Columnas de `role_scopes` que un alcance de este rol debe llenar para contar en
      * ScopedContext (columna "Alcance" de PROJECT.md). Admin no necesita alcance; al docente,
      * cuyo alcance es su propia carga, se le pide el campus donde la tiene.

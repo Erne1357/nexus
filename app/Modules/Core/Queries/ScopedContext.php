@@ -34,7 +34,7 @@ use Illuminate\Support\Collection;
 final class ScopedContext
 {
     /**
-     * Claves de sesión del campus y periodo elegidos en la topbar; las escribe SetActiveContext.
+     * Claves de sesión del campus y periodo elegidos en la credencial; las escribe SetActiveContext.
      */
     public const string ACTIVE_CAMPUS = 'core.active_campus_id';
 
@@ -126,6 +126,21 @@ final class ScopedContext
     }
 
     /**
+     * Los roles que el usuario ejerce, en el orden del enum; el admin, que los tiene todos, solo
+     * Admin. Ninguno sin usuario activo ni alcance vigente.
+     *
+     * @return list<Role>
+     */
+    public function roles(): array
+    {
+        if ($this->isAdmin()) {
+            return [Role::Admin];
+        }
+
+        return array_values(array_filter(Role::cases(), fn (Role $role): bool => $this->has($role)));
+    }
+
+    /**
      * Si el usuario, con alguno de `$roles`, cubre el objetivo: un campus completo, o un
      * departamento o una carrera dentro de él. El admin, siempre; el docente, nunca.
      *
@@ -171,7 +186,7 @@ final class ScopedContext
     }
 
     /**
-     * Campus activos donde trabaja, por código: lo que ofrece el selector de la topbar.
+     * Campus activos donde trabaja, por código: lo que ofrece el selector de la credencial.
      *
      * @return Collection<int, Campus>
      */
