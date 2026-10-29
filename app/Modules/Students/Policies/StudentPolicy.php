@@ -2,11 +2,11 @@
 
 namespace App\Modules\Students\Policies;
 
+use App\Modules\Academic\Models\Career;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
 use App\Modules\Students\Models\Student;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Quién consulta alumnos, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Consultar alumnos"):
@@ -35,8 +35,10 @@ final class StudentPolicy
 
     public function view(User $user, Student $student): bool
     {
-        $student->loadMissing(['career' => fn (BelongsTo $career) => $career->withTrashed()]);
+        $department = $student->relationLoaded('career')
+            ? $student->career?->department_id
+            : Career::withTrashed()->whereKey($student->career_id)->value('department_id');
 
-        return $this->scope($user)->covers(self::VIEWERS, $student->campus_id, department: $student->career->department_id, career: $student->career_id);
+        return $this->scope($user)->covers(self::VIEWERS, $student->campus_id, department: $department, career: $student->career_id);
     }
 }

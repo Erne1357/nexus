@@ -4,21 +4,23 @@ namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Policies\StudentPolicy;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 /**
  * Lecturas de alumnos para las pantallas (tarea 1.6). El listado es de un campus, el activo de la credencial, y
- * deja ver lo mismo que StudentPolicy, filtrado en SQL con los alcances de ScopedContext: al admin y a la
- * subdirección, todo el campus; al jefe de departamento, las carreras de su departamento; al coordinador, su
- * carrera (reglas-de-negocio.md, "Consultar alumnos").
+ * deja ver lo mismo que StudentPolicy, filtrado en SQL con los alcances de ScopedContext y la misma regla que
+ * ScopedContext::covers(): al admin y a la subdirección, todo el campus; al jefe de departamento, las carreras
+ * de su departamento; al coordinador, su carrera (reglas-de-negocio.md, "Consultar alumnos"). Incluye a los
+ * alumnos inactivos, como todo catálogo; los borrados no.
  */
 final class StudentQuery
 {
@@ -26,10 +28,12 @@ final class StudentQuery
     public const string WITHOUT_STATUS = 'sin_estatus';
 
     /**
-     * La tabla de alumnos del campus, por número de control y sin los borrados. Busca `$search` en el número de
-     * control o el nombre con TextSearch; `$filters` filtra por carrera, plan, semestre y estatus.
+     * La tabla de alumnos del campus, por número de control y sin los borrados, con su avance para la columna de
+     * créditos. Busca `$search` en el número de control o el nombre con TextSearch; `$filters` filtra por carrera,
+     * plan, semestre y estatus. Los filtros llegan del navegador: una carrera o un plan que no es uuid, o un
+     * semestre que no es número, no encuentra a nadie, en lugar de tronar en PostgreSQL (ADR-0014).
      *
-     * @param  array{career?: string, plan?: string, semester?: int, status?: string}  $filters
+     * @param  array{career?: string, plan?: string, semester?: int|string, status?: string}  $filters
      * @return LengthAwarePaginator<int, Student>
      */
     public function forTable(ScopedContext $context, Campus $campus, array $filters = [], string $search = '', int $perPage = 25): LengthAwarePaginator
@@ -41,9 +45,11 @@ final class StudentQuery
                 'progress',
             ])
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['control_number', 'name'], $search))
-            ->when($filters['career'] ?? null, fn (Builder $query, string $career) => $query->where('career_id', $career))
-            ->when($filters['plan'] ?? null, fn (Builder $query, string $plan) => $query->where('study_plan_id', $plan))
-            ->when($filters['semester'] ?? null, fn (Builder $query, int $semester) => $query->where('current_semester', $semester))
+            ->when($filters['career'] ?? null, fn (Builder $query, string $career) => $this->whereKeyFromClient($query, 'career_id', $career))
+            ->when($filters['plan'] ?? null, fn (Builder $query, string $plan) => $this->whereKeyFromClient($query, 'study_plan_id', $plan))
+            ->when($filters['semester'] ?? null, fn (Builder $query, int|string $semester) => filter_var($semester, FILTER_VALIDATE_INT) === false
+                ? $query->whereRaw('false')
+                : $query->where('current_semester', (int) $semester))
             ->when($filters['status'] ?? null, fn (Builder $query, string $status) => $status === self::WITHOUT_STATUS
                 ? $query->whereNull('status')
                 : $query->where('status', $status))
@@ -72,7 +78,9 @@ final class StudentQuery
     }
 
     /**
-     * Los alumnos del campus que el usuario puede ver.
+     * Los alumnos del campus que el usuario puede ver: con cada alcance de StudentPolicy::VIEWERS en ese campus,
+     * los que covers() le daría, es decir, su departamento (de la carrera) y su carrera cuando el alcance los
+     * trae. Un alcance sin ninguno de los dos cubre todo el campus.
      *
      * @return Builder<Student>
      */
@@ -80,16 +88,32 @@ final class StudentQuery
     {
         $query = Student::query()->where('students.campus_id', $campus->id);
 
-        if ($context->covers(Role::Subdireccion, $campus)) {
+        if ($context->isAdmin()) {
             return $query;
         }
 
-        $scopes = $context->scopes()->filter(fn (RoleScope $scope): bool => $scope->campus_id === $campus->id);
-        $careers = $scopes->where('role', Role::Coordinador)->pluck('career_id')->all();
-        $departments = $scopes->where('role', Role::JefeDepartamento)->pluck('department_id')->all();
+        $scopes = $context->scopes()->filter(fn (RoleScope $scope): bool => $scope->campus_id === $campus->id
+            && in_array($scope->role, StudentPolicy::VIEWERS, true));
 
-        return $query->where(fn (Builder $query) => $query
-            ->whereIn('career_id', $careers)
-            ->orWhereIn('career_id', Career::withTrashed()->whereIn('department_id', $departments)->select('id')));
+        return $query->where(function (Builder $query) use ($scopes): void {
+            $query->whereRaw('false');
+
+            foreach ($scopes as $scope) {
+                $query->orWhere(fn (Builder $covered) => $covered
+                    ->whereRaw('true')
+                    ->when($scope->department_id, fn (Builder $covered, string $department) => $covered
+                        ->whereIn('career_id', Career::withTrashed()->where('department_id', $department)->select('id')))
+                    ->when($scope->career_id, fn (Builder $covered, string $career) => $covered->where('career_id', $career)));
+            }
+        });
+    }
+
+    /**
+     * @param  Builder<Student>  $query
+     * @return Builder<Student>
+     */
+    private function whereKeyFromClient(Builder $query, string $column, string $id): Builder
+    {
+        return Str::isUuid($id) ? $query->where($column, $id) : $query->whereRaw('false');
     }
 }

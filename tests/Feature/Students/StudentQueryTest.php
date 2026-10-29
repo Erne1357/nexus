@@ -81,14 +81,19 @@ it('no lista nada a quien no tiene alcance en ese campus, aunque lo tenga en otr
         ->and(listedControlNumbers($teacherHead, $this->campus))->toBe([]);
 });
 
-it('lo que lista coincide con lo que la policy deja ver', function () {
-    $head = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->department->id])->create();
-    $listed = listedControlNumbers($head, $this->campus);
+it('lo que lista coincide con lo que la policy deja ver, también con alcances que traen columnas de más: :dataset', function (User $user) {
+    $listed = listedControlNumbers($user, $this->campus);
 
     foreach ($this->students as $controlNumber => $student) {
-        expect($head->can('view', $student))->toBe(in_array((string) $controlNumber, $listed, true));
+        expect($user->can('view', $student))->toBe(in_array((string) $controlNumber, $listed, true));
     }
-});
+})->with([
+    'subdirección' => fn () => User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->campus->id])->create(),
+    'subdirección con departamento' => fn () => User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->campus->id, 'department_id' => $this->department->id])->create(),
+    'jefe de departamento' => fn () => User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->department->id])->create(),
+    'jefe de departamento con carrera' => fn () => User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->department->id, 'career_id' => $this->iti->id])->create(),
+    'coordinador' => fn () => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create(),
+]);
 
 it('filtra por carrera, plan, semestre y estatus, también por los que no tienen estatus', function (array $filters, array $expected) {
     $filters = array_map(fn ($value) => $value instanceof Closure ? $value($this) : $value, $filters);
@@ -100,6 +105,15 @@ it('filtra por carrera, plan, semestre y estatus, también por los que no tienen
     'semestre' => [['semester' => 3], ['21000001', '21000003']],
     'estatus' => [['status' => 'baja_temporal'], ['21000002']],
     'sin estatus' => [['status' => StudentQuery::WITHOUT_STATUS], ['21000004']],
+    'semestre que llega como texto' => [['semester' => '5'], ['21000002']],
+]);
+
+it('un filtro que llega alterado del navegador no truena: no encuentra a nadie', function (array $filters) {
+    expect(listedControlNumbers(User::factory()->admin()->create(), $this->campus, $filters))->toBe([]);
+})->with([
+    'carrera que no es uuid' => [['career' => 'abc']],
+    'plan que no es uuid' => [['plan' => "1' or '1'='1"]],
+    'semestre que no es número' => [['semester' => 'x']],
 ]);
 
 it('busca por número de control o por nombre, de forma literal y sin distinguir mayúsculas', function () {
