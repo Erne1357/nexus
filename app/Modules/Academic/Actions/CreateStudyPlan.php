@@ -34,6 +34,7 @@ final class CreateStudyPlan
     public function handle(array $data): StudyPlan
     {
         $code = $this->rules->normalizeCode($data['code']);
+        $this->rules->ensureTextIsPresent($data, required: true);
         $this->rules->ensureNumbersAreValid($data);
 
         return DB::transaction(function () use ($code, $data): StudyPlan {

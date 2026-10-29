@@ -52,6 +52,7 @@ final class UpdateStudyPlan
             $data['code'] = $this->rules->normalizeCode($data['code']);
         }
 
+        $this->rules->ensureTextIsPresent($data);
         $this->rules->ensureNumbersAreValid($data);
 
         return DB::transaction(function () use ($plan, $data): StudyPlan {

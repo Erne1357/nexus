@@ -67,6 +67,36 @@ final class StudyPlanRules
     }
 
     /**
+     * El nombre y la versión (NOT NULL en la base) no pueden ser null ni quedar vacíos. Con
+     * `$required` revisa los dos aunque falten en `$data` (alta); sin él, solo los que vengan (edición).
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws ValidationException
+     */
+    public function ensureTextIsPresent(array $data, bool $required = false): void
+    {
+        $labels = ['name' => 'El nombre', 'version' => 'La versión'];
+        $errors = [];
+
+        foreach ($labels as $field => $label) {
+            if (! $required && ! array_key_exists($field, $data)) {
+                continue;
+            }
+
+            $value = $data[$field] ?? null;
+
+            if (! is_string($value) || trim($value) === '') {
+                $errors[$field] = "{$label} no puede quedar vacío.";
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    /**
      * Revisa los semestres y los créditos que vengan en `$data`; null es «sin capturar».
      *
      * @param  array<string, mixed>  $data

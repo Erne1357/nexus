@@ -69,6 +69,16 @@ describe('CreateStudyPlan', function () {
         expect($plan->semesters_count)->toBeNull()->and($plan->total_credits)->toBeNull()->and($plan->valid_from)->toBeNull();
     });
 
+    it('rechaza un nombre o una versión null o vacíos con error en su campo', function (string $field, mixed $value) {
+        expect(planErrors(fn () => newPlan([$field => $value])))->toHaveKey($field)
+            ->and(StudyPlan::count())->toBe(1);
+    })->with([
+        'nombre null' => ['name', null],
+        'nombre vacío' => ['name', '  '],
+        'versión null' => ['version', null],
+        'versión vacía' => ['version', ''],
+    ]);
+
     it('rechaza una clave repetida aun entre los borrados', function () {
         $this->plan->delete();
 
@@ -118,6 +128,16 @@ describe('UpdateStudyPlan', function () {
         expect(planErrors(fn () => app(UpdateStudyPlan::class)->handle($this->plan, ['code' => 'otro-1'])))->toHaveKey('code')
             ->and($this->plan->fresh()->code)->toBe('ISIC-2010-224');
     });
+
+    it('rechaza un nombre o una versión null o vacíos con error en su campo y no cambia nada', function (string $field, mixed $value) {
+        expect(planErrors(fn () => app(UpdateStudyPlan::class)->handle($this->plan, [$field => $value])))->toHaveKey($field)
+            ->and($this->plan->fresh()->{$field})->not->toBeEmpty();
+    })->with([
+        'nombre null' => ['name', null],
+        'nombre vacío' => ['name', ''],
+        'versión null' => ['version', null],
+        'versión vacía' => ['version', ' '],
+    ]);
 
     it('valida semestres y créditos', function () {
         expect(planErrors(fn () => app(UpdateStudyPlan::class)->handle($this->plan, ['semesters_count' => 0])))->toHaveKey('semesters_count')

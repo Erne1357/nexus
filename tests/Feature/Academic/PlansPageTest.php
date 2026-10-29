@@ -246,7 +246,8 @@ describe('admin', function () {
         $this->get(route('academic.plans'))->assertOk();
         $queries = count(DB::getQueryLog());
 
-        expect($queries)->toBeLessThanOrEqual(11);
+        // 10 medidas: constante con el número de planes (sesión, auth, carreras, página, conteo, relaciones).
+        expect($queries)->toBe(10);
     });
 });
 
