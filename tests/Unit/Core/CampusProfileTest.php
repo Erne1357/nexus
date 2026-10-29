@@ -80,6 +80,25 @@ it('se convierte de vuelta en el arreglo que guarda campuses.settings', function
         ->and(CampusProfile::fromArray([])->toArray())->toHaveKeys(array_keys($settings));
 });
 
+it('se resume en una línea para la columna Perfil de flujo de la tabla de campus', function (array $settings, string $summary) {
+    expect(CampusProfile::fromArray($settings)->summary())->toBe($summary);
+})->with([
+    'presencial por omisión' => [[], 'Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00'],
+    'con visto bueno de Subdirección' => [
+        ['requires_subdireccion_approval' => true],
+        'Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00 · visto bueno de Subdirección',
+    ],
+    'dos días seguidos' => [
+        ['days' => [5, 6], 'block_minutes' => 120, 'day_start' => '08:00', 'day_end' => '14:00'],
+        'Salones · bloques de 120 min · viernes y sábado, 8:00 a 14:00',
+    ],
+    'un solo día' => [['days' => [6], 'day_start' => '00:30', 'day_end' => '12:30'], 'Salones · bloques de 60 min · sábado, 0:30 a 12:30'],
+    'días salteados, sin salones ni bloques, central y con externos' => [
+        ['uses_rooms' => false, 'uses_time_blocks' => false, 'staffing_mode' => 'central', 'days' => [1, 3, 5], 'allow_external_teachers' => true],
+        'Sin salones · sin bloques fijos · lunes, miércoles y viernes, 7:00 a 21:00 · asignación central · docentes externos',
+    ],
+]);
+
 it('rechaza un perfil con valores inválidos', function (array $settings) {
     expect(fn () => CampusProfile::fromArray($settings))->toThrow(InvalidArgumentException::class);
 })->with([
