@@ -80,17 +80,47 @@ describe('admin', function () {
             ->assertViewHas('students', listsStudents(['24111258']));
     });
 
+    it('filtra por plan, y al cambiar un filtro vuelve a la primera página', function () {
+        $plan = StudyPlan::factory()->for($this->isc)->create(['code' => 'ISC-2020']);
+        foreach (range(1, 26) as $i) {
+            Student::factory()->for($plan)->create(['control_number' => sprintf('2412%04d', $i), 'campus_id' => $this->campus->id]);
+        }
+
+        studentsPageAs($this->admin, $this->campus)
+            ->call('gotoPage', 2)
+            ->set('plan', $plan->id)
+            ->assertSet('paginators.page', 1)
+            ->assertViewHas('students', fn ($students): bool => $students->total() === 26);
+    });
+
+    it('olvida un filtro que no aplica en el campus de la credencial, en lugar de dejar la lista vacía sin decir por qué', function () {
+        studentsPageAs($this->admin, $this->other)
+            ->set('career', $this->ind->id)
+            ->assertSet('career', '')
+            ->assertViewHas('students', listsStudents(['24119999']));
+    });
+
+    it('sin alumnos en el campus, dice que llegan con la importación; con una búsqueda sin resultados, que nada coincide', function () {
+        studentsPageAs($this->admin, Campus::factory()->create())
+            ->assertSee('Este campus todavía no tiene alumnos: llegan con la importación de alumnos del SII.');
+
+        studentsPageAs($this->admin, $this->campus)
+            ->set('search', 'nadie se llama así')
+            ->assertSee('Ningún alumno coincide con la búsqueda.');
+    });
+
     it('busca por número de control o nombre', function () {
         studentsPageAs($this->admin, $this->campus)
             ->set('search', 'ávila')
             ->assertViewHas('students', listsStudents(['24111241']));
     });
 
-    it('un filtro alterado desde el navegador no truena: no encuentra a nadie', function () {
+    it('un filtro alterado desde el navegador no truena: se olvida', function () {
         studentsPageAs($this->admin, $this->campus)
             ->set('career', 'no-es-un-uuid')
             ->assertOk()
-            ->assertViewHas('students', listsStudents([]));
+            ->assertSet('career', '')
+            ->assertViewHas('students', listsStudents(['24111234', '24111241', '24111258']));
     });
 });
 

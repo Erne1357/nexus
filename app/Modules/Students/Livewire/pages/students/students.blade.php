@@ -67,28 +67,30 @@
                 @endscope
 
                 @scope('cell_status', $student)
-                    <x-core::status-badge :tone="$student->status?->tone() ?? 'draft'" :label="$student->status?->label() ?? 'Sin estatus'" :icon="$student->status === null ? 'o-exclamation-triangle' : $student->status->icon()" />
+                    @include('students::status-badge', ['status' => $student->status])
                 @endscope
 
                 <x-slot:empty>
-                    <x-icon name="o-academic-cap" label="Ningún alumno coincide con la búsqueda." />
+                    <x-icon name="o-academic-cap" :label="$filtered ? 'Ningún alumno coincide con la búsqueda.' : 'Este campus todavía no tiene alumnos: llegan con la importación de alumnos del SII.'" />
                 </x-slot:empty>
             </x-table>
 
             <ul class="divide-y divide-base-300 md:hidden" data-testid="student-cards">
-                @foreach ($students as $student)
+                @forelse ($students as $student)
                     <li wire:key="student-card-{{ $student->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $student->is_active])>
                         <div class="flex items-center gap-2.5">
                             <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $student->is_active])>{{ $student->control_number }}</span>
-                            <span class="min-w-0 flex-1 font-semibold">{{ $student->name }}</span>
-                            <x-core::status-badge :tone="$student->status?->tone() ?? 'draft'" :label="$student->status?->label() ?? 'Sin estatus'" :icon="$student->status === null ? 'o-exclamation-triangle' : $student->status->icon()" />
+                            <span @class(['min-w-0 flex-1', 'font-semibold' => $student->is_active])>{{ $student->name }}</span>
+                            @include('students::status-badge', ['status' => $student->status])
                         </div>
                         <div class="text-sm text-neutral">
                             <span class="font-mono">{{ $student->career->code }}</span> · semestre <span class="font-mono">{{ $student->current_semester ?? '—' }}</span>
                             @if ($student->progress) · <span class="font-mono">{{ $student->progress->credits_approved }}</span> créditos @endif
                         </div>
                     </li>
-                @endforeach
+                @empty
+                    <li class="px-4 py-6 text-center text-neutral">{{ $filtered ? 'Ningún alumno coincide con la búsqueda.' : 'Este campus todavía no tiene alumnos: llegan con la importación de alumnos del SII.' }}</li>
+                @endforelse
             </ul>
 
             @if ($students->isNotEmpty() || $students->hasPages())

@@ -50,12 +50,15 @@ new #[Title('Alumnos')] class extends Component
     public function with(StudentQuery $students, ScopedContext $context): array
     {
         $campus = $context->activeCampus();
+        $options = $campus === null ? ['careers' => [], 'plans' => [], 'semesters' => []] : $students->filterOptions($context, $campus);
+        $this->forgetFiltersOutside($options);
         $filters = array_filter(['career' => $this->career, 'plan' => $this->plan, 'semester' => $this->semester, 'status' => $this->status], fn (string $value): bool => $value !== '');
 
         return [
             'campus' => $campus,
             'students' => $campus === null ? null : $students->forTable($context, $campus, $filters, $this->search),
-            'options' => $campus === null ? ['careers' => [], 'plans' => [], 'semesters' => []] : $students->filterOptions($context, $campus),
+            'options' => $options,
+            'filtered' => $filters !== [] || trim($this->search) !== '',
             'statuses' => [
                 ...array_map(fn (StudentStatus $status): array => ['id' => $status->value, 'name' => $status->label()], StudentStatus::cases()),
                 ['id' => StudentQuery::WITHOUT_STATUS, 'name' => 'Sin estatus'],
@@ -64,15 +67,30 @@ new #[Title('Alumnos')] class extends Component
             'headers' => [
                 ['key' => 'control_number', 'label' => 'Control'],
                 ['key' => 'name', 'label' => 'Nombre'],
-                ['key' => 'career', 'label' => 'Carrera', 'sortable' => false],
-                ['key' => 'plan', 'label' => 'Plan', 'class' => 'max-[1200px]:hidden', 'sortable' => false],
+                ['key' => 'career', 'label' => 'Carrera'],
+                ['key' => 'plan', 'label' => 'Plan', 'class' => 'max-[1200px]:hidden'],
                 ['key' => 'current_semester', 'label' => 'Semestre', 'class' => 'text-right'],
-                ['key' => 'credits', 'label' => 'Créditos', 'class' => 'text-right max-[1200px]:hidden', 'sortable' => false],
+                ['key' => 'credits', 'label' => 'Créditos', 'class' => 'text-right max-[1200px]:hidden'],
                 ['key' => 'status', 'label' => 'Estatus'],
             ],
             // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
             'rowDecoration' => ['text-neutral' => fn (Student $student): bool => ! $student->is_active],
         ];
+    }
+
+    /**
+     * Olvida la carrera, el plan o el semestre que no están entre las opciones del campus de la credencial: los
+     * filtros se recuerdan en la sesión, y uno de otro campus dejaría la lista vacía sin mostrarse en su select.
+     *
+     * @param  array{careers: list<array{id: string, name: string}>, plans: list<array{id: string, name: string}>, semesters: list<array{id: int, name: string}>}  $options
+     */
+    private function forgetFiltersOutside(array $options): void
+    {
+        foreach (['career' => 'careers', 'plan' => 'plans', 'semester' => 'semesters'] as $property => $list) {
+            if ($this->{$property} !== '' && ! in_array($this->{$property}, array_map('strval', array_column($options[$list], 'id')), true)) {
+                $this->{$property} = '';
+            }
+        }
     }
 
     public function updated(string $property): void
