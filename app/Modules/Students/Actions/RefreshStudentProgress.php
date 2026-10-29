@@ -9,13 +9,16 @@ use App\Modules\Students\Models\StudentProgress;
 use App\Modules\Students\Queries\PlanGrid;
 use App\Modules\Students\Queries\PlanGridQuery;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Recalcula `student_progress` de todos los alumnos (sin los borrados) desde su kardex y la retícula de su
  * plan (PlanGrid), de 500 en 500. Lo aprobado da créditos y materias; lo aprobado y lo que está cursando dicen
  * su especialidad. Escribe por alumno con un upsert por bloque: volver a calcular reescribe el avance, también
  * si el alumno cambió de plan. Un alumno cuyo plan todavía no tiene retícula se queda sin avance, en lugar de
- * uno en ceros que parecería que ya terminó; al final se borra el de los alumnos borrados.
+ * uno en ceros que parecería que ya terminó; al final se borra el de los alumnos borrados. Todo va en una sola
+ * transacción: quien lee el avance mientras se recalcula (los elegibles) ve el anterior completo y no una mezcla
+ * de bloques, y si el recálculo falla a la mitad, el avance se queda como estaba.
  *
  * Es una tabla derivada que se recalcula completa (decisión de modelado 5), así que no deja bitácora ni avisa:
  * lo que cambió ya lo registró la importación. La corre el job RecomputeStudentProgress.
@@ -27,6 +30,13 @@ final class RefreshStudentProgress
     public function __construct(private readonly PlanGridQuery $grids) {}
 
     public function handle(): void
+    {
+        DB::transaction(function (): void {
+            $this->refresh();
+        });
+    }
+
+    private function refresh(): void
     {
         /** @var array<string, PlanGrid> $grids */
         $grids = [];
