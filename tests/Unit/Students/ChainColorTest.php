@@ -17,7 +17,9 @@ it('da a cada cadena su color en orden, y los repite después del duodécimo', f
     [12, ChainColor::Chain1],
 ]);
 
-it('da las clases de la franja y de la muestra de la leyenda con el token de su color', function () {
-    expect(ChainColor::Chain3->stripeClasses())->toBe('shadow-[inset_5px_0_0_var(--color-chain-3)]')
-        ->and(ChainColor::Chain3->swatchClasses())->toBe('border-chain-3');
-});
+it('da a cada color las clases de la franja y de la muestra de la leyenda con su propio token', function (int $number) {
+    $color = ChainColor::forChain($number - 1);
+
+    expect($color->stripeClasses())->toBe("shadow-[inset_5px_0_0_var(--color-chain-{$number})]")
+        ->and($color->swatchClasses())->toBe("border-chain-{$number}");
+})->with(range(1, 12));

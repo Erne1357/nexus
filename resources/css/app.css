@@ -32,8 +32,9 @@
 
 /*
 | Colores propios de Nexus que no son de daisyUI (banda, texto sobre la banda, texto secundario sobre
-| gris polvo y las cadenas de seriación). Cada tema los define abajo; aquí se exponen como utilidades: bg-band, text-band-content,
-| text-band-muted, text-secondary-muted.
+| gris polvo y las cadenas de seriación de la retícula del alumno). Cada tema los define abajo; aquí se
+| exponen como utilidades: bg-band, text-band-content, text-band-muted, text-secondary-muted y chain-1 a
+| chain-12 (border-chain-N, var(--color-chain-N)).
 */
 @theme inline {
     --color-band: var(--nexus-band);

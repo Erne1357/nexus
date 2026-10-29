@@ -59,12 +59,13 @@
             <p class="text-neutral">Puede seleccionar materias hasta el semestre <span class="font-mono">{{ $record->reachSemester }}</span>, el suyo y dos más.</p>
         @endif
 
-        <div x-data="studentGrid" @keydown.escape.window="clear()" class="space-y-3">
+        {{-- wire:ignore: el resaltado vive en Alpine, y volver a pintar la página no debe borrarlo. --}}
+        <div x-data="studentGrid" wire:ignore @keydown.escape.window="clearUnlessLayerOpen()" class="space-y-3">
         @if ($record->chains !== [])
             <div class="flex flex-wrap items-center gap-1.5" data-testid="chain-legend">
                 <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Cadenas de seriación</span>
                 @foreach ($record->chains as $chain)
-                    <button type="button" data-chain-chip data-chain="{{ $chain['index'] }}" aria-pressed="false" @click="toggleChain('{{ $chain['index'] }}')"
+                    <button type="button" data-chain-chip data-chain="{{ $chain['index'] }}" data-name="{{ $chain['name'] }}" aria-pressed="false" @click="toggleChain('{{ $chain['index'] }}')"
                         class="inline-flex h-7 items-center gap-1.5 rounded-field border border-base-300 bg-base-100 px-2 text-[12.5px] aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary">
                         <span @class(['size-3.5 rounded-sm border-[3px]', ChainColor::forChain($chain['index'])->swatchClasses()]) aria-hidden="true"></span>
                         {{ $chain['name'] }}

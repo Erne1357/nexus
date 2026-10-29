@@ -399,13 +399,23 @@ document.addEventListener('alpine:init', () => {
         /** { code } de una materia, { chain } de una cadena, o null. */
         selected: null,
         hint: '',
+        tiles: [],
+        byCode: {},
+        pre: {},
+        post: {},
 
+        /** La seriación no cambia mientras la ficha está abierta: se arma una vez. */
         init() {
             this.hint = this.$refs.info.textContent.trim();
-        },
+            this.tiles = [...this.$root.querySelectorAll('[data-subject]')];
+            this.byCode = Object.fromEntries(this.tiles.map((tile) => [tile.dataset.subject, tile]));
 
-        tiles() {
-            return [...this.$root.querySelectorAll('[data-subject]')];
+            for (const tile of this.tiles) {
+                for (const prerequisite of (tile.dataset.prereqs ?? '').split(' ').filter((code) => this.byCode[code])) {
+                    (this.pre[tile.dataset.subject] ??= []).push(prerequisite);
+                    (this.post[prerequisite] ??= []).push(tile.dataset.subject);
+                }
+            }
         },
 
         toggleSubject(tile) {
@@ -417,63 +427,55 @@ document.addEventListener('alpine:init', () => {
             this.select(this.selected?.chain === chain ? null : { chain });
         },
 
-        clear() {
-            if (this.selected !== null) {
+        /** Esc cierra solo la capa de arriba (DESIGN.md, "Movimiento"): con el menú o un diálogo abierto, no toca el resaltado. */
+        clearUnlessLayerOpen() {
+            const layerOpen = document.body.dataset.menu === 'open' || document.querySelector('dialog[open]') !== null;
+
+            if (this.selected !== null && !layerOpen) {
                 this.select(null);
             }
         },
 
-        select(selection) {
-            this.selected = selection;
-            const tiles = this.tiles();
-            const byCode = Object.fromEntries(tiles.map((tile) => [tile.dataset.subject, tile]));
-            const pre = {};
-            const post = {};
+        walk(graph, start) {
+            const seen = new Set();
+            const pending = [start];
 
-            for (const tile of tiles) {
-                for (const prerequisite of (tile.dataset.prereqs ?? '').split(' ').filter((code) => byCode[code])) {
-                    (pre[tile.dataset.subject] ??= []).push(prerequisite);
-                    (post[prerequisite] ??= []).push(tile.dataset.subject);
+            while (pending.length) {
+                for (const next of graph[pending.pop()] ?? []) {
+                    if (!seen.has(next)) {
+                        seen.add(next);
+                        pending.push(next);
+                    }
                 }
             }
 
-            const walk = (graph, start) => {
-                const seen = new Set();
-                const pending = [start];
+            return seen;
+        },
 
-                while (pending.length) {
-                    for (const next of graph[pending.pop()] ?? []) {
-                        if (!seen.has(next)) {
-                            seen.add(next);
-                            pending.push(next);
-                        }
-                    }
-                }
-
-                return seen;
-            };
-
+        select(selection) {
+            this.selected = selection;
             let chain = new Set();
             let text = this.hint;
 
             if (selection?.code) {
-                const name = (code) => `${code} ${byCode[code].dataset.name}`;
-                const requires = pre[selection.code] ?? [];
-                const opens = post[selection.code] ?? [];
-                chain = new Set([selection.code, ...walk(pre, selection.code), ...walk(post, selection.code)]);
+                const name = (code) => `${code} ${this.byCode[code].dataset.name}`;
+                const requires = this.pre[selection.code] ?? [];
+                const opens = this.post[selection.code] ?? [];
+                chain = new Set([selection.code, ...this.walk(this.pre, selection.code), ...this.walk(this.post, selection.code)]);
                 text = `${name(selection.code)}: `
                     + (requires.length ? `pide ${requires.map(name).join(', ')}` : 'no pide seriación')
                     + ' · '
                     + (opens.length ? `abre ${opens.map(name).join(', ')}` : 'no abre ninguna');
             } else if (selection?.chain !== undefined) {
-                const members = tiles.filter((tile) => tile.dataset.chain === selection.chain);
+                const chip = this.$root.querySelector(`[data-chain-chip][data-chain="${selection.chain}"]`);
+                const members = this.tiles.filter((tile) => tile.dataset.chain === selection.chain);
                 chain = new Set(members.map((tile) => tile.dataset.subject));
-                text = `Cadena de ${members[0]?.dataset.name ?? ''}: ${members.length} materias.`;
+                text = `Cadena de ${chip?.dataset.name ?? ''}: ${members.length} materias.`;
             }
 
             this.$refs.grid.toggleAttribute('data-focus', selection !== null);
 
-            for (const tile of tiles) {
+            for (const tile of this.tiles) {
                 tile.toggleAttribute('data-on-chain', chain.has(tile.dataset.subject));
                 tile.toggleAttribute('data-me', selection?.code === tile.dataset.subject);
                 tile.setAttribute('aria-pressed', selection?.code === tile.dataset.subject ? 'true' : 'false');
