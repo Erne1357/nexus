@@ -12,6 +12,8 @@ use App\Modules\Imports\Jobs\ApplyQueuedBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Templates\TemplateRegistry;
+use Dom\Element;
+use Dom\HTMLDocument;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Queue;
@@ -73,6 +75,21 @@ describe('admin', function () {
             ->assertSee('Fila 3')
             ->assertSee('clave: El registro está inactivo: se actualizan sus datos, pero sigue inactivo.')
             ->assertDontSee('Fila 4');
+    });
+
+    it('pinta el estado del lote y el tipo de cada mensaje con la insignia de estado de DESIGN.md', function () {
+        $badgeClasses = fn (Testable $page, string $text): array => collect(HTMLDocument::createFromString('<!DOCTYPE html><body>'.$page->html().'</body>', LIBXML_NOERROR)->querySelectorAll('.badge'))
+            ->filter(fn (Element $badge): bool => trim($badge->textContent) === $text)
+            ->map(fn (Element $badge): array => iterator_to_array($badge->classList, false))
+            ->values()
+            ->all();
+
+        $page = wizardForBatch($this->admin, $this->batch);
+
+        expect($badgeClasses($page, 'Validado'))->toHaveCount(1)->each->toContain('badge-success', 'badge-soft')
+            ->and($badgeClasses($page, 'Error'))->not->toBeEmpty()->each->toContain('badge-error', 'badge-soft');
+
+        expect($badgeClasses($page->set('issues', 'warnings'), 'Advertencia'))->not->toBeEmpty()->each->toContain('badge-warning', 'badge-soft');
     });
 
     it('sin filas con error no ofrece descargar errores', function () {

@@ -40,6 +40,8 @@ final readonly class CampusProfile
 
     private const int LAST_DAY = 6;
 
+    private const array DAY_NAMES = [1 => 'lunes', 2 => 'martes', 3 => 'miércoles', 4 => 'jueves', 5 => 'viernes', 6 => 'sábado'];
+
     /**
      * @param  list<int>  $days
      */
@@ -108,6 +110,50 @@ final readonly class CampusProfile
             'allow_external_teachers' => $this->allowExternalTeachers,
             'requires_subdireccion_approval' => $this->requiresSubdireccionApproval,
         ];
+    }
+
+    /**
+     * El perfil en una línea para la tabla de campus: salones, bloques, días y jornada, y lo que se
+     * aparta del flujo presencial (asignación central, docentes externos, visto bueno de Subdirección).
+     */
+    public function summary(): string
+    {
+        return implode(' · ', array_filter([
+            $this->usesRooms ? 'Salones' : 'Sin salones',
+            $this->usesTimeBlocks ? "bloques de {$this->blockMinutes} min" : 'sin bloques fijos',
+            self::dayNames($this->days).', '.self::clock($this->dayStart).' a '.self::clock($this->dayEnd),
+            $this->staffingMode === StaffingMode::Central ? 'asignación central' : null,
+            $this->allowExternalTeachers ? 'docentes externos' : null,
+            $this->requiresSubdireccionApproval ? 'visto bueno de Subdirección' : null,
+        ]));
+    }
+
+    /**
+     * «lunes a viernes» si los días van seguidos (tres o más); si no, «viernes y sábado» o
+     * «lunes, miércoles y viernes».
+     *
+     * @param  list<int>  $days
+     */
+    private static function dayNames(array $days): string
+    {
+        $names = array_map(fn (int $day): string => self::DAY_NAMES[$day], $days);
+        $count = count($days);
+
+        if ($count >= 3 && $count - 1 === $days[$count - 1] - $days[0]) {
+            return $names[0].' a '.$names[$count - 1];
+        }
+
+        $last = array_pop($names);
+
+        return $names === [] ? $last : implode(', ', $names).' y '.$last;
+    }
+
+    /**
+     * «07:00» como «7:00».
+     */
+    private static function clock(string $time): string
+    {
+        return (int) substr($time, 0, 2).substr($time, 2);
     }
 
     /**

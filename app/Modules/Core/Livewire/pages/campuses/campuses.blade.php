@@ -1,83 +1,122 @@
+{{--
+    Anatomía de una pantalla de catálogo (DESIGN.md, "Layout"): encabezado con búsqueda, filtro y una
+    sola acción principal; tabla en una superficie blanca con filete, la clave en Mono, el estado con su
+    insignia y las acciones en btn-ghost; al pie, el rango y la paginación. Debajo de 768 px la tabla
+    cede su lugar a renglones apilados (clave, nombre y estado; luego el detalle; luego las acciones),
+    que no repiten los data-testid de la tabla.
+--}}
 <div>
-    <x-header title="Campus" subtitle="Cada campus con su modalidad y su perfil de flujo, que decide qué pasos del proceso aplican." separator progress-indicator>
-        <x-slot:actions>
-            <x-input
-                wire:model.live.debounce.300ms="search"
-                placeholder="Buscar por código o nombre"
-                aria-label="Buscar campus"
-                icon="o-magnifying-glass"
-                clearable
-            />
+    <x-header title="Campus" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
+        <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
+            Cada campus con su modalidad y su perfil de flujo, que decide qué pasos del proceso aplican.
+        </x-slot:subtitle>
 
-            @if ($canSeeInactive)
-                <x-select
-                    wire:model.live="status"
-                    aria-label="Estado"
-                    :options="$statuses"
-                    placeholder="Activos e inactivos"
+        <x-slot:actions class="w-full flex-wrap md:w-auto">
+            <div class="w-full md:w-64">
+                <x-input
+                    wire:model.live.debounce.300ms="search"
+                    placeholder="Buscar por código o nombre"
+                    aria-label="Buscar campus"
+                    icon="o-magnifying-glass"
+                    clearable
                 />
-            @else
-                <span class="tooltip tooltip-bottom" data-tip="Solo el administrador ve los campus inactivos.">
-                    <x-select aria-label="Estado" :options="[]" placeholder="Activos" disabled />
-                </span>
-            @endif
+            </div>
+
+            <div class="flex-1 md:w-44 md:flex-none">
+                @if ($canSeeInactive)
+                    <x-select
+                        wire:model.live="status"
+                        aria-label="Estado"
+                        :options="$statuses"
+                        placeholder="Activos e inactivos"
+                    />
+                @else
+                    <span class="tooltip tooltip-bottom block" data-tip="Solo el administrador ve los campus inactivos.">
+                        <x-select aria-label="Estado" :options="[]" placeholder="Activos" disabled />
+                    </span>
+                @endif
+            </div>
 
             @if ($canCreate)
-                <x-button label="Nuevo campus" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+                <x-button label="Nuevo campus" icon="o-plus" class="btn-primary max-md:flex-1" wire:click="create" spinner="create" />
             @else
-                <span class="tooltip tooltip-left" data-tip="Solo el administrador da de alta campus.">
-                    <x-button label="Nuevo campus" icon="o-plus" class="btn-primary" disabled />
+                <span class="tooltip tooltip-left max-md:flex-1" data-tip="Solo el administrador da de alta campus.">
+                    <x-button label="Nuevo campus" icon="o-plus" class="btn-primary w-full" disabled />
                 </span>
             @endif
         </x-slot:actions>
     </x-header>
 
-    <x-card shadow>
-        <x-table :headers="$headers" :rows="$campuses" with-pagination>
+    <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
+        <x-table
+            :headers="$headers"
+            :rows="$campuses"
+            :row-decoration="$rowDecoration"
+            class="max-md:hidden [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
+        >
+            @scope('cell_code', $campus)
+                <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $campus->is_active])>{{ $campus->code }}</span>
+            @endscope
+
             @scope('cell_modality', $campus)
                 {{ $campus->modality->label() }}
             @endscope
 
-            @scope('cell_is_active', $campus)
-                @if ($campus->is_active)
-                    <x-badge value="Activo" class="badge-success badge-soft" />
+            @scope('cell_profile', $campus, $profiles)
+                @if ($profiles[$campus->id] === null)
+                    <x-core::status-badge tone="error" label="Perfil inválido" />
                 @else
-                    <x-badge value="Inactivo" class="badge-ghost" />
+                    <span class="text-neutral">{{ $profiles[$campus->id] }}</span>
                 @endif
             @endscope
 
-            @scope('actions', $campus)
-                <div class="flex justify-end gap-1">
-                    <x-button
-                        icon="o-pencil-square"
-                        wire:click="edit('{{ $campus->id }}')"
-                        aria-label="Editar {{ $campus->code }}"
-                        data-testid="edit-{{ $campus->code }}"
-                        class="btn-ghost btn-sm"
-                        spinner="edit('{{ $campus->id }}')"
-                    />
+            @scope('cell_is_active', $campus)
+                <x-core::status-badge :tone="$campus->is_active ? 'success' : 'neutral'" :label="$campus->is_active ? 'Activo' : 'Inactivo'" />
+            @endscope
 
-                    @can('update', $campus)
-                        <x-button
-                            :label="$campus->is_active ? 'Desactivar' : 'Activar'"
-                            wire:click="toggleActive('{{ $campus->id }}')"
-                            wire:confirm="{{ $campus->is_active ? '¿Desactivar el campus '.$campus->code.'? Nadie podrá trabajar en él hasta que se reactive.' : '¿Activar el campus '.$campus->code.'?' }}"
-                            class="btn-ghost btn-sm"
-                            spinner="toggleActive('{{ $campus->id }}')"
-                        />
-                    @else
-                        <span class="tooltip tooltip-left" data-tip="Solo el administrador activa o desactiva campus.">
-                            <x-button :label="$campus->is_active ? 'Desactivar' : 'Activar'" class="btn-ghost btn-sm" disabled />
-                        </span>
-                    @endcan
-                </div>
+            @scope('actions', $campus)
+                @include('core::campuses.row-actions', ['campus' => $campus, 'inTable' => true])
             @endscope
 
             <x-slot:empty>
                 <x-icon name="o-building-office-2" label="Ningún campus coincide con la búsqueda." />
             </x-slot:empty>
         </x-table>
-    </x-card>
+
+        <ul class="divide-y divide-base-300 md:hidden" data-testid="campus-cards">
+            @foreach ($campuses as $campus)
+                <li wire:key="campus-card-{{ $campus->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $campus->is_active])>
+                    <div class="flex items-center gap-2.5">
+                        <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $campus->is_active])>{{ $campus->code }}</span>
+                        <span @class(['min-w-0 flex-1', 'font-semibold' => $campus->is_active])>{{ $campus->name }}</span>
+
+                        <x-core::status-badge :tone="$campus->is_active ? 'success' : 'neutral'" :label="$campus->is_active ? 'Activo' : 'Inactivo'" />
+                    </div>
+
+                    <div class="text-neutral">
+                        {{ $campus->modality->label() }} ·
+                        @if ($profiles[$campus->id] === null)
+                            <x-core::status-badge tone="error" label="Perfil inválido" />
+                        @else
+                            {{ $profiles[$campus->id] }}
+                        @endif
+                    </div>
+
+                    @include('core::campuses.row-actions', ['campus' => $campus, 'inTable' => false])
+                </li>
+            @endforeach
+        </ul>
+
+        @if ($campuses->isNotEmpty() || $campuses->hasPages())
+            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
+                @if ($campuses->isNotEmpty())
+                    <p>Campus <span class="font-mono">{{ $campuses->first()->code }}</span>@if ($campuses->count() > 1) a <span class="font-mono">{{ $campuses->last()->code }}</span> · <span class="font-mono">{{ $campuses->firstItem() }}–{{ $campuses->lastItem() }}</span>@else · <span class="font-mono">{{ $campuses->firstItem() }}</span>@endif de <span class="font-mono">{{ $campuses->total() }}</span></p>
+                @endif
+
+                {{ $campuses->onEachSide(1)->links(data: ['scrollTo' => false]) }}
+            </div>
+        @endif
+    </div>
 
     <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo campus' : 'Editar campus'" box-class="max-w-3xl" separator>
         <x-form wire:submit="save" no-separator>

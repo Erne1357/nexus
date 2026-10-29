@@ -8,7 +8,10 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
+use Dom\Element;
+use Dom\HTMLDocument;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
@@ -37,6 +40,62 @@ function listsCampuses(array $codes): Closure
     return fn ($campuses): bool => $campuses->pluck('code')->all() === $codes;
 }
 
+/**
+ * La página como DOM, para revisar clases y estructura y no solo el texto.
+ */
+function campusPageDom(TestResponse $response): HTMLDocument
+{
+    return HTMLDocument::createFromString($response->getContent(), LIBXML_NOERROR);
+}
+
+/**
+ * Las filas de la tabla (de 768 px en adelante), por la clave de su campus.
+ *
+ * @return array<string, Element>
+ */
+function campusTableRowsOn(TestResponse $response): array
+{
+    $rows = [];
+
+    foreach (campusPageDom($response)->querySelectorAll('table tbody tr') as $row) {
+        $rows[trim($row->querySelector('td')->textContent)] = $row;
+    }
+
+    return $rows;
+}
+
+/**
+ * Los renglones apilados del celular, por la clave de su campus.
+ *
+ * @return array<string, Element>
+ */
+function campusCardsOn(TestResponse $response): array
+{
+    $cards = [];
+
+    foreach (campusPageDom($response)->querySelectorAll('[data-testid="campus-cards"] > li') as $card) {
+        $cards[trim($card->querySelector('.font-mono')->textContent)] = $card;
+    }
+
+    return $cards;
+}
+
+/**
+ * @return list<string>
+ */
+function campusClassesOf(?Element $element): array
+{
+    return $element === null ? [] : iterator_to_array($element->classList, false);
+}
+
+/**
+ * El texto visible de un elemento, con los espacios juntos.
+ */
+function campusTextOf(Element $element): string
+{
+    return trim(preg_replace('/\s+/u', ' ', $element->textContent));
+}
+
 function seesCampusMenu(User $user): bool
 {
     test()->actingAs($user);
@@ -46,12 +105,88 @@ function seesCampusMenu(User $user): bool
 }
 
 describe('admin', function () {
-    it('ve la tabla con código, nombre, modalidad y estado de todos los campus', function () {
+    it('ve la tabla con código, nombre, modalidad, perfil de flujo y estado de todos los campus', function () {
         $this->actingAs($this->admin)
             ->get(route('core.campuses'))
             ->assertOk()
-            ->assertSeeInOrder(['Código', 'Nombre', 'Modalidad', 'Activo'])
-            ->assertSeeInOrder(['C1', 'Campus I', 'Presencial', 'C2', 'Campus II', 'EAD', 'Educación a Distancia', 'Mixta', 'Inactivo']);
+            ->assertSeeInOrder(['Código', 'Nombre', 'Modalidad', 'Perfil de flujo', 'Estado'])
+            ->assertSeeInOrder([
+                'C1', 'Campus I', 'Presencial', 'Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00', 'Activo',
+                'C2', 'Campus II',
+                'EAD', 'Educación a Distancia', 'Mixta', 'Inactivo',
+            ]);
+    });
+
+    it('pinta la clave en Mono, el estado con su insignia y la fila inactiva en gris y sin negritas', function () {
+        $rows = campusTableRowsOn($this->actingAs($this->admin)->get(route('core.campuses')));
+
+        expect(array_keys($rows))->toBe(['C1', 'C2', 'EAD']);
+
+        expect(campusClassesOf($rows['C1']))->not->toContain('text-neutral')
+            ->and(campusClassesOf($rows['C1']->querySelector('td .font-mono')))->toContain('font-semibold')
+            ->and(campusClassesOf($badge = $rows['C1']->querySelector('.badge')))->toContain('badge-success', 'badge-soft')
+            ->and(trim($badge->textContent))->toBe('Activo');
+
+        expect(campusClassesOf($rows['EAD']))->toContain('text-neutral')
+            ->and(campusClassesOf($rows['EAD']->querySelector('td .font-mono')))->not->toContain('font-semibold')
+            ->and(campusClassesOf($badge = $rows['EAD']->querySelector('.badge')))->toContain('badge-neutral', 'badge-soft')
+            ->and(trim($badge->textContent))->toBe('Inactivo');
+    });
+
+    it('en el celular apila cada campus: clave, nombre y estado; luego modalidad y perfil; luego las acciones', function () {
+        $cards = campusCardsOn($this->actingAs($this->admin)->get(route('core.campuses')));
+
+        expect(array_keys($cards))->toBe(['C1', 'C2', 'EAD'])
+            ->and(campusTextOf($cards['C1']))->toBe('C1 Campus I Activo Presencial · Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00 Editar Desactivar')
+            ->and(campusTextOf($cards['EAD']))->toStartWith('EAD Educación a Distancia Inactivo Mixta · ')
+            ->and(campusTextOf($cards['EAD']))->toEndWith('Editar Activar')
+            ->and(campusClassesOf($cards['EAD']))->toContain('text-neutral')
+            ->and(campusClassesOf($cards['EAD']->querySelector('.font-mono')))->not->toContain('font-semibold')
+            ->and(campusClassesOf($cards['EAD']->querySelector('.badge')))->toContain('badge-neutral', 'badge-soft')
+            ->and(campusClassesOf($cards['C1']->querySelector('.font-mono')))->toContain('font-semibold')
+            ->and(campusClassesOf($cards['C1']->querySelector('.badge')))->toContain('badge-success', 'badge-soft');
+    });
+
+    it('resume al pie qué campus muestra la página y de cuántos, y pagina de 15 en 15', function () {
+        foreach (range(1, 15) as $number) {
+            Campus::factory()->create(['code' => sprintf('X%02d', $number)]);
+        }
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.campuses')
+            ->assertSeeText('Campus C1 a X12 · 1–15 de 18')
+            ->assertSee('Ir a la página 2')
+            ->call('gotoPage', 2)
+            ->assertSeeText('Campus X13 a X15 · 16–18 de 18');
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.campuses')
+            ->set('search', 'C1')
+            ->assertSeeText('Campus C1 · 1 de 1')
+            ->assertDontSee('Ir a la página 2');
+    });
+
+    it('en una página que quedó vacía (por desactivar el último o un enlace viejo) deja volver a las otras', function () {
+        foreach (range(1, 15) as $number) {
+            Campus::factory()->create(['code' => sprintf('X%02d', $number)]);
+        }
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.campuses')
+            ->call('gotoPage', 3)
+            ->assertSee('Ningún campus coincide con la búsqueda.')
+            ->assertDontSeeText('Campus C1 a')
+            ->assertSee('Ir a la página 1')
+            ->assertSee('Ir a la página 2');
+    });
+
+    it('marca el perfil de flujo guardado que no es válido en lugar de romper la tabla', function () {
+        DB::table('campuses')->where('id', $this->c2->id)->update(['settings' => json_encode(['block_minutes' => 45])]);
+
+        $rows = campusTableRowsOn($this->actingAs($this->admin)->get(route('core.campuses'))->assertOk());
+
+        expect(campusClassesOf($badge = $rows['C2']->querySelector('.badge-error')))->toContain('badge-soft')
+            ->and(trim($badge->textContent))->toBe('Perfil inválido');
     });
 
     it('busca por código o nombre y filtra activos o inactivos', function () {
