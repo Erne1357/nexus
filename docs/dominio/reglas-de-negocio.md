@@ -65,7 +65,7 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 - La especialidad de un alumno sale de su kardex: si aprobó o está cursando materias de una especialidad de su plan, las materias de las otras especialidades ya no le faltan ni cuentan para sus elegibles. Mientras no toma ninguna, cuentan las de todas, porque puede elegir cualquiera (confirmado el 29 de octubre de 2026).
 - Una materia de la retícula del alumno cuenta aunque esté inactiva en el catálogo: el plan se ata al alumno al inscribirse. Por eso no se desactiva una materia que sigue en un plan con alumnos que la necesitan (lo revisa la tarea 1.8; confirmado el 29 de octubre de 2026).
 - Solo cuentan como elegibles los alumnos con estatus `activo`: no cuentan los de baja temporal o definitiva, los egresados, los que quedaron sin estatus porque el SII trajo uno que Nexus no conoce, ni un alumno desactivado (confirmado el 29 de octubre de 2026).
-- R1: `eligible_students` por materia, carrera y campus se calcula desde `student_progress` al importar kardex (`EligibleStudentsQuery`).
+- R1: `eligible_students` por materia, carrera y campus se cuenta al leerlo desde `student_progress` (`EligibleStudentsQuery`), que se recalcula al importar alumnos o kardex. El estatus del alumno cuenta desde que se importa; un cambio de plan, desde el recálculo.
 - R2: `expected_students = eligible_students x (1 - tasa_de_no_inscripción) + repetidores_esperados`, con tasas históricas por materia y campus (`demand.history_terms`, por defecto 4). `suggested_groups = ceil(expected_students / tamaño_objetivo)`, con tamaño objetivo configurable por tipo de materia (`demand.target_group_size`, por defecto 35; laboratorios 25).
 
 ## Aprobaciones y permisos

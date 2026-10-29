@@ -46,10 +46,7 @@ function eligibilityStudent(StudyPlan $plan, Campus $campus, array $attributes =
  */
 function eligibleCounts(StudyPlan $plan, Campus $campus): array
 {
-    $counts = app(EligibleStudentsQuery::class)->countsFor($plan->career_id, $campus->id);
-    ksort($counts);
-
-    return $counts;
+    return sortedCounts(app(EligibleStudentsQuery::class)->countsFor($plan->career, $campus));
 }
 
 /**
@@ -151,6 +148,14 @@ it('no cuenta a un alumno borrado ni a uno cuyo avance se calculó con otro plan
     expect(eligibleCounts($this->plan, $this->campus))->toBe(sortedCounts([$this->a->id => 1, $this->f->id => 1]));
 });
 
-it('sin alumnos elegibles devuelve un mapa vacío', function () {
+it('devuelve un mapa vacío si nadie de la carrera puede cursar nada', function () {
+    $graduate = eligibilityStudent($this->plan, $this->campus);
+    foreach ([$this->a, $this->f, $this->b] as $subject) {
+        KardexRecord::factory()->for($graduate)->for($subject)->create();
+    }
+    eligibilityStudent($this->plan, $this->campus, ['status' => StudentStatus::Egresado, 'current_semester' => null]);
+
+    app(RefreshStudentProgress::class)->handle();
+
     expect(eligibleCounts($this->plan, $this->campus))->toBe([]);
 });
