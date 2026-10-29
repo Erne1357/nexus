@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -40,12 +42,37 @@ function lastToastOf(Testable $component): ?array
 }
 
 /**
- * Un uuid fijo para un registro que la prueba no crea: `fakeKey(10)` siempre da el mismo valor. Lo
- * usan los departamentos y carreras de los alcances mientras Academic no tenga sus tablas (fase 1).
+ * Un uuid fijo: `fakeKey(10)` siempre da el mismo valor. Sirve para un registro que la prueba no crea,
+ * o, con departmentKey() y careerKey(), para comparar contra el que sí crea.
  */
 function fakeKey(int $number): string
 {
     return sprintf('00000000-0000-7000-8000-%012d', $number);
+}
+
+/**
+ * El id de un departamento con el uuid de fakeKey($number), que se crea la primera vez: los alcances de
+ * las pruebas solo necesitan que exista, y las pruebas comparan contra fakeKey($number).
+ */
+function departmentKey(int $number): string
+{
+    $id = fakeKey($number);
+
+    Department::query()->withTrashed()->whereKey($id)->exists() || Department::factory()->create(['id' => $id]);
+
+    return $id;
+}
+
+/**
+ * El id de una carrera con el uuid de fakeKey($number), que se crea la primera vez (ver departmentKey()).
+ */
+function careerKey(int $number): string
+{
+    $id = fakeKey($number);
+
+    Career::query()->withTrashed()->whereKey($id)->exists() || Career::factory()->create(['id' => $id]);
+
+    return $id;
 }
 
 /**

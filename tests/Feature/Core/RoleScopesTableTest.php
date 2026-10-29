@@ -18,8 +18,8 @@ it('guarda el alcance de un rol en un campus, departamento y carrera', function 
         'user_id' => $user->id,
         'role' => Role::Coordinador->value,
         'campus_id' => $campus->id,
-        'department_id' => fakeKey(7),
-        'career_id' => fakeKey(12),
+        'department_id' => departmentKey(7),
+        'career_id' => careerKey(12),
         'valid_from' => '2026-08-01',
         'valid_to' => null,
     ]);
@@ -31,7 +31,7 @@ it('guarda el alcance de un rol en un campus, departamento y carrera', function 
         ->valid_to->toBeNull();
 });
 
-it('rechaza un alcance de un usuario o campus que no existe', function (string $column) {
+it('rechaza un alcance de un usuario, campus, departamento o carrera que no existe', function (string $column) {
     $row = [
         'user_id' => User::factory()->create()->id,
         'role' => Role::JefeDepartamento->value,
@@ -41,7 +41,7 @@ it('rechaza un alcance de un usuario o campus que no existe', function (string $
 
     expect(fn () => DB::table('role_scopes')->insert([...$row, $column => fakeKey(999_999)]))
         ->toThrow(QueryException::class, 'foreign key');
-})->with(['user_id', 'campus_id']);
+})->with(['user_id', 'campus_id', 'department_id', 'career_id']);
 
 it('rechaza una vigencia que termina antes de empezar y acepta una de un solo día', function () {
     $row = [

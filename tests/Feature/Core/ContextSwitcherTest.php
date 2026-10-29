@@ -21,8 +21,8 @@ beforeEach(function () {
     $this->previous = Term::factory()->create(['code' => '2026-2', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
 
     $this->jefe = User::factory()
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => fakeKey(10)])
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => fakeKey(10)])
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
         ->create();
 });
 
@@ -39,7 +39,7 @@ it('ofrece solo los campus del alcance y todos los periodos, del más reciente a
 });
 
 it('con un solo campus lo muestra fijo, sin selector de campus', function () {
-    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create());
+    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
 
     Livewire::test('core::components.context-switcher')
         ->assertSee('Campus II')

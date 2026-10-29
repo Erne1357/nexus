@@ -114,7 +114,7 @@ describe('agrupado por área', function () {
     });
 
     it('deja fuera las entradas que el rol no ve y las áreas que se quedan vacías', function () {
-        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create();
+        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
         $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
         // Plantilla, la única de Recursos humanos, pide la ability viewAny de Campus: ninguno de los dos la pasa.
@@ -137,7 +137,7 @@ describe('agrupado por área', function () {
         withDemoCatalogNavigation();
 
         $admin = User::factory()->admin()->create();
-        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create();
+        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
 
         // Presencia y ausencia, no listas exactas, como arriba.
         expect(navigationAreasFor($admin))
@@ -177,7 +177,7 @@ it('filtra por rol: admin, coordinador y docente ven menús distintos', function
     withDemoCatalogNavigation();
 
     $admin = User::factory()->admin()->create();
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
     // Presencia y ausencia, no listas exactas: cada módulo nuevo agrega entradas sin romper esta prueba.
@@ -189,7 +189,7 @@ it('filtra por rol: admin, coordinador y docente ven menús distintos', function
 it('decide por la ability de Gate con la policy del módulo', function () {
     withDemoCatalogNavigation();
 
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => fakeKey(10)])->create();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => departmentKey(10)])->create();
 
     expect(navigationLabelsFor($jefe))->not->toContain('Elementos')
         ->and(navigationLabelsFor(User::factory()->admin()->create()))->toContain('Elementos');
@@ -246,7 +246,7 @@ function menuAreasIn(HTMLDocument $page): array
 describe('menú', function () {
     it('muestra al coordinador sus entradas con su enlace, y no las del admin', function () {
         withDemoCatalogNavigation();
-        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create());
+        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
@@ -274,7 +274,7 @@ describe('menú', function () {
     });
 
     it('en la página, el coordinador no ve las entradas de Campus ni de Importaciones', function () {
-        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create());
+        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
 
         $menu = domOf($this->get('/')->assertOk())->getElementById('nexus-menu');
 

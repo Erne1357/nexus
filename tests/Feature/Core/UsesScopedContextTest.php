@@ -17,17 +17,17 @@ beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
 
-    $this->item = new Item(['name' => 'Elemento', 'campus_id' => $this->c2->id, 'department_id' => fakeKey(10), 'career_id' => fakeKey(20)]);
+    $this->item = new Item(['name' => 'Elemento', 'campus_id' => $this->c2->id, 'department_id' => departmentKey(10), 'career_id' => careerKey(20)]);
 });
 
 it('permite editar al jefe del departamento del elemento en su campus', function () {
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => fakeKey(10)])->create();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
 
     expect($jefe->can('update', $this->item))->toBeTrue();
 });
 
 it('permite editar al coordinador de la carrera del elemento en su campus', function () {
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
 
     expect($coordinador->can('update', $this->item))->toBeTrue();
 });
@@ -47,19 +47,19 @@ it('niega editar a otro rol del mismo campus, aunque pueda verlo', function (Rol
 })->with([
     'docente' => [Role::Docente, []],
     'subdirección' => [Role::Subdireccion, []],
-    'jefe de proyecto docente del departamento' => [Role::JefeProyectoDocente, ['department_id' => fakeKey(10)]],
+    'jefe de proyecto docente del departamento' => [Role::JefeProyectoDocente, fn () => ['department_id' => departmentKey(10)]],
 ]);
 
 it('niega ver y editar al jefe del mismo departamento en otro campus', function () {
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => fakeKey(10)])->create();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])->create();
 
     expect($jefe->can('view', $this->item))->toBeFalse()
         ->and($jefe->can('update', $this->item))->toBeFalse();
 });
 
 it('niega editar al jefe de otro departamento y al coordinador de otra carrera del mismo campus', function () {
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => fakeKey(11)])->create();
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(21)])->create();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(11)])->create();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(21)])->create();
 
     expect($jefe->can('update', $this->item))->toBeFalse()
         ->and($coordinador->can('update', $this->item))->toBeFalse();
@@ -67,7 +67,7 @@ it('niega editar al jefe de otro departamento y al coordinador de otra carrera d
 
 it('niega todo a quien tiene el rol pero ningún alcance vigente', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, [
-        'campus_id' => $this->c2->id, 'department_id' => fakeKey(10), 'valid_from' => '2025-01-01', 'valid_to' => '2025-12-31',
+        'campus_id' => $this->c2->id, 'department_id' => departmentKey(10), 'valid_from' => '2025-01-01', 'valid_to' => '2025-12-31',
     ])->create();
 
     expect($jefe->can('view', $this->item))->toBeFalse()
@@ -88,7 +88,7 @@ it('decide por el usuario que recibe la policy, no por el autenticado', function
 
 it('pregunta por otro usuario sin cargar los roles ni alcances del autenticado', function () {
     $this->actingAs(User::factory()->admin()->create());
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
 
     DB::enableQueryLog();
     Gate::forUser($coordinador)->allows('update', $this->item);
@@ -100,7 +100,7 @@ it('pregunta por otro usuario sin cargar los roles ni alcances del autenticado',
 
 it('recuerda el contexto de otro usuario: repetir la policy no repite consultas', function () {
     $this->actingAs(User::factory()->admin()->create());
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
     Gate::forUser($coordinador)->allows('update', $this->item);
 
     DB::enableQueryLog();

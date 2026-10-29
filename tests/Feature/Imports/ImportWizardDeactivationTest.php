@@ -210,7 +210,7 @@ describe('admin', function () {
 describe('otros roles', function () {
     it('un coordinador no puede aplicar desactivando faltantes aunque la página la haya abierto el admin', function () {
         Queue::fake();
-        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create();
+        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
         $page = deactivationWizard($this->admin, $this->batch)->set('deactivateMissing', true);
 
         $this->actingAs($coordinador);

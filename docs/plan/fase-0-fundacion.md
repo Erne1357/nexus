@@ -88,7 +88,7 @@ La fase se cerró con todas sus tareas mezcladas en `develop`. Quedan fuera del 
 - **Diseño:** la paleta de colores sigue provisional, a la espera de la institucional.
 - **Decisiones antes de la fase 1:**
   1. **Resuelta.** Students no escucha `BatchApplied` de Imports, porque el mapa lo prohíbe: las plantillas `students` y `kardex` viven en `Imports/Templates/` y despachan el job de recálculo de Students (tareas 1.1 y 1.4 de [fase-1-catalogos-importacion.md](fase-1-catalogos-importacion.md)).
-  2. Cuando Academic agregue las FK de `role_scopes`, las pruebas que usan ids inventados de departamento o carrera tendrán que crear registros reales.
+  2. **Resuelta.** Academic agregó las FK de `role_scopes` (tarea 1.7): las pruebas crean el departamento o la carrera del alcance con `departmentKey()` y `careerKey()` de `tests/Pest.php`.
   3. **Resuelta.** Edificios y salones los administran `admin` y `subdireccion` de su campus, y todo catálogo con `campus_id` toma el campus del contexto activo de la topbar ([arquitectura.md](../arquitectura/arquitectura.md#autorización-y-alcance)).
 - **Seguridad:**
   - PHPUnit 13.4.3 tiene un aviso (PKSA-qhjm-rpqc-qkn6) que no se puede corregir mientras Pest 5.3.3 pida `phpunit <=13.4.3`; solo afecta a la cobertura de PHPT. Se decidió esperar a la siguiente versión de Pest, así que `composer audit` lo seguirá mostrando hasta entonces;

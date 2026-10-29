@@ -70,7 +70,7 @@ describe('banda', function () {
 
     it('muestra en la credencial el nombre, las iniciales, el rol, el campus y el periodo activos', function () {
         $coordinador = User::factory()
-            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
             ->create(['name' => 'Carla Cota Ruiz']);
 
         $credential = domOf($this->actingAs($coordinador)->get('/'))->querySelector('[data-testid="credential"]');
@@ -91,10 +91,10 @@ describe('banda', function () {
 
     it('a quien ejerce varios roles le muestra el primero, y a quien no tiene uno vigente, ninguno', function () {
         $jefe = User::factory()
-            ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => fakeKey(10)])
+            ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
             ->withRole(Role::Docente, ['campus_id' => $this->c2->id])
             ->create(['name' => 'Juan Pérez']);
-        $vencido = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create(['name' => 'Eva Luna']);
+        $vencido = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create(['name' => 'Eva Luna']);
         RoleScope::where('user_id', $vencido->id)->update(['valid_to' => today()->subDay()]);
 
         expect(textOf(domOf($this->actingAs($jefe)->get('/'))->querySelector('[data-testid="credential"]')))
@@ -106,7 +106,7 @@ describe('banda', function () {
     it('escapa el nombre del usuario y el del campus', function () {
         $this->c2->update(['name' => '<script>alert(1)</script>']);
         $coordinador = User::factory()
-            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
             ->create(['name' => '<img src=x onerror=alert(2)>']);
 
         $this->actingAs($coordinador)->get('/')

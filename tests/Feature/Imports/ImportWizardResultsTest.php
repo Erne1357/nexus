@@ -184,7 +184,7 @@ describe('admin', function () {
 describe('otros roles', function () {
     it('no pueden aplicar aunque la página la haya abierto el admin', function () {
         Queue::fake();
-        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => fakeKey(20)])->create();
+        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(20)])->create();
         $page = wizardForBatch($this->admin, $this->batch);
 
         $this->actingAs($coordinador);
