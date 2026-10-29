@@ -40,6 +40,16 @@ class Department extends Model
     }
 
     /**
+     * Las materias que imparte.
+     *
+     * @return HasMany<Subject, $this>
+     */
+    public function subjects(): HasMany
+    {
+        return $this->hasMany(Subject::class);
+    }
+
+    /**
      * Quién lo dirige o lo dirigió, en cada campus.
      *
      * @return HasMany<DepartmentHead, $this>
