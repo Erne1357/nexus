@@ -8,6 +8,7 @@ use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentProgress;
 use App\Modules\Students\Queries\PlanGrid;
 use App\Modules\Students\Queries\PlanGridQuery;
+use App\Modules\Students\Queries\TermInProgressQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\DB;
  * tiene retícula se queda sin avance, en lugar de uno en ceros que parecería que ya terminó; al final se borra
  * el de los alumnos borrados. Todo va en una sola transacción: quien lee el avance mientras se recalcula (los
  * elegibles) ve el anterior completo y no una mezcla de bloques, y si el recálculo falla a la mitad, el avance
- * se queda como estaba.
+ * se queda como estaba. Al final vuelve a calcular el periodo en curso de cada campus (TermInProgressQuery).
  *
  * Es una tabla derivada que se recalcula completa (decisión de modelado 5), así que no deja bitácora ni avisa:
  * lo que cambió ya lo registró la importación. La corre el job RecomputeStudentProgress.
@@ -28,13 +29,18 @@ final class RefreshStudentProgress
 {
     private const int CHUNK_STUDENTS = 500;
 
-    public function __construct(private readonly PlanGridQuery $grids) {}
+    public function __construct(
+        private readonly PlanGridQuery $grids,
+        private readonly TermInProgressQuery $terms,
+    ) {}
 
     public function handle(): void
     {
         DB::transaction(function (): void {
             $this->refresh();
         });
+
+        $this->terms->refresh();
     }
 
     private function refresh(): void

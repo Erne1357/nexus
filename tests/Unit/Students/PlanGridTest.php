@@ -165,3 +165,11 @@ describe('requisito de créditos', function () {
             ->and($grid->progressFor(['A'], ['W1'])['subjects_available'])->toBe(['S', 'W1']);
     });
 });
+
+it('el total de créditos es el del plan o, sin capturar, el de la retícula con la especialidad que tomó o la de más créditos', function () {
+    $grid = new PlanGrid(credits: ['A' => 60, 'R1' => 30, 'W1' => 10], specialtyOf: ['R1' => 'redes', 'W1' => 'software']);
+
+    expect($grid->totalFor([]))->toBe(90)
+        ->and($grid->totalFor(['A', 'W1']))->toBe(70)
+        ->and((new PlanGrid(credits: ['A' => 60], totalCredits: 260))->totalFor([]))->toBe(260);
+});

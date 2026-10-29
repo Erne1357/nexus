@@ -78,6 +78,7 @@ El registro completo está en `docs/decisiones/`.
 | El equipo escribe código con IA sin pruebas suficientes | Media | TDD obligatorio, CI bloqueante en PR, revisión cruzada, checklist en `CONTRIBUTING.md`. |
 | Octane y estado compartido entre peticiones | Media | Sin singletons con estado mutable; pruebas en modo Octane antes del piloto. |
 | Tres personas tocando el mismo módulo | Media | Ownership por módulo por fase (ver `docs/plan/trabajo-en-equipo.md`) y PRs pequeños. |
+| La frontera entre Campus I y Campus II no está documentada | Media | Falta escribir en un solo lugar el contexto completo: cuándo la línea es clara, cuándo es difusa (en Campus II es normal que las materias de especialidad no se abran y los alumnos las cursen en Campus I) y cuándo en esencia son lo mismo (la titulación es igual en los dos, aunque importa de qué campus era el alumno). Mientras, Nexus separa por el campus del alumno (anotado el 29 de octubre de 2026). |
 
 ## Equipo
 
