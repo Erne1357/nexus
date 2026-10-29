@@ -250,7 +250,7 @@ describe('menú', function () {
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuAreasIn($page))->toBe(['Académico' => ['Inicio'], 'Servicios escolares' => ['Saludo']])
+        expect(menuAreasIn($page))->toBe(['Académico' => ['Inicio'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
             ->and($page->querySelector('a[data-menu-entry][href="'.route('demo-catalog.greeting').'"]')?->hasAttribute('wire:navigate'))->toBeTrue()
             ->and($page->querySelector('a[href="'.route('demo-catalog.ping').'"]'))->toBeNull();
     });
@@ -261,7 +261,7 @@ describe('menú', function () {
 
         expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))
             ->{'Académico'}->toContain('Inicio', 'Campus')
-            ->{'Servicios escolares'}->toContain('Saludo')
+            ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
             ->{'Recursos humanos'}->toContain('Elementos')
             ->{'Datos'}->toContain('Importaciones');
     });
@@ -339,6 +339,7 @@ describe('menú', function () {
     })->with([
         'Campus' => ['core.campuses', 'Académico'],
         'Importaciones' => ['imports.wizard', 'Datos'],
+        'Alumnos' => ['students.index', 'Servicios escolares'],
         'fuera del menú' => ['user-password.edit', 'Académico'],
     ]);
 

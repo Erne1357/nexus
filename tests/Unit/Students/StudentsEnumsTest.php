@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Enums\StatusTone;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Enums\StudentStatus;
 
@@ -20,4 +21,14 @@ it('cada resultado del kardex tiene su etiqueta, y solo la aprobada aprueba la m
     [KardexResult::Reprobada, 'Reprobada', false],
     [KardexResult::Cursando, 'Cursando', false],
     [KardexResult::Baja, 'Baja', false],
+]);
+
+it('cada estatus de alumno tiene el tono y el icono de su insignia', function (StudentStatus $status, StatusTone $tone, ?string $icon) {
+    expect($status->tone())->toBe($tone)
+        ->and($status->icon())->toBe($icon);
+})->with([
+    [StudentStatus::Activo, StatusTone::Success, null],
+    [StudentStatus::BajaTemporal, StatusTone::Warning, 'o-clock'],
+    [StudentStatus::BajaDefinitiva, StatusTone::Neutral, null],
+    [StudentStatus::Egresado, StatusTone::Info, 'o-academic-cap'],
 ]);
