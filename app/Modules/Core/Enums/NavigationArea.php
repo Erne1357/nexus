@@ -3,9 +3,9 @@
 namespace App\Modules\Core\Enums;
 
 /**
- * Área del menú a la que pertenece una entrada de la barra lateral (ADR-0015, DESIGN.md
- * "Navigation"). El orden de los casos es el orden del menú; solo se muestran las áreas con al
- * menos una entrada visible para el usuario.
+ * Área del menú a la que pertenece una entrada (ADR-0015, DESIGN.md "Navigation"). El orden de
+ * los casos es el orden del menú; solo se muestran las áreas con al menos una entrada visible para
+ * el usuario.
  */
 enum NavigationArea: string
 {

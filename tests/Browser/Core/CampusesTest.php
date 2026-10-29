@@ -7,7 +7,8 @@ use App\Modules\Core\Models\User;
 
 /*
 | CRUD de Campus en el navegador: el admin da de alta un campus y lo edita desde la UI; un
-| coordinador no ve la opción en el menú (criterio 2 de la fase 0).
+| coordinador no ve la opción en el menú (criterio 2 de la fase 0). Campus es del área Académico, la
+| del inicio, así que se ve en el menú cerrado.
 */
 
 beforeEach(function () {
@@ -25,12 +26,13 @@ function signInToCampuses(string $username)
         ->fill('username', $username)
         ->fill('password', 'password')
         ->press('Entrar')
-        ->assertPathIs('/');
+        ->assertPathIs('/')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false');
 }
 
 it('el admin da de alta un campus y luego lo edita desde la UI', function () {
     $page = signInToCampuses('admin')
-        ->click('Campus')
+        ->click('#nexus-menu a[data-label="Campus"]')
         ->assertPathIs('/campus')
         ->assertSee('Campus II')
         ->press('Nuevo campus')
@@ -58,6 +60,9 @@ it('el admin da de alta un campus y luego lo edita desde la UI', function () {
 it('un coordinador no ve la opción Campus en el menú', function () {
     signInToCampuses('19110001')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Campus')
+        ->click('@hare')
+        ->assertVisible('[data-menu-area="academico"] [data-menu-flip="name"]')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Campus')
         ->assertNoJavaScriptErrors();
 });

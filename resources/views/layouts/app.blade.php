@@ -1,8 +1,13 @@
 {{--
-    Layout de la aplicación para toda página MFC (config/livewire.php, component_layout). Con sesión:
-    topbar con el selector de campus y periodo, el tema y el menú de usuario; barra lateral con la
-    navegación por rol (colapsable en móvil). Sin sesión, solo el contenido. Los datos salen de los
-    componentes de Core (core::components.*), no de consultas aquí.
+    Layout de la aplicación para toda página MFC (config/livewire.php, component_layout). Con sesión,
+    el shell de DESIGN.md: la banda con la liebre, la ruta y la credencial (core::components.band), el
+    menú que se transforma (core::components.navigation) y el contenido a su derecha. Sin sesión, solo
+    el contenido. Los datos salen de los componentes de Core, no de consultas aquí.
+
+    <body> lleva el estado del shell, que cambia el componente Alpine nexusShell (resources/js/app.js):
+    data-menu="closed|open". También declara la geometría por ancho, que la banda, el menú y el
+    contenido leen: --shell-top (banda y franja), --menu-w (el menú cerrado), --panel-w (el menú
+    abierto) y --panel-clip (la cortina recogida). Escritorio desde 1200 px, tableta desde 768 px.
 --}}
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -18,68 +23,37 @@
 
         @livewireStyles
     </head>
-    <body class="min-h-screen bg-base-200 font-sans antialiased">
-        @auth
-            <x-nav sticky full-width>
-                <x-slot:brand class="gap-3">
-                    <label for="main-drawer" class="cursor-pointer lg:hidden" aria-label="Abrir el menú">
-                        <x-icon name="o-bars-3" />
-                    </label>
+    @auth
+        <body
+            x-data="nexusShell"
+            x-on:keydown.window="onKeydown($event)"
+            data-menu="closed"
+            class="min-h-screen bg-base-200 font-sans text-base-content antialiased [--menu-w:288px] [--panel-clip:inset(0_calc(100%_-_var(--menu-w))_0_0)] [--panel-w:min(1480px,calc(100vw_-_80px))] [--shell-top:67px] max-desktop:[--menu-w:64px] max-desktop:[--panel-w:calc(100vw_-_48px)] max-md:[--menu-w:0px] max-md:[--panel-clip:inset(0_0_100%_0)] max-md:[--panel-w:100vw] max-md:[--shell-top:59px]"
+        >
+            <livewire:core::components.band :title="$title ?? null" />
 
-                    <a href="{{ route('home') }}" wire:navigate class="text-lg font-semibold text-primary max-sm:hidden">
-                        {{ config('app.name') }}
-                    </a>
-                </x-slot:brand>
+            <livewire:core::components.navigation />
 
-                <x-slot:actions>
-                    <livewire:core::components.context-switcher />
+            <main
+                id="nexus-content"
+                class="ms-(--menu-w) min-h-[calc(100vh_-_var(--shell-top))] max-w-[calc(1680px_+_4rem)] border-s border-base-300 px-8 pt-6.5 pb-10 max-desktop:px-6 max-desktop:pt-6 max-md:border-s-0 max-md:px-4 max-md:pt-[18px] max-md:pb-8"
+            >
+                {{ $slot }}
+            </main>
 
-                    <x-theme-toggle
-                        light-theme="nexus"
-                        dark-theme="nexus-dark"
-                        class="btn btn-circle btn-ghost"
-                        title="Cambiar entre tema claro y oscuro"
-                        data-testid="theme-toggle"
-                    />
+            <x-toast />
 
-                    <x-dropdown right>
-                        <x-slot:trigger>
-                            <x-button :label="auth()->user()->name" icon="o-user-circle" class="btn-ghost" responsive />
-                        </x-slot:trigger>
-
-                        <x-menu-item title="Cambiar contraseña" icon="o-key" :link="route('user-password.edit')" no-wire-navigate />
-
-                        <li>
-                            <form method="POST" action="{{ route('logout') }}">
-                                @csrf
-
-                                <button type="submit" class="flex w-full items-center gap-2">
-                                    <x-icon name="o-arrow-right-start-on-rectangle" />
-                                    Cerrar sesión
-                                </button>
-                            </form>
-                        </li>
-                    </x-dropdown>
-                </x-slot:actions>
-            </x-nav>
-
-            <x-main with-nav full-width>
-                <x-slot:sidebar drawer="main-drawer" class="border-e border-base-content/10 bg-base-100">
-                    <livewire:core::components.navigation />
-                </x-slot:sidebar>
-
-                <x-slot:content>
-                    {{ $slot }}
-                </x-slot:content>
-            </x-main>
-        @else
+            @livewireScripts
+        </body>
+    @else
+        <body class="min-h-screen bg-base-200 font-sans antialiased">
             <main class="p-5">
                 {{ $slot }}
             </main>
-        @endauth
 
-        <x-toast />
+            <x-toast />
 
-        @livewireScripts
-    </body>
+            @livewireScripts
+        </body>
+    @endauth
 </html>

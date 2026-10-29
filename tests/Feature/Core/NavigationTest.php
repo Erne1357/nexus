@@ -7,6 +7,8 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
+use Dom\Element;
+use Dom\HTMLDocument;
 use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
 use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
@@ -223,60 +225,165 @@ it('se arma una vez para toda la aplicación, no por petición', function () {
     expect(app(Navigation::class))->toBe($navigation);
 });
 
-describe('barra lateral', function () {
-    it('muestra al coordinador sus entradas con enlace e icono, y no las del admin', function () {
+/**
+ * Las áreas del menú de un componente o una página, con el texto de sus entradas, en orden.
+ *
+ * @return array<string, list<string>>
+ */
+function menuAreasIn(HTMLDocument $page): array
+{
+    $areas = [];
+
+    foreach ($page->querySelectorAll('#nexus-menu [data-menu-area]') as $group) {
+        foreach ($group->querySelectorAll('a[data-menu-entry]') as $entry) {
+            $areas[$group->getAttribute('aria-label')][] = textOf($entry);
+        }
+    }
+
+    return $areas;
+}
+
+describe('menú', function () {
+    it('muestra al coordinador sus entradas con su enlace, y no las del admin', function () {
         withDemoCatalogNavigation();
         $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create());
 
-        Livewire::test('core::components.navigation')
-            ->assertSee('Inicio')
-            ->assertSee('Saludo')
-            ->assertSee(route('demo-catalog.greeting'))
-            ->assertDontSee('Elementos')
-            ->assertDontSee(route('demo-catalog.ping'));
+        $page = domOf(Livewire::test('core::components.navigation'));
+
+        expect(menuAreasIn($page))->toBe(['Académico' => ['Inicio'], 'Servicios escolares' => ['Saludo']])
+            ->and($page->querySelector('a[data-menu-entry][href="'.route('demo-catalog.greeting').'"]')?->hasAttribute('wire:navigate'))->toBeTrue()
+            ->and($page->querySelector('a[href="'.route('demo-catalog.ping').'"]'))->toBeNull();
     });
 
     it('muestra al admin todas las entradas', function () {
         withDemoCatalogNavigation();
         $this->actingAs(User::factory()->admin()->create());
 
-        Livewire::test('core::components.navigation')
-            ->assertSee('Inicio')
-            ->assertSee('Saludo')
-            ->assertSee('Elementos')
-            ->assertSee(route('demo-catalog.ping'));
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))
+            ->{'Académico'}->toContain('Inicio', 'Campus')
+            ->{'Servicios escolares'}->toContain('Saludo')
+            ->{'Recursos humanos'}->toContain('Elementos')
+            ->{'Datos'}->toContain('Importaciones');
     });
 
     it('muestra al docente solo Inicio', function () {
         withDemoCatalogNavigation();
         $this->actingAs(User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create());
 
-        Livewire::test('core::components.navigation')
-            ->assertSee('Inicio')
-            ->assertDontSee('Saludo')
-            ->assertDontSee('Elementos');
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Académico' => ['Inicio']]);
+    });
+
+    it('en la página, el coordinador no ve las entradas de Campus ni de Importaciones', function () {
+        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => fakeKey(20)])->create());
+
+        $menu = domOf($this->get('/')->assertOk())->getElementById('nexus-menu');
+
+        expect(textOf($menu))->toContain('Inicio')->not->toContain('Campus')->not->toContain('Importaciones')
+            ->and($menu->querySelector('a[href="'.route('core.campuses').'"]'))->toBeNull()
+            ->and($menu->querySelector('a[href="'.route('imports.wizard').'"]'))->toBeNull();
     });
 
     it('agrupa las entradas bajo el nombre de su área, en el orden del menú', function () {
         app()->instance(Navigation::class, handBuiltNavigation());
         $this->actingAs(User::factory()->admin()->create());
 
-        Livewire::test('core::components.navigation')
-            ->assertSeeInOrder(['Académico', 'Propuestas', 'Inicio', 'Recursos humanos', 'Plantilla', 'Datos', 'Cargas'])
-            ->assertSeeHtml('aria-label="Académico"')
-            ->assertSeeHtml('aria-label="Datos"')
-            ->assertDontSee('Servicios escolares')
-            ->assertDontSee('Recursos financieros');
+        $page = domOf(Livewire::test('core::components.navigation'));
+
+        expect(menuAreasIn($page))->toBe([
+            'Académico' => ['Propuestas', 'Inicio'],
+            'Recursos humanos' => ['Plantilla'],
+            'Datos' => ['Cargas'],
+        ])
+            ->and(array_map(fn (Element $name): string => textOf($name), iterator_to_array($page->querySelectorAll('[data-menu-area] [data-menu-flip="name"]'))))
+            ->toBe(['Académico', 'Recursos humanos', 'Datos'])
+            ->and($page->querySelector('[data-menu-area] [data-menu-flip="icon"]')?->getAttribute('aria-hidden'))->toBe('true');
     });
 
     it('no muestra el área de las entradas que el rol no ve', function () {
         app()->instance(Navigation::class, handBuiltNavigation());
         $this->actingAs(User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create());
 
-        Livewire::test('core::components.navigation')
-            ->assertSeeInOrder(['Académico', 'Inicio', 'Datos', 'Cargas'])
-            ->assertDontSee('Propuestas')
-            ->assertDontSee('Recursos humanos')
-            ->assertDontSee('Plantilla');
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe([
+            'Académico' => ['Inicio'],
+            'Datos' => ['Cargas'],
+        ]);
+    });
+
+    it('marca la entrada de la pantalla actual con aria-current y solo a ella', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $current = domOf(Livewire::test('core::components.navigation', ['route' => 'core.campuses']))
+            ->querySelectorAll('#nexus-menu [aria-current="page"]');
+
+        expect($current)->toHaveCount(1)
+            ->and(textOf($current->item(0)))->toBe('Campus');
+    });
+
+    it('en la página, marca la entrada de la ruta que se pidió', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $current = domOf($this->get(route('imports.wizard'))->assertOk())->querySelectorAll('#nexus-menu [aria-current="page"]');
+
+        expect($current)->toHaveCount(1)
+            ->and(textOf($current->item(0)))->toBe('Importaciones');
+    });
+
+    it('el área actual es la de la pantalla; si la pantalla no está en el menú, la primera', function (string $route, string $area) {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $current = domOf(Livewire::test('core::components.navigation', ['route' => $route]))
+            ->querySelectorAll('#nexus-menu [data-menu-area][data-current]');
+
+        expect($current)->toHaveCount(1)
+            ->and($current->item(0)->getAttribute('aria-label'))->toBe($area);
+    })->with([
+        'Campus' => ['core.campuses', 'Académico'],
+        'Importaciones' => ['imports.wizard', 'Datos'],
+        'fuera del menú' => ['user-password.edit', 'Académico'],
+    ]);
+
+    it('si el área de la pantalla no es visible para el usuario, el área actual es la primera que ve', function () {
+        $this->actingAs(User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create());
+
+        $current = domOf(Livewire::test('core::components.navigation', ['route' => 'imports.wizard']))
+            ->querySelectorAll('#nexus-menu [data-menu-area][data-current]');
+
+        expect($current)->toHaveCount(1)
+            ->and($current->item(0)->getAttribute('aria-label'))->toBe('Académico')
+            ->and(domOf(Livewire::test('core::components.navigation', ['route' => 'imports.wizard']))->querySelector('[aria-current="page"]'))->toBeNull();
+    });
+
+    it('trae el buscador y el aviso de «Sin resultados», oculto mientras no se busca', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $page = domOf(Livewire::test('core::components.navigation'));
+        $empty = $page->querySelector('#nexus-menu [data-menu-empty]');
+
+        expect($page->querySelector('#nexus-menu input[type="search"]')?->getAttribute('aria-label'))->toBe('Buscar en el menú')
+            ->and(textOf($empty))->toBe('Sin resultados')
+            ->and($empty->hasAttribute('hidden'))->toBeTrue();
+    });
+
+    it('acomoda las áreas en cinco columnas y, en tableta, en tres, con las demás debajo de la más larga', function () {
+        app()->instance(Navigation::class, new Navigation([
+            new NavigationItem('A1', 'home', 'o-home', NavigationArea::Academico),
+            new NavigationItem('A2', 'home', 'o-home', NavigationArea::Academico),
+            new NavigationItem('S1', 'home', 'o-home', NavigationArea::ServiciosEscolares),
+            new NavigationItem('S2', 'home', 'o-home', NavigationArea::ServiciosEscolares),
+            new NavigationItem('S3', 'home', 'o-home', NavigationArea::ServiciosEscolares),
+            new NavigationItem('H1', 'home', 'o-home', NavigationArea::RecursosHumanos),
+            new NavigationItem('D1', 'home', 'o-home', NavigationArea::Datos),
+        ]));
+        $this->actingAs(User::factory()->admin()->create());
+
+        $page = domOf(Livewire::test('core::components.navigation', ['route' => 'login']));
+        $styleOf = fn (string $label): string => $page->querySelector('a[data-label="'.$label.'"]')->getAttribute('style');
+
+        // Datos es la cuarta área visible: cuarta columna en escritorio y, en tableta, la primera,
+        // debajo de la más larga de las tres de arriba (Servicios escolares, tres entradas): 3 + 3 + 2.
+        expect($styleOf('A2'))->toBe('--c: 1; --i: 2; --col-t: 1; --base-t: 3')
+            ->and($styleOf('S3'))->toBe('--c: 2; --i: 3; --col-t: 2; --base-t: 3')
+            ->and($styleOf('H1'))->toBe('--c: 3; --i: 1; --col-t: 3; --base-t: 3')
+            ->and($styleOf('D1'))->toBe('--c: 4; --i: 1; --col-t: 1; --base-t: 8');
     });
 });

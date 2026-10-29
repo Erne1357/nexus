@@ -7,7 +7,7 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Queries\ScopedContext;
 
 /**
- * Registro de la barra lateral: las entradas que cada módulo declara en navigation() de su
+ * Registro del menú: las entradas que cada módulo declara en navigation() de su
  * provider, en el orden de bootstrap/providers.php y, dentro de un módulo, en el que las declara.
  * El menú las agrupa por área, en el orden de NavigationArea.
  *

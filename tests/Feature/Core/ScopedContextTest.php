@@ -115,6 +115,20 @@ describe('alcance por rol', function () {
             ->and($context->canAccessCampus($this->c2))->toBeTrue();
     });
 
+    it('da los roles que el usuario ejerce, en el orden del enum; al admin, solo el suyo', function () {
+        $jefeYDocente = User::factory()
+            ->withRole(Role::Docente, ['campus_id' => $this->c2->id])
+            ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => fakeKey(10)])
+            ->create();
+        $vencido = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create();
+        RoleScope::where('user_id', $vencido->id)->update(['valid_to' => today()->subDay()]);
+
+        expect(scopedContextOf($jefeYDocente)->roles())->toBe([Role::JefeDepartamento, Role::Docente])
+            ->and(scopedContextOf(User::factory()->admin()->create())->roles())->toBe([Role::Admin])
+            ->and(scopedContextOf($vencido)->roles())->toBe([])
+            ->and(scopedContextOf(User::factory()->admin()->create(['is_active' => false]))->roles())->toBe([]);
+    });
+
     it('cubre con cualquiera de varios roles el que el usuario sí tiene', function () {
         $context = scopedContextOf(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => fakeKey(20)])->create());
 

@@ -12,3 +12,14 @@ it('exige a cada rol las columnas de alcance de PROJECT.md (Actores y roles)', f
     'coordinador: una carrera en un campus' => [Role::Coordinador, ['campus_id', 'career_id']],
     'docente: un campus donde tiene carga' => [Role::Docente, ['campus_id']],
 ]);
+
+it('nombra cada rol como lo nombran PROJECT.md y el glosario, para la credencial y la página de inicio', function (Role $role, string $label) {
+    expect($role->label())->toBe($label);
+})->with([
+    [Role::Admin, 'Administración'],
+    [Role::Subdireccion, 'Subdirección Académica'],
+    [Role::JefeDepartamento, 'Jefe de departamento académico'],
+    [Role::JefeProyectoDocente, 'Jefe de proyecto docente'],
+    [Role::Coordinador, 'Coordinador de carrera'],
+    [Role::Docente, 'Docente'],
+]);

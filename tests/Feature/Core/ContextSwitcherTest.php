@@ -8,7 +8,7 @@ use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Livewire;
 
 /*
-| Selector de campus y periodo de la topbar (core::components.context-switcher). Ofrece los campus
+| Selector de campus y periodo de la credencial (core::components.context-switcher). Ofrece los campus
 | de ScopedContext::campuses() y los periodos existentes, y fija la elección con SetActiveContext.
 */
 
