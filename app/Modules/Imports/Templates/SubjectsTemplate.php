@@ -16,13 +16,15 @@ use Illuminate\Support\Str;
  * nombre, semestre, horas, créditos, departamento que la imparte y, si es de especialidad, la clave de su
  * especialidad. Da de alta o actualiza la materia, que es global y se busca por su clave, y su lugar en la
  * retícula (`study_plan_subjects`): semestre y especialidad. La especialidad que el plan no tiene se crea con su
- * clave y con su nombre si viene; si no, se llama como su clave hasta que se capture (confirmado el 29 de octubre
- * de 2026). La clave del archivo es el plan con la materia.
+ * clave y con su nombre si viene; si no, se llama como su clave hasta que se capture, y la de un plan inactivo nace
+ * inactiva. Una materia que tenía especialidad y el SII ya no se la trae la conserva, con advertencia (confirmado el
+ * 29 de octubre de 2026). La clave del archivo es el plan con la materia.
  *
  * Una materia viene en un renglón por plan: si dos renglones no coinciden en créditos, horas o departamento, el
  * posterior es error; si solo cambia el nombre, avisa y se queda el del primero (consistentAcrossRows(),
  * confirmado el 29 de octubre de 2026). El SII puede dar claves distintas a la «misma» materia en planes
- * distintos: si otra clave ya tiene el mismo nombre, avisa, pero no las unifica.
+ * distintos: si otra clave ya tiene el mismo nombre, en la base o en el archivo (twinsAcrossRows()), avisa, pero
+ * no las unifica.
  *
  * Como todo lo importado, no reactiva ni restaura: una materia inactiva se actualiza y sigue inactiva, y una
  * materia, una especialidad o un lugar en la retícula borrados son error. No ofrece "desactivar faltantes": quitar
@@ -39,6 +41,9 @@ class SubjectsTemplate extends ImportTemplate
 
     /** @var array<string, true> lugares en la retícula cuya última fila aplicada solo cambió la materia */
     private array $subjectOnly = [];
+
+    /** @var array<string, list<string>>|null claves de materia por nombre en minúsculas, en esta corrida */
+    private ?array $codesByName = null;
 
     public function key(): string
     {
@@ -86,16 +91,25 @@ class SubjectsTemplate extends ImportTemplate
         return ['group' => ['code'], 'errors' => ['credits', 'theory_hours', 'practice_hours', 'department'], 'warnings' => ['name']];
     }
 
+    public function twinsAcrossRows(): ?array
+    {
+        return ['name' => 'name', 'key' => 'code'];
+    }
+
+    /**
+     * Solo los límites del modelo de datos: semestre desde 1, horas y créditos no negativos; el tope es el de la
+     * columna (smallint), no una regla.
+     */
     public function rules(): array
     {
         return [
             'plan' => ['required', 'string'],
             'code' => ['required', 'string', 'max:20'],
             'name' => ['required', 'string', 'max:255'],
-            'semester' => ['required', 'integer', 'min:1', 'max:20'],
-            'theory_hours' => ['required', 'integer', 'min:0', 'max:40'],
-            'practice_hours' => ['required', 'integer', 'min:0', 'max:40'],
-            'credits' => ['required', 'integer', 'min:0', 'max:40'],
+            'semester' => ['required', 'integer', 'min:1', 'max:32767'],
+            'theory_hours' => ['required', 'integer', 'min:0', 'max:32767'],
+            'practice_hours' => ['required', 'integer', 'min:0', 'max:32767'],
+            'credits' => ['required', 'integer', 'min:0', 'max:32767'],
             'department' => ['required', 'string'],
             'specialty' => ['nullable', 'string', 'max:30'],
             'specialty_name' => ['nullable', 'string', 'max:255'],
@@ -138,8 +152,12 @@ class SubjectsTemplate extends ImportTemplate
 
         $specialty = $row['specialty'] === null ? null : Specialty::query()->firstOrCreate(
             ['study_plan_id' => $plan->getKey(), 'code' => $row['specialty']],
-            ['name' => $row['specialty_name'] ?? $row['specialty'], 'is_active' => true],
+            ['name' => $row['specialty_name'] ?? $row['specialty'], 'is_active' => (bool) $plan->is_active],
         );
+
+        if ($specialty !== null && ! $specialty->wasRecentlyCreated && $row['specialty_name'] !== null) {
+            $specialty->fill(['name' => $row['specialty_name']])->save();
+        }
 
         $placement = StudyPlanSubject::query()->where(['study_plan_id' => $plan->getKey(), 'subject_id' => $subject->getKey()])->first()
             ?? new StudyPlanSubject(['study_plan_id' => $plan->getKey(), 'subject_id' => $subject->getKey()]);
@@ -148,7 +166,7 @@ class SubjectsTemplate extends ImportTemplate
         unset($this->subjectOnly[$placement->getKey()]);
 
         if (! $placement->wasRecentlyCreated && ! $placement->wasChanged()
-            && ($subject->wasRecentlyCreated || $subject->wasChanged() || $specialty?->wasRecentlyCreated)) {
+            && ($subject->wasRecentlyCreated || $subject->wasChanged() || $specialty?->wasRecentlyCreated || $specialty?->wasChanged())) {
             $this->subjectOnly[$placement->getKey()] = true;
         }
 
@@ -193,7 +211,7 @@ class SubjectsTemplate extends ImportTemplate
             $issues = $issues->withWarning('code', "La materia {$row['code']} está inactiva: se actualizan sus datos, pero sigue inactiva.");
         }
 
-        $twin = Subject::query()->where('code', '<>', $row['code'])->whereRaw('lower(name) = lower(?)', [$row['name']])->value('code');
+        $twin = collect($this->codesByName()[mb_strtolower($row['name'])] ?? [])->first(fn (string $code): bool => $code !== $row['code']);
 
         if ($twin !== null) {
             $issues = $issues->withWarning('name', "La materia {$twin} tiene el mismo nombre con otra clave; no se unifican.");
@@ -207,11 +225,36 @@ class SubjectsTemplate extends ImportTemplate
             $issues = $issues->withError('code', "La materia {$row['code']} se quitó de la retícula del plan {$row['plan']}; una importación no la vuelve a poner.");
         }
 
-        if ($row['specialty'] !== null && Specialty::onlyTrashed()->where(['study_plan_id' => $plan->getKey(), 'code' => $row['specialty']])->exists()) {
+        $specialty = $row['specialty'] === null ? null : Specialty::withTrashed()->where(['study_plan_id' => $plan->getKey(), 'code' => $row['specialty']])->first(['id', 'is_active', 'deleted_at']);
+
+        if ($specialty?->trashed()) {
             $issues = $issues->withError('specialty', "La especialidad {$row['specialty']} del plan {$row['plan']} está borrada; una importación no la restaura.");
+        } elseif ($specialty !== null && ! $specialty->is_active) {
+            $issues = $issues->withWarning('specialty', "La especialidad {$row['specialty']} del plan {$row['plan']} está inactiva.");
+        }
+
+        $current = $row['specialty'] !== null || $subject === null ? null : StudyPlanSubject::query()
+            ->where(['study_plan_id' => $plan->getKey(), 'subject_id' => $subject->getKey()])
+            ->whereNotNull('specialty_id')
+            ->value('specialty_id');
+
+        if ($current !== null) {
+            $code = Specialty::withTrashed()->whereKey($current)->value('code');
+            $issues = $issues->withWarning('specialty', "El SII ya no trae especialidad para {$row['code']} en {$row['plan']}: se queda en {$code}; quitarla es una edición a mano en la retícula.");
         }
 
         return $issues;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function codesByName(): array
+    {
+        return $this->codesByName ??= Subject::query()->get(['code', 'name'])
+            ->groupBy(fn (Subject $subject): string => mb_strtolower($subject->name))
+            ->map(fn ($subjects): array => $subjects->pluck('code')->all())
+            ->all();
     }
 
     private function plan(string $code): ?StudyPlan

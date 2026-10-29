@@ -125,6 +125,33 @@ it('crea la especialidad que falta con su clave, y con su nombre si viene; la qu
         ->and(StudyPlanSubject::where('specialty_id', $web->id)->count())->toBe(2);
 });
 
+it('avisa si la especialidad está inactiva; la nueva de un plan inactivo nace inactiva, y el nombre que trae el archivo la actualiza', function () {
+    Specialty::factory()->for($this->plan)->create(['code' => 'RED', 'is_active' => false]);
+    $old = StudyPlan::factory()->inactive()->create(['code' => 'ISIC-2004-296']);
+
+    $warnings = $this->template->validate(subjectRow(['specialty' => 'RED']), $this->context)->warnings;
+    $this->template->apply(subjectRow(['plan' => 'ISIC-2004-296', 'specialty' => 'WEB']), $this->context);
+    $this->template->apply(subjectRow(['plan' => 'ISIC-2004-296', 'code' => 'DWB-2101', 'specialty' => 'WEB', 'specialty_name' => 'Desarrollo Web']), $this->context);
+
+    expect($warnings)->toBe(['specialty' => ['La especialidad RED del plan ISIC-2010-224 está inactiva.']])
+        ->and(Specialty::where(['study_plan_id' => $old->id, 'code' => 'WEB'])->sole())->is_active->toBeFalse()->name->toBe('Desarrollo Web');
+});
+
+it('si el SII ya no trae la especialidad de una materia que la tenía, la deja y avisa: quitarla es una edición a mano', function () {
+    $this->template->apply(subjectRow(['specialty' => 'WEB']), $this->context);
+
+    $issues = $this->template->validate(subjectRow(), $this->context);
+    $this->template->apply(subjectRow(), $this->context);
+
+    expect($issues->warnings)->toBe(['specialty' => ['El SII ya no trae especialidad para ACF-0901 en ISIC-2010-224: se queda en WEB; quitarla es una edición a mano en la retícula.']])
+        ->and(StudyPlanSubject::sole()->specialty_id)->toBe(Specialty::where('code', 'WEB')->value('id'));
+});
+
+it('no pone topes que no están en las reglas: solo créditos y horas no negativos y semestre desde 1', function () {
+    expect($this->template->validate(subjectRow(['credits' => 50, 'theory_hours' => 45, 'semester' => 21]), $this->context)->errors)->toBe([])
+        ->and($this->template->validate(subjectRow(['credits' => -1, 'semester' => 0]), $this->context)->errors)->toHaveKeys(['credits', 'semester']);
+});
+
 it('lo borrado no se restaura: materia, especialidad o materia quitada de la retícula son error', function () {
     Subject::factory()->create(['code' => 'ACF-0902'])->delete();
     Specialty::factory()->for($this->plan)->create(['code' => 'OLD'])->delete();
@@ -182,6 +209,25 @@ it('en un archivo, los renglones de una materia deben coincidir en créditos, ho
         ->and($rows[5]->errors)->toBe(['department' => ['No coincide con la fila 2, que trae «CB».']])
         ->and($rows[6])->status->toBe(RowStatus::Warning)
         ->warnings->toBe(['name' => ['No coincide con la fila 2: se queda «Cálculo Diferencial».']]);
+});
+
+it('en un archivo, avisa si dos materias nuevas traen el mismo nombre con otra clave', function () {
+    Storage::fake('imports');
+    StudyPlan::factory()->create(['code' => 'IIND-2010-227']);
+    $batch = ImportBatch::factory()->create(['template' => 'subjects', 'uploaded_by' => $this->context->user->id]);
+    $batch->update(['file_path' => "{$batch->id}.csv"]);
+    Storage::disk('imports')->put($batch->file_path, implode("\n", [
+        'clave de plan,clave de materia,nombre,semestre,horas teoría,horas práctica,créditos,departamento',
+        'ISIC-2010-224,ACF-0901,Cálculo Diferencial,1,3,2,5,CB',
+        'IIND-2010-227,MAT-0101,cálculo diferencial,1,3,2,5,CB',
+    ]));
+
+    app(ValidateImportBatch::class)->handle($batch);
+    $rows = $batch->rows()->orderBy('row_number')->get()->keyBy('row_number');
+
+    expect($rows[2]->status)->toBe(RowStatus::Valid)
+        ->and($rows[3])->status->toBe(RowStatus::Warning)
+        ->warnings->toBe(['name' => ['La fila 2 trae el mismo nombre con otra clave (ACF-0901); no se unifican.']]);
 });
 
 it('al terminar el lote recalcula el avance de los alumnos, porque cambió la retícula', function () {

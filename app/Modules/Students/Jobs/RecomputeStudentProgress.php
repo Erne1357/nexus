@@ -11,8 +11,8 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 
 /**
  * Recalcula en la cola el avance de todos los alumnos (RefreshStudentProgress). Lo despachan las plantillas de
- * importación `students` y `kardex` al terminar de aplicar un lote: Students no escucha a Imports, porque el
- * mapa de dependencias lo prohíbe (tarea 1.4).
+ * importación `students`, `kardex`, `subjects` y `prerequisites` al terminar de aplicar un lote: Students no
+ * escucha a Imports, porque el mapa de dependencias lo prohíbe (tareas 1.4 y 1.9).
  *
  * Espera uno solo en la cola aunque lleguen varias importaciones seguidas, con un candado que vence en una hora
  * por si el job nunca llega a correr. Si llega otra importación mientras corre, se encola de nuevo, porque el
