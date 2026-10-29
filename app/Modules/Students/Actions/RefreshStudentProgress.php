@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Recalcula `student_progress` de todos los alumnos (sin los borrados) desde su kardex y la retícula de su
  * plan (PlanGrid), de 500 en 500. Lo aprobado da créditos y materias; lo aprobado y lo que está cursando dicen
- * su especialidad. Escribe por alumno con un upsert por bloque: volver a calcular reescribe el avance, también
+ * su especialidad, y su semestre limita hasta dónde puede cursar. Escribe por alumno con un upsert por bloque: volver a calcular reescribe el avance, también
  * si el alumno cambió de plan. Un alumno cuyo plan todavía no tiene retícula se queda sin avance, en lugar de
  * uno en ceros que parecería que ya terminó; al final se borra el de los alumnos borrados. Todo va en una sola
  * transacción: quien lee el avance mientras se recalcula (los elegibles) ve el anterior completo y no una mezcla
@@ -42,7 +42,7 @@ final class RefreshStudentProgress
         $grids = [];
 
         Student::query()
-            ->select(['id', 'study_plan_id'])
+            ->select(['id', 'study_plan_id', 'current_semester'])
             ->chunkById(self::CHUNK_STUDENTS, function (Collection $students) use (&$grids): void {
                 $kardex = KardexRecord::query()
                     ->whereIn('student_id', $students->modelKeys())
@@ -68,6 +68,7 @@ final class RefreshStudentProgress
                     $progress = $grid->progressFor(
                         $records->where('result', KardexResult::Aprobada->value)->pluck('subject_id')->unique()->values()->all(),
                         $records->where('result', KardexResult::Cursando->value)->pluck('subject_id')->unique()->values()->all(),
+                        $student->current_semester,
                     );
 
                     $rows[] = [
