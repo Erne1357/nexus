@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
  * Usuarios de prueba del demo, con su rol y su alcance vigentes desde hoy, en cada campus de `$campuses`:
@@ -27,8 +28,8 @@ use RuntimeException;
  * - `coord.<carrera>.<campus>`: coordinador de cada carrera ofrecida en el campus (`alias` de data/careers.php).
  *
  * Entran con la contraseña `password` sin tener que cambiarla (supuesto S5, por confirmar). Requiere el catálogo
- * (AcademicDemoSeeder) y los roles (RoleSeeder). Un usuario que ya existe no se toca, y un departamento que ya
- * tiene jefe vigente lo conserva. No corre en producción.
+ * (AcademicDemoSeeder) y los roles (RoleSeeder). A un usuario que ya existe solo se le completan el rol y el
+ * alcance si le faltan, y un departamento que ya tiene jefe vigente lo conserva. No corre en producción.
  */
 class DemoStaffSeeder extends Seeder
 {
@@ -104,16 +105,29 @@ class DemoStaffSeeder extends Seeder
     }
 
     /**
-     * El usuario con ese username o, si no existe, uno nuevo con el rol y su alcance desde hoy.
+     * El usuario con ese username, nuevo si no existe, con el rol y un alcance vigente sobre exactamente `$scope`:
+     * si una corrida anterior lo dejó sin rol o sin alcance, se los da (desde hoy) sin duplicar los que ya tiene.
      *
      * @param  array<string, string>  $scope
      */
     private function user(string $username, string $name, Role $role, array $scope): User
     {
-        return User::query()->where('username', $username)->first()
-            ?? User::factory()
+        $scope = ['campus_id' => null, 'department_id' => null, 'career_id' => null, ...$scope];
+        $user = User::query()->where('username', $username)->first();
+
+        if ($user === null) {
+            return User::factory()
                 ->withRole($role, [...$scope, 'valid_from' => today()->toDateString()])
                 ->create(['username' => $username, 'name' => $name, 'email' => null, 'email_verified_at' => null]);
+        }
+
+        $user->assignRole(SpatieRole::findOrCreate($role->value));
+
+        if (! $user->roleScopes()->current()->where(['role' => $role, ...$scope])->exists()) {
+            $user->roleScopes()->create(['role' => $role, ...$scope, 'valid_from' => today()->toDateString()]);
+        }
+
+        return $user;
     }
 
     /**

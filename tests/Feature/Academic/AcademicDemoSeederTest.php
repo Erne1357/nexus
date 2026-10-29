@@ -47,6 +47,23 @@ function seedDemoCatalog(array $campuses): void
 }
 
 /**
+ * Cuántos registros hay de lo que siembra el demo, contando los borrados.
+ *
+ * @return array<string, int>
+ */
+function demoCounts(): array
+{
+    return [
+        ...collect([Department::class, Career::class, CareerCampus::class, StudyPlan::class, Subject::class, Specialty::class, StudyPlanSubject::class, SubjectPrerequisite::class, DepartmentHead::class])
+            ->mapWithKeys(fn (string $model): array => [$model => $model::withTrashed()->count()])
+            ->all(),
+        'users' => User::query()->count(),
+        'role_scopes' => RoleScope::query()->count(),
+        'terms' => Term::query()->count(),
+    ];
+}
+
+/**
  * La cadena de seriación más larga (en materias) de un plan, o null si la seriación forma un ciclo.
  *
  * @param  Collection<int, SubjectPrerequisite>  $seriation
@@ -263,21 +280,71 @@ it('no cambia el periodo actual si ya hay uno', function () {
 });
 
 it('es idempotente: sembrar dos veces no duplica', function () {
-    $counts = fn (): array => [
-        ...collect([Department::class, Career::class, CareerCampus::class, StudyPlan::class, Subject::class, Specialty::class, StudyPlanSubject::class, SubjectPrerequisite::class, DepartmentHead::class])
-            ->mapWithKeys(fn (string $model): array => [$model => $model::withTrashed()->count()])
-            ->all(),
-        'users' => User::query()->count(),
-        'role_scopes' => RoleScope::query()->count(),
-        'terms' => Term::query()->count(),
-    ];
-
     $this->seed(DemoSeeder::class);
-    $first = $counts();
+    $first = demoCounts();
     $this->seed(DemoSeeder::class);
 
-    expect($counts())->toBe($first)
+    expect(demoCounts())->toBe($first)
         ->and($first[Subject::class])->toBeGreaterThan(0);
+});
+
+it('el camino del seeder masivo: el demo de Campus II y después los dos campus dejan datos consistentes', function () {
+    $this->seed(DemoSeeder::class);
+
+    $seedBothCampuses = function (): void {
+        $seeder = (new DatabaseSeeder)->setContainer(app());
+        $seeder->callWith(AcademicDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
+        $seeder->callWith(DemoStaffSeeder::class, ['campuses' => ['C1', 'C2']]);
+    };
+
+    $seedBothCampuses();
+    $first = demoCounts();
+    $seedBothCampuses();
+
+    $offered = fn (string $campus): int => CareerCampus::query()->whereRelation('campus', 'code', $campus)->where('is_active', true)->count();
+    $scopes = RoleScope::query()->get();
+    $staff = User::query()->where('username', 'like', '%.c_')->get();
+    $roleOf = ['subdir' => Role::Subdireccion, 'jefe' => Role::JefeDepartamento, 'jpd' => Role::JefeProyectoDocente, 'coord' => Role::Coordinador];
+    $campusIds = Campus::query()->pluck('id', 'code');
+
+    expect(demoCounts())->toBe($first)
+        ->and($offered('C1'))->toBe(12)
+        ->and($offered('C2'))->toBe(6)
+        ->and($scopes->countBy(fn (RoleScope $scope): string => "{$scope->user_id}|{$scope->role->value}|{$scope->campus_id}|{$scope->department_id}|{$scope->career_id}")->max())->toBe(1)
+        ->and($staff->filter(fn (User $user): bool => str_ends_with($user->username, '.c1')))->toHaveCount(25)
+        ->and($staff->filter(fn (User $user): bool => str_ends_with($user->username, '.c2')))->toHaveCount(15)
+        ->and(DepartmentHead::query()->currentOn(now())->count())->toBe($staff->filter(fn (User $user): bool => preg_match('/^(jefe|jpd)\./', $user->username) === 1)->count());
+
+    foreach ($staff as $user) {
+        $role = $roleOf[strtok($user->username, '.')];
+        $campus = $campusIds[strtoupper(substr($user->username, -2))];
+        $context = app(ScopedContext::class)->forUser($user);
+
+        expect($context->roles())->toBe([$role], "{$user->username} no ejerce su rol.")
+            ->and($context->scopes()->pluck('campus_id')->all())->toBe([$campus], "{$user->username} no tiene un solo alcance en su campus.");
+    }
+
+    expect(app(ScopedContext::class)->forUser($staff->firstWhere('username', 'coord.ie.c1'))
+        ->covers(Role::Coordinador, $campusIds['C1'], null, Career::query()->where('code', 'IELE')->value('id')))->toBeTrue();
+});
+
+it('completa el rol y el alcance de un usuario de prueba que una corrida anterior dejó a medias', function () {
+    $this->seed(CampusSeeder::class);
+    $c2 = Campus::query()->where('code', 'C2')->sole();
+
+    User::factory()->create(['username' => 'coord.isc.c2']);
+    User::factory()->withRole(Role::Subdireccion, ['campus_id' => $c2->id, 'valid_from' => '2026-01-01', 'valid_to' => '2026-06-30'])->create(['username' => 'subdir.c2']);
+
+    $this->seed(DemoSeeder::class);
+    $this->seed(DemoSeeder::class);
+
+    $coordinator = User::query()->where('username', 'coord.isc.c2')->sole();
+    $subdirection = User::query()->where('username', 'subdir.c2')->sole();
+
+    expect(app(ScopedContext::class)->forUser($coordinator)->covers(Role::Coordinador, $c2, null, Career::query()->where('code', 'ISIC')->value('id')))->toBeTrue()
+        ->and(app(ScopedContext::class)->forUser($subdirection)->covers(Role::Subdireccion, $c2))->toBeTrue()
+        ->and($coordinator->roleScopes()->count())->toBe(1)
+        ->and($subdirection->roleScopes()->count())->toBe(2);
 });
 
 it('no corre en producción', function () {
