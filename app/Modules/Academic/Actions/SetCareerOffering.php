@@ -67,7 +67,7 @@ final class SetCareerOffering
             }
 
             if ($wasTrashed && ! $offered) {
-                return $offering;
+                return null;
             }
 
             if ($wasTrashed) {
