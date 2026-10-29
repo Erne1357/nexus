@@ -56,3 +56,12 @@ it('currentOn da los jefes vigentes en una fecha, con el último día incluido',
 
     expect($ids)->toEqualCanonicalizing([$current->id, $endsThatDay->id]);
 });
+
+it('currentOn cuenta los días en Ciudad Juárez aunque la fecha llegue en otra zona', function () {
+    $head = DepartmentHead::factory()->create(['valid_from' => '2026-01-01', 'valid_to' => '2026-10-29']);
+
+    // La 1 de la mañana del 30 en UTC sigue siendo el 29 en Ciudad Juárez.
+    $ids = DepartmentHead::query()->currentOn(Carbon::parse('2026-10-30 01:00', 'UTC'))->pluck('id')->all();
+
+    expect($ids)->toBe([$head->id]);
+});

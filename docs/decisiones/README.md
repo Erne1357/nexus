@@ -19,5 +19,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0013](0013-despliegue-on-premise-itcj.md) | Despliegue on-premise en el ITCJ: HTTPS con Caddy, `.env` con permisos restringidos, `pg_dump` diario con retención | Aceptada; puntos por confirmar con el ITCJ | 2026-10-27 |
 | [0014](0014-uuidv7-como-llave-primaria.md) | UUIDv7 como llave primaria en todo modelo de Nexus; se editaron una sola vez las migraciones de la fase 0 | Aceptada | 2026-10-27 |
 | [0015](0015-identidad-visual.md) | Identidad visual: credencial con áreas, menú que se transforma, paleta institucional, Atkinson Hyperlegible y la liebre como marca | Aceptada | 2026-10-29 |
+| [0016](0016-btree-gist-para-exclusiones-por-fecha.md) | Extensión `btree_gist` para restricciones de exclusión por rango de fechas (un jefe a la vez) | Aceptada | 2026-10-29 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.

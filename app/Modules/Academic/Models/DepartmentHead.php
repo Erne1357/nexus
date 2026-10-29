@@ -66,14 +66,15 @@ class DepartmentHead extends Model
     }
 
     /**
-     * Vigentes en una fecha: `valid_from` ≤ fecha ≤ `valid_to`, con `valid_to` nulo sin fecha de fin.
+     * Vigentes en una fecha: `valid_from` ≤ fecha ≤ `valid_to`, con `valid_to` nulo sin fecha de fin. El día
+     * se cuenta en Ciudad Juárez (config/app.php) aunque la fecha llegue en otra zona, como RoleScope::current().
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
     protected function currentOn(Builder $query, CarbonInterface $date): void
     {
-        $day = $date->toDateString();
+        $day = $date->toImmutable()->setTimezone(config('app.timezone'))->toDateString();
 
         $query->where('valid_from', '<=', $day)
             ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $day));

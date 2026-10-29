@@ -21,6 +21,8 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestampsTz();
             $table->softDeletesTz();
+
+            $table->index('department_id');
         });
     }
 

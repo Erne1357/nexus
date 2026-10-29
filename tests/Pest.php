@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use Dom\Element;
 use Dom\HTMLDocument;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
 use Illuminate\Testing\TestResponse;
@@ -56,11 +57,7 @@ function fakeKey(int $number): string
  */
 function departmentKey(int $number): string
 {
-    $id = fakeKey($number);
-
-    Department::query()->withTrashed()->whereKey($id)->exists() || Department::factory()->create(['id' => $id]);
-
-    return $id;
+    return fixedKeyOf(Department::class, $number);
 }
 
 /**
@@ -68,9 +65,21 @@ function departmentKey(int $number): string
  */
 function careerKey(int $number): string
 {
+    return fixedKeyOf(Career::class, $number);
+}
+
+/**
+ * Crea con su factory, si no existe, el registro del modelo con el uuid de fakeKey($number), y da ese uuid.
+ *
+ * @param  class-string<Model>  $model
+ */
+function fixedKeyOf(string $model, int $number): string
+{
     $id = fakeKey($number);
 
-    Career::query()->withTrashed()->whereKey($id)->exists() || Career::factory()->create(['id' => $id]);
+    if (! $model::query()->withTrashed()->whereKey($id)->exists()) {
+        $model::factory()->create(['id' => $id]);
+    }
 
     return $id;
 }

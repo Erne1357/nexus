@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Core\Models\Campus;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /*
@@ -112,6 +113,27 @@ describe('jefes de departamento', function () {
         departmentHeadFor($this->department, $this->c2, '2026-01-01');
 
         expect(DepartmentHead::withTrashed()->count())->toBe(2);
+    });
+
+    it('la misma persona no se registra dos veces en el mismo cargo con periodos que se traslapan', function () {
+        $head = departmentHeadFor($this->department, $this->c2, '2026-01-01', kind: DepartmentHeadKind::JefeProyectoDocente);
+
+        expect(fn () => DepartmentHead::factory()->for($this->department)->for($this->c2)->for($head->user)->create([
+            'kind' => DepartmentHeadKind::JefeProyectoDocente,
+            'valid_from' => '2026-06-01',
+        ]))->toThrow(QueryException::class, 'department_heads_no_duplicate');
+    });
+
+    it('solo acepta los tipos de jefe conocidos: la regla de un solo jefe depende del tipo', function () {
+        $head = departmentHeadFor($this->department, $this->c2, '2026-01-01');
+
+        expect(fn () => DB::table('department_heads')->insert([
+            'department_id' => $this->department->id,
+            'campus_id' => $this->c2->id,
+            'user_id' => $head->user_id,
+            'kind' => 'JEFE',
+            'valid_from' => '2027-01-01',
+        ]))->toThrow(QueryException::class, 'department_heads_kind_check');
     });
 
     it('la vigencia no termina antes de empezar, y puede ser de un solo día', function () {

@@ -12,7 +12,9 @@ use Illuminate\Support\Facades\Schema;
  *
  * Un solo `jefe` vigente por departamento y campus: la base rechaza dos periodos que se traslapan, salvo
  * que uno esté borrado. De `jefe_proyecto_docente` puede haber varios a la vez (confirmado el 29 de octubre
- * de 2026). La exclusión con rangos de fechas necesita `btree_gist` para comparar los uuid en un índice GiST.
+ * de 2026), pero nunca la misma persona dos veces en el mismo cargo con periodos que se traslapan. `kind`
+ * solo acepta sus dos valores, porque la regla del jefe depende de él. Las exclusiones con rangos de fechas
+ * necesitan `btree_gist` para comparar los uuid en un índice GiST (ADR-0016).
  */
 return new class extends Migration
 {
@@ -32,16 +34,27 @@ return new class extends Migration
             $table->softDeletesTz();
 
             $table->index(['department_id', 'campus_id']);
+            $table->index('campus_id');
             $table->index('user_id');
         });
 
         DB::statement('alter table department_heads add constraint department_heads_validity_check check (valid_to is null or valid_to >= valid_from)');
+        DB::statement("alter table department_heads add constraint department_heads_kind_check check (kind in ('jefe', 'jefe_proyecto_docente'))");
         DB::statement(<<<'SQL'
             alter table department_heads add constraint department_heads_one_jefe exclude using gist (
                 department_id with =,
                 campus_id with =,
                 daterange(valid_from, valid_to, '[]') with &&
             ) where (kind = 'jefe' and deleted_at is null)
+            SQL);
+        DB::statement(<<<'SQL'
+            alter table department_heads add constraint department_heads_no_duplicate exclude using gist (
+                department_id with =,
+                campus_id with =,
+                user_id with =,
+                kind with =,
+                daterange(valid_from, valid_to, '[]') with &&
+            ) where (deleted_at is null)
             SQL);
     }
 

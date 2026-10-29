@@ -40,7 +40,9 @@ class Career extends Model
     }
 
     /**
-     * Los campus donde se ofrece, con `pivot.is_active`; sin las filas de `career_campus` borradas.
+     * Los campus donde se ofrece, con `pivot.is_active`; sin las filas de `career_campus` borradas. Solo para
+     * leer: attach(), detach() y sync() borrarían filas de verdad o chocarían con una borrada. Ofrecer o quitar
+     * una carrera en un campus va por CareerCampus, con borrado lógico y restore().
      *
      * @return BelongsToMany<Campus, $this>
      */
