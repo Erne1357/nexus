@@ -7,7 +7,7 @@ use App\Modules\Faculty\Models\TeacherDepartment;
 
 /**
  * Veta borrar un departamento que tiene docentes adscritos sin borrar (S10, supuesto por confirmar). Cuenta
- * docentes distintos: uno adscrito al departamento en dos campus es uno.
+ * docentes distintos y no borrados: uno adscrito al departamento en dos campus es uno.
  */
 final class BlockDepartmentDeletionWithTeachers
 {
@@ -15,6 +15,7 @@ final class BlockDepartmentDeletionWithTeachers
     {
         $teachers = TeacherDepartment::query()
             ->where('department_id', $event->department->id)
+            ->whereHas('teacher')
             ->distinct()
             ->count('teacher_id');
 

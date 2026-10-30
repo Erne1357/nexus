@@ -16,7 +16,7 @@ beforeEach(function () {
     $this->department = Department::factory()->create();
 });
 
-function deleteReasons(Department $department): ?array
+function departmentDeletionReasons(Department $department): ?array
 {
     try {
         app(DeleteDepartment::class)->handle($department);
@@ -30,7 +30,7 @@ function deleteReasons(Department $department): ?array
 it('rechaza borrar un departamento con un docente adscrito', function () {
     Teacher::factory()->adscribedTo($this->department, Campus::factory()->create())->create();
 
-    expect(deleteReasons($this->department))->toBe(['Tiene 1 docente adscrito.'])
+    expect(departmentDeletionReasons($this->department))->toBe(['Tiene 1 docente adscrito.'])
         ->and(Department::find($this->department->id))->not->toBeNull();
 });
 
@@ -40,19 +40,25 @@ it('usa el plural con varios docentes y no cuenta dos veces al que está en dos 
     $both = Teacher::factory()->adscribedTo($this->department, $campus)->create();
     TeacherDepartment::factory()->for($both)->for($this->department)->for(Campus::factory())->create(['is_primary' => false]);
 
-    expect(deleteReasons($this->department))->toBe(['Tiene 3 docentes adscritos.']);
+    expect(departmentDeletionReasons($this->department))->toBe(['Tiene 3 docentes adscritos.']);
 });
 
 it('con la adscripción borrada sí se borra', function () {
     $teacher = Teacher::factory()->adscribedTo($this->department, Campus::factory()->create())->create();
     $teacher->adscriptions()->get()->each->delete();
 
-    expect(deleteReasons($this->department))->toBeNull()
+    expect(departmentDeletionReasons($this->department))->toBeNull()
         ->and(Department::find($this->department->id))->toBeNull();
 });
 
 it('un departamento sin docentes se borra', function () {
     Teacher::factory()->adscribedTo(Department::factory()->create(), Campus::factory()->create())->create();
 
-    expect(deleteReasons($this->department))->toBeNull();
+    expect(departmentDeletionReasons($this->department))->toBeNull();
+});
+
+it('un docente borrado cuya adscripción sigue en pie no bloquea', function () {
+    Teacher::factory()->adscribedTo($this->department, Campus::factory()->create())->create()->delete();
+
+    expect(departmentDeletionReasons($this->department))->toBeNull();
 });
