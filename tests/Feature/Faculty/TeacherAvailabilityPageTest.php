@@ -146,6 +146,16 @@ describe('guardar', function () {
             ->and(lastToastOf($page)['description'])->toContain('sábado');
     });
 
+    it('el aviso de guardado cuenta las celdas ya revisadas, aunque el tipo llegue como enum', function () {
+        $page = availabilityEditor($this->jefe, $this->ana)->call('save', [
+            ['day' => 1, 'starts_at' => '07:00', 'kind' => 'unavailable'],
+            ['day' => 1, 'starts_at' => '08:00', 'kind' => 'unavailable', 'extra' => ['x']],
+            ['day' => 3, 'starts_at' => '10:00', 'kind' => 'preferred'],
+        ]);
+
+        expect(lastToastOf($page)['description'])->toBe('Ene-Jun 2027: 2 h no disponibles y 1 h preferidas.');
+    });
+
     it('una celda con forma inválida no escribe y lo dice en un toast', function (array $cells) {
         $page = availabilityEditor($this->jefe, $this->ana)->call('save', $cells);
 

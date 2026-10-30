@@ -162,3 +162,60 @@ it('las flechas llevan de una celda a los botones del día y de la hora, que pin
         ->assertScript("[...document.querySelectorAll('[data-testid=availability-grid] button')].filter((button) => button.tabIndex === 0).length", 1)
         ->assertNoJavaScriptErrors();
 });
+
+it('al volver con Atrás trae lo guardado de nuevo y conserva lo pintado sin guardar como pendiente', function () {
+    $page = openAvailabilityEditor($this->ana)
+        ->click('[data-d="0"][data-h="0"]')
+        ->click('[data-testid="save-availability"]')
+        ->waitForText('1 h no disponibles')
+        ->click('[data-d="1"][data-h="1"]')
+        ->click('[data-d="1"][data-h="2"]')
+        ->assertSee('2 bloques sin guardar');
+
+    $page->script('(() => { window.confirm = () => true; return true; })()');
+    $page->click('a[href*="tab=disponibilidad"]')->waitForText('Editar disponibilidad');
+
+    // Mientras tanto, otra sesión guarda el jueves a las 7:00.
+    TeacherAvailability::factory()->for($this->ana)->for($this->term)->preferred()->create(['day' => 4, 'starts_at' => '07:00', 'ends_at' => '08:00']);
+
+    $page->back()
+        ->waitForText('Por día')
+        ->wait(1)
+        ->assertScript(availabilityKindAt(0, 0), 'unavailable')
+        ->assertScript(availabilityKindAt(3, 0), 'preferred')
+        ->assertScript(availabilityKindAt(1, 1), 'unavailable')
+        ->assertScript(availabilityKindAt(1, 2), 'unavailable')
+        ->assertScript("[...document.querySelectorAll('[data-testid=availability-grid] [data-changed]')].map((cell) => cell.dataset.d + '-' + cell.dataset.h).join(',')", '1-1,1-2')
+        ->assertSee('2 bloques sin guardar')
+        ->click('[data-testid="save-availability"]')
+        ->waitForText('3 h no disponibles y 1 h preferidas')
+        ->assertNoJavaScriptErrors();
+
+    expect(availabilityRowsOf($this->ana))->toBe(['1 07:00-08:00 unavailable', '2 08:00-10:00 unavailable', '4 07:00-08:00 preferred']);
+});
+
+it('al volver del bfcache del navegador conserva lo pintado sin guardar y trae lo guardado', function () {
+    $page = openAvailabilityEditor($this->ana)->click('[data-d="1"][data-h="1"]');
+    TeacherAvailability::factory()->for($this->ana)->for($this->term)->preferred()->create(['day' => 4, 'starts_at' => '07:00', 'ends_at' => '08:00']);
+
+    $page->script("(() => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); return true; })()");
+    $page->wait(1)
+        ->assertScript(availabilityKindAt(3, 0), 'preferred')
+        ->assertScript(availabilityKindAt(1, 1), 'unavailable')
+        ->assertSee('1 bloque sin guardar');
+});
+
+it('no deja pintar mientras se guarda', function () {
+    $page = openAvailabilityEditor($this->ana)->click('[data-d="0"][data-h="0"]');
+    $page->script('(() => { const send = window.fetch; window.fetch = (...args) => new Promise((resolve) => setTimeout(() => resolve(send(...args)), 1500)); return true; })()');
+
+    $page->click('[data-testid="save-availability"]')
+        ->click('[data-d="2"][data-h="2"]')
+        ->assertScript(availabilityKindAt(2, 2), '')
+        ->waitForText('1 h no disponibles')
+        ->wait(0.3)
+        ->assertScript(availabilityKindAt(2, 2), '')
+        ->assertDontSee('bloque sin guardar');
+
+    expect(availabilityRowsOf($this->ana))->toBe(['1 07:00-08:00 unavailable']);
+});

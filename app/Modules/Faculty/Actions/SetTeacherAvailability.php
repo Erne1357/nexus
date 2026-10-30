@@ -22,10 +22,11 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * `day_end`; una que no, o repetida, rechaza todo sin escribir (error en `cells`).
  *
  * Solo cambia los bloques cuyo tipo difiere del que muestra la cuadrícula con lo guardado (AvailabilityRanges::kindOver):
- * de lo guardado quita el tramo de esos bloques (recortando o partiendo el rango que lo cruza) y pone el tipo nuevo;
- * luego une los rangos contiguos del mismo tipo. Así un rango que no cae en los bloques del perfil (capturado con otro
- * bloque u otro horario) se queda como está si no se tocó, y lo de otros días u horas del periodo, y otro periodo, no se
- * tocan (supuestos por confirmar). En una transacción bloquea al docente, para que dos guardados no se crucen; si ningún
+ * de lo guardado quita el tramo de esos bloques (recortando o partiendo el rango que lo cruza) y pone el tipo nuevo,
+ * unido con los rangos contiguos del mismo tipo que tocan esos bloques. Un rango que no toca ningún bloque cambiado se
+ * queda como está, con su fila, aunque no caiga en los bloques del perfil (capturado con otro bloque u otro horario) o
+ * siga a otro del mismo tipo; lo de otros días u horas del periodo, y otro periodo, no se tocan (supuestos por
+ * confirmar). En una transacción bloquea al docente, para que dos guardados no se crucen; si ningún
  * bloque cambia, no escribe, no registra ni avisa. Si cambia, quita con borrado lógico las filas que ya no van, crea las
  * nuevas, deja una entrada de bitácora en el docente con el antes y el después del periodo y, después del commit, avisa
  * con AvailabilityChanged.
@@ -33,16 +34,21 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 final class SetTeacherAvailability
 {
     /**
+     * Da los minutos marcados en la cuadrícula por tipo, de las celdas ya revisadas, para el aviso de la pantalla.
+     *
      * @param  list<array{day: int, starts_at: string, kind: AvailabilityKind|string}>  $cells
+     * @return array{unavailable: int, preferred: int}
      *
      * @throws ValidationException
      */
-    public function handle(Teacher $teacher, Term $term, array $cells, CampusProfile $profile): void
+    public function handle(Teacher $teacher, Term $term, array $cells, CampusProfile $profile): array
     {
         $wanted = [];
+        $marked = [AvailabilityKind::Unavailable->value => 0, AvailabilityKind::Preferred->value => 0];
 
         foreach ($this->validated($cells, $profile) as $cell) {
             $wanted[$cell['day']][$cell['starts_at']] = $cell['kind'];
+            $marked[$cell['kind']->value] += $profile->blockMinutes;
         }
 
         DB::transaction(function () use ($teacher, $term, $wanted, $profile): void {
@@ -67,7 +73,13 @@ final class SetTeacherAvailability
                 $kept = AvailabilityRanges::cut($kept, $block['day'], $block['starts_at'], $block['ends_at']);
             }
 
-            $final = AvailabilityRanges::join([...$kept, ...array_values(array_filter($changed, fn (array $block): bool => $block['kind'] !== null))]);
+            // Solo se unen los rangos que tocan un bloque cambiado; los demás se quedan como están.
+            $touches = fn (array $range): bool => array_any($changed, fn (array $block): bool => $block['day'] === $range['day']
+                && ($range['ends_at'] === $block['starts_at'] || $range['starts_at'] === $block['ends_at']));
+            $near = array_values(array_filter($kept, $touches));
+            $far = array_values(array_filter($kept, fn (array $range): bool => ! $touches($range)));
+            $added = array_values(array_filter($changed, fn (array $block): bool => $block['kind'] !== null));
+            $final = self::sorted([...$far, ...AvailabilityRanges::join([...$near, ...$added])]);
             $current = $rows->mapWithKeys(fn (TeacherAvailability $row): array => [self::key($this->rangeOf($row)) => $row])->all();
             $next = array_combine(array_map(self::key(...), $final), $final);
 
@@ -93,6 +105,19 @@ final class SetTeacherAvailability
 
             AvailabilityChanged::dispatch($teacher, $term);
         });
+
+        return $marked;
+    }
+
+    /**
+     * @param  list<array{day: int, starts_at: string, ends_at: string, kind: AvailabilityKind}>  $ranges
+     * @return list<array{day: int, starts_at: string, ends_at: string, kind: AvailabilityKind}>
+     */
+    private static function sorted(array $ranges): array
+    {
+        usort($ranges, fn (array $a, array $b): int => [$a['day'], AvailabilityRanges::minutes($a['starts_at'])] <=> [$b['day'], AvailabilityRanges::minutes($b['starts_at'])]);
+
+        return $ranges;
     }
 
     /**

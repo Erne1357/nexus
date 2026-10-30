@@ -44,7 +44,7 @@
 
                 <div class="md:ms-auto max-md:w-full">
                     @if ($copyReason === null)
-                        <x-button :label="'Copiar de '.$previous->name" icon="o-document-duplicate" class="btn-outline max-md:w-full" x-on:click="copyPrevious()" x-bind:disabled="copying || syncing" data-testid="copy-previous" />
+                        <x-button :label="'Copiar de '.$previous->name" icon="o-document-duplicate" class="btn-outline max-md:w-full" x-on:click="copyPrevious()" x-bind:disabled="copying || syncing || saving" data-testid="copy-previous" />
                     @else
                         <span class="tooltip tooltip-left max-md:tooltip-bottom max-md:block" data-tip="{{ $copyReason }}">
                             <x-button :label="$previous ? 'Copiar de '.$previous->name : 'Copiar del periodo anterior'" icon="o-document-duplicate" class="btn-outline max-md:w-full" disabled aria-label="Copiar del periodo anterior: {{ $copyReason }}" data-testid="copy-previous" />

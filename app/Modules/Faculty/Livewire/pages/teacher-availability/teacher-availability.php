@@ -108,15 +108,16 @@ new #[Title('Disponibilidad')] class extends Component
         $profile = $grids->profile($grids->campus($this->campusId));
 
         try {
-            $setAvailability->handle($teacher, $term, $cells, $profile);
+            $marked = $setAvailability->handle($teacher, $term, $cells, $profile);
         } catch (ValidationException $exception) {
             $this->error('No se guardó la disponibilidad', e(collect($exception->errors())->flatten()->implode(' ')));
 
             return false;
         }
 
-        $hours = fn (AvailabilityKind $kind): int|float => AvailabilityGridQuery::hours(count(array_filter($cells, fn (array $cell): bool => $cell['kind'] === $kind->value)) * $profile->blockMinutes);
-        $this->success('Disponibilidad guardada', e("{$term->name}: {$hours(AvailabilityKind::Unavailable)} h no disponibles y {$hours(AvailabilityKind::Preferred)} h preferidas."));
+        $unavailable = AvailabilityGridQuery::hours($marked['unavailable']);
+        $preferred = AvailabilityGridQuery::hours($marked['preferred']);
+        $this->success('Disponibilidad guardada', e("{$term->name}: {$unavailable} h no disponibles y {$preferred} h preferidas."));
 
         return true;
     }

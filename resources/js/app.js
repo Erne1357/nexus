@@ -586,7 +586,8 @@ document.addEventListener('alpine:init', () => {
 |
 | Cuando Livewire restaura la página de su caché (Atrás o Adelante tras wire:navigate) o el navegador la saca de su
 | bfcache, el x-data trae los tipos de cuando se abrió, no lo guardado después: el editor pide lo guardado a
-| currentKinds() y, mientras llega, no deja pintar ni guardar.
+| currentKinds() y vuelve a poner encima lo pintado sin guardar (de la caché de wire:navigate lo lee de las celdas,
+| que salieron con data-changed), que sigue pendiente. Mientras trae lo guardado o mientras guarda, no deja pintar.
 |
 | Cada celda se actualiza a mano, como en studentGrid: su tipo en data-kind (que leen las utilidades del relleno y del
 | icono), data-continues, data-changed (el punto de «sin guardar»), su aria-label y su texto. Las cifras, las horas de
@@ -657,24 +658,40 @@ document.addEventListener('alpine:init', () => {
 
             init() {
                 elements = cells.map((day, d) => day.map((_, h) => this.$refs.grid.querySelector(`[data-d="${d}"][data-h="${h}"]`)));
+                const restored = availabilityFromCache;
+                availabilityFromCache = false;
+
+                // La página de la caché de wire:navigate se guardó al salir con lo pintado sin guardar en cada celda
+                // (data-kind con data-changed); el x-data, en cambio, trae lo de cuando se abrió. Se recupera de ahí.
+                if (restored) {
+                    elements.forEach((day, d) => day.forEach((element, h) => {
+                        if (element.hasAttribute('data-changed')) {
+                            cells[d][h] = element.dataset.kind ?? '';
+                        }
+                    }));
+                }
+
                 this.refresh();
 
-                if (availabilityFromCache) {
-                    availabilityFromCache = false;
+                if (restored) {
                     this.sync();
                 }
             },
 
-            /** Vuelve a lo guardado en el servidor, sin nada pendiente. */
+            /**
+             * Trae lo guardado en el servidor y vuelve a poner encima lo pintado sin guardar, que sigue pendiente: ni lo
+             * guardado viejo de la página ni el trabajo sin guardar se pierden.
+             */
             async sync() {
                 this.syncing = true;
+                const painted = cells.map((day, d) => day.map((kind, h) => (kind !== saved[d][h] ? kind : null)));
 
                 try {
                     const kinds = await this.$wire.currentKinds();
 
                     if (Array.isArray(kinds)) {
-                        cells = toCells(kinds);
                         saved = toCells(kinds);
+                        cells = saved.map((day, d) => day.map((kind, h) => painted[d][h] ?? kind));
                         this.refresh();
                     }
                 } catch {
@@ -682,6 +699,11 @@ document.addEventListener('alpine:init', () => {
                 } finally {
                     this.syncing = false;
                 }
+            },
+
+            /** Mientras se trae lo guardado o se guarda, no se pinta: la barra de pendientes no queda desfasada. */
+            busy() {
+                return this.syncing || this.saving;
             },
 
             /** Toast de error de MaryUI para una llamada al servidor que no respondió. */
@@ -807,7 +829,7 @@ document.addEventListener('alpine:init', () => {
             down(event) {
                 const cell = event.target.closest('[data-d]');
 
-                if (!cell || event.button > 0 || this.syncing) {
+                if (!cell || event.button > 0 || this.busy()) {
                     return;
                 }
 
@@ -858,7 +880,7 @@ document.addEventListener('alpine:init', () => {
             click(event) {
                 const cell = event.target.closest('[data-d]');
 
-                if (this.syncing) {
+                if (this.busy()) {
                     return;
                 }
 
@@ -977,7 +999,7 @@ document.addEventListener('alpine:init', () => {
             },
 
             async copyPrevious() {
-                if (this.copying || this.syncing) {
+                if (this.copying || this.busy()) {
                     return;
                 }
 

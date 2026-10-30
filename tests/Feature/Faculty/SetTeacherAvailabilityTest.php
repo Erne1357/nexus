@@ -195,6 +195,42 @@ describe('rangos que no caen en los bloques del perfil', function () {
     });
 });
 
+describe('filas contiguas del mismo tipo guardadas por separado', function () {
+    beforeEach(function () {
+        $this->nine = TeacherAvailability::factory()->for($this->teacher)->for($this->term)->preferred()->create(['day' => 1, 'starts_at' => '09:00', 'ends_at' => '10:00']);
+        $this->ten = TeacherAvailability::factory()->for($this->teacher)->for($this->term)->preferred()->create(['day' => 1, 'starts_at' => '10:00', 'ends_at' => '11:00']);
+    });
+
+    it('no las une si sus bloques no se tocaron', function () {
+        setAvailability($this->teacher, $this->term, [[1, '09:00', 'preferred'], [1, '10:00', 'preferred'], [2, '07:00']]);
+
+        expect(availabilityRows($this->teacher, $this->term))->toBe(['1 09:00-10:00 preferred', '1 10:00-11:00 preferred', '2 07:00-08:00 unavailable'])
+            ->and($this->nine->fresh()->trashed())->toBeFalse()
+            ->and($this->ten->fresh()->trashed())->toBeFalse();
+    });
+
+    it('une con lo nuevo solo la que toca el bloque que cambió', function () {
+        setAvailability($this->teacher, $this->term, [[1, '09:00', 'preferred'], [1, '10:00', 'preferred'], [1, '11:00', 'preferred']]);
+
+        expect(availabilityRows($this->teacher, $this->term))->toBe(['1 09:00-10:00 preferred', '1 10:00-12:00 preferred'])
+            ->and($this->nine->fresh()->trashed())->toBeFalse()
+            ->and($this->ten->fresh()->trashed())->toBeTrue();
+    });
+});
+
+it('da los minutos marcados de la cuadrícula por tipo, de las celdas ya revisadas', function () {
+    $marked = app(SetTeacherAvailability::class)->handle($this->teacher, $this->term, [
+        ['day' => 1, 'starts_at' => '07:00', 'kind' => 'unavailable'],
+        ['day' => 1, 'starts_at' => '08:00', 'kind' => AvailabilityKind::Unavailable],
+        ['day' => 2, 'starts_at' => '09:00', 'kind' => 'preferred'],
+    ], $this->profile);
+
+    expect($marked)->toBe(['unavailable' => 120, 'preferred' => 60]);
+
+    expect(app(SetTeacherAvailability::class)->handle($this->teacher, $this->term, [], $this->profile))
+        ->toBe(['unavailable' => 0, 'preferred' => 0]);
+});
+
 it('deja una entrada de bitácora con el antes y el después y avisa tras el commit', function () {
     setAvailability($this->teacher, $this->term, [[1, '07:00']]);
     $this->activityBase = (int) Activity::max('id');
