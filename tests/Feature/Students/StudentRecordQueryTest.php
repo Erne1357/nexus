@@ -126,11 +126,29 @@ it('una vez elegida la especialidad, ya no muestra las materias de las otras', f
     placeInPlan($this->plan, $s, 2, $software);
 
     expect(cellOf(recordOf($this->student), 'R'))->not->toBeNull()
-        ->and(cellOf(recordOf($this->student), 'S')->specialty)->toBe('Software');
+        ->and(cellOf(recordOf($this->student), 'S')->specialtyId)->toBe($software->id);
 
     recordKardex($this->student, $s, 'cursando', '20261');
 
-    expect(fn () => cellOf(recordOf($this->student), 'R'))->toThrow(RuntimeException::class);
+    expect(fn () => cellOf(recordOf($this->student), 'R'))->toThrow(RuntimeException::class)
+        ->and(recordOf($this->student)->specialties)->toBe([['id' => $software->id, 'name' => 'Software', 'subjects' => 1]]);
+});
+
+it('en cada semestre va primero el tronco común y luego cada especialidad, por su clave, con sus materias', function () {
+    $networks = Specialty::factory()->for($this->plan)->create(['code' => 'ESP-B', 'name' => 'Redes']);
+    $software = Specialty::factory()->for($this->plan)->create(['code' => 'ESP-A', 'name' => 'Software']);
+    placeInPlan($this->plan, Subject::factory()->create(['code' => '0-2']), 2, $networks);
+    placeInPlan($this->plan, Subject::factory()->create(['code' => '1-2']), 2, $software);
+    placeInPlan($this->plan, Subject::factory()->create(['code' => '2-4']), 4, $networks);
+
+    $record = recordOf($this->student);
+
+    expect(array_map(fn (GridCell $cell): string => $cell->code, $record->semesters[2]))->toBe(['B-2', 'C-2', 'D-2', 'H-2', '1-2', '0-2'])
+        ->and(array_map(fn (GridCell $cell): ?string => $cell->specialtyId, $record->semesters[4]))->toBe([null, $networks->id])
+        ->and($record->specialties)->toBe([
+            ['id' => $software->id, 'name' => 'Software', 'subjects' => 1],
+            ['id' => $networks->id, 'name' => 'Redes', 'subjects' => 2],
+        ]);
 });
 
 it('agrupa las materias en cadenas de seriación, nombradas por la primera', function () {

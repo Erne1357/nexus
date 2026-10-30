@@ -13,7 +13,7 @@ use Illuminate\Support\Collection;
 
 /**
  * La ficha de un alumno (tarea 1.6): su retícula por semestre con el estado de cada materia como lo nombra el
- * SII (SubjectStanding), las cadenas de seriación, sus cifras y su kárdex por periodo. El avance se calcula al
+ * SII (SubjectStanding), sus especialidades, las cadenas de seriación, sus cifras y su kárdex por periodo. El avance se calcula al
  * leer con PlanGrid, desde su kardex y su semestre, para que la ficha no espere al siguiente recálculo de
  * `student_progress` (reglas-de-negocio.md, "Retícula del alumno"). Una vez elegida la especialidad, no muestra
  * las materias de las otras.
@@ -41,7 +41,8 @@ final class StudentRecordQuery
         $shown = array_keys(array_intersect_key($grid->credits, array_flip([...$approved, ...$progress['subjects_pending']])));
         $available = array_flip($progress['subjects_available']);
         $subjects = Subject::withTrashed()->whereIn('id', array_keys($grid->credits))->get(['id', 'code', 'name'])->keyBy('id');
-        $specialties = Specialty::withTrashed()->whereIn('id', array_values($grid->specialtyOf))->pluck('name', 'id');
+        $specialties = Specialty::withTrashed()->whereIn('id', array_values($grid->specialtyOf))->orderBy('code')->get(['id', 'name']);
+        $bandOf = array_flip($specialties->modelKeys());
         [$chainOf, $chains] = $this->chains($shown, $grid->seriation, $subjects);
         $termInProgress = $this->terms->forCampus($student->campus_id);
         $reach = $student->current_semester === null ? null : $student->current_semester + 2;
@@ -67,7 +68,7 @@ final class StudentRecordQuery
                 name: $subjects[$subjectId]->name,
                 credits: $grid->credits[$subjectId],
                 semester: $semester,
-                specialty: isset($grid->specialtyOf[$subjectId]) ? $specialties[$grid->specialtyOf[$subjectId]] : null,
+                specialtyId: $grid->specialtyOf[$subjectId] ?? null,
                 standing: $standing,
                 grade: $shownRow?->grade_label,
                 termCode: $shownRow?->term_code,
@@ -81,7 +82,17 @@ final class StudentRecordQuery
         }
 
         ksort($semesters);
+
+        // Primero el tronco común y luego cada especialidad, por su clave; dentro de cada una, por clave de materia.
+        $band = fn (GridCell $cell): int => $cell->specialtyId === null ? -1 : $bandOf[$cell->specialtyId];
+
+        foreach ($semesters as $semester => $semesterCells) {
+            usort($semesterCells, fn (GridCell $a, GridCell $b): int => $band($a) <=> $band($b));
+            $semesters[$semester] = $semesterCells;
+        }
+
         $cells = array_merge(...array_values($semesters));
+        $bySpecialty = array_count_values(array_filter(array_map(fn (GridCell $cell): ?string => $cell->specialtyId, $cells)));
 
         return new StudentRecord(
             student: $student,
@@ -94,6 +105,10 @@ final class StudentRecordQuery
             reachSemester: $reach,
             approvedBySemester: array_map(fn (array $semesterCells): int => count(array_filter($semesterCells, fn (GridCell $cell): bool => $cell->standing === SubjectStanding::Acreditada)), $semesters),
             semesters: $semesters,
+            specialties: $specialties->filter(fn (Specialty $specialty): bool => isset($bySpecialty[$specialty->id]))
+                ->map(fn (Specialty $specialty): array => ['id' => $specialty->id, 'name' => $specialty->name, 'subjects' => $bySpecialty[$specialty->id]])
+                ->values()
+                ->all(),
             chains: $chains,
             kardex: $this->kardex($records),
         );

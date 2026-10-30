@@ -11,6 +11,7 @@ use App\Modules\Students\Enums\SubjectStanding;
 final readonly class GridCell
 {
     /**
+     * @param  string|null  $specialtyId  su especialidad (StudentRecord::$specialties), o null si es del tronco común
      * @param  list<string>  $prerequisites  claves de la seriación que pide en el plan
      * @param  list<string>  $missing  claves de esa seriación que todavía no acredita
      * @param  int|null  $creditShare  porcentaje de los créditos del plan que pide, si pide alguno
@@ -23,7 +24,7 @@ final readonly class GridCell
         public string $name,
         public int $credits,
         public int $semester,
-        public ?string $specialty,
+        public ?string $specialtyId,
         public SubjectStanding $standing,
         public ?string $grade,
         public ?string $termCode,

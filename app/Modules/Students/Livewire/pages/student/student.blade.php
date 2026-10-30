@@ -1,7 +1,9 @@
 {{--
     Ficha del alumno (DESIGN.md, "Retícula del alumno"): encabezado con sus datos y cifras, y dos pestañas. La
-    retícula va en columnas por semestre, como la del SII, y en celular los semestres se apilan. Cada materia
-    lleva el relleno, el borde y el icono de su estado, y el estado en texto para lectores de pantalla.
+    retícula va en columnas por semestre, como la del SII, con las piezas de Core (core::semester-grid): una sola
+    cuadrícula con mosaicos de tamaño fijo, el tronco común arriba y una banda por especialidad; en celular los
+    semestres se apilan. Cada materia lleva el relleno, el borde y el icono de su estado, y el estado en texto para
+    lectores de pantalla. Arriba va la leyenda de estados; debajo, la de cadenas y la barra de selección.
 --}}
 @use('App\Modules\Students\Enums\ChainColor')
 @use('App\Modules\Students\Enums\SubjectStanding')
@@ -47,104 +49,90 @@
     </div>
 
     @if ($tab !== 'kardex')
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-neutral">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-neutral" data-testid="standing-legend">
             @foreach ($standings as $standing)
-                <span class="inline-flex items-center gap-1.5">
-                    <span @class(['inline-grid size-5 place-items-center rounded border', $standing->tileClasses()])><x-icon :name="$standing->icon()" class="w-3.5 h-3.5" /></span>
+                <span class="inline-flex items-center gap-1">
+                    <span @class(['inline-flex w-6 h-6 shrink-0 items-center justify-center rounded border', $standing->tileClasses()]) aria-hidden="true"><x-icon :name="$standing->icon()" class="w-4 h-4" /></span>
                     {{ $standing->label() }}
                 </span>
             @endforeach
         </div>
-        @if ($record->reachSemester !== null)
-            <p class="text-neutral">Puede seleccionar materias hasta el semestre <span class="font-mono">{{ $record->reachSemester }}</span>, el suyo y dos más.</p>
-        @endif
 
-        {{-- wire:ignore: el resaltado vive en Alpine, y volver a pintar la página no debe borrarlo. --}}
-        <div x-data="studentGrid" wire:ignore @keydown.escape.window="clearUnlessLayerOpen()" class="space-y-3">
-        @if ($record->chains !== [])
-            <div x-data="{ open: false }" data-testid="chain-legend">
-                {{-- En celular (menos de 768 px) la leyenda va plegada tras este botón; desde md siempre está abierta. --}}
-                <button type="button" data-testid="chain-legend-toggle" class="btn btn-sm btn-ghost md:hidden" aria-controls="student-chain-chips" x-bind:aria-expanded="open.toString()" aria-expanded="false" @click="open = ! open">
-                    Cadenas de seriación ({{ count($record->chains) }})
-                </button>
-                <div id="student-chain-chips" class="flex flex-wrap items-center gap-1.5" x-bind:class="open ? '' : 'max-md:hidden'">
-                <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral max-md:hidden">Cadenas de seriación</span>
-                @foreach ($record->chains as $chain)
-                    <button type="button" data-chain-chip data-chain="{{ $chain['index'] }}" data-name="{{ $chain['name'] }}" aria-pressed="false" @click="toggleChain('{{ $chain['index'] }}')"
-                        class="inline-flex h-7 items-center gap-1.5 rounded-field border border-base-300 bg-base-100 px-2 text-[12.5px] aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary">
-                        <span @class(['size-3.5 rounded-sm border-[3px]', ChainColor::forChain($chain['index'])->swatchClasses()]) aria-hidden="true"></span>
-                        {{ $chain['name'] }}
-                        <span class="font-mono text-neutral">{{ $chain['size'] }}</span>
-                    </button>
+        {{--
+            wire:ignore: el resaltado vive en Alpine, y volver a pintar la página no debe borrarlo. Su wire:key y el
+            del kárdex hacen que, al cambiar de pestaña, Livewire lo cambie por el kárdex en lugar de saltárselo.
+        --}}
+        <div x-data="studentGrid" wire:ignore wire:key="student-grid" @keydown.escape.window="clearUnlessLayerOpen()" class="space-y-4">
+            <x-core::semester-grid.frame :layout="$layout" :current="$record->student->current_semester" data-testid="student-grid" x-ref="grid">
+                @foreach ($record->specialties as $specialty)
+                    <x-core::semester-grid.band :specialty="$specialty['id']" :row="$layout->bands[$specialty['id']]" :name="$specialty['name']" :subjects="$specialty['subjects']" />
                 @endforeach
-                </div>
-            </div>
-        @endif
-        <p class="min-h-6 text-neutral" x-ref="info" aria-live="polite" data-testid="chain-info">Toca una materia o una cadena para resaltarla; Esc la quita.</p>
 
-        <div class="relative overflow-x-auto rounded-box border border-base-300 bg-base-100 max-md:overflow-visible max-md:border-0 max-md:bg-transparent">
-            <div class="group/grid flex min-w-max max-md:min-w-0 max-md:flex-col max-md:gap-3 md:min-w-full" data-testid="student-grid" x-ref="grid">
                 @foreach ($record->semesters as $semester => $cells)
-                    <section @class([
-                        'flex min-w-28 flex-1 basis-0 flex-col gap-2 border-base-300 px-1.5 pt-2.5 pb-3 md:[&:not(:first-child)]:border-l',
-                        'max-md:grid max-md:grid-cols-2 max-md:rounded-box max-md:border max-md:bg-base-100 max-md:px-2',
-                        'bg-base-200/60' => $semester === $record->student->current_semester,
-                    ]) aria-label="Semestre {{ $semester }}">
-                        <h3 class="px-0.5 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral max-md:col-span-2">
-                            Semestre {{ $semester }}
-                            <span class="block font-mono text-xs normal-case tracking-normal">{{ $record->approvedBySemester[$semester] }} de {{ count($cells) }}</span>
-                            @if ($semester === $record->student->current_semester)
-                                <span class="block text-xs font-semibold normal-case tracking-normal text-base-content">Su semestre</span>
-                            @elseif ($record->reachSemester !== null && $semester > $record->reachSemester)
-                                <span class="block text-xs normal-case tracking-normal">Fuera de su avance</span>
-                            @endif
-                        </h3>
+                    @php($isCurrent = $semester === $record->student->current_semester)
+                    <x-core::semester-grid.semester :semester="$semester" :column="$layout->columns[$semester]" :current="$isCurrent" :note="$isCurrent ? 'su semestre' : null">
+                        <x-slot:figures>{{ $record->approvedBySemester[$semester] }} de {{ count($cells) }}</x-slot:figures>
+
                         @foreach ($cells as $cell)
-                            <button type="button" @class([
-                                'flex min-h-24 flex-col gap-1 rounded-field border px-2.5 py-2 text-left transition-opacity motion-reduce:transition-none',
-                                'group-data-[focus]/grid:not-data-[on-chain]:opacity-20 group-data-[focus]/grid:not-data-[on-chain]:grayscale',
-                                'data-[me]:ring-2 data-[me]:ring-primary data-[me]:ring-offset-2 data-[me]:ring-offset-base-100',
-                                $cell->standing->tileClasses(),
-                                $cell->chain === null ? '' : ChainColor::forChain($cell->chain)->stripeClasses().' pl-3.5',
-                            ]) title="{{ $cell->standing->label() }}" aria-pressed="false" @click="toggleSubject($el)"
-                                data-subject="{{ $cell->code }}" data-name="{{ $cell->name }}" data-prereqs="{{ implode(' ', $cell->prerequisites) }}" @if ($cell->chain !== null) data-chain="{{ $cell->chain }}" @endif>
-                                <span class="flex items-center justify-between gap-1.5">
-                                    <span class="whitespace-nowrap font-mono text-[12.5px] font-semibold">{{ $cell->code }}</span>
-                                    <x-icon :name="$cell->standing->icon()" class="w-4 h-4 shrink-0" aria-hidden="true" />
-                                </span>
-                                <span class="line-clamp-3 text-[13px] leading-snug text-base-content">{{ $cell->name }}</span>
+                            @if ($cell->specialtyId !== null && ($loop->first || $cells[$loop->index - 1]->specialtyId !== $cell->specialtyId))
+                                <x-core::semester-grid.separator :specialty="$cell->specialtyId" :name="$specialtyNames[$cell->specialtyId]" />
+                            @endif
+
+                            <x-core::semester-grid.tile :row="$layout->rows[$cell->code]" :chain="$cell->chain" :code="$cell->code" :name="$cell->name"
+                                :class="$cell->standing->tileClasses()" :title="$cell->standing->label()" aria-pressed="false" x-on:click="toggleSubject($el)"
+                                :data-subject="$cell->code" :data-name="$cell->name" :data-prereqs="implode(' ', $cell->prerequisites)" :data-chain="$cell->chain">
+                                <x-slot:icon><x-icon :name="$cell->standing->icon()" class="w-4 h-4 shrink-0" aria-hidden="true" /></x-slot:icon>
                                 <span class="sr-only">{{ $cell->standing->label() }}</span>
-                                @if ($cell->specialty)
-                                    <span class="text-[11.5px] text-neutral">Esp. {{ $cell->specialty }}</span>
-                                @endif
+
                                 @if ($cell->standing === SubjectStanding::NoPermitida)
-                                    <span class="text-[11.5px] leading-snug text-neutral">
-                                        @if ($cell->missing !== [])
-                                            Pide <span class="whitespace-nowrap font-mono font-semibold">{{ implode(', ', $cell->missing) }}</span>
-                                        @elseif ($cell->beyondReach)
-                                            Fuera de su avance
-                                        @elseif ($cell->creditShare !== null)
-                                            Pide {{ $cell->creditShare }} % de los créditos
-                                        @endif
-                                    </span>
+                                    @if ($cell->missing !== [])
+                                        <x-slot:requisites :title="'Pide '.implode(', ', $cell->missing)">Pide <span class="font-mono font-semibold">{{ implode(', ', $cell->missing) }}</span></x-slot:requisites>
+                                    @elseif ($cell->beyondReach)
+                                        <x-slot:requisites title="Fuera de su avance">Fuera de su avance</x-slot:requisites>
+                                    @elseif ($cell->creditShare !== null)
+                                        <x-slot:requisites :title="'Pide '.$cell->creditShare.' % de los créditos'">Pide {{ $cell->creditShare }} % de los créditos</x-slot:requisites>
+                                    @endif
                                 @endif
-                                <span class="mt-auto flex items-center justify-between gap-1.5 whitespace-nowrap text-xs">
-                                    <span class="font-mono">{{ $cell->credits }} cr</span>
-                                    <span class="flex gap-1.5 font-mono">
-                                        @if ($cell->attempt !== null && $cell->attempt > 1)<span>{{ $cell->attempt }}.ª</span>@endif
-                                        @if ($cell->grade !== null)<span>{{ $cell->grade }}</span>@endif
-                                    </span>
-                                </span>
+
+                                <x-slot:start>{{ $cell->credits }} cr</x-slot:start>
+                                <x-slot:end>
+                                    @if ($cell->attempt !== null && $cell->attempt > 1)<span>{{ $cell->attempt }}.ª</span>@endif
+                                    @if ($cell->grade !== null)<span>{{ $cell->grade }}</span>@endif
+                                </x-slot:end>
+                            </x-core::semester-grid.tile>
+                        @endforeach
+                    </x-core::semester-grid.semester>
+                @endforeach
+            </x-core::semester-grid.frame>
+
+            @if ($record->chains !== [])
+                <div x-data="{ open: false }" data-testid="chain-legend">
+                    {{-- En celular (menos de 768 px) la leyenda va plegada tras este botón; desde md siempre está abierta. --}}
+                    <button type="button" data-testid="chain-legend-toggle" class="btn btn-sm btn-ghost md:hidden" aria-controls="student-chain-chips" x-bind:aria-expanded="open.toString()" aria-expanded="false" @click="open = ! open">
+                        Cadenas de seriación ({{ count($record->chains) }})
+                    </button>
+                    <div id="student-chain-chips" class="flex flex-wrap items-center gap-1.5" x-bind:class="open ? '' : 'max-md:hidden'">
+                        <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral max-md:hidden">Cadenas de seriación</span>
+                        @foreach ($record->chains as $chain)
+                            <button type="button" data-chain-chip data-chain="{{ $chain['index'] }}" data-name="{{ $chain['name'] }}" aria-pressed="false" @click="toggleChain('{{ $chain['index'] }}')"
+                                class="inline-flex h-7 items-center gap-1.5 rounded-field border border-base-300 bg-base-100 px-2 text-[12.5px] aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary">
+                                <span @class(['size-3.5 rounded-sm border-[3px]', ChainColor::forChain($chain['index'])->swatchClasses()]) aria-hidden="true"></span>
+                                {{ $chain['name'] }}
+                                <span class="font-mono text-neutral">{{ $chain['size'] }}</span>
                             </button>
                         @endforeach
-                    </section>
-                @endforeach
-            </div>
-        </div>
+                    </div>
+                </div>
+            @endif
+
+            <x-core::semester-grid.selection-bar x-ref="bar">
+                <x-slot:info x-ref="info"></x-slot:info>
+                <x-slot:clear x-on:click="select(null)"></x-slot:clear>
+            </x-core::semester-grid.selection-bar>
         </div>
     @else
         <p class="text-neutral">Cada materia que ha cursado, por periodo y desde el primero, como viene en la última importación de kárdex.</p>
-        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="student-kardex">
+        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="student-kardex" wire:key="student-kardex">
             @forelse ($record->kardex as $term)
                 <div class="flex flex-wrap items-center justify-between gap-2 border-base-300 bg-base-200/60 px-5 py-2.5 font-bold [&:not(:first-child)]:border-t">
                     <span><span class="font-mono">{{ $term['term'] }}</span> · {{ $term['label'] }}</span>

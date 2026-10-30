@@ -4,9 +4,10 @@ namespace App\Modules\Students\Enums;
 
 /**
  * Color de una cadena de seriación en la retícula del alumno (tarea 1.6; DESIGN.md, "Retícula del alumno"): la
- * franja a la izquierda de cada materia de la cadena y la muestra de la leyenda. Usa los tokens `chain-1` a
- * `chain-12` del tema, medidos contra los rellenos de la retícula en claro y en oscuro. Con más de doce cadenas
- * los colores se repiten; la leyenda y el nombre de cada cadena las distinguen, porque el color nunca va solo.
+ * muestra de la leyenda. La franja a la izquierda de cada materia la pinta el mosaico de Core
+ * (core::semester-grid.tile) con el mismo token. Usa los tokens `chain-1` a `chain-12` del tema, medidos contra
+ * los rellenos de la retícula en claro y en oscuro. Con más de doce cadenas los colores se repiten; la leyenda y
+ * el nombre de cada cadena las distinguen, porque el color nunca va solo.
  */
 enum ChainColor: string
 {
@@ -29,28 +30,6 @@ enum ChainColor: string
     public static function forChain(int $chain): self
     {
         return self::cases()[$chain % count(self::cases())];
-    }
-
-    /**
-     * La franja de la materia: una sombra interior a la izquierda, para no tocar el borde de su estado. Van
-     * completas, sin armar, para que Tailwind las encuentre.
-     */
-    public function stripeClasses(): string
-    {
-        return match ($this) {
-            self::Chain1 => 'shadow-[inset_5px_0_0_var(--color-chain-1)]',
-            self::Chain2 => 'shadow-[inset_5px_0_0_var(--color-chain-2)]',
-            self::Chain3 => 'shadow-[inset_5px_0_0_var(--color-chain-3)]',
-            self::Chain4 => 'shadow-[inset_5px_0_0_var(--color-chain-4)]',
-            self::Chain5 => 'shadow-[inset_5px_0_0_var(--color-chain-5)]',
-            self::Chain6 => 'shadow-[inset_5px_0_0_var(--color-chain-6)]',
-            self::Chain7 => 'shadow-[inset_5px_0_0_var(--color-chain-7)]',
-            self::Chain8 => 'shadow-[inset_5px_0_0_var(--color-chain-8)]',
-            self::Chain9 => 'shadow-[inset_5px_0_0_var(--color-chain-9)]',
-            self::Chain10 => 'shadow-[inset_5px_0_0_var(--color-chain-10)]',
-            self::Chain11 => 'shadow-[inset_5px_0_0_var(--color-chain-11)]',
-            self::Chain12 => 'shadow-[inset_5px_0_0_var(--color-chain-12)]',
-        };
     }
 
     /**
