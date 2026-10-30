@@ -19,8 +19,8 @@ use Laravel\Fortify\Contracts\UpdatesUserPasswords;
  *
  * A diferencia de las demás Actions, valida su entrada: el controlador de Fortify le pasa la
  * petición sin validar. Exige la contraseña actual y una nueva confirmada, distinta de la actual
- * y conforme a Password::defaults() (FortifyServiceProvider de Core) y que no sea la contraseña por defecto. Rota el remember token,
- * así que ninguna cookie de "recordarme" anterior vuelve a servir; las demás sesiones abiertas
+ * y conforme a Password::defaults() (FortifyServiceProvider de Core). Rechaza también la contraseña
+ * por defecto (DefaultPassword) como contraseña nueva. Rota el remember token, así que ninguna cookie de "recordarme" anterior vuelve a servir; las demás sesiones abiertas
  * las cierra AuthenticateSession en su siguiente petición. La bitácora registra el cambio, nunca
  * la contraseña.
  */

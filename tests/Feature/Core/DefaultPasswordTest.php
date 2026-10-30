@@ -3,8 +3,10 @@
 use App\Modules\Core\Actions\RequirePasswordChange;
 use App\Modules\Core\Actions\ResetUserPassword;
 use App\Modules\Core\Actions\UpdateUserPassword;
+use App\Modules\Core\Events\UserPasswordReset;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\DefaultPassword;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -82,4 +84,34 @@ it('ResetUserPassword vuelve a la de defecto, obliga a cambiarla y cierra las de
     $log = Activity::where('event', 'password-reset')->where('subject_id', $user->id)->first();
     expect($log)->not->toBeNull()
         ->and(json_encode([$log->attribute_changes, $log->properties]))->not->toContain(app(DefaultPassword::class)->value());
+});
+
+it('ResetUserPassword atribuye el reinicio a quien lo hizo y avisa con UserPasswordReset', function () {
+    Event::fake([UserPasswordReset::class]);
+    $admin = User::factory()->create();
+    $user = User::factory()->create();
+
+    app(ResetUserPassword::class)->handle($user, $admin);
+
+    $log = Activity::where('event', 'password-reset')->where('subject_id', $user->id)->sole();
+    expect($log->causer_id)->toBe($admin->id);
+    Event::assertDispatched(UserPasswordReset::class, fn ($e) => $e->user->is($user) && $e->actor->is($admin));
+});
+
+it('ResetUserPassword sin actor no atribuye el reinicio a nadie', function () {
+    $user = User::factory()->create();
+
+    app(ResetUserPassword::class)->handle($user);
+
+    expect(Activity::where('event', 'password-reset')->sole()->causer_id)->toBeNull();
+});
+
+it('RequirePasswordChange marca al usuario y deja una sola entrada aunque se repita', function () {
+    $user = User::factory()->create();
+
+    app(RequirePasswordChange::class)->handle($user);
+    app(RequirePasswordChange::class)->handle($user);
+
+    expect($user->fresh()->must_change_password)->toBeTrue()
+        ->and(Activity::where('event', 'password-change-required')->count())->toBe(1);
 });
