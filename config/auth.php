@@ -127,4 +127,18 @@ return [
 
     'admin_initial_password' => env('ADMIN_INITIAL_PASSWORD'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Contraseña por defecto del personal
+    |--------------------------------------------------------------------------
+    |
+    | La reciben los usuarios nuevos de personal (CreateStaffUser) y quien
+    | reinicia su contraseña (ResetUserPassword). Quien entra con ella queda
+    | obligado a cambiarla y no puede volver a elegirla. Solo vive en .env
+    | (NEXUS_DEFAULT_PASSWORD): el repositorio es público.
+    |
+    */
+
+    'default_password' => env('NEXUS_DEFAULT_PASSWORD'),
+
 ];
