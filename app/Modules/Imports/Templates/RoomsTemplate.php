@@ -166,7 +166,8 @@ class RoomsTemplate extends ImportTemplate
     }
 
     /**
-     * Crea el edificio si el campus no lo tiene (S11).
+     * Crea el edificio si el campus no lo tiene (S11). Corre dentro de la transacción del lote, así que si la fila
+     * falla el edificio no se queda.
      */
     protected function attributes(array $row, ImportContext $context): array
     {

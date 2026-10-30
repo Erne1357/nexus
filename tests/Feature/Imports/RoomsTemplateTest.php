@@ -173,7 +173,7 @@ it('desactivar faltantes solo toca los salones activos del campus del lote', fun
         ->and(Room::where('code', 'EA-101')->sole()->is_active)->toBeTrue();
 });
 
-it('el CSV de ejemplo valida con 0 errores y avisa de los edificios y el tipo nuevos', function () {
+it('el CSV de ejemplo valida con 0 errores y avisa solo del edificio nuevo', function () {
     $csv = file_get_contents(base_path('tests/Fixtures/imports/rooms.csv'));
     $batch = validatedRoomsBatch($this->admin, $this->c2, $csv);
 
@@ -201,4 +201,16 @@ it('busca cada edificio y departamento una sola vez por corrida', function () {
     $lookups = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => preg_match('/from "(buildings|departments)"/', $sql) === 1);
 
     expect($lookups)->toHaveCount(2);
+});
+
+it('un edificio vacío es error de la fila, sin excepción, en la validación y al aplicar el lote', function () {
+    expect($this->template->validate(importRoomRow(['building' => '   ']), $this->context)->errors)
+        ->toBe(['building' => ['El campo edificio es obligatorio.']]);
+
+    $batch = validatedRoomsBatch($this->admin, $this->c2, "edificio,clave,nombre,tipo,capacidad,departamento\n,EA-101,Aula 101,Aula,40,\nEA,EA-102,Aula 102,Aula,40,\n");
+    $applied = app(ApplyImportBatch::class)->handle($batch, $this->admin);
+
+    expect($batch->error_rows)->toBe(1)
+        ->and($applied->status->value)->toBe('applied')
+        ->and(Room::pluck('code')->all())->toBe(['EA-102']);
 });

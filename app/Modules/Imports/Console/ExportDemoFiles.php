@@ -88,7 +88,11 @@ final class ExportDemoFiles extends Command
     {
         $files = [];
 
-        foreach (DB::table('campuses')->whereNull('deleted_at')->whereExists(fn (Builder $rooms) => $rooms->from('rooms')->whereColumn('rooms.campus_id', 'campuses.id')->whereNull('rooms.deleted_at'))->orderBy('code')->pluck('id', 'code') as $code => $campusId) {
+        $campuses = DB::table('campuses')->whereNull('deleted_at')
+            ->whereExists(fn (Builder $rooms) => $rooms->from('rooms')->whereColumn('rooms.campus_id', 'campuses.id')->whereNull('rooms.deleted_at'))
+            ->orderBy('code')->pluck('id', 'code');
+
+        foreach ($campuses as $code => $campusId) {
             $files["rooms-{$code}"] = fn (): iterable => DB::table('rooms as r')
                 ->join('buildings as b', 'b.id', '=', 'r.building_id')
                 ->leftJoin('departments as d', fn ($join) => $join->on('d.id', '=', 'r.department_id')->whereNull('d.deleted_at'))
