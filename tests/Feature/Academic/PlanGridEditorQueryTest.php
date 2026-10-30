@@ -240,3 +240,73 @@ describe('búsquedas por id', function () {
             ->and(fn () => $query->specialtyOrFail($this->plan, $specialty->id))->toThrow(ModelNotFoundException::class);
     });
 });
+
+describe('catálogo para «Agregar materia»', function () {
+    it('busca con todas las palabras en la clave o el nombre, primero las que se pueden poner, y dice por qué no las demás', function () {
+        $free = ($this->subject)('SCD-1027', ['name' => 'Tópicos de Bases de Datos']);
+        $placed = ($this->subject)('AEF-1031', ['name' => 'Fundamentos de Base de Datos']);
+        placeInPlan($this->plan, $placed, 4);
+        $removed = ($this->subject)('BDA-2101', ['name' => 'Bases de Datos Avanzadas']);
+        placeInPlan($this->plan, $removed, 2)->delete();
+        $elsewhere = ($this->subject)('TIB-1009', ['name' => 'Bases de Datos en la Nube']);
+        placeInPlan(StudyPlan::factory()->create(), $elsewhere, 3);
+        ($this->subject)('IFD-1005', ['name' => 'Bases de Datos I', 'is_active' => false]);
+        ($this->subject)('TIB-1008', ['name' => 'Bases de Datos Distribuidas'])->delete();
+        ($this->subject)('ACF-0901', ['name' => 'Cálculo Diferencial']);
+
+        $catalog = app(PlanGridEditorQuery::class)->catalog($this->plan, 'datos BASE');
+
+        expect($catalog)->total->toBe(6)->searched->toBeTrue()->matches->toBe(6)
+            ->and(array_map(fn (array $row): string => $row['code'].($row['placeable'] ? '' : ' no'), $catalog['subjects']))
+            ->toBe(['BDA-2101', 'SCD-1027', 'TIB-1009', 'AEF-1031 no', 'IFD-1005 no', 'TIB-1008 no'])
+            ->and($catalog['subjects'][3])->toBe([
+                'id' => $placed->id,
+                'code' => 'AEF-1031',
+                'name' => 'Fundamentos de Base de Datos',
+                'theory_hours' => 3,
+                'practice_hours' => 2,
+                'credits' => 5,
+                'department' => 'Sistemas y Computación',
+                'is_active' => true,
+                'deleted' => false,
+                'semester' => 4,
+                'placeable' => false,
+            ])
+            ->and($catalog['subjects'][0])->semester->toBeNull()->placeable->toBeTrue()
+            ->and($catalog['subjects'][4])->is_active->toBeFalse()->deleted->toBeFalse()
+            ->and($catalog['subjects'][5])->deleted->toBeTrue();
+    });
+
+    it('no busca con menos de dos letras, y muestra a lo más 8 con cuántas coinciden', function () {
+        foreach (range(1, 12) as $i) {
+            ($this->subject)(sprintf('OPT-%04d', $i), ['name' => "Optativa {$i}"]);
+        }
+
+        $query = app(PlanGridEditorQuery::class);
+
+        expect($query->catalog($this->plan, ' o '))->toBe(['total' => 12, 'searched' => false, 'matches' => 0, 'subjects' => []])
+            ->and($query->catalog($this->plan, 'optativa'))->matches->toBe(12)->subjects->toHaveCount(8)
+            ->and($query->catalog($this->plan, '50%'))->matches->toBe(0)->subjects->toBe([]);
+    });
+
+    it('lee el catálogo en 2 consultas', function () {
+        foreach (range(1, 30) as $i) {
+            placeInPlan($this->plan, ($this->subject)(sprintf('OPT-%04d', $i)), $i % 4 + 1);
+        }
+
+        DB::enableQueryLog();
+        app(PlanGridEditorQuery::class)->catalog($this->plan, 'opt');
+
+        expect(DB::getQueryLog())->toHaveCount(2);
+    });
+
+    it('encuentra una materia del catálogo para ponerla, también borrada; una que no existe o no es uuid no', function () {
+        $deleted = ($this->subject)('TIB-1008');
+        $deleted->delete();
+        $query = app(PlanGridEditorQuery::class);
+
+        expect($query->subjectOrFail($deleted->id)->is($deleted))->toBeTrue()
+            ->and(fn () => $query->subjectOrFail(fakeKey(99)))->toThrow(ModelNotFoundException::class)
+            ->and(fn () => $query->subjectOrFail('no-es-uuid'))->toThrow(ModelNotFoundException::class);
+    });
+});

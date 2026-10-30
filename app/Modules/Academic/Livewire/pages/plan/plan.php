@@ -1,12 +1,18 @@
 <?php
 
 use App\Modules\Academic\Actions\CreateSpecialty;
+use App\Modules\Academic\Actions\PlaceSubject;
+use App\Modules\Academic\Actions\RemovePlacement;
 use App\Modules\Academic\Actions\RemoveSpecialty;
+use App\Modules\Academic\Actions\UpdatePlacement;
 use App\Modules\Academic\Actions\UpdateSpecialty;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Queries\PlanGridEditorQuery;
 use App\Modules\Academic\Queries\StudyPlanQuery;
+use App\Modules\Academic\Rules\PlacementRules;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -17,7 +23,9 @@ use Mary\Traits\Toast;
  * Retícula de un plan (tarea 1.8; DESIGN.md, "Retícula del plan (editor)", variante A aprobada el 29 de
  * octubre de 2026): el encabezado del plan, sus especialidades y sus materias en columnas por semestre, con su
  * seriación y sus cadenas. Tocar una materia la selecciona, resalta su cadena y la abre en el panel lateral
- * (`x-drawer`): su lugar, lo que pide y quién la pide. En el mismo panel se gestionan las especialidades. Es del
+ * (`x-drawer`): su lugar, que se edita ahí (semestre, especialidad y si es obligatoria), lo que pide y quién la
+ * pide, y al pie «Quitar de la retícula…», que pide confirmar con la seriación que se va. Al pie de cada semestre,
+ * «Agregar materia» busca en el catálogo y la pone. En el mismo panel se gestionan las especialidades. Es del
  * admin.
  *
  * El componente lee con PlanGridEditorQuery, autoriza `view` del plan en mount() y en cada lectura, y
@@ -25,8 +33,8 @@ use Mary\Traits\Toast;
  * valida la forma de los datos y llama a las Actions, que hacen cumplir las reglas. Los ids que llegan del
  * navegador se buscan dentro del plan: una fila o una especialidad de otro plan no existe.
  *
- * Las tareas 1.8.9 (poner, mover y quitar materias) y 1.8.10 (seriación) llenan las secciones del panel de una
- * materia: ver academic::plan.subject-panel.
+ * La tarea 1.8.10 (seriación) llena las secciones «Pide» y «Agregar requisito» del panel de una materia: ver
+ * academic::plan.subject-panel.
  */
 new #[Title('Retícula del plan')] class extends Component
 {
@@ -63,6 +71,41 @@ new #[Title('Retícula del plan')] class extends Component
 
     public string $renamedName = '';
 
+    /** El semestre de la materia del panel (lo que manda el select); se llena al elegirla. */
+    public string $semester = '';
+
+    /** La especialidad de la materia del panel; '' es el tronco común. */
+    public string $specialty_id = '';
+
+    /** Si la materia del panel es obligatoria. */
+    public bool $is_required = true;
+
+    /** La confirmación de quitar de la retícula la materia del panel. */
+    public bool $showRemove = false;
+
+    /** «Agregar materia»: el modal con la búsqueda en el catálogo. */
+    public bool $showAdd = false;
+
+    /** Lo que se busca en el catálogo: clave o nombre. */
+    public string $addSearch = '';
+
+    /** La materia del catálogo elegida para agregar; null si ninguna. Solo la elige pick(). */
+    #[Locked]
+    public ?string $addSubjectId = null;
+
+    /** Su clave, para el botón que la agrega. */
+    #[Locked]
+    public string $addSubjectCode = '';
+
+    /** El semestre donde se agrega. */
+    public string $addSemester = '1';
+
+    /** Su especialidad; '' es el tronco común. */
+    public string $addSpecialtyId = '';
+
+    /** Si se agrega como obligatoria. */
+    public bool $addIsRequired = true;
+
     public function mount(string $plan, StudyPlanQuery $plans): void
     {
         $model = $plans->findOrFail($plan);
@@ -87,9 +130,15 @@ new #[Title('Retícula del plan')] class extends Component
             $this->showDrawer = $this->showDrawer && $this->panel === 'specialties';
         }
 
+        if ($selected === null) {
+            $this->showRemove = false;
+        }
+
         if ($this->chainFocus !== null && ! isset($grid['chains'][$this->chainFocus])) {
             $this->chainFocus = null;
         }
+
+        $offeredSemesters = PlacementRules::offeredSemesters($plan->semesters_count, $grid['semesters_count']);
 
         return [
             'plan' => $plan,
@@ -98,6 +147,17 @@ new #[Title('Retícula del plan')] class extends Component
             'specialtiesById' => array_column($grid['specialties'], null, 'id'),
             'summaries' => array_map(fn (array $semester): array => $this->summary($semester), $grid['semesters']),
             'selected' => $selected,
+            'offeredSemesters' => $offeredSemesters,
+            'placementOptions' => $selected === null ? null : [
+                'semesters' => $this->semesterOptions(max($offeredSemesters, $selected['semester'])),
+                'specialties' => $this->specialtyOptions($grid['specialties'], $selected['specialty_id']),
+            ],
+            'removal' => $this->showRemove && $selected !== null ? $this->removal($rows, $selected) : null,
+            'addOptions' => $this->showAdd ? [
+                'semesters' => $this->semesterOptions($offeredSemesters),
+                'specialties' => $this->specialtyOptions($grid['specialties']),
+            ] : null,
+            'catalog' => $this->showAdd ? $grids->catalog($plan, $this->addSearch) : null,
             ...$this->highlight($grid, $rows, $selected),
         ];
     }
@@ -113,6 +173,8 @@ new #[Title('Retícula del plan')] class extends Component
         $this->chainFocus = null;
         $this->panel = 'subject';
         $this->showDrawer = true;
+        $this->showRemove = false;
+        $this->fillPlacement($placement);
     }
 
     /**
@@ -143,7 +205,8 @@ new #[Title('Retícula del plan')] class extends Component
     public function updatedShowDrawer(bool $open): void
     {
         if (! $open) {
-            $this->reset('selectedId', 'renamingId', 'renamedName');
+            $this->resetValidation(['semester', 'specialty_id', 'is_required']);
+            $this->reset('selectedId', 'renamingId', 'renamedName', 'showRemove', 'semester', 'specialty_id', 'is_required');
 
             return;
         }
@@ -251,11 +314,210 @@ new #[Title('Retícula del plan')] class extends Component
     }
 
     /**
+     * Guarda el lugar de la materia de la fila `$id` (la del panel): su semestre, su especialidad y si es
+     * obligatoria. Los errores de UpdatePlacement caen en su campo, que se llama como su clave. Si otra sesión
+     * la quitó, lo dice y cierra el panel (selectedPlacementGone()).
+     */
+    public function savePlacement(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids, UpdatePlacement $updatePlacement): void
+    {
+        $placement = $this->selectedPlacement($id, $plans, $grids);
+
+        if ($placement === null) {
+            return;
+        }
+
+        $data = $this->validate([
+            'semester' => ['required', 'integer'],
+            'specialty_id' => ['nullable', 'string'],
+            'is_required' => ['boolean'],
+        ]);
+
+        try {
+            $placement = $updatePlacement->handle($placement, [
+                'semester' => (int) $data['semester'],
+                'specialty_id' => $data['specialty_id'] ?? null,
+                'is_required' => (bool) $data['is_required'],
+            ]);
+        } catch (ModelNotFoundException) {
+            $this->selectedPlacementGone();
+
+            return;
+        }
+
+        $this->fillPlacement($placement);
+        $subject = $placement->subject;
+
+        if (! $placement->wasChanged()) {
+            $this->info('Sin cambios', e("{$subject->code} {$subject->name} ya estaba así."));
+
+            return;
+        }
+
+        $this->success('Lugar guardado', e("{$subject->code} {$subject->name} queda en el semestre {$placement->semester}."));
+    }
+
+    /**
+     * Pide confirmar que se quita de la retícula la materia del panel; la confirmación lista la seriación que se
+     * va con ella.
+     */
+    public function confirmRemove(StudyPlanQuery $plans, PlanGridEditorQuery $grids): void
+    {
+        if ($this->selectedId === null) {
+            $this->authorize('editGrid', $this->plan($plans));
+
+            return;
+        }
+
+        $this->showRemove = $this->selectedPlacement($this->selectedId, $plans, $grids) !== null;
+    }
+
+    /**
+     * Quita de la retícula la materia de la fila `$id`, con su seriación, y cierra el panel. Si otra sesión ya la
+     * quitó, lo dice (selectedPlacementGone()).
+     */
+    public function removePlacement(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids, RemovePlacement $removePlacement): void
+    {
+        $placement = $this->selectedPlacement($id, $plans, $grids);
+
+        if ($placement === null) {
+            return;
+        }
+
+        try {
+            $removed = $removePlacement->handle($placement);
+        } catch (ModelNotFoundException) {
+            $this->selectedPlacementGone();
+
+            return;
+        }
+
+        $subject = $placement->subject;
+
+        $this->resetValidation(['semester', 'specialty_id', 'is_required']);
+        $this->reset('selectedId', 'showDrawer', 'showRemove', 'semester', 'specialty_id', 'is_required');
+        $this->success('Materia quitada', e("{$subject->code} {$subject->name} ya no está en la retícula".match ($removed) {
+            0 => '.',
+            1 => ' ni su seriación.',
+            default => " ni sus {$removed} seriaciones.",
+        }));
+    }
+
+    /**
+     * Abre «Agregar materia» en el semestre `$semester`, sin búsqueda ni materia elegida.
+     */
+    public function openAdd(int $semester, StudyPlanQuery $plans): void
+    {
+        $this->authorize('editGrid', $this->plan($plans));
+
+        $this->resetValidation(['addSubjectId', 'addSemester', 'addSpecialtyId', 'addIsRequired']);
+        $this->reset('addSearch', 'addSubjectId', 'addSubjectCode', 'addSpecialtyId', 'addIsRequired');
+        $this->addSemester = (string) max(1, $semester);
+        $this->showAdd = true;
+    }
+
+    /**
+     * Elige la materia del catálogo que se va a agregar. Si no se puede poner, lo dice PlaceSubject al agregarla.
+     */
+    public function pick(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids): void
+    {
+        $this->authorize('editGrid', $this->plan($plans));
+
+        $subject = $grids->subjectOrFail($id);
+
+        $this->resetValidation('addSubjectId');
+        $this->addSubjectId = $subject->id;
+        $this->addSubjectCode = $subject->code;
+    }
+
+    /**
+     * Otra búsqueda suelta la materia elegida: puede ya no estar en la lista.
+     */
+    public function updatedAddSearch(): void
+    {
+        $this->reset('addSubjectId', 'addSubjectCode');
+    }
+
+    /**
+     * Agrega la materia elegida en el semestre, con su especialidad y si es obligatoria. Los errores de
+     * PlaceSubject caen en el campo del modal que les toca.
+     */
+    public function place(StudyPlanQuery $plans, PlanGridEditorQuery $grids, PlaceSubject $placeSubject): void
+    {
+        $plan = $this->plan($plans);
+        $this->authorize('editGrid', $plan);
+
+        $data = $this->validate([
+            'addSubjectId' => ['required', 'string'],
+            'addSemester' => ['required', 'integer'],
+            'addSpecialtyId' => ['nullable', 'string'],
+            'addIsRequired' => ['boolean'],
+        ], ['addSubjectId.required' => 'Elige una materia del catálogo.']);
+
+        $subject = $grids->subjectOrFail($data['addSubjectId']);
+
+        try {
+            $specialty = ($data['addSpecialtyId'] ?? '') === '' ? null : $grids->specialtyOrFail($plan, $data['addSpecialtyId']);
+        } catch (ModelNotFoundException) {
+            throw ValidationException::withMessages(['addSpecialtyId' => PlacementRules::SPECIALTY_GONE]);
+        }
+
+        try {
+            $placement = $placeSubject->handle($plan, $subject, (int) $data['addSemester'], $specialty, (bool) $data['addIsRequired']);
+        } catch (ValidationException $exception) {
+            $fields = ['subject_id' => 'addSubjectId', 'semester' => 'addSemester', 'specialty_id' => 'addSpecialtyId'];
+
+            throw ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => [$fields[$key] ?? $key => $messages])->all());
+        }
+
+        $this->reset('showAdd', 'addSearch', 'addSubjectId', 'addSubjectCode', 'addSpecialtyId', 'addIsRequired');
+        $this->success('Materia agregada', e("{$subject->code} {$subject->name} quedó en el semestre {$placement->semester}."));
+    }
+
+    /**
+     * El navegador solo cierra «Agregar materia» (Esc, el velo o la X); abrirlo es de openAdd(), y una petición
+     * que lo abre pide `editGrid` como ella.
+     */
+    public function updatedShowAdd(bool $open): void
+    {
+        if ($open) {
+            $this->authorize('editGrid', $this->plan(app(StudyPlanQuery::class)));
+        }
+    }
+
+    /**
+     * El navegador solo cierra la confirmación de quitar; abrirla es de confirmRemove(): sin una materia elegida
+     * se queda cerrada, y con ella pide `editGrid`.
+     */
+    public function updatedShowRemove(bool $open): void
+    {
+        if (! $open) {
+            return;
+        }
+
+        if ($this->selectedId === null) {
+            $this->showRemove = false;
+
+            return;
+        }
+
+        $this->authorize('editGrid', $this->plan(app(StudyPlanQuery::class)));
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function validationAttributes(): array
     {
-        return ['code' => 'clave', 'name' => 'nombre', 'renamedName' => 'nombre'];
+        return [
+            'code' => 'clave',
+            'name' => 'nombre',
+            'renamedName' => 'nombre',
+            'semester' => 'semestre',
+            'specialty_id' => 'especialidad',
+            'addSubjectId' => 'materia',
+            'addSemester' => 'semestre',
+            'addSpecialtyId' => 'especialidad',
+        ];
     }
 
     /**
@@ -279,6 +541,96 @@ new #[Title('Retícula del plan')] class extends Component
         $this->authorize('editGrid', $plan);
 
         return $grids->specialtyOrFail($plan, $id);
+    }
+
+    /**
+     * Una fila de la retícula del plan con permiso de editarla; una de otro plan, quitada o con un id que no es
+     * uuid no existe (404). La excepción es la fila del panel (`selectedId`, que solo pone select() con una fila
+     * de este plan): si ya no está, otra sesión la quitó (o borró su materia del catálogo), y en lugar del 404 lo
+     * dice y cierra el panel; devuelve null.
+     *
+     * @throws ModelNotFoundException<StudyPlanSubject>
+     */
+    private function selectedPlacement(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids): ?StudyPlanSubject
+    {
+        $plan = $this->plan($plans);
+        $this->authorize('editGrid', $plan);
+
+        try {
+            return $grids->placementOrFail($plan, $id);
+        } catch (ModelNotFoundException $exception) {
+            if ($this->selectedId === null || $id !== $this->selectedId) {
+                throw $exception;
+            }
+
+            $this->selectedPlacementGone();
+
+            return null;
+        }
+    }
+
+    /**
+     * La materia del panel ya no está en la retícula: cierra el panel y la confirmación, y lo dice. Al pintar, la
+     * retícula ya sale sin ella.
+     */
+    private function selectedPlacementGone(): void
+    {
+        $this->resetValidation(['semester', 'specialty_id', 'is_required']);
+        $this->reset('selectedId', 'showDrawer', 'showRemove', 'semester', 'specialty_id', 'is_required');
+        $this->info('Esa materia ya no está en la retícula.', 'La retícula ya está al día.');
+    }
+
+    /**
+     * Llena el formulario del panel con el lugar de la fila y le quita sus errores.
+     */
+    private function fillPlacement(StudyPlanSubject $placement): void
+    {
+        $this->resetValidation(['semester', 'specialty_id', 'is_required']);
+        $this->semester = (string) $placement->semester;
+        $this->specialty_id = (string) $placement->specialty_id;
+        $this->is_required = $placement->is_required;
+    }
+
+    /**
+     * Los semestres del 1 al `$last` para un select.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    private function semesterOptions(int $last): array
+    {
+        return array_map(fn (int $semester): array => ['id' => (string) $semester, 'name' => (string) $semester], range(1, max(1, $last)));
+    }
+
+    /**
+     * Las especialidades del plan para un select; una inactiva no se puede elegir, salvo la que ya tiene la
+     * materia (`$current`): conservarla vale.
+     *
+     * @param  list<array{id: string, code: string, name: string, is_active: bool, subjects: int}>  $specialties
+     * @return list<array{id: string, name: string, disabled: bool}>
+     */
+    private function specialtyOptions(array $specialties, ?string $current = null): array
+    {
+        return array_map(fn (array $specialty): array => [
+            'id' => $specialty['id'],
+            'name' => $specialty['name'].($specialty['is_active'] ? '' : ' (inactiva)'),
+            'disabled' => ! $specialty['is_active'] && $specialty['id'] !== $current,
+        ], $specialties);
+    }
+
+    /**
+     * Lo que dice la confirmación de quitar la materia del panel: las materias que la piden y se quedan sin
+     * ningún requisito al quitarla.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $selected
+     * @return array{orphans: list<string>}
+     */
+    private function removal(array $rows, array $selected): array
+    {
+        $byId = array_column($rows, null, 'subject_id');
+        $orphans = array_filter($selected['required_by'], fn (array $requisite): bool => count($byId[$requisite['subject_id']]['requires'] ?? []) === 1);
+
+        return ['orphans' => array_values(array_unique(array_column($orphans, 'code')))];
     }
 
     /**

@@ -6,10 +6,14 @@ use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\TextSearch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Query\JoinClause;
+use Illuminate\Support\Facades\DB;
 
 /**
  * La retícula de un plan para su editor (academic::pages.plan; tarea 1.8): sus materias por semestre con su
@@ -19,9 +23,16 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  *
  * @phpstan-type Requisite array{prerequisite_id: string, subject_id: string, code: string, name: string, semester: int, kind: string}
  * @phpstan-type Row array{placement_id: string, subject_id: string, code: string, name: string, credits: int, theory_hours: int, practice_hours: int, department: ?string, semester: int, specialty_id: ?string, is_required: bool, is_active: bool, chain: ?int, requires: list<Requisite>, required_by: list<Requisite>}
+ * @phpstan-type CatalogSubject array{id: string, code: string, name: string, theory_hours: int, practice_hours: int, credits: int, department: ?string, is_active: bool, deleted: bool, semester: ?int, placeable: bool}
  */
 final class PlanGridEditorQuery
 {
+    /** Lo que hay que escribir, como mínimo, para buscar en el catálogo. */
+    public const int CATALOG_MIN_SEARCH = 2;
+
+    /** Cuántas materias del catálogo muestra «Agregar materia». */
+    public const int CATALOG_LIMIT = 8;
+
     /**
      * La retícula en tres consultas, sin importar cuántas materias tenga:
      *
@@ -115,6 +126,85 @@ final class PlanGridEditorQuery
     public function specialtyOrFail(StudyPlan $plan, string $id): Specialty
     {
         return KeyLookup::findOrFail(Specialty::query()->where('study_plan_id', $plan->getKey()), $id);
+    }
+
+    /**
+     * El catálogo de materias para «Agregar materia», en dos consultas: cuántas materias tiene (`total`, sin las
+     * borradas) y, si `$search` tiene al menos CATALOG_MIN_SEARCH letras (`searched`), las que tienen cada una de
+     * sus palabras en la clave o el nombre (TextSearch), también las inactivas y las borradas, porque se ven
+     * aunque no se puedan poner: cuántas coinciden (`matches`) y las primeras CATALOG_LIMIT (`subjects`), primero
+     * las que se pueden poner y luego las demás, por clave.
+     *
+     * Cada una dice su departamento, si está activa o borrada, en qué semestre ya está en la retícula del plan
+     * (`semester`; null si no está o se quitó: volver a ponerla la restaura) y si se puede poner (`placeable`):
+     * activa, sin borrar y fuera de la retícula. PlaceSubject lo vuelve a revisar.
+     *
+     * @return array{total: int, searched: bool, matches: int, subjects: list<CatalogSubject>}
+     */
+    public function catalog(StudyPlan $plan, string $search): array
+    {
+        $total = Subject::query()->count();
+        $search = trim($search);
+
+        if (mb_strlen($search) < self::CATALOG_MIN_SEARCH) {
+            return ['total' => $total, 'searched' => false, 'matches' => 0, 'subjects' => []];
+        }
+
+        $words = preg_split('/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [$search];
+        $rows = Subject::withTrashed()
+            ->leftJoin('departments', 'departments.id', '=', 'subjects.department_id')
+            ->leftJoin('study_plan_subjects', fn (JoinClause $join) => $join
+                ->on('study_plan_subjects.subject_id', '=', 'subjects.id')
+                ->where('study_plan_subjects.study_plan_id', $plan->getKey())
+                ->whereNull('study_plan_subjects.deleted_at'))
+            ->tap(function (Builder $query) use ($words): void {
+                foreach ($words as $word) {
+                    TextSearch::apply($query, ['subjects.code', 'subjects.name'], $word);
+                }
+            })
+            ->orderByRaw('(subjects.deleted_at is not null or not subjects.is_active or study_plan_subjects.id is not null)')
+            ->orderBy('subjects.code')
+            ->limit(self::CATALOG_LIMIT)
+            ->toBase()
+            ->get([
+                'subjects.id', 'subjects.code', 'subjects.name', 'subjects.theory_hours', 'subjects.practice_hours', 'subjects.credits',
+                'departments.name as department', 'subjects.is_active', 'subjects.deleted_at', 'study_plan_subjects.semester',
+                DB::raw('count(*) over () as matches'),
+            ]);
+
+        return [
+            'total' => $total,
+            'searched' => true,
+            'matches' => (int) ($rows->first()->matches ?? 0),
+            'subjects' => $rows->map(function (object $row): array {
+                $semester = $row->semester === null ? null : (int) $row->semester;
+                $deleted = $row->deleted_at !== null;
+
+                return [
+                    'id' => $row->id,
+                    'code' => $row->code,
+                    'name' => $row->name,
+                    'theory_hours' => (int) $row->theory_hours,
+                    'practice_hours' => (int) $row->practice_hours,
+                    'credits' => (int) $row->credits,
+                    'department' => $row->department,
+                    'is_active' => (bool) $row->is_active,
+                    'deleted' => $deleted,
+                    'semester' => $semester,
+                    'placeable' => (bool) $row->is_active && ! $deleted && $semester === null,
+                ];
+            })->all(),
+        ];
+    }
+
+    /**
+     * Una materia del catálogo para ponerla en la retícula, también borrada: PlaceSubject dice por qué no se puede.
+     *
+     * @throws ModelNotFoundException<Subject> si no existe o el id no es uuid
+     */
+    public function subjectOrFail(string $id): Subject
+    {
+        return KeyLookup::findOrFail(Subject::withTrashed(), $id);
     }
 
     /**

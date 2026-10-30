@@ -126,6 +126,8 @@ Oferta por campus: la oferta de una carrera inactiva nace inactiva (confirmado e
 
 Especialidades: quitar una especialidad de un plan no pasa en la práctica: sería otro plan; un plan suele tener 2 o 3 y el alumno elige una (confirmado el 29 de octubre de 2026). Por eso solo se quita, de forma lógica, una especialidad sin materias en la retícula, que se capturó por error; desactivarla se permite siempre, tenga o no materias (supuesto por confirmar, S1). Su clave es única dentro del plan, también contra las quitadas. Darla de alta, renombrarla, desactivarla o quitarla no cambia el avance de ningún alumno.
 
+Retícula del plan: una materia está una sola vez en la retícula de un plan, y volver a poner una que se quitó restaura su fila con el lugar nuevo, como pide el modelo de datos (modelo-de-datos.md, `study_plan_subjects`); su seriación no vuelve, porque se quitó con ella. Quitar una materia de la retícula quita en la misma operación toda su seriación en ese plan, la que pide y la que la pide a ella; la materia sigue en el catálogo y en los otros planes. El semestre va de 1 a los semestres del plan; si el plan no los tiene capturados, de 1 a 12, y el editor ofrece los que ya tienen materias y uno más (supuesto por confirmar). Solo se pone una materia activa y sin borrar del catálogo, y solo se asigna una especialidad activa del mismo plan; una materia conserva su especialidad aunque esta se desactive (supuesto por confirmar). Poner, mover o quitar una materia cambia el avance de los alumnos del plan, y cada cambio queda en la bitácora con el lugar anterior y el nuevo y, al quitarla, cuántas seriaciones se fueron.
+
 ## Parámetros por campus (perfil de flujo)
 
 | Clave | Presencial (C1, C2) | Notas para otras modalidades |

@@ -2,9 +2,11 @@
     Retícula de un plan (DESIGN.md, "Retícula del plan (editor)"; variante A aprobada el 29 de octubre de 2026):
     el encabezado del plan con la entrada a sus especialidades; la leyenda; las cadenas de seriación; y sus
     materias en columnas por semestre, como la retícula del alumno, con el tronco común antes que cada
-    especialidad. En celular los semestres se apilan. Tocar una materia la abre en el panel lateral (x-drawer a
-    la derecha; a pantalla completa en celular) y resalta su cadena; el panel también gestiona las
-    especialidades. El resaltado lo pinta el servidor con data-focus, data-me y data-on-chain, que leen las
+    especialidad. En celular los semestres se apilan. Al pie de cada semestre (hasta el último que se ofrece),
+    «Agregar materia» abre la búsqueda en el catálogo; un plan sin semestres ni materias la ofrece en su estado
+    vacío. Tocar una materia la abre en el panel lateral (x-drawer a la derecha; a pantalla completa en celular),
+    donde se edita su lugar o se quita, y resalta su cadena; el panel también gestiona las especialidades.
+    «Agregar materia» y la confirmación de quitar son x-modal de la página, fuera del panel. El resaltado lo pinta el servidor con data-focus, data-me y data-on-chain, que leen las
     utilidades de Tailwind: la retícula cambia con cada edición y así no hay estado que se desfase.
 --}}
 <div class="space-y-5">
@@ -72,7 +74,10 @@
         <p class="min-h-6 text-neutral" aria-live="polite" data-testid="chain-info">{{ $info }}</p>
 
         @if ($grid['semesters'] === [])
-            <p class="rounded-box border border-base-300 bg-base-100 px-5 py-6 text-center text-neutral">Este plan todavía no tiene semestres ni materias en su retícula.</p>
+            <div class="rounded-box border border-base-300 bg-base-100 px-5 py-6 text-center" data-testid="empty-grid">
+                <p class="text-neutral">Este plan todavía no tiene semestres ni materias en su retícula.</p>
+                <x-button label="Agregar materia" icon="o-plus" class="btn-primary btn-sm mt-3" wire:click="openAdd(1)" spinner="openAdd(1)" data-testid="add-first-subject" />
+            </div>
         @else
             <div class="relative overflow-x-auto rounded-box border border-base-300 bg-base-100 max-md:overflow-visible max-md:border-0 max-md:bg-transparent">
                 <div class="group/grid flex min-w-max max-md:min-w-0 max-md:flex-col max-md:gap-3 md:min-w-full" data-testid="plan-grid" @if ($focused) data-focus @endif>
@@ -102,13 +107,40 @@
                                 @include('academic::plan.tile', ['row' => $row, 'isSelected' => $selected !== null && $selected['placement_id'] === $row['placement_id']])
                             @endforeach
 
-                            {{-- Tarea 1.8.9: «Agregar materia» al pie de cada semestre (un botón punteado que abre la búsqueda en el catálogo). --}}
+                            @if ($semester <= $offeredSemesters)
+                                <x-button
+                                    label="Agregar materia"
+                                    icon="o-plus"
+                                    class="btn-ghost btn-sm h-auto min-h-10 gap-1.5 border border-dashed border-base-300 py-1.5 text-center font-medium leading-tight text-neutral hover:border-neutral hover:text-base-content max-md:col-span-2"
+                                    wire:click="openAdd({{ $semester }})"
+                                    spinner="openAdd({{ $semester }})"
+                                    aria-label="Agregar materia al semestre {{ $semester }}"
+                                    data-add-semester="{{ $semester }}"
+                                />
+                            @endif
                         </section>
                     @endforeach
                 </div>
             </div>
         @endif
     </div>
+
+    {{--
+        «Agregar materia» y la confirmación de quitar van en la página y no dentro del panel: el panel se desliza
+        con transform, y un modal dentro quedaría encerrado en él. Esc los cierra sin llegar al panel, que lo
+        escucha en window (si no, cerraría también el panel y quitaría la selección).
+    --}}
+    <x-modal wire:model="showAdd" box-class="max-w-2xl" aria-labelledby="add-title" data-testid="add-modal" x-on:keydown.escape.stop="$wire.showAdd = false">
+        @if ($showAdd && $catalog !== null)
+            @include('academic::plan.add-subject')
+        @endif
+    </x-modal>
+
+    <x-modal wire:model="showRemove" box-class="max-w-xl" aria-labelledby="remove-title" data-testid="remove-modal" x-on:keydown.escape.stop="$wire.showRemove = false">
+        @if ($removal !== null)
+            @include('academic::plan.remove-placement', ['row' => $selected])
+        @endif
+    </x-modal>
 
     {{-- Los atributos que no son de x-drawer caen en su panel (la x-card): ahí van la semántica de diálogo y el título que lo nombra. MaryUI pone la trampa de foco, Esc e inert. --}}
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="plan-drawer-title" data-testid="plan-drawer">
