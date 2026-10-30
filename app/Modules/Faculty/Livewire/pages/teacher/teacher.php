@@ -1,21 +1,30 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Queries\SubjectQuery;
 use App\Modules\Core\Actions\ResetUserPassword;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Faculty\Actions\AddExternalLoad;
 use App\Modules\Faculty\Actions\AddPosition;
 use App\Modules\Faculty\Actions\RemoveAdscription;
+use App\Modules\Faculty\Actions\RemoveExternalLoad;
 use App\Modules\Faculty\Actions\RemovePosition;
+use App\Modules\Faculty\Actions\RemoveQualification;
 use App\Modules\Faculty\Actions\SetPrimaryAdscription;
+use App\Modules\Faculty\Actions\SetQualification;
 use App\Modules\Faculty\Actions\SetTeacherActive;
+use App\Modules\Faculty\Actions\UpdateExternalLoad;
 use App\Modules\Faculty\Actions\UpdatePosition;
 use App\Modules\Faculty\Actions\UpdateTeacher;
 use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Policies\TeacherPolicy;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
@@ -31,9 +40,10 @@ use Mary\Traits\Toast;
 
 /**
  * Ficha del docente (tarea 1.13, spec 4.3 y S8), con la forma de la ficha del alumno: encabezado con sus datos y
- * cifras, y cinco pestañas. Datos (sus datos, sus adscripciones: quitar y hacer principal) y Plazas (agregar,
- * editar y quitar) son de esta tarea; Disponibilidad, Perfil e Historial muestran su lugar hasta que las tareas
- * siguientes las llenen. «Acciones» trae darlo de baja o reactivarlo y «Restablecer contraseña», que es solo del
+ * cifras, y cinco pestañas: Datos (sus datos, sus adscripciones: quitar y hacer principal), Plazas (agregar,
+ * editar y quitar), Perfil (las materias que puede dar, apto o preferente, y sus «Horas fuera del ITCJ» del periodo
+ * activo; S16 y S17, supuestos por confirmar) e Historial (grupos por periodo y evaluaciones, de solo lectura).
+ * Disponibilidad muestra su lugar hasta que la tarea 1.14 la llene. «Acciones» trae darlo de baja o reactivarlo y «Restablecer contraseña», que es solo del
  * administrador.
  *
  * Lo ven y cambian el admin, la subdirección y los jefes, cada quien los docentes de su alcance (TeacherPolicy). El
@@ -95,6 +105,34 @@ new #[Title('Ficha del docente')] class extends Component
     #[Locked]
     public ?string $removingPositionId = null;
 
+    public bool $showQualificationModal = false;
+
+    /** La materia del perfil que se edita; null es una materia nueva. */
+    #[Locked]
+    public ?string $editingQualificationId = null;
+
+    /** La materia elegida al declarar una nueva. */
+    public string $qualSubjectId = '';
+
+    public string $qualSearch = '';
+
+    /** Valor de QualificationLevel. */
+    public string $qualLevel = 'apto';
+
+    public string $qualNotes = '';
+
+    public bool $showLoadModal = false;
+
+    /** Las horas fuera del ITCJ que se editan; null es un origen nuevo. */
+    #[Locked]
+    public ?string $editingLoadId = null;
+
+    public string $loadSource = '';
+
+    public string $loadHours = '';
+
+    public string $loadNotes = '';
+
     public function mount(string $teacher, TeacherQuery $teachers): void
     {
         $model = $teachers->findOrFail($teacher);
@@ -152,9 +190,17 @@ new #[Title('Ficha del docente')] class extends Component
                 : 'Solo quien administra ese departamento la hace principal.';
         }
 
+        $tabData = match ($this->tab) {
+            'perfil' => $this->profileData($teacher, $records, $teachers, $context, $record->term),
+            'historial' => ['history' => $records->history($teacher)],
+            default => [],
+        };
+
         $removing = $this->removingAdscriptionId === null ? null : $record->adscriptions->firstWhere('id', $this->removingAdscriptionId);
 
         return [
+            'subjectOptions' => collect(),
+            ...$tabData,
             'record' => $record,
             'removal' => $removal,
             'primaryReasons' => $primaryReasons,
@@ -389,6 +435,129 @@ new #[Title('Ficha del docente')] class extends Component
         }
     }
 
+    public function createQualification(TeacherQuery $teachers): void
+    {
+        $this->authorize('view', $teachers->findOrFail($this->teacherId));
+
+        $this->resetValidation();
+        $this->reset('editingQualificationId', 'qualSubjectId', 'qualSearch', 'qualNotes');
+        $this->qualLevel = QualificationLevel::Apto->value;
+        $this->showQualificationModal = true;
+    }
+
+    public function editQualification(string $id, TeacherQuery $teachers, TeacherRecordQuery $records): void
+    {
+        $teacher = $teachers->findOrFail($this->teacherId);
+        $qualification = $records->findQualification($teacher, $id);
+        $this->authorize('manageQualification', [$teacher, Subject::withTrashed()->findOrFail($qualification->subject_id)]);
+
+        $this->resetValidation();
+        $this->editingQualificationId = $qualification->id;
+        $this->qualSubjectId = $qualification->subject_id;
+        $this->qualLevel = $qualification->level->value;
+        $this->qualNotes = (string) $qualification->notes;
+        $this->showQualificationModal = true;
+    }
+
+    public function saveQualification(TeacherQuery $teachers, TeacherRecordQuery $records, SubjectQuery $subjects, SetQualification $setQualification, ScopedContext $context): void
+    {
+        $teacher = $teachers->findOrFail($this->teacherId);
+        $this->authorize('view', $teacher);
+
+        $data = $this->validate([
+            'qualSubjectId' => ['required', 'string'],
+            'qualLevel' => ['required', Rule::enum(QualificationLevel::class)],
+            'qualNotes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        // Al editar, la materia es la del renglón, no lo que mande el navegador.
+        $subject = $this->editingQualificationId === null
+            ? $subjects->findOrFail($data['qualSubjectId'])
+            : Subject::withTrashed()->findOrFail($records->findQualification($teacher, $this->editingQualificationId)->subject_id);
+        $this->authorize('manageQualification', [$teacher, $subject]);
+
+        $setQualification->handle($teacher, $subject, QualificationLevel::from($data['qualLevel']), $context->user(), $data['qualNotes']);
+
+        $this->success('Perfil actualizado', e("{$subject->code} · {$subject->name}"));
+        $this->showQualificationModal = false;
+    }
+
+    public function removeQualification(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, RemoveQualification $removeQualification): void
+    {
+        $teacher = $teachers->findOrFail($this->teacherId);
+        $qualification = $records->findQualification($teacher, $id);
+        $this->authorize('manageQualification', [$teacher, Subject::withTrashed()->findOrFail($qualification->subject_id)]);
+
+        if ($this->attempt(fn () => $removeQualification->handle($qualification), 'No se pudo quitar la materia')) {
+            $this->success('Materia quitada del perfil', 'Queda en la bitácora.');
+        }
+    }
+
+    public function createLoad(TeacherQuery $teachers, ScopedContext $context): void
+    {
+        $this->authorize('manageExternalLoads', $teachers->findOrFail($this->teacherId));
+        $this->activeTermOrFail($context);
+
+        $this->resetValidation();
+        $this->reset('editingLoadId', 'loadSource', 'loadHours', 'loadNotes');
+        $this->showLoadModal = true;
+    }
+
+    public function editLoad(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context): void
+    {
+        $teacher = $teachers->findOrFail($this->teacherId);
+        $this->authorize('manageExternalLoads', $teacher);
+        $load = $this->findLoadInActiveTerm($id, $teacher, $records, $context);
+
+        $this->resetValidation();
+        $this->editingLoadId = $load->id;
+        $this->loadSource = $load->source;
+        $this->loadHours = (string) $load->hours;
+        $this->loadNotes = (string) $load->notes;
+        $this->showLoadModal = true;
+    }
+
+    public function saveLoad(TeacherQuery $teachers, TeacherRecordQuery $records, AddExternalLoad $addExternalLoad, UpdateExternalLoad $updateExternalLoad, ScopedContext $context): void
+    {
+        $teacher = $teachers->findOrFail($this->teacherId);
+        $this->authorize('manageExternalLoads', $teacher);
+        $term = $this->activeTermOrFail($context);
+
+        $data = $this->validate([
+            'loadSource' => ['required', 'string', 'max:255'],
+            'loadHours' => ['required', 'integer', 'between:1,40'],
+            'loadNotes' => ['nullable', 'string', 'max:500'],
+        ]);
+        $data = ['source' => $data['loadSource'], 'hours' => $data['loadHours'], 'notes' => $data['loadNotes']];
+
+        try {
+            if ($this->editingLoadId === null) {
+                $addExternalLoad->handle($teacher, $term, $data);
+                $this->success('Horas agregadas', e("Se restan de lo que se le puede asignar en {$term->name}."));
+            } else {
+                $updateExternalLoad->handle($this->findLoadInActiveTerm($this->editingLoadId, $teacher, $records, $context), $data);
+                $this->success('Horas actualizadas', 'Queda en la bitácora.');
+            }
+        } catch (ValidationException $exception) {
+            $this->addError('loadSource', (string) ($exception->errors()['source'][0] ?? $exception->errors()['hours'][0] ?? collect($exception->errors())->flatten()->first()));
+
+            return;
+        }
+
+        $this->showLoadModal = false;
+    }
+
+    public function removeLoad(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, RemoveExternalLoad $removeExternalLoad, ScopedContext $context): void
+    {
+        $teacher = $teachers->findOrFail($this->teacherId);
+        $this->authorize('manageExternalLoads', $teacher);
+        $load = $this->findLoadInActiveTerm($id, $teacher, $records, $context);
+
+        if ($this->attempt(fn () => $removeExternalLoad->handle($load), 'No se pudo quitar las horas')) {
+            $this->success('Horas quitadas', 'Dejan de restarse de lo que se le puede asignar. Queda en la bitácora.');
+        }
+    }
+
     /**
      * @return array<string, string>
      */
@@ -403,7 +572,52 @@ new #[Title('Ficha del docente')] class extends Component
             'base_hours' => 'horas base',
             'valid_from' => 'inicio de la vigencia',
             'valid_to' => 'fin de la vigencia',
+            'qualSubjectId' => 'materia',
+            'qualLevel' => 'nivel',
+            'qualNotes' => 'notas',
+            'loadSource' => 'origen',
+            'loadHours' => 'horas',
+            'loadNotes' => 'notas',
         ];
+    }
+
+    /**
+     * Lo que pinta la pestaña Perfil: sus materias con quién puede cambiarlas, las horas fuera del ITCJ del periodo
+     * activo y, con el modal abierto, las materias que el usuario puede declarar (S17: las de los departamentos que
+     * cubre).
+     *
+     * @return array<string, mixed>
+     */
+    private function profileData(Teacher $teacher, TeacherRecordQuery $records, TeacherQuery $teachers, ScopedContext $context, ?Term $term): array
+    {
+        $profile = $records->profile($teacher);
+        $loads = $term === null ? collect() : $records->externalLoads($teacher, $term);
+
+        return [
+            'profile' => $profile,
+            'canQualify' => $profile->mapWithKeys(fn ($qualification): array => [$qualification->id => Gate::allows('manageQualification', [$teacher, $qualification->subject])])->all(),
+            'loads' => $loads,
+            'canManageLoads' => Gate::allows('manageExternalLoads', $teacher),
+            'subjectOptions' => $this->showQualificationModal && $this->editingQualificationId === null
+                ? $records->qualifiableSubjects($teachers->coveredDepartments($context), $this->qualSearch)
+                : collect(),
+        ];
+    }
+
+    private function activeTermOrFail(ScopedContext $context): Term
+    {
+        return $context->activeTerm() ?? abort(403, 'Elige un periodo en la credencial.');
+    }
+
+    /**
+     * Unas horas fuera del ITCJ del docente en el periodo activo; las de otro periodo no se tocan desde aquí.
+     */
+    private function findLoadInActiveTerm(string $id, Teacher $teacher, TeacherRecordQuery $records, ScopedContext $context): TeacherExternalLoad
+    {
+        $load = $records->findExternalLoad($teacher, $id);
+        abort_unless($load->term_id === $this->activeTermOrFail($context)->id, 404);
+
+        return $load;
     }
 
     /**

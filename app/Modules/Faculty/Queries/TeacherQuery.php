@@ -172,7 +172,7 @@ final class TeacherQuery
      *
      * @return list<string>|null
      */
-    private function coveredDepartments(ScopedContext $context): ?array
+    public function coveredDepartments(ScopedContext $context): ?array
     {
         if ($context->isAdmin()) {
             return null;

@@ -3,8 +3,9 @@
     Docentes, el encabezado con su nombre, número y estado, sus datos clave y a la derecha «Editar datos» y
     «Acciones» (baja o reactivación y «Restablecer contraseña», deshabilitada con su motivo para quien no es
     administrador); una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
-    pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil e Historial. Las tres últimas muestran su
-    lugar hasta que las tareas 1.14 y 1.15 las llenen. Agregar o editar una plaza y quitar una adscripción o una plaza
+    pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil (materias apto/preferente y «Horas fuera del
+    ITCJ») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad muestra su lugar hasta que
+    la tarea 1.14 la llene. Agregar o editar una plaza y quitar una adscripción o una plaza
     se hacen en un modal. Los renglones de adscripciones y plazas son una cuadrícula que se apila debajo de 768 px.
 --}}
 <div class="space-y-5">
@@ -123,19 +124,138 @@
                     @endif
                 </footer>
             </section>
-        @elseif (in_array($tab, ['disponibilidad', 'perfil', 'historial'], true))
+        @elseif ($tab === 'perfil')
+            @php($preferred = $profile->filter(fn ($qualification) => $qualification->level === \App\Modules\Faculty\Enums\QualificationLevel::Preferente)->count())
+            <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-perfil" data-testid="qualifications">
+                <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-base-300 px-5 py-3">
+                    <h2 id="h-perfil" class="text-lg font-bold">Perfil <span class="font-mono text-neutral">{{ $profile->count() }}</span></h2>
+                    <span class="text-sm text-neutral max-md:order-last max-md:w-full">{{ $preferred }} {{ $preferred === 1 ? 'preferente' : 'preferentes' }} · {{ $profile->count() - $preferred }} {{ $profile->count() - $preferred === 1 ? 'apta' : 'aptas' }}</span>
+                    <x-button label="Agregar materia" icon="o-plus" class="btn-outline btn-sm" wire:click="createQualification" spinner="createQualification" data-testid="add-qualification" />
+                </header>
+
+                @forelse ($profile as $qualification)
+                    <div wire:key="qualification-{{ $qualification->id }}" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3 md:grid-cols-[6rem_minmax(0,1fr)_8rem_7rem_10rem_auto]">
+                        <span class="font-mono text-neutral">{{ $qualification->subject?->code }}</span>
+                        <span class="min-w-0 max-md:col-start-1 max-md:row-start-2 max-md:col-span-2">
+                            <span class="font-semibold">{{ $qualification->subject?->name }}</span>
+                            <span class="block text-sm text-neutral">{{ $qualification->subject?->department?->name }}</span>
+                        </span>
+                        <span class="max-md:col-start-2 max-md:row-start-1 max-md:justify-self-end">
+                            <x-core::status-badge :tone="$qualification->level === \App\Modules\Faculty\Enums\QualificationLevel::Preferente ? 'primary' : 'neutral'" :label="$qualification->level->label()" />
+                        </span>
+                        <span class="max-md:col-span-2 md:text-right"><span class="font-mono font-semibold tabular-nums">{{ $qualification->taught_count }}</span> {{ $qualification->taught_count === 1 ? 'vez' : 'veces' }}<span class="text-neutral md:hidden"> impartida</span></span>
+                        <span class="min-w-0 text-sm text-neutral max-md:col-span-2">Calificó <span class="text-base-content">{{ $qualification->qualifier?->name ?? '—' }}</span>, {{ $qualification->updated_at->format('d/m/Y') }}</span>
+                        <span class="flex justify-end gap-1 max-md:col-span-2 max-md:justify-start max-md:-ms-3">
+                            @if ($canQualify[$qualification->id])
+                                <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" wire:click="editQualification('{{ $qualification->id }}')" spinner="editQualification('{{ $qualification->id }}')" :data-testid="'edit-qualification-'.$loop->index" aria-label="Editar {{ $qualification->subject?->code }} del perfil" />
+                                <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeQualification('{{ $qualification->id }}')" wire:confirm="¿Quitar {{ $qualification->subject?->code }} del perfil de {{ $record->teacher->name }}? Queda en la bitácora." spinner="removeQualification('{{ $qualification->id }}')" :data-testid="'remove-qualification-'.$loop->index" aria-label="Quitar {{ $qualification->subject?->code }} del perfil" />
+                            @else
+                                <span class="tooltip tooltip-left" data-tip="Solo quien administra el departamento de la materia cambia su perfil.">
+                                    <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" disabled aria-label="Editar {{ $qualification->subject?->code }}: solo quien administra su departamento" />
+                                </span>
+                            @endif
+                        </span>
+                    </div>
+                @empty
+                    <p class="px-5 py-6 text-center text-neutral" data-testid="qualifications-empty">Todavía no tiene materias en su perfil: sin ellas el motor no la sugiere para ninguna.</p>
+                @endforelse
+            </section>
+
+            <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-loads" data-testid="external-loads">
+                <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-base-300 px-5 py-3">
+                    <h2 id="h-loads" class="text-lg font-bold">Horas fuera del ITCJ @if ($record->term)<span class="font-normal text-neutral">· {{ $record->term->name }}</span>@endif</h2>
+                    @if ($record->term && $canManageLoads)
+                        <x-button label="Agregar horas" icon="o-plus" class="btn-outline btn-sm" wire:click="createLoad" spinner="createLoad" data-testid="add-load" />
+                    @endif
+                </header>
+
+                @if ($record->term === null)
+                    <p class="px-5 py-6 text-center text-neutral" data-testid="loads-no-term">Elige un periodo en la credencial para capturar las horas que da fuera del ITCJ.</p>
+                @else
+                    @forelse ($loads as $load)
+                        <div wire:key="load-{{ $load->id }}" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3 md:grid-cols-[minmax(0,1fr)_6rem_minmax(0,1fr)_auto]">
+                            <span class="min-w-0 font-semibold">{{ $load->source }}</span>
+                            <span class="font-mono tabular-nums max-md:col-start-2 max-md:row-start-1 md:text-right"><span class="font-semibold">{{ $load->hours }}</span> h</span>
+                            <span class="min-w-0 text-sm text-neutral max-md:col-span-2">{{ $load->notes }}</span>
+                            <span class="flex justify-end gap-1 max-md:col-span-2 max-md:justify-start max-md:-ms-3">
+                                @if ($canManageLoads)
+                                    <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" wire:click="editLoad('{{ $load->id }}')" spinner="editLoad('{{ $load->id }}')" :data-testid="'edit-load-'.$loop->index" aria-label="Editar las horas de {{ $load->source }}" />
+                                    <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeLoad('{{ $load->id }}')" wire:confirm="¿Quitar las {{ $load->hours }} h de {{ $load->source }}? Queda en la bitácora." spinner="removeLoad('{{ $load->id }}')" :data-testid="'remove-load-'.$loop->index" aria-label="Quitar las horas de {{ $load->source }}" />
+                                @endif
+                            </span>
+                        </div>
+                    @empty
+                        <p class="px-5 py-6 text-center text-neutral" data-testid="loads-empty">No tiene horas fuera del ITCJ en {{ $record->term->name }}.</p>
+                    @endforelse
+
+                    <footer class="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-sm text-neutral">
+                        <span>Fuera del ITCJ: <span class="font-mono font-semibold text-base-content">{{ $loads->sum('hours') }} h</span></span>
+                        <span>Se restan de lo que se le puede asignar. Horas base: <span class="font-mono font-semibold text-base-content">{{ $record->baseHours }} h</span></span>
+                    </footer>
+                @endif
+            </section>
+        @elseif ($tab === 'historial')
+            @php($groupCount = $history->sum(fn ($term) => $term['groups']->count()))
+            @php($evaluated = $history->filter(fn ($term) => $term['evaluations']->isNotEmpty()))
+            <div class="grid items-start gap-5 desktop:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-hist" data-testid="history">
+                    <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3">
+                        <h2 id="h-hist" class="text-lg font-bold">Historial <span class="font-mono text-neutral">{{ $groupCount }}</span></h2>
+                        <span class="text-sm text-neutral">Grupos por periodo, del más antiguo al más reciente</span>
+                    </header>
+
+                    @forelse ($history->filter(fn ($term) => $term['groups']->isNotEmpty()) as $term)
+                        <div wire:key="history-{{ $term['code'] }}" class="border-b border-base-300 last:border-b-0">
+                            <div class="flex flex-wrap items-baseline gap-x-3 bg-base-200 px-5 py-2">
+                                <span class="font-mono text-neutral">{{ $term['code'] }}</span>
+                                <span class="font-semibold">{{ $term['label'] }}</span>
+                                <span class="text-sm text-neutral">{{ $term['groups']->count() }} {{ $term['groups']->count() === 1 ? 'grupo' : 'grupos' }}</span>
+                            </div>
+                            @foreach ($term['groups'] as $group)
+                                <div class="grid grid-cols-[5rem_minmax(0,1fr)_3.5rem_3.5rem] items-baseline gap-x-3 px-5 py-2 max-md:grid-cols-[minmax(0,1fr)_auto_auto]">
+                                    <span class="font-mono text-neutral max-md:col-span-3">{{ $group->subject?->code }}</span>
+                                    <span class="min-w-0">{{ $group->subject?->name }}</span>
+                                    <span class="font-mono font-semibold tabular-nums"><span class="text-neutral md:hidden">Grupo </span>{{ $group->group_code }}</span>
+                                    <span class="font-mono tabular-nums text-neutral">{{ $group->campus?->code ?? '—' }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    @empty
+                        <p class="px-5 py-6 text-center text-neutral" data-testid="history-empty">Todavía no tiene grupos importados del SII.</p>
+                    @endforelse
+                </section>
+
+                <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-evals" data-testid="evaluations">
+                    <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3">
+                        <h2 id="h-evals" class="text-lg font-bold">Evaluaciones <span class="font-mono text-neutral">{{ $evaluated->count() }}</span></h2>
+                        <span class="text-sm text-neutral">Escala de 1 a 5</span>
+                    </header>
+
+                    @forelse ($evaluated as $term)
+                        @php($scores = $term['evaluations']->mapWithKeys(fn ($evaluation) => [$evaluation->kind->value => $evaluation->score]))
+                        <div wire:key="evaluation-{{ $term['code'] }}" class="grid grid-cols-2 gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3 last:border-b-0">
+                            <span class="col-span-2 font-semibold">{{ $term['label'] }} <span class="font-mono font-normal text-neutral">{{ $term['code'] }}</span></span>
+                            @foreach (\App\Modules\Faculty\Enums\EvaluationKind::cases() as $evalKind)
+                                <span class="flex flex-col gap-0.5">
+                                    <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $evalKind->label() }}</span>
+                                    @if (isset($scores[$evalKind->value]))
+                                        <span class="flex items-center gap-2"><span class="font-mono font-semibold tabular-nums">{{ $scores[$evalKind->value] }}</span><progress class="progress progress-primary w-16" value="{{ $scores[$evalKind->value] }}" max="5" aria-hidden="true"></progress></span>
+                                    @else
+                                        <span class="text-neutral">Sin evaluar</span>
+                                    @endif
+                                </span>
+                            @endforeach
+                        </div>
+                    @empty
+                        <p class="px-5 py-6 text-center text-neutral" data-testid="evaluations-empty">Todavía no tiene evaluaciones.</p>
+                    @endforelse
+                </section>
+            </div>
+        @elseif ($tab === 'disponibilidad')
             <div class="flex flex-col items-center gap-2 rounded-box border border-dashed border-base-300 bg-base-100 px-5 py-10 text-center" data-testid="tab-pending">
                 <x-icon name="o-clock" class="h-6 w-6 text-neutral" aria-hidden="true" />
                 <p class="font-semibold">{{ $tabs[$tab][0] }}</p>
-                <p class="max-w-prose text-neutral">
-                    @if ($tab === 'disponibilidad')
-                        Aquí irán el resumen de su disponibilidad del periodo y el enlace al editor. Todavía no está disponible.
-                    @elseif ($tab === 'perfil')
-                        Aquí irán las materias que puede dar y su nivel. Todavía no está disponible.
-                    @else
-                        Aquí irán los grupos que ha dado y sus evaluaciones, del periodo más antiguo al más reciente. Todavía no está disponible.
-                    @endif
-                </p>
+                <p class="max-w-prose text-neutral">Aquí irán el resumen de su disponibilidad del periodo y el enlace al editor. Todavía no está disponible.</p>
             </div>
         @else
             <div class="grid items-start gap-5 desktop:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -293,5 +413,52 @@
             <x-button label="Cancelar" @click="$wire.showRemovePositionModal = false" />
             <x-button label="Quitar plaza" icon="o-trash" class="btn-error" wire:click="removePosition" spinner="removePosition" data-testid="confirm-remove-position" />
         </x-slot:actions>
+    </x-modal>
+    <x-modal wire:model="showQualificationModal" :title="$editingQualificationId === null ? 'Agregar materia al perfil' : 'Editar materia del perfil'" :subtitle="$record->teacher->name" box-class="max-w-2xl" separator>
+        <x-form wire:submit="saveQualification" no-separator>
+            <div class="grid gap-4">
+                @if ($editingQualificationId === null)
+                    <x-input label="Buscar materia" wire:model.live.debounce.300ms="qualSearch" placeholder="Clave o nombre" icon="o-magnifying-glass" hint="Solo las de los departamentos que administras." />
+                    <fieldset class="max-h-56 overflow-y-auto rounded-box border border-base-300" data-testid="subject-options">
+                        <legend class="sr-only">Materia</legend>
+                        @forelse ($subjectOptions as $option)
+                            <label wire:key="option-{{ $option->id }}" class="flex cursor-pointer items-start gap-3 border-b border-base-300 px-3 py-2 last:border-b-0 has-[:checked]:bg-base-200">
+                                <input type="radio" class="radio radio-sm mt-0.5" wire:model="qualSubjectId" value="{{ $option->id }}" />
+                                <span class="min-w-0"><span class="font-mono text-neutral">{{ $option->code }}</span> {{ $option->name }}<span class="block text-sm text-neutral">{{ $option->department?->name }}</span></span>
+                            </label>
+                        @empty
+                            <p class="px-3 py-4 text-center text-neutral">Ninguna materia coincide.</p>
+                        @endforelse
+                    </fieldset>
+                    @error('qualSubjectId')<p class="text-sm text-error">{{ $message }}</p>@enderror
+                @endif
+                <x-select label="Nivel" wire:model="qualLevel" :options="array_map(fn ($level) => ['id' => $level->value, 'name' => $level->label()], \App\Modules\Faculty\Enums\QualificationLevel::cases())" hint="Preferente pesa más que apto al sugerir docentes." />
+                <x-textarea label="Notas (opcional)" wire:model="qualNotes" rows="2" />
+            </div>
+
+            <x-slot:actions>
+                <x-button label="Cancelar" @click="$wire.showQualificationModal = false" />
+                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="saveQualification" data-testid="save-qualification" />
+            </x-slot:actions>
+        </x-form>
+    </x-modal>
+
+    <x-modal wire:model="showLoadModal" :title="$editingLoadId === null ? 'Agregar horas fuera del ITCJ' : 'Editar horas fuera del ITCJ'" :subtitle="$record->term?->name" box-class="max-w-xl" separator>
+        <x-form wire:submit="saveLoad" no-separator>
+            <div class="grid gap-4 md:grid-cols-3">
+                <div class="md:col-span-2">
+                    <x-input label="Origen" name="loadSource" wire:model="loadSource" placeholder="Por ejemplo, TecNM Virtual" />
+                </div>
+                <x-input label="Horas" name="loadHours" wire:model="loadHours" type="number" inputmode="numeric" min="1" max="40" class="font-mono" hint="De 1 a 40." />
+                <div class="md:col-span-3">
+                    <x-textarea label="Notas (opcional)" wire:model="loadNotes" rows="2" />
+                </div>
+            </div>
+
+            <x-slot:actions>
+                <x-button label="Cancelar" @click="$wire.showLoadModal = false" />
+                <x-button label="Guardar horas" type="submit" icon="o-check" class="btn-primary" spinner="saveLoad" data-testid="save-load" />
+            </x-slot:actions>
+        </x-form>
     </x-modal>
 </div>

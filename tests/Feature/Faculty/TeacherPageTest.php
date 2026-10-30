@@ -1,12 +1,19 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Models\TeacherEvaluation;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
+use App\Modules\Faculty\Models\TeacherSubjectHistory;
+use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Features\SupportTesting\Testable;
@@ -65,7 +72,7 @@ describe('ficha', function () {
 
     it('las pestañas que vienen después muestran un estado vacío', function (string $tab) {
         teacherRecord($this->admin, $this->ana)->set('tab', $tab)->assertSeeHtml('data-testid="tab-pending"');
-    })->with(['disponibilidad', 'perfil', 'historial']);
+    })->with(['disponibilidad']);
 
     it('no dice «horas extras» en ninguna pestaña', function (string $tab) {
         $page = teacherRecord($this->admin, $this->ana)->set('tab', $tab);
@@ -400,5 +407,211 @@ describe('revisión de la ficha', function () {
 
         expect($this->ana->adscriptions()->count())->toBe(5)
             ->and($count())->toBe($before);
+    });
+});
+
+describe('perfil', function () {
+    beforeEach(function () {
+        $this->redes = Subject::factory()->create(['code' => 'SCC-1', 'name' => 'Redes de computadoras', 'department_id' => $this->sc->id]);
+        $this->calculo = Subject::factory()->create(['code' => 'ACF-1', 'name' => 'Cálculo diferencial', 'department_id' => $this->cb->id]);
+    });
+
+    it('S17: lista las materias del perfil con su nivel y cuántas veces las impartió', function () {
+        TeacherSubjectQualification::factory()->for($this->ana)->for($this->redes)->preferente()->create();
+        TeacherSubjectHistory::factory()->for($this->ana)->for($this->redes)->count(2)->create();
+
+        teacherRecord($this->admin, $this->ana)->set('tab', 'perfil')
+            ->assertSeeInOrder(['Perfil', 'SCC-1', 'Redes de computadoras', 'Preferente', 'veces'])
+            ->assertSeeHtml('>2</span> veces')
+            ->assertSeeHtml('data-testid="qualifications"');
+    });
+
+    it('S17: el jefe de SC declara una materia de SC con su nivel, con bitácora', function () {
+        $page = teacherRecord($this->jefe, $this->ana)->set('tab', 'perfil')->call('createQualification')
+            ->set('qualSubjectId', $this->redes->id)->set('qualLevel', 'preferente')->set('qualNotes', 'La dio en 2024')->call('saveQualification');
+
+        $qualification = TeacherSubjectQualification::sole();
+
+        expect($qualification)->teacher_id->toBe($this->ana->id)->subject_id->toBe($this->redes->id)->level->toBe(QualificationLevel::Preferente)
+            ->qualified_by->toBe($this->jefe->id)->notes->toBe('La dio en 2024')
+            ->and(lastToastOf($page))->type->toBe('success')
+            ->and(Activity::where('id', '>', $this->activityBase)->where('event', 'created')->count())->toBe(1);
+    });
+
+    it('S17: el jefe de SC no declara una materia de CB: 403 y nada se guarda', function () {
+        teacherRecord($this->jefe, $this->ana)->set('tab', 'perfil')->call('createQualification')
+            ->set('qualSubjectId', $this->calculo->id)->set('qualLevel', 'apto')->call('saveQualification')->assertForbidden();
+
+        expect(TeacherSubjectQualification::count())->toBe(0);
+    });
+
+    it('la Subdirección y el admin declaran cualquier materia', function (string $user) {
+        teacherRecord($this->{$user}, $this->ana)->set('tab', 'perfil')->call('createQualification')
+            ->set('qualSubjectId', $this->calculo->id)->set('qualLevel', 'apto')->call('saveQualification')->assertHasNoErrors();
+
+        expect(TeacherSubjectQualification::count())->toBe(1);
+    })->with(['admin', 'subdireccion']);
+
+    it('la búsqueda de materias del jefe de SC solo ofrece las de su departamento', function () {
+        teacherRecord($this->jefe, $this->ana)->set('tab', 'perfil')->call('createQualification')
+            ->assertSee('SCC-1')->assertDontSee('ACF-1')
+            ->set('qualSearch', 'cálculo')->assertDontSee('ACF-1');
+
+        teacherRecord($this->subdireccion, $this->ana)->set('tab', 'perfil')->call('createQualification')
+            ->set('qualSearch', 'cálculo')->assertSee('ACF-1');
+    });
+
+    it('cambia el nivel de una materia y la quita', function () {
+        $qualification = TeacherSubjectQualification::factory()->for($this->ana)->for($this->redes)->apto()->create();
+
+        $page = teacherRecord($this->jefe, $this->ana)->set('tab', 'perfil')->call('editQualification', $qualification->id)
+            ->assertSet('qualSubjectId', $this->redes->id)->set('qualLevel', 'preferente')->call('saveQualification');
+
+        expect($qualification->fresh()->level)->toBe(QualificationLevel::Preferente);
+
+        $page->call('removeQualification', $qualification->id);
+
+        expect($qualification->fresh()->trashed())->toBeTrue()
+            ->and(lastToastOf($page))->title->toBe('Materia quitada del perfil');
+    });
+
+    it('el jefe de SC no edita ni quita una materia de CB del perfil aunque llame directo', function () {
+        $qualification = TeacherSubjectQualification::factory()->for($this->ana)->for($this->calculo)->apto()->create();
+
+        teacherRecord($this->jefe, $this->ana)->call('editQualification', $qualification->id)->assertForbidden();
+        teacherRecord($this->jefe, $this->ana)->call('removeQualification', $qualification->id)->assertForbidden();
+
+        expect($qualification->fresh()->trashed())->toBeFalse();
+    });
+
+    it('no toca el perfil de otro docente ni uno que no es uuid', function () {
+        $foreign = TeacherSubjectQualification::factory()->for($this->beto)->for($this->redes)->create();
+
+        teacherRecord($this->admin, $this->ana)->call('removeQualification', $foreign->id)->assertNotFound();
+        teacherRecord($this->admin, $this->ana)->call('editQualification', 'no-es-uuid')->assertNotFound();
+
+        expect($foreign->fresh()->trashed())->toBeFalse();
+    });
+
+    it('el nivel y la materia son obligatorios', function () {
+        teacherRecord($this->admin, $this->ana)->call('createQualification')->set('qualSubjectId', '')->set('qualLevel', 'experto')->call('saveQualification')
+            ->assertHasErrors(['qualSubjectId', 'qualLevel']);
+    });
+
+    it('quien no cubre al docente no ve su ficha', function () {
+        $this->actingAs($this->jefeCb)->get(route('faculty.teachers.show', $this->beto->id))->assertForbidden();
+    });
+});
+
+describe('horas fuera del ITCJ', function () {
+    it('S16: las muestra por origen con el total, contra las horas base', function () {
+        TeacherExternalLoad::factory()->for($this->ana)->for($this->term)->create(['source' => 'TecNM Virtual', 'hours' => 6]);
+        TeacherExternalLoad::factory()->for($this->ana)->for($this->term)->create(['source' => 'Otra escuela', 'hours' => 4]);
+
+        teacherRecord($this->admin, $this->ana)->set('tab', 'perfil')
+            ->assertSeeInOrder(['Horas fuera del ITCJ', 'Ene-Jun 2027', 'Otra escuela', 'TecNM Virtual', '10 h'])
+            ->assertSeeHtml('data-testid="external-loads"');
+    });
+
+    it('S16: agrega, edita y quita horas del periodo activo', function () {
+        $page = teacherRecord($this->jefe, $this->ana)->set('tab', 'perfil')->call('createLoad')
+            ->set('loadSource', 'TecNM Virtual')->set('loadHours', '12')->set('loadNotes', 'Dos grupos')->call('saveLoad');
+
+        $load = TeacherExternalLoad::sole();
+
+        expect($load)->teacher_id->toBe($this->ana->id)->term_id->toBe($this->term->id)->hours->toBe(12)
+            ->and(lastToastOf($page))->type->toBe('success');
+
+        $page->call('editLoad', $load->id)->assertSet('loadSource', 'TecNM Virtual')->set('loadHours', '8')->call('saveLoad');
+
+        expect($load->fresh()->hours)->toBe(8);
+
+        $page->call('removeLoad', $load->id);
+
+        expect($load->fresh()->trashed())->toBeTrue();
+    });
+
+    it('S16: rechaza horas fuera de 1 a 40 y un origen repetido', function () {
+        teacherRecord($this->admin, $this->ana)->set('tab', 'perfil')->call('createLoad')->set('loadSource', 'A')->set('loadHours', '41')->call('saveLoad')
+            ->assertHasErrors(['loadHours']);
+
+        TeacherExternalLoad::factory()->for($this->ana)->for($this->term)->create(['source' => 'A']);
+
+        teacherRecord($this->admin, $this->ana)->set('tab', 'perfil')->call('createLoad')->set('loadSource', 'A')->set('loadHours', '3')->call('saveLoad')
+            ->assertHasErrors(['loadSource']);
+
+        expect(TeacherExternalLoad::count())->toBe(1);
+    });
+
+    it('sin periodo activo pide elegir uno en la credencial y no deja capturar', function () {
+        Term::query()->update(['is_current' => false]);
+
+        teacherRecord($this->admin, $this->ana)->set('tab', 'perfil')
+            ->assertSee('Elige un periodo en la credencial')
+            ->call('createLoad')->assertForbidden();
+
+        expect(TeacherExternalLoad::count())->toBe(0);
+    });
+
+    it('no toca las horas de otro docente ni las de otro periodo', function () {
+        $foreign = TeacherExternalLoad::factory()->for($this->beto)->for($this->term)->create();
+        $past = TeacherExternalLoad::factory()->for($this->ana)->for(Term::factory()->create())->create();
+
+        teacherRecord($this->admin, $this->ana)->call('removeLoad', $foreign->id)->assertNotFound();
+        teacherRecord($this->admin, $this->ana)->call('editLoad', $past->id)->assertNotFound();
+        teacherRecord($this->admin, $this->ana)->call('removeLoad', $past->id)->assertNotFound();
+
+        expect($foreign->fresh()->trashed())->toBeFalse()->and($past->fresh()->trashed())->toBeFalse();
+    });
+
+    it('quien no cubre al docente no llega a sus horas', function () {
+        $this->actingAs($this->jefeCb)->get(route('faculty.teachers.show', $this->beto->id))->assertForbidden();
+    });
+});
+
+describe('historial', function () {
+    it('muestra los grupos por periodo, del más antiguo al más reciente, y las evaluaciones por tipo', function () {
+        $subject = Subject::factory()->create(['code' => 'SCC-1', 'name' => 'Redes de computadoras']);
+        $campus = Campus::factory()->create(['code' => 'C2']);
+        TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20243', 'campus_id' => $campus->id, 'group_code' => '5B']);
+        TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20241', 'campus_id' => $campus->id, 'group_code' => '3A']);
+        TeacherEvaluation::factory()->for($this->ana)->estudiantil()->create(['term_code' => '20241', 'score' => 4.5]);
+        TeacherEvaluation::factory()->for($this->ana)->departamental()->create(['term_code' => '20241', 'score' => 3.8]);
+
+        teacherRecord($this->admin, $this->ana)->set('tab', 'historial')
+            ->assertSeeInOrder(['Historial', 'Ene-Jun 2024', 'SCC-1', '3A', 'C2', 'Ago-Dic 2024', '5B'])
+            ->assertSeeInOrder(['Evaluaciones', 'Ene-Jun 2024', 'Estudiantil', '4.50', 'Departamental', '3.80'])
+            ->assertSeeHtml('data-testid="history"')
+            ->assertSeeHtml('data-testid="evaluations"');
+    });
+
+    it('es de solo lectura: no hay botones de captura ni métodos que escriban', function () {
+        TeacherSubjectHistory::factory()->for($this->ana)->create();
+
+        $page = teacherRecord($this->admin, $this->ana)->set('tab', 'historial');
+        $dom = domOf($page);
+
+        expect($dom->querySelectorAll('#panel button'))->toHaveCount(0)
+            ->and(method_exists($page->instance(), 'saveHistory'))->toBeFalse();
+    });
+
+    it('sin historial dice que no hay grupos', function () {
+        teacherRecord($this->admin, $this->ana)->set('tab', 'historial')->assertSee('Todavía no tiene grupos importados')->assertSee('Todavía no tiene evaluaciones');
+    });
+
+    it('lee el historial de 8 periodos sin N+1', function () {
+        $subject = Subject::factory()->create();
+        $campus = Campus::factory()->create();
+
+        foreach (['20231', '20232', '20233', '20241', '20242', '20243', '20251', '20252'] as $code) {
+            TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->count(3)->create(['term_code' => $code, 'campus_id' => $campus->id]);
+            TeacherEvaluation::factory()->for($this->ana)->estudiantil()->create(['term_code' => $code]);
+        }
+
+        $page = teacherRecord($this->admin, $this->ana);
+        DB::enableQueryLog();
+        $page->set('tab', 'historial');
+
+        expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(30);
     });
 });
