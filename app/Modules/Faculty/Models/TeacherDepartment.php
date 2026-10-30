@@ -3,7 +3,6 @@
 namespace App\Modules\Faculty\Models;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Faculty\Database\Factories\TeacherDepartmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -14,10 +13,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Adscripción: un docente en un departamento y un campus. Una es la principal (la del SII); para el
- * ranking cuentan todas igual (confirmado el 30 de octubre de 2026).
+ * Adscripción: un docente en un departamento, sin campus, porque el docente no es de un campus (confirmado el 30
+ * de octubre de 2026). Una es la principal (la del SII); para el ranking cuentan todas igual (confirmado el 30 de
+ * octubre de 2026).
  */
-#[Fillable(['teacher_id', 'department_id', 'campus_id', 'is_primary'])]
+#[Fillable(['teacher_id', 'department_id', 'is_primary'])]
 #[UseFactory(TeacherDepartmentFactory::class)]
 class TeacherDepartment extends Model
 {
@@ -46,13 +46,5 @@ class TeacherDepartment extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
-    }
-
-    /**
-     * @return BelongsTo<Campus, $this>
-     */
-    public function campus(): BelongsTo
-    {
-        return $this->belongsTo(Campus::class);
     }
 }

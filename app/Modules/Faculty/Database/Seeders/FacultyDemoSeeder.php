@@ -22,8 +22,9 @@ use RuntimeException;
  * ese número de docentes ficticios (TeacherRosterGenerator) con sus adscripciones, plazas, disponibilidad del
  * periodo actual, horas fuera del ITCJ, perfil, historial de 8 periodos y evaluaciones. Hay docentes de cada
  * departamento que da materias en los planes del campus, de los cinco tipos de plaza (varias a la vez, vencidas y
- * futuras), sin plaza, con adscripciones en los dos campus, inactivos, borrados, sin correo ni grado y con nombres
- * muy largos.
+ * futuras), sin plaza, con dos o tres departamentos, inactivos, borrados, sin correo ni grado y con nombres muy
+ * largos. La adscripción es solo al departamento: el campus del docente es solo el de su número de empleado y su
+ * historial.
  *
  * Al final ProvisionTeacherUsers les da usuario (contraseña por defecto, cambio obligatorio) a los activos, y unos
  * cuantos por departamento se nombran jefe de proyecto docente con AppointDepartmentHead (el departamento puede
@@ -69,12 +70,11 @@ class FacultyDemoSeeder extends Seeder
         $heads = [];
 
         foreach ($teachersPerCampus as $code => $count) {
-            $otherCampus = collect($campuses)->except($code)->first();
             $catalog = $this->catalog($campuses[$code]);
             $roster = (new TeacherRosterGenerator(new Randomizer(new Mt19937($seed + crc32($code)))))
                 ->generate($code, $count, array_map(fn (array $subjects): int => count($subjects), array_column($catalog, 'subjects')));
 
-            $heads[$code] = DB::transaction(fn (): array => $this->insert($roster, $catalog, $campuses[$code], $otherCampus, $terms, $admin, $totals));
+            $heads[$code] = DB::transaction(fn (): array => $this->insert($roster, $catalog, $campuses[$code], $terms, $admin, $totals));
         }
 
         $inserted = (hrtime(true) - $started) / 1e9;
@@ -137,7 +137,7 @@ class FacultyDemoSeeder extends Seeder
      * @param  array<string, int>  $totals
      * @return array<string, list<string>>
      */
-    private function insert(array $roster, array $catalog, string $campusId, ?string $otherCampusId, array $terms, string $admin, array &$totals): array
+    private function insert(array $roster, array $catalog, string $campusId, array $terms, string $admin, array &$totals): array
     {
         $now = now();
         $existing = DB::table('teachers')->whereIn('employee_number', array_column($roster, 'employee_number'))->pluck('employee_number')->flip();
@@ -188,13 +188,7 @@ class FacultyDemoSeeder extends Seeder
             ]);
 
             foreach ($teacher['adscriptions'] as $adscription) {
-                $campus = $adscription['campus'] === 'own' ? $campusId : $otherCampusId;
-
-                if ($campus === null) {
-                    continue;
-                }
-
-                $push('teacher_departments', ['teacher_id' => $id, 'department_id' => $catalog[$adscription['dept']]['id'], 'campus_id' => $campus, 'is_primary' => $adscription['primary'], ...$stamps]);
+                $push('teacher_departments', ['teacher_id' => $id, 'department_id' => $catalog[$adscription['dept']]['id'], 'is_primary' => $adscription['primary'], ...$stamps]);
             }
 
             foreach ($teacher['positions'] as $position) {

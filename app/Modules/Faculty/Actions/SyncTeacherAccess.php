@@ -13,7 +13,6 @@ use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Models\Teacher;
-use App\Modules\Faculty\Models\TeacherDepartment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -34,18 +33,20 @@ use Spatie\Permission\Models\Role as SpatieRole;
  *   eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser con la contraseña por defecto (o
  *   `$passwordHash`, para reutilizar el hash de una corrida) y cambio obligatorio, con el correo del docente si
  *   ningún otro usuario lo usa (supuesto por confirmar). Luego activa el usuario ya ligado (reactivar al docente
- *   lo devuelve), le da el rol `docente` y un alcance de `docente` por cada campus de sus adscripciones sin borrar;
- *   cierra el de un campus donde ya no tiene ninguna (S14, supuesto por confirmar), con la regla de
- *   CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
+ *   lo devuelve) y le da el rol `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
+ *   ahí sale que su alcance de `docente` sea uno solo, sin campus, y que no dependa de sus adscripciones: un docente
+ *   sin departamento conserva usuario, rol y alcance. Uno sin campus que todavía no empieza cuenta como el suyo y no
+ *   se abre otro (supuesto por confirmar). Cierra los alcances de `docente` con campus que quedaron de antes, con la
+ *   regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
  * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026):
  *   desactiva su usuario, salvo que sea admin, y termina con fecha de ayer cada jefatura suya vigente o por
  *   empezar (supuesto por confirmar; EndDepartmentHead borra las que empiezan hoy o después). Sin usuario no hace
  *   nada: un docente inactivo no recibe usuario. Sus alcances de `docente` se quedan, para cuando se reactive.
  *
- * Cada cambio deja su bitácora: la liga sobre el docente, el alta (CreateStaffUser), el acceso (activo, roles y
- * campus de `docente`, valor anterior y nuevo) sobre el usuario y cada jefatura terminada (EndDepartmentHead).
- * Nunca registra contraseñas. Si cambió algo, avisa con TeacherAccessChanged después del commit. Quién puede lo
- * deciden las Actions y pantallas que la llaman.
+ * Cada cambio deja su bitácora: la liga sobre el docente, el alta (CreateStaffUser), el acceso (activo, roles, el
+ * alcance de `docente` de todo el Tec y los campus de `docente` cerrados, valor anterior y nuevo) sobre el usuario
+ * y cada jefatura terminada (EndDepartmentHead). Nunca registra contraseñas. Si cambió algo, avisa con
+ * TeacherAccessChanged después del commit. Quién puede lo deciden las Actions y pantallas que la llaman.
  */
 final class SyncTeacherAccess
 {
@@ -154,8 +155,8 @@ final class SyncTeacherAccess
     }
 
     /**
-     * Activa el usuario, le da el rol `docente` y deja un alcance de `docente` por campus de sus adscripciones.
-     * Devuelve si cambió algo.
+     * Activa el usuario, le da el rol `docente`, le deja un alcance de `docente` sin campus y cierra los que tienen
+     * campus. Devuelve si cambió algo.
      */
     private function grantAccess(Teacher $teacher, User $user): bool
     {
@@ -178,39 +179,32 @@ final class SyncTeacherAccess
             $done[] = 'le dio el rol '.Role::Docente->label();
         }
 
-        $campuses = TeacherDepartment::query()->where('teacher_id', $teacher->getKey())->distinct()->pluck('campus_id')->sort()->values()->all();
         $scopes = $user->roleScopes()
             ->where('role', Role::Docente)
             ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()->toDateString()))
             ->lockForUpdate()
             ->get();
-        $had = $scopes->pluck('campus_id')->filter()->unique()->sort()->values()->all();
-        $opened = array_values(array_diff($campuses, $had));
-        $closing = $scopes->reject(fn (RoleScope $scope): bool => in_array($scope->campus_id, $campuses, true));
+        $closing = $scopes->filter(fn (RoleScope $scope): bool => $scope->campus_id !== null);
 
-        foreach ($opened as $campusId) {
-            $user->roleScopes()->create(['role' => Role::Docente, 'campus_id' => $campusId, 'valid_from' => today()->toDateString()]);
+        if ($scopes->every(fn (RoleScope $scope): bool => $scope->campus_id !== null)) {
+            $user->roleScopes()->create(['role' => Role::Docente, 'valid_from' => today()->toDateString()]);
+            [$old['docente_general'], $new['docente_general']] = [false, true];
+            $done[] = 'abrió su alcance de '.Role::Docente->label().' en todo el Tec';
         }
 
-        foreach ($closing as $scope) {
-            if ($scope->valid_from->lt(today())) {
-                $scope->forceFill(['valid_to' => today()->subDay()->toDateString()])->save();
-            } else {
-                $scope->delete();
-            }
-        }
-
-        if ($opened !== [] || $closing->isNotEmpty()) {
-            $codes = Campus::withTrashed()->whereKey([...$opened, ...$closing->pluck('campus_id')->filter()])->pluck('code', 'id');
-            [$old['docente_campus_ids'], $new['docente_campus_ids']] = [$had, $campuses];
-
-            if ($opened !== []) {
-                $done[] = 'abrió su alcance de '.Role::Docente->label().' en '.$this->codes($codes, $opened);
+        if ($closing->isNotEmpty()) {
+            foreach ($closing as $scope) {
+                if ($scope->valid_from->lt(today())) {
+                    $scope->forceFill(['valid_to' => today()->subDay()->toDateString()])->save();
+                } else {
+                    $scope->delete();
+                }
             }
 
-            if ($closing->isNotEmpty()) {
-                $done[] = 'cerró su alcance de '.Role::Docente->label().' en '.$this->codes($codes, $closing->pluck('campus_id')->filter()->unique()->all());
-            }
+            $campusIds = $closing->pluck('campus_id')->unique()->sort()->values()->all();
+            $codes = Campus::withTrashed()->whereKey($campusIds)->pluck('code', 'id');
+            [$old['docente_campus_ids'], $new['docente_campus_ids']] = [$campusIds, []];
+            $done[] = 'cerró su alcance de '.Role::Docente->label().' en '.$this->codes($codes, $campusIds);
         }
 
         if ($done === []) {
