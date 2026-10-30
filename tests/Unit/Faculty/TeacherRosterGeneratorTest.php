@@ -136,3 +136,13 @@ it('no da perfil ni historial de materias de un departamento sin materias', func
         }
     }
 });
+
+it('las plazas de un docente no repiten tipo y «desde», que es la clave de la importación de plazas', function () {
+    foreach ([2027, 1, 99] as $seed) {
+        foreach (roster(400, seed: $seed) as $teacher) {
+            $keys = array_map(fn (array $p): string => "{$p['kind']}/{$p['from']}", $teacher['positions']);
+
+            expect(array_unique($keys))->toHaveCount(count($keys));
+        }
+    }
+});
