@@ -151,3 +151,32 @@ it('el admin agrega un requisito, ve el error de ciclo con su cadena, cambia su 
     expect(SubjectPrerequisite::withTrashed()->where('study_plan_id', $this->plan->id)->where('subject_id', $calculus->id)->where('prerequisite_subject_id', $equations->id)->sole())
         ->kind->toBe(PrerequisiteKind::Correquisito)->trashed()->toBeTrue();
 });
+
+it('en celular la leyenda de cadenas del plan va plegada y se abre con un toque; en escritorio siempre está abierta', function () {
+    $chip = '[data-testid="chain-legend"] [data-chain="0"]';
+    $toggle = '[data-testid="chain-legend-toggle"]';
+    $hidden = fn (string $selector): string => "document.querySelector('{$selector}').offsetParent === null";
+
+    $page = visit('/login')
+        ->fill('username', 'ana.admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/academic/plans/'.$this->plan->id)
+        ->resize(390, 900)
+        ->assertSeeIn($toggle, 'Cadenas de seriación (')
+        ->assertScript($hidden($chip), true)
+        ->assertScript("document.querySelector('{$toggle}').getAttribute('aria-expanded')", 'false')
+        ->click($toggle)
+        ->assertScript($hidden($chip), false)
+        ->assertScript("document.querySelector('{$toggle}').getAttribute('aria-expanded')", 'true')
+        ->click($chip)
+        ->waitForText('Cadena de')
+        ->assertScript("document.querySelector('{$chip}').getAttribute('aria-pressed')", 'true')
+        ->assertScript($hidden($chip), false)
+        ->assertNoJavaScriptErrors();
+
+    $page->resize(1440, 900)
+        ->assertScript($hidden($chip), false)
+        ->assertScript($hidden($toggle), true);
+});

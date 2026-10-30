@@ -62,8 +62,13 @@
         {{-- wire:ignore: el resaltado vive en Alpine, y volver a pintar la página no debe borrarlo. --}}
         <div x-data="studentGrid" wire:ignore @keydown.escape.window="clearUnlessLayerOpen()" class="space-y-3">
         @if ($record->chains !== [])
-            <div class="flex flex-wrap items-center gap-1.5" data-testid="chain-legend">
-                <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Cadenas de seriación</span>
+            <div x-data="{ open: false }" data-testid="chain-legend">
+                {{-- En celular (menos de 768 px) la leyenda va plegada tras este botón; desde md siempre está abierta. --}}
+                <button type="button" data-testid="chain-legend-toggle" class="btn btn-sm btn-ghost md:hidden" aria-controls="student-chain-chips" x-bind:aria-expanded="open.toString()" aria-expanded="false" @click="open = ! open">
+                    Cadenas de seriación ({{ count($record->chains) }})
+                </button>
+                <div id="student-chain-chips" class="flex flex-wrap items-center gap-1.5" x-bind:class="open ? '' : 'max-md:hidden'">
+                <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral max-md:hidden">Cadenas de seriación</span>
                 @foreach ($record->chains as $chain)
                     <button type="button" data-chain-chip data-chain="{{ $chain['index'] }}" data-name="{{ $chain['name'] }}" aria-pressed="false" @click="toggleChain('{{ $chain['index'] }}')"
                         class="inline-flex h-7 items-center gap-1.5 rounded-field border border-base-300 bg-base-100 px-2 text-[12.5px] aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary">
@@ -72,6 +77,7 @@
                         <span class="font-mono text-neutral">{{ $chain['size'] }}</span>
                     </button>
                 @endforeach
+                </div>
             </div>
         @endif
         <p class="min-h-6 text-neutral" x-ref="info" aria-live="polite" data-testid="chain-info">Toca una materia o una cadena para resaltarla; Esc la quita.</p>

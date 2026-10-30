@@ -259,7 +259,7 @@ La ficha del alumno muestra su retícula como la del SII, que es la que conocen 
 | No permitida aún | `neutral` sobre `base-200` | punteado | `o-lock-closed` |
 
 - Arriba de la retícula, la leyenda de los estados y hasta qué semestre puede seleccionar. La pestaña **Kárdex** muestra el historial por periodo, con el resultado en su insignia.
-- **Cadenas de seriación.** Cada grupo de materias unidas por su seriación tiene su color, que se ve siempre como una **franja a la izquierda** de cada materia: una sombra interior, que no toca el borde del estado (`ChainColor::stripeClasses()`). Una leyenda nombra cada cadena por su primera materia y dice cuántas tiene. Tocar una materia resalta su cadena completa (lo que pide y lo que abre) y atenúa lo demás, y una línea dice qué pide y qué abre; tocar una cadena de la leyenda resalta todas sus materias; tocar lo mismo otra vez o Esc lo quita. Solo al tocar, no al pasar el cursor, y sin líneas entre materias (decidido por el usuario el 29 de octubre de 2026). Lo hace el componente Alpine `studentGrid` (`resources/js/app.js`).
+- **Cadenas de seriación.** Cada grupo de materias unidas por su seriación tiene su color, que se ve siempre como una **franja a la izquierda** de cada materia: una sombra interior, que no toca el borde del estado (`ChainColor::stripeClasses()`). Una leyenda nombra cada cadena por su primera materia y dice cuántas tiene. Tocar una materia resalta su cadena completa (lo que pide y lo que abre) y atenúa lo demás, y una línea dice qué pide y qué abre; tocar una cadena de la leyenda resalta todas sus materias; tocar lo mismo otra vez o Esc lo quita. Solo al tocar, no al pasar el cursor, y sin líneas entre materias (decidido por el usuario el 29 de octubre de 2026). Lo hace el componente Alpine `studentGrid` (`resources/js/app.js`). En celular (menos de 768 px) la leyenda de cadenas va plegada: «Cadenas de seriación (N)» se abre con un toque (decidido por el usuario el 29 de octubre de 2026).
 - **Tokens de las cadenas** (`--color-chain-1` a `--color-chain-12`, utilidades `chain-N`). Son elementos gráficos, así que piden 3:1; la razón es la mínima contra los rellenos de la retícula (blanco, `base-200` y los tintes al 10 % de cada tono). Con más de doce cadenas los colores se repiten, y la leyenda las distingue:
 
 | Token | Claro · mínima | Oscuro · mínima |
@@ -318,7 +318,7 @@ El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/pla
   - la elegida lleva un anillo `primary`, y el botón dice «Agregar CLAVE»;
   - debajo van el semestre, la especialidad y «Obligatoria».
 - **Los modales de la retícula** («Agregar materia» y la confirmación de quitar) van en la página y no dentro del panel, porque el panel se desliza con `transform` y los encerraría. Esc los cierra sin cerrar el panel.
-- **La leyenda de cadenas** resalta la cadena que se toca. Tocarla otra vez o Esc quita el resaltado.
+- **La leyenda de cadenas** resalta la cadena que se toca. Tocarla otra vez o Esc quita el resaltado. En celular (menos de 768 px) la leyenda de cadenas va plegada: «Cadenas de seriación (N)» se abre con un toque (decidido por el usuario el 29 de octubre de 2026).
 - **Especialidades**, en el mismo panel. Cada una muestra su clave, su estado, su nombre y cuántas materias tiene. Sus acciones:
   - «Renombrar», en su lugar;
   - «Desactivar» o «Activar»;
