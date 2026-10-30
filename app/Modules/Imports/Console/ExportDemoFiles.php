@@ -52,6 +52,12 @@ final class ExportDemoFiles extends Command
             $path = $disk->path("{$dir}/{$template}.csv");
             $count = $this->write($path, $templates->get($template), $rows());
 
+            if ($count === null) {
+                $this->components->error("No se pudo escribir {$dir}/{$template}.csv.");
+
+                return self::FAILURE;
+            }
+
             $this->components->twoColumnDetail("{$dir}/{$template}.csv", "{$count} filas");
         }
 
@@ -144,13 +150,19 @@ final class ExportDemoFiles extends Command
     }
 
     /**
-     * Escribe el encabezado con las etiquetas de la plantilla y los renglones; devuelve cuántos renglones.
+     * Escribe el encabezado con las etiquetas de la plantilla y los renglones; devuelve cuántos renglones, o null
+     * si no pudo abrir el archivo.
      *
      * @param  iterable<int, list<scalar|null>>  $rows
      */
-    private function write(string $path, ImportTemplate $template, iterable $rows): int
+    private function write(string $path, ImportTemplate $template, iterable $rows): ?int
     {
-        $stream = fopen($path, 'w');
+        $stream = @fopen($path, 'w');
+
+        if ($stream === false) {
+            return null;
+        }
+
         fputcsv($stream, array_values($template->fields()), ',', '"', '');
         $count = 0;
 
