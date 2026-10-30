@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Enums\TeacherDegree;
@@ -23,21 +22,19 @@ it('un docente tiene usuario opcional, adscripciones y plazas', function () {
 
 it('adscribedTo crea la adscripción y primaryAdscription devuelve la principal', function () {
     $department = Department::factory()->create();
-    $campus = Campus::factory()->create();
-    $teacher = Teacher::factory()->adscribedTo($department, $campus)->create();
+    $teacher = Teacher::factory()->adscribedTo($department)->create();
     TeacherDepartment::factory()->for($teacher)->create(['is_primary' => false]);
 
     $primary = $teacher->primaryAdscription;
 
     expect($teacher->adscriptions)->toHaveCount(2)
         ->and($primary->department->is($department))->toBeTrue()
-        ->and($primary->campus->is($campus))->toBeTrue()
         ->and($primary->teacher->is($teacher))->toBeTrue()
         ->and($primary->is_primary)->toBeTrue();
 });
 
 it('adscribedTo con primary falso la deja como no principal', function () {
-    $teacher = Teacher::factory()->adscribedTo(Department::factory()->create(), Campus::factory()->create(), false)->create();
+    $teacher = Teacher::factory()->adscribedTo(Department::factory()->create(), false)->create();
 
     expect($teacher->primaryAdscription)->toBeNull()
         ->and($teacher->adscriptions->sole()->is_primary)->toBeFalse();

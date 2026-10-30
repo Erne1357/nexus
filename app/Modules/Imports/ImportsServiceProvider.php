@@ -12,6 +12,7 @@ use App\Modules\Imports\Templates\DepartmentsTemplate;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\KardexTemplate;
 use App\Modules\Imports\Templates\PrerequisitesTemplate;
+use App\Modules\Imports\Templates\RoomsTemplate;
 use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\StudyPlansTemplate;
 use App\Modules\Imports\Templates\SubjectsTemplate;
@@ -34,6 +35,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         PrerequisitesTemplate::class,
         StudentsTemplate::class,
         KardexTemplate::class,
+        RoomsTemplate::class,
     ];
 
     public function register(): void

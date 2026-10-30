@@ -18,9 +18,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Quién dirige un departamento en un campus y desde cuándo (`kind`: jefe o jefe de proyecto docente).
- * `valid_to` nulo es vigente sin fecha de fin. Un solo jefe vigente por departamento y campus; de jefe de
- * proyecto docente puede haber varios (la base lo garantiza).
+ * Quién dirige un departamento y desde cuándo (`kind`: jefe o jefe de proyecto docente). El jefe es de todo el
+ * Tec, sin campus (`campus_id` nulo), y hay uno solo vigente por departamento. El jefe de proyecto docente es de un
+ * campus, y puede haber varios a la vez. La base garantiza las dos reglas. `valid_to` nulo es vigente sin fecha de
+ * fin.
  */
 #[Fillable(['department_id', 'campus_id', 'user_id', 'kind', 'valid_from', 'valid_to'])]
 #[UseFactory(DepartmentHeadFactory::class)]

@@ -3,7 +3,6 @@
 namespace App\Modules\Faculty\Rules;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Models\Teacher;
@@ -19,7 +18,7 @@ use Illuminate\Validation\ValidationException;
  *   (reglas-de-negocio.md, "Reglas de datos").
  * - `name`: sin espacios a los lados y no vacío.
  * - `email`, `degree` y `hired_on`: opcionales; vacío es null. El grado, un valor de TeacherDegree.
- * - La adscripción: un departamento y un campus que existen y no están borrados.
+ * - La adscripción: un departamento que existe y no está borrado (sin campus: el docente no es de un campus).
  */
 final class TeacherRules
 {
@@ -113,17 +112,6 @@ final class TeacherRules
     {
         return KeyLookup::find(Department::query()->sharedLock(), $department->getKey())
             ?? throw ValidationException::withMessages(['department_id' => 'El departamento no existe o está borrado.']);
-    }
-
-    /**
-     * Lo mismo para el campus de la adscripción.
-     *
-     * @throws ValidationException si el campus no existe o está borrado
-     */
-    public function lockCampus(Campus $campus): Campus
-    {
-        return KeyLookup::find(Campus::query()->sharedLock(), $campus->getKey())
-            ?? throw ValidationException::withMessages(['campus_id' => 'El campus no existe o está borrado.']);
     }
 
     /**

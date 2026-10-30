@@ -3,7 +3,6 @@
 namespace App\Modules\Faculty\Queries;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
@@ -18,25 +17,26 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
- * Lecturas de docentes para las pantallas (tarea 1.12). El listado deja ver lo mismo que TeacherPolicy (`view`),
- * filtrado en SQL con los alcances de ScopedContext y la misma regla que ScopedContext::covers(): al admin, todos;
- * a quien tiene un alcance de TeacherPolicy::EDITORS, los docentes con una adscripción sin borrar en el campus del
- * alcance y, si el alcance fija departamento (jefes), en ese departamento. Incluye a los inactivos; los borrados no.
+ * Lecturas de docentes para las pantallas (tarea 1.12). Los docentes son de todo el Tec: nada aquí depende de un
+ * campus. El listado deja ver lo mismo que TeacherPolicy (`view`), filtrado en SQL con los alcances de
+ * ScopedContext y la misma regla que ScopedContext::coversDepartment(): al admin y a quien tiene un alcance de
+ * TeacherPolicy::EDITORS sin departamento (la Subdirección), todos; a los jefes, los docentes con una adscripción
+ * sin borrar a uno de sus departamentos. Incluye a los inactivos; los borrados no.
  */
 final class TeacherQuery
 {
     public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
 
     /**
-     * La tabla de Docentes, por número de empleado, con sus adscripciones sin borrar (la principal primero) y su
-     * departamento y campus, aunque estén borrados. Busca `$search` en el número o el nombre con TextSearch.
-     * `$departmentId` y `$campusId` filtran por una adscripción sin borrar (las dos a la vez, la misma adscripción;
-     * un id que no es uuid no trae a nadie); `$kind`, por una plaza de ese tipo vigente el primer día del periodo
-     * activo (S1, supuesto por confirmar; sin periodo, hoy); `$active`, por estado. `null` no filtra.
+     * La tabla de Docentes, por número de empleado, con sus adscripciones sin borrar (la principal primero y luego
+     * de la más antigua a la más nueva, el orden en que RemoveAdscription escoge la principal que queda) y su
+     * departamento, aunque esté borrado. Busca `$search` en el número o el nombre con TextSearch. `$departmentId`
+     * filtra por una adscripción sin borrar (un id que no es uuid no trae a nadie); `$kind`, por una plaza de ese
+     * tipo vigente el primer día del periodo activo (S1, supuesto por confirmar; sin periodo, hoy); `$active`, por
+     * estado. `null` no filtra.
      *
      * @return LengthAwarePaginator<int, Teacher>
      */
@@ -44,23 +44,16 @@ final class TeacherQuery
         ScopedContext $context,
         string $search = '',
         ?string $departmentId = null,
-        ?string $campusId = null,
         ?PositionKind $kind = null,
         ?bool $active = null,
         int $perPage = 15,
     ): LengthAwarePaginator {
         return $this->visible($context)
-            ->with(['adscriptions' => fn (HasMany $adscriptions) => $adscriptions
-                ->with([
-                    'department' => fn (BelongsTo $department) => $department->withTrashed()->select(['id', 'code', 'name']),
-                    'campus' => fn (BelongsTo $campus) => $campus->withTrashed()->select(['id', 'code', 'name']),
-                ])
-                ->orderByDesc('is_primary')
-                ->orderBy('id')])
+            ->with(['adscriptions' => fn (HasMany $adscriptions) => $this->orderedAdscriptions($adscriptions)])
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['employee_number', 'name'], $search))
-            ->when($departmentId !== null || $campusId !== null, fn (Builder $query) => $query->whereHas('adscriptions', fn (Builder $adscription) => $adscription
-                ->when($departmentId !== null, fn (Builder $adscription) => $this->whereKeyFromClient($adscription, 'department_id', $departmentId))
-                ->when($campusId !== null, fn (Builder $adscription) => $this->whereKeyFromClient($adscription, 'campus_id', $campusId))))
+            ->when($departmentId !== null, fn (Builder $query) => $query->whereHas('adscriptions', fn (Builder $adscription) => Str::isUuid($departmentId)
+                ? $adscription->where('department_id', $departmentId)
+                : $adscription->whereRaw('false')))
             ->when($kind !== null, fn (Builder $query) => $query->whereHas('positions', fn (Builder $position) => $position
                 ->currentOn($context->activeTerm()?->starts_on ?? today())
                 ->where('kind', $kind)))
@@ -88,50 +81,40 @@ final class TeacherQuery
     }
 
     /**
-     * Las opciones de los filtros: los departamentos y los campus de las adscripciones de los docentes que ve, en el
-     * formato de los select de MaryUI.
+     * Las opciones del filtro de departamento: los departamentos de las adscripciones de los docentes que ve, en el
+     * formato de los select de MaryUI, con los inactivos marcados.
      *
-     * @return array{departments: list<array{id: string, name: string}>, campuses: list<array{id: string, name: string}>}
+     * @return array{departments: list<array{id: string, name: string}>}
      */
     public function filterOptions(ScopedContext $context): array
     {
-        $adscriptions = fn (string $column): Builder => TeacherDepartment::query()
-            ->whereIn('teacher_id', $this->visible($context)->select('teachers.id'))
-            ->select($column);
+        $departments = Department::withTrashed()
+            ->whereIn('id', TeacherDepartment::query()->whereIn('teacher_id', $this->visible($context)->select('teachers.id'))->select('department_id'))
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'is_active'])
+            ->map(fn (Department $department): array => ['id' => $department->id, 'name' => $this->label($department)])
+            ->all();
 
-        return [
-            'departments' => $this->options(Department::withTrashed()->whereIn('id', $adscriptions('department_id'))),
-            'campuses' => $this->options(Campus::withTrashed()->whereIn('id', $adscriptions('campus_id'))),
-        ];
+        return ['departments' => $departments];
     }
 
     /**
-     * Dónde puede dar de alta (o adscribir) docentes: los departamentos y los campus sin borrar que cubre con
-     * TeacherPolicy::EDITORS. Al admin, todos los departamentos y los campus activos; a la subdirección, todos los
-     * departamentos en su campus; a un jefe, su departamento en su campus. Con `code` para nombrar el destino.
+     * En qué departamentos puede dar de alta (o adscribir) docentes: los sin borrar que cubre con
+     * TeacherPolicy::EDITORS. Al admin y a la Subdirección, todos; a un jefe, el suyo. Con `code` para nombrar el
+     * destino y los inactivos marcados.
      *
-     * @return array{departments: list<array{id: string, code: string, name: string}>, campuses: list<array{id: string, code: string, name: string}>}
+     * @return list<array{id: string, code: string, name: string}>
      */
     public function adscriptionTargets(ScopedContext $context): array
     {
-        if ($context->isAdmin()) {
-            return [
-                'departments' => $this->options(Department::query(), withCode: true),
-                'campuses' => $this->campusOptions($context->campuses()),
-            ];
-        }
+        $departments = $this->coveredDepartments($context);
 
-        $scopes = $this->editorScopes($context);
-        $wholeCampus = $scopes->contains(fn (RoleScope $scope): bool => $scope->department_id === null);
-        $campusIds = $scopes->pluck('campus_id')->unique()->all();
-
-        return [
-            'departments' => $this->options(
-                Department::query()->when(! $wholeCampus, fn (Builder $query) => $query->whereKey($scopes->pluck('department_id')->unique()->all())),
-                withCode: true,
-            ),
-            'campuses' => $this->campusOptions($context->campuses()->filter(fn (Campus $campus): bool => in_array($campus->id, $campusIds, true))),
-        ];
+        return Department::query()
+            ->when($departments !== null, fn (Builder $query) => $query->whereKey($departments))
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'is_active'])
+            ->map(fn (Department $department): array => ['id' => $department->id, 'code' => $department->code, 'name' => $this->label($department)])
+            ->all();
     }
 
     /**
@@ -146,6 +129,20 @@ final class TeacherQuery
     }
 
     /**
+     * La adscripción sin borrar que se va a quitar, con su departamento y su docente, y las demás adscripciones de
+     * este con su departamento, para decir qué principal queda.
+     *
+     * @throws ModelNotFoundException<TeacherDepartment>
+     */
+    public function findAdscriptionOrFail(string $id): TeacherDepartment
+    {
+        return KeyLookup::findOrFail(TeacherDepartment::query()->with([
+            'department' => fn (BelongsTo $department) => $department->withTrashed(),
+            'teacher.adscriptions' => fn (HasMany $adscriptions) => $this->orderedAdscriptions($adscriptions),
+        ]), $id);
+    }
+
+    /**
      * El docente sin borrar con ese número de empleado (ya normalizado), para ofrecer adscribirlo en lugar de darlo
      * de alta otra vez (S9, supuesto por confirmar).
      */
@@ -155,76 +152,60 @@ final class TeacherQuery
     }
 
     /**
-     * Los docentes que el usuario puede ver: con cada alcance de TeacherPolicy::EDITORS, los que covers() le daría.
+     * Los docentes que el usuario puede ver: todos, o los adscritos a uno de los departamentos que cubre.
      *
      * @return Builder<Teacher>
      */
     private function visible(ScopedContext $context): Builder
     {
-        $query = Teacher::query();
+        $departments = $this->coveredDepartments($context);
 
+        return Teacher::query()->when($departments !== null, fn (Builder $query) => $departments === []
+            ? $query->whereRaw('false')
+            : $query->whereHas('adscriptions', fn (Builder $adscription) => $adscription->whereIn('department_id', $departments)));
+    }
+
+    /**
+     * Los departamentos que cubre con TeacherPolicy::EDITORS, como ScopedContext::coversDepartment(): null si los
+     * cubre todos (el admin, o un alcance sin departamento ni carrera, como el de la Subdirección). Un alcance que
+     * fija carrera no cubre docentes.
+     *
+     * @return list<string>|null
+     */
+    private function coveredDepartments(ScopedContext $context): ?array
+    {
         if ($context->isAdmin()) {
-            return $query;
+            return null;
         }
 
-        $scopes = $this->editorScopes($context);
+        $scopes = $context->scopes()
+            ->filter(fn (RoleScope $scope): bool => in_array($scope->role, TeacherPolicy::EDITORS, true) && $scope->career_id === null);
 
-        return $query->whereHas('adscriptions', fn (Builder $adscription) => $adscription->where(function (Builder $covered) use ($scopes): void {
-            $covered->whereRaw('false');
+        if ($scopes->contains(fn (RoleScope $scope): bool => $scope->department_id === null)) {
+            return null;
+        }
 
-            foreach ($scopes as $scope) {
-                $covered->orWhere(fn (Builder $one) => $one
-                    ->where('campus_id', $scope->campus_id)
-                    ->when($scope->department_id, fn (Builder $one, string $department) => $one->where('department_id', $department)));
-            }
-        }));
+        return $scopes->pluck('department_id')->unique()->values()->all();
     }
 
     /**
-     * Los alcances vigentes con los que cubre docentes. Como covers(), uno que fija carrera no cubre nada que no sea
-     * de una carrera, y un docente no lo es.
-     *
-     * @return Collection<int, RoleScope>
+     * @param  HasMany<TeacherDepartment, Teacher>  $adscriptions
+     * @return HasMany<TeacherDepartment, Teacher>
      */
-    private function editorScopes(ScopedContext $context): Collection
+    private function orderedAdscriptions(HasMany $adscriptions): HasMany
     {
-        return $context->scopes()
-            ->filter(fn (RoleScope $scope): bool => in_array($scope->role, TeacherPolicy::EDITORS, true) && $scope->career_id === null)
-            ->values();
+        return $adscriptions
+            ->with(['department' => fn (BelongsTo $department) => $department->withTrashed()->select(['id', 'code', 'name', 'is_active'])])
+            ->orderByDesc('is_primary')
+            ->orderBy('created_at')
+            ->orderBy('id');
     }
 
     /**
-     * @param  Builder<covariant Department|Campus>  $query
-     * @return list<array{id: string, name: string, code?: string}>
+     * «SC · Sistemas y Computación», con «(inactivo)» si el departamento está inactivo.
      */
-    private function options(Builder $query, bool $withCode = false): array
+    private function label(Department $department): string
     {
-        return $query->orderBy('code')->get(['id', 'code', 'name'])
-            ->map(fn (Department|Campus $row): array => [
-                'id' => $row->id,
-                'name' => "{$row->code} · {$row->name}",
-                ...($withCode ? ['code' => $row->code] : []),
-            ])
-            ->all();
-    }
-
-    /**
-     * @param  Collection<int, Campus>  $campuses
-     * @return list<array{id: string, code: string, name: string}>
-     */
-    private function campusOptions(Collection $campuses): array
-    {
-        return $campuses->map(fn (Campus $campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}", 'code' => $campus->code])
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @param  Builder<TeacherDepartment>  $query
-     * @return Builder<TeacherDepartment>
-     */
-    private function whereKeyFromClient(Builder $query, string $column, string $id): Builder
-    {
-        return Str::isUuid($id) ? $query->where($column, $id) : $query->whereRaw('false');
+        return "{$department->code} · {$department->name}".($department->is_active ? '' : ' (inactivo)');
     }
 }
