@@ -769,7 +769,7 @@ describe('agregar materia', function () {
             ->and(domOf($component)->querySelectorAll('[data-testid="plan-grid"] > section'))->toHaveCount(1);
     });
 
-    it('sin semestres capturados ofrece los que tiene y uno más, hasta 12 (supuesto por confirmar)', function () {
+    it('sin semestres capturados ofrece los que tiene y uno más, hasta 12', function () {
         $this->plan->update(['semesters_count' => null]);
 
         $page = domOf(planPage($this->admin, $this->plan)->call('openAdd', 1));

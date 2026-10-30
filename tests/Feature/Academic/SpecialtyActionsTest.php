@@ -15,7 +15,7 @@ use Spatie\Activitylog\Models\Activity;
 /*
 | Actions de las especialidades de un plan (reglas-de-negocio.md, "Especialidades"). Crear exige una clave única
 | dentro del plan, también contra las quitadas, y un nombre; renombrar y desactivar se permiten siempre; quitar
-| (borrado lógico) solo una especialidad sin materias en la retícula (supuesto por confirmar, S1). Ninguna cambia el
+| (borrado lógico) solo una especialidad sin materias en la retícula (confirmado el 29 de octubre de 2026). Ninguna cambia el
 | avance de los alumnos: no avisan CurriculumChanged.
 */
 

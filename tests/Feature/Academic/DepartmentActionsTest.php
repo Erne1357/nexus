@@ -20,7 +20,7 @@ use Spatie\Activitylog\Models\Activity;
 /*
 | Actions de Departamento. Crear y editar hacen cumplir la clave normalizada y única, también entre
 | los borrados; borrar solo si no tiene carreras ni materias sin borrar, deja que otro módulo lo
-| vete con DepartmentDeleting y cierra los alcances de sus jefes (supuesto S2).
+| vete con DepartmentDeleting y cierra los alcances de sus jefes (confirmado el 29 de octubre de 2026).
 */
 
 beforeEach(function () {
