@@ -1,0 +1,267 @@
+<?php
+
+namespace App\Modules\Imports\Templates;
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\Faculty\Enums\TeacherDegree;
+use App\Modules\Faculty\Jobs\ProvisionTeacherUsersJob;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Rules\TeacherRules;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * Docentes del SII (tarea 10): número de empleado, nombre, departamento de su adscripción, correo, grado, activo y
+ * fecha de ingreso.
+ *
+ * Los docentes son de toda la institución y su adscripción no tiene campus (confirmado el 30 de octubre de 2026).
+ * Si el archivo del SII trae una columna de campus, simplemente no se mapea (supuesto por confirmar).
+ *
+ * Un docente con varias adscripciones viene en un renglón por departamento, y la clave del archivo es el docente
+ * con su departamento, para que esos renglones no cuenten como repetidos (S5, supuesto por confirmar). El registro
+ * se busca por el número de empleado, que se normaliza con `TeacherRules` igual que uno capturado. La primera
+ * adscripción de un docente es la principal; si ya tenía otra principal, la conserva y avisa. Los renglones de un
+ * mismo docente deben traer el mismo nombre, correo, grado y fecha de ingreso: si uno posterior trae otro, avisa y
+ * se queda el del primero.
+ *
+ * Como todo lo importado, no reactiva ni restaura (S4, supuesto por confirmar): el docente que el SII no marca
+ * activo nace inactivo, uno activo que el archivo marca inactivo sigue activo con advertencia, y uno inactivo se
+ * actualiza y sigue inactivo. No ofrece «desactivar faltantes»: es global, la exportación puede ser de un campus y
+ * la baja desactiva usuarios. Un grado desconocido queda vacío con advertencia (S6, supuesto por confirmar). Al
+ * aplicar el lote despacha el alta de usuarios de los docentes.
+ */
+class TeachersTemplate extends ImportTemplate
+{
+    use ParsesSiiDates;
+
+    /** @var array<string, Department|null> departamento por clave, en esta corrida */
+    private array $departments = [];
+
+    /** @var array<string, Teacher> docente por número de empleado, en esta corrida (solo los que existen) */
+    private array $teachers = [];
+
+    /** @var array<string, true> docentes cuya última fila aplicada solo agregó una adscripción */
+    private array $adscriptionOnly = [];
+
+    public function key(): string
+    {
+        return 'teachers';
+    }
+
+    public function label(): string
+    {
+        return 'Docentes';
+    }
+
+    public function fields(): array
+    {
+        return [
+            'employee_number' => 'número de empleado',
+            'name' => 'nombre',
+            'department' => 'departamento',
+            'email' => 'correo',
+            'degree' => 'grado',
+            'active' => 'activo',
+            'hired_on' => 'fecha de ingreso',
+        ];
+    }
+
+    public function naturalKey(): array
+    {
+        return ['employee_number', 'department'];
+    }
+
+    public function model(): string
+    {
+        return Teacher::class;
+    }
+
+    public function deactivatesMissing(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Los renglones de un docente deben traer el mismo nombre; uno distinto solo avisa y se queda el del primero.
+     */
+    public function consistentAcrossRows(): ?array
+    {
+        return ['group' => ['employee_number'], 'errors' => [], 'warnings' => ['name', 'email', 'degree', 'hired_on']];
+    }
+
+    public function rules(): array
+    {
+        return [
+            'employee_number' => ['required', 'string', 'max:20'],
+            'name' => ['required', 'string', 'max:255'],
+            'department' => ['required', 'string'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'degree' => ['nullable', 'string'],
+            'active' => ['nullable', 'boolean'],
+            'hired_on' => ['nullable', 'date_format:Y-m-d'],
+        ];
+    }
+
+    public function normalize(array $row): array
+    {
+        $row = parent::normalize($row);
+
+        foreach (['employee_number', 'department'] as $field) {
+            $row[$field] = self::asText($row[$field]);
+        }
+
+        if (is_string($row['employee_number'])) {
+            try {
+                $row['employee_number'] = app(TeacherRules::class)->normalizeEmployeeNumber($row['employee_number']);
+            } catch (ValidationException) {
+                // Texto que no es UTF-8 válido: validate() lo reporta.
+            }
+        }
+
+        $row['department'] = is_string($row['department']) ? Str::upper($row['department']) : $row['department'];
+
+        $row['degree'] = is_string($row['degree']) ? (TeacherDegree::tryFrom(self::slug($row['degree']))?->value ?? $row['degree']) : $row['degree'];
+        $row['active'] = $this->active($row['active']);
+        $row['hired_on'] = self::siiDate($row['hired_on']);
+
+        return $row;
+    }
+
+    /**
+     * Como la base, y además la adscripción del renglón: la principal si el docente no tiene otra. Un grado que
+     * Nexus no conoce deja al docente sin grado también en un cambio: el cambio no pisa con null lo que el
+     * archivo trae vacío, y aquí el archivo sí trajo un grado. Un renglón que solo agrega la adscripción cuenta
+     * como cambio del docente.
+     */
+    public function apply(array $row, ImportContext $context): Model
+    {
+        unset($this->teachers[$row['employee_number']]);
+        $teacher = parent::apply($row, $context);
+
+        if ($row['degree'] !== null && TeacherDegree::tryFrom($row['degree']) === null && $teacher->getAttribute('degree') !== null) {
+            $teacher->forceFill(['degree' => null])->save();
+        }
+
+        $adscription = [
+            'teacher_id' => $teacher->getKey(),
+            'department_id' => $this->department($row['department'])?->getKey(),
+        ];
+
+        unset($this->adscriptionOnly[$teacher->getKey()]);
+
+        if (! TeacherDepartment::withTrashed()->where($adscription)->exists()) {
+            $hasPrimary = TeacherDepartment::query()->where('teacher_id', $teacher->getKey())->where('is_primary', true)->exists();
+            TeacherDepartment::query()->create([...$adscription, 'is_primary' => ! $hasPrimary]);
+
+            if (! $teacher->wasRecentlyCreated && ! $teacher->wasChanged()) {
+                $this->adscriptionOnly[$teacher->getKey()] = true;
+            }
+        }
+
+        return $teacher;
+    }
+
+    public function wroteAlongside(Model $model): bool
+    {
+        return isset($this->adscriptionOnly[$model->getKey()]);
+    }
+
+    public function afterApply(ImportContext $context): void
+    {
+        ProvisionTeacherUsersJob::dispatch($context->user);
+    }
+
+    protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
+    {
+        $issues = parent::check($row, $context, $issues);
+
+        if ($row['degree'] !== null && TeacherDegree::tryFrom($row['degree']) === null) {
+            $issues = $issues->withWarning('degree', "El grado «{$row['degree']}» no está en Nexus: el docente queda sin grado.");
+        }
+
+        $department = $this->department($row['department']);
+
+        if ($department === null) {
+            $issues = $issues->withError('department', "No hay un departamento con la clave {$row['department']}.");
+        } elseif (! $department->is_active) {
+            $issues = $issues->withWarning('department', "El departamento {$row['department']} está inactivo.");
+        }
+
+        $teacher = $this->teacher($row['employee_number']);
+
+        if ($teacher === null || $teacher->trashed()) {
+            return $issues;
+        }
+
+        if ($row['active'] === false && $teacher->is_active) {
+            $issues = $issues->withWarning('active', 'El archivo lo marca inactivo, pero el docente sigue activo: una importación no lo da de baja.');
+        }
+
+        if ($department === null) {
+            return $issues;
+        }
+
+        $adscription = TeacherDepartment::withTrashed()
+            ->where(['teacher_id' => $teacher->getKey(), 'department_id' => $department->getKey()])
+            ->first(['id', 'deleted_at']);
+
+        if ($adscription?->trashed()) {
+            return $issues->withError('department', "La adscripción del docente a {$row['department']} está borrada; una importación no la restaura.");
+        }
+
+        if ($adscription === null && TeacherDepartment::query()->where('teacher_id', $teacher->getKey())->where('is_primary', true)->exists()) {
+            $issues = $issues->withWarning('department', 'El docente ya tiene otra adscripción principal: esta se agrega como no principal.');
+        }
+
+        return $issues;
+    }
+
+    protected function recordKey(array $row, ImportContext $context): ?array
+    {
+        return ['employee_number' => $row['employee_number']];
+    }
+
+    protected function attributes(array $row, ImportContext $context): array
+    {
+        return [
+            'name' => $row['name'],
+            'email' => $row['email'],
+            'degree' => TeacherDegree::tryFrom((string) $row['degree']),
+            'hired_on' => $row['hired_on'],
+            'is_active' => $row['active'] ?? true,
+        ];
+    }
+
+    /**
+     * El «activo» del SII como booleano; vacío es null (nace activo) y lo que no entiende se queda como texto,
+     * para que `rules()` lo rechace.
+     */
+    private function active(mixed $value): mixed
+    {
+        if (! is_string($value) && ! is_int($value)) {
+            return $value;
+        }
+
+        return match (self::slug((string) $value)) {
+            'si', 's', 'activo', '1', 'true', 'verdadero' => true,
+            'no', 'n', 'inactivo', '0', 'false', 'falso', 'baja' => false,
+            default => $value,
+        };
+    }
+
+    private function department(string $code): ?Department
+    {
+        return array_key_exists($code, $this->departments) ? $this->departments[$code] : $this->departments[$code] = Department::query()->where('code', $code)->first(['id', 'is_active']);
+    }
+
+    /**
+     * El docente con ese número, borrado o no, una vez por corrida. Solo se guarda el que existe, y apply() lo
+     * suelta: un docente que una fila acaba de dar de alta o cambiar no se lee viejo en la siguiente.
+     */
+    private function teacher(string $number): ?Teacher
+    {
+        return $this->teachers[$number] ??= Teacher::withTrashed()->where('employee_number', $number)->first(['id', 'is_active', 'deleted_at']);
+    }
+}

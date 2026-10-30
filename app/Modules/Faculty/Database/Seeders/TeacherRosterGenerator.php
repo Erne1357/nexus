@@ -191,18 +191,23 @@ final class TeacherRosterGenerator
     private function positions(int $i): array
     {
         $positions = [];
+        $taken = [];
 
         foreach (self::POSITION_SCENARIOS[$i % count(self::POSITION_SCENARIOS)] as [$kind, $validity]) {
-            $positions[] = [
-                'kind' => $kind,
-                'hours' => self::POSITION_HOURS[$kind] ?? $this->random->getInt(1, 40),
-                'from' => match ($validity) {
-                    'expired' => '2018-08-20',
-                    'future' => '2027-08-16',
-                    default => sprintf('%d-%02d-01', $this->random->getInt(2008, 2025), $this->random->getInt(1, 12)),
-                },
-                'to' => $validity === 'expired' ? '2025-12-31' : null,
-            ];
+            $hours = self::POSITION_HOURS[$kind] ?? $this->random->getInt(1, 40);
+            $from = match ($validity) {
+                'expired' => '2018-08-20',
+                'future' => '2027-08-16',
+                default => sprintf('%d-%02d-01', $this->random->getInt(2008, 2025), $this->random->getInt(1, 12)),
+            };
+
+            // La plantilla `positions` identifica la plaza por docente, tipo y «desde»: dos iguales no se importan.
+            while (in_array("{$kind}/{$from}", $taken, true)) {
+                $from = date('Y-m-d', strtotime("{$from} +1 month"));
+            }
+
+            $taken[] = "{$kind}/{$from}";
+            $positions[] = ['kind' => $kind, 'hours' => $hours, 'from' => $from, 'to' => $validity === 'expired' ? '2025-12-31' : null];
         }
 
         return $positions;
