@@ -10,15 +10,16 @@ use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
+use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
- * Volumen para probar pantallas y rendimiento: lo base, los periodos, el catálogo, los usuarios, los edificios y
- * salones de Campus I y Campus II, y unos 12 mil alumnos (670 por cada una de las 12 carreras de Campus I y 660 por cada una de las 6 de
- * Campus II) con unos 360 mil renglones de kárdex y su avance. Imprime lo que tarda cada parte. No corre en
- * producción.
+ * Volumen para probar pantallas y rendimiento: lo base, los periodos, el catálogo, los usuarios y los edificios y
+ * salones de Campus I y Campus II, unos 600 docentes (350 y 250) y unos 12 mil alumnos (670 por cada una de las 12
+ * carreras de Campus I y 660 por cada una de las 6 de Campus II) con unos 360 mil renglones de kárdex y su avance.
+ * Imprime lo que tarda cada parte. No corre en producción.
  *
  *     php artisan migrate:fresh --seed --seeder='Database\Seeders\MassiveSeeder'
  */
@@ -45,6 +46,11 @@ class MassiveSeeder extends Seeder
         $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
 
         $this->command?->info(sprintf('Base, catálogo e instalaciones: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $started = hrtime(true);
+        $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C1' => 350, 'C2' => 250]]);
+
+        $this->command?->info(sprintf('Docentes, usuarios y jefaturas en total: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $started = hrtime(true);
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C1' => 670, 'C2' => 660]]);
