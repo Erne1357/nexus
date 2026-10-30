@@ -19,6 +19,12 @@
             <x-icon name="o-building-office-2" class="mx-auto mb-2 w-8 h-8" />
             <p>Elige un campus en tu credencial para ver sus salones.</p>
         </div>
+    @elseif (! $usesRooms)
+        <div class="rounded-box border border-base-300 bg-base-100 px-6 py-10 text-center text-neutral" data-testid="rooms-not-used">
+            <x-icon name="o-rectangle-stack" class="mx-auto mb-2 w-8 h-8" />
+            <p>El campus {{ $campus->code }} no usa salones: sus grupos no se asignan a un salón.</p>
+            <x-button label="Nuevo salón" icon="o-plus" class="btn-primary mt-4" disabled title="Este campus no usa salones." />
+        </div>
     @else
         <x-core::catalog-toolbar>
             <x-slot:search>
@@ -153,7 +159,7 @@
                     </div>
 
                     <div class="md:col-span-6">
-                        <x-select label="Departamento dueño" name="department_id" wire:model="department_id" :options="$departments" placeholder="Sin dueño" />
+                        <x-select label="Departamento dueño" name="department_id" wire:model="department_id" :options="$ownerOptions" placeholder="Sin dueño" />
                     </div>
 
                     <div class="md:col-span-6">

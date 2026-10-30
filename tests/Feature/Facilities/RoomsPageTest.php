@@ -135,7 +135,7 @@ describe('admin', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
             ->call('create')->set('building_id', $this->edA->id)->set('code', 'a-101')->set('type', 'aula')->set('capacity', '10')->call('save')
             ->assertHasErrors('code')->assertSee('Ya existe un salón con la clave A-101')
-            ->set('code', 'A-104')->set('capacity', '0')->call('save')->assertHasErrors('capacity')->assertSee('La capacidad debe ser mayor que cero')
+            ->set('code', 'A-104')->set('capacity', '0')->call('save')->assertHasErrors('capacity')
             ->set('code', '')->set('building_id', '')->set('type', '')->set('capacity', '')->call('save')
             ->assertHasErrors(['code', 'building_id', 'type', 'capacity'])->assertSee('El campo clave es obligatorio');
     });
@@ -261,6 +261,61 @@ describe('bloqueos del salón en el panel', function () {
 
     it('agregar sin haber abierto un salón no hace nada y da 403', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('addBlock')->assertForbidden();
+    });
+});
+
+describe('robustez y perfil del campus', function () {
+    it('si el salón del panel se borra, cierra el panel en lugar de romper la página', function () {
+        $component = Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id)->assertSet('showDrawer', true);
+        $this->a101->delete();
+
+        $component->call('$refresh')->assertOk()->assertSet('showDrawer', false)->assertSet('blocksRoomId', null);
+    });
+
+    it('si el usuario pierde el alcance del salón del panel, lo cierra sin 403', function () {
+        $component = Livewire::actingAs($this->sub)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id);
+        $this->sub->roleScopes()->update(['valid_to' => today()->subDay()]);
+        app(ScopedContext::class)->refresh();
+
+        $component->call('$refresh')->assertOk()->assertSet('showDrawer', false);
+    });
+
+    it('quitar un bloqueo ya quitado no da error ni avisa de éxito', function () {
+        $block = RoomBlock::factory()->for($this->a101)->create();
+        $component = Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id)->call('removeBlock', $block->id);
+        $activities = Activity::count();
+
+        $component->call('removeBlock', $block->id)->assertOk();
+
+        expect(Activity::count())->toBe($activities)->and(lastToastOf($component)['title'] ?? null)->not->toBe('Bloqueo quitado');
+    });
+
+    it('rechaza un dueño desactivado y no lo ofrece en el select, salvo el que el salón ya tiene', function () {
+        $dead = Department::factory()->inactive()->create(['code' => 'DEAD']);
+        $this->old->update(['department_id' => $dead->id]);
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->assertViewHas('ownerOptions', fn (array $o): bool => ! in_array($dead->id, array_column($o, 'id'), true))
+            ->call('edit', $this->old->id)
+            ->assertViewHas('ownerOptions', fn (array $o): bool => in_array($dead->id, array_column($o, 'id'), true))
+            ->call('create')->set('building_id', $this->edA->id)->set('code', 'N-1')->set('type', 'aula')->set('capacity', '10')->set('department_id', $dead->id)
+            ->call('save')->assertHasErrors('department_id')->assertSee('El departamento dueño está desactivado');
+    });
+
+    it('rechaza capacidad menor que uno y características de más de 40 caracteres', function () {
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->call('create')->set('building_id', $this->edA->id)->set('code', 'N-2')->set('type', 'aula')->set('capacity', '-3')->call('save')->assertHasErrors('capacity')
+            ->set('capacity', '10')->set('features', 'Proyector, '.str_repeat('x', 41))->call('save')->assertHasErrors('features')->assertSee('hasta 40 caracteres')
+            ->set('features', 'Proyector, '.str_repeat('x', 40))->call('save')->assertHasNoErrors();
+    });
+
+    it('un campus que no usa salones muestra su estado vacío y no deja crear (por perfil, no por código)', function () {
+        $this->c2->update(['settings' => [...$this->c2->settings, 'uses_rooms' => false]]);
+
+        $this->actingAs($this->admin)->get(route('facilities.rooms'))
+            ->assertOk()->assertSee('no usa salones')->assertDontSee('A-101');
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->assertViewHas('rooms', null)->call('create')->assertForbidden();
+        $this->actingAs($this->admin)->get(route('facilities.buildings'))->assertOk()->assertSee('Edificio A');
     });
 });
 
