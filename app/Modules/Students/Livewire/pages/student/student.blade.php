@@ -143,7 +143,7 @@
         </div>
         </div>
     @else
-        <p class="text-neutral">Cada materia que ha cursado, por periodo, como viene en la última importación de kárdex.</p>
+        <p class="text-neutral">Cada materia que ha cursado, por periodo y desde el primero, como viene en la última importación de kárdex.</p>
         <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="student-kardex">
             @forelse ($record->kardex as $term)
                 <div class="flex flex-wrap items-center justify-between gap-2 border-base-300 bg-base-200/60 px-5 py-2.5 font-bold [&:not(:first-child)]:border-t">
