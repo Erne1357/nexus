@@ -2,6 +2,8 @@
 
 namespace App\Modules\Imports\Console;
 
+use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Closure;
@@ -156,6 +158,31 @@ final class ExportDemoFiles extends Command
                 ->get(['p.code as plan', 's.code as subject', 'q.code as prerequisite', 'r.kind'])
                 ->map(fn (object $r): array => [$r->plan, $r->subject, $r->prerequisite, $r->kind]),
 
+            // Un renglón por adscripción, la principal primero: la primera de un docente es la principal al importar.
+            'teachers' => fn (): iterable => DB::table('teacher_departments as td')
+                ->join('teachers as t', 't.id', '=', 'td.teacher_id')
+                ->join('departments as d', 'd.id', '=', 'td.department_id')
+                ->whereNull('td.deleted_at')->whereNull('t.deleted_at')->whereNull('d.deleted_at')
+                ->orderBy('t.employee_number')->orderByDesc('td.is_primary')->orderBy('d.code')
+                ->get(['t.employee_number', 't.name', 'd.code as department', 't.email', 't.degree', 't.is_active', 't.hired_on'])
+                ->map(fn (object $r): array => [
+                    $r->employee_number, $r->name, $r->department, $r->email,
+                    $r->degree === null ? null : TeacherDegree::from($r->degree)->label(),
+                    $r->is_active ? 'Sí' : 'No',
+                    $r->hired_on === null ? null : date('d/m/Y', strtotime($r->hired_on)),
+                ]),
+
+            'positions' => fn (): iterable => DB::table('teacher_positions as p')
+                ->join('teachers as t', 't.id', '=', 'p.teacher_id')
+                ->whereNull('p.deleted_at')->whereNull('t.deleted_at')
+                ->orderBy('t.employee_number')->orderBy('p.kind')->orderBy('p.valid_from')
+                ->get(['t.employee_number', 'p.kind', 'p.base_hours', 'p.valid_from', 'p.valid_to'])
+                ->map(fn (object $r): array => [
+                    $r->employee_number, PositionKind::from($r->kind)->label(), $r->base_hours,
+                    $r->valid_from === null ? null : date('d/m/Y', strtotime($r->valid_from)),
+                    $r->valid_to === null ? null : date('d/m/Y', strtotime($r->valid_to)),
+                ]),
+
             'students' => fn (): iterable => $this->chunked(
                 DB::table('students as st')
                     ->join('careers as c', 'c.id', '=', 'st.career_id')
@@ -176,6 +203,25 @@ final class ExportDemoFiles extends Command
                 'kr.id',
                 fn (object $r): array => [$r->control_number, $r->code, $r->term_code, $r->grade === null ? null : (string) (float) $r->grade, $r->result, $r->attempt],
             ),
+
+            // Un renglón por grupo impartido; el campus puede ir vacío.
+            'teacher_history' => fn (): iterable => $this->chunked(
+                DB::table('teacher_subject_history as h')
+                    ->join('teachers as t', 't.id', '=', 'h.teacher_id')
+                    ->join('subjects as s', 's.id', '=', 'h.subject_id')
+                    ->leftJoin('campuses as k', 'k.id', '=', 'h.campus_id')
+                    ->whereNull('h.deleted_at')->whereNull('t.deleted_at')->whereNull('s.deleted_at')
+                    ->select(['h.id', 't.employee_number', 's.code', 'h.term_code', 'k.code as campus', 'h.group_code']),
+                'h.id',
+                fn (object $r): array => [$r->employee_number, $r->code, $r->term_code, $r->campus, $r->group_code],
+            ),
+
+            'evaluations' => fn (): iterable => DB::table('teacher_evaluations as e')
+                ->join('teachers as t', 't.id', '=', 'e.teacher_id')
+                ->whereNull('e.deleted_at')->whereNull('t.deleted_at')
+                ->orderBy('t.employee_number')->orderBy('e.term_code')->orderBy('e.kind')
+                ->get(['t.employee_number', 'e.term_code', 'e.kind', 'e.score'])
+                ->map(fn (object $r): array => [$r->employee_number, $r->term_code, $r->kind, (string) (float) $r->score]),
         ];
     }
 

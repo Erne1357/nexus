@@ -33,6 +33,10 @@ final class AddAdscription
     public function __construct(private readonly TeacherRules $rules) {}
 
     /**
+     * @param  bool  $primary  pedirla como principal (el alta de CreateTeacher); con una principal viva es un error.
+     *                         Si el docente no tiene principal viva, la adscripción nueva o restaurada queda como
+     *                         principal aunque `$primary` sea false.
+     *
      * @throws ValidationException
      */
     public function handle(Teacher $teacher, Department $department, bool $primary = false): TeacherDepartment
@@ -57,15 +61,15 @@ final class AddAdscription
                 throw ValidationException::withMessages(['adscription' => "{$locked->name} ya tiene una adscripción principal."]);
             }
 
-            $primary = ! $hasPrimary;
-            $mark = $primary ? ' (principal)' : '';
+            $becomesPrimary = ! $hasPrimary;
+            $mark = $becomesPrimary ? ' (principal)' : '';
 
             if ($adscription === null) {
                 try {
                     $adscription = TeacherDepartment::create([
                         'teacher_id' => $locked->getKey(),
                         'department_id' => $department->getKey(),
-                        'is_primary' => $primary,
+                        'is_primary' => $becomesPrimary,
                     ]);
                 } catch (UniqueConstraintViolationException) {
                     throw $alreadyThere;
@@ -76,7 +80,7 @@ final class AddAdscription
                 ]);
             } else {
                 $old = $adscription->only(['is_primary']);
-                $adscription->is_primary = $primary;
+                $adscription->is_primary = $becomesPrimary;
                 $adscription->restore();
 
                 $this->record($adscription, ActivityEvent::Restored, "Volvió a adscribir al docente {$locked->employee_number} a {$department->code}{$mark}", [

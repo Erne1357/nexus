@@ -184,6 +184,18 @@ it('nadie se da de baja ni se quita a sí mismo de un departamento, ni el admin 
     'jefe de SC' => fn ($test) => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $test->sc->id])->create(),
 ]);
 
+it('adscribir a un docente que ya existe es solo del admin y la Subdirección (S9, supuesto por confirmar)', function () {
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
+    $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
+
+    expect(User::factory()->admin()->create()->can('adscribe', Teacher::class))->toBeTrue()
+        ->and(User::factory()->withRole(Role::Subdireccion)->create()->can('adscribe', Teacher::class))->toBeTrue()
+        ->and($jefe->can('adscribe', Teacher::class))->toBeFalse()
+        ->and($jpd->can('adscribe', Teacher::class))->toBeFalse()
+        ->and($coordinador->can('adscribe', Teacher::class))->toBeFalse();
+});
+
 it('appointHeads, provisionUsers y resetPassword son solo del admin', function (Role $role, array $scope) {
     $user = User::factory()->withRole($role, $scope)->create();
 

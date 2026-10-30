@@ -37,9 +37,10 @@ use Mary\Traits\Toast;
  * Lo ven el admin y la Subdirección, a todos, y los jefes de departamento y de proyecto docente, a los de su
  * departamento (TeacherPolicy; TeacherQuery lista con la misma regla). El alta lleva el departamento de quien da de
  * alta: el jefe, el suyo, sin elegirlo; el admin y la Subdirección lo eligen. Si el número ya existe, no se da de
- * alta otra vez: se ofrece adscribirlo a ese departamento sin cambiar sus datos (S9, supuesto por confirmar). La baja
- * es solo del admin y la Subdirección; los jefes quitan al docente de su departamento (RemoveAdscription). El admin
- * además encola «Dar de alta usuarios» (ProvisionTeacherUsersJob) desde «Más acciones».
+ * alta otra vez: al admin y a la Subdirección se les ofrece adscribirlo a ese departamento sin cambiar sus datos; a
+ * un jefe solo se le dice que ya está registrado (S9, supuesto por confirmar). La baja es solo del admin y la
+ * Subdirección; los jefes quitan al docente de su departamento (RemoveAdscription). El admin además encola «Dar de
+ * alta usuarios» (ProvisionTeacherUsersJob) desde «Más acciones».
  *
  * El componente lee con TeacherQuery, autoriza en mount() y en cada acción (una petición puede llegar con una página
  * que abrió otra sesión), valida la forma de los datos y llama a las Actions, que hacen cumplir las reglas. Los
@@ -48,6 +49,15 @@ use Mary\Traits\Toast;
 new #[Title('Docentes')] class extends Component
 {
     use Toast, WithPagination;
+
+    /** El número es de un docente borrado: no se reutiliza ni se adscribe. */
+    private const string DELETED_NUMBER = 'Ese número pertenece a un docente borrado; pide a Subdirección que lo revise.';
+
+    /** El número es de un docente dado de baja: primero se reactiva. */
+    private const string INACTIVE_NUMBER = 'Ese número es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.';
+
+    /** A un jefe no se le dice de quién es un número que ya existe (S9, supuesto por confirmar). */
+    private const string TAKEN_NUMBER = 'Ese número ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.';
 
     /** Número de empleado o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
     #[Session]
@@ -163,7 +173,7 @@ new #[Title('Docentes')] class extends Component
         }
 
         $this->authorize('create', Teacher::class);
-        $this->resetErrorBag('adscription');
+        $this->resetErrorBag(['adscription', 'employee_number']);
         $this->lookUpExisting();
     }
 
@@ -236,16 +246,27 @@ new #[Title('Docentes')] class extends Component
 
     /**
      * S9: adscribe al docente que ya existe con el número capturado al departamento del alta, sin cambiar sus datos.
+     * Solo el admin y la Subdirección (TeacherPolicy::adscribe). Si mientras tanto el docente se dio de baja o se
+     * borró, lo dice en el número y no escribe.
+     *
+     * @throws ValidationException
      */
     public function adscribeExisting(AddAdscription $addAdscription, TeacherQuery $teachers, ScopedContext $context): void
     {
-        $this->authorize('create', Teacher::class);
+        $this->authorize('adscribe', Teacher::class);
 
         if ($this->existingId === null) {
             return;
         }
 
-        $teacher = $teachers->findOrFail($this->existingId);
+        $teacher = $teachers->findForAdscription($this->existingId);
+
+        if ($teacher === null || $teacher->trashed() || ! $teacher->is_active) {
+            $this->reset('existingId', 'existingLabel');
+
+            throw ValidationException::withMessages(['employee_number' => $teacher === null || $teacher->trashed() ? self::DELETED_NUMBER : self::INACTIVE_NUMBER]);
+        }
+
         $this->validate(['department_id' => ['required', 'string']]);
         $department = $this->allowedDepartment($teachers, $context);
 
@@ -443,7 +464,10 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * Busca al docente sin borrar con el número capturado y, si existe, lo deja para el aviso de S9.
+     * Busca al docente con el número capturado, también borrado, y da el que encuentra (el número ya no se puede dar de
+     * alta). Al admin y a la Subdirección, si está activo, lo deja para el aviso de S9 con su número y su nombre. Si
+     * no, lo dice en el número: borrado, dado de baja o, a un jefe, solo que ya está registrado, sin decir de quién
+     * (S9, supuesto por confirmar).
      */
     private function lookUpExisting(): ?Teacher
     {
@@ -455,11 +479,23 @@ new #[Title('Docentes')] class extends Component
             return null;
         }
 
-        $teacher = app(TeacherQuery::class)->findByEmployeeNumber($number);
+        $teacher = app(TeacherQuery::class)->findByEmployeeNumber($number, withTrashed: true);
 
-        if ($teacher !== null) {
+        if ($teacher === null) {
+            return null;
+        }
+
+        $canAdscribe = Gate::allows('adscribe', Teacher::class);
+
+        if ($canAdscribe && $teacher->is_active && ! $teacher->trashed()) {
             $this->existingId = $teacher->id;
             $this->existingLabel = "{$teacher->employee_number} · {$teacher->name}";
+        } else {
+            $this->addError('employee_number', match (true) {
+                $teacher->trashed() => self::DELETED_NUMBER,
+                ! $canAdscribe => self::TAKEN_NUMBER,
+                default => self::INACTIVE_NUMBER,
+            });
         }
 
         return $teacher;
