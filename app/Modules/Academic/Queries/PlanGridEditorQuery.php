@@ -119,6 +119,16 @@ final class PlanGridEditorQuery
     }
 
     /**
+     * Un requisito sin quitar de la seriación del plan.
+     *
+     * @throws ModelNotFoundException<SubjectPrerequisite> si no existe, se quitó, es de otro plan o el id no es uuid
+     */
+    public function prerequisiteOrFail(StudyPlan $plan, string $id): SubjectPrerequisite
+    {
+        return KeyLookup::findOrFail(SubjectPrerequisite::query()->where('study_plan_id', $plan->getKey()), $id);
+    }
+
+    /**
      * Una especialidad del plan, sin las quitadas.
      *
      * @throws ModelNotFoundException<Specialty> si no existe, es de otro plan o el id no es uuid

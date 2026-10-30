@@ -144,7 +144,7 @@ describe('admin', function () {
 
         expect(textOf($page->querySelector('[data-testid="subject-panel"] header')))->toContain('ACF-0902', 'Cálculo Integral', '3-2-5 · Ciencias Básicas')
             ->and(textOf($page->querySelector('[data-testid="placement-section"]')))->toContain('Lugar en la retícula', 'Semestre', 'Especialidad', 'Obligatoria', 'Guardar lugar')
-            ->and(textOf($page->querySelector('[data-testid="requires-section"]')))->toContain('Pide 2', 'ACF-0901 Cálculo Diferencial Semestre 1 Seriación', 'SCC-1017 Métodos Numéricos Semestre 2 Correquisito')
+            ->and(textOf($page->querySelector('[data-testid="requires-section"]')))->toContain('Pide 2', 'ACF-0901 Cálculo Diferencial Semestre 1', 'SCC-1017 Métodos Numéricos Semestre 2')
             ->and(textOf($page->querySelector('[data-testid="required-by-section"]')))->toContain('La piden 1', 'ACF-0904 Cálculo Vectorial Semestre 3 Seriación')
             ->and($page->querySelector('[data-testid="plan-grid"]')->hasAttribute('data-focus'))->toBeTrue()
             ->and($page->querySelector('[data-subject="ACF-0902"]')->hasAttribute('data-me'))->toBeTrue()
@@ -563,6 +563,7 @@ describe('lugar en la retícula', function () {
         'guardar el lugar' => ['savePlacement', fn ($test) => [$test->integralRow->id]],
         'pedir quitarla' => ['confirmRemove', fn () => []],
         'quitarla' => ['removePlacement', fn ($test) => [$test->integralRow->id]],
+        'agregarle un requisito' => ['addPrerequisite', fn () => []],
     ]);
 
     it('si otra sesión la quita mientras se guarda o se quita, lo dice en lugar de fallar', function (string $method) {
@@ -795,6 +796,309 @@ describe('agregar materia', function () {
     });
 });
 
+function seriationActivitiesCount(): int
+{
+    return Activity::where('subject_type', (new SubjectPrerequisite)->getMorphClass())->count();
+}
+
+/**
+ * La seriación del plan como está en la base, también la quitada, para comparar antes y después.
+ *
+ * @return list<array<string, mixed>>
+ */
+function seriationSnapshot(): array
+{
+    return SubjectPrerequisite::withTrashed()->orderBy('id')->get(['id', 'kind', 'deleted_at'])->toArray();
+}
+
+describe('seriación', function () {
+    beforeEach(function () {
+        planFixture($this);
+        $this->architectureRow = $this->plan->placements()->where('subject_id', $this->architecture->id)->sole();
+        $requisite = fn (Subject $subject, Subject $prerequisite): SubjectPrerequisite => SubjectPrerequisite::where('subject_id', $subject->id)->where('prerequisite_subject_id', $prerequisite->id)->sole();
+        $this->integralNeedsCalculus = $requisite($this->integral, $this->calculus);
+        $this->integralNeedsNumerical = $requisite($this->integral, $this->numerical);
+    });
+
+    it('«Pide» lleva el tipo editable y quitar de cada requisito, y debajo «Agregar requisito»; «La piden» es de solo lectura', function () {
+        $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id);
+        $page = domOf($component);
+        $requires = $page->querySelector('[data-testid="requires-section"]');
+        $row = $requires->querySelector('[data-requisite="ACF-0901"]');
+
+        expect($component->get('kinds'))->toEqual([$this->integralNeedsCalculus->id => 'seriacion', $this->integralNeedsNumerical->id => 'correquisito'])
+            ->and(textOf($requires->querySelector('h3')))->toBe('Pide 2')
+            ->and(textOf($row))->toContain('ACF-0901 Cálculo Diferencial Semestre 1')
+            ->and(optionLabelsOf($row->querySelector('select')))->toBe(['Seriación', 'Correquisito'])
+            ->and($row->querySelector('select')->getAttribute('wire:model.live'))->toBe('kinds.'.$this->integralNeedsCalculus->id)
+            ->and($row->querySelector('select')->getAttribute('aria-label'))->toBe('Tipo del requisito ACF-0901')
+            ->and($row->querySelector('[aria-label="Quitar el requisito ACF-0901"]'))->not->toBeNull()
+            ->and($requires->querySelector('[data-requisite="SCC-1017"]'))->not->toBeNull()
+            ->and(textOf($page->querySelector('[data-testid="add-requisite"]')))->toContain('Agregar requisito', 'Otra materia de esta retícula', 'Agregar')
+            ->and(optionLabelsOf($page->querySelector('[data-testid="new-requisite-kind"]')))->toBe(['Seriación', 'Correquisito'])
+            ->and($page->querySelector('[data-testid="requisite-options"]'))->toBeNull()
+            ->and($page->querySelectorAll('[data-testid="required-by-section"] select'))->toHaveCount(0)
+            ->and(textOf($page->querySelector('[data-testid="required-by-section"]')))->toContain('ACF-0904 Cálculo Vectorial Semestre 3 Seriación');
+    });
+
+    it('«Agregar requisito» busca otra materia de esta retícula, sin la propia ni las que ya pide, sin importar acentos', function () {
+        $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id);
+        $options = fn (): array => array_map(textOf(...), iterator_to_array(domOf($component)->querySelectorAll('[data-testid="requisite-options"] button')));
+
+        $component->set('requisiteSearch', 'calculo');
+        expect($options())->toBe(['ACF-0904 Cálculo Vectorial Sem. 3']);
+
+        $component->set('requisiteSearch', 'scc');
+        expect($options())->toBe(['SCC-1005 Cultura Empresarial Sem. 3']);
+
+        $component->set('requisiteSearch', ' arquitectura  software ');
+        expect($options())->toBe(['ISD-2001 Arquitectura de Software Sem. 4']);
+
+        $component->set('requisiteSearch', 'zzz')->assertSee('Ninguna materia de la retícula coincide.');
+    });
+
+    it('agrega una seriación elegida de la retícula, lo confirma y la retícula la muestra', function () {
+        $component = planPage($this->admin, $this->plan)
+            ->call('select', $this->architectureRow->id)
+            ->set('requisiteSearch', 'vectorial')
+            ->call('pickRequisite', $this->vectorial->id)
+            ->assertSet('prerequisite_subject_id', $this->vectorial->id)
+            ->assertSet('requisiteSearch', 'ACF-0904 · Cálculo Vectorial');
+
+        expect(domOf($component)->querySelector('[data-testid="requisite-options"]'))->toBeNull();
+
+        $component->call('addPrerequisite')
+            ->assertHasNoErrors()
+            ->assertSet('requisiteSearch', '')
+            ->assertSet('prerequisite_subject_id', null)
+            ->assertSet('kind', 'seriacion')
+            ->assertSet('selectedId', $this->architectureRow->id);
+        $page = domOf($component);
+
+        expect(SubjectPrerequisite::where('subject_id', $this->architecture->id)->sole())
+            ->prerequisite_subject_id->toBe($this->vectorial->id)->kind->toBe(PrerequisiteKind::Seriacion)
+            ->and(lastToastOf($component))->type->toBe('success')->title->toBe('Requisito agregado')->description->toBe('ISD-2001 pide ACF-0904 (seriación).')
+            ->and(textOf($page->querySelector('[data-testid="requires-section"] h3')))->toBe('Pide 1')
+            ->and(textOf($page->querySelector('[data-subject="ISD-2001"]')))->toContain('Pide ACF-0904')
+            ->and(seriationActivitiesCount())->toBe(1);
+    });
+
+    it('una seriación que cierra un ciclo se rechaza en el panel con su cadena; como correquisito se acepta', function () {
+        $component = planPage($this->admin, $this->plan)
+            ->call('select', $this->calculusRow->id)
+            ->set('requisiteSearch', 'ACF-0904')
+            ->call('pickRequisite', $this->vectorial->id)
+            ->call('addPrerequisite')
+            ->assertHasErrors('kind')
+            ->assertSet('prerequisite_subject_id', $this->vectorial->id);
+        $alert = domOf($component)->querySelector('[data-testid="cycle-error"]');
+
+        expect(textOf($alert))->toStartWith('Cierra un ciclo: ACF-0904 ya pide, en cadena, a ACF-0901.')
+            ->and($alert->getAttribute('role'))->toBe('alert')
+            ->and(array_map(textOf(...), iterator_to_array($alert->querySelectorAll('[data-testid="cycle-path"] li'))))->toBe(['ACF-0904', 'ACF-0902', 'ACF-0901'])
+            ->and(SubjectPrerequisite::where('subject_id', $this->calculus->id)->count())->toBe(0)
+            ->and(seriationActivitiesCount())->toBe(0);
+
+        $component->set('kind', 'correquisito')->call('addPrerequisite')->assertHasNoErrors();
+
+        expect(SubjectPrerequisite::where('subject_id', $this->calculus->id)->sole()->kind)->toBe(PrerequisiteKind::Correquisito)
+            ->and(lastToastOf($component)['description'])->toBe('ACF-0901 pide ACF-0904 (correquisito).')
+            ->and(domOf($component)->querySelector('[data-testid="cycle-error"]'))->toBeNull()
+            ->and(textOf(domOf($component)->querySelector('[data-subject="ACF-0901"]')))->toContain('Correq. ACF-0904');
+    });
+
+    it('cambia el tipo: a correquisito siempre; a seriación revisa el ciclo y, si lo cierra, lo dice y deja el que tenía', function () {
+        $loop = seriate($this->plan, $this->calculus, $this->vectorial, PrerequisiteKind::Correquisito);
+        $component = planPage($this->admin, $this->plan)
+            ->call('select', $this->calculusRow->id)
+            ->set('kinds.'.$loop->id, 'seriacion')
+            ->assertHasErrors('kind')
+            ->assertSet('kinds.'.$loop->id, 'correquisito');
+
+        expect($loop->fresh()->kind)->toBe(PrerequisiteKind::Correquisito)
+            ->and(textOf(domOf($component)->querySelector('[data-testid="cycle-error"]')))->toStartWith('Cierra un ciclo: ACF-0904 ya pide, en cadena, a ACF-0901.')
+            ->and(seriationActivitiesCount())->toBe(0);
+
+        $component->call('select', $this->integralRow->id)
+            ->assertHasNoErrors()
+            ->set('kinds.'.$this->integralNeedsNumerical->id, 'seriacion')
+            ->assertHasNoErrors()
+            ->assertSet('kinds.'.$this->integralNeedsNumerical->id, 'seriacion');
+
+        expect($this->integralNeedsNumerical->fresh()->kind)->toBe(PrerequisiteKind::Seriacion)
+            ->and(lastToastOf($component))->type->toBe('success')->title->toBe('Tipo cambiado')->description->toBe('ACF-0902 pide SCC-1017 como seriación.');
+
+        $component->call('changeKind', $this->integralNeedsCalculus->id, 'correquisito');
+        expect($this->integralNeedsCalculus->fresh()->kind)->toBe(PrerequisiteKind::Correquisito)
+            ->and(lastToastOf($component)['description'])->toBe('ACF-0902 pide ACF-0901 como correquisito.');
+
+        $component->call('changeKind', $this->integralNeedsCalculus->id, 'correquisito');
+        expect(lastToastOf($component))->type->toBe('info')->title->toBe('Sin cambios')
+            ->and(seriationActivitiesCount())->toBe(2);
+
+        $component->call('changeKind', $this->integralNeedsCalculus->id, 'optativa')->assertHasErrors('kind');
+        expect($this->integralNeedsCalculus->fresh()->kind)->toBe(PrerequisiteKind::Correquisito);
+    });
+
+    it('quita un requisito y lo confirma', function () {
+        $component = planPage($this->admin, $this->plan)
+            ->call('select', $this->integralRow->id)
+            ->call('removePrerequisite', $this->integralNeedsCalculus->id)
+            ->assertSet('selectedId', $this->integralRow->id);
+        $page = domOf($component);
+
+        expect($this->integralNeedsCalculus->fresh()->trashed())->toBeTrue()
+            ->and(lastToastOf($component))->type->toBe('success')->title->toBe('Requisito quitado')->description->toBe('ACF-0902 ya no pide ACF-0901.')
+            ->and(textOf($page->querySelector('[data-testid="requires-section"] h3')))->toBe('Pide 1')
+            ->and($page->querySelector('[data-requisite="ACF-0901"]'))->toBeNull()
+            ->and($component->get('kinds'))->toBe([$this->integralNeedsNumerical->id => 'correquisito'])
+            ->and(seriationActivitiesCount())->toBe(1);
+    });
+
+    it('si otra sesión quita el requisito mientras se cambia o se quita, lo dice en lugar de fallar', function (string $method, array $arguments) {
+        $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id);
+        $removed = false;
+
+        // El requisito se quita justo después de que el componente lo encuentra y antes de que la Action lo bloquee.
+        SubjectPrerequisite::retrieved(function (SubjectPrerequisite $prerequisite) use (&$removed): void {
+            if (! $removed) {
+                $removed = true;
+                SubjectPrerequisite::whereKey($prerequisite->getKey())->delete();
+            }
+        });
+
+        $component->call($method, $this->integralNeedsNumerical->id, ...$arguments)
+            ->assertStatus(200)
+            ->assertSet('selectedId', $this->integralRow->id);
+
+        expect($removed)->toBeTrue()
+            ->and(lastToastOf($component))->type->toBe('info')->title->toBe('Ese requisito ya no está.')
+            ->and($this->integralNeedsNumerical->fresh())->trashed()->toBeTrue()->kind->toBe(PrerequisiteKind::Correquisito)
+            ->and($component->get('kinds'))->toBe([$this->integralNeedsCalculus->id => 'seriacion'])
+            ->and(seriationActivitiesCount())->toBe(0);
+    })->with([
+        'cambiar el tipo' => ['changeKind', ['seriacion']],
+        'quitarlo' => ['removePrerequisite', []],
+    ]);
+
+    it('agregar una seriación quitada restaura su fila con el tipo nuevo (Review Focus 3)', function () {
+        planPage($this->admin, $this->plan)
+            ->call('select', $this->integralRow->id)
+            ->call('removePrerequisite', $this->integralNeedsCalculus->id)
+            ->set('requisiteSearch', 'ACF-0901')
+            ->call('pickRequisite', $this->calculus->id)
+            ->set('kind', 'correquisito')
+            ->call('addPrerequisite')
+            ->assertHasNoErrors();
+
+        expect($this->integralNeedsCalculus->fresh())->trashed()->toBeFalse()->kind->toBe(PrerequisiteKind::Correquisito)
+            ->and(SubjectPrerequisite::withTrashed()->where('subject_id', $this->integral->id)->where('prerequisite_subject_id', $this->calculus->id)->count())->toBe(1);
+    });
+
+    it('sin materia elegida pide una; una que ya pide, ella misma o una fuera de la retícula dan su error, sin escribir (Review Focus 2)', function () {
+        $outside = Subject::factory()->create(['code' => 'SCD-1018']);
+        $before = seriationSnapshot();
+
+        planPage($this->admin, $this->plan)
+            ->call('select', $this->integralRow->id)
+            ->call('addPrerequisite')
+            ->assertHasErrors(['prerequisite_subject_id' => 'required'])
+            ->assertSee('Elige una materia de esta retícula.')
+            ->call('pickRequisite', $this->calculus->id)
+            ->call('addPrerequisite')
+            ->assertHasErrors('prerequisite_subject_id')
+            ->assertSee('ACF-0902 ya pide ACF-0901 como seriación.')
+            ->call('pickRequisite', $this->integral->id)
+            ->call('addPrerequisite')
+            ->assertSee('ACF-0902 no puede pedirse a sí misma.')
+            ->call('pickRequisite', $outside->id)
+            ->call('addPrerequisite')
+            ->assertHasErrors('prerequisite_subject_id')
+            ->assertSee('SCD-1018 no está en la retícula de este plan.')
+            ->set('kind', 'optativa')
+            ->call('addPrerequisite')
+            ->assertHasErrors('kind');
+
+        expect(seriationSnapshot())->toBe($before)
+            ->and(seriationActivitiesCount())->toBe(0);
+    });
+
+    it('elegir un requisito que no existe o con un id que no es uuid no existe', function (string $id) {
+        planPage($this->admin, $this->plan)->call('select', $this->integralRow->id)->call('pickRequisite', $id)->assertNotFound();
+    })->with(['no existe' => fakeKey(99), 'no uuid' => 'no-es-uuid']);
+
+    it('cambiar o quitar un requisito de otro plan, quitado o con un id que no es uuid no existe y no escribe (Review Focus 2)', function (string $method, Closure $id) {
+        $id = $id($this);
+        $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id);
+        $before = seriationSnapshot();
+
+        match ($method) {
+            'changeKind' => $component->call('changeKind', $id, 'correquisito'),
+            'kinds' => $component->set('kinds.'.$id, 'correquisito'),
+            default => $component->call($method, $id),
+        };
+
+        $component->assertNotFound();
+        expect(seriationSnapshot())->toBe($before)
+            ->and(seriationActivitiesCount())->toBe(0);
+    })->with(function () {
+        $ids = [
+            'de otro plan' => fn () => SubjectPrerequisite::factory()->create()->id,
+            'quitado' => fn ($test) => tap(seriate($test->plan, $test->vectorial, $test->calculus))->delete()->id,
+            'no uuid' => fn () => 'no-es-uuid',
+        ];
+        $cases = [];
+
+        foreach (['changeKind', 'kinds', 'removePrerequisite'] as $method) {
+            foreach ($ids as $label => $id) {
+                $cases["{$method}, {$label}"] = [$method, $id];
+            }
+        }
+
+        return $cases;
+    });
+
+    it('elegir otra materia, cerrar el panel o cambiar la búsqueda limpia «Agregar requisito»', function () {
+        planPage($this->admin, $this->plan)
+            ->call('select', $this->integralRow->id)
+            ->set('requisiteSearch', 'vec')
+            ->call('pickRequisite', $this->vectorial->id)
+            ->call('addPrerequisite')
+            ->assertHasErrors('kind')
+            ->call('select', $this->calculusRow->id)
+            ->assertHasNoErrors()
+            ->assertSet('requisiteSearch', '')
+            ->assertSet('prerequisite_subject_id', null)
+            ->assertSet('cycle', null)
+            ->set('requisiteSearch', 'vec')
+            ->call('pickRequisite', $this->vectorial->id)
+            ->set('kind', 'correquisito')
+            ->set('requisiteSearch', 'vect')
+            ->assertSet('prerequisite_subject_id', null)
+            ->call('pickRequisite', $this->vectorial->id)
+            ->set('showDrawer', false)
+            ->assertSet('requisiteSearch', '')
+            ->assertSet('prerequisite_subject_id', null)
+            ->assertSet('kind', 'seriacion')
+            ->assertSet('kinds', []);
+    });
+
+    it('busca un requisito sin más consultas que las de la retícula, y muestra a lo más 8', function () {
+        foreach (range(1, 30) as $i) {
+            placeInPlan($this->plan, Subject::factory()->create(['name' => "Optativa {$i}"]), 4);
+        }
+
+        $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id);
+        DB::enableQueryLog();
+        $component->set('requisiteSearch', 'optativa');
+        $queries = count(DB::getQueryLog());
+
+        // 5 medidas, constantes con el número de materias: el plan con su carrera (2) y la retícula (3).
+        expect(domOf($component)->querySelectorAll('[data-testid="requisite-options"] button'))->toHaveCount(8)
+            ->and($queries)->toBe(5);
+    });
+});
+
 describe('otros roles e invitados', function () {
     beforeEach(fn () => planFixture($this));
 
@@ -868,6 +1172,33 @@ describe('otros roles e invitados', function () {
         'guardar el lugar' => ['savePlacement', fn ($test) => [$test->integralRow->id]],
         'pedir quitarla' => ['confirmRemove', fn () => []],
         'quitarla de la retícula' => ['removePlacement', fn ($test) => [$test->integralRow->id]],
+    ]);
+
+    it('reciben 403 en cada método de la seriación aunque lo llamen directo con una página que abrió el admin', function (string $method, Closure $arguments) {
+        $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => $this->career->id])->create();
+        $requisite = SubjectPrerequisite::where('subject_id', $this->integral->id)->where('prerequisite_subject_id', $this->calculus->id)->sole();
+        $component = planPage($this->admin, $this->plan)
+            ->call('select', $this->integralRow->id)
+            ->set('requisiteSearch', 'ACF-0904')
+            ->call('pickRequisite', $this->vectorial->id)
+            ->set('kind', 'correquisito');
+        $before = seriationSnapshot();
+
+        $this->actingAs($user);
+        match ($method) {
+            'kinds' => $component->set('kinds.'.$requisite->id, 'correquisito'),
+            default => $component->call($method, ...$arguments($requisite)),
+        };
+
+        $component->assertForbidden();
+        expect(seriationSnapshot())->toBe($before)
+            ->and(seriationActivitiesCount())->toBe(0);
+    })->with([
+        'elegir un requisito' => ['pickRequisite', fn () => [fakeKey(1)]],
+        'agregar el requisito' => ['addPrerequisite', fn () => []],
+        'cambiar el tipo' => ['changeKind', fn (SubjectPrerequisite $requisite) => [$requisite->id, 'correquisito']],
+        'cambiar el tipo por la propiedad' => ['kinds', fn () => []],
+        'quitar el requisito' => ['removePrerequisite', fn (SubjectPrerequisite $requisite) => [$requisite->id]],
     ]);
 
     it('reciben 403 si abren «Agregar materia» o la confirmación de quitar por la propiedad', function (string $property) {

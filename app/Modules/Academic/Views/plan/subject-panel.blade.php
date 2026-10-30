@@ -6,9 +6,9 @@
     - «Lugar en la retícula» (placement-section): un formulario con el semestre, la especialidad («Ninguna
       (tronco común)»; una inactiva no se elige, salvo la que ya tiene) y si es obligatoria, y «Guardar lugar».
       Sus campos se llaman como las claves de UpdatePlacement, así sus errores caen en su campo.
-    - «Pide» (requires-section): cada requisito con su tipo. La tarea 1.8.10 vuelve editable el tipo, agrega
-      quitar y, debajo, «Agregar requisito» con el rechazo de un ciclo.
-    - «La piden» (required-by-section): solo lectura.
+    - «Pide» (requires-section, academic::plan.requires-editor): cada requisito con su tipo editable y quitar y,
+      debajo, «Agregar requisito» con el rechazo de un ciclo y su cadena.
+    - «La piden» (required-by-section): solo lectura; se edita desde el panel de la materia que la pide.
 
     Al pie, fijo, «Cada cambio queda en la bitácora.» y «Quitar de la retícula…», que abre la confirmación
     (academic::plan.remove-placement, en la página: un modal dentro del panel quedaría encerrado en él).
@@ -50,10 +50,7 @@
             </x-form>
         </section>
 
-        <section class="space-y-2.5" data-testid="requires-section">
-            <h3 class="flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Pide <span class="font-mono tracking-normal text-base-content">{{ count($row['requires']) }}</span></h3>
-            @include('academic::plan.requisites', ['requisites' => $row['requires'], 'empty' => 'No pide ninguna materia.'])
-        </section>
+        @include('academic::plan.requires-editor', ['row' => $row])
 
         <section class="space-y-2.5" data-testid="required-by-section">
             <h3 class="flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">La piden <span class="font-mono tracking-normal text-base-content">{{ count($row['required_by']) }}</span></h3>

@@ -1,18 +1,25 @@
 <?php
 
+use App\Modules\Academic\Actions\AddPrerequisite;
 use App\Modules\Academic\Actions\CreateSpecialty;
 use App\Modules\Academic\Actions\PlaceSubject;
 use App\Modules\Academic\Actions\RemovePlacement;
+use App\Modules\Academic\Actions\RemovePrerequisite;
 use App\Modules\Academic\Actions\RemoveSpecialty;
 use App\Modules\Academic\Actions\UpdatePlacement;
+use App\Modules\Academic\Actions\UpdatePrerequisite;
 use App\Modules\Academic\Actions\UpdateSpecialty;
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Queries\PlanGridEditorQuery;
 use App\Modules\Academic\Queries\StudyPlanQuery;
 use App\Modules\Academic\Rules\PlacementRules;
+use App\Modules\Academic\Rules\SeriationRules;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -23,22 +30,26 @@ use Mary\Traits\Toast;
  * Retícula de un plan (tarea 1.8; DESIGN.md, "Retícula del plan (editor)", variante A aprobada el 29 de
  * octubre de 2026): el encabezado del plan, sus especialidades y sus materias en columnas por semestre, con su
  * seriación y sus cadenas. Tocar una materia la selecciona, resalta su cadena y la abre en el panel lateral
- * (`x-drawer`): su lugar, que se edita ahí (semestre, especialidad y si es obligatoria), lo que pide y quién la
- * pide, y al pie «Quitar de la retícula…», que pide confirmar con la seriación que se va. Al pie de cada semestre,
- * «Agregar materia» busca en el catálogo y la pone. En el mismo panel se gestionan las especialidades. Es del
- * admin.
+ * (`x-drawer`): su lugar, que se edita ahí (semestre, especialidad y si es obligatoria), lo que pide, que también
+ * se edita ahí (el tipo de cada requisito, quitarlo y «Agregar requisito» con otra materia de la retícula), quién
+ * la pide, y al pie «Quitar de la retícula…», que pide confirmar con la seriación que se va. Al pie de cada
+ * semestre, «Agregar materia» busca en el catálogo y la pone. En el mismo panel se gestionan las especialidades.
+ * Es del admin.
  *
  * El componente lee con PlanGridEditorQuery, autoriza `view` del plan en mount() y en cada lectura, y
  * `editGrid` en cada método que escribe (una petición puede llegar con una página que abrió otra sesión);
  * valida la forma de los datos y llama a las Actions, que hacen cumplir las reglas. Los ids que llegan del
  * navegador se buscan dentro del plan: una fila o una especialidad de otro plan no existe.
  *
- * La tarea 1.8.10 (seriación) llena las secciones «Pide» y «Agregar requisito» del panel de una materia: ver
- * academic::plan.subject-panel.
+ * Una seriación que cierra un ciclo se rechaza en el panel con su cadena, del requisito a la materia; la cadena la
+ * calcula SeriationRules::cyclePath() con la seriación de la retícula que ya se leyó, sin consultar.
  */
 new #[Title('Retícula del plan')] class extends Component
 {
     use Toast;
+
+    /** Cuántas materias de la retícula muestra «Agregar requisito», como en la maqueta. */
+    private const int REQUISITE_LIMIT = 8;
 
     /** El plan de la retícula. El navegador no lo puede cambiar. */
     #[Locked]
@@ -106,6 +117,32 @@ new #[Title('Retícula del plan')] class extends Component
     /** Si se agrega como obligatoria. */
     public bool $addIsRequired = true;
 
+    /** «Agregar requisito»: lo que se busca entre las materias de esta retícula, clave o nombre. */
+    public string $requisiteSearch = '';
+
+    /** La materia de esta retícula elegida como requisito nuevo; null si ninguna. Solo la elige pickRequisite(). */
+    #[Locked]
+    public ?string $prerequisite_subject_id = null;
+
+    /** El tipo del requisito nuevo: `seriacion` o `correquisito`. */
+    public string $kind = 'seriacion';
+
+    /**
+     * El tipo de cada requisito de la materia del panel, por id de la seriación: lo que manda su select. Al pintar
+     * vuelve a tener lo que hay en la base, así un cambio rechazado regresa el select; cambiarlo es changeKind().
+     *
+     * @var array<string, string>
+     */
+    public array $kinds = [];
+
+    /**
+     * La seriación que se rechazó por cerrar un ciclo, para pintar su cadena; null sin ninguna.
+     *
+     * @var array{subject_id: string, prerequisite_subject_id: string}|null
+     */
+    #[Locked]
+    public ?array $cycle = null;
+
     public function mount(string $plan, StudyPlanQuery $plans): void
     {
         $model = $plans->findOrFail($plan);
@@ -138,6 +175,8 @@ new #[Title('Retícula del plan')] class extends Component
             $this->chainFocus = null;
         }
 
+        $this->kinds = $selected === null ? [] : array_column($selected['requires'], 'kind', 'prerequisite_id');
+
         $offeredSemesters = PlacementRules::offeredSemesters($plan->semesters_count, $grid['semesters_count']);
 
         return [
@@ -158,6 +197,9 @@ new #[Title('Retícula del plan')] class extends Component
                 'specialties' => $this->specialtyOptions($grid['specialties']),
             ] : null,
             'catalog' => $this->showAdd ? $grids->catalog($plan, $this->addSearch) : null,
+            'kindOptions' => array_map(fn (PrerequisiteKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], PrerequisiteKind::cases()),
+            'requisiteOptions' => $selected === null ? null : $this->requisiteOptions($rows, $selected),
+            'cyclePath' => $selected === null ? null : $this->cyclePath($rows),
             ...$this->highlight($grid, $rows, $selected),
         ];
     }
@@ -175,6 +217,7 @@ new #[Title('Retícula del plan')] class extends Component
         $this->showDrawer = true;
         $this->showRemove = false;
         $this->fillPlacement($placement);
+        $this->resetRequisiteForm();
     }
 
     /**
@@ -187,6 +230,7 @@ new #[Title('Retícula del plan')] class extends Component
         $this->chainFocus = $this->chainFocus === $chain ? null : $chain;
         $this->selectedId = null;
         $this->showDrawer = $this->showDrawer && $this->panel === 'specialties';
+        $this->resetRequisiteForm();
     }
 
     public function clearFocus(StudyPlanQuery $plans): void
@@ -207,6 +251,7 @@ new #[Title('Retícula del plan')] class extends Component
         if (! $open) {
             $this->resetValidation(['semester', 'specialty_id', 'is_required']);
             $this->reset('selectedId', 'renamingId', 'renamedName', 'showRemove', 'semester', 'specialty_id', 'is_required');
+            $this->resetRequisiteForm();
 
             return;
         }
@@ -228,6 +273,7 @@ new #[Title('Retícula del plan')] class extends Component
 
         $this->resetValidation();
         $this->reset('selectedId', 'renamingId', 'renamedName', 'code', 'name');
+        $this->resetRequisiteForm();
         $this->panel = 'specialties';
         $this->showDrawer = true;
     }
@@ -395,6 +441,7 @@ new #[Title('Retícula del plan')] class extends Component
 
         $this->resetValidation(['semester', 'specialty_id', 'is_required']);
         $this->reset('selectedId', 'showDrawer', 'showRemove', 'semester', 'specialty_id', 'is_required');
+        $this->resetRequisiteForm();
         $this->success('Materia quitada', e("{$subject->code} {$subject->name} ya no está en la retícula".match ($removed) {
             0 => '.',
             1 => ' ni su seriación.',
@@ -474,6 +521,151 @@ new #[Title('Retícula del plan')] class extends Component
     }
 
     /**
+     * Elige la materia de esta retícula que se agrega como requisito de la materia del panel; su clave y nombre
+     * quedan en la búsqueda. Si no se puede, lo dice AddPrerequisite al agregarla.
+     */
+    public function pickRequisite(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids): void
+    {
+        $this->authorize('editGrid', $this->plan($plans));
+
+        $subject = $grids->subjectOrFail($id);
+
+        $this->resetValidation(['prerequisite_subject_id', 'kind']);
+        $this->cycle = null;
+        $this->prerequisite_subject_id = $subject->id;
+        $this->requisiteSearch = "{$subject->code} · {$subject->name}";
+    }
+
+    /**
+     * Otra búsqueda suelta la materia elegida y su error: puede ya no estar en la lista.
+     */
+    public function updatedRequisiteSearch(): void
+    {
+        $this->resetValidation(['prerequisite_subject_id', 'kind']);
+        $this->reset('prerequisite_subject_id', 'cycle');
+    }
+
+    /**
+     * Agrega a la materia del panel el requisito elegido, con su tipo. Los errores de AddPrerequisite caen en
+     * `prerequisite_subject_id` (la materia) o en `kind` (el ciclo, que el panel muestra con su cadena). Si otra
+     * sesión quitó la materia del panel, lo dice y cierra el panel (selectedPlacementGone()).
+     */
+    public function addPrerequisite(StudyPlanQuery $plans, PlanGridEditorQuery $grids, AddPrerequisite $addPrerequisite): void
+    {
+        if ($this->selectedId === null) {
+            $this->authorize('editGrid', $this->plan($plans));
+
+            return;
+        }
+
+        $placement = $this->selectedPlacement($this->selectedId, $plans, $grids);
+
+        if ($placement === null) {
+            return;
+        }
+
+        $this->cycle = null;
+        $data = $this->validate([
+            'prerequisite_subject_id' => ['required', 'string'],
+            'kind' => ['required', Rule::enum(PrerequisiteKind::class)],
+        ], [
+            'prerequisite_subject_id.required' => 'Elige una materia de esta retícula.',
+            'kind.enum' => 'El tipo debe ser seriación o correquisito.',
+        ]);
+
+        $subject = $placement->subject;
+        $prerequisite = $grids->subjectOrFail($data['prerequisite_subject_id']);
+
+        try {
+            $row = $addPrerequisite->handle($this->plan($plans), $subject, $prerequisite, PrerequisiteKind::from($data['kind']));
+        } catch (ValidationException $exception) {
+            if (isset($exception->errors()['kind'])) {
+                $this->cycle = ['subject_id' => $subject->id, 'prerequisite_subject_id' => $prerequisite->id];
+            }
+
+            throw ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => [$key === 'subject_id' ? 'prerequisite_subject_id' : $key => $messages])->all());
+        }
+
+        $this->resetRequisiteForm();
+        $this->success('Requisito agregado', e("{$subject->code} pide {$prerequisite->code} (".mb_strtolower($row->kind->label()).').'));
+    }
+
+    /**
+     * El select de tipo de un requisito del panel (`kinds.{id}`): cambiarlo es changeKind(). Un `kinds` entero que
+     * llega del navegador no cambia nada: al pintar vuelve a tener lo de la base.
+     */
+    public function updatedKinds(mixed $kind, ?string $id = null): void
+    {
+        if ($id === null) {
+            return;
+        }
+
+        $this->changeKind($id, is_string($kind) ? $kind : '', app(StudyPlanQuery::class), app(PlanGridEditorQuery::class), app(UpdatePrerequisite::class));
+    }
+
+    /**
+     * Cambia el tipo del requisito `$id` del plan a `$kind`. Si como seriación cierra un ciclo, el error cae en
+     * `kind` y el panel lo muestra con su cadena; el select regresa al tipo que tiene. Si otra sesión lo quitó
+     * mientras tanto, lo dice.
+     */
+    public function changeKind(string $id, string $kind, StudyPlanQuery $plans, PlanGridEditorQuery $grids, UpdatePrerequisite $updatePrerequisite): void
+    {
+        $plan = $this->plan($plans);
+        $this->authorize('editGrid', $plan);
+
+        $prerequisite = $grids->prerequisiteOrFail($plan, $id);
+        $this->resetValidation('kind');
+        $this->cycle = null;
+        $newKind = PrerequisiteKind::tryFrom($kind) ?? throw ValidationException::withMessages(['kind' => 'El tipo debe ser seriación o correquisito.']);
+
+        try {
+            $prerequisite = $updatePrerequisite->handle($prerequisite, $newKind);
+        } catch (ModelNotFoundException) {
+            $this->prerequisiteGone();
+
+            return;
+        } catch (ValidationException $exception) {
+            $this->cycle = ['subject_id' => $prerequisite->subject_id, 'prerequisite_subject_id' => $prerequisite->prerequisite_subject_id];
+
+            throw $exception;
+        }
+
+        $description = e("{$prerequisite->subject->code} pide {$prerequisite->prerequisite->code} como ".mb_strtolower($newKind->label()).'.');
+
+        if (! $prerequisite->wasChanged()) {
+            $this->info('Sin cambios', $description);
+
+            return;
+        }
+
+        $this->success('Tipo cambiado', $description);
+    }
+
+    /**
+     * Quita el requisito `$id` del plan: la materia deja de pedirlo. Si otra sesión lo quitó mientras tanto, lo
+     * dice.
+     */
+    public function removePrerequisite(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids, RemovePrerequisite $removePrerequisite): void
+    {
+        $plan = $this->plan($plans);
+        $this->authorize('editGrid', $plan);
+
+        $prerequisite = $grids->prerequisiteOrFail($plan, $id);
+
+        try {
+            $removePrerequisite->handle($prerequisite);
+        } catch (ModelNotFoundException) {
+            $this->prerequisiteGone();
+
+            return;
+        }
+
+        $this->resetValidation('kind');
+        $this->cycle = null;
+        $this->success('Requisito quitado', e("{$prerequisite->subject->code} ya no pide {$prerequisite->prerequisite->code}."));
+    }
+
+    /**
      * El navegador solo cierra «Agregar materia» (Esc, el velo o la X); abrirlo es de openAdd(), y una petición
      * que lo abre pide `editGrid` como ella.
      */
@@ -517,6 +709,8 @@ new #[Title('Retícula del plan')] class extends Component
             'addSubjectId' => 'materia',
             'addSemester' => 'semestre',
             'addSpecialtyId' => 'especialidad',
+            'prerequisite_subject_id' => 'requisito',
+            'kind' => 'tipo',
         ];
     }
 
@@ -577,6 +771,7 @@ new #[Title('Retícula del plan')] class extends Component
     {
         $this->resetValidation(['semester', 'specialty_id', 'is_required']);
         $this->reset('selectedId', 'showDrawer', 'showRemove', 'semester', 'specialty_id', 'is_required');
+        $this->resetRequisiteForm();
         $this->info('Esa materia ya no está en la retícula.', 'La retícula ya está al día.');
     }
 
@@ -589,6 +784,93 @@ new #[Title('Retícula del plan')] class extends Component
         $this->semester = (string) $placement->semester;
         $this->specialty_id = (string) $placement->specialty_id;
         $this->is_required = $placement->is_required;
+    }
+
+    /**
+     * Deja «Agregar requisito» como al abrir el panel: sin búsqueda, sin materia elegida, seriación y sin error.
+     */
+    private function resetRequisiteForm(): void
+    {
+        $this->resetValidation(['prerequisite_subject_id', 'kind']);
+        $this->reset('requisiteSearch', 'prerequisite_subject_id', 'kind', 'cycle');
+    }
+
+    /**
+     * El requisito ya no está: otra sesión lo quitó, solo o con su materia. Al pintar, el panel ya sale sin él.
+     */
+    private function prerequisiteGone(): void
+    {
+        $this->resetValidation('kind');
+        $this->cycle = null;
+        $this->info('Ese requisito ya no está.', 'La retícula ya está al día.');
+    }
+
+    /**
+     * Las materias de esta retícula que «Agregar requisito» ofrece para la búsqueda: todas menos la del panel y las
+     * que ya pide, con cada palabra en la clave o el nombre (sin importar mayúsculas ni acentos), en el orden de la
+     * retícula y a lo más REQUISITE_LIMIT. Null sin búsqueda o con una materia ya elegida. No consulta: filtra
+     * la retícula que ya se leyó.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $selected
+     * @return list<array{subject_id: string, code: string, name: string, semester: int}>|null
+     */
+    private function requisiteOptions(array $rows, array $selected): ?array
+    {
+        $fold = fn (string $text): string => Str::lower(Str::ascii($text));
+        $words = preg_split('/\s+/u', $fold($this->requisiteSearch), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if ($words === [] || $this->prerequisite_subject_id !== null) {
+            return null;
+        }
+
+        $taken = array_fill_keys([$selected['subject_id'], ...array_column($selected['requires'], 'subject_id')], true);
+        $options = [];
+
+        foreach ($rows as $row) {
+            $text = $fold("{$row['code']} {$row['name']}");
+
+            if (isset($taken[$row['subject_id']]) || array_filter($words, fn (string $word): bool => ! str_contains($text, $word)) !== []) {
+                continue;
+            }
+
+            $options[] = ['subject_id' => $row['subject_id'], 'code' => $row['code'], 'name' => $row['name'], 'semester' => $row['semester']];
+
+            if (count($options) === self::REQUISITE_LIMIT) {
+                break;
+            }
+        }
+
+        return $options;
+    }
+
+    /**
+     * La cadena del ciclo que se rechazó (`cycle`), del requisito a la materia, con sus claves; null sin ciclo o
+     * si la retícula ya no lo tiene.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<string>|null
+     */
+    private function cyclePath(array $rows): ?array
+    {
+        if ($this->cycle === null) {
+            return null;
+        }
+
+        $edges = [];
+
+        foreach ($rows as $row) {
+            foreach ($row['requires'] as $requisite) {
+                if ($requisite['kind'] === PrerequisiteKind::Seriacion->value) {
+                    $edges[$row['subject_id']][$requisite['subject_id']] = true;
+                }
+            }
+        }
+
+        $path = SeriationRules::cyclePath($edges, $this->cycle['subject_id'], $this->cycle['prerequisite_subject_id']);
+        $codes = array_column($rows, 'code', 'subject_id');
+
+        return $path === null ? null : array_map(fn (string $id): string => $codes[$id], $path);
     }
 
     /**
