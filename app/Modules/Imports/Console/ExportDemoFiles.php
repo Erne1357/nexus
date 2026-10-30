@@ -2,6 +2,8 @@
 
 namespace App\Modules\Imports\Console;
 
+use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Closure;
@@ -155,6 +157,31 @@ final class ExportDemoFiles extends Command
                 ->orderBy('p.code')->orderBy('s.code')->orderBy('q.code')
                 ->get(['p.code as plan', 's.code as subject', 'q.code as prerequisite', 'r.kind'])
                 ->map(fn (object $r): array => [$r->plan, $r->subject, $r->prerequisite, $r->kind]),
+
+            // Un renglón por adscripción, la principal primero: la primera de un docente es la principal al importar.
+            'teachers' => fn (): iterable => DB::table('teacher_departments as td')
+                ->join('teachers as t', 't.id', '=', 'td.teacher_id')
+                ->join('departments as d', 'd.id', '=', 'td.department_id')
+                ->whereNull('td.deleted_at')->whereNull('t.deleted_at')->whereNull('d.deleted_at')
+                ->orderBy('t.employee_number')->orderByDesc('td.is_primary')->orderBy('d.code')
+                ->get(['t.employee_number', 't.name', 'd.code as department', 't.email', 't.degree', 't.is_active', 't.hired_on'])
+                ->map(fn (object $r): array => [
+                    $r->employee_number, $r->name, $r->department, $r->email,
+                    $r->degree === null ? null : TeacherDegree::from($r->degree)->label(),
+                    $r->is_active ? 'Sí' : 'No',
+                    $r->hired_on === null ? null : date('d/m/Y', strtotime($r->hired_on)),
+                ]),
+
+            'positions' => fn (): iterable => DB::table('teacher_positions as p')
+                ->join('teachers as t', 't.id', '=', 'p.teacher_id')
+                ->whereNull('p.deleted_at')->whereNull('t.deleted_at')
+                ->orderBy('t.employee_number')->orderBy('p.kind')->orderBy('p.valid_from')
+                ->get(['t.employee_number', 'p.kind', 'p.base_hours', 'p.valid_from', 'p.valid_to'])
+                ->map(fn (object $r): array => [
+                    $r->employee_number, PositionKind::from($r->kind)->label(), $r->base_hours,
+                    $r->valid_from === null ? null : date('d/m/Y', strtotime($r->valid_from)),
+                    $r->valid_to === null ? null : date('d/m/Y', strtotime($r->valid_to)),
+                ]),
 
             'students' => fn (): iterable => $this->chunked(
                 DB::table('students as st')
