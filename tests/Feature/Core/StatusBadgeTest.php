@@ -77,3 +77,11 @@ it('escapa el texto y suma las clases que recibe', function () {
 it('rechaza un tono que no está en DESIGN.md', function () {
     renderStatusBadge('<x-core::status-badge tone="rojo" label="Choque" />');
 })->throws(ViewException::class, '"rojo" is not a valid backing value');
+
+it('pinta el icono a 14 px, dentro de la insignia', function () {
+    $classes = renderStatusBadge('<x-core::status-badge tone="success" label="Activo" />')->querySelector('svg')->classList;
+
+    expect($classes->contains('w-3.5'))->toBeTrue()
+        ->and($classes->contains('h-3.5'))->toBeTrue()
+        ->and($classes->contains('w-5'))->toBeFalse('MaryUI le puso su tamaño de 20 px.');
+});

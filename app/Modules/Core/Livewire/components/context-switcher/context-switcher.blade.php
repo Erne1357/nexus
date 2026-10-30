@@ -4,7 +4,7 @@
         <div class="grid gap-1">
             <span class="text-[11.5px] font-medium tracking-[.09em] text-neutral uppercase">Campus</span>
             <span class="flex h-11 items-center gap-2 rounded-field border border-base-300 px-3 text-base" title="Campus activo">
-                <x-icon name="o-building-office-2" class="size-4 text-neutral" />
+                <x-icon name="o-building-office-2" class="w-4 h-4 text-neutral" />
                 {{ $campuses->first()->name }}
             </span>
         </div>
