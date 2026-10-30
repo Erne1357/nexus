@@ -49,17 +49,20 @@
     </div>
 
     @if ($tab !== 'kardex')
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-neutral" data-testid="standing-legend">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-neutral" data-testid="standing-legend">
             @foreach ($standings as $standing)
-                <span class="inline-flex items-center gap-1.5">
+                <span class="inline-flex items-center gap-1">
                     <span @class(['inline-flex w-6 h-6 shrink-0 items-center justify-center rounded border', $standing->tileClasses()]) aria-hidden="true"><x-icon :name="$standing->icon()" class="w-4 h-4" /></span>
                     {{ $standing->label() }}
                 </span>
             @endforeach
         </div>
 
-        {{-- wire:ignore: el resaltado vive en Alpine, y volver a pintar la página no debe borrarlo. --}}
-        <div x-data="studentGrid" wire:ignore @keydown.escape.window="clearUnlessLayerOpen()" class="space-y-4">
+        {{--
+            wire:ignore: el resaltado vive en Alpine, y volver a pintar la página no debe borrarlo. Su wire:key y el
+            del kárdex hacen que, al cambiar de pestaña, Livewire lo cambie por el kárdex en lugar de saltárselo.
+        --}}
+        <div x-data="studentGrid" wire:ignore wire:key="student-grid" @keydown.escape.window="clearUnlessLayerOpen()" class="space-y-4">
             <x-core::semester-grid.frame :layout="$layout" :current="$record->student->current_semester" data-testid="student-grid" x-ref="grid">
                 @foreach ($record->specialties as $specialty)
                     <x-core::semester-grid.band :specialty="$specialty['id']" :row="$layout->bands[$specialty['id']]" :name="$specialty['name']" :subjects="$specialty['subjects']" />
@@ -129,7 +132,7 @@
         </div>
     @else
         <p class="text-neutral">Cada materia que ha cursado, por periodo y desde el primero, como viene en la última importación de kárdex.</p>
-        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="student-kardex">
+        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="student-kardex" wire:key="student-kardex">
             @forelse ($record->kardex as $term)
                 <div class="flex flex-wrap items-center justify-between gap-2 border-base-300 bg-base-200/60 px-5 py-2.5 font-bold [&:not(:first-child)]:border-t">
                     <span><span class="font-mono">{{ $term['term'] }}</span> · {{ $term['label'] }}</span>

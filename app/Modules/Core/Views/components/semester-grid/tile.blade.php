@@ -1,6 +1,8 @@
 {{--
     El mosaico de una materia en core::semester-grid.frame, el mismo en la ficha del alumno y en el editor del plan:
     un botón de alto fijo (104 px) y el ancho de su columna, que nada estira, en su renglón (`$row`, de SemesterGrid).
+    Sus márgenes y su relleno están medidos para que la clave (ocho caracteres en Mono) y el icono quepan con nueve
+    semestres a 1366 px: 4 px a cada lado de la columna (el mismo hueco que entre renglones) y 8 px de relleno.
     De arriba abajo: la clave en Mono con `$icon` a la derecha; el nombre en dos renglones a lo más, partido con
     guiones y completo en `title` (y en el texto, para lectores de pantalla); lo que va en el slot (texto `sr-only`);
     un renglón de requisitos (`$requisites`, recortado y completo en su `title`); y al pie, `$start` y `$end` en Mono.
@@ -12,13 +14,13 @@
 @props(['row', 'code', 'name', 'chain' => null, 'muted' => false])
 
 <button type="button" {{ $attributes->class([
-    'flex h-26 min-w-0 cursor-pointer flex-col overflow-hidden rounded-field border px-2.5 py-2 text-left transition-opacity motion-reduce:transition-none md:col-(--col) md:row-(--row) md:mx-1.5',
+    'flex h-26 min-w-0 cursor-pointer flex-col overflow-hidden rounded-field border p-2 text-left transition-opacity motion-reduce:transition-none md:col-(--col) md:row-(--row) md:mx-1',
     'group-data-[focus]/grid:not-data-[on-chain]:opacity-20 group-data-[focus]/grid:not-data-[on-chain]:grayscale',
     'data-[me]:ring-2 data-[me]:ring-primary data-[me]:ring-offset-2 data-[me]:ring-offset-base-100',
-    'shadow-[inset_5px_0_0_var(--chain)] pl-3.5' => $chain !== null,
+    'shadow-[inset_5px_0_0_var(--chain)] pl-3' => $chain !== null,
 ]) }} style="--row: {{ $row }}{{ $chain === null ? '' : '; --chain: var(--color-chain-'.($chain % 12 + 1).')' }}">
-    <span class="flex h-4 shrink-0 items-center justify-between gap-1">
-        <span class="truncate font-mono text-[12.5px] font-semibold leading-4">{{ $code }}</span>
+    <span class="-mr-0.5 flex h-4 shrink-0 items-center justify-between">
+        <span class="truncate font-mono text-[12.5px] font-semibold leading-4 tracking-[-0.02em]">{{ $code }}</span>
         {{ $icon ?? '' }}
     </span>
     <span @class(['mt-1 line-clamp-2 hyphens-auto break-words text-[13px] leading-4', 'text-base-content' => ! $muted]) lang="es" title="{{ $name }}">{{ $name }}</span>
