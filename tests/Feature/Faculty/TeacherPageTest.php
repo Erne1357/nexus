@@ -7,6 +7,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherPosition;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -351,5 +352,53 @@ describe('alcance', function () {
         $page->call('removePosition')->assertForbidden();
 
         expect($sc->fresh()->trashed())->toBeFalse()->and($this->plaza->fresh()->trashed())->toBeFalse();
+    });
+});
+
+describe('revisión de la ficha', function () {
+    it('«Hacer principal» es de quien cubre el departamento de esa adscripción (supuesto por confirmar)', function () {
+        $ii = $this->ana->adscriptions()->where('department_id', $this->ii->id)->sole();
+        $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
+        $ii->update(['is_primary' => false]);
+        $sc->update(['is_primary' => true]);
+
+        teacherRecord($this->jefe, $this->ana)->call('setPrimary', $ii->id)->assertForbidden();
+
+        expect($ii->fresh()->is_primary)->toBeFalse();
+
+        teacherRecord($this->subdireccion, $this->ana)->call('setPrimary', $ii->id);
+
+        expect($ii->fresh()->is_primary)->toBeTrue();
+    });
+
+    it('el jefe ve «Hacer principal» deshabilitado, con su motivo, en el departamento que no cubre', function () {
+        $ii = $this->ana->adscriptions()->where('department_id', $this->ii->id)->sole();
+        $ii->update(['is_primary' => false]);
+        $this->ana->adscriptions()->where('department_id', $this->sc->id)->update(['is_primary' => true]);
+
+        $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        $button = $dom->querySelector('[data-testid="set-primary-'.$ii->id.'"]');
+
+        expect($button->hasAttribute('disabled'))->toBeTrue()
+            ->and($button->parentElement->getAttribute('data-tip'))->toContain('Solo quien administra');
+    });
+
+    it('la ficha no consulta por adscripción: las consultas no crecen con tres o más', function () {
+        $count = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->ana->id))->assertOk();
+
+            return count(DB::getQueryLog());
+        };
+        $count();
+        $before = $count();
+
+        foreach ([$this->cb, Department::factory()->create(), Department::factory()->create()] as $department) {
+            TeacherDepartment::factory()->for($this->ana)->for($department)->create(['is_primary' => false]);
+        }
+
+        expect($this->ana->adscriptions()->count())->toBe(5)
+            ->and($count())->toBe($before);
     });
 });

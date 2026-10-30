@@ -123,7 +123,7 @@ Alcance de cada rol: la Subdirección Académica es una para todo el Tec y el je
 
 El jefe de proyecto docente lo es de un departamento en un campus, lo más restrictivo mientras no se decida si también es de todo el Tec (supuesto por confirmar).
 
-Adscripciones de docentes: qué hace «Quitar de mi departamento» y qué principal queda está en "Reglas de datos". Nadie se quita a sí mismo de un departamento (supuesto por confirmar). Quien cubre al docente puede cambiar cuál adscripción es la principal (supuesto por confirmar). Si al quitar una adscripción el jefe deja de cubrir al docente, la ficha lo regresa a la lista.
+Adscripciones de docentes: qué hace «Quitar de mi departamento» y qué principal queda está en "Reglas de datos". Nadie se quita a sí mismo de un departamento (supuesto por confirmar). Cambiar cuál adscripción es la principal es de quien cubre el departamento de esa adscripción; el admin y la Subdirección, de cualquiera (supuesto por confirmar). Si al quitar una adscripción el jefe deja de cubrir al docente, la ficha lo regresa a la lista.
 
 Dar de alta un docente con un número de empleado que ya existe no crea otro: la pantalla ofrece adscribirlo al departamento de quien lo da de alta, sin cambiar sus datos; si esa adscripción se había quitado, la restaura, y si el docente no tiene principal, esa queda como principal (S9, supuesto por confirmar).
 

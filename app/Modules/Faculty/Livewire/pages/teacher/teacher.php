@@ -139,6 +139,7 @@ new #[Title('Ficha del docente')] class extends Component
         // «Quitar de <depto>» es de quien cubre ese departamento (y nadie a sí mismo); el motivo de lo deshabilitado
         // se escribe junto al botón.
         $removal = [];
+        $primaryReasons = [];
 
         foreach ($record->adscriptions as $adscription) {
             $removal[$adscription->id] = Gate::allows('removeAdscription', [Teacher::class, $adscription])
@@ -146,6 +147,9 @@ new #[Title('Ficha del docente')] class extends Component
                 : ($context->coversDepartment(TeacherPolicy::EDITORS, $adscription->department_id)
                     ? 'No te puedes quitar a ti mismo de un departamento.'
                     : 'Solo quien administra ese departamento lo quita.');
+            $primaryReasons[$adscription->id] = Gate::allows('setPrimaryAdscription', [Teacher::class, $adscription])
+                ? null
+                : 'Solo quien administra ese departamento la hace principal.';
         }
 
         $removing = $this->removingAdscriptionId === null ? null : $record->adscriptions->firstWhere('id', $this->removingAdscriptionId);
@@ -153,6 +157,7 @@ new #[Title('Ficha del docente')] class extends Component
         return [
             'record' => $record,
             'removal' => $removal,
+            'primaryReasons' => $primaryReasons,
             'removing' => $removing,
             'removingWarning' => $removing === null ? '' : $this->removalWarning($record, $removing),
             'removingPosition' => $this->removingPositionId === null ? null : $record->positions->firstWhere('id', $this->removingPositionId),
@@ -306,6 +311,7 @@ new #[Title('Ficha del docente')] class extends Component
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('update', $teacher);
         $adscription = $records->findAdscription($teacher, $id);
+        $this->authorize('setPrimaryAdscription', [Teacher::class, $adscription]);
 
         if ($this->attempt(fn () => $setPrimaryAdscription->handle($adscription), 'No se pudo cambiar la principal')) {
             $this->success('Adscripción principal cambiada', 'Queda en la bitácora.');

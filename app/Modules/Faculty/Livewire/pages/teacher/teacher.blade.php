@@ -188,7 +188,13 @@
                                 @if ($adscription->is_primary)
                                     <x-core::status-badge tone="primary" label="Principal" class="me-2" />
                                 @else
-                                    <x-button label="Hacer principal" class="btn-ghost btn-sm" wire:click="setPrimary('{{ $adscription->id }}')" spinner="setPrimary('{{ $adscription->id }}')" :data-testid="'set-primary-'.$adscription->id" />
+                                    @if ($primaryReasons[$adscription->id] === null)
+                                        <x-button label="Hacer principal" class="btn-ghost btn-sm" wire:click="setPrimary('{{ $adscription->id }}')" spinner="setPrimary('{{ $adscription->id }}')" :data-testid="'set-primary-'.$adscription->id" />
+                                    @else
+                                        <span class="tooltip tooltip-left" data-tip="{{ $primaryReasons[$adscription->id] }}">
+                                            <x-button label="Hacer principal" class="btn-ghost btn-sm" disabled :data-testid="'set-primary-'.$adscription->id" aria-label="Hacer principal: {{ $primaryReasons[$adscription->id] }}" />
+                                        </span>
+                                    @endif
                                 @endif
 
                                 @if ($removal[$adscription->id] === null)

@@ -29,7 +29,8 @@ final class TeacherRecordQuery
             ->with(['department' => fn (BelongsTo $department) => $department->withTrashed()->select(['id', 'code', 'name'])])
             ->orderByDesc('is_primary')
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->each(fn (TeacherDepartment $adscription) => $adscription->setRelation('teacher', $teacher));
 
         $today = today()->toDateString();
         $termDay = $term?->starts_on->toDateString();
