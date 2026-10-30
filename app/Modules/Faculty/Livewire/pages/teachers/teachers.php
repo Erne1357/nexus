@@ -265,15 +265,12 @@ new #[Title('Docentes')] class extends Component
         $this->authorize('removeAdscription', [Teacher::class, $adscription]);
 
         $teacher = $adscription->teacher ?? abort(404);
-        $rest = $teacher->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription));
-        $promoted = $removeAdscription->handle($adscription);
-        $outcome = match (true) {
-            $rest->isEmpty() => '; queda sin departamento',
-            $promoted !== null => '; su adscripción principal pasa a '.$rest->firstWhere('id', $promoted->id)?->department?->code,
-            default => '',
-        };
+        $removal = $removeAdscription->handle($adscription);
 
-        $this->success(e("Docente quitado de {$adscription->department?->code}"), $this->describe($teacher).e($outcome));
+        $this->success(
+            e("Docente quitado de {$adscription->department?->code}"),
+            $this->describe($teacher).($removal['outcome'] === null ? '' : e("; {$removal['outcome']}")),
+        );
     }
 
     public function toggleActive(string $id, TeacherQuery $teachers, SetTeacherActive $setTeacherActive, DefaultPassword $defaultPassword): void

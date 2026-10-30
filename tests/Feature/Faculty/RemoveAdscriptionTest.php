@@ -31,9 +31,12 @@ function adscriptionOf(Teacher $teacher, Department $department): TeacherDepartm
     return TeacherDepartment::withTrashed()->where('teacher_id', $teacher->id)->where('department_id', $department->id)->sole();
 }
 
+/**
+ * La adscripción que pasó a ser la principal, o null.
+ */
 function removeAdscription(TeacherDepartment $adscription): ?TeacherDepartment
 {
-    return app(RemoveAdscription::class)->handle($adscription);
+    return app(RemoveAdscription::class)->handle($adscription)['promoted'];
 }
 
 /**
@@ -179,4 +182,18 @@ it('avisa con AdscriptionChanged solo después del commit', function () {
     removeAdscription($sis);
 
     expect($heard)->toBe([$sis->id]);
+});
+
+it('devuelve la principal nueva, cuántas adscripciones le quedan y el resultado con el mismo texto de la bitácora', function () {
+    $teacher = teacherInThreeDepartments($this->sis, $this->ind, $this->civ);
+    $alone = Teacher::factory()->adscribedTo($this->sis)->create();
+
+    $primaryMoved = app(RemoveAdscription::class)->handle(adscriptionOf($teacher, $this->sis));
+    $notPrimary = app(RemoveAdscription::class)->handle(adscriptionOf($teacher, $this->civ));
+    $last = app(RemoveAdscription::class)->handle(adscriptionOf($alone, $this->sis));
+
+    expect($primaryMoved['promoted']->is(adscriptionOf($teacher, $this->ind)))->toBeTrue()
+        ->and($primaryMoved)->remaining->toBe(2)->outcome->toBe('su adscripción principal pasa a IND')
+        ->and($notPrimary)->promoted->toBeNull()->remaining->toBe(1)->outcome->toBeNull()
+        ->and($last)->promoted->toBeNull()->remaining->toBe(0)->outcome->toBe('queda sin departamento');
 });

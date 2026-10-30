@@ -129,8 +129,8 @@ final class TeacherQuery
     }
 
     /**
-     * La adscripción sin borrar que se va a quitar, con su departamento y su docente, y las demás adscripciones de
-     * este con su departamento, para decir qué principal queda.
+     * La adscripción sin borrar que se va a quitar, con su departamento (aunque esté borrado) y su docente, que usa
+     * TeacherPolicy para no dejar que alguien se quite a sí mismo. El id llega del navegador (ADR-0014).
      *
      * @throws ModelNotFoundException<TeacherDepartment>
      */
@@ -138,7 +138,7 @@ final class TeacherQuery
     {
         return KeyLookup::findOrFail(TeacherDepartment::query()->with([
             'department' => fn (BelongsTo $department) => $department->withTrashed(),
-            'teacher.adscriptions' => fn (HasMany $adscriptions) => $this->orderedAdscriptions($adscriptions),
+            'teacher',
         ]), $id);
     }
 
