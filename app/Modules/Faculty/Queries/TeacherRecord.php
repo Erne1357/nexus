@@ -19,7 +19,7 @@ use Illuminate\Support\Collection;
 final readonly class TeacherRecord
 {
     /**
-     * @param  Collection<int, TeacherDepartment>  $adscriptions  La principal primero, con su departamento y campus.
+     * @param  Collection<int, TeacherDepartment>  $adscriptions  La principal primero, con su departamento (sin campus: el docente no es de un campus).
      * @param  Collection<int, TeacherPosition>  $positions  Las vigentes primero, luego las por empezar y al final las vencidas.
      * @param  array<string, string>  $positionStatus
      * @param  array<string, bool>  $countsInTerm

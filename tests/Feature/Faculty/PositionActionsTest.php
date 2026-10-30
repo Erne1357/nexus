@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Faculty\Actions\AddPosition;
 use App\Modules\Faculty\Actions\CreateTeacher;
 use App\Modules\Faculty\Actions\RemovePosition;
@@ -20,9 +19,8 @@ use Spatie\Activitylog\Models\Activity;
 */
 
 beforeEach(function () {
-    $campus = Campus::factory()->create(['code' => 'C2']);
     $department = Department::factory()->create(['code' => 'SC']);
-    $this->teacher = app(CreateTeacher::class)->handle(['employee_number' => '1234567', 'name' => 'Ana Pérez Soto'], $department, $campus);
+    $this->teacher = app(CreateTeacher::class)->handle(['employee_number' => '1234567', 'name' => 'Ana Pérez Soto'], $department);
     $this->activityBase = (int) Activity::max('id');
 });
 

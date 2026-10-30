@@ -2,10 +2,10 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherPosition;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Features\SupportTesting\Testable;
@@ -20,21 +20,22 @@ use Spatie\Activitylog\Models\Activity;
 */
 
 beforeEach(function () {
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
+    $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     $this->term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
 
-    $this->docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create(['username' => '1000001']);
-    $this->ana = Teacher::factory()->adscribedTo($this->ii, $this->c2)->adscribedTo($this->sc, $this->c2, primary: false)
-        ->create(['employee_number' => '1000001', 'name' => 'Ana Pérez', 'email' => 'ana@example.test', 'user_id' => $this->docente->id]);
+    $this->docente = User::factory()->withRole(Role::Docente)->create(['username' => '1000001']);
+    $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez', 'email' => 'ana@example.test', 'user_id' => $this->docente->id]);
+    TeacherDepartment::factory()->for($this->ana)->for($this->sc)->create(['is_primary' => false, 'created_at' => now()->addSecond()]);
     $this->plaza = TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create();
-    $this->beto = Teacher::factory()->adscribedTo($this->sc, $this->c1)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
+    $this->beto = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
 
     $this->admin = User::factory()->admin()->create();
-    $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
-    $this->subdireccionC1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])->create();
+    $this->sin = Teacher::factory()->create(['employee_number' => '1000003', 'name' => 'Elsa Mora']);
+    $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
+    $this->jefeCb = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
+    $this->subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
     $this->activityBase = (int) Activity::max('id');
 });
 
@@ -86,8 +87,8 @@ describe('datos', function () {
             ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Datos actualizados');
     });
 
-    it('desactiva y activa al docente', function () {
-        $page = teacherRecord($this->jefe, $this->ana)->call('toggleActive');
+    it('desactiva y activa al docente (la baja es solo del admin y la Subdirección)', function () {
+        $page = teacherRecord($this->subdireccion, $this->ana)->call('toggleActive');
 
         expect($this->ana->fresh()->is_active)->toBeFalse()
             ->and(lastToastOf($page))->title->toBe('Docente desactivado');
@@ -98,18 +99,38 @@ describe('datos', function () {
     });
 });
 
+describe('baja', function () {
+    it('el jefe ve «Desactivar» deshabilitado con su motivo y recibe 403 al llamarlo', function () {
+        $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        $item = $dom->querySelector('[data-testid="toggle-active"]');
+
+        expect($item->getAttribute('aria-disabled'))->toBe('true')
+            ->and(textOf($item))->toContain('Solo el administrador y la Subdirección');
+
+        teacherRecord($this->jefe, $this->ana)->call('toggleActive')->assertForbidden();
+
+        expect($this->ana->fresh()->is_active)->toBeTrue();
+    });
+
+    it('el admin y la Subdirección la ven habilitada', function (string $user) {
+        $dom = domOf($this->actingAs($this->{$user})->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+
+        expect($dom->querySelector('[data-testid="toggle-active"]')->getAttribute('aria-disabled'))->toBeNull();
+    })->with(['admin', 'subdireccion']);
+});
+
 describe('adscripciones', function () {
     it('quita una adscripción después de confirmar y avisa', function () {
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
         $page = teacherRecord($this->admin, $this->ana)->call('confirmRemoveAdscription', $sc->id);
-        $page->assertSet('removingAdscriptionId', $sc->id)->assertSee('¿Quitar la adscripción de');
+        $page->assertSet('removingAdscriptionId', $sc->id)->assertSee('¿Quitar al docente');
         $page->call('removeAdscription');
 
         expect($sc->fresh()->trashed())->toBeTrue()
-            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Adscripción quitada');
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Quitado de SC');
     });
 
-    it('el jefe de SC en C2 que quita la de SC en C2 ya no cubre al docente: vuelve a la lista', function () {
+    it('el jefe de SC que quita la de SC ya no cubre al docente: vuelve a la lista', function () {
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
 
         teacherRecord($this->jefe, $this->ana)->call('confirmRemoveAdscription', $sc->id)->call('removeAdscription')->assertRedirect(route('faculty.teachers'));
@@ -117,12 +138,42 @@ describe('adscripciones', function () {
         expect($sc->fresh()->trashed())->toBeTrue();
     });
 
-    it('S8: el error de quitar la principal sale en un toast, sin quitarla', function () {
+    it('quitar la principal pasa la principal a la más antigua que queda, y el aviso lo dice', function () {
         $primary = $this->ana->adscriptions()->where('is_primary', true)->sole();
-        $page = teacherRecord($this->admin, $this->ana)->call('confirmRemoveAdscription', $primary->id)->call('removeAdscription');
+        $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
 
-        expect($primary->fresh()->trashed())->toBeFalse()
-            ->and(lastToastOf($page))->type->toBe('error')->description->toContain('principal');
+        $page = teacherRecord($this->admin, $this->ana)->call('confirmRemoveAdscription', $primary->id)
+            ->assertSee('su adscripción principal pasa a SC')
+            ->call('removeAdscription');
+
+        expect($primary->fresh()->trashed())->toBeTrue()
+            ->and($sc->fresh()->is_primary)->toBeTrue()
+            ->and(lastToastOf($page))->type->toBe('success')->description->toContain('principal pasa a SC');
+    });
+
+    it('quitar la única adscripción deja al docente activo y sin departamento', function () {
+        $page = teacherRecord($this->admin, $this->beto)->call('confirmRemoveAdscription', $this->beto->adscriptions()->sole()->id)
+            ->assertSee('Se queda sin departamento, pero sigue activo.')
+            ->call('removeAdscription');
+
+        expect($this->beto->fresh()->is_active)->toBeTrue()
+            ->and($this->beto->adscriptions()->count())->toBe(0)
+            ->and(lastToastOf($page))->description->toContain('queda sin departamento');
+    });
+
+    it('nadie se quita a sí mismo de un departamento (supuesto por confirmar)', function () {
+        $this->ana->update(['user_id' => $this->jefe->id]);
+        $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
+
+        teacherRecord($this->jefe, $this->ana)->call('confirmRemoveAdscription', $sc->id)->assertForbidden();
+
+        expect($sc->fresh()->trashed())->toBeFalse();
+    });
+
+    it('lista las adscripciones sin campus, con «Quitar de <depto>» por renglón', function () {
+        $page = teacherRecord($this->admin, $this->ana);
+
+        $page->assertSee('Quitar de II')->assertSee('Quitar de SC')->assertDontSee(' en C2');
     });
 
     it('hace principal a otra y deja una sola', function () {
@@ -223,9 +274,15 @@ describe('restablecer contraseña', function () {
 });
 
 describe('alcance', function () {
-    it('el jefe de SC en C2 recibe 403 en la ficha de un docente de SC en C1 y de ninguno', function () {
+    it('el jefe de SC recibe 403 en la ficha de un docente de otro departamento, y el de CB en la de uno de SC e II', function () {
         $this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->beto->id))->assertForbidden();
-        $this->actingAs($this->subdireccionC1)->get(route('faculty.teachers.show', $this->ana->id))->assertForbidden();
+        $this->actingAs($this->jefeCb)->get(route('faculty.teachers.show', $this->ana->id))->assertForbidden();
+    });
+
+    it('la Subdirección ve la ficha de cualquiera, también la de un docente sin departamento; el jefe no', function () {
+        $this->actingAs($this->subdireccion)->get(route('faculty.teachers.show', $this->sin->id))->assertOk();
+        $this->actingAs($this->subdireccion)->get(route('faculty.teachers.show', $this->beto->id))->assertOk();
+        $this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->sin->id))->assertForbidden();
     });
 
     it('un id que no es uuid o no existe da 404', function () {
@@ -260,7 +317,7 @@ describe('alcance', function () {
         }, $arguments);
 
         $page = Livewire::actingAs($this->admin)->test('faculty::pages.teacher', ['teacher' => $this->ana->id]);
-        $this->actingAs($this->subdireccionC1);
+        $this->actingAs($this->jefeCb);
 
         $page->call($method, ...$arguments)->assertForbidden();
 
@@ -286,11 +343,11 @@ describe('alcance', function () {
         $page = Livewire::actingAs($this->admin)->test('faculty::pages.teacher', ['teacher' => $this->ana->id])
             ->call('confirmRemoveAdscription', $sc->id)->call('confirmRemovePosition', $this->plaza->id);
 
-        $this->actingAs($this->subdireccionC1);
+        $this->actingAs($this->jefeCb);
         $page->call('removeAdscription')->assertForbidden();
 
         $page = Livewire::actingAs($this->admin)->test('faculty::pages.teacher', ['teacher' => $this->ana->id])->call('confirmRemovePosition', $this->plaza->id);
-        $this->actingAs($this->subdireccionC1);
+        $this->actingAs($this->jefeCb);
         $page->call('removePosition')->assertForbidden();
 
         expect($sc->fresh()->trashed())->toBeFalse()->and($this->plaza->fresh()->trashed())->toBeFalse();

@@ -21,7 +21,7 @@
             </h1>
             <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                 @php($primary = $record->adscriptions->first())
-                <span>Adscripción principal <span class="font-medium text-base-content">@if ($primary)<span class="font-mono">{{ $primary->department?->code }}</span> en <span class="font-mono">{{ $primary->campus?->code }}</span>@else — @endif</span></span>
+                <span>Adscripción principal <span class="font-medium text-base-content">@if ($primary)<span class="font-mono">{{ $primary->department?->code }}</span> · {{ $primary->department?->name }}@else — @endif</span></span>
                 @if ($record->adscriptions->count() > 1)
                     <span>y <span class="font-medium text-base-content">{{ $record->adscriptions->count() - 1 }} {{ $record->adscriptions->count() === 2 ? 'otra' : 'otras' }}</span></span>
                 @endif
@@ -34,13 +34,17 @@
             <x-button label="Editar datos" icon="o-pencil-square" class="btn-outline" wire:click="editData" spinner="editData" data-testid="edit-data" />
 
             <x-core::row-menu :name="$record->teacher->employee_number">
-                <x-core::row-menu-item
-                    :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'"
-                    wire:click="toggleActive"
-                    wire:confirm="{{ $record->teacher->is_active ? '¿Dar de baja al docente '.$record->teacher->employee_number.'? Se desactiva su usuario y terminan sus jefaturas vigentes.' : '¿Activar al docente '.$record->teacher->employee_number.'? Su usuario vuelve a estar activo.' }}"
-                    spinner="toggleActive"
-                    data-testid="toggle-active"
-                />
+                @if ($canDeactivate)
+                    <x-core::row-menu-item
+                        :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'"
+                        wire:click="toggleActive"
+                        wire:confirm="{{ $record->teacher->is_active ? '¿Dar de baja al docente '.$record->teacher->employee_number.'? Se desactiva su usuario y terminan sus jefaturas vigentes.' : '¿Activar al docente '.$record->teacher->employee_number.'? Su usuario vuelve a estar activo.' }}"
+                        spinner="toggleActive"
+                        data-testid="toggle-active"
+                    />
+                @else
+                    <x-core::row-menu-item :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'" :reason="$deactivateReason" disabled data-testid="toggle-active" />
+                @endif
                 @if ($canReset)
                     <x-core::row-menu-item
                         label="Restablecer contraseña"
@@ -178,8 +182,7 @@
                     @foreach ($record->adscriptions as $adscription)
                         <div wire:key="adscription-{{ $adscription->id }}" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3 last:border-b-0">
                             <div class="min-w-0">
-                                <span class="font-semibold">{{ $adscription->department?->name }}</span>
-                                <span class="block text-neutral"><span class="font-mono">{{ $adscription->campus?->code }}</span> · {{ $adscription->campus?->name }}</span>
+                                <span class="font-mono text-neutral">{{ $adscription->department?->code }}</span> <span class="font-semibold">{{ $adscription->department?->name }}</span>
                             </div>
                             <div class="flex flex-wrap items-center justify-end gap-1 max-md:col-span-2 max-md:justify-start max-md:-ms-3">
                                 @if ($adscription->is_primary)
@@ -189,10 +192,10 @@
                                 @endif
 
                                 @if ($removal[$adscription->id] === null)
-                                    <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="confirmRemoveAdscription('{{ $adscription->id }}')" spinner="confirmRemoveAdscription('{{ $adscription->id }}')" :data-testid="'remove-adscription-'.$adscription->id" aria-label="Quitar la adscripción a {{ $adscription->department?->name }} en {{ $adscription->campus?->name }}" />
+                                    <x-button label="Quitar de {{ $adscription->department?->code }}" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="confirmRemoveAdscription('{{ $adscription->id }}')" spinner="confirmRemoveAdscription('{{ $adscription->id }}')" :data-testid="'remove-adscription-'.$adscription->id" aria-label="Quitar la adscripción a {{ $adscription->department?->name }}" />
                                 @else
                                     <span class="tooltip tooltip-left" data-tip="{{ $removal[$adscription->id] }}">
-                                        <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm" disabled :data-testid="'remove-adscription-'.$adscription->id" aria-label="Quitar la adscripción a {{ $adscription->department?->name }} en {{ $adscription->campus?->name }}: {{ $removal[$adscription->id] }}" />
+                                        <x-button label="Quitar de {{ $adscription->department?->code }}" icon="o-trash" class="btn-ghost btn-sm" disabled :data-testid="'remove-adscription-'.$adscription->id" aria-label="Quitar la adscripción a {{ $adscription->department?->name }}: {{ $removal[$adscription->id] }}" />
                                     </span>
                                 @endif
                             </div>
@@ -264,19 +267,14 @@
         </x-form>
     </x-modal>
 
-    <x-modal wire:model="showRemoveAdscriptionModal" title="Quitar adscripción" :subtitle="$removing ? ($removing->department?->name.' · '.$removing->campus?->name) : null" box-class="max-w-lg" separator>
+    <x-modal wire:model="showRemoveAdscriptionModal" :title="$removing ? 'Quitar de '.$removing->department?->code : 'Quitar de un departamento'" :subtitle="$removing?->department?->name" box-class="max-w-lg" separator>
         @if ($removing)
-            <p>¿Quitar la adscripción de <b>{{ $record->teacher->name }}</b> a <b>{{ $removing->department?->name }}</b> en <b>{{ $removing->campus?->name }}</b>?</p>
-            <ul class="mt-3 list-disc space-y-1 ps-5 text-neutral">
-                @foreach ($removingConsequences as $consequence)
-                    <li>{{ $consequence }}</li>
-                @endforeach
-            </ul>
+            <p>{{ $removingWarning }}</p>
         @endif
 
         <x-slot:actions>
             <x-button label="Cancelar" @click="$wire.showRemoveAdscriptionModal = false" />
-            <x-button label="Quitar adscripción" icon="o-trash" class="btn-error" wire:click="removeAdscription" spinner="removeAdscription" data-testid="confirm-remove-adscription" />
+            <x-button label="Quitar de {{ $removing?->department?->code }}" icon="o-trash" class="btn-error" wire:click="removeAdscription" spinner="removeAdscription" data-testid="confirm-remove-adscription" />
         </x-slot:actions>
     </x-modal>
 

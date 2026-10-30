@@ -15,8 +15,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * parcial). Quién puede lo decide TeacherPolicy (`update` sobre el docente) antes de llamarla.
  *
  * En una transacción bloquea al docente y sus adscripciones; si ya es la principal no escribe, no registra ni avisa.
- * Deja bitácora de las dos adscripciones con el valor anterior, llama a SyncTeacherAccess (idempotente: los
- * campus no cambian) y, después del commit, avisa con AdscriptionChanged. Una adscripción ya quitada es un error en
+ * Deja bitácora de las dos adscripciones con el valor anterior, llama a SyncTeacherAccess (idempotente: el
+ * acceso no depende de las adscripciones) y, después del commit, avisa con AdscriptionChanged. Una adscripción ya quitada es un error en
  * `adscription`.
  */
 final class SetPrimaryAdscription

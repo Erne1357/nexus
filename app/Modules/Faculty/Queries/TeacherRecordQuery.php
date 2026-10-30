@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Lecturas de la ficha de un docente (tarea 1.13). Quién la ve lo decide TeacherPolicy (`view`) antes de llamarla.
- * Sin N+1: adscripciones con departamento y campus, plazas y usuario, en una consulta cada una; las horas base del
+ * Sin N+1: adscripciones con su departamento, plazas y usuario, en una consulta cada una; las horas base del
  * periodo salen de las plazas ya cargadas con la misma regla que la lista (BaseHours, S1 y S2, supuestos por
  * confirmar).
  */
@@ -21,15 +21,12 @@ final class TeacherRecordQuery
 {
     /**
      * La ficha de `$teacher` en `$term` (el periodo activo; null si no hay). Las adscripciones y plazas borradas no
-     * entran; el departamento y el campus de una adscripción sí, aunque estén borrados.
+     * entran; el departamento de una adscripción sí, aunque esté borrado.
      */
     public function for(Teacher $teacher, ?Term $term): TeacherRecord
     {
         $adscriptions = $teacher->adscriptions()
-            ->with([
-                'department' => fn (BelongsTo $department) => $department->withTrashed()->select(['id', 'code', 'name']),
-                'campus' => fn (BelongsTo $campus) => $campus->withTrashed()->select(['id', 'code', 'name']),
-            ])
+            ->with(['department' => fn (BelongsTo $department) => $department->withTrashed()->select(['id', 'code', 'name'])])
             ->orderByDesc('is_primary')
             ->orderBy('id')
             ->get();
