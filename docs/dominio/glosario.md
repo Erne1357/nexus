@@ -27,7 +27,7 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Plaza / base** | `TeacherPosition` | Nombramiento del docente que define sus **horas base**: tiempo completo (40 h), tres cuartos (30 h), medio tiempo (20 h), asignatura (N h) u honorarios (0 h base). La base máxima de una plaza es 40 h y un docente puede tener varias plazas vigentes a la vez. |
 | **Prioridad de base** | — | Regla de asignación: primero se asignan materias a los docentes con más horas base; al final a los de honorarios. |
 | **Desempate docente** | `StaffingRanking` | Criterio para ordenar docentes con la misma base: historial de haber impartido la materia y perfil, luego evaluación docente. Nexus lo calcula y lo muestra. |
-| **Horas externas** | `TeacherExternalLoad` | Horas que un docente del ITCJ imparte fuera del campus (por ejemplo para TecNM Virtual). Reducen su disponibilidad. |
+| **Horas fuera del ITCJ** | `TeacherExternalLoad` | Horas que un docente del ITCJ imparte fuera del campus (por ejemplo para TecNM Virtual). Reducen su disponibilidad. |
 | **Edificio / salón** | `Building` / `Room` | Espacio físico con capacidad y tipo (aula, laboratorio, taller, sala de cómputo). Un salón puede tener un departamento "dueño". |
 | **Salón por defecto** | `SubjectRoomDefault` | Salón donde una materia se imparte siempre o preferentemente. Nexus lo sugiere al asignar. |
 | **Préstamo de salón** | `InterdepartmentalAgreement` (kind `room_loan`) | Acuerdo de la junta interdepartamental para que un departamento use un salón de otro en ciertos bloques. |
