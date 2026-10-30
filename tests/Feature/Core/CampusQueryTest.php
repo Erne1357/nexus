@@ -116,3 +116,11 @@ it('carga el campus que se va a editar, y no uno borrado', function () {
 it('no encuentra un campus con un id que no es uuid', function (string $id) {
     expect(fn () => app(CampusQuery::class)->findOrFail($id))->toThrow(ModelNotFoundException::class);
 })->with(['número' => '999999', 'texto' => 'no-es-un-uuid', 'vacío' => '']);
+
+it('activeOptions da solo los campus activos, por código', function () {
+    Campus::factory()->create(['code' => 'X2', 'name' => 'Campus II']);
+    Campus::factory()->create(['code' => 'X1', 'name' => 'Campus I']);
+    Campus::factory()->create(['code' => 'X3', 'name' => 'Campus III', 'is_active' => false]);
+
+    expect(collect((new CampusQuery)->activeOptions())->pluck('name')->filter(fn (string $name): bool => str_starts_with($name, 'X'))->values()->all())->toBe(['X1 · Campus I', 'X2 · Campus II']);
+});

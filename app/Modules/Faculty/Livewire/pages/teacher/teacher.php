@@ -421,7 +421,10 @@ new #[Title('Ficha del docente')] class extends Component
             );
         } catch (ValidationException $exception) {
             foreach ($exception->errors() as $field => $messages) {
-                $this->addError(['user' => 'headDepartmentId', 'campus' => 'headCampusId', 'valid_to' => 'headTo', 'valid_from' => 'headFrom'][$field] ?? 'headKind', (string) $messages[0]);
+                $target = $field === 'user' && str_contains((string) $messages[0], 'inactivo')
+                    ? 'headKind'
+                    : ['user' => 'headDepartmentId', 'campus' => 'headCampusId', 'valid_to' => 'headTo', 'valid_from' => 'headFrom'][$field] ?? 'headKind';
+                $this->addError($target, (string) $messages[0]);
             }
 
             return;
@@ -461,7 +464,17 @@ new #[Title('Ficha del docente')] class extends Component
         $data = $this->validate(['endLastDay' => ['required', 'date_format:Y-m-d']]);
         $head = $records->findHeadship($teachers->findOrFail($this->teacherId), $this->endingHeadshipId);
 
-        $endDepartmentHead->handle($head, CarbonImmutable::parse($data['endLastDay']));
+        try {
+            $endDepartmentHead->handle($head, CarbonImmutable::parse($data['endLastDay']));
+        } catch (ValidationException $exception) {
+            $this->addError('endLastDay', (string) collect($exception->errors())->flatten()->first());
+
+            return;
+        } catch (RuntimeException $exception) {
+            $this->addError('endLastDay', $exception->getMessage());
+
+            return;
+        }
 
         $this->showEndHeadshipModal = false;
         $this->endingHeadshipId = null;

@@ -170,3 +170,47 @@ describe('alcance', function () {
         'Subdirección' => [Role::Subdireccion, []],
     ]);
 });
+
+describe('rechazos y límites', function () {
+    it('un usuario inactivo se rechaza en el campo del cargo, no en el departamento', function () {
+        $user = User::factory()->withRole(Role::Docente)->create(['username' => '1000001', 'is_active' => false]);
+        $this->ana->update(['user_id' => $user->id]);
+
+        headshipRecord($this->admin, $this->ana)
+            ->call('createHeadship')
+            ->set('headKind', 'jefe')
+            ->set('headDepartmentId', $this->sc->id)
+            ->set('headFrom', today()->toDateString())
+            ->call('saveHeadship')
+            ->assertHasErrors('headKind')
+            ->assertHasNoErrors('headDepartmentId');
+    });
+
+    it('un campus que quedó de antes se ignora al nombrar a un jefe de departamento', function () {
+        headshipRecord($this->admin, $this->ana)
+            ->call('createHeadship')
+            ->set('headKind', 'jefe_proyecto_docente')
+            ->set('headCampusId', $this->c1->id)
+            ->set('headKind', 'jefe')
+            ->set('headDepartmentId', $this->sc->id)
+            ->set('headFrom', today()->toDateString())
+            ->call('saveHeadship')
+            ->assertHasNoErrors();
+
+        expect(DepartmentHead::sole()->campus_id)->toBeNull();
+    });
+
+    it('terminar con un último día anterior al inicio no falla: la jefatura que no había empezado se quita', function () {
+        $user = User::factory()->withRole(Role::Docente)->create(['username' => '1000001']);
+        $this->ana->update(['user_id' => $user->id]);
+        $head = app(AppointDepartmentHead::class)->handle($this->sc, null, $user, DepartmentHeadKind::Jefe, today()->addMonth()->toImmutable());
+
+        headshipRecord($this->admin, $this->ana)
+            ->call('confirmEndHeadship', $head->id)
+            ->set('endLastDay', today()->toDateString())
+            ->call('endHeadship')
+            ->assertHasNoErrors();
+
+        expect(DepartmentHead::count())->toBe(0);
+    });
+});
