@@ -315,22 +315,35 @@ new #[Title('Retícula del plan')] class extends Component
 
     /**
      * Guarda el lugar de la materia de la fila `$id` (la del panel): su semestre, su especialidad y si es
-     * obligatoria. Los errores de UpdatePlacement caen en su campo, que se llama como su clave.
+     * obligatoria. Los errores de UpdatePlacement caen en su campo, que se llama como su clave. Si otra sesión
+     * la quitó, lo dice y cierra el panel (selectedPlacementGone()).
      */
     public function savePlacement(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids, UpdatePlacement $updatePlacement): void
     {
-        $placement = $this->placement($id, $plans, $grids);
+        $placement = $this->selectedPlacement($id, $plans, $grids);
+
+        if ($placement === null) {
+            return;
+        }
+
         $data = $this->validate([
             'semester' => ['required', 'integer'],
             'specialty_id' => ['nullable', 'string'],
             'is_required' => ['boolean'],
         ]);
 
-        $placement = $updatePlacement->handle($placement, [
-            'semester' => (int) $data['semester'],
-            'specialty_id' => $data['specialty_id'] ?? null,
-            'is_required' => (bool) $data['is_required'],
-        ]);
+        try {
+            $placement = $updatePlacement->handle($placement, [
+                'semester' => (int) $data['semester'],
+                'specialty_id' => $data['specialty_id'] ?? null,
+                'is_required' => (bool) $data['is_required'],
+            ]);
+        } catch (ModelNotFoundException) {
+            $this->selectedPlacementGone();
+
+            return;
+        }
+
         $this->fillPlacement($placement);
         $subject = $placement->subject;
 
@@ -349,24 +362,35 @@ new #[Title('Retícula del plan')] class extends Component
      */
     public function confirmRemove(StudyPlanQuery $plans, PlanGridEditorQuery $grids): void
     {
-        $plan = $this->plan($plans);
-        $this->authorize('editGrid', $plan);
-
         if ($this->selectedId === null) {
+            $this->authorize('editGrid', $this->plan($plans));
+
             return;
         }
 
-        $grids->placementOrFail($plan, $this->selectedId);
-        $this->showRemove = true;
+        $this->showRemove = $this->selectedPlacement($this->selectedId, $plans, $grids) !== null;
     }
 
     /**
-     * Quita de la retícula la materia de la fila `$id`, con su seriación, y cierra el panel.
+     * Quita de la retícula la materia de la fila `$id`, con su seriación, y cierra el panel. Si otra sesión ya la
+     * quitó, lo dice (selectedPlacementGone()).
      */
     public function removePlacement(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids, RemovePlacement $removePlacement): void
     {
-        $placement = $this->placement($id, $plans, $grids);
-        $removed = $removePlacement->handle($placement);
+        $placement = $this->selectedPlacement($id, $plans, $grids);
+
+        if ($placement === null) {
+            return;
+        }
+
+        try {
+            $removed = $removePlacement->handle($placement);
+        } catch (ModelNotFoundException) {
+            $this->selectedPlacementGone();
+
+            return;
+        }
+
         $subject = $placement->subject;
 
         $this->resetValidation(['semester', 'specialty_id', 'is_required']);
@@ -521,14 +545,39 @@ new #[Title('Retícula del plan')] class extends Component
 
     /**
      * Una fila de la retícula del plan con permiso de editarla; una de otro plan, quitada o con un id que no es
-     * uuid no existe.
+     * uuid no existe (404). La excepción es la fila del panel (`selectedId`, que solo pone select() con una fila
+     * de este plan): si ya no está, otra sesión la quitó (o borró su materia del catálogo), y en lugar del 404 lo
+     * dice y cierra el panel; devuelve null.
+     *
+     * @throws ModelNotFoundException<StudyPlanSubject>
      */
-    private function placement(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids): StudyPlanSubject
+    private function selectedPlacement(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids): ?StudyPlanSubject
     {
         $plan = $this->plan($plans);
         $this->authorize('editGrid', $plan);
 
-        return $grids->placementOrFail($plan, $id);
+        try {
+            return $grids->placementOrFail($plan, $id);
+        } catch (ModelNotFoundException $exception) {
+            if ($this->selectedId === null || $id !== $this->selectedId) {
+                throw $exception;
+            }
+
+            $this->selectedPlacementGone();
+
+            return null;
+        }
+    }
+
+    /**
+     * La materia del panel ya no está en la retícula: cierra el panel y la confirmación, y lo dice. Al pintar, la
+     * retícula ya sale sin ella.
+     */
+    private function selectedPlacementGone(): void
+    {
+        $this->resetValidation(['semester', 'specialty_id', 'is_required']);
+        $this->reset('selectedId', 'showDrawer', 'showRemove', 'semester', 'specialty_id', 'is_required');
+        $this->info('Esa materia ya no está en la retícula.', 'La retícula ya está al día.');
     }
 
     /**

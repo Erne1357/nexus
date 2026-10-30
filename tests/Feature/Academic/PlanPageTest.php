@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Actions\RemovePlacement;
 use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
@@ -543,6 +544,50 @@ describe('lugar en la retícula', function () {
 
         expect(lastToastOf($component)['description'])->toBe('ISD-2001 Arquitectura de Software ya no está en la retícula.');
     });
+
+    it('si otra sesión quitó la materia del panel, guardar, pedir quitarla o quitarla lo dice y cierra el panel, sin escribir', function (string $method, Closure $arguments) {
+        $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id)->set('semester', '3');
+        app(RemovePlacement::class)->handle($this->integralRow);
+
+        $component->call($method, ...$arguments($this))
+            ->assertStatus(200)
+            ->assertSet('selectedId', null)
+            ->assertSet('showDrawer', false)
+            ->assertSet('showRemove', false)
+            ->assertSet('semester', '');
+
+        expect(lastToastOf($component))->type->toBe('info')->title->toBe('Esa materia ya no está en la retícula.')
+            ->and($this->integralRow->fresh())->semester->toBe(2)->trashed()->toBeTrue()
+            ->and(placementActivitiesCount())->toBe(1);
+    })->with([
+        'guardar el lugar' => ['savePlacement', fn ($test) => [$test->integralRow->id]],
+        'pedir quitarla' => ['confirmRemove', fn () => []],
+        'quitarla' => ['removePlacement', fn ($test) => [$test->integralRow->id]],
+    ]);
+
+    it('si otra sesión la quita mientras se guarda o se quita, lo dice en lugar de fallar', function (string $method) {
+        $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id)->set('semester', '3');
+        $removed = false;
+
+        // La fila se quita justo después de que el componente la encuentra y antes de que la Action la bloquee.
+        StudyPlanSubject::retrieved(function (StudyPlanSubject $placement) use (&$removed): void {
+            if (! $removed) {
+                $removed = true;
+                StudyPlanSubject::whereKey($placement->getKey())->delete();
+            }
+        });
+
+        $component->call($method, $this->integralRow->id)
+            ->assertStatus(200)
+            ->assertSet('selectedId', null)
+            ->assertSet('showDrawer', false);
+
+        expect($removed)->toBeTrue()
+            ->and(lastToastOf($component))->type->toBe('info')->title->toBe('Esa materia ya no está en la retícula.')
+            ->and($this->integralRow->fresh()->semester)->toBe(2)
+            ->and(SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count())->toBe(3)
+            ->and(placementActivitiesCount())->toBe(0);
+    })->with(['savePlacement', 'removePlacement']);
 
     it('la confirmación no se abre sin una materia elegida, y cerrar el panel la cierra', function () {
         planPage($this->admin, $this->plan)
