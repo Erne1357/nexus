@@ -15,7 +15,8 @@ use App\Modules\Faculty\Policies\TeacherPolicy;
 | - el admin y la Subdirección, a todos los docentes, también a los que no tienen departamento;
 | - el jefe de departamento de D (sin campus) y el jefe de proyecto docente de D (en un campus), a los docentes con
 |   una adscripción sin borrar a D, aunque su principal sea otra;
-| - la baja (desactivar o reactivar), solo el admin y la Subdirección; los jefes solo quitan de su departamento;
+| - la baja (desactivar o reactivar), solo el admin y la Subdirección; los jefes y los JPD solo quitan de su
+|   departamento («Quitar de <código>» en la pantalla);
 | - nadie se da de baja ni se quita a sí mismo (supuesto por confirmar);
 | - el coordinador, el docente y un usuario inactivo, nada. Nombrar jefes, dar de alta usuarios y reiniciar
 |   contraseñas es solo del admin.
@@ -157,14 +158,17 @@ it('manageQualification del jefe de SC con una materia de CB es falso, y con una
         ->and($jefe->can('manageQualification', [$this->onlyIi, $systems]))->toBeFalse();
 });
 
-it('removeAdscription cubre la adscripción del departamento del jefe y no la de otro', function () {
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
+it('removeAdscription cubre la adscripción del departamento del jefe o del JPD y no la de otro', function (Role $role, array $scope) {
+    $jefe = User::factory()->withRole($role, ['department_id' => $this->sc->id, ...$scope])->create();
     $own = $this->inSc->adscriptions()->where('department_id', $this->sc->id)->sole();
     $other = $this->inSc->adscriptions()->where('department_id', $this->ii->id)->sole();
 
     expect($jefe->can('removeAdscription', [Teacher::class, $own]))->toBeTrue()
         ->and($jefe->can('removeAdscription', [Teacher::class, $other]))->toBeFalse();
-});
+})->with([
+    'jefe de departamento' => [Role::JefeDepartamento, []],
+    'jefe de proyecto docente de SC en C2' => [Role::JefeProyectoDocente, fn () => ['campus_id' => Campus::where('code', 'C2')->value('id')]],
+]);
 
 it('nadie se da de baja ni se quita a sí mismo de un departamento, ni el admin ni la Subdirección (supuesto por confirmar)', function (Closure $makeUser) {
     $user = $makeUser($this);
