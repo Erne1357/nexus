@@ -12,6 +12,7 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Queries\BuildingQuery;
 use App\Modules\Facilities\Queries\RoomQuery;
 use App\Modules\Facilities\Rules\RoomRules;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
@@ -114,14 +115,11 @@ new #[Title('Salones')] class extends Component
         $ownerFilters = [['id' => RoomQuery::WITHOUT_OWNER, 'name' => 'Sin dueño'], ...$departments];
         $this->forgetFiltersOutside($buildings, $types, $ownerFilters);
 
-        $blocksRoom = $this->showDrawer && $this->blocksRoomId !== null ? $rooms->findOrFail($this->blocksRoomId) : null;
-        if ($blocksRoom !== null) {
-            $this->authorize('view', $blocksRoom);
-        }
+        $blocksRoom = $this->openBlocksRoom($rooms);
 
         return [
             'campus' => $campus,
-            'rooms' => $campus === null ? null : $rooms->forTable(
+            'rooms' => $campus === null || ! $campus->profile->usesRooms ? null : $rooms->forTable(
                 $context,
                 $campus,
                 $this->search,
@@ -134,7 +132,9 @@ new #[Title('Salones')] class extends Component
                     default => null,
                 },
             ),
-            'canCreate' => $campus !== null && auth()->user()->can('create', [Room::class, $campus]),
+            'usesRooms' => $campus === null || $campus->profile->usesRooms,
+            'canCreate' => $campus !== null && $campus->profile->usesRooms && auth()->user()->can('create', [Room::class, $campus]),
+            'ownerOptions' => $rooms->ownerOptions($this->department_id === '' ? null : $this->department_id),
             'buildings' => $buildings,
             'types' => $types,
             'departments' => $departments,
@@ -254,7 +254,12 @@ new #[Title('Salones')] class extends Component
 
     public function removeBlock(string $id, RoomQuery $rooms, RemoveRoomBlock $removeRoomBlock): void
     {
-        $block = $rooms->findBlockOrFail($id);
+        $block = $rooms->findBlock($id);
+
+        if ($block === null) {
+            return;
+        }
+
         $this->authorize('update', $block->room);
 
         $removeRoomBlock->handle($block);
@@ -288,7 +293,36 @@ new #[Title('Salones')] class extends Component
      */
     private function campus(ScopedContext $context): Campus
     {
-        return $context->activeCampus() ?? abort(403, 'Elige un campus en tu credencial.');
+        $campus = $context->activeCampus() ?? abort(403, 'Elige un campus en tu credencial.');
+        abort_unless($campus->profile->usesRooms, 403, 'Este campus no usa salones.');
+
+        return $campus;
+    }
+
+    /**
+     * El salón del panel abierto. Si ya no existe o el usuario perdió su alcance, cierra el panel en lugar de
+     * romper la página.
+     */
+    private function openBlocksRoom(RoomQuery $rooms): ?Room
+    {
+        if (! $this->showDrawer || $this->blocksRoomId === null) {
+            return null;
+        }
+
+        try {
+            $room = $rooms->findOrFail($this->blocksRoomId);
+        } catch (ModelNotFoundException) {
+            $room = null;
+        }
+
+        if ($room === null || ! auth()->user()->can('view', $room)) {
+            $this->showDrawer = false;
+            $this->blocksRoomId = null;
+
+            return null;
+        }
+
+        return $room;
     }
 
     /**
@@ -305,9 +339,17 @@ new #[Title('Salones')] class extends Component
             'code' => ['required', 'string', 'max:20'],
             'name' => ['nullable', 'string', 'max:255'],
             'type' => ['required', Rule::enum(RoomType::class)],
-            'capacity' => ['required', 'integer', 'max:100000'],
+            'capacity' => ['required', 'integer', 'min:1', 'max:100000'],
             'department_id' => ['nullable', 'string'],
-            'features' => ['nullable', 'string', 'max:1000'],
+            'features' => ['nullable', 'string', 'max:1000', function (string $attribute, mixed $value, callable $fail): void {
+                foreach ($this->featureList((string) $value) as $feature) {
+                    if (mb_strlen($feature) > 40) {
+                        $fail('Cada característica admite hasta 40 caracteres.');
+
+                        return;
+                    }
+                }
+            }],
         ]);
 
         return [
@@ -315,8 +357,16 @@ new #[Title('Salones')] class extends Component
             'name' => $data['name'] ?? null,
             'capacity' => (int) $data['capacity'],
             'department_id' => ($data['department_id'] ?? '') === '' ? null : $data['department_id'],
-            'features' => preg_split('/[,\n]/', (string) $data['features']) ?: [],
+            'features' => $this->featureList((string) $data['features']),
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function featureList(string $text): array
+    {
+        return array_map(trim(...), preg_split('/[,\n]/', $text) ?: []);
     }
 
     /**

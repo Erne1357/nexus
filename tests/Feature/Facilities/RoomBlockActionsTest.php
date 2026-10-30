@@ -10,6 +10,7 @@ use App\Modules\Facilities\Events\RoomBlockRemoved;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -66,10 +67,34 @@ it('respeta los días del perfil del campus, no unos fijos', function () {
         ->toThrow(ValidationException::class, 'El campus no tiene clases ese día');
 });
 
-it('rechaza horas fuera de la jornada del campus', function (string $starts, string $ends) {
-    expect(fn () => app(AddRoomBlock::class)->handle($this->room, blockData(['starts_at' => $starts, 'ends_at' => $ends])))
-        ->toThrow(ValidationException::class, 'dentro del horario del campus (07:00 a 21:00)');
-})->with([['06:00', '08:00'], ['20:00', '22:00']]);
+it('rechaza horas fuera de la jornada del campus, en el campo de la hora que se sale', function (string $starts, string $ends, string $field) {
+    try {
+        app(AddRoomBlock::class)->handle($this->room, blockData(['starts_at' => $starts, 'ends_at' => $ends]));
+        $this->fail('Debió rechazar las horas.');
+    } catch (ValidationException $exception) {
+        expect(array_keys($exception->errors()))->toBe([$field])
+            ->and($exception->errors()[$field][0])->toContain('dentro del horario del campus (07:00 a 21:00)');
+    }
+})->with([['06:00', '08:00', 'starts_at'], ['20:00', '22:00', 'ends_at']]);
+
+it('una hora de fin que no es posterior a la de inicio se reporta en ends_at', function () {
+    expect(fn () => app(AddRoomBlock::class)->handle($this->room, blockData(['starts_at' => '10:00', 'ends_at' => '09:00'])))
+        ->toThrow(fn (ValidationException $e) => expect(array_keys($e->errors()))->toBe(['ends_at']));
+});
+
+it('vuelve a leer el salón: uno borrado no se encuentra', function () {
+    $stale = $this->room;
+    $this->room->delete();
+
+    expect(fn () => app(AddRoomBlock::class)->handle($stale, blockData()))->toThrow(ModelNotFoundException::class);
+});
+
+it('usa el perfil vigente del salón en la base, no el de un modelo viejo', function () {
+    $stale = Room::query()->with('campus')->find($this->room->id);
+    $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [6]]]);
+
+    expect(fn () => app(AddRoomBlock::class)->handle($stale, blockData(['day' => 2])))->toThrow(ValidationException::class, 'El campus no tiene clases ese día');
+});
 
 it('acepta de la hora de inicio a la de cierre de la jornada', function () {
     expect(app(AddRoomBlock::class)->handle($this->room, blockData(['starts_at' => '07:00', 'ends_at' => '21:00'])))->toBeInstanceOf(RoomBlock::class);

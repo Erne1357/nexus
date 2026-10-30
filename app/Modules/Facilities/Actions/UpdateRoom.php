@@ -82,7 +82,7 @@ final class UpdateRoom
             $changed = array_keys($room->getDirty());
 
             if ($changed === []) {
-                return $room;
+                return $room->unsetRelations();
             }
 
             try {
@@ -102,7 +102,7 @@ final class UpdateRoom
 
             RoomUpdated::dispatch($room, $changed);
 
-            return $room;
+            return $room->unsetRelations();
         });
     }
 

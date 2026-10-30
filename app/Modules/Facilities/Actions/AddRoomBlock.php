@@ -14,7 +14,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Bloquea un salón (mantenimiento, reservado) un día y un rango de horas, para un periodo o para todos.
  * Recibe datos ya validados en forma. RoomRules exige que el día sea uno de los del perfil del campus
  * del salón y que las horas caigan en su jornada, la de fin posterior a la de inicio. Deja bitácora y,
- * después del commit, avisa con RoomBlockAdded. Quién puede lo decide RoomPolicy::update.
+ * después del commit, avisa con RoomBlockAdded. Vuelve a leer el salón con bloqueo: uno borrado no se encuentra. Quién puede lo decide RoomPolicy::update.
  */
 final class AddRoomBlock
 {
@@ -33,6 +33,7 @@ final class AddRoomBlock
         $termId = ($data['term_id'] ?? '') === '' ? null : $data['term_id'];
 
         return DB::transaction(function () use ($room, $data, $startsAt, $endsAt, $reason, $termId): RoomBlock {
+            $room = Room::query()->lockForUpdate()->findOrFail($room->getKey());
             $this->rules->ensureBlockFitsCampus($room->campus->profile, $data['day'], $startsAt, $endsAt);
             $this->rules->ensureTermExists($termId);
 

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Facilities\Queries;
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -80,6 +81,33 @@ final class RoomQuery
     public function findBlockOrFail(string $id): RoomBlock
     {
         return KeyLookup::findOrFail(RoomBlock::query()->with('room'), $id);
+    }
+
+    /**
+     * El bloqueo, sin los quitados, o null si ya no existe (quitarlo dos veces no es un error).
+     */
+    public function findBlock(string $id): ?RoomBlock
+    {
+        return KeyLookup::find(RoomBlock::query()->with('room'), $id);
+    }
+
+    /**
+     * Los departamentos que se pueden elegir como dueño: los activos y, al editar, el que el salón ya tiene
+     * aunque esté desactivado.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function ownerOptions(?string $current = null): array
+    {
+        return Department::query()
+            ->where(fn (Builder $query) => $query->where('is_active', true)->when($current !== null && Str::isUuid($current), fn (Builder $query) => $query->orWhere('id', $current)))
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'is_active'])
+            ->map(fn (Department $department): array => [
+                'id' => $department->id,
+                'name' => "{$department->code} · {$department->name}".($department->is_active ? '' : ' (inactivo)'),
+            ])
+            ->all();
     }
 
     /**

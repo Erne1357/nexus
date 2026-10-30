@@ -20,7 +20,7 @@ use Illuminate\Validation\ValidationException;
  *
  * - `code`: en mayúsculas, sin espacios, no vacío y único dentro del campus, también entre los borrados.
  * - `capacity` mayor que cero; `type` de RoomType; `building_id` de un edificio sin borrar del mismo
- *   campus; `department_id` (dueño), si viene, de un departamento sin borrar.
+ *   campus; `department_id` (dueño), si viene, de un departamento sin borrar y activo (departamentos son globales).
  * - `features`: lista de textos recortados, sin vacíos ni repetidos (sin distinguir mayúsculas).
  * - Bloqueo: el día es uno de los del perfil del campus, las horas caen en su jornada (`day_start` a
  *   `day_end`), la de fin es posterior a la de inicio, el motivo no está vacío y el periodo, si viene, existe.
@@ -123,8 +123,18 @@ final class RoomRules
      */
     public function ensureOwnerExists(?string $departmentId): void
     {
-        if ($departmentId !== null && KeyLookup::find(Department::query(), $departmentId) === null) {
+        if ($departmentId === null) {
+            return;
+        }
+
+        $department = KeyLookup::find(Department::query(), $departmentId);
+
+        if ($department === null) {
             throw ValidationException::withMessages(['department_id' => 'El departamento dueño no existe.']);
+        }
+
+        if (! $department->is_active) {
+            throw ValidationException::withMessages(['department_id' => 'El departamento dueño está desactivado: elige uno activo.']);
         }
     }
 
@@ -194,10 +204,14 @@ final class RoomRules
             throw ValidationException::withMessages(['ends_at' => 'La hora de fin debe ser posterior a la de inicio.']);
         }
 
-        if ($startsAt < $profile->dayStart || $endsAt > $profile->dayEnd) {
-            throw ValidationException::withMessages([
-                'starts_at' => "El bloqueo debe quedar dentro del horario del campus ({$profile->dayStart} a {$profile->dayEnd}).",
-            ]);
+        $window = "El bloqueo debe quedar dentro del horario del campus ({$profile->dayStart} a {$profile->dayEnd}).";
+
+        if ($startsAt < $profile->dayStart) {
+            throw ValidationException::withMessages(['starts_at' => $window]);
+        }
+
+        if ($endsAt > $profile->dayEnd) {
+            throw ValidationException::withMessages(['ends_at' => $window]);
         }
     }
 

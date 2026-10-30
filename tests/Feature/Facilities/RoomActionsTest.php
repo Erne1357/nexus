@@ -182,3 +182,30 @@ it('normaliza las características: recorta, quita vacías y repetidas sin disti
     expect((new RoomRules)->normalizeFeatures([' Proyector ', '', 'AIRE  acondicionado', 'proyector', "\u{00A0}", 'Pizarrón']))
         ->toBe(['Proyector', 'AIRE acondicionado', 'Pizarrón']);
 });
+
+it('rechaza un dueño desactivado al darlo de alta o cambiarlo, pero conserva uno que ya tenía', function () {
+    $inactive = Department::factory()->inactive()->create();
+    $active = Department::factory()->create();
+
+    expect(fn () => newRoom($this->c2, $this->edificioA, ['code' => 'X1', 'department_id' => $inactive->id]))
+        ->toThrow(ValidationException::class, 'El departamento dueño está desactivado');
+
+    $room = newRoom($this->c2, $this->edificioA, ['code' => 'X2', 'department_id' => $active->id]);
+    $active->update(['is_active' => false]);
+
+    app(UpdateRoom::class)->handle($room, ['department_id' => $active->id, 'capacity' => 31]);
+    expect($room->fresh()->capacity)->toBe(31);
+
+    expect(fn () => app(UpdateRoom::class)->handle($room, ['department_id' => $inactive->id]))
+        ->toThrow(ValidationException::class, 'El departamento dueño está desactivado');
+});
+
+it('devuelve un salón sin relaciones viejas', function () {
+    $room = newRoom($this->c2, $this->edificioA);
+    $room->load('building');
+    $other = Building::factory()->for($this->c2)->create(['code' => 'B']);
+
+    $updated = app(UpdateRoom::class)->handle($room, ['building_id' => $other->id]);
+
+    expect($updated->relationLoaded('building'))->toBeFalse()->and($updated->building->id)->toBe($other->id);
+});
