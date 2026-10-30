@@ -35,6 +35,21 @@ final class CampusQuery
     }
 
     /**
+     * Los campus activos, por código, como opciones de x-select: «C2 · Campus II».
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function activeOptions(): array
+    {
+        return Campus::query()
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name'])
+            ->map(fn (Campus $campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])
+            ->all();
+    }
+
+    /**
      * El campus que se va a editar, sin los borrados.
      *
      * @throws ModelNotFoundException<Campus>

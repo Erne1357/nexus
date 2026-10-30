@@ -2,6 +2,7 @@
 
 namespace App\Modules\Faculty\Queries;
 
+use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
@@ -73,6 +74,59 @@ final class TeacherRecordQuery
             ),
             term: $term,
             user: $teacher->user_id === null ? null : $teacher->user()->first(['id', 'username', 'is_active', 'must_change_password']),
+        );
+    }
+
+    /**
+     * Las jefaturas del usuario del docente, vigentes y pasadas (sin las borradas), con su departamento y campus
+     * aunque estén borrados: las vigentes y las por empezar primero, luego las terminadas, y dentro de cada grupo
+     * las de inicio más reciente. Cada una lleva `status` (`vigente`, `por_empezar` o `terminada`). Sin usuario no
+     * tiene jefaturas. Quién la ve lo decide TeacherPolicy (`appointHeads`).
+     *
+     * @return EloquentCollection<int, DepartmentHead>
+     */
+    public function headships(Teacher $teacher): EloquentCollection
+    {
+        if ($teacher->user_id === null) {
+            return new EloquentCollection;
+        }
+
+        $today = today()->toDateString();
+
+        return DepartmentHead::query()
+            ->where('user_id', $teacher->user_id)
+            ->with([
+                'department' => fn (BelongsTo $department) => $department->withTrashed()->select(['id', 'code', 'name']),
+                'campus' => fn (BelongsTo $campus) => $campus->withTrashed()->select(['id', 'code', 'name']),
+            ])
+            ->get()
+            ->each(fn (DepartmentHead $head) => $head->setAttribute('status', match (true) {
+                $head->valid_to !== null && $head->valid_to->toDateString() < $today => 'terminada',
+                $head->valid_from->toDateString() > $today => 'por_empezar',
+                default => 'vigente',
+            }))
+            ->sortBy([
+                fn (DepartmentHead $a, DepartmentHead $b): int => ($a->status === 'terminada') <=> ($b->status === 'terminada'),
+                fn (DepartmentHead $a, DepartmentHead $b): int => strcmp($b->valid_from->toDateString(), $a->valid_from->toDateString()),
+                fn (DepartmentHead $a, DepartmentHead $b): int => strcmp($a->id, $b->id),
+            ])
+            ->values();
+    }
+
+    /**
+     * Una jefatura sin borrar del usuario de ese docente; el id llega del navegador.
+     *
+     * @throws ModelNotFoundException<DepartmentHead>
+     */
+    public function findHeadship(Teacher $teacher, string $id): DepartmentHead
+    {
+        return KeyLookup::findOrFail(
+            DepartmentHead::query()->when(
+                $teacher->user_id === null,
+                fn ($query) => $query->whereRaw('false'),
+                fn ($query) => $query->where('user_id', $teacher->user_id),
+            ),
+            $id,
         );
     }
 
