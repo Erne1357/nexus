@@ -706,3 +706,15 @@ describe('menú', function () {
             ->and(seesTeachersMenu($docente))->toBeFalse();
     });
 });
+
+it('cada docente de la lista enlaza a su ficha, y el menú de Docentes se queda marcado dentro de ella', function () {
+    $admin = User::factory()->admin()->create();
+    $teacher = Teacher::factory()->create(['employee_number' => '9000001']);
+    $link = domOf($this->actingAs($admin)->get(route('faculty.teachers'))->assertOk())->querySelector('a[data-testid="record-9000001"]');
+
+    expect($link)->not->toBeNull()
+        ->and($link->getAttribute('href'))->toBe(route('faculty.teachers.show', $teacher->id));
+
+    $this->actingAs($admin)->get(route('faculty.teachers.show', $teacher->id))->assertOk();
+    expect(collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))->first(fn (NavigationItem $item): bool => $item->label === 'Docentes')->owns('faculty.teachers.show'))->toBeTrue();
+});

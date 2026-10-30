@@ -113,6 +113,15 @@ final class TeacherPolicy
     }
 
     /**
+     * «Hacer principal»: la adscripción es de un departamento que cubre (supuesto por confirmar). Se pregunta con
+     * `can('setPrimaryAdscription', [Teacher::class, $adscription])`.
+     */
+    public function setPrimaryAdscription(User $user, TeacherDepartment $adscription): bool
+    {
+        return $this->scope($user)->coversDepartment(self::EDITORS, $adscription->department_id);
+    }
+
+    /**
      * Sin destino, si da de alta docentes en algún departamento; con el departamento de la adscripción nueva, si lo
      * cubre.
      */

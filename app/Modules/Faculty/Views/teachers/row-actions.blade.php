@@ -1,6 +1,6 @@
 {{--
     Acciones de un docente, las mismas en la tabla y en los renglones apilados del celular (faculty::pages.teachers):
-    «Editar» visible y lo demás plegado en «Acciones» (DESIGN.md, "Acciones de fila"). En la tabla (`$inTable`), los
+    «Ficha» (el enlace a la ficha del docente) y «Editar» visibles y lo demás plegado en «Acciones» (DESIGN.md, "Acciones de fila"). En la tabla (`$inTable`), los
     botones quedan solo con su icono entre 768 y 1199 px y «Editar» lleva el data-testid del browser test; en el
     celular siempre llevan su texto y no repiten el data-testid.
 
@@ -9,6 +9,17 @@
     motivo por el que «Desactivar/Activar» está deshabilitado, o null. No hay «Borrar»: un docente se da de baja.
 --}}
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
+    <a
+        href="{{ route('faculty.teachers.show', $teacher->id) }}"
+        wire:navigate
+        class="btn btn-ghost btn-sm"
+        aria-label="Ficha de {{ $teacher->employee_number }}"
+        @if ($inTable) data-testid="record-{{ $teacher->employee_number }}" @endif
+    >
+        <x-icon name="o-identification" class="h-4 w-4" aria-hidden="true" />
+        <span @class(['max-[1200px]:hidden' => $inTable])>Ficha</span>
+    </a>
+
     <x-button
         icon="o-pencil-square"
         wire:click="edit('{{ $teacher->id }}')"

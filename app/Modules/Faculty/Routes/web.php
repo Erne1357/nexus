@@ -8,4 +8,5 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->prefix('faculty')->name('faculty.')->group(function () {
     Route::livewire('/teachers', 'faculty::pages.teachers')->name('teachers');
+    Route::livewire('/teachers/{teacher}', 'faculty::pages.teacher')->name('teachers.show');
 });
