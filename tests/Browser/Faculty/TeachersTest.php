@@ -9,8 +9,8 @@ use App\Modules\Faculty\Models\Teacher;
 /*
 | Docentes en el navegador: el jefe de Sistemas y Computación (de todo el Tec) entra por el icono de Recursos
 | humanos, da de alta un docente (con su departamento, sin elegirlo) y lo ve en su lista; al escribir el número de
-| uno que ya existe lo adscribe a su departamento (S9). A 1440 px la búsqueda y los filtros caben en un renglón.
-| El coordinador no ve el área.
+| uno que ya existe lo adscribe a su departamento (S9). A 1440 px la búsqueda, los filtros y la acción caben en un
+| renglón sin cortar ningún texto. El coordinador no ve el área.
 */
 
 beforeEach(function () {
@@ -19,11 +19,6 @@ beforeEach(function () {
 
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create(['username' => 'jefe.sc', 'name' => 'Julia Jefa']);
 });
-
-/**
- * Si la búsqueda y los filtros de la barra de herramientas de catálogo están en un mismo renglón.
- */
-const CATALOG_FILTERS_IN_ONE_ROW = "(() => { const tops = [...document.querySelectorAll('[data-testid=catalog-toolbar] > div:first-child, [data-testid=catalog-filters] > *')].map((el) => Math.round(el.getBoundingClientRect().top)); return new Set(tops).size === 1; })()";
 
 it('el jefe de SC da de alta un docente y lo ve en su lista', function () {
     visit('/login')
@@ -70,7 +65,7 @@ it('al escribir el número de un docente que ya existe, el jefe lo adscribe a su
     expect($existing->adscriptions()->pluck('department_id')->all())->toContain($this->sc->id);
 });
 
-it('a 1440 px la búsqueda y los filtros caben en un renglón y «Más acciones» abre «Dar de alta usuarios»', function () {
+it('a 1440 px la búsqueda, los filtros y la acción caben en un renglón sin cortar textos, y «Más acciones» abre «Dar de alta usuarios»', function () {
     User::factory()->admin()->create(['username' => 'admin']);
 
     visit('/login')
@@ -79,7 +74,7 @@ it('a 1440 px la búsqueda y los filtros caben en un renglón y «Más acciones�
         ->press('Entrar')
         ->resize(1440, 900)
         ->navigate('/faculty/teachers')
-        ->assertScript(CATALOG_FILTERS_IN_ONE_ROW, true)
+        ->assertScript(catalogToolbarInOneRowScript(), true)
         ->click('[data-testid="catalog-toolbar"] button[aria-label="Más acciones"]')
         ->assertVisible('[data-testid="catalog-toolbar"] [role="menuitem"]')
         ->assertSeeIn('[data-testid="catalog-toolbar"] [role="menu"]', 'Dar de alta usuarios')

@@ -80,10 +80,10 @@ it('un coordinador no ve la opción Salones en el menú', function () {
         ->assertNoJavaScriptErrors();
 });
 
-it('a 1440 px la búsqueda y los cuatro filtros angostos de Salones caben en un renglón', function () {
+it('a 1440 px la búsqueda, los cuatro filtros y la acción de Salones caben en un renglón sin cortar textos', function () {
     signInToRooms('subdireccion')
         ->resize(1440, 900)
         ->navigate('/facilities/rooms')
-        ->assertScript("(() => { const tops = [...document.querySelectorAll('[data-testid=catalog-toolbar] > div:first-child, [data-testid=catalog-filters] > *')].map((el) => Math.round(el.getBoundingClientRect().top)); return new Set(tops).size === 1; })()", true)
+        ->assertScript(catalogToolbarInOneRowScript(), true)
         ->assertNoJavaScriptErrors();
 });

@@ -73,13 +73,22 @@ it('usa la barra de herramientas común: búsqueda, filtros a la izquierda y la 
         ->and($dom->querySelector('main h1')?->parentElement?->parentElement?->querySelector('input[type="search"], .btn-primary'))->toBeNull();
 })->with('catalog screens');
 
-it('con cuatro filtros, los filtros son angostos (md:w-44) para caber en un renglón desde 1440 px; con menos, md:w-52', function (string $route, string $code) {
+it('con cuatro filtros o con «Más acciones», la búsqueda es md:w-56, los filtros md:w-40 y la opción «todos» de cada filtro dice solo su nombre; los demás, md:w-64 y md:w-52', function (string $route, string $code) {
     seedCatalogRow($route, $code);
 
-    $filters = domOf($this->actingAs($this->admin)->get(route($route))->assertOk())->querySelector('[data-testid="catalog-toolbar"] [data-testid="catalog-filters"]');
-    $count = count($filters->querySelectorAll('select'));
+    $toolbar = domOf($this->actingAs($this->admin)->get(route($route))->assertOk())->querySelector('[data-testid="catalog-toolbar"]');
+    $filters = $toolbar->querySelector('[data-testid="catalog-filters"]');
+    $selects = iterator_to_array($filters->querySelectorAll('select'));
+    $narrow = count($selects) >= 4 || $toolbar->querySelector('button[aria-label="Más acciones"]') !== null;
 
-    expect($filters->getAttribute('class'))->toContain($count >= 4 ? 'md:[&>*]:w-44' : 'md:[&>*]:w-52');
+    expect($toolbar->querySelector('[data-testid="catalog-search"]')->getAttribute('class'))->toContain($narrow ? 'md:w-56' : 'md:w-64')
+        ->and($filters->getAttribute('class'))->toContain($narrow ? 'md:[&>*]:w-40' : 'md:[&>*]:w-52');
+
+    if ($narrow) {
+        foreach ($selects as $select) {
+            expect(textOf($select->querySelector('option')))->toBe($select->getAttribute('aria-label'));
+        }
+    }
 })->with('catalog screens');
 
 it('cada fila lleva «Editar» visible y el botón «Acciones» con su menú', function (string $route, string $code) {

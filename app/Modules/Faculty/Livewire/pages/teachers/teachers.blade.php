@@ -19,20 +19,20 @@
         </x-slot:subtitle>
     </x-header>
 
-    <x-core::catalog-toolbar>
+    <x-core::catalog-toolbar narrow>
         <x-slot:search>
             <x-input
                 wire:model.live.debounce.300ms="search"
-                placeholder="Buscar por número o nombre"
+                placeholder="Número o nombre"
                 aria-label="Buscar docentes"
                 icon="o-magnifying-glass"
                 clearable
             />
         </x-slot:search>
 
-        <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$options['departments']" placeholder="Todos los departamentos" />
-        <x-select wire:model.live="kindFilter" aria-label="Tipo de plaza" :options="$kinds" placeholder="Todas las plazas" />
-        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activos e inactivos" />
+        <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$options['departments']" placeholder="Departamento" />
+        <x-select wire:model.live="kindFilter" aria-label="Tipo de plaza" :options="$kinds" placeholder="Tipo de plaza" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
 
         <x-slot:action>
             <div class="flex gap-2 [&>.btn-primary]:flex-1 md:[&>.btn-primary]:flex-none">
