@@ -94,10 +94,10 @@ new #[Title('Planes de estudio')] class extends Component
             // La versión y los semestres son las columnas descriptivas: se ocultan debajo de 1200 px.
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
-                ['key' => 'name', 'label' => 'Nombre'],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'career', 'label' => 'Carrera'],
-                ['key' => 'version', 'label' => 'Versión', 'class' => 'max-[1200px]:hidden'],
-                ['key' => 'semesters_count', 'label' => 'Semestres', 'class' => 'max-[1200px]:hidden'],
+                ['key' => 'version', 'label' => 'Versión', 'class' => 'max-[1535px]:hidden'],
+                ['key' => 'semesters_count', 'label' => 'Semestres', 'class' => 'max-[1535px]:hidden'],
                 ['key' => 'total_credits', 'label' => 'Créditos'],
                 ['key' => 'placements_count', 'label' => 'Materias'],
                 ['key' => 'is_active', 'label' => 'Estado'],

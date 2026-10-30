@@ -87,7 +87,7 @@ new #[Title('Campus')] class extends Component
             // El perfil es la columna descriptiva larga: se oculta debajo de 1200 px (DESIGN.md, "Responsivo").
             'headers' => [
                 ['key' => 'code', 'label' => 'Código'],
-                ['key' => 'name', 'label' => 'Nombre'],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'modality', 'label' => 'Modalidad'],
                 ['key' => 'profile', 'label' => 'Perfil de flujo', 'class' => 'max-[1200px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],

@@ -104,11 +104,11 @@ new #[Title('Materias')] class extends Component
             // El tipo y el laboratorio son las columnas descriptivas: se ocultan debajo de 1200 px.
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
-                ['key' => 'name', 'label' => 'Nombre'],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'department', 'label' => 'Departamento'],
                 ['key' => 'hours', 'label' => 'HT-HP-Créditos'],
-                ['key' => 'kind', 'label' => 'Tipo', 'class' => 'max-[1200px]:hidden'],
-                ['key' => 'needs_lab', 'label' => 'Laboratorio', 'class' => 'max-[1200px]:hidden'],
+                ['key' => 'kind', 'label' => 'Tipo', 'class' => 'max-[1535px]:hidden'],
+                ['key' => 'needs_lab', 'label' => 'Laboratorio', 'class' => 'max-[1535px]:hidden'],
                 ['key' => 'study_plans_count', 'label' => 'Planes'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],

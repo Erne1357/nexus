@@ -62,7 +62,7 @@ new #[Title('Departamentos')] class extends Component
             }),
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
-                ['key' => 'name', 'label' => 'Nombre'],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'careers_count', 'label' => 'Carreras'],
                 ['key' => 'subjects_count', 'label' => 'Materias'],
                 ['key' => 'is_active', 'label' => 'Estado'],
