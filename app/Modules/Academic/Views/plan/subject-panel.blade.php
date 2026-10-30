@@ -10,7 +10,8 @@
       quitar y, debajo, «Agregar requisito» con el rechazo de un ciclo.
     - «La piden» (required-by-section): solo lectura.
 
-    `$row` es la fila de PlanGridEditorQuery; `close()` es del x-drawer.
+    `$row` es la fila de PlanGridEditorQuery; `close()` es del x-drawer; el título lleva el id que nombra al
+    diálogo (aria-labelledby).
 --}}
 <div class="flex min-h-full flex-col" data-testid="subject-panel">
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
@@ -21,7 +22,7 @@
                     <x-core::status-badge tone="neutral" label="Inactiva" />
                 @endunless
             </div>
-            <h2 class="mt-0.5 text-xl font-bold leading-tight">{{ $row['name'] }}</h2>
+            <h2 id="plan-drawer-title" class="mt-0.5 text-xl font-bold leading-tight">{{ $row['name'] }}</h2>
             <p class="mt-1 text-neutral"><span class="font-mono">{{ $row['theory_hours'] }}-{{ $row['practice_hours'] }}-{{ $row['credits'] }}</span>@if ($row['department']) · {{ $row['department'] }}@endif</p>
         </div>
         <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar el panel" />

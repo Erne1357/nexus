@@ -110,7 +110,8 @@
         @endif
     </div>
 
-    <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" aria-label="{{ $panel === 'specialties' ? 'Especialidades del plan' : 'Materia de la retícula' }}">
+    {{-- Los atributos que no son de x-drawer caen en su panel (la x-card): ahí van la semántica de diálogo y el título que lo nombra. MaryUI pone la trampa de foco, Esc e inert. --}}
+    <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="plan-drawer-title" data-testid="plan-drawer">
         @if ($panel === 'specialties')
             @include('academic::plan.specialties-panel')
         @elseif ($selected !== null)

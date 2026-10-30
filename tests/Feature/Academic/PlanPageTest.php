@@ -142,6 +142,17 @@ describe('admin', function () {
             ->and(textOf($page->querySelector('[data-testid="required-by-section"]')))->toContain('Ninguna materia la pide.');
     });
 
+    it('el panel es un diálogo modal nombrado por su título', function () {
+        $page = domOf(planPage($this->admin, $this->plan)->call('select', $this->integralRow->id));
+        $dialog = $page->querySelector('[data-testid="plan-drawer"]');
+
+        expect($dialog->getAttribute('role'))->toBe('dialog')
+            ->and($dialog->getAttribute('aria-modal'))->toBe('true')
+            ->and($dialog->getAttribute('aria-labelledby'))->toBe('plan-drawer-title')
+            ->and(textOf($dialog->querySelector('#plan-drawer-title')))->toBe('Cálculo Integral')
+            ->and($page->querySelectorAll('#plan-drawer-title'))->toHaveCount(1);
+    });
+
     it('cerrar el panel quita la selección y el resaltado', function () {
         $page = planPage($this->admin, $this->plan)
             ->call('select', $this->integralRow->id)
@@ -149,6 +160,22 @@ describe('admin', function () {
             ->assertSet('selectedId', null);
 
         expect(domOf($page)->querySelector('[data-testid="plan-grid"]')->hasAttribute('data-focus'))->toBeFalse();
+    });
+
+    it('una petición que abre el panel sin una materia elegida lo deja cerrado', function () {
+        planPage($this->admin, $this->plan)
+            ->set('showDrawer', true)
+            ->assertSet('showDrawer', false)
+            ->call('select', $this->integralRow->id)
+            ->set('showDrawer', false)
+            ->set('showDrawer', true)
+            ->assertSet('showDrawer', false)
+            ->assertSet('selectedId', null)
+            ->call('openSpecialties')
+            ->set('showDrawer', false)
+            ->set('showDrawer', true)
+            ->assertSet('showDrawer', true)
+            ->assertSet('panel', 'specialties');
     });
 
     it('una fila de otro plan, quitada o con un id que no es uuid no existe', function (Closure $id) {
@@ -290,10 +317,15 @@ describe('especialidades', function () {
     it('quita una especialidad sin materias; la que tiene materias muestra Quitar deshabilitado con su motivo y, pedido directo, lo rechaza', function () {
         $component = planPage($this->admin, $this->plan)->call('openSpecialties');
         $page = domOf($component);
-        $blocked = $page->querySelector('[data-specialty="ISIC-ISW-2020"] [data-tip]');
+        $row = $page->querySelector('[data-specialty="ISIC-ISW-2020"]');
+        $blocked = collect($row->querySelectorAll('button'))->first(fn ($button): bool => textOf($button) === 'Quitar');
+        $reason = $page->getElementById($blocked->getAttribute('aria-describedby'));
 
-        expect($blocked->getAttribute('data-tip'))->toBe('Tiene 1 materia en la retícula; una especialidad con materias no se quita.')
-            ->and($blocked->querySelector('button')->hasAttribute('disabled'))->toBeTrue();
+        // El motivo se ve escrito en el renglón, no solo en un tooltip, y el botón lo enlaza.
+        expect($blocked->hasAttribute('disabled'))->toBeTrue()
+            ->and($row->querySelector('[data-tip]'))->toBeNull()
+            ->and($row->contains($reason))->toBeTrue()
+            ->and(textOf($reason))->toBe('Tiene 1 materia en la retícula; una especialidad con materias no se quita.');
 
         $component->call('removeSpecialty', $this->software->id);
         expect($this->software->fresh()->trashed())->toBeFalse()
@@ -371,6 +403,14 @@ describe('otros roles e invitados', function () {
         'activar o desactivar' => ['toggleSpecialty', fn ($test) => [$test->networks->id]],
         'quitar' => ['removeSpecialty', fn ($test) => [$test->networks->id]],
     ]);
+
+    it('reciben 403 si abren el panel por la propiedad con una página que abrió el admin', function () {
+        $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => $this->career->id])->create();
+        $component = planPage($this->admin, $this->plan)->call('openSpecialties')->set('showDrawer', false);
+
+        $this->actingAs($user);
+        $component->set('showDrawer', true)->assertForbidden();
+    });
 
     it('un invitado va al login', function () {
         $this->get(route('academic.plans.show', $this->plan))->assertRedirect('/login');

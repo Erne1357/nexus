@@ -303,6 +303,7 @@ El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/pla
   Su cadena de seriación es la franja de la retícula del alumno, con el mismo token `chain-N` en `--chain`. Academic calcula sus cadenas en `PlanGridEditorQuery`, porque no depende de Students.
 - **Tocar una materia** le pone el anillo, resalta su cadena completa y atenúa lo demás. La línea de arriba dice qué pide, qué correquisito tiene y qué abre. También la abre en el panel lateral:
   - El panel es un `x-drawer` de MaryUI a la derecha, de 448 px, y a pantalla completa en celular. Se superpone con su velo, porque MaryUI no empuja el contenido sin CSS propio.
+  - Es un diálogo: `role="dialog"`, `aria-modal="true"` y `aria-labelledby` con el título del panel. MaryUI pone la trampa de foco, Esc e `inert`.
   - Esc, el velo o la X lo cierran y quitan la selección.
   - Sus secciones son «Lugar en la retícula», «Pide» y «La piden».
   - Las tareas 1.8.9 y 1.8.10 las vuelven editables: «Guardar lugar», el tipo y el quitar de cada requisito, «Agregar requisito» con el error de ciclo, «Quitar de la retícula…» y «Agregar materia» al pie de cada semestre.
@@ -310,7 +311,7 @@ El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/pla
 - **Especialidades**, en el mismo panel. Cada una muestra su clave, su estado, su nombre y cuántas materias tiene. Sus acciones:
   - «Renombrar», en su lugar;
   - «Desactivar» o «Activar»;
-  - «Quitar», deshabilitado con su motivo si tiene materias.
+  - «Quitar», deshabilitado si tiene materias. El motivo va escrito en el renglón y el botón lo enlaza con `aria-describedby`, porque un tooltip no lo ve quien usa teclado o pantalla táctil.
 
   Al final va «Nueva especialidad», con clave y nombre.
 - **El resaltado lo pinta el servidor** con `data-focus`, `data-me` y `data-on-chain`, que leen las mismas utilidades de la retícula del alumno. La retícula cambia con cada edición, y así no queda estado de Alpine desfasado.

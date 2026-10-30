@@ -87,7 +87,10 @@ final class SpecialtyRules
     }
 
     /**
-     * S1: una especialidad con materias en la retícula (filas sin quitar) no se quita; se desactiva.
+     * S1: una especialidad con materias en la retícula (filas sin quitar) no se quita; se desactiva. Cuenta
+     * también la fila cuya materia se borró del catálogo, aunque la retícula ya no la muestre: la fila sigue
+     * apuntando a la especialidad, y quitarla la dejaría colgando de una borrada. Es a propósito, del lado
+     * seguro; PlanGridEditorQuery cuenta igual para el número del chip y el botón deshabilitado.
      *
      * @throws ValidationException sobre `specialty` con cuántas materias tiene
      */

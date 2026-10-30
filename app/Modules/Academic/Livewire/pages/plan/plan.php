@@ -135,12 +135,27 @@ new #[Title('Retícula del plan')] class extends Component
     }
 
     /**
-     * Al cerrar el panel se quita la materia elegida y lo que se estaba renombrando.
+     * El navegador solo cierra el panel (Esc, el velo o la X), y al cerrarlo se quitan la materia elegida y lo
+     * que se estaba renombrando. Abrirlo es de select() y openSpecialties(): una petición que lo abre sin una
+     * materia elegida lo deja cerrado, y una que vuelve a abrir las especialidades pide `editGrid`, como
+     * openSpecialties(). `showDrawer` no puede ser #[Locked] porque el x-drawer lo cierra desde el navegador.
      */
     public function updatedShowDrawer(bool $open): void
     {
         if (! $open) {
             $this->reset('selectedId', 'renamingId', 'renamedName');
+
+            return;
+        }
+
+        if ($this->panel === 'specialties') {
+            $this->authorize('editGrid', $this->plan(app(StudyPlanQuery::class)));
+
+            return;
+        }
+
+        if ($this->selectedId === null) {
+            $this->showDrawer = false;
         }
     }
 

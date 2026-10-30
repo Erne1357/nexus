@@ -30,7 +30,9 @@ final class PlanGridEditorQuery
      *   pide (`requires`) y qué materias la piden (`required_by`), con su tipo (`seriacion` o `correquisito`), y
      *   su cadena de seriación (`chain`, el índice en `chains`).
      * - `specialties`: las del plan sin las quitadas, por clave, con cuántas filas de la retícula las usan
-     *   (`subjects`), las mismas que RemoveSpecialty cuenta para no quitarlas.
+     *   (`subjects`), las mismas que RemoveSpecialty cuenta para no quitarlas. A propósito, del lado seguro,
+     *   cuenta también la fila cuya materia se borró del catálogo, aunque `semesters` no la traiga: sigue
+     *   apuntando a la especialidad e impide quitarla (SpecialtyRules::ensureHasNoSubjects()).
      * - `chains`: cada grupo de dos o más materias unidas por su seriación (los correquisitos no bloquean y no
      *   forman cadena), en el orden de su primera materia en la retícula y nombrado por ella, como en la
      *   retícula del alumno (DESIGN.md, "Retícula del alumno").
