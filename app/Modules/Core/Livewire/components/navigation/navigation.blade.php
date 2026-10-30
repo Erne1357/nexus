@@ -5,7 +5,8 @@
     sin prefijo es escritorio cerrado; in-data-[menu=open]: es abierto; max-desktop: es tableta y
     max-md: es el celular, donde el menú solo existe abierto (la hoja). Cada área envuelve sus
     elementos en un grupo con display: contents para que todos sean hijos de la misma retícula: así un
-    icono o una entrada pueden viajar de la franja a su columna.
+    icono o una entrada pueden viajar de la franja a su columna. Los nombres y las entradas van encima
+    de los iconos (relative z-[1]): un icono que viaja pasa por debajo del texto, no lo tapa.
 --}}
 <div class="text-sm/[1.45]">
     {{-- Velo detrás del menú abierto; un clic fuera lo cierra. --}}
@@ -80,13 +81,13 @@
                     <x-icon :name="$area['area']->icon()" class="w-[18px] h-[18px]" />
                 </a>
 
-                {{-- Nombre del área: el grupo ya lo lleva en aria-label. --}}
+                {{-- Nombre del área: el grupo ya lo lleva en aria-label. Abierto cubre su icono: no toma los clics. --}}
                 <span
                     data-menu-flip="name"
                     @if ($area['current']) data-keep @endif
                     aria-hidden="true"
                     style="{{ $area['style'] }}"
-                    class="hidden self-center px-[22px] text-xs font-bold tracking-[.1em] whitespace-nowrap text-neutral uppercase [grid-column:2] [grid-row:1] [--open-col:var(--c)] [--open-row:3] desktop:in-data-current:block max-desktop:tracking-[.05em] max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:var(--base-t)] in-data-[menu=open]:block in-data-[menu=open]:truncate in-data-[menu=open]:ps-[38px] in-data-[menu=open]:pe-0 in-data-[menu=open]:text-base-content in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] max-md:mt-3 max-md:p-0 max-md:tracking-[.08em] max-md:[grid-area:auto]"
+                    class="pointer-events-none relative z-[1] hidden self-center px-[22px] text-xs font-bold tracking-[.1em] whitespace-nowrap text-neutral uppercase [grid-column:2] [grid-row:1] [--open-col:var(--c)] [--open-row:3] desktop:in-data-current:block max-desktop:tracking-[.05em] max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:var(--base-t)] in-data-[menu=open]:block in-data-[menu=open]:truncate in-data-[menu=open]:ps-[38px] in-data-[menu=open]:pe-0 in-data-[menu=open]:text-base-content in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] max-md:mt-3 max-md:p-0 max-md:tracking-[.08em] max-md:[grid-area:auto]"
                 >{{ $area['area']->label() }}</span>
 
                 @foreach ($area['entries'] as $entry)
@@ -99,7 +100,7 @@
                         @if ($area['current']) data-keep @endif
                         @if ($entry['active']) data-active aria-current="{{ $entry['page'] ? 'page' : 'true' }}" @endif
                         style="{{ $entry['style'] }}"
-                        class="mx-3 my-0.5 hidden min-w-0 items-center gap-2.5 rounded-md px-2.5 whitespace-nowrap text-base-content [grid-column:2] [grid-row:calc(var(--i)_+_1)] [--open-col:var(--c)] [--open-row:calc(3_+_var(--i))] hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary data-active:bg-secondary data-active:font-bold data-active:before:size-1.5 data-active:before:flex-none data-active:before:rounded-full data-active:before:bg-accent desktop:in-data-current:flex max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:calc(var(--base-t)_+_var(--i))] in-data-[menu=open]:m-0 in-data-[menu=open]:flex in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] max-md:col-span-full max-md:min-h-11 max-md:px-3 max-md:[grid-row:auto]"
+                        class="relative z-[1] mx-3 my-0.5 hidden min-w-0 items-center gap-2.5 rounded-md px-2.5 whitespace-nowrap text-base-content [grid-column:2] [grid-row:calc(var(--i)_+_1)] [--open-col:var(--c)] [--open-row:calc(3_+_var(--i))] hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary data-active:bg-secondary data-active:font-bold data-active:before:size-1.5 data-active:before:flex-none data-active:before:rounded-full data-active:before:bg-accent desktop:in-data-current:flex max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:calc(var(--base-t)_+_var(--i))] in-data-[menu=open]:m-0 in-data-[menu=open]:flex in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] max-md:col-span-full max-md:min-h-11 max-md:px-3 max-md:[grid-row:auto]"
                     >
                         <span class="truncate">{{ $entry['item']->label }}</span>
                     </a>

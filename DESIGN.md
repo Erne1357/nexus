@@ -387,7 +387,7 @@ Un solo menú, no dos:
   2. el buscador entra de inmediato, con el cursor;
   3. los iconos de área viajan a los encabezados de sus columnas y las secciones del área actual a la suya;
   4. cuando cada icono aterriza, aparecen su nombre y sus secciones.
-- **Al cerrar** (Esc, la liebre o un clic fuera): lo de las otras áreas se va primero, la cortina se recoge y todo regresa a su lugar. El foco regresa a la liebre.
+- **Al cerrar** (Esc, la liebre o un clic fuera), en un solo tiempo: la cortina se recoge, lo que se queda (los iconos y el área actual) regresa a su lugar junto con ella y lo de las otras áreas se desvanece a la vez, sin salir de la cortina. El foco regresa a la liebre.
 - **El buscador** filtra las entradas por su nombre, sin importar mayúsculas ni acentos; las que quedan suben en su columna, las áreas sin ninguna se ocultan y, si no queda nada, dice «Sin resultados». Enter abre la primera. Por ahora solo busca pantallas del menú, así que dice «Busca una pantalla…».
 - **Al ir a otra pantalla** desde el menú, la página nueva llega con el menú cerrado.
 
@@ -397,13 +397,14 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 | Momento | Curva | Duración |
 |---|---|---|
 | Abrir (menú, credencial) | `cubic-bezier(.3, 1.06, .5, 1)`, rebote apenas perceptible | 0.55 s; elementos nuevos 0.32 s en cascada |
-| Cerrar y regresar | `cubic-bezier(.22, 1, .36, 1)`, sin rebote | 0.42 s; lo que se va, 0.11 s antes |
+| Cerrar y regresar | `cubic-bezier(.22, 1, .36, 1)`, sin rebote | 0.42 s, todo junto y sin cascada; lo que se va se desvanece en 0.12 s a la vez |
 | Salto de la liebre al abrir | la misma de abrir | 0.5 s, 4 px |
 
 - Solo se anima `transform`, `opacity` y `clip-path`.
 - Con `prefers-reduced-motion`, todo cambia sin animar.
+- Lo que se mueve lleva el punto que el ojo sigue (el centro del icono, el principio del texto), no el borde de su caja, y lo que espera para moverse se queda en su lugar inicial mientras espera (`fill: 'backwards'`): nada brinca al empezar.
 - Nunca dos movimientos del menú encimados: lo que se pide mientras uno corre (Esc justo después de abrir) se hace al terminar. Esc cierra solo la capa de arriba: la credencial si está abierta sobre el menú; si no, el menú.
-- **Implementación:** el componente Alpine `nexusShell` (`resources/js/app.js`) hace el FLIP del menú con la Web Animations API; la cortina, el velo y la tarjeta son transiciones de utilidades de Tailwind. El estado vive en `<body data-menu>` y las utilidades lo leen con `in-data-[menu=open]:`; la geometría por ancho son variables que declara `<body>`. La única regla del shell escrita a mano en `resources/css/app.css` bloquea el desplazamiento con el menú abierto (el candado de daisyUI vive en `:root`, donde no llega una utilidad).
+- **Implementación:** el componente Alpine `nexusShell` (`resources/js/app.js`) hace el FLIP del menú con la Web Animations API (al cerrar, lo que se va se desvanece en una copia del menú abierto, sin nada interactivo, que se quita al terminar); la cortina, el velo y la tarjeta son transiciones de utilidades de Tailwind. El estado vive en `<body data-menu>` y las utilidades lo leen con `in-data-[menu=open]:`; la geometría por ancho son variables que declara `<body>`. La única regla del shell escrita a mano en `resources/css/app.css` bloquea el desplazamiento con el menú abierto (el candado de daisyUI vive en `:root`, donde no llega una utilidad).
 - La palabra gigante y los mosaicos vivos son para los inicios por rol, nunca para pantallas de captura.
 
 ### La liebre
