@@ -80,3 +80,23 @@ it('al tocar una materia resalta su cadena y dice qué pide y qué abre; Esc la 
         ->assertScript($onChain('ACF-0902'), true)
         ->assertNoJavaScriptErrors();
 });
+
+it('la retícula del alumno con nueve semestres no desborda la página en 390, 768 y 1440 px', function () {
+    $student = Student::where('control_number', '24111234')->sole();
+    foreach (range(3, 9) as $semester) {
+        placeInPlan($student->studyPlan, Subject::factory()->create(), $semester);
+    }
+
+    $page = visit('/login')
+        ->fill('username', '19110002')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/students/'.$student->id)
+        ->assertSee('Cálculo Integral');
+
+    foreach ([390, 768, 1440] as $width) {
+        $page->resize($width, 900)
+            ->assertScript('document.documentElement.scrollWidth <= window.innerWidth', true);
+    }
+});
