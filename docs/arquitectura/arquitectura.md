@@ -116,6 +116,8 @@ Cada catálogo que llega del SII se importa con una plantilla: una clase en `app
 
 `validate()` y `keyFor()` son `final`: el motor depende de que se comporten igual en toda plantilla. `keyFor()` da la clave tal como viene en el archivo, con la que el motor encuentra filas repetidas; `apply()` y `check()` buscan el registro con `recordKey()`. `validate()` también rechaza el texto que no es UTF-8 válido.
 
+La plantilla `rooms` (tarea 1.15) es la primera de un campus (`requiresCampus()`): la clave natural es `code` más el campus del lote, y «desactivar faltantes» solo mira los salones activos de ese campus. Crea el edificio que el campus no tiene con su clave como nombre y avisa (S11, igual que `SubjectsTemplate` con las especialidades), y usa `RoomRules` y `BuildingRules` de Facilities para normalizar las claves como las capturadas a mano.
+
 `TemplateRegistry` se arma al arrancar, como `Navigation`. Ahí rechaza claves repetidas, una clave natural fuera de los campos y los campos que pone el sistema (`id`, `deleted_at`, marcas de tiempo). Guarda clases y pide una plantilla nueva al contenedor en cada `get()`, por eso es un singleton seguro con Octane. Una plantilla no guarda estado del lote: quién lo aplica y el campus llegan en `ImportContext`.
 
 `apply()` escribe sin pasar por las Actions del catálogo porque corre dentro de la Action que aplica el lote. Por eso no deja bitácora por registro: el lote deja una entrada y el detalle queda en `import_rows`. Si el catálogo tiene reglas propias (como `CampusRules`), la plantilla las usa en `normalize()` y `check()`, para que un registro importado cumpla lo mismo que uno capturado.

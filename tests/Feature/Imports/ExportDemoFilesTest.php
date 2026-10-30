@@ -1,6 +1,11 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Enums\RoomType;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
 use App\Modules\Imports\Actions\ApplyImportBatch;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
@@ -75,6 +80,35 @@ it('trae un renglón por carrera y campus, sin borrados y con lo inactivo', func
         ->and(collect(demoCsv('study_plans'))->pluck(4))->toContain('No')
         ->and(demoCsv('students'))->toHaveCount(DB::table('students')->whereNull('deleted_at')->count() + 1)
         ->and(demoCsv('kardex'))->toHaveCount(DB::table('kardex_records')->whereNull('deleted_at')->count() + 1);
+});
+
+it('escribe un archivo de salones por campus, que valida con 0 errores en su campus', function () {
+    $c2 = Campus::where('code', 'C2')->firstOrFail();
+    $c1 = Campus::where('code', 'C1')->firstOrFail();
+    $owner = Department::query()->firstOrFail();
+    $a = Building::factory()->for($c2)->create(['code' => 'XA']);
+    Room::factory()->for($a)->ofType(RoomType::Laboratorio)->capacity(1200)->ownedBy($owner)->create(['code' => 'XA-1', 'name' => 'Lab de prueba']);
+    Room::factory()->for($a)->inactive()->create(['code' => 'XA-2']);
+    Room::factory()->for($a)->create(['code' => 'XA-3'])->delete();
+    Room::factory()->for(Building::factory()->for($c1)->create(['code' => 'XB']))->create(['code' => 'XB-1']);
+
+    $this->artisan('imports:export-demo')->assertSuccessful();
+
+    $admin = User::factory()->admin()->create();
+    $files = Storage::disk('imports')->allFiles('demo');
+    $rows = fn (string $campus): array => array_slice(demoCsv("rooms-{$campus}"), 1);
+
+    expect($files)->toContain('demo/rooms-C1.csv', 'demo/rooms-C2.csv')
+        ->and(array_column($rows('C2'), 1))->toBe(['XA-1', 'XA-2'])
+        ->and(array_column($rows('C1'), 1))->toBe(['XB-1'])
+        ->and($rows('C2')[0])->toBe(['XA', 'XA-1', 'Lab de prueba', 'laboratorio', '1200', $owner->code]);
+
+    foreach ([$c1, $c2] as $campus) {
+        $batch = app(StoreImportBatch::class)->handle($admin, 'rooms', new UploadedFile(Storage::disk('imports')->path("demo/rooms-{$campus->code}.csv"), "rooms-{$campus->code}.csv", 'text/csv', null, true), $campus);
+        $batch = app(ValidateImportBatch::class)->handle($batch);
+
+        expect([$campus->code, $batch->status->value, $batch->error_rows, $batch->total_rows > 0])->toBe([$campus->code, 'validated', 0, true]);
+    }
 });
 
 it('rechaza una carpeta vacía o que sale del disco', function (string $dir) {

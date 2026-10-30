@@ -122,6 +122,8 @@ Borrar departamentos (confirmado el 29 de octubre de 2026): un departamento solo
 
 Borrar departamentos con salones (S10, supuesto por confirmar): un departamento que es dueño de salones no borrados, activos o no, no se borra; Facilities lo veta con «Es dueño de N salones.» mediante `DepartmentDeleting`. Se desactiva, o se reasignan sus salones.
 
+Importar salones (S11, supuesto por confirmar): la plantilla `rooms` es de un campus, el del lote, y trae edificio, clave, nombre, tipo, capacidad y departamento dueño; «desactivar faltantes» solo mira los salones activos de ese campus. El edificio que el campus no tiene se crea con su clave como nombre y avisa, como las especialidades al importar materias; uno inactivo avisa y uno borrado es error. El tipo se reconoce por nombre, sin acentos ni mayúsculas (`AULA`, `LABORATORIO`, `TALLER`, `SALA DE COMPUTO` o `CENTRO DE COMPUTO`, `AUDITORIO`); otro es error. La capacidad es un entero mayor que cero y acepta separadores de miles. Un departamento dueño que no existe es error; uno inactivo, advertencia. Como todo lo importado, no reactiva ni restaura: un salón inactivo se actualiza y sigue inactivo, con advertencia, y uno borrado es error.
+
 Desactivar un edificio con salones activos (supuesto por confirmar): un edificio se puede desactivar aunque tenga salones activos; los salones no cambian.
 
 Edificio inactivo en un salón (supuesto por confirmar): un edificio desactivado sigue disponible para elegirse como edificio de un salón y aparece marcado «(inactivo)».
