@@ -7,7 +7,6 @@ use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -17,8 +16,10 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Termina una jefatura y su alcance con `$lastDay` como último día, con la regla de CloseRoleScopes (confirmado el
  * 29 de octubre de 2026): si ya empezó, la jefatura y su alcance terminan ese día (`valid_to`); si empieza
  * después, las dos se borran, porque `valid_to` no puede ser anterior a `valid_from` (la jefatura de forma
- * lógica; el alcance, que no tiene borrado lógico, de verdad). Su alcance es el del mismo usuario, rol, campus y
- * departamento cuyas fechas se traslapan con las de la jefatura, como lo escribe AppointDepartmentHead.
+ * lógica; el alcance, que no tiene borrado lógico, de verdad). Su alcance es el que escribió AppointDepartmentHead:
+ * mismo usuario, rol, campus y departamento, y el mismo `valid_from`; otro alcance del mismo cargo que empezó otro
+ * día (uno capturado a mano o el de otra jefatura) no se toca. Si no encuentra ninguno, termina solo la jefatura y
+ * la bitácora lo dice.
  *
  * Nunca alarga: una jefatura borrada o que ya termina para `$lastDay` se queda como está, sin bitácora ni aviso.
  * El rol de spatie se queda, porque sin alcance vigente no cuenta en ScopedContext. Deja la bitácora sobre el
@@ -54,6 +55,8 @@ final class EndDepartmentHead
             ];
             $what = "la jefatura de {$locked->user->name} como ".Str::lcfirst($locked->kind->label())
                 ." de {$locked->department->name} en {$locked->campus->name}";
+            $missing = $scopes->isEmpty() ? '; no encontró su alcance' : '';
+            $properties = ['department_head_id' => $locked->getKey(), 'role_scope_ids' => $scopes->modelKeys()];
 
             if ($old['valid_from'] > $last) {
                 $locked->delete();
@@ -62,7 +65,8 @@ final class EndDepartmentHead
                     ->performedOn($locked->user)
                     ->event(ActivityEvent::Deleted)
                     ->withChanges(['old' => $old])
-                    ->log("Quitó {$what}, que todavía no empezaba");
+                    ->withProperties($properties)
+                    ->log("Quitó {$what}, que todavía no empezaba{$missing}");
             } else {
                 $locked->forceFill(['valid_to' => $last])->save();
 
@@ -70,8 +74,8 @@ final class EndDepartmentHead
                     ->performedOn($locked->user)
                     ->event(ActivityEvent::Updated)
                     ->withChanges(['attributes' => ['valid_to' => $last], 'old' => ['valid_to' => $old['valid_to']]])
-                    ->withProperties(['department_head_id' => $locked->getKey()])
-                    ->log("Terminó {$what}");
+                    ->withProperties($properties)
+                    ->log("Terminó {$what}{$missing}");
             }
 
             foreach ($scopes as $scope) {
@@ -95,7 +99,8 @@ final class EndDepartmentHead
     }
 
     /**
-     * Los alcances de la jefatura: mismo usuario, rol, campus y departamento, con fechas que se traslapan.
+     * Los alcances de la jefatura: mismo usuario, rol, campus, departamento y `valid_from`, como los escribe
+     * AppointDepartmentHead.
      *
      * @return Collection<int, RoleScope>
      */
@@ -107,8 +112,7 @@ final class EndDepartmentHead
             ->where('campus_id', $head->campus_id)
             ->where('department_id', $head->department_id)
             ->whereNull('career_id')
-            ->when($head->valid_to, fn (Builder $query, CarbonImmutable $to) => $query->where('valid_from', '<=', $to->toDateString()))
-            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $head->valid_from->toDateString()))
+            ->where('valid_from', $head->valid_from->toDateString())
             ->lockForUpdate()
             ->get();
     }

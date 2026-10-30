@@ -11,8 +11,10 @@ use RuntimeException;
 use Spatie\Activitylog\Support\CauserResolver;
 
 /**
- * Corre SyncTeacherAccess sobre todos los docentes no borrados, por bloques de 200, con un solo hash de la
- * contraseña por defecto para toda la corrida. Sin NEXUS_DEFAULT_PASSWORD falla antes de tocar a ningún docente.
+ * Corre SyncTeacherAccess sobre todos los docentes, por bloques de 200, con un solo hash de la contraseña por defecto
+ * para toda la corrida. También los borrados: a un docente borrado se le aplica la baja si no se le aplicó al
+ * borrarlo (supuesto por confirmar), y si ya se le aplicó, queda sin cambios. Sin NEXUS_DEFAULT_PASSWORD falla
+ * antes de tocar a ningún docente.
  *
  * Cada docente que cambia deja su propia bitácora (SyncTeacherAccess), y la corrida, una entrada más con las
  * cuentas y los números de empleado en conflicto (S15), aunque no haya cambiado nada. Con `$actor`, todas esas
@@ -50,7 +52,7 @@ final class ProvisionTeacherUsers
     {
         $summary = ['created' => 0, 'linked' => 0, 'updated' => 0, 'unchanged' => 0, 'conflicts' => []];
 
-        Teacher::query()
+        Teacher::withTrashed()
             ->select(['id', 'employee_number'])
             ->chunkById(self::CHUNK, function (Collection $teachers) use (&$summary, $passwordHash): void {
                 foreach ($teachers as $teacher) {

@@ -263,3 +263,50 @@ it('termina antes de tiempo una jefatura que tenía fecha de fin, con su alcance
         ->and(RoleScope::sole()->valid_to->toDateString())->toBe($yesterday)
         ->and(app(ScopedContext::class)->forUser($this->user)->covers(Role::JefeDepartamento, $this->c2, $this->sis->id))->toBeFalse();
 });
+
+it('al terminar una jefatura solo cierra el alcance que empezó con ella', function () {
+    $head = appointHead($this->user, $this->sis, $this->c2);
+    $other = RoleScope::factory()->for($this->user)->create([
+        'role' => Role::JefeDepartamento,
+        'campus_id' => $this->c2->id,
+        'department_id' => $this->sis->id,
+        'valid_from' => today()->subDays(10)->toDateString(),
+    ]);
+
+    app(EndDepartmentHead::class)->handle($head, today()->subDay()->toImmutable());
+
+    expect(RoleScope::whereKeyNot($other->id)->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
+        ->and($other->fresh()->valid_to)->toBeNull();
+});
+
+it('termina una jefatura sin alcance y deja dicho en la bitácora que no encontró uno', function () {
+    $head = DepartmentHead::factory()->create([
+        'department_id' => $this->sis->id,
+        'campus_id' => $this->c2->id,
+        'user_id' => $this->user->id,
+    ]);
+
+    app(EndDepartmentHead::class)->handle($head, today()->subDay()->toImmutable());
+
+    $entry = Activity::sole();
+
+    expect($head->fresh()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
+        ->and($entry->description)->toBe('Terminó la jefatura de Ana Pérez como jefe de departamento de Sistemas y Computación en Campus II; no encontró su alcance')
+        ->and($entry->properties['role_scope_ids'])->toBe([]);
+});
+
+it('no nombra jefe a un usuario inactivo', function () {
+    $this->user->update(['is_active' => false]);
+
+    try {
+        appointHead($this->user, $this->sis, $this->c2);
+        $this->fail('Se esperaba ValidationException.');
+    } catch (ValidationException $exception) {
+        expect($exception->errors())->toBe(['user' => ['El usuario está inactivo.']]);
+    }
+
+    expect(DepartmentHead::count())->toBe(0)
+        ->and(RoleScope::count())->toBe(0)
+        ->and($this->user->fresh()->roles)->toBeEmpty()
+        ->and(Activity::count())->toBe(0);
+});
