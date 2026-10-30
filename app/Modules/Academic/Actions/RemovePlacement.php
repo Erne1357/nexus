@@ -17,9 +17,10 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * StudyPlanPolicy (`editGrid`) antes de llamarla.
  *
  * Vuelve a leer la fila con bloqueo (`lockForUpdate`): una que otra sesión quitó no existe, y quien agrega una
- * seriación a la materia la lee para compartir y espera. Quita la seriación sin quitar, luego la fila; deja
- * bitácora sobre la fila con el lugar que tenía y cuántas seriaciones se fueron y, después del commit, avisa con
- * CurriculumChanged. Devuelve cuántas seriaciones quitó y deja la materia en la relación `subject` de la fila.
+ * seriación a la materia o cambia su tipo (AddPrerequisite, UpdatePrerequisite) la lee para compartir y espera.
+ * Quita la seriación sin quitar, luego la fila; deja bitácora sobre la fila con el lugar que tenía y cuántas
+ * seriaciones se fueron y, después del commit, avisa con CurriculumChanged. Devuelve cuántas seriaciones quitó y
+ * deja la materia en la relación `subject` de la fila.
  */
 final class RemovePlacement
 {

@@ -305,10 +305,12 @@ El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/pla
   - El panel es un `x-drawer` de MaryUI a la derecha, de 448 px, y a pantalla completa en celular. Se superpone con su velo, porque MaryUI no empuja el contenido sin CSS propio.
   - Es un diálogo: `role="dialog"`, `aria-modal="true"` y `aria-labelledby` con el título del panel. MaryUI pone la trampa de foco, Esc e `inert`.
   - Esc, el velo o la X lo cierran y quitan la selección.
-  - Sus secciones son «Lugar en la retícula», «Pide» y «La piden».
+  - Sus secciones son «Lugar en la retícula», «Pide» y «La piden»; «La piden» es de solo lectura.
   - «Lugar en la retícula» es un formulario: semestre, especialidad («Ninguna (tronco común)»; una inactiva aparece deshabilitada, salvo la que ya tiene la materia), «Obligatoria» y «Guardar lugar» (`btn-primary btn-sm`). Los errores caen en su campo.
   - Al pie, fijo, «Cada cambio queda en la bitácora.» y «Quitar de la retícula…» (`btn-ghost text-error`). Abre una confirmación que lista la seriación que se va, como materia y como requisito con su tipo, qué materias se quedan sin seriación y que cambia el avance de los alumnos del plan; Academic no da la cifra de alumnos, que es de Students.
-  - La tarea 1.8.10 vuelve editables el tipo y el quitar de cada requisito y agrega «Agregar requisito» con el error de ciclo.
+  - «Pide» lista cada requisito con su clave en Mono, su nombre y su semestre, su tipo en un select («Seriación» o «Correquisito») y quitar (una X, sin confirmación, como en la maqueta). Bajo 640 px el select y la X bajan a un segundo renglón.
+  - Debajo va «Agregar requisito»: busca otra materia de esta retícula por clave o nombre, sin importar acentos y sin la propia ni las que ya pide; lista hasta 8 con su clave, su nombre y «Sem. N», en el orden de la retícula, y la elegida queda escrita en la búsqueda. Luego el tipo y «Agregar» (`btn-outline`). La lista va en línea bajo la búsqueda, como en «Agregar materia», y no flotante como en la maqueta.
+  - Una seriación que cierra un ciclo, al agregarla o al cambiar el tipo, se rechaza con una alerta `alert-error alert-soft` al final de «Pide»: «**Cierra un ciclo:** X ya pide, en cadena, a Y.» y la cadena como claves en Mono unidas por flechas, del requisito a la materia. El select del tipo regresa al que tiene.
 - **«Agregar materia»** es un botón punteado al pie de cada semestre (hasta el último que se ofrece; en columnas angostas su texto se parte en dos renglones centrados). Un plan sin semestres ni materias lo ofrece en su estado vacío, en el semestre 1. Abre un modal:
   - busca en el catálogo por clave o nombre, desde dos letras y con todas las palabras;
   - lista las primeras 8 coincidencias con la clave en Mono, el nombre, el departamento y `HT-HP-C`, y al pie cuántas son;

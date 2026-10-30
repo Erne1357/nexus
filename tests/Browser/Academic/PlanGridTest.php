@@ -1,9 +1,11 @@
 <?php
 
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Models\User;
 use Database\Seeders\DemoSeeder;
 
@@ -12,7 +14,8 @@ use Database\Seeders\DemoSeeder;
 | de Planes, toca una materia y ve su lugar y su seriación en el panel lateral con su cadena resaltada; Esc
 | cierra el panel; desde «Especialidades» da de alta una especialidad y la renombra. Luego agrega una materia del
 | catálogo al pie de un semestre, la mueve desde el panel y la quita de la retícula (Esc en la confirmación no
-| cierra el panel).
+| cierra el panel). Por último, en el panel agrega un requisito: como seriación cierra un ciclo y el panel lo dice
+| con su cadena; como correquisito entra; volverlo seriación lo rechaza y el select regresa; y lo quita.
 */
 
 beforeEach(function () {
@@ -107,4 +110,44 @@ it('el admin agrega una materia del catálogo a un semestre, la mueve y la quita
 
     expect(StudyPlanSubject::withTrashed()->where('study_plan_id', $this->plan->id)->where('subject_id', $subject->id)->sole())
         ->semester->toBe(8)->trashed()->toBeTrue();
+});
+
+it('el admin agrega un requisito, ve el error de ciclo con su cadena, cambia su tipo y lo quita', function () {
+    $kindOf = "document.querySelector('[data-requisite=\"ACF-0905\"] select').value";
+
+    $page = visit('/login')
+        ->fill('username', 'ana.admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/academic/plans/'.$this->plan->id)
+        ->click('[data-subject="ACF-0901"]')
+        ->waitForText('Agregar requisito')
+        ->type('requisiteSearch', 'ecuaciones')
+        ->waitForText('Ecuaciones Diferenciales')
+        ->click('[data-requisite-option="ACF-0905"]')
+        ->click('@add-requisite-submit')
+        ->waitForText('Cierra un ciclo')
+        ->assertSeeIn('@cycle-error', 'ACF-0905 ya pide, en cadena, a ACF-0901.')
+        ->assertSeeIn('@cycle-path', 'ACF-0904')
+        ->select('kind', 'correquisito')
+        ->click('@add-requisite-submit')
+        ->waitForText('Requisito agregado')
+        ->assertSeeIn('[data-testid="requires-section"]', 'Ecuaciones Diferenciales')
+        ->assertSeeIn('[data-subject="ACF-0901"]', 'Correq.')
+        ->assertNoJavaScriptErrors();
+
+    // Volverlo seriación cierra el ciclo: el panel lo dice y el select regresa a «Correquisito».
+    $page->select('[data-requisite="ACF-0905"] select', 'seriacion')
+        ->waitForText('Cierra un ciclo')
+        ->assertScript($kindOf, 'correquisito')
+        ->click('[aria-label="Quitar el requisito ACF-0905"]')
+        ->waitForText('Requisito quitado')
+        ->assertDontSeeIn('[data-testid="requires-section"]', 'Ecuaciones Diferenciales')
+        ->assertNoJavaScriptErrors();
+
+    $calculus = Subject::where('code', 'ACF-0901')->sole();
+    $equations = Subject::where('code', 'ACF-0905')->sole();
+    expect(SubjectPrerequisite::withTrashed()->where('study_plan_id', $this->plan->id)->where('subject_id', $calculus->id)->where('prerequisite_subject_id', $equations->id)->sole())
+        ->kind->toBe(PrerequisiteKind::Correquisito)->trashed()->toBeTrue();
 });

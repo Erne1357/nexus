@@ -1,8 +1,8 @@
 {{--
-    Una lista de seriación en el panel de una materia (academic::plan.subject-panel): lo que pide o quién la
-    pide. Cada renglón lleva la clave en Mono, el nombre y el semestre de la otra materia, y el tipo
-    (seriación o correquisito); `$requisites` son filas `requires` o `required_by` de PlanGridEditorQuery y
-    `$empty`, lo que dice sin ninguna.
+    Una lista de seriación de solo lectura en el panel de una materia (academic::plan.subject-panel): quién la
+    pide; lo que pide se edita en academic::plan.requires-editor. Cada renglón lleva la clave en Mono, el nombre y
+    el semestre de la otra materia, y el tipo (seriación o correquisito); `$requisites` son filas `required_by` de
+    PlanGridEditorQuery y `$empty`, lo que dice sin ninguna.
 --}}
 @if ($requisites === [])
     <p class="text-neutral">{{ $empty }}</p>

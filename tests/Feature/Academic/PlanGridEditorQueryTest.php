@@ -239,6 +239,34 @@ describe('búsquedas por id', function () {
             ->and(fn () => $query->placementOrFail($this->plan, $orphan->id))->toThrow(ModelNotFoundException::class)
             ->and(fn () => $query->specialtyOrFail($this->plan, $specialty->id))->toThrow(ModelNotFoundException::class);
     });
+
+    it('encuentra un requisito sin quitar solo dentro del plan; uno quitado, de otro plan o que no es uuid no; y sabe si uno del plan se quitó', function () {
+        $calculus = ($this->subject)('ACF-0901');
+        $integral = ($this->subject)('ACF-0902');
+        placeInPlan($this->plan, $calculus);
+        placeInPlan($this->plan, $integral, 2);
+        $prerequisite = seriate($this->plan, $integral, $calculus);
+        $removed = seriate($this->plan, $calculus, $integral, PrerequisiteKind::Correquisito);
+        $removed->delete();
+        $other = StudyPlan::factory()->create();
+        placeInPlan($other, $calculus);
+        placeInPlan($other, $integral, 2);
+        $foreign = seriate($other, $integral, $calculus);
+        $query = app(PlanGridEditorQuery::class);
+
+        expect($query->prerequisiteOrFail($this->plan, $prerequisite->id)->is($prerequisite))->toBeTrue()
+            ->and(fn () => $query->prerequisiteOrFail($this->plan, $removed->id))->toThrow(ModelNotFoundException::class)
+            ->and(fn () => $query->prerequisiteOrFail($this->plan, $foreign->id))->toThrow(ModelNotFoundException::class)
+            ->and(fn () => $query->prerequisiteOrFail($this->plan, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
+
+        $foreign->delete();
+
+        expect($query->prerequisiteWasRemoved($this->plan, $removed->id))->toBeTrue()
+            ->and($query->prerequisiteWasRemoved($this->plan, $prerequisite->id))->toBeFalse()
+            ->and($query->prerequisiteWasRemoved($this->plan, $foreign->id))->toBeFalse()
+            ->and($query->prerequisiteWasRemoved($this->plan, fakeKey(99)))->toBeFalse()
+            ->and($query->prerequisiteWasRemoved($this->plan, 'no-es-uuid'))->toBeFalse();
+    });
 });
 
 describe('catálogo para «Agregar materia»', function () {

@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\Academic\Rules\SeriationRules;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -18,9 +19,10 @@ use Illuminate\Validation\Rule;
  *
  * Es error si alguna de las dos materias no está en la retícula del plan, si una materia se pide a sí misma o si
  * una seriación cierra un ciclo con la que ya tiene el plan o con renglones anteriores del archivo (confirmado el
- * 29 de octubre de 2026). Para eso guarda la seriación de cada plan en la corrida y le suma cada renglón válido:
- * así un ciclo dentro del archivo ya es error al validar, y un renglón que vuelve correquisito una seriación
- * cuenta para los que siguen. Los correquisitos no bloquean, así que no forman ciclos.
+ * 29 de octubre de 2026), con la misma regla que el editor de la retícula (SeriationRules::closesCycle()). Para
+ * eso guarda la seriación de cada plan en la corrida y le suma cada renglón válido: así un ciclo dentro del archivo
+ * ya es error al validar, y un renglón que vuelve correquisito una seriación cuenta para los que siguen. Los
+ * correquisitos no bloquean, así que no forman ciclos.
  *
  * Como todo lo importado, una seriación borrada no se restaura. No ofrece "desactivar faltantes": quitar una
  * seriación cambia el avance de los alumnos y se hace a mano. Al terminar el lote recalcula el avance.
@@ -144,7 +146,7 @@ class PrerequisitesTemplate extends ImportTemplate
         $prerequisite = $grid[$row['prerequisite']];
         $seriation = $row['kind'] === PrerequisiteKind::Seriacion->value;
 
-        if (! $issues->hasErrors() && $seriation && $this->requiresTransitively($plan, $prerequisite, $subject)) {
+        if (! $issues->hasErrors() && $seriation && SeriationRules::closesCycle($this->seriation($plan), $subject, $prerequisite)) {
             return $issues->withError('prerequisite', "Cierra un ciclo de seriación: {$row['prerequisite']} ya pide, en cadena, a {$row['subject']}.");
         }
 
@@ -178,47 +180,14 @@ class PrerequisitesTemplate extends ImportTemplate
     }
 
     /**
-     * Si la materia `$from` pide, directa o en cadena, a la materia `$to`, según la seriación del plan (sin
-     * correquisitos ni lo borrado) más la de los renglones válidos anteriores de esta corrida.
-     */
-    private function requiresTransitively(StudyPlan $plan, string $from, string $to): bool
-    {
-        $requires = $this->seriation($plan);
-        $seen = [];
-        $pending = [$from];
-
-        while ($pending !== []) {
-            foreach (array_keys($requires[array_pop($pending)] ?? []) as $prerequisite) {
-                if ($prerequisite === $to) {
-                    return true;
-                }
-
-                if (! isset($seen[$prerequisite])) {
-                    $seen[$prerequisite] = true;
-                    $pending[] = $prerequisite;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * La seriación del plan como la deja esta corrida: la de la base al empezar, con cada renglón válido encima.
+     * La seriación del plan como la deja esta corrida: la de la base al empezar (SeriationRules::edgesFor()), con
+     * cada renglón válido encima.
      *
      * @return array<string, array<string, true>>
      */
     private function seriation(StudyPlan $plan): array
     {
-        if (! isset($this->seriations[$plan->getKey()])) {
-            $this->seriations[$plan->getKey()] = [];
-
-            foreach (SubjectPrerequisite::query()->where('study_plan_id', $plan->getKey())->where('kind', PrerequisiteKind::Seriacion)->toBase()->get(['subject_id', 'prerequisite_subject_id']) as $edge) {
-                $this->seriations[$plan->getKey()][$edge->subject_id][$edge->prerequisite_subject_id] = true;
-            }
-        }
-
-        return $this->seriations[$plan->getKey()];
+        return $this->seriations[$plan->getKey()] ??= SeriationRules::edgesFor($plan->getKey());
     }
 
     private function plan(string $code): ?StudyPlan
