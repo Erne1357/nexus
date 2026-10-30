@@ -128,6 +128,12 @@
         ],
         "createdAt": "2026-10-29T05:46:27.322Z",
         "reason": "Claude: maqueta de exploración anterior a DESIGN.md (fuera de git); compara otras tipografías a propósito y no se entrega"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "hyperlegible next\",ui-sans-serif,system-ui,sans-serif",
+        "createdAt": "2026-10-29T23:43:45.471Z",
+        "reason": "Claude: Atkinson Hyperlegible Next is the body font declared in DESIGN.md Typography; the detector parsed the font stack fragment"
       }
     ]
   }
