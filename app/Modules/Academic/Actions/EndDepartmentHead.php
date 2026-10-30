@@ -119,5 +119,4 @@ final class EndDepartmentHead
             ->lockForUpdate()
             ->get();
     }
-
 }

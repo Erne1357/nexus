@@ -137,5 +137,4 @@ final class AppointDepartmentHead
 
         return $exception;
     }
-
 }
