@@ -9,6 +9,7 @@ use App\Modules\Imports\Console\ExportDemoFiles;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
+use App\Modules\Imports\Templates\EvaluationsTemplate;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\KardexTemplate;
 use App\Modules\Imports\Templates\PrerequisitesTemplate;
@@ -16,6 +17,7 @@ use App\Modules\Imports\Templates\RoomsTemplate;
 use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\StudyPlansTemplate;
 use App\Modules\Imports\Templates\SubjectsTemplate;
+use App\Modules\Imports\Templates\TeacherHistoryTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Contracts\Foundation\Application;
 
@@ -35,6 +37,8 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         PrerequisitesTemplate::class,
         StudentsTemplate::class,
         KardexTemplate::class,
+        TeacherHistoryTemplate::class,
+        EvaluationsTemplate::class,
         RoomsTemplate::class,
     ];
 

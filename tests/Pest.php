@@ -138,16 +138,6 @@ function textOf(?Element $element): string
 }
 
 /**
- * La bitácora escrita después del arranque de la prueba (la bitácora es inmutable: no se vacía).
- *
- * @return Builder<Activity>
- */
-function activitySince(): Builder
-{
-    return Activity::query()->where('id', '>', test()->activityBase);
-}
-
-/**
  * Expresión de JS para los browser tests: si la búsqueda, los filtros y la acción de la barra de herramientas de
  * catálogo están en un mismo renglón y ningún texto de la búsqueda ni de los filtros se corta (DESIGN.md, "Anatomía
  * de una pantalla de catálogo").
@@ -173,4 +163,14 @@ function catalogToolbarInOneRowScript(): string
                 && [...bar.querySelectorAll('select')].every((select) => fits(select, select.selectedOptions[0]?.text ?? ''));
         })()
         JS;
+}
+
+/**
+ * La bitácora escrita después del arranque de la prueba (la bitácora es inmutable: no se vacía).
+ *
+ * @return Builder<Activity>
+ */
+function activitySince(): Builder
+{
+    return Activity::query()->where('id', '>', test()->activityBase);
 }
