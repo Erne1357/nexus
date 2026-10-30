@@ -87,7 +87,6 @@ it('aplica la baja a un docente borrado cuyo usuario seguía activo, y repetirla
     $teacher = Teacher::factory()->adscribedTo($this->department, $this->campus)->create(['employee_number' => '3333333', 'user_id' => $user->id]);
     $head = DepartmentHead::factory()->create([
         'department_id' => $this->department->id,
-        'campus_id' => $this->campus->id,
         'user_id' => $user->id,
     ]);
     $teacher->delete();

@@ -24,6 +24,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoSeeder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 
@@ -61,6 +62,22 @@ function demoCounts(): array
         'role_scopes' => RoleScope::query()->count(),
         'terms' => Term::query()->count(),
     ];
+}
+
+/**
+ * Los usuarios de prueba de DemoStaffSeeder: `subdir`, `jefe.<depto>`, `jpd.<depto>.<campus>` y
+ * `coord.<carrera>.<campus>` (los docentes de FacultyDemoSeeder entran con su número de empleado).
+ *
+ * @return EloquentCollection<int, User>
+ */
+function demoStaff(): EloquentCollection
+{
+    return User::query()
+        ->where(fn ($query) => $query->where('username', 'subdir')
+            ->orWhere('username', 'like', 'jefe.%')
+            ->orWhere('username', 'like', 'jpd.%')
+            ->orWhere('username', 'like', 'coord.%'))
+        ->get();
 }
 
 /**
@@ -239,9 +256,10 @@ it('deja los casos extremos para probar las pantallas', function () {
         ->and(Subject::query()->whereRaw('char_length(name) > 100')->exists())->toBeTrue('Falta una materia con nombre muy largo.');
 });
 
-it('crea los usuarios de prueba con su alcance', function () {
+it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el Tec, jefes de proyecto docente y coordinadores por campus', function () {
     $this->seed(DemoSeeder::class);
 
+    $c1 = Campus::query()->where('code', 'C1')->sole();
     $c2 = Campus::query()->where('code', 'C2')->sole();
     $isic = Career::query()->where('code', 'ISIC')->sole();
     $iind = Career::query()->where('code', 'IIND')->sole();
@@ -249,18 +267,27 @@ it('crea los usuarios de prueba con su alcance', function () {
     $context = fn (string $username): ScopedContext => app(ScopedContext::class)->forUser(User::query()->where('username', $username)->sole());
     $coordinator = User::query()->where('username', 'coord.isc.c2')->sole();
 
-    expect(User::query()->where('username', 'like', '%.c2')->pluck('username')->all())->toEqualCanonicalizing([
-        'subdir.c2',
-        'jefe.cb.c2', 'jpd.cb.c2', 'jefe.cea.c2', 'jpd.cea.c2', 'jefe.ii.c2', 'jpd.ii.c2', 'jefe.sc.c2', 'jpd.sc.c2',
+    expect(demoStaff()->pluck('username')->all())->toEqualCanonicalizing([
+        'subdir',
+        'jefe.cb', 'jefe.cea', 'jefe.ii', 'jefe.sc',
+        'jpd.cb.c2', 'jpd.cea.c2', 'jpd.ii.c2', 'jpd.sc.c2',
         'coord.isc.c2', 'coord.ii.c2', 'coord.ige.c2', 'coord.il.c2', 'coord.la.c2', 'coord.cp.c2',
     ])
         ->and($context('coord.isc.c2')->covers(Role::Coordinador, $c2, null, $isic->id))->toBeTrue()
         ->and($context('coord.isc.c2')->covers(Role::Coordinador, $c2, null, $iind->id))->toBeFalse()
-        ->and($context('jefe.sc.c2')->covers(Role::JefeDepartamento, $c2, $sc->id))->toBeTrue()
+        ->and($context('coord.isc.c2')->covers(Role::Coordinador, $c1, null, $isic->id))->toBeFalse()
+        ->and($context('jefe.sc')->covers(Role::JefeDepartamento, $c2, $sc->id))->toBeTrue()
+        ->and($context('jefe.sc')->covers(Role::JefeDepartamento, $c1, $sc->id))->toBeTrue()
+        ->and($context('jefe.sc')->scopes()->sole()->campus_id)->toBeNull()
         ->and($context('jpd.sc.c2')->covers(Role::JefeProyectoDocente, $c2, $sc->id))->toBeTrue()
-        ->and($context('subdir.c2')->covers(Role::Subdireccion, $c2))->toBeTrue()
-        ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'campus_id' => $c2->id, 'kind' => DepartmentHeadKind::Jefe])->sole()->user->username)->toBe('jefe.sc.c2')
-        ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'campus_id' => $c2->id, 'kind' => DepartmentHeadKind::JefeProyectoDocente])->whereHas('user', fn ($query) => $query->where('username', 'jpd.sc.c2'))->sole()->user->username)->toBe('jpd.sc.c2')
+        ->and($context('jpd.sc.c2')->covers(Role::JefeProyectoDocente, $c1, $sc->id))->toBeFalse()
+        ->and($context('subdir')->covers(Role::Subdireccion, $c2))->toBeTrue()
+        ->and($context('subdir')->covers(Role::Subdireccion, $c1))->toBeTrue()
+        ->and($context('subdir')->scopes()->sole()->campus_id)->toBeNull()
+        ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'kind' => DepartmentHeadKind::Jefe])->sole())
+        ->campus_id->toBeNull()
+        ->user->username->toBe('jefe.sc')
+        ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'campus_id' => $c2->id, 'kind' => DepartmentHeadKind::JefeProyectoDocente])->whereHas('user', fn ($query) => $query->where('username', 'jpd.sc.c2'))->exists())->toBeTrue()
         ->and(Hash::check('password', $coordinator->password))->toBeTrue()
         ->and($coordinator->must_change_password)->toBeFalse();
 });
@@ -303,25 +330,33 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
 
     $offered = fn (string $campus): int => CareerCampus::query()->whereRelation('campus', 'code', $campus)->where('is_active', true)->count();
     $scopes = RoleScope::query()->get();
-    $staff = User::query()->where('username', 'like', '%.c_')->get();
+    $staff = demoStaff();
     $roleOf = ['subdir' => Role::Subdireccion, 'jefe' => Role::JefeDepartamento, 'jpd' => Role::JefeProyectoDocente, 'coord' => Role::Coordinador];
     $campusIds = Campus::query()->pluck('id', 'code');
+    $named = fn (string $pattern): Collection => $staff->filter(fn (User $user): bool => preg_match($pattern, $user->username) === 1);
+    $headed = fn (DepartmentHeadKind $kind): array => DepartmentHead::query()->currentOn(now())->where('kind', $kind)->whereIn('user_id', $staff->modelKeys())->with('user')->get()->map(fn (DepartmentHead $head): string => $head->user->username)->all();
 
     expect(demoCounts())->toBe($first)
         ->and($offered('C1'))->toBe(12)
         ->and($offered('C2'))->toBe(6)
         ->and($scopes->countBy(fn (RoleScope $scope): string => "{$scope->user_id}|{$scope->role->value}|{$scope->campus_id}|{$scope->department_id}|{$scope->career_id}")->max())->toBe(1)
-        ->and($staff->filter(fn (User $user): bool => str_ends_with($user->username, '.c1')))->toHaveCount(25)
-        ->and($staff->filter(fn (User $user): bool => str_ends_with($user->username, '.c2')))->toHaveCount(15)
-        ->and(DepartmentHead::query()->currentOn(now())->whereHas('user', fn ($query) => $query->where('username', 'like', 'jefe.%')->orWhere('username', 'like', 'jpd.%'))->count())->toBe($staff->filter(fn (User $user): bool => preg_match('/^(jefe|jpd)\./', $user->username) === 1)->count());
+        ->and($named('/^subdir$/'))->toHaveCount(1)
+        ->and($named('/^jpd\.[a-z]+\.c1$/'))->toHaveCount(6)
+        ->and($named('/^jpd\.[a-z]+\.c2$/'))->toHaveCount(4)
+        ->and($named('/^coord\.[a-z]+\.c1$/'))->toHaveCount(12)
+        ->and($named('/^coord\.[a-z]+\.c2$/'))->toHaveCount(6)
+        ->and($named('/^jefe\.[a-z]+$/')->pluck('username')->map(fn (string $username): string => substr($username, 5))->sort()->values()->all())
+        ->toBe($named('/^jpd\./')->pluck('username')->map(fn (string $username): string => explode('.', $username)[1])->unique()->sort()->values()->all())
+        ->and($headed(DepartmentHeadKind::Jefe))->toEqualCanonicalizing($named('/^jefe\./')->pluck('username')->all())
+        ->and($headed(DepartmentHeadKind::JefeProyectoDocente))->toEqualCanonicalizing($named('/^jpd\./')->pluck('username')->all());
 
     foreach ($staff as $user) {
         $role = $roleOf[strtok($user->username, '.')];
-        $campus = $campusIds[strtoupper(substr($user->username, -2))];
+        $campus = in_array($role, [Role::Subdireccion, Role::JefeDepartamento], true) ? null : $campusIds[strtoupper(substr($user->username, -2))];
         $context = app(ScopedContext::class)->forUser($user);
 
         expect($context->roles())->toBe([$role], "{$user->username} no ejerce su rol.")
-            ->and($context->scopes()->pluck('campus_id')->all())->toBe([$campus], "{$user->username} no tiene un solo alcance en su campus.");
+            ->and($context->scopes()->pluck('campus_id')->all())->toBe([$campus], "{$user->username} no tiene un solo alcance donde le toca.");
     }
 
     expect(app(ScopedContext::class)->forUser($staff->firstWhere('username', 'coord.ie.c1'))
@@ -333,13 +368,13 @@ it('completa el rol y el alcance de un usuario de prueba que una corrida anterio
     $c2 = Campus::query()->where('code', 'C2')->sole();
 
     User::factory()->create(['username' => 'coord.isc.c2']);
-    User::factory()->withRole(Role::Subdireccion, ['campus_id' => $c2->id, 'valid_from' => '2026-01-01', 'valid_to' => '2026-06-30'])->create(['username' => 'subdir.c2']);
+    User::factory()->withRole(Role::Subdireccion, ['valid_from' => '2026-01-01', 'valid_to' => '2026-06-30'])->create(['username' => 'subdir']);
 
     $this->seed(DemoSeeder::class);
     $this->seed(DemoSeeder::class);
 
     $coordinator = User::query()->where('username', 'coord.isc.c2')->sole();
-    $subdirection = User::query()->where('username', 'subdir.c2')->sole();
+    $subdirection = User::query()->where('username', 'subdir')->sole();
 
     expect(app(ScopedContext::class)->forUser($coordinator)->covers(Role::Coordinador, $c2, null, Career::query()->where('code', 'ISIC')->value('id')))->toBeTrue()
         ->and(app(ScopedContext::class)->forUser($subdirection)->covers(Role::Subdireccion, $c2))->toBeTrue()
