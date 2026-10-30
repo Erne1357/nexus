@@ -166,7 +166,7 @@ new #[Title('Ficha del docente')] class extends Component
             'availability' => $this->tab === 'disponibilidad' && $record->term !== null
                 ? $grids->for($teacher, $record->term, $grids->profile($context->activeCampus()))
                 : null,
-            'availabilityReason' => Gate::allows('manageAvailability', $teacher) ? null : 'Solo quien administra al docente edita su disponibilidad.',
+            'availabilityReason' => $this->tab !== 'disponibilidad' || Gate::allows('manageAvailability', $teacher) ? null : 'Solo quien administra al docente edita su disponibilidad.',
             'canReset' => Gate::allows('resetPassword', $teacher),
             'canDeactivate' => Gate::allows('deactivate', $teacher),
             'deactivateReason' => $context->isAdmin() || $context->has(Role::Subdireccion)
