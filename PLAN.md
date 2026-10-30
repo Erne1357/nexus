@@ -49,7 +49,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Core | 0 | ✅ (base de R1; periodos y notificaciones en fase 2) |
 | Academic | 1 | 🟨 (1.7 a 1.10 hechas: modelos #116 y #117; CRUD y retícula #135, #136, #137, #139, #142, #144, #145; seeder demo #138, #140, #141; faltan 1.11 a 1.16) |
 | Facilities | 1 | ⬜ |
-| Faculty | 1 | ⬜ |
+| Faculty | 1 | 🟨 (1.11 hecha: docentes, adscripciones y plazas #159; disponibilidad, horas externas, historial, perfil y evaluaciones #160; faltan 1.12 y 1.13) |
 | Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
 | Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120) |
 | CatalogValidation | 2 | ⬜ |
