@@ -115,7 +115,9 @@ new #[Title('Salones')] class extends Component
         $this->forgetFiltersOutside($buildings, $types, $ownerFilters);
 
         $blocksRoom = $this->showDrawer && $this->blocksRoomId !== null ? $rooms->findOrFail($this->blocksRoomId) : null;
-        $blocksRoom !== null && $this->authorize('view', $blocksRoom);
+        if ($blocksRoom !== null) {
+            $this->authorize('view', $blocksRoom);
+        }
 
         return [
             'campus' => $campus,
