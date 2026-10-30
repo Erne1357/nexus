@@ -7,7 +7,7 @@
 @use('App\Modules\Students\Enums\SubjectStanding')
 <div class="space-y-5">
     <a href="{{ route('students.index') }}" wire:navigate class="inline-flex items-center gap-1.5 font-medium text-primary">
-        <x-icon name="o-chevron-left" class="size-4" />Alumnos
+        <x-icon name="o-chevron-left" class="w-4 h-4" />Alumnos
     </a>
 
     <div>
@@ -50,7 +50,7 @@
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-neutral">
             @foreach ($standings as $standing)
                 <span class="inline-flex items-center gap-1.5">
-                    <span @class(['inline-grid size-5 place-items-center rounded border', $standing->tileClasses()])><x-icon :name="$standing->icon()" class="size-3.5" /></span>
+                    <span @class(['inline-grid size-5 place-items-center rounded border', $standing->tileClasses()])><x-icon :name="$standing->icon()" class="w-3.5 h-3.5" /></span>
                     {{ $standing->label() }}
                 </span>
             @endforeach
@@ -110,7 +110,7 @@
                                 data-subject="{{ $cell->code }}" data-name="{{ $cell->name }}" data-prereqs="{{ implode(' ', $cell->prerequisites) }}" @if ($cell->chain !== null) data-chain="{{ $cell->chain }}" @endif>
                                 <span class="flex items-center justify-between gap-1.5">
                                     <span class="whitespace-nowrap font-mono text-[12.5px] font-semibold">{{ $cell->code }}</span>
-                                    <x-icon :name="$cell->standing->icon()" class="size-4 shrink-0" aria-hidden="true" />
+                                    <x-icon :name="$cell->standing->icon()" class="w-4 h-4 shrink-0" aria-hidden="true" />
                                 </span>
                                 <span class="line-clamp-3 text-[13px] leading-snug text-base-content">{{ $cell->name }}</span>
                                 <span class="sr-only">{{ $cell->standing->label() }}</span>

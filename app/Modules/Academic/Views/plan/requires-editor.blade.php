@@ -92,7 +92,7 @@
         @error('kind')
             <x-alert class="alert-error alert-soft text-sm text-base-content" role="alert" data-testid="cycle-error">
                 <span class="flex items-start gap-2.5">
-                    <x-icon name="o-x-circle" class="mt-0.5 size-5 shrink-0 text-error" />
+                    <x-icon name="o-x-circle" class="mt-0.5 w-5 h-5 shrink-0 text-error" />
                     <span class="min-w-0">
                         @if (Str::startsWith($message, 'Cierra un ciclo: '))
                             <span class="font-semibold">Cierra un ciclo:</span> {{ Str::after($message, 'Cierra un ciclo: ') }}
@@ -105,7 +105,7 @@
                                 @foreach ($cyclePath as $code)
                                     <li class="flex items-center gap-1.5">
                                         @unless ($loop->first)
-                                            <x-icon name="o-arrow-right" class="size-3.5 text-neutral" />
+                                            <x-icon name="o-arrow-right" class="w-3.5 h-3.5 text-neutral" />
                                         @endunless
                                         <span class="rounded border border-base-300 bg-base-100 px-1.5 font-mono text-[13px] font-semibold text-base-content">{{ $code }}</span>
                                     </li>

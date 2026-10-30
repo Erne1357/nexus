@@ -31,7 +31,7 @@
             <nav aria-label="Ruta" class="flex min-w-0 items-center gap-2 text-[15px] whitespace-nowrap text-band-muted max-md:hidden">
                 @if ($areaLabel !== null)
                     <span class="max-desktop:hidden">{{ $areaLabel }}</span>
-                    <x-icon name="o-chevron-right" class="size-4 max-desktop:hidden" />
+                    <x-icon name="o-chevron-right" class="w-4 h-4 max-desktop:hidden" />
                 @endif
 
                 <span aria-current="page" class="truncate font-medium text-band-content">{{ $pageTitle }}</span>
@@ -47,7 +47,7 @@
             x-on:click="openMenu()"
             class="flex h-10 w-[clamp(260px,26vw,520px)] cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-band-content/18 bg-band-content/8 px-3 whitespace-nowrap text-band-muted transition-[opacity,visibility] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-desktop:w-[220px] max-md:hidden in-data-[menu=open]:pointer-events-none in-data-[menu=open]:invisible in-data-[menu=open]:opacity-0"
         >
-            <x-icon name="o-magnifying-glass" class="size-[18px] flex-none" />
+            <x-icon name="o-magnifying-glass" class="w-[18px] h-[18px] flex-none" />
             Buscar o ir a…
             <kbd class="ms-auto rounded border border-band-content/25 px-1.5 py-px font-mono text-xs font-semibold text-band-content">Ctrl K</kbd>
         </button>
@@ -59,7 +59,7 @@
             x-on:click="openMenu()"
             class="hidden size-11 flex-none cursor-pointer place-items-center rounded-lg border border-band-content/20 transition-[opacity,visibility] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-md:grid in-data-[menu=open]:pointer-events-none in-data-[menu=open]:invisible in-data-[menu=open]:opacity-0"
         >
-            <x-icon name="o-magnifying-glass" class="size-[18px]" />
+            <x-icon name="o-magnifying-glass" class="w-[18px] h-[18px]" />
         </button>
 
         <div x-on:click.outside="closeCard(false)" x-on:focusout="onCardFocusOut($event)" class="min-w-0">
@@ -83,7 +83,7 @@
                     @endif
                 </span>
 
-                <x-icon name="o-chevron-down" class="size-[18px] flex-none max-md:hidden" />
+                <x-icon name="o-chevron-down" class="w-[18px] h-[18px] flex-none max-md:hidden" />
             </button>
 
             <div

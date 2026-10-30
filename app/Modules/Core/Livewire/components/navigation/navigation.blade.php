@@ -36,7 +36,7 @@
             data-menu-flip="search"
             class="col-span-full row-[1/span_2] hidden h-[50px] items-center gap-2.5 self-start rounded-lg border-2 border-primary bg-base-100 px-3.5 ring-4 ring-primary/10 in-data-[menu=open]:flex max-md:row-auto max-md:mb-2"
         >
-            <x-icon name="o-magnifying-glass" class="size-[18px] text-secondary-muted" />
+            <x-icon name="o-magnifying-glass" class="w-[18px] h-[18px] text-secondary-muted" />
 
             <input
                 id="nexus-menu-search"
@@ -72,7 +72,7 @@
                     x-on:click="openMenu()"
                     class="grid h-10 w-11 place-items-center place-self-center rounded-lg text-secondary-muted transition-colors duration-300 ease-settle [grid-column:1] [grid-row:var(--c)] [--open-col:var(--c)] [--open-row:3] in-data-current:bg-(--current-icon) in-data-current:text-base-content max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:var(--base-t)] in-data-[menu=closed]:cursor-pointer in-data-[menu=open]:w-[30px] in-data-[menu=open]:justify-self-start in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] max-md:mt-3 max-md:w-10 max-md:[grid-area:auto]"
                 >
-                    <x-icon :name="$area['area']->icon()" class="size-[18px]" />
+                    <x-icon :name="$area['area']->icon()" class="w-[18px] h-[18px]" />
                 </span>
 
                 {{-- Nombre del área: el grupo ya lo lleva en aria-label. --}}
