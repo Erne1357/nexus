@@ -1,11 +1,13 @@
 <?php
 
 use App\Modules\Core\Actions\SetActiveContext;
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Navigation\RecentPages;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Auth\Access\AuthorizationException;
 
@@ -42,6 +44,15 @@ it('con null olvida la elección y vuelve al campus y periodo por omisión', fun
 
     expect($context->activeCampus()?->is($this->c2))->toBeTrue()
         ->and($context->activeTerm()?->is($this->current))->toBeTrue();
+});
+
+it('olvida las páginas del menú que el usuario visitó: una ficha de otro campus ya no se abriría', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    app(RecentPages::class)->remember('core.campuses', '/campus?search=norte');
+
+    app(SetActiveContext::class)->handle($this->c2, null);
+
+    expect(app(RecentPages::class)->last(NavigationArea::Academico))->toBeNull();
 });
 
 it('rechaza un campus fuera del alcance del usuario y no cambia el contexto', function () {

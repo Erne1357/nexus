@@ -388,7 +388,8 @@ Los de MaryUI: 40 px en barras de herramientas y 44 px en la credencial y en cel
 
 ### Navigation
 - **Entrada de menú:** su nombre, como en la pantalla de referencia; el icono de la entrada no se pinta (lo llevan las áreas). La activa lleva fondo gris polvo, peso 700, el punto rojo y `aria-current="page"`. Las cifras de registros irán a la derecha en Mono cuando haya de dónde salgan; hoy no se muestran.
-- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; una pantalla hija sin entrada propia (la ficha de un alumno, `students.show`) se declara en `childRoutes` de la entrada de su listado, que la ubica con `aria-current="true"` (la página misma lleva `"page"`); si la pantalla no está en el menú, la primera. Con el menú cerrado, un clic en un icono de área abre el menú completo (el botón accesible es la liebre).
+- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; una pantalla hija sin entrada propia (la ficha de un alumno, `students.show`) se declara en `childRoutes` de la entrada de su listado, que la ubica con `aria-current="true"` (la página misma lleva `"page"`); si la pantalla no está en el menú, la primera.
+- **Iconos de área:** son enlaces, para ir rápido de un área a otra sin abrir el menú. El de otra área lleva a la última página que visitaste de ella en tu sesión (con su consulta: `/students/<id>?tab=kardex`), o a su primera entrada si no has visitado ninguna; el del área actual, a su primera entrada (la principal). Cuenta como visita cada página completa cuya entrada (o pantalla hija) ves; al cambiar el campus o el periodo se olvidan, porque una ficha de otro campus ya no se abriría. Con el menú cerrado, al pasar el cursor se ve el nombre del área en un tooltip a la derecha. El menú completo lo abren solo la liebre, Ctrl K y el buscador de la banda.
 
 ### El menú que se transforma (firma)
 Un solo menú, no dos:
@@ -397,7 +398,7 @@ Un solo menú, no dos:
   2. el buscador entra de inmediato, con el cursor;
   3. los iconos de área viajan a los encabezados de sus columnas y las secciones del área actual a la suya;
   4. cuando cada icono aterriza, aparecen su nombre y sus secciones.
-- **Al cerrar** (Esc, la liebre o un clic fuera): lo de las otras áreas se va primero, la cortina se recoge y todo regresa a su lugar. El foco regresa a la liebre.
+- **Al cerrar** (Esc, la liebre o un clic fuera), en un solo tiempo: la cortina se recoge, lo que se queda (los iconos y el área actual) regresa a su lugar junto con ella y lo de las otras áreas se desvanece a la vez, sin salir de la cortina. El foco regresa a la liebre.
 - **El buscador** filtra las entradas por su nombre, sin importar mayúsculas ni acentos; las que quedan suben en su columna, las áreas sin ninguna se ocultan y, si no queda nada, dice «Sin resultados». Enter abre la primera. Por ahora solo busca pantallas del menú, así que dice «Busca una pantalla…».
 - **Al ir a otra pantalla** desde el menú, la página nueva llega con el menú cerrado.
 
@@ -407,13 +408,14 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 | Momento | Curva | Duración |
 |---|---|---|
 | Abrir (menú, credencial) | `cubic-bezier(.3, 1.06, .5, 1)`, rebote apenas perceptible | 0.55 s; elementos nuevos 0.32 s en cascada |
-| Cerrar y regresar | `cubic-bezier(.22, 1, .36, 1)`, sin rebote | 0.42 s; lo que se va, 0.11 s antes |
+| Cerrar y regresar | `cubic-bezier(.22, 1, .36, 1)`, sin rebote | 0.42 s, todo junto y sin cascada; lo que se va se desvanece en 0.12 s a la vez |
 | Salto de la liebre al abrir | la misma de abrir | 0.5 s, 4 px |
 
 - Solo se anima `transform`, `opacity` y `clip-path`.
 - Con `prefers-reduced-motion`, todo cambia sin animar.
+- Lo que se mueve lleva el punto que el ojo sigue (el centro del icono, el principio del texto), no el borde de su caja, y lo que espera para moverse se queda en su lugar inicial mientras espera (`fill: 'backwards'`): nada brinca al empezar.
 - Nunca dos movimientos del menú encimados: lo que se pide mientras uno corre (Esc justo después de abrir) se hace al terminar. Esc cierra solo la capa de arriba: la credencial si está abierta sobre el menú; si no, el menú.
-- **Implementación:** el componente Alpine `nexusShell` (`resources/js/app.js`) hace el FLIP del menú con la Web Animations API; la cortina, el velo y la tarjeta son transiciones de utilidades de Tailwind. El estado vive en `<body data-menu>` y las utilidades lo leen con `in-data-[menu=open]:`; la geometría por ancho son variables que declara `<body>`. La única regla del shell escrita a mano en `resources/css/app.css` bloquea el desplazamiento con el menú abierto (el candado de daisyUI vive en `:root`, donde no llega una utilidad).
+- **Implementación:** el componente Alpine `nexusShell` (`resources/js/app.js`) hace el FLIP del menú con la Web Animations API (al cerrar, lo que se va se desvanece en una copia del menú abierto, sin nada interactivo, que se quita al terminar); la cortina, el velo y la tarjeta son transiciones de utilidades de Tailwind. El estado vive en `<body data-menu>` y las utilidades lo leen con `in-data-[menu=open]:`; la geometría por ancho son variables que declara `<body>`. La única regla del shell escrita a mano en `resources/css/app.css` bloquea el desplazamiento con el menú abierto (el candado de daisyUI vive en `:root`, donde no llega una utilidad).
 - La palabra gigante y los mosaicos vivos son para los inicios por rol, nunca para pantallas de captura.
 
 ### La liebre

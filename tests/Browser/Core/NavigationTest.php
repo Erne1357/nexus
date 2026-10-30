@@ -11,7 +11,8 @@ use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 | Layout en el navegador. DemoCatalog (tests/Fixtures/Modules) agrega "Saludo", para coordinadores,
 | en Servicios escolares, y "Elementos", solo para el admin, en Recursos humanos, a "Inicio" de Core
 | (Académico). Cerrado, el menú muestra el área de la pantalla; las demás se ven al abrirlo con la
-| liebre. El campus, el periodo y el tema están en la tarjeta de la credencial.
+| liebre. Los iconos de área no abren el menú: llevan a la última página que visitaste del área. El
+| campus, el periodo y el tema están en la tarjeta de la credencial.
 */
 
 beforeEach(function () {
@@ -62,6 +63,61 @@ it('navegación muestra solo lo permitido por rol', function () {
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Saludo')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Elementos')
         ->assertSee('Administración')
+        ->assertNoJavaScriptErrors();
+});
+
+it('el icono de otra área lleva a la última página que visitaste de ella, con el menú cerrado; el menú lo abre la liebre', function () {
+    $page = signInFromBrowser('admin');
+
+    $page->navigate('/campus?search=Campus')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
+        ->click('[data-menu-area="datos"] [data-menu-flip="icon"]')
+        ->assertPathIs('/imports')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->click('[data-menu-area="academico"] [data-menu-flip="icon"]')
+        ->assertPathIs('/campus')
+        ->assertQueryStringHas('search', 'Campus')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->click('@hare')
+        ->assertScript('document.body.dataset.menu', 'open')
+        ->assertNoJavaScriptErrors();
+});
+
+it('el menú no brinca: lo que espera para moverse sale de su lugar inicial, y al cerrar todo va a la vez', function () {
+    $page = signInFromBrowser('admin');
+
+    // Las animaciones del menú y de la copia que se desvanece al cerrar. Una con retraso y sin fill
+    // backwards pinta el elemento en su lugar final mientras espera y después brinca al inicial.
+    $page->script(<<<'JS'
+        (() => {
+            window.menuMotion = () => {
+                const ofMenu = document.getAnimations()
+                    .filter((animation) => animation.effect?.target?.closest?.('#nexus-menu, [data-menu-ghost]'));
+
+                return {
+                    count: ofMenu.length,
+                    jumps: ofMenu.filter((animation) => {
+                        const { delay, fill } = animation.effect.getTiming();
+
+                        return delay > 0 && fill !== 'backwards' && fill !== 'both';
+                    }).length,
+                    ghost: ofMenu.some((animation) => animation.effect.target.closest('[data-menu-ghost]') !== null),
+                };
+            };
+        })()
+    JS);
+
+    $opening = $page->script('(() => { Alpine.$data(document.body).openMenu(); return menuMotion(); })()');
+
+    $page->assertScript('Alpine.$data(document.body).busy === false');
+
+    $closing = $page->script('(() => { Alpine.$data(document.body).closeMenu(); return { closedAtOnce: document.body.dataset.menu === "closed", ...menuMotion() }; })()');
+
+    expect($opening)->count->toBeGreaterThan(0)->jumps->toBe(0)
+        ->and($closing)->closedAtOnce->toBeTrue()->ghost->toBeTrue()->jumps->toBe(0);
+
+    $page->assertScript('document.querySelector("[data-menu-ghost]") === null')
+        ->assertScript('document.activeElement.id', 'nexus-hare')
         ->assertNoJavaScriptErrors();
 });
 
