@@ -5,6 +5,7 @@ namespace App\Modules\Imports;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Imports\Console\ExportDemoFiles;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
@@ -52,6 +53,10 @@ final class ImportsServiceProvider extends ModuleServiceProvider
     public function boot(): void
     {
         parent::boot();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([ExportDemoFiles::class]);
+        }
 
         // Como Navigation: se arma al arrancar, antes de la primera petición, para que Octane lo cree
         // una vez por worker y una plantilla mal declarada falle al arrancar y no al subir un lote.
