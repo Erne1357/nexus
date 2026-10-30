@@ -284,20 +284,15 @@ new #[Title('Ficha del docente')] class extends Component
         $this->removingAdscriptionId = null;
 
         $teacher = $teachers->findOrFail($this->teacherId);
-        $rest = $teacher->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription));
-        $promoted = null;
+        $removal = null;
 
-        if (! $this->attempt(function () use ($removeAdscription, $adscription, &$promoted): void {
-            $promoted = $removeAdscription->handle($adscription);
+        if (! $this->attempt(function () use ($removeAdscription, $adscription, &$removal): void {
+            $removal = $removeAdscription->handle($adscription);
         }, 'No se pudo quitar de ese departamento')) {
             return;
         }
 
-        $outcome = match (true) {
-            $rest->isEmpty() => '; queda sin departamento',
-            $promoted !== null => '; su adscripción principal pasa a '.$rest->firstWhere('id', $promoted->id)?->department?->code,
-            default => '',
-        };
+        $outcome = $removal['outcome'] === null ? '' : "; {$removal['outcome']}";
         $code = Department::withTrashed()->whereKey($adscription->department_id)->value('code');
 
         // Quien quitó la última adscripción de su alcance ya no cubre al docente: vuelve a la lista en lugar de un 403.
