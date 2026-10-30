@@ -18,6 +18,7 @@ use App\Modules\Academic\Queries\PlanGridEditorQuery;
 use App\Modules\Academic\Queries\StudyPlanQuery;
 use App\Modules\Academic\Rules\PlacementRules;
 use App\Modules\Academic\Rules\SeriationRules;
+use App\Modules\Core\Support\SemesterGrid;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -30,12 +31,12 @@ use Mary\Traits\Toast;
 /**
  * Retícula de un plan (tarea 1.8; DESIGN.md, "Retícula del plan (editor)", variante A aprobada el 29 de
  * octubre de 2026): el encabezado del plan, sus especialidades y sus materias en columnas por semestre, con su
- * seriación y sus cadenas. Tocar una materia la selecciona, resalta su cadena y la abre en el panel lateral
- * (`x-drawer`): su lugar, que se edita ahí (semestre, especialidad y si es obligatoria), lo que pide, que también
- * se edita ahí (el tipo de cada requisito, quitarlo y «Agregar requisito» con otra materia de la retícula), quién
- * la pide, y al pie «Quitar de la retícula…», que pide confirmar con la seriación que se va. Al pie de cada
- * semestre, «Agregar materia» busca en el catálogo y la pone. En el mismo panel se gestionan las especialidades.
- * Es del admin.
+ * seriación y sus cadenas, en la misma cuadrícula de Core que la retícula del alumno (SemesterGrid). Tocar una
+ * materia la selecciona, resalta su cadena y la abre en el panel lateral (`x-drawer`): su lugar, que se edita ahí
+ * (semestre, especialidad y si es obligatoria), lo que pide, que también se edita ahí (el tipo de cada requisito,
+ * quitarlo y «Agregar requisito» con otra materia de la retícula), quién la pide, y al pie «Quitar de la
+ * retícula…», que pide confirmar con la seriación que se va. En el encabezado de cada semestre, «Agregar materia»
+ * busca en el catálogo y la pone. En el mismo panel se gestionan las especialidades. Es del admin.
  *
  * El componente lee con PlanGridEditorQuery, autoriza `view` del plan en mount() y en cada lectura, y
  * `editGrid` en cada método que escribe (una petición puede llegar con una página que abrió otra sesión);
@@ -185,7 +186,12 @@ new #[Title('Retícula del plan')] class extends Component
             'grid' => $grid,
             'subjectsCount' => count($rows),
             'specialtiesById' => array_column($grid['specialties'], null, 'id'),
-            'summaries' => array_map(fn (array $semester): array => $this->summary($semester), $grid['semesters']),
+            'layout' => SemesterGrid::place(
+                array_map(fn (array $semester): array => array_column($semester, 'specialty_id', 'placement_id'), $grid['semesters']),
+                array_column($grid['specialties'], 'id'),
+            ),
+            'bandSubjects' => array_count_values(array_filter(array_column($rows, 'specialty_id'))),
+            'commonCredits' => array_map(fn (array $semester): int => $this->commonCredits($semester), $grid['semesters']),
             'selected' => $selected,
             'offeredSemesters' => $offeredSemesters,
             'placementOptions' => $selected === null ? null : [
@@ -947,8 +953,8 @@ new #[Title('Retícula del plan')] class extends Component
 
     /**
      * Lo que se resalta en la retícula: la materia elegida con su cadena completa (lo que pide y lo que abre,
-     * hasta el final, solo por seriación), o todas las materias de la cadena de la leyenda; y la línea que lo
-     * dice, como en la retícula del alumno.
+     * hasta el final, solo por seriación), o todas las materias de la cadena de la leyenda; y lo que dice la barra
+     * de selección, como en la retícula del alumno (vacío sin nada resaltado).
      *
      * @param  array<string, mixed>  $grid
      * @param  list<array<string, mixed>>  $rows
@@ -957,8 +963,6 @@ new #[Title('Retícula del plan')] class extends Component
      */
     private function highlight(array $grid, array $rows, ?array $selected): array
     {
-        $hint = 'Toca una materia para verla en el panel; su cadena se resalta. Toca una cadena para verla completa; Esc la quita.';
-
         if ($this->chainFocus !== null) {
             $members = array_filter($rows, fn (array $row): bool => $row['chain'] === $this->chainFocus);
             $chain = $grid['chains'][$this->chainFocus];
@@ -971,7 +975,7 @@ new #[Title('Retícula del plan')] class extends Component
         }
 
         if ($selected === null) {
-            return ['focused' => false, 'onChain' => [], 'info' => $hint];
+            return ['focused' => false, 'onChain' => [], 'info' => ''];
         }
 
         $byId = array_column($rows, null, 'subject_id');
@@ -1010,21 +1014,14 @@ new #[Title('Retícula del plan')] class extends Component
     }
 
     /**
-     * El encabezado de un semestre: cuántas materias tiene, los créditos de las del tronco común y si tiene
-     * materias de especialidad (sus créditos dependen de cuál elija el alumno).
+     * Las cifras del encabezado de un semestre: los créditos de sus materias del tronco común. Los de las de
+     * especialidad dependen de cuál elija el alumno, y cuántas materias tiene ya se ve.
      *
      * @param  list<array<string, mixed>>  $rows
-     * @return array{subjects: int, credits: int, withSpecialties: bool}
      */
-    private function summary(array $rows): array
+    private function commonCredits(array $rows): int
     {
-        $common = array_filter($rows, fn (array $row): bool => $row['specialty_id'] === null);
-
-        return [
-            'subjects' => count($rows),
-            'credits' => array_sum(array_column($common, 'credits')),
-            'withSpecialties' => count($common) < count($rows),
-        ];
+        return array_sum(array_column(array_filter($rows, fn (array $row): bool => $row['specialty_id'] === null), 'credits'));
     }
 
     /**

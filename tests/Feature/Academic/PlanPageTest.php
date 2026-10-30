@@ -106,11 +106,16 @@ describe('admin', function () {
     it('muestra cada semestre con sus materias, el tronco común antes que cada especialidad', function () {
         $page = domOf(planPage($this->admin, $this->plan));
         $semester = fn (int $number): string => textOf($page->querySelector('[data-semester="'.$number.'"]'));
+        $header = fn (int $number): string => textOf($page->querySelector('[data-semester="'.$number.'"] [data-semester-header]'));
 
         expect($page->querySelectorAll('[data-testid="plan-grid"] > section'))->toHaveCount(4)
-            ->and($semester(1))->toContain('Semestre 1', '1 materia', '5 cr', 'ACF-0901 Cálculo Diferencial')
-            ->and($semester(2))->toContain('2 materias', '9 cr')
-            ->and($semester(4))->toContain('1 materia', '0 cr + esp.', 'Especialidad Ingeniería de Software', 'ISD-2001')
+            ->and($header(1))->toBe('Semestre 1 5 cr')
+            ->and($header(2))->toBe('Semestre 2 9 cr')
+            ->and($header(3))->toBe('Semestre 3 10 cr')
+            ->and($header(4))->toBe('Semestre 4 0 cr')
+            ->and($semester(1))->toContain('ACF-0901 Cálculo Diferencial')
+            ->and($semester(4))->toContain('Especialidad Ingeniería de Software', 'ISD-2001')
+            ->and(textOf($page->querySelector('[data-testid="plan-grid"]')))->not->toContain('+ esp.', 'Sin materias', '1 materia ')
             ->and(textOf($page->querySelector('h1')))->toContain('Sistemas 2010', 'ISIC-2010-224', 'Activo')
             ->and(textOf($page->querySelector('[data-testid="plan-facts"]')))->toContain('Carrera ISIC · Ingeniería en Sistemas Computacionales', 'Versión 2010', 'Semestres 4', 'Créditos 260', 'Materias 6');
     });
@@ -119,10 +124,36 @@ describe('admin', function () {
         $page = domOf(planPage($this->admin, $this->plan));
         $tile = fn (string $code) => $page->querySelector('[data-subject="'.$code.'"]');
 
-        expect(textOf($tile('ACF-0902')))->toBe('ACF-0902 Cálculo Integral Pide ACF-0901 Correq. SCC-1017 3-2-5 Obligatoria')
-            ->and(textOf($tile('SCC-1017')))->toBe('SCC-1017 Métodos Numéricos Optativa 2-2-4')
+        expect(textOf($tile('ACF-0902')))->toBe('ACF-0902 Cálculo Integral Obligatoria Pide ACF-0901 · Correq. SCC-1017 3-2-5')
+            ->and($tile('ACF-0902')->querySelector('[title^="Pide"]')->getAttribute('title'))->toBe('Pide ACF-0901 · Correq. SCC-1017')
+            ->and($tile('ACF-0902')->querySelector('[title="Inactiva"]'))->toBeNull()
+            ->and(textOf($tile('SCC-1017')))->toBe('SCC-1017 Métodos Numéricos 2-2-4 Optativa')
             ->and($tile('SCC-1017')->getAttribute('class'))->toContain('border-dashed')
-            ->and(textOf($tile('SCC-1005')))->toBe('SCC-1005 Cultura Empresarial Inactiva 3-2-5 Obligatoria');
+            ->and(textOf($tile('SCC-1005')))->toBe('SCC-1005 Inactiva Cultura Empresarial Obligatoria 3-2-5')
+            ->and($tile('SCC-1005')->querySelector('[title="Inactiva"] .sr-only'))->not->toBeNull()
+            ->and($tile('SCC-1005')->getAttribute('class'))->toContain('bg-base-200', 'text-neutral');
+    });
+
+    it('cada especialidad con materias tiene una banda con su nombre y cuántas materias tiene', function () {
+        placeInPlan($this->plan, Subject::factory()->create(['code' => 'ISD-2002']), 4, $this->software);
+        $page = domOf(planPage($this->admin, $this->plan));
+
+        expect(textOf($page->querySelector('[data-band="'.$this->software->id.'"]')))->toBe('Especialidad Ingeniería de Software 2 materias')
+            ->and($page->querySelector('[data-band="'.$this->networks->id.'"]'))->toBeNull()
+            ->and(textOf($page->querySelector('[data-semester="4"] [data-separator="'.$this->software->id.'"]')))->toBe('Especialidad Ingeniería de Software')
+            ->and(textOf($page->querySelector('[data-subject="ISD-2001"]')))->not->toContain('Ingeniería de Software');
+    });
+
+    it('sin nada resaltado no hay textos de ayuda y la barra de selección está vacía y oculta', function () {
+        $component = planPage($this->admin, $this->plan);
+        $page = domOf($component);
+
+        expect(textOf($page->querySelector('[data-testid="chain-info"]')))->toBe('')
+            ->and($page->querySelector('[data-testid="chain-info"]')->getAttribute('aria-live'))->toBe('polite')
+            ->and($page->querySelector('[data-testid="selection-bar"]')->hasAttribute('data-shown'))->toBeFalse()
+            ->and(textOf($page->documentElement))->not->toContain('Toca una materia', 'Toca una cadena');
+
+        expect(domOf($component->call('focusChain', 0))->querySelector('[data-testid="selection-bar"]')->hasAttribute('data-shown'))->toBeTrue();
     });
 
     it('cada cadena de seriación lleva su color en la franja de sus materias y en la leyenda, con su nombre', function () {
@@ -131,7 +162,7 @@ describe('admin', function () {
 
         expect(textOf($page->querySelector('[data-testid="chain-legend"] [data-chain="0"]')))->toBe('Cálculo Diferencial 3')
             ->and($tile('ACF-0904')->getAttribute('data-chain'))->toBe('0')
-            ->and($tile('ACF-0901')->getAttribute('style'))->toContain('--chain: var(--color-chain-1)')
+            ->and($tile('ACF-0901')->getAttribute('class'))->toContain('[--chain:var(--color-chain-1)]')
             ->and($tile('SCC-1017')->hasAttribute('data-chain'))->toBeFalse();
     });
 
@@ -620,12 +651,17 @@ describe('agregar materia', function () {
         placeInPlan($this->plan, $this->fundamentals, 3);
     });
 
-    it('al pie de cada semestre hay «Agregar materia», que abre la búsqueda del catálogo en ese semestre', function () {
+    it('en el encabezado de cada semestre hay un botón para agregar materia, que abre la búsqueda del catálogo en ese semestre', function () {
         $component = planPage($this->admin, $this->plan);
-        $buttons = domOf($component)->querySelectorAll('[data-testid="plan-grid"] > section [data-add-semester]');
+        $buttons = domOf($component)->querySelectorAll('[data-testid="plan-grid"] > section [data-semester-header] [data-add-semester]');
 
-        expect(array_map(fn (Element $button): string => $button->getAttribute('data-add-semester').' '.textOf($button), iterator_to_array($buttons)))
-            ->toBe(['1 Agregar materia', '2 Agregar materia', '3 Agregar materia', '4 Agregar materia']);
+        expect(array_map(fn (Element $button): string => $button->getAttribute('data-add-semester').' '.$button->getAttribute('aria-label').' · '.$button->getAttribute('data-tip'), iterator_to_array($buttons)))
+            ->toBe([
+                '1 Agregar materia al semestre 1 · Agregar materia',
+                '2 Agregar materia al semestre 2 · Agregar materia',
+                '3 Agregar materia al semestre 3 · Agregar materia',
+                '4 Agregar materia al semestre 4 · Agregar materia',
+            ]);
 
         $component->call('openAdd', 3)->assertSet('showAdd', true)->assertSet('addSemester', '3');
         $modal = domOf($component)->querySelector('[data-testid="add-modal"]');

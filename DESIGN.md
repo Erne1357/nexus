@@ -307,23 +307,22 @@ El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/pla
   - el nombre del plan, su clave en Mono y la insignia de estado;
   - carrera, versión, semestres, créditos y materias;
   - debajo, sus especialidades como chips con su número de materias, y «Gestionar especialidades».
-- **Leyenda:**
+- **Leyenda,** arriba de la retícula, en un renglón compacto como la de la ficha (recuadros de 24 px):
   - obligatoria (filete) y optativa (borde punteado);
-  - la insignia «Inactiva» de una materia inactiva en el catálogo;
+  - inactiva en el catálogo: `o-minus-circle` sobre `bg-base-200`, como en el mosaico;
   - `3-2-5`: horas de teoría, de práctica y créditos;
   - «Pide» para seriación y «Correq.» para correquisito.
-- **Columnas por semestre** con el mismo comportamiento responsivo que la retícula del alumno, del primero al último semestre del plan, aunque estén vacíos.
-  - El encabezado de cada semestre dice cuántas materias tiene y los créditos de su tronco común, más «+ esp.» si tiene materias de especialidad.
-  - Dentro de un semestre va primero el tronco común y luego cada especialidad, bajo un separador punteado con su nombre.
-- **Cada materia** es un mosaico con:
-  - la clave en Mono y el nombre, partido con guiones;
-  - «Inactiva», si lo está en el catálogo, con relleno `bg-base-200`;
-  - lo que pide;
-  - «Optativa», si lo es;
-  - horas y créditos.
 
-  Su cadena de seriación es la franja de la retícula del alumno, con el mismo token `chain-N` en `--chain`. Academic calcula sus cadenas en `PlanGridEditorQuery`, porque no depende de Students.
-- **Tocar una materia** le pone el anillo, resalta su cadena completa y atenúa lo demás. La línea de arriba dice qué pide, qué correquisito tiene y qué abre. También la abre en el panel lateral:
+  **Sin textos de ayuda:** el mosaico lleva `cursor-pointer`.
+- **La misma cuadrícula que la retícula del alumno,** con las mismas piezas de Core (`SemesterGrid` y `core::semester-grid.*`; ver "Retícula del alumno"): una columna por semestre, del primero al último del plan aunque estén vacíos; el tronco común arriba; una banda por especialidad con sus materias debajo; mosaicos de tamaño fijo; y en celular, los semestres apilados. La cadena de seriación es la misma franja, con el token `chain-N` en `--chain`; Academic calcula sus cadenas en `PlanGridEditorQuery`, porque no depende de Students.
+  - **El encabezado de cada semestre** dice «SEMESTRE N» y, debajo, los créditos de su tronco común («27 cr»; los de especialidad dependen de cuál elija el alumno, y cuántas materias tiene ya se ve). A su derecha, en los semestres que se ofrecen, **«Agregar materia»**: un botón de icono `o-plus` (`btn-ghost btn-xs`, `aria-label` «Agregar materia al semestre N», tooltip «Agregar materia» a la izquierda, para que el del último semestre no se salga de la caja).
+  - **Las bandas** van solo para las especialidades con materias en la retícula; las demás están en los chips del encabezado.
+- **Cada materia** es el mosaico de Core, de arriba abajo:
+  1. la clave en Mono y, si está inactiva en el catálogo, `o-minus-circle` a la derecha («Inactiva» en `title` y en `sr-only`); el mosaico inactivo conserva `bg-base-200` y texto `text-neutral`;
+  2. el nombre, en dos renglones a lo más, partido con guiones;
+  3. lo que pide, en un renglón: «Pide X · Correq. Y», recortado y completo en `title`;
+  4. al pie, horas y créditos (`3-2-5`) y, a la derecha, «Optativa» si lo es, además del borde punteado.
+- **Tocar una materia** le pone el anillo, resalta su cadena completa y atenúa lo demás, y la barra de selección (la misma de la ficha) dice qué pide, qué correquisito tiene y qué abre. También la abre en el panel lateral, cuyo velo tapa la barra:
   - El panel es un `x-drawer` de MaryUI a la derecha, de 448 px, y a pantalla completa en celular. Se superpone con su velo, porque MaryUI no empuja el contenido sin CSS propio.
   - Es un diálogo: `role="dialog"`, `aria-modal="true"` y `aria-labelledby` con el título del panel. MaryUI pone la trampa de foco, Esc e `inert`.
   - Esc, el velo o la X lo cierran y quitan la selección.
@@ -333,14 +332,14 @@ El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/pla
   - «Pide» lista cada requisito con su clave en Mono, su nombre y su semestre, su tipo en un select («Seriación» o «Correquisito») y quitar (una X, sin confirmación, como en la maqueta). Bajo 640 px el select y la X bajan a un segundo renglón.
   - Debajo va «Agregar requisito»: busca otra materia de esta retícula por clave o nombre, sin importar acentos y sin la propia ni las que ya pide; lista hasta 8 con su clave, su nombre y «Sem. N», en el orden de la retícula, y la elegida queda escrita en la búsqueda. Luego el tipo y «Agregar» (`btn-outline`). La lista va en línea bajo la búsqueda, como en «Agregar materia», y no flotante como en la maqueta.
   - Una seriación que cierra un ciclo, al agregarla o al cambiar el tipo, se rechaza con una alerta `alert-error alert-soft` al final de «Pide»: «**Cierra un ciclo:** X ya pide, en cadena, a Y.» y la cadena como claves en Mono unidas por flechas, del requisito a la materia. El select del tipo regresa al que tiene.
-- **«Agregar materia»** es un botón punteado al pie de cada semestre (hasta el último que se ofrece; en columnas angostas su texto se parte en dos renglones centrados). Un plan sin semestres ni materias lo ofrece en su estado vacío, en el semestre 1. Abre un modal:
+- **«Agregar materia»**, en el encabezado de cada semestre (hasta el último que se ofrece). Un plan sin semestres ni materias lo ofrece en su estado vacío, en el semestre 1. Abre un modal:
   - busca en el catálogo por clave o nombre, desde dos letras y con todas las palabras;
   - lista las primeras 8 coincidencias con la clave en Mono, el nombre, el departamento y `HT-HP-C`, y al pie cuántas son;
   - las que ya están en la retícula, las inactivas y las borradas se ven atenuadas, con el motivo en lugar del departamento, y no se eligen;
   - la elegida lleva un anillo `primary`, y el botón dice «Agregar CLAVE»;
   - debajo van el semestre, la especialidad y «Obligatoria».
 - **Los modales de la retícula** («Agregar materia» y la confirmación de quitar) van en la página y no dentro del panel, porque el panel se desliza con `transform` y los encerraría. Esc los cierra sin cerrar el panel.
-- **La leyenda de cadenas** resalta la cadena que se toca. Tocarla otra vez o Esc quita el resaltado. En celular (menos de 768 px) la leyenda de cadenas va plegada: «Cadenas de seriación (N)» se abre con un toque (decidido por el usuario el 29 de octubre de 2026).
+- **La leyenda de cadenas** va **debajo de la retícula** y resalta la cadena que se toca; la barra de selección dice cuántas materias tiene. Tocarla otra vez, «Quitar resaltado» o Esc quita el resaltado. En celular (menos de 768 px) la leyenda de cadenas va plegada: «Cadenas de seriación (N)» se abre con un toque (decidido por el usuario el 29 de octubre de 2026).
 - **Especialidades**, en el mismo panel. Cada una muestra su clave, su estado, su nombre y cuántas materias tiene. Sus acciones:
   - «Renombrar», en su lugar;
   - «Desactivar» o «Activar»;

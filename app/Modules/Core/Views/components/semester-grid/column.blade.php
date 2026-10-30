@@ -5,5 +5,5 @@
 --}}
 @props(['semester', 'column', 'current' => false])
 
-<div aria-hidden="true" data-column="{{ $semester }}" style="--col: {{ $column }}"
+<div aria-hidden="true" data-column="{{ $semester }}" wire:key="column-{{ $semester }}" style="--col: {{ $column }}"
     @class(['max-md:hidden md:col-(--col) md:row-[1/-1]', 'border-l border-base-300' => $column > 1, 'bg-base-200' => $current])></div>

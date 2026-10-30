@@ -54,7 +54,7 @@ it('el admin edita una retícula de punta a punta: pone, seria, intenta un ciclo
 
     // Desde Cálculo Integral, pedir la materia nueva cerraría un ciclo.
     $page->keys('[data-testid="subject-panel"] [aria-label="Cerrar el panel"]', 'Escape')
-        ->waitForText('Toca una materia para verla en el panel')
+        ->assertNotPresent('[data-testid="subject-panel"]')
         ->click('[data-subject="ACF-0902"]')
         ->waitForText('Agregar requisito')
         ->assertSeeIn('[data-testid="required-by-section"]', $subject->code)
@@ -68,7 +68,7 @@ it('el admin edita una retícula de punta a punta: pone, seria, intenta un ciclo
 
     // Quita la materia: su seriación se resuelve con ella y ya no aparece en «La piden» de la otra.
     $page->keys('[data-testid="subject-panel"] [aria-label="Cerrar el panel"]', 'Escape')
-        ->waitForText('Toca una materia para verla en el panel')
+        ->assertNotPresent('[data-testid="subject-panel"]')
         ->click('[data-subject="'.$subject->code.'"]')
         ->waitForText('Lugar en la retícula')
         ->click('@remove-placement')
