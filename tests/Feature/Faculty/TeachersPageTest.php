@@ -25,9 +25,10 @@ use Spatie\Activitylog\Models\Activity;
 | todos) y los jefes de departamento y de proyecto docente (a los de su departamento). Tabla con número, nombre,
 | adscripción principal y otras, horas base del periodo activo, usuario y estado; filtros de departamento, tipo de
 | plaza y estado. Alta en un modal con el departamento de quien da de alta (el jefe, el suyo; el admin y la
-| Subdirección lo eligen); un número que ya existe ofrece adscribirlo (S9). En «Acciones»: «Quitar de mi
-| departamento» (quien cubre ese departamento) y «Desactivar/Activar» (solo admin y Subdirección). «Dar de alta
-| usuarios» va en «Más acciones», es del admin y encola ProvisionTeacherUsersJob.
+| Subdirección lo eligen); un número que ya existe ofrece adscribirlo (S9). En «Acciones»: «Quitar de <código>»
+| por cada departamento que cubre (RemoveAdscription) y «Desactivar/Activar» (solo admin y Subdirección); nadie se
+| quita ni se da de baja a sí mismo. «Dar de alta usuarios» va en «Más acciones», es del admin y encola
+| ProvisionTeacherUsersJob.
 */
 
 beforeEach(function () {
@@ -265,12 +266,28 @@ describe('admin', function () {
             ->and(lastToastOf($page))->title->toBe('Docente activado');
     });
 
-    it('«Acciones» de cada fila ofrece «Quitar de …» por cada departamento que cubre y «Desactivar» o «Activar»', function () {
+    it('«Acciones» de cada fila ofrece «Quitar de <código>» por cada departamento que cubre y «Desactivar» o «Activar»', function () {
         expect(textOf(teacherRowMenu($this->admin, '1000001')))->toContain('Quitar de II', 'Quitar de SC', 'Desactivar')
             ->and(textOf(teacherRowMenu($this->admin, '1000003')))->toContain('Activar')
             // Sin departamento no hay nada que quitar.
             ->and(textOf(teacherRowMenu($this->admin, '1000005')))->not->toContain('Quitar');
     });
+
+    it('en la fila de su propio docente, «Quitar de <código>» y «Desactivar» salen deshabilitados con su motivo', function (string $viewer) {
+        $user = $this->{$viewer};
+        $own = Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000009', 'user_id' => $user->id]);
+        $items = collect(teacherRowMenu($user, '1000009')->querySelectorAll('[role="menuitem"]'));
+        $remove = $items->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de SC'));
+        $deactivate = $items->first(fn ($item): bool => str_starts_with(textOf($item), 'Desactivar'));
+
+        expect($remove->getAttribute('aria-disabled'))->toBe('true')
+            ->and(textOf($remove))->toBe('Quitar de SC No te puedes quitar a ti mismo de un departamento.')
+            ->and($remove->hasAttribute('wire:click'))->toBeFalse()
+            ->and($deactivate->getAttribute('aria-disabled'))->toBe('true')
+            ->and(textOf($deactivate))->toBe('Desactivar No te puedes dar de baja a ti mismo.')
+            ->and($deactivate->hasAttribute('wire:click'))->toBeFalse()
+            ->and($own->adscriptions()->count())->toBe(1);
+    })->with(['admin' => 'admin', 'jefe de SC' => 'jefe']);
 
     it('quitar de un departamento la principal pasa la principal a la más antigua que le queda', function () {
         $page = Livewire::actingAs($this->admin)
@@ -434,7 +451,7 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
             ->and(lastToastOf($page))->title->toBe('Docente adscrito a SC');
     });
 
-    it('en «Acciones» solo puede quitar de SC; «Desactivar» queda deshabilitado con su motivo', function () {
+    it('en «Acciones» solo ofrece «Quitar de SC»; «Desactivar» queda deshabilitado con su motivo', function () {
         $menu = teacherRowMenu($this->jefe, '1000001');
         $deactivate = collect($menu->querySelectorAll('[role="menuitem"]'))->first(fn ($item): bool => str_starts_with(textOf($item), 'Desactivar'));
 
@@ -510,10 +527,29 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
 });
 
 describe('jefe de proyecto docente de SC en C2', function () {
-    it('ve a los mismos docentes que su jefe: el docente no es de un campus', function () {
-        $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
+    beforeEach(function () {
+        $this->jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
+    });
 
-        expect(teacherNumbersOnPage($jpd))->toBe(['1000001', '1000004']);
+    it('ve a los mismos docentes que su jefe: el docente no es de un campus', function () {
+        expect(teacherNumbersOnPage($this->jpd))->toBe(['1000001', '1000004']);
+    });
+
+    it('quita a un docente de SC; la principal en II no cambia', function () {
+        $page = Livewire::actingAs($this->jpd)
+            ->test('faculty::pages.teachers')
+            ->call('removeAdscription', $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole()->id);
+
+        expect($this->ana->adscriptions()->sole())->department_id->toBe($this->ii->id)->is_primary->toBeTrue()
+            ->and(lastToastOf($page))->title->toBe('Docente quitado de SC')->description->toBe('1000001 · Ana Pérez');
+    });
+
+    it('recibe 403 al quitar a un docente de otro departamento', function () {
+        $other = $this->ana->adscriptions()->where('department_id', $this->ii->id)->sole();
+
+        Livewire::actingAs($this->jpd)->test('faculty::pages.teachers')->call('removeAdscription', $other->id)->assertForbidden();
+
+        expect($other->fresh()->trashed())->toBeFalse();
     });
 });
 
