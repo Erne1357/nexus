@@ -54,6 +54,12 @@ final class ScopedContext
     /** @var Collection<int, RoleScope> */
     private Collection $scopes;
 
+    /**
+     * Si tiene algún alcance vigente y completo de un rol distinto de docente, aunque sea en un
+     * campus desactivado o borrado: entonces la credencial sigue a esos roles (campuses()).
+     */
+    private bool $holdsNonTeacherScope = false;
+
     /** @var Collection<int, Campus>|null todos los campus activos, por código */
     private ?Collection $activeCampuses = null;
 
@@ -219,7 +225,8 @@ final class ScopedContext
 
     /**
      * Campus activos donde trabaja, por código: lo que ofrece el selector de la credencial. Salen
-     * de sus alcances de roles distintos de docente, si tiene alguno; solo quien no ejerce otro rol
+     * de sus alcances de roles distintos de docente si tiene alguno vigente, aunque su campus ya
+     * esté desactivado o borrado (entonces puede no quedar ninguno); solo quien no tiene otro rol
      * que docente los toma de sus alcances de docente. Con un alcance sin campus de los que
      * cuentan, todos los activos. Así, el alcance de docente de todo el Tec de un coordinador de C2
      * no le ofrece otros campus, aunque canAccessCampus() diga que da clase en cualquiera.
@@ -240,8 +247,9 @@ final class ScopedContext
             return $this->campuses = $this->activeCampuses();
         }
 
-        $scopes = $this->scopes->reject(fn (RoleScope $scope): bool => $scope->role === Role::Docente);
-        $scopes = $scopes->isEmpty() ? $this->scopes : $scopes;
+        $scopes = $this->holdsNonTeacherScope
+            ? $this->scopes->reject(fn (RoleScope $scope): bool => $scope->role === Role::Docente)
+            : $this->scopes;
 
         if ($scopes->contains(fn (RoleScope $scope): bool => $scope->campus_id === null)) {
             return $this->campuses = $this->activeCampuses();
@@ -329,15 +337,18 @@ final class ScopedContext
         $this->campuses = null;
         $this->terms = [];
         $this->admin = $user?->hasRole(Role::Admin) ?? false;
-        $this->scopes = $user === null ? new Collection : $user->roleScopes()
+
+        $complete = $user === null ? new Collection : $user->roleScopes()
             ->current()
             ->whereIn('role', $user->getRoleNames()->all())
-            ->where(fn (Builder $query) => $query
-                ->whereNull('campus_id')
-                ->orWhereHas('campus', fn (Builder $query) => $query->where('is_active', true)))
+            ->withExists(['campus as campus_is_active' => fn (Builder $query) => $query->where('is_active', true)])
             ->get()
             ->filter(fn (RoleScope $scope): bool => collect($scope->role->scopeColumns())
-                ->every(fn (string $column): bool => $scope->{$column} !== null))
+                ->every(fn (string $column): bool => $scope->{$column} !== null));
+
+        $this->holdsNonTeacherScope = $complete->contains(fn (RoleScope $scope): bool => $scope->role !== Role::Docente);
+        $this->scopes = $complete
+            ->filter(fn (RoleScope $scope): bool => $scope->campus_id === null || $scope->campus_is_active)
             ->values();
     }
 }
