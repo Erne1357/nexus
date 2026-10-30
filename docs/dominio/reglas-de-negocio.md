@@ -124,6 +124,8 @@ Borrar carreras (confirmado el 29 de octubre de 2026): una carrera solo se borra
 
 Oferta por campus: la oferta de una carrera inactiva nace inactiva (confirmado el 29 de octubre de 2026, la misma regla de la importación). Ofrecer crea, restaura o activa la fila de `career_campus` del campus y dejar de ofrecer la desactiva; ofrecer nunca desactiva una oferta activa (supuesto por confirmar).
 
+Especialidades: quitar una especialidad de un plan no pasa en la práctica: sería otro plan; un plan suele tener 2 o 3 y el alumno elige una (confirmado el 29 de octubre de 2026). Por eso solo se quita, de forma lógica, una especialidad sin materias en la retícula, que se capturó por error; desactivarla se permite siempre, tenga o no materias (supuesto por confirmar, S1). Su clave es única dentro del plan, también contra las quitadas. Darla de alta, renombrarla, desactivarla o quitarla no cambia el avance de ningún alumno.
+
 ## Parámetros por campus (perfil de flujo)
 
 | Clave | Presencial (C1, C2) | Notas para otras modalidades |

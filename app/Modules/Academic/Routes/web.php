@@ -12,4 +12,5 @@ Route::middleware('auth')->prefix('academic')->name('academic.')->group(function
     Route::livewire('/careers', 'academic::pages.careers')->name('careers');
     Route::livewire('/subjects', 'academic::pages.subjects')->name('subjects');
     Route::livewire('/plans', 'academic::pages.plans')->name('plans');
+    Route::livewire('/plans/{plan}', 'academic::pages.plan')->name('plans.show');
 });

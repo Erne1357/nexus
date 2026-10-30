@@ -232,6 +232,7 @@ La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php
 | Formulario en modal | Catálogos | **Decidido:** modal para crear y editar; página completa si no cabe o tiene pasos |
 | Asistente de pasos | Importación | **Decidido (tarea 1.2):** `x-steps` de MaryUI como indicador, con los pasos hechos en `primary`; el contenido de cada paso en una `x-card` debajo. Lo que corre en la cola se muestra en la misma tarjeta con `x-progress` (indeterminado si no se sabe el total) y su texto, y la URL guarda en qué va (`?lote=`) para retomarlo |
 | Retícula del alumno | Ficha del alumno; propuesta del coordinador (fase 2) | **Decidido (tarea 1.6):** ver "Retícula del alumno", abajo |
+| Editor de retícula del plan | Retícula de cada plan de estudios (Académico › Planes de estudio) | **Decidido (tarea 1.8):** variante A, columnas por semestre y panel lateral; ver "Retícula del plan (editor)", abajo |
 | Inicio por rol | Inicio | Palabra gigante y mosaicos vivos (por diseñar) |
 | Checklist con contadores | Validación de catálogos | Cómo mostrar diferencias contra el periodo anterior |
 | Cuadrícula día x hora | Editor de horarios, disponibilidad docente, vista por salón | Interacción por clic o arrastrar; colores por carrera o por estado |
@@ -275,6 +276,44 @@ La ficha del alumno muestra su retícula como la del SII, que es la que conocen 
 | `chain-10` | `#9c4fd1` · 4.0 | `#d29cf5` · 6.17 |
 | `chain-11` | `#2f8f5b` · 3.42 | `#7fd6a4` · 7.57 |
 | `chain-12` | `#c24f9b` · 3.65 | `#f29ad0` · 6.48 |
+
+### Retícula del plan (editor)
+El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/plans/{plan}`). De tres maquetas, el usuario eligió la variante A, columnas por semestre con un panel lateral: «para cosas densas, haya drawers» (aprobado el 29 de octubre de 2026). Las maquetas están en `.impeccable/mocks/decision/reticula/`.
+
+- **Encabezado:**
+  - el enlace «Planes de estudio»;
+  - el nombre del plan, su clave en Mono y la insignia de estado;
+  - carrera, versión, semestres, créditos y materias;
+  - debajo, sus especialidades como chips con su número de materias, y «Gestionar especialidades».
+- **Leyenda:**
+  - obligatoria (filete) y optativa (borde punteado);
+  - la insignia «Inactiva» de una materia inactiva en el catálogo;
+  - `3-2-5`: horas de teoría, de práctica y créditos;
+  - «Pide» para seriación y «Correq.» para correquisito.
+- **Columnas por semestre** con el mismo comportamiento responsivo que la retícula del alumno, del primero al último semestre del plan, aunque estén vacíos.
+  - El encabezado de cada semestre dice cuántas materias tiene y los créditos de su tronco común, más «+ esp.» si tiene materias de especialidad.
+  - Dentro de un semestre va primero el tronco común y luego cada especialidad, bajo un separador punteado con su nombre.
+- **Cada materia** es un mosaico con:
+  - la clave en Mono y el nombre, partido con guiones;
+  - «Inactiva», si lo está en el catálogo, con relleno `bg-base-200`;
+  - lo que pide;
+  - «Optativa», si lo es;
+  - horas y créditos.
+
+  Su cadena de seriación es la franja de la retícula del alumno, con el mismo token `chain-N` en `--chain`. Academic calcula sus cadenas en `PlanGridEditorQuery`, porque no depende de Students.
+- **Tocar una materia** le pone el anillo, resalta su cadena completa y atenúa lo demás. La línea de arriba dice qué pide, qué correquisito tiene y qué abre. También la abre en el panel lateral:
+  - El panel es un `x-drawer` de MaryUI a la derecha, de 448 px, y a pantalla completa en celular. Se superpone con su velo, porque MaryUI no empuja el contenido sin CSS propio.
+  - Esc, el velo o la X lo cierran y quitan la selección.
+  - Sus secciones son «Lugar en la retícula», «Pide» y «La piden».
+  - Las tareas 1.8.9 y 1.8.10 las vuelven editables: «Guardar lugar», el tipo y el quitar de cada requisito, «Agregar requisito» con el error de ciclo, «Quitar de la retícula…» y «Agregar materia» al pie de cada semestre.
+- **La leyenda de cadenas** resalta la cadena que se toca. Tocarla otra vez o Esc quita el resaltado.
+- **Especialidades**, en el mismo panel. Cada una muestra su clave, su estado, su nombre y cuántas materias tiene. Sus acciones:
+  - «Renombrar», en su lugar;
+  - «Desactivar» o «Activar»;
+  - «Quitar», deshabilitado con su motivo si tiene materias.
+
+  Al final va «Nueva especialidad», con clave y nombre.
+- **El resaltado lo pinta el servidor** con `data-focus`, `data-me` y `data-on-chain`, que leen las mismas utilidades de la retícula del alumno. La retícula cambia con cada edición, y así no queda estado de Alpine desfasado.
 
 ## Elevation & Depth
 

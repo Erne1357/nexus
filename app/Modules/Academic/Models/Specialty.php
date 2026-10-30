@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -35,5 +36,15 @@ class Specialty extends Model
     public function studyPlan(): BelongsTo
     {
         return $this->belongsTo(StudyPlan::class);
+    }
+
+    /**
+     * Las filas de la retícula de su plan que son de esta especialidad, sin las quitadas.
+     *
+     * @return HasMany<StudyPlanSubject, $this>
+     */
+    public function placements(): HasMany
+    {
+        return $this->hasMany(StudyPlanSubject::class);
     }
 }
