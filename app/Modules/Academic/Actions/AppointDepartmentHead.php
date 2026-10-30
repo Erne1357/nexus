@@ -25,7 +25,7 @@ use Throwable;
  * alcance (`role_scopes`) con el mismo campus, departamento y fechas, que es lo que cuenta ScopedContext. Quién
  * puede nombrar lo decide la policy antes de llamarla.
  *
- * La base rechaza un segundo jefe vigente del departamento en el campus, y a la misma persona dos veces en el
+ * Un usuario inactivo no se nombra: es una ValidationException sobre `user`. La base rechaza un segundo jefe vigente del departamento en el campus, y a la misma persona dos veces en el
  * mismo cargo con fechas que se traslapan (confirmado el 29 de octubre de 2026); los dos rechazos se vuelven una
  * ValidationException sobre `user` y no se escribe nada. Deja la bitácora sobre el usuario, recarga
  * ScopedContext (también el del usuario autenticado) y avisa con DepartmentHeadAppointed después del commit.
@@ -46,7 +46,11 @@ final class AppointDepartmentHead
 
         return DB::transaction(function () use ($department, $campus, $user, $kind, $validFrom, $validTo): DepartmentHead {
             // Con el usuario bloqueado, dos nombramientos a la vez no le asignan el mismo rol dos veces.
-            User::query()->whereKey($user->getKey())->lockForUpdate()->firstOrFail();
+            $locked = User::query()->whereKey($user->getKey())->lockForUpdate()->firstOrFail();
+
+            if (! $locked->is_active) {
+                throw ValidationException::withMessages(['user' => 'El usuario está inactivo.']);
+            }
 
             try {
                 $head = DepartmentHead::query()->create([
