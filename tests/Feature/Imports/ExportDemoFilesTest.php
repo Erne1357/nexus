@@ -100,6 +100,19 @@ it('avisa y falla si no puede abrir un archivo', function () {
     expect(Storage::disk('imports')->allFiles())->toBe([]);
 });
 
+it('escribe la calificación sin ceros de más y sin tocar los enteros', function () {
+    $ids = DB::table('kardex_records')->whereNull('deleted_at')->orderBy('id')->limit(3)->pluck('id');
+    DB::table('kardex_records')->where('id', $ids[0])->update(['grade' => 100]);
+    DB::table('kardex_records')->where('id', $ids[1])->update(['grade' => 70]);
+    DB::table('kardex_records')->where('id', $ids[2])->update(['grade' => 85.5]);
+
+    $this->artisan('imports:export-demo')->assertSuccessful();
+
+    $grades = collect(array_slice(demoCsv('kardex'), 1))->pluck(3)->all();
+
+    expect($grades)->toContain('100', '70', '85.5')->not->toContain('1', '7', '85.50');
+});
+
 it('lo exportado se vuelve a importar completo, en orden, con el motor real', function () {
     Queue::fake();
     $this->artisan('imports:export-demo')->assertSuccessful();

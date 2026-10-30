@@ -133,7 +133,7 @@ final class ExportDemoFiles extends Command
                     ->whereNull('kr.deleted_at')->whereNull('st.deleted_at')->whereNull('s.deleted_at')
                     ->select(['kr.id', 'st.control_number', 's.code', 'kr.term_code', 'kr.grade', 'kr.result', 'kr.attempt']),
                 'kr.id',
-                fn (object $r): array => [$r->control_number, $r->code, $r->term_code, $r->grade === null ? null : rtrim(rtrim((string) $r->grade, '0'), '.'), $r->result, $r->attempt],
+                fn (object $r): array => [$r->control_number, $r->code, $r->term_code, $r->grade === null ? null : (string) (float) $r->grade, $r->result, $r->attempt],
             ),
         ];
     }
