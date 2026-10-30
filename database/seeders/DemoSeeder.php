@@ -9,13 +9,14 @@ use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\RoleSeeder;
+use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
  * Datos demo de Campus II para desarrollo, demostraciones y browser tests: lo base, los periodos, el catálogo
- * académico de sus 6 carreras y los usuarios de prueba (docs/arquitectura/testing.md, "Datos de prueba"). No corre
- * en producción.
+ * académico de sus 6 carreras, los usuarios de prueba y unos 200 alumnos con su kárdex
+ * (docs/arquitectura/testing.md, "Datos de prueba"). No corre en producción.
  *
  *     php artisan migrate:fresh --seed --seeder='Database\Seeders\DemoSeeder'
  */
@@ -36,5 +37,6 @@ class DemoSeeder extends Seeder
 
         $this->callWith(AcademicDemoSeeder::class, ['campuses' => ['C2']]);
         $this->callWith(DemoStaffSeeder::class, ['campuses' => ['C2']]);
+        $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C2' => 35]]);
     }
 }
