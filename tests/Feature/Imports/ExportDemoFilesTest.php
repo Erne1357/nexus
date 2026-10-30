@@ -3,10 +3,6 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Faculty\Enums\TeacherDegree;
-use App\Modules\Faculty\Models\Teacher;
-use App\Modules\Faculty\Models\TeacherDepartment;
-use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -25,7 +21,7 @@ use Illuminate\Support\Facades\Storage;
 | reconoce sin mapeo, para probar la importación con archivos grandes sin exportaciones reales del SII.
 */
 
-const DEMO_TEMPLATES = ['departments', 'careers', 'study_plans', 'subjects', 'prerequisites', 'students', 'kardex'];
+const DEMO_TEMPLATES = ['departments', 'careers', 'study_plans', 'subjects', 'prerequisites', 'students', 'kardex', 'teachers', 'positions'];
 
 beforeEach(function () {
     Storage::fake('imports');
@@ -163,7 +159,7 @@ it('lo exportado se vuelve a importar completo, en orden, con el motor real', fu
 
     $exported = collect(DEMO_TEMPLATES)->mapWithKeys(fn (string $t): array => [$t => collect(array_slice(demoCsv($t), 1))]);
 
-    DB::statement('TRUNCATE kardex_records, student_progress, students, subject_prerequisites, study_plan_subjects, specialties, subjects, study_plans, career_campus, careers, departments CASCADE');
+    DB::statement('TRUNCATE teacher_positions, teacher_departments, teachers, kardex_records, student_progress, students, subject_prerequisites, study_plan_subjects, specialties, subjects, study_plans, career_campus, careers, departments CASCADE');
 
     $admin = User::factory()->admin()->create();
     $results = [];
@@ -179,9 +175,9 @@ it('lo exportado se vuelve a importar completo, en orden, con el motor real', fu
             ->flatMap(fn (string $w): array => array_keys(json_decode($w, true)))->unique()->sort()->values()->all();
     }
 
-    expect($results)->toBe(collect(DEMO_TEMPLATES)->mapWithKeys(fn (string $t): array => [$t => ['applied', 0, $exported[$t]->count()]])->all())
+    expect($results)->toBe(collect(DEMO_TEMPLATES)->mapWithKeys(fn (string $t): array => [$t => ['applied', 0, $t === 'teachers' ? $exported[$t]->pluck(0)->unique()->count() : $exported[$t]->count()]])->all())
         // Avisos esperados del demo: los planes 2004 inactivos y las materias con el mismo nombre y otra clave.
-        ->and($warned)->toBe(['departments' => [], 'careers' => [], 'study_plans' => [], 'subjects' => ['name', 'plan'], 'prerequisites' => ['plan'], 'students' => [], 'kardex' => []])
+        ->and($warned)->toBe(['departments' => [], 'careers' => [], 'study_plans' => [], 'subjects' => ['name', 'plan'], 'prerequisites' => ['plan'], 'students' => [], 'kardex' => [], 'teachers' => [], 'positions' => []])
         ->and(DB::table('departments')->count())->toBe($exported['departments']->count())
         ->and(DB::table('career_campus')->count())->toBe($exported['careers']->count())
         ->and(DB::table('careers')->count())->toBe($exported['careers']->pluck(0)->unique()->count())
@@ -190,55 +186,29 @@ it('lo exportado se vuelve a importar completo, en orden, con el motor real', fu
         ->and(DB::table('subjects')->count())->toBe($exported['subjects']->pluck(1)->unique()->count())
         ->and(DB::table('subject_prerequisites')->count())->toBe($exported['prerequisites']->count())
         ->and(DB::table('students')->count())->toBe($exported['students']->count())
-        ->and(DB::table('kardex_records')->count())->toBe($exported['kardex']->count());
+        ->and(DB::table('kardex_records')->count())->toBe($exported['kardex']->count())
+        ->and(DB::table('teachers')->count())->toBe($exported['teachers']->pluck(0)->unique()->count())
+        ->and(DB::table('teacher_departments')->count())->toBe($exported['teachers']->count())
+        ->and(DB::table('teacher_departments')->where('is_primary', true)->count())->toBe($exported['teachers']->pluck(0)->unique()->count())
+        ->and(DB::table('teacher_positions')->count())->toBe($exported['positions']->count());
 });
 
-it('exporta docentes y plazas con el formato de sus plantillas, y se vuelven a importar sin errores', function () {
-    Queue::fake();
-    DB::statement('TRUNCATE teacher_positions, teacher_departments, teachers CASCADE');
-    $sistemas = Department::factory()->create(['code' => 'ZS']);
-    $industrial = Department::factory()->create(['code' => 'ZI']);
-    $campus = Campus::factory()->create(['code' => 'ZC']);
-    $ana = Teacher::factory()->adscribedTo($sistemas, $campus)->create(['employee_number' => '7001', 'degree' => TeacherDegree::Maestria, 'hired_on' => '2015-08-05', 'email' => 'ana@example.test']);
-    TeacherDepartment::factory()->for($ana)->for($industrial)->for($campus)->create(['is_primary' => false]);
-    $beto = Teacher::factory()->adscribedTo($sistemas, $campus)->inactive()->create(['employee_number' => '7002']);
-    Teacher::factory()->adscribedTo($sistemas, $campus)->create(['employee_number' => '7003'])->delete();
-    TeacherPosition::factory()->for($ana)->tiempoCompleto()->create(['valid_from' => '2026-08-01', 'valid_to' => '2026-12-31']);
-    TeacherPosition::factory()->for($beto)->asignatura(8)->create();
+it('exporta un renglón por adscripción con la principal primero y una plaza por renglón, sin borrados', function () {
+    $this->artisan('imports:export-demo')->assertSuccessful();
 
-    $this->artisan('imports:export-demo', ['--dir' => 'docentes'])->assertSuccessful();
+    $adscriptions = DB::table('teacher_departments as td')->join('teachers as t', 't.id', '=', 'td.teacher_id')
+        ->whereNull('td.deleted_at')->whereNull('t.deleted_at')->count();
+    $positions = DB::table('teacher_positions as p')->join('teachers as t', 't.id', '=', 'p.teacher_id')
+        ->whereNull('p.deleted_at')->whereNull('t.deleted_at')->count();
+    $teachers = collect(array_slice(demoCsv('teachers'), 1));
+    $firstOfEach = $teachers->unique(0)->pluck(2, 0);
+    $primary = DB::table('teacher_departments as td')->join('teachers as t', 't.id', '=', 'td.teacher_id')
+        ->join('departments as d', 'd.id', '=', 'td.department_id')
+        ->where('td.is_primary', true)->whereNull('td.deleted_at')->whereNull('t.deleted_at')->pluck('d.code', 't.employee_number');
 
-    $csv = function (string $template): array {
-        $stream = fopen(Storage::disk('imports')->path("docentes/{$template}.csv"), 'r');
-        $rows = [];
-        while (($row = fgetcsv($stream, escape: '')) !== false) {
-            $rows[] = $row;
-        }
-        fclose($stream);
-
-        return $rows;
-    };
-
-    expect($csv('teachers'))->toBe([
-        ['número de empleado', 'nombre', 'departamento', 'campus', 'correo', 'grado', 'activo', 'fecha de ingreso'],
-        ['7001', $ana->name, 'ZS', 'ZC', 'ana@example.test', 'Maestría', 'Sí', '05/08/2015'],
-        ['7001', $ana->name, 'ZI', 'ZC', 'ana@example.test', 'Maestría', 'Sí', '05/08/2015'],
-        ['7002', $beto->name, 'ZS', 'ZC', '', '', 'No', ''],
-    ])->and($csv('positions'))->toBe([
-        ['número de empleado', 'tipo de plaza', 'horas base', 'desde', 'hasta'],
-        ['7001', 'Tiempo completo', '40', '01/08/2026', '31/12/2026'],
-        ['7002', 'Asignatura', '8', '', ''],
-    ]);
-
-    $admin = User::factory()->admin()->create();
-
-    foreach (['teachers', 'positions'] as $template) {
-        $batch = ImportBatch::factory()->create(['template' => $template, 'uploaded_by' => $admin->id]);
-        $batch->update(['file_path' => "{$batch->id}.csv"]);
-        Storage::disk('imports')->copy("docentes/{$template}.csv", $batch->file_path);
-
-        $batch = app(ValidateImportBatch::class)->handle($batch);
-
-        expect([$template, $batch->status->value, $batch->error_rows, $batch->total_rows])->toBe([$template, 'validated', 0, count($csv($template)) - 1]);
-    }
+    expect($teachers)->toHaveCount($adscriptions)
+        ->and(demoCsv('teachers')[0])->toBe(['número de empleado', 'nombre', 'departamento', 'correo', 'grado', 'activo', 'fecha de ingreso'])
+        ->and($teachers->map(fn (array $r): string => "{$r[0]}/{$r[2]}")->unique())->toHaveCount($adscriptions)
+        ->and($firstOfEach->all())->toEqual($primary->all())
+        ->and(demoCsv('positions'))->toHaveCount($positions + 1);
 });

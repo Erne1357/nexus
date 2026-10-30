@@ -1,5 +1,5 @@
-número de empleado,nombre,departamento,campus,correo,grado,activo,fecha de ingreso
-90001,Docente Prueba Uno,SC,C2,uno@example.test,Maestría,Sí,05/08/2015
-90001,Docente Prueba Uno,II,C2,uno@example.test,Maestría,Sí,05/08/2015
-90002,Docente Prueba Dos,SC,C2,,Doctorado,Sí,16/01/2010
-90003,Docente Prueba Tres,II,C1,tres@example.test,Posdoctorado,No,
+número de empleado,nombre,departamento,correo,grado,activo,fecha de ingreso
+90001,Docente Prueba Uno,SC,uno@example.test,Maestría,Sí,05/08/2015
+90001,Docente Prueba Uno,II,uno@example.test,Maestría,Sí,05/08/2015
+90002,Docente Prueba Dos,SC,,Doctorado,Sí,16/01/2010
+90003,Docente Prueba Tres,II,tres@example.test,Posdoctorado,No,

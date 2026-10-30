@@ -3,7 +3,6 @@
 namespace App\Modules\Imports\Templates;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Jobs\ProvisionTeacherUsersJob;
 use App\Modules\Faculty\Models\Teacher;
@@ -14,10 +13,11 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Docentes del SII (tarea 10): número de empleado, nombre, departamento y campus de su adscripción, correo,
- * grado, activo y fecha de ingreso. Un docente con varias adscripciones viene en un renglón por departamento y
- * campus (S5, supuesto por confirmar), como las carreras por campus: la clave del archivo es el docente con su
- * adscripción, para que esos renglones no cuenten como repetidos, y el registro se busca por el número de
+ * Docentes del SII (tarea 10): número de empleado, nombre, departamento de su adscripción, correo, grado,
+ * activo y fecha de ingreso. Los docentes son de toda la institución y su adscripción no tiene campus (confirmado
+ * el 30 de octubre de 2026): si el archivo del SII trae una columna de campus, simplemente no se mapea (supuesto
+ * por confirmar). Un docente con varias adscripciones viene en un renglón por departamento (S5, supuesto por
+ * confirmar): la clave del archivo es el docente con su departamento, para que esos renglones no cuenten como repetidos, y el registro se busca por el número de
  * empleado. La primera adscripción de un docente es la principal; si ya tenía otra principal, la conserva y
  * avisa. El número se normaliza con `TeacherRules`, igual que uno capturado.
  *
@@ -33,9 +33,6 @@ class TeachersTemplate extends ImportTemplate
 
     /** @var array<string, Department|null> departamento por clave, en esta corrida */
     private array $departments = [];
-
-    /** @var array<string, Campus|null> campus por clave, en esta corrida */
-    private array $campuses = [];
 
     /** @var array<string, true> docentes cuya última fila aplicada solo agregó una adscripción */
     private array $adscriptionOnly = [];
@@ -56,7 +53,6 @@ class TeachersTemplate extends ImportTemplate
             'employee_number' => 'número de empleado',
             'name' => 'nombre',
             'department' => 'departamento',
-            'campus' => 'campus',
             'email' => 'correo',
             'degree' => 'grado',
             'active' => 'activo',
@@ -66,7 +62,7 @@ class TeachersTemplate extends ImportTemplate
 
     public function naturalKey(): array
     {
-        return ['employee_number', 'department', 'campus'];
+        return ['employee_number', 'department'];
     }
 
     public function model(): string
@@ -93,7 +89,6 @@ class TeachersTemplate extends ImportTemplate
             'employee_number' => ['required', 'string', 'max:20'],
             'name' => ['required', 'string', 'max:255'],
             'department' => ['required', 'string'],
-            'campus' => ['required', 'string'],
             'email' => ['nullable', 'email', 'max:255'],
             'degree' => ['nullable', 'string'],
             'active' => ['nullable', 'boolean'],
@@ -105,7 +100,7 @@ class TeachersTemplate extends ImportTemplate
     {
         $row = parent::normalize($row);
 
-        foreach (['employee_number', 'department', 'campus'] as $field) {
+        foreach (['employee_number', 'department'] as $field) {
             $row[$field] = self::asText($row[$field]);
         }
 
@@ -117,9 +112,7 @@ class TeachersTemplate extends ImportTemplate
             }
         }
 
-        foreach (['department', 'campus'] as $field) {
-            $row[$field] = is_string($row[$field]) ? Str::upper($row[$field]) : $row[$field];
-        }
+        $row['department'] = is_string($row['department']) ? Str::upper($row['department']) : $row['department'];
 
         $row['degree'] = is_string($row['degree']) ? (TeacherDegree::tryFrom(self::slug($row['degree']))?->value ?? $row['degree']) : $row['degree'];
         $row['active'] = $this->active($row['active']);
@@ -145,7 +138,6 @@ class TeachersTemplate extends ImportTemplate
         $adscription = [
             'teacher_id' => $teacher->getKey(),
             'department_id' => $this->department($row['department'])?->getKey(),
-            'campus_id' => $this->campus($row['campus'])?->getKey(),
         ];
 
         unset($this->adscriptionOnly[$teacher->getKey()]);
@@ -188,14 +180,6 @@ class TeachersTemplate extends ImportTemplate
             $issues = $issues->withWarning('department', "El departamento {$row['department']} está inactivo.");
         }
 
-        $campus = $this->campus($row['campus']);
-
-        if ($campus === null) {
-            $issues = $issues->withError('campus', "No hay un campus con la clave {$row['campus']}.");
-        } elseif (! $campus->is_active) {
-            $issues = $issues->withWarning('campus', "El campus {$row['campus']} está inactivo.");
-        }
-
         $teacher = Teacher::withTrashed()->where('employee_number', $row['employee_number'])->first(['id', 'is_active', 'deleted_at']);
 
         if ($teacher === null || $teacher->trashed()) {
@@ -206,16 +190,16 @@ class TeachersTemplate extends ImportTemplate
             $issues = $issues->withWarning('active', 'El archivo lo marca inactivo, pero el docente sigue activo: una importación no lo da de baja.');
         }
 
-        if ($department === null || $campus === null) {
+        if ($department === null) {
             return $issues;
         }
 
         $adscription = TeacherDepartment::withTrashed()
-            ->where(['teacher_id' => $teacher->getKey(), 'department_id' => $department->getKey(), 'campus_id' => $campus->getKey()])
+            ->where(['teacher_id' => $teacher->getKey(), 'department_id' => $department->getKey()])
             ->first(['id', 'deleted_at']);
 
         if ($adscription?->trashed()) {
-            return $issues->withError('department', "La adscripción del docente a {$row['department']} en {$row['campus']} está borrada; una importación no la restaura.");
+            return $issues->withError('department', "La adscripción del docente a {$row['department']} está borrada; una importación no la restaura.");
         }
 
         if ($adscription === null && TeacherDepartment::query()->where('teacher_id', $teacher->getKey())->where('is_primary', true)->exists()) {
@@ -261,10 +245,5 @@ class TeachersTemplate extends ImportTemplate
     private function department(string $code): ?Department
     {
         return array_key_exists($code, $this->departments) ? $this->departments[$code] : $this->departments[$code] = Department::query()->where('code', $code)->first(['id', 'is_active']);
-    }
-
-    private function campus(string $code): ?Campus
-    {
-        return array_key_exists($code, $this->campuses) ? $this->campuses[$code] : $this->campuses[$code] = Campus::query()->where('code', $code)->first(['id', 'is_active']);
     }
 }

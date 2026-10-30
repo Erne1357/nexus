@@ -162,12 +162,11 @@ final class ExportDemoFiles extends Command
             'teachers' => fn (): iterable => DB::table('teacher_departments as td')
                 ->join('teachers as t', 't.id', '=', 'td.teacher_id')
                 ->join('departments as d', 'd.id', '=', 'td.department_id')
-                ->join('campuses as k', 'k.id', '=', 'td.campus_id')
                 ->whereNull('td.deleted_at')->whereNull('t.deleted_at')->whereNull('d.deleted_at')
-                ->orderBy('t.employee_number')->orderByDesc('td.is_primary')->orderBy('d.code')->orderBy('k.code')
-                ->get(['t.employee_number', 't.name', 'd.code as department', 'k.code as campus', 't.email', 't.degree', 't.is_active', 't.hired_on'])
+                ->orderBy('t.employee_number')->orderByDesc('td.is_primary')->orderBy('d.code')
+                ->get(['t.employee_number', 't.name', 'd.code as department', 't.email', 't.degree', 't.is_active', 't.hired_on'])
                 ->map(fn (object $r): array => [
-                    $r->employee_number, $r->name, $r->department, $r->campus, $r->email,
+                    $r->employee_number, $r->name, $r->department, $r->email,
                     $r->degree === null ? null : TeacherDegree::from($r->degree)->label(),
                     $r->is_active ? 'Sí' : 'No',
                     $r->hired_on === null ? null : date('d/m/Y', strtotime($r->hired_on)),
