@@ -14,8 +14,9 @@ use Spatie\Activitylog\Models\Activity;
 | La migración que quita el campus de las adscripciones: la adscripción es solo a un departamento (confirmado el 30
 | de octubre de 2026). Antes de quitar `campus_id` junta las de un docente en el mismo departamento y distinto campus:
 | se queda una fila (la sin borrar, luego la principal, luego la más antigua) y las demás se eliminan con su entrada
-| en la bitácora, porque la clave nueva, docente y departamento, cuenta también las borradas. Se prueba sobre la
-| forma vieja: `down()`, filas con `DB::table()` y `up()`.
+| en la bitácora, porque la clave nueva, docente y departamento, cuenta también las borradas. La que se queda toma la
+| fecha de alta más antigua de las vigentes de su grupo. Se prueba sobre la forma vieja: `down()`, filas con
+| `DB::table()` y `up()`.
 */
 
 beforeEach(function () {
@@ -71,6 +72,19 @@ it('quita el campus y junta en una las del mismo docente y departamento en dos c
         ->and(remainingAdscriptions())->toEqualCanonicalizing([$primary, $other])
         ->and(TeacherDepartment::find($primary)->is_primary)->toBeTrue()
         ->and(TeacherDepartment::find($other)->is_primary)->toBeFalse();
+});
+
+it('la que se queda toma la fecha de alta más antigua de las vigentes de su grupo, no la de una borrada', function () {
+    $c3 = Campus::factory()->create(['code' => 'C3']);
+    $kept = oldAdscription($this->teacher, $this->sis, $this->c2, primary: true, createdAt: '2026-02-01');
+    oldAdscription($this->teacher, $this->sis, $this->c1, primary: false, createdAt: '2026-01-01');
+    oldAdscription($this->teacher, $this->sis, $c3, primary: false, createdAt: '2025-06-01', deletedAt: '2025-12-01');
+    $alone = oldAdscription($this->teacher, $this->ind, $this->c1, primary: false, createdAt: '2026-03-01');
+
+    $this->migration->up();
+
+    expect(TeacherDepartment::find($kept)->created_at->toDateString())->toBe('2026-01-01')
+        ->and(TeacherDepartment::find($alone)->created_at->toDateString())->toBe('2026-03-01');
 });
 
 it('sin principal en el departamento se queda la más antigua', function () {

@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\Schema;
  *
  * Antes junta las filas de un docente en el mismo departamento y distinto campus. Se queda una: la que no está
  * borrada; entre ellas, la principal; luego la más antigua (`created_at` y, a igual fecha, el id). Así una
- * adscripción vigente nunca se pierde por una borrada más antigua, y la principal vigente siempre se queda. Las
+ * adscripción vigente nunca se pierde por una borrada más antigua, y la principal vigente siempre se queda. La que se
+ * queda, si está vigente, toma el `created_at` más antiguo de las vigentes de su grupo: es la antigüedad real del
+ * docente en el departamento, la que usa «la principal pasa a la más antigua» (RemoveAdscription). Las
  * demás se **eliminan**, no se borran de forma lógica: una borrada con el mismo docente y departamento rompería la
  * clave nueva, que cuenta también las borradas. Quitado el campus son copias de la que se queda y nada las
  * referencia; cada una deja en la bitácora lo que tenía (con su campus) y la que se queda. Ningún docente termina con
@@ -81,6 +83,8 @@ return new class extends Migration
             return;
         }
 
+        $this->keepOldestDate(array_values(array_unique(array_column($duplicates, 'kept_id'))));
+
         $now = now();
 
         foreach (array_chunk($duplicates, 500) as $chunk) {
@@ -103,6 +107,34 @@ return new class extends Migration
             ], $chunk));
 
             DB::table('teacher_departments')->whereIn('id', array_column($chunk, 'id'))->delete();
+        }
+    }
+
+    /**
+     * A cada fila que se queda y está vigente le pone el `created_at` más antiguo de las vigentes de su grupo (docente
+     * y departamento); las borradas no cuentan.
+     *
+     * @param  list<string>  $keptIds
+     */
+    private function keepOldestDate(array $keptIds): void
+    {
+        foreach (array_chunk($keptIds, 500) as $ids) {
+            DB::update(
+                'update teacher_departments as kept set created_at = live.oldest
+                from (
+                    select teacher_id, department_id, min(created_at) as oldest
+                    from teacher_departments
+                    where deleted_at is null
+                    group by teacher_id, department_id
+                ) as live
+                where kept.id in ('.implode(', ', array_fill(0, count($ids), '?')).')
+                    and kept.deleted_at is null
+                    and live.teacher_id = kept.teacher_id
+                    and live.department_id = kept.department_id
+                    and live.oldest is not null
+                    and (kept.created_at is null or live.oldest < kept.created_at)',
+                $ids,
+            );
         }
     }
 };

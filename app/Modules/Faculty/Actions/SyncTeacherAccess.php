@@ -33,10 +33,11 @@ use Spatie\Permission\Models\Role as SpatieRole;
  *   eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser con la contraseña por defecto (o
  *   `$passwordHash`, para reutilizar el hash de una corrida) y cambio obligatorio, con el correo del docente si
  *   ningún otro usuario lo usa (supuesto por confirmar). Luego activa el usuario ya ligado (reactivar al docente
- *   lo devuelve), le da el rol `docente` y un solo alcance de `docente`, sin campus, porque el docente no es de un
- *   campus (confirmado el 30 de octubre de 2026). Ese alcance no depende de sus adscripciones: un docente sin
- *   departamento conserva usuario, rol y alcance. Cierra los alcances de `docente` con campus que quedaron de antes,
- *   con la regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
+ *   lo devuelve) y le da el rol `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
+ *   ahí sale que su alcance de `docente` sea uno solo, sin campus, y que no dependa de sus adscripciones: un docente
+ *   sin departamento conserva usuario, rol y alcance. Uno sin campus que todavía no empieza cuenta como el suyo y no
+ *   se abre otro (supuesto por confirmar). Cierra los alcances de `docente` con campus que quedaron de antes, con la
+ *   regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
  * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026):
  *   desactiva su usuario, salvo que sea admin, y termina con fecha de ayer cada jefatura suya vigente o por
  *   empezar (supuesto por confirmar; EndDepartmentHead borra las que empiezan hoy o después). Sin usuario no hace

@@ -21,9 +21,9 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | SyncTeacherAccess (spec 4.1): todo docente activo tiene usuario (username = número de empleado, contraseña por
-| defecto y cambio obligatorio) con el rol `docente` y un solo alcance sin campus, porque el docente no es de un
-| campus (confirmado el 30 de octubre de 2026), tenga o no departamento; cierra los alcances de `docente` por campus
-| que quedaron de antes. Reutiliza un usuario existente con su número sin tocar su contraseña, salvo que esté ligado
+| defecto y cambio obligatorio) con el rol `docente`. El docente no es de un campus (confirmado el 30 de octubre de
+| 2026); de ahí sale que su alcance sea uno solo, sin campus, tenga o no departamento, y que se cierren los
+| alcances de `docente` por campus que quedaron de antes. Reutiliza un usuario existente con su número sin tocar su contraseña, salvo que esté ligado
 | a otro docente (S15, supuesto por confirmar). La baja desactiva su usuario, salvo admin, y termina sus jefaturas
 | vigentes; reactivarlo lo devuelve (confirmado el 30 de octubre de 2026). Es idempotente.
 */
@@ -200,6 +200,38 @@ it('cierra los alcances de docente por campus que quedaron de antes y abre el de
 
     expect(syncAccess($teacher->fresh()))->toBe(AccessSync::Unchanged)
         ->and(Activity::count())->toBe(1);
+});
+
+it('con el alcance de todo el Tec y uno por campus que quedó de antes, solo cierra el del campus', function () {
+    $user = User::factory()
+        ->withRole(Role::Docente)
+        ->withRole(Role::Docente, ['campus_id' => $this->c1->id])
+        ->create(['username' => '1234567']);
+    $general = RoleScope::query()->whereNull('campus_id')->sole();
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Updated);
+
+    $access = Activity::where('subject_id', $user->id)->sole();
+
+    expect(RoleScope::where('campus_id', $this->c1->id)->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
+        ->and($general->fresh()->valid_to)->toBeNull()
+        ->and(RoleScope::where('role', Role::Docente)->count())->toBe(2)
+        ->and(teachingScopes($user))->toBe(['todo el Tec'])
+        ->and($access->description)->toBe('Sincronizó el acceso del docente 1234567: cerró su alcance de Docente en C1')
+        ->and($access->attribute_changes->all())->toBe([
+            'attributes' => ['docente_campus_ids' => []],
+            'old' => ['docente_campus_ids' => [$this->c1->id]],
+        ]);
+});
+
+it('un alcance de todo el Tec que todavía no empieza cuenta como el suyo y no abre otro (supuesto por confirmar)', function () {
+    $user = User::factory()->withRole(Role::Docente, ['valid_from' => today()->addDays(3)->toDateString()])->create(['username' => '1234567']);
+    $teacher = Teacher::factory()->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Unchanged)
+        ->and(RoleScope::count())->toBe(1)
+        ->and(Activity::count())->toBe(0);
 });
 
 it('borra el alcance de docente por campus que empezó hoy', function () {
