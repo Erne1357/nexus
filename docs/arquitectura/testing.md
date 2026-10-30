@@ -76,6 +76,22 @@ docker compose exec app php artisan test --testsuite=Browser
 - `TestCase` llama a `withoutVite()` para unit y feature, pero los browser tests cargan el CSS y el JS compilados (`tests/Pest.php` llama a `withVite()` en `tests/Browser`): la banda, la credencial y el menú del shell no funcionan sin ellos. Antes de correrlos hay que compilar con `docker compose exec vite npm run build` (en un worktree, con `-w /app/.worktrees/<rama>`); sin `public/build/manifest.json` fallan con "Vite manifest not found". Usan siempre ese manifiesto, aunque el contenedor `vite` esté sirviendo en modo desarrollo, porque Chromium, dentro de `app`, no llega a su servidor. CI compila en el job `browser` antes de las pruebas.
 - Una prueba que use el teclado o el shell justo al entrar espera a que Alpine arranque (`assertScript('window.Alpine?.$data(document.body).menuOpen === false')`): un atajo que llega antes no tiene quién lo escuche.
 
+## Revisión visual con volumen
+
+Antes del PR de una pantalla, DESIGN.md pide revisarla a 390, 768 y 1440 px en claro y oscuro. Con pocos datos una pantalla puede verse bien y romperse con nombres reales y miles de filas, así que se revisa con el `MassiveSeeder` en una base aparte, sin tocar la de desarrollo:
+
+```bash
+docker compose exec -T postgres createdb -U nexus nexus_massive
+docker compose exec -T -e DB_DATABASE=nexus_massive app sh -c 'php artisan migrate:fresh --force && php artisan db:seed --class="Database\Seeders\MassiveSeeder" --force'
+docker compose exec -d -e DB_DATABASE=nexus_massive app php artisan serve --host=127.0.0.1 --port=8099
+docker compose exec -T -e LOGIN=subdir.c2 -w /app app node .github/scripts/review-screens.mjs alumnos=/students materias=/academic/subjects
+```
+
+- `review-screens.mjs` entra con `LOGIN` (contraseña `PASSWORD`, por omisión `password`, la de los usuarios demo), abre cada ruta a los anchos de `WIDTHS` (390, 768 y 1440 por omisión) y en claro y oscuro, guarda las capturas en `storage/app/review/` (ignorado por git) y reporta estado, tiempo de carga y desborde horizontal. Termina con error si alguna pantalla desborda, responde con error o lanza un error de JavaScript.
+- El admin trabaja en varios campus, así que no tiene uno activo; las pantallas de un campus (alumnos) se revisan con un usuario de un solo campus, como `subdir.c2`.
+- Las capturas se miran: el script encuentra desbordes, no textos cortados ni columnas que se parten en tres renglones.
+- Al terminar, detén el servidor (`docker compose restart app` o mata el proceso de `artisan serve`) y borra la base con `dropdb`.
+
 ## Pruebas de rendimiento
 
 Hay tres presupuestos que se miden, no se suponen:
