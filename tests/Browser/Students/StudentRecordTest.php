@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
@@ -46,10 +47,11 @@ it('el coordinador abre la ficha de un alumno desde el listado y pasa al kárdex
         ->assertNoJavaScriptErrors();
 });
 
-it('al tocar una materia resalta su cadena y dice qué pide y qué abre; Esc la quita y la leyenda resalta la cadena completa', function () {
+it('al tocar una materia resalta su cadena y la barra de selección dice qué pide y qué abre; Esc la quita y la leyenda resalta la cadena completa', function () {
     $student = Student::where('control_number', '24111234')->sole();
     $focused = "document.querySelector('[data-testid=student-grid]').hasAttribute('data-focus')";
     $onChain = fn (string $code): string => "document.querySelector('[data-subject=\"{$code}\"]').hasAttribute('data-on-chain')";
+    $barShown = "(() => { const bar = document.querySelector('[data-testid=selection-bar]'); return bar.hasAttribute('data-shown') && bar.offsetHeight > 0; })()";
 
     $page = visit('/login')
         ->fill('username', '19110002')
@@ -57,8 +59,11 @@ it('al tocar una materia resalta su cadena y dice qué pide y qué abre; Esc la 
         ->press('Entrar')
         ->assertPathIs('/')
         ->navigate('/students/'.$student->id)
+        ->assertScript($barShown, false)
+        ->assertScript("document.querySelector('[data-testid=chain-info]').textContent.trim()", '')
         ->click('[data-subject="ACF-0902"]')
-        ->assertSee('ACF-0902 Cálculo Integral: pide ACF-0901 Cálculo Diferencial · no abre ninguna')
+        ->assertSeeIn('[data-testid="selection-bar"]', 'ACF-0902 Cálculo Integral: pide ACF-0901 Cálculo Diferencial · no abre ninguna')
+        ->assertScript($barShown, true)
         ->assertScript($focused, true)
         ->assertScript($onChain('ACF-0901'), true);
 
@@ -73,12 +78,71 @@ it('al tocar una materia resalta su cadena y dice qué pide y qué abre; Esc la 
     $page->script("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
 
     $page->assertScript($focused, false)
-        ->assertSee('Toca una materia o una cadena para resaltarla; Esc la quita.')
+        ->assertScript($barShown, false)
+        ->assertDontSee('Toca una materia')
         ->click('[data-chain-chip][data-chain="0"]')
-        ->assertSee('Cadena de Cálculo Diferencial: 2 materias.')
+        ->assertSeeIn('[data-testid="selection-bar"]', 'Cadena de Cálculo Diferencial: 2 materias.')
         ->assertScript($onChain('ACF-0901'), true)
         ->assertScript($onChain('ACF-0902'), true)
+        ->click('[data-testid="selection-bar"] button')
+        ->assertScript($focused, false)
+        ->assertScript($barShown, false)
         ->assertNoJavaScriptErrors();
+});
+
+it('a 1440 px todos los mosaicos miden lo mismo, los de un renglón se alinean entre columnas y las cadenas van debajo de la retícula', function () {
+    $student = Student::where('control_number', '24111234')->sole();
+    $plan = $student->studyPlan;
+    $specialty = Specialty::factory()->for($plan)->create(['name' => 'Ciencia de Datos e Inteligencia Artificial Aplicada']);
+    placeInPlan($plan, Subject::factory()->create(['code' => 'ACA-0910', 'name' => 'Taller de Investigación para el Desarrollo de Proyectos de Ingeniería en Sistemas Computacionales']));
+    placeInPlan($plan, Subject::factory()->create(['code' => 'DAD-2401', 'name' => 'Aprendizaje Automático Supervisado y No Supervisado']), 2, $specialty);
+    $deep = Subject::factory()->create(['code' => 'DAD-2402', 'name' => 'Aprendizaje Profundo']);
+    placeInPlan($plan, $deep, 3, $specialty);
+    seriate($plan, $deep, Subject::where('code', 'DAD-2401')->sole());
+    $top = fn (string $code): string => "Math.round(document.querySelector('[data-subject=\"{$code}\"]').getBoundingClientRect().top)";
+
+    $page = visit('/login')
+        ->fill('username', '19110002')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/students/'.$student->id)
+        ->resize(1440, 900)
+        ->assertSee('Aprendizaje Profundo')
+        ->assertScript("new Set([...document.querySelectorAll('[data-subject]')].map((tile) => { const box = tile.getBoundingClientRect(); return Math.round(box.width) + 'x' + Math.round(box.height); })).size", 1)
+        ->assertScript("Math.round(document.querySelector('[data-subject=\"ACA-0910\"]').getBoundingClientRect().height)", 104)
+        ->assertScript($top('ACA-0910').' === '.$top('ACF-0902'), true)
+        ->assertScript($top('DAD-2401').' === '.$top('DAD-2402'), true)
+        ->assertScript("document.querySelector('[data-testid=chain-legend]').getBoundingClientRect().top >= document.querySelector('[data-testid=student-grid]').getBoundingClientRect().bottom", true)
+        // El icono de cada estado de la leyenda queda dentro de su recuadro.
+        ->assertScript("[...document.querySelectorAll('[data-testid=standing-legend] svg')].every((icon) => { const i = icon.getBoundingClientRect(), b = icon.parentElement.getBoundingClientRect(); return i.left >= b.left && i.right <= b.right && i.top >= b.top && i.bottom <= b.bottom; })", true)
+        ->assertNoJavaScriptErrors();
+});
+
+it('la retícula de nueve semestres cabe sin desplazarse desde 1366 px; más angosta se desplaza su caja y no la página', function () {
+    $student = Student::where('control_number', '24111234')->sole();
+    foreach (range(3, 9) as $semester) {
+        placeInPlan($student->studyPlan, Subject::factory()->create(['code' => sprintf('SCC-10%02d', $semester)]), $semester);
+    }
+    $boxScrolls = "(() => { const box = document.querySelector('[data-testid=student-grid]').parentElement; return box.scrollWidth > box.clientWidth; })()";
+    // La clave y el icono de estado caben en el mosaico más angosto.
+    $keysFit = "[...document.querySelectorAll('[data-subject] > span:first-child > span:first-child')].every((key) => key.scrollWidth <= key.clientWidth)";
+
+    $page = visit('/login')
+        ->fill('username', '19110002')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/students/'.$student->id)
+        ->assertSee('Cálculo Integral');
+
+    $page->resize(1366, 900)
+        ->assertScript($boxScrolls, false)
+        ->assertScript($keysFit, true);
+
+    $page->resize(1024, 900)
+        ->assertScript($boxScrolls, true)
+        ->assertScript('document.documentElement.scrollWidth <= window.innerWidth', true);
 });
 
 it('la retícula del alumno con nueve semestres no desborda la página en 390, 768 y 1440 px', function () {

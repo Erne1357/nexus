@@ -389,16 +389,16 @@ document.addEventListener('alpine:init', () => {
 /*
 | studentGrid: las cadenas de seriación de la retícula del alumno (DESIGN.md, "Retícula del alumno"). Al
 | tocar una materia se resalta su cadena (lo que pide y lo que abre, hasta el final) y se atenúa lo demás;
-| al tocar una cadena de la leyenda, todas sus materias. Tocar lo mismo otra vez o Esc lo quita. Solo con
-| clic, no al pasar el cursor (decidido por el usuario el 29 de octubre de 2026). La seriación viene en
-| data-prereqs de cada materia; el resaltado se pinta con data-focus en la retícula y data-me / data-on-chain
-| en las materias, que leen las utilidades de Tailwind.
+| al tocar una cadena de la leyenda, todas sus materias. Tocar lo mismo otra vez, «Quitar resaltado» o Esc lo
+| quita. Solo con clic, no al pasar el cursor (decidido por el usuario el 29 de octubre de 2026). La seriación
+| viene en data-prereqs de cada materia; el resaltado se pinta con data-focus en la retícula y data-me /
+| data-on-chain en las materias, que leen las utilidades de Tailwind. Lo resaltado se dice en la barra de
+| selección (core::semester-grid.selection-bar), que solo se ve con data-shown.
 */
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('studentGrid', () => ({
         /** { code } de una materia, { chain } de una cadena, o null. */
         selected: null,
-        hint: '',
         tiles: [],
         byCode: {},
         pre: {},
@@ -406,7 +406,6 @@ document.addEventListener('alpine:init', () => {
 
         /** La seriación no cambia mientras la ficha está abierta: se arma una vez. */
         init() {
-            this.hint = this.$refs.info.textContent.trim();
             this.tiles = [...this.$root.querySelectorAll('[data-subject]')];
             this.byCode = Object.fromEntries(this.tiles.map((tile) => [tile.dataset.subject, tile]));
 
@@ -455,7 +454,7 @@ document.addEventListener('alpine:init', () => {
         select(selection) {
             this.selected = selection;
             let chain = new Set();
-            let text = this.hint;
+            let text = '';
 
             if (selection?.code) {
                 const name = (code) => `${code} ${this.byCode[code].dataset.name}`;
@@ -486,6 +485,7 @@ document.addEventListener('alpine:init', () => {
             }
 
             this.$refs.info.textContent = text;
+            this.$refs.bar.toggleAttribute('data-shown', selection !== null);
         },
     }));
 });

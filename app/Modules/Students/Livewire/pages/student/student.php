@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Core\Support\SemesterGrid;
 use App\Modules\Students\Enums\SubjectStanding;
+use App\Modules\Students\Queries\GridCell;
 use App\Modules\Students\Queries\StudentQuery;
 use App\Modules\Students\Queries\StudentRecordQuery;
 use Livewire\Attributes\Locked;
@@ -11,7 +13,8 @@ use Livewire\Component;
 /**
  * Ficha del alumno (tarea 1.6): sus datos y cifras, su retícula por semestre con el estado de cada materia como
  * lo nombra el SII y su kárdex por periodo. Solo lectura. Carga al alumno con StudentQuery (el id llega de la
- * ruta), autoriza `view` con StudentPolicy y arma la ficha con StudentRecordQuery.
+ * ruta), autoriza `view` con StudentPolicy, arma la ficha con StudentRecordQuery y acomoda su retícula en la
+ * cuadrícula de Core (SemesterGrid), con el tronco común arriba y una banda por especialidad.
  */
 new #[Title('Ficha del alumno')] class extends Component
 {
@@ -47,8 +50,15 @@ new #[Title('Ficha del alumno')] class extends Component
         $student = $students->findOrFail($this->studentId);
         $this->authorize('view', $student);
 
+        $record = $records->forStudent($student);
+
         return [
-            'record' => $records->forStudent($student),
+            'record' => $record,
+            'layout' => SemesterGrid::place(
+                array_map(fn (array $cells): array => collect($cells)->mapWithKeys(fn (GridCell $cell): array => [$cell->code => $cell->specialtyId])->all(), $record->semesters),
+                array_column($record->specialties, 'id'),
+            ),
+            'specialtyNames' => array_column($record->specialties, 'name', 'id'),
             'standings' => SubjectStanding::cases(),
         ];
     }
