@@ -23,6 +23,8 @@ docker compose exec -w /app/.worktrees/feature-<issue>-<slug> vite npm install
 docker compose exec -w /app/.worktrees/feature-<issue>-<slug> app php artisan test
 ```
 
+Después de traer `develop` a la carpeta principal, recarga los workers de Octane con `docker compose exec app php artisan octane:reload` (y corre `migrate` si llegaron migraciones): guardan el código en memoria y, sin recargarlos, el navegador sigue mostrando la versión anterior.
+
 Nunca corras `docker compose up` desde un worktree: comparte el nombre de proyecto con el repo principal y lo pisaría. Los contenedores `app` y `queue` sirven siempre el código de la carpeta principal: en un worktree se prueba con `php artisan test`, no en el navegador. El `.env` copiado comparte base de datos, Valkey y cola con el repo principal, así que no corras `migrate` de una rama sin mezclar contra la base de desarrollo.
 
 **Pruebas en paralelo.** `RefreshDatabase` migra y revierte sobre una sola base, así que dos worktrees corriendo pruebas a la vez sobre `nexus_test` se pisan. Dale a cada worktree su propia base de pruebas y selecciónala con `DB_DATABASE` (`phpunit.xml` lo permite porque no lo fuerza):
