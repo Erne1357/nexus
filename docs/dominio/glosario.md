@@ -22,8 +22,9 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Semestre reticular** | `semester` en `StudyPlanSubject` | Posición sugerida de la materia en la retícula (1 a 9). El "alumno tipo" de un semestre cursa las materias de ese semestre, por eso no deben empalmarse. |
 | **Avance reticular** | `StudentProgress` | Qué materias ha aprobado, cursa o le faltan a un alumno respecto a su plan. Base de la proyección de demanda. |
 | **Kardex** | `KardexRecord` | Historial de materias cursadas por un alumno con calificación y resultado. |
-| **Docente / profesor** | `Teacher` | Persona que imparte grupos. Pertenece a un departamento y puede tener carga en varios campus. |
-| **Plaza / base** | `TeacherPosition` | Nombramiento del docente que define sus **horas base**: tiempo completo (40 h), tres cuartos (30 h), medio tiempo (20 h), asignatura (N h) u honorarios (0 h base). La base máxima es 40 h. |
+| **Docente / profesor** | `Teacher` | Persona que imparte grupos. Su departamento y campus los dan sus adscripciones, y puede tener carga en varios campus. |
+| **Adscripción** | `TeacherDepartment` | Departamento y campus al que está adscrito un docente. Un docente puede tener varias; una es la principal (la del SII, para RH y reportes) y en el ranking cuentan todas igual (confirmado el 30 de octubre de 2026). |
+| **Plaza / base** | `TeacherPosition` | Nombramiento del docente que define sus **horas base**: tiempo completo (40 h), tres cuartos (30 h), medio tiempo (20 h), asignatura (N h) u honorarios (0 h base). La base máxima de una plaza es 40 h y un docente puede tener varias plazas vigentes a la vez. |
 | **Prioridad de base** | — | Regla de asignación: primero se asignan materias a los docentes con más horas base; al final a los de honorarios. |
 | **Desempate docente** | `StaffingRanking` | Criterio para ordenar docentes con la misma base: historial de haber impartido la materia y perfil, luego evaluación docente. Nexus lo calcula y lo muestra. |
 | **Horas externas** | `TeacherExternalLoad` | Horas que un docente del ITCJ imparte fuera del campus (por ejemplo para TecNM Virtual). Reducen su disponibilidad. |
