@@ -15,16 +15,16 @@
                 <div class="w-full md:w-64">
                     <x-input wire:model.live.debounce.300ms="search" placeholder="Número de control o nombre" aria-label="Buscar alumnos" icon="o-magnifying-glass" clearable />
                 </div>
-                <div class="w-[calc(50%-0.375rem)] md:w-48">
+                <div class="w-full md:w-48">
                     <x-select wire:model.live="career" aria-label="Carrera" :options="$options['careers']" placeholder="Todas las carreras" />
                 </div>
-                <div class="w-[calc(50%-0.375rem)] md:w-40">
+                <div class="w-full md:w-40">
                     <x-select wire:model.live="plan" aria-label="Plan" :options="$options['plans']" placeholder="Todos los planes" />
                 </div>
-                <div class="w-[calc(50%-0.375rem)] md:w-44">
+                <div class="w-full md:w-44">
                     <x-select wire:model.live="semester" aria-label="Semestre" :options="$options['semesters']" placeholder="Cualquier semestre" />
                 </div>
-                <div class="w-[calc(50%-0.375rem)] md:w-44">
+                <div class="w-full md:w-44">
                     <x-select wire:model.live="status" aria-label="Estatus" :options="$statuses" placeholder="Todos los estatus" />
                 </div>
             </x-slot:actions>
@@ -49,7 +49,7 @@
                 @endscope
 
                 @scope('cell_career', $student)
-                    <span class="block max-w-52 truncate" title="{{ $student->career->name }}">
+                    <span class="block max-w-36 truncate" title="{{ $student->career->name }}">
                         <span class="font-mono">{{ $student->career->code }}</span><span class="text-neutral max-[1200px]:hidden"> · {{ $student->career->name }}</span>
                     </span>
                 @endscope
@@ -71,8 +71,8 @@
                 @endscope
 
                 @scope('actions', $student)
-                    <a href="{{ route('students.show', $student) }}" wire:navigate class="btn btn-ghost btn-sm" aria-label="Ver la ficha de {{ $student->control_number }}" data-testid="show-{{ $student->control_number }}">
-                        <x-icon name="o-eye" class="size-4" /><span class="max-[1200px]:hidden">Ver ficha</span>
+                    <a href="{{ route('students.show', $student) }}" wire:navigate class="btn btn-ghost btn-sm whitespace-nowrap" aria-label="Ver la ficha de {{ $student->control_number }}" data-testid="show-{{ $student->control_number }}">
+                        <x-icon name="o-eye" class="size-4" /><span class="whitespace-nowrap max-[1200px]:hidden">Ver ficha</span>
                     </a>
                 @endscope
 

@@ -100,3 +100,29 @@ it('la retícula del alumno con nueve semestres no desborda la página en 390, 7
             ->assertScript('document.documentElement.scrollWidth <= window.innerWidth', true);
     }
 });
+
+it('el listado de alumnos no desborda y «Ver ficha» queda en una línea con nombres largos', function () {
+    $student = Student::where('control_number', '24111234')->sole();
+    Student::factory()->for($student->studyPlan)->count(5)->create(['campus_id' => $student->campus_id, 'name' => 'Fernanda Holguín Meza']);
+
+    $page = visit('/login')
+        ->fill('username', '19110002')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/students')
+        ->assertSee('Fernanda Holguín Meza');
+
+    foreach ([390, 768, 1440, 1920] as $width) {
+        $page->resize($width, 900)
+            ->assertScript('document.documentElement.scrollWidth <= window.innerWidth', true)
+            ->screenshot(filename: "students-$width");
+
+        if ($width >= 768) {
+            $page->assertScript("(() => { const a = document.querySelector('table [data-testid^=show-]'); const box = a.closest('.overflow-hidden'); return a.getBoundingClientRect().right <= box.getBoundingClientRect().right; })()", true);
+        }
+    }
+
+    $page->resize(1440, 900)
+        ->assertScript("(() => { const a = document.querySelector('table [data-testid^=show-]'); return a.getBoundingClientRect().height < 48; })()", true);
+});

@@ -23,11 +23,11 @@
                 />
             </div>
 
-            <div class="w-[calc(50%-0.375rem)] md:w-56">
+            <div class="w-full md:w-56">
                 <x-select wire:model.live="careerFilter" aria-label="Carrera" :options="$careers" placeholder="Todas las carreras" />
             </div>
 
-            <div class="flex-1 md:w-44 md:flex-none">
+            <div class="w-full md:w-44">
                 <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activos e inactivos" />
             </div>
 
