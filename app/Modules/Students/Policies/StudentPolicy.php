@@ -12,9 +12,11 @@ use App\Modules\Students\Models\Student;
  * Quién consulta alumnos, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Consultar alumnos"):
  *
  * - El admin, a todos.
- * - La subdirección, a los de su campus.
- * - El jefe de departamento, a los de las carreras que coordina su departamento, en su campus.
+ * - La subdirección, a los de cualquier campus (su alcance es de todo el Tec).
+ * - El jefe de departamento, a los de las carreras que coordina su departamento, en cualquier campus.
  * - El coordinador, a los de su carrera en su campus.
+ *
+ * Un alcance que todavía trae campus vale solo en ese campus (ScopedContext).
  *
  * Nadie más, ni el jefe de proyecto docente. Nadie los edita ni los borra: vienen del SII (no hay `update` ni
  * `delete`). covers() ya da por cubierto todo al admin, así que `view` no lo repite.

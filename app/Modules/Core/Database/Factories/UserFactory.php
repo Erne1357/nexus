@@ -52,8 +52,9 @@ class UserFactory extends Factory
 
     /**
      * Con el rol de spatie y, salvo admin, un alcance vigente con las columnas de `$scope`
-     * (`campus_id`, `department_id`, `career_id`, `valid_from`, `valid_to`). Se encadena para
-     * dar varios roles o varios alcances del mismo rol.
+     * (`campus_id`, `department_id`, `career_id`, `valid_from`, `valid_to`). Sin `campus_id`, el
+     * alcance es de todo el Tec, lo que solo vale para los roles que no piden campus. Se encadena
+     * para dar varios roles o varios alcances del mismo rol.
      *
      * @param  array<string, mixed>  $scope
      *

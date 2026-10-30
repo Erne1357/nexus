@@ -82,6 +82,25 @@ it('no lista nada a quien no tiene alcance en ese campus, aunque lo tenga en otr
         ->and(listedControlNumbers($teacherHead, $this->campus))->toBe([]);
 });
 
+it('a la subdirección y al jefe de departamento de todo el Tec les lista los alumnos de su alcance en cualquier campus', function () {
+    $otherCampus = Campus::query()->whereKeyNot($this->campus->id)->sole();
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->department->id])->create();
+
+    expect(listedControlNumbers($subdireccion, $this->campus))->toBe(['21000001', '21000002', '21000003', '21000004'])
+        ->and(listedControlNumbers($head, $this->campus))->toBe(['21000001', '21000002', '21000003'])
+        ->and(listedControlNumbers($head, $otherCampus))->toBe(['21000009']);
+});
+
+it('con un alcance de todo el Tec no lista nada en un campus desactivado, igual que la policy', function () {
+    $otherCampus = Campus::query()->whereKeyNot($this->campus->id)->sole();
+    $otherCampus->update(['is_active' => false]);
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+    expect(listedControlNumbers($subdireccion, $otherCampus))->toBe([])
+        ->and($subdireccion->can('view', Student::query()->where('control_number', '21000009')->sole()))->toBeFalse();
+});
+
 it('lo que lista coincide con lo que la policy deja ver, también con alcances que traen columnas de más: :dataset', function (User $user) {
     $listed = listedControlNumbers($user, $this->campus);
 
@@ -94,6 +113,9 @@ it('lo que lista coincide con lo que la policy deja ver, también con alcances q
     'jefe de departamento' => fn () => User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->department->id])->create(),
     'jefe de departamento con carrera' => fn () => User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->department->id, 'career_id' => $this->iti->id])->create(),
     'coordinador' => fn () => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create(),
+    'subdirección de todo el Tec' => fn () => User::factory()->withRole(Role::Subdireccion)->create(),
+    'jefe de departamento de todo el Tec' => fn () => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->department->id])->create(),
+    'docente de todo el Tec' => fn () => User::factory()->withRole(Role::Docente)->create(),
 ]);
 
 it('filtra por carrera, plan, semestre y estatus, también por los que no tienen estatus', function (array $filters, array $expected) {

@@ -6,10 +6,13 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 
 /*
-| Las pantallas de catálogo, de Campus a Planes de estudio y Docentes, comparten la forma
+| Las ocho pantallas de catálogo, de Campus a Planes de estudio más Edificios, Salones y Docentes, comparten la forma
 | (DESIGN.md, "Anatomía de una pantalla de catálogo"): una barra de herramientas común en su propio
 | renglón, con la búsqueda y los filtros a la izquierda y la acción principal a la derecha, y en cada
 | fila «Editar» visible y el resto plegado en el menú «Acciones», donde lo deshabilitado se queda con
@@ -29,6 +32,8 @@ dataset('catalog screens', [
     'Carreras' => ['academic.careers', 'CAR9', 'Nueva carrera', 'Buscar carreras'],
     'Materias' => ['academic.subjects', 'MAT9', 'Nueva materia', 'Buscar materias'],
     'Planes de estudio' => ['academic.plans', 'PLN9', 'Nuevo plan', 'Buscar planes'],
+    'Edificios' => ['facilities.buildings', 'EDI9', 'Nuevo edificio', 'Buscar edificios'],
+    'Salones' => ['facilities.rooms', 'SAL9', 'Nuevo salón', 'Buscar salones'],
     'Docentes' => ['faculty.teachers', '9000009', 'Nuevo docente', 'Buscar docentes'],
 ]);
 
@@ -40,8 +45,15 @@ function seedCatalogRow(string $route, string $code): void
         'academic.careers' => Career::factory()->create(['code' => $code]),
         'academic.subjects' => Subject::factory()->create(['code' => $code]),
         'academic.plans' => StudyPlan::factory()->create(['code' => $code]),
-        'faculty.teachers' => Teacher::factory()->adscribedTo(Department::factory()->create(), Campus::factory()->create())->create(['employee_number' => $code]),
+        'facilities.buildings' => Building::factory()->create(['code' => $code]),
+        'facilities.rooms' => Room::factory()->create(['code' => $code]),
+        'faculty.teachers' => Teacher::factory()->adscribedTo(Department::factory()->create())->create(['employee_number' => $code]),
     };
+
+    // Edificios y salones son de un campus: el admin, que no tiene uno por omisión, elige el de la fila.
+    if (str_starts_with($route, 'facilities.')) {
+        session([ScopedContext::ACTIVE_CAMPUS => ($route === 'facilities.rooms' ? Room::query() : Building::query())->where('code', $code)->value('campus_id')]);
+    }
 }
 
 it('usa la barra de herramientas común: búsqueda, filtros a la izquierda y la acción principal a la derecha, fuera del encabezado', function (string $route, string $code, string $action, string $searchLabel) {
