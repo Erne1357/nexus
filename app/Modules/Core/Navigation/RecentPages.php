@@ -25,7 +25,8 @@ final readonly class RecentPages
 
     /**
      * Anota la página como la última de su área si su ruta es la de una entrada, o la de una pantalla
-     * hija de una entrada (Navigation::forRoute), que el usuario ve.
+     * hija de una entrada (Navigation::forRoute), que el usuario ve. Se guarda con una sola barra al
+     * inicio: una petición a `//host/...` no puede quedar como enlace a otro host.
      *
      * @param  string  $uri  ruta relativa de la petición con su consulta (`/students/<id>?tab=kardex`)
      */
@@ -34,7 +35,7 @@ final readonly class RecentPages
         $item = $this->navigation->forRoute($route);
 
         if ($item !== null && $item->isVisibleTo($this->context)) {
-            $this->session->put(self::KEY.'.'.$item->area->value, $uri);
+            $this->session->put(self::KEY.'.'.$item->area->value, '/'.ltrim($uri, '/'));
         }
     }
 

@@ -6,6 +6,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Navigation\RecentPages;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Students\Models\Student;
 use Dom\Element;
@@ -456,6 +457,13 @@ describe('iconos de área', function () {
         $page = domOf($this->get(route('imports.wizard'))->assertOk());
 
         expect(areaIconIn($page, 'academico')->getAttribute('href'))->toBe(route('academic.subjects', ['search' => 'cal'], false));
+    });
+
+    it('guarda la página con una sola barra al inicio: una petición a //campus no deja un enlace a otro host', function () {
+        $this->get(route('home'))->assertOk();
+        app(RecentPages::class)->remember('core.campuses', '//campus?search=norte');
+
+        expect(app(RecentPages::class)->last(NavigationArea::Academico))->toBe('/campus?search=norte');
     });
 
     it('una pantalla hija cuenta como página de su área: la ficha de un alumno, con su pestaña', function () {
