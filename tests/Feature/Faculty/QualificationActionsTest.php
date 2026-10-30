@@ -9,6 +9,7 @@ use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
@@ -89,4 +90,21 @@ it('volver a declarar una materia quitada la restaura, sin duplicar la fila', fu
         ->and($restored->trashed())->toBeFalse()
         ->and($restored->level)->toBe(QualificationLevel::Preferente)
         ->and(TeacherSubjectQualification::withTrashed()->count())->toBe(1);
+});
+
+it('no declara una materia inactiva ni borrada, pero deja cambiar el nivel de una ya declarada', function () {
+    $kept = app(SetQualification::class)->handle($this->teacher, $this->subject, QualificationLevel::Apto, $this->jefe);
+    $this->subject->update(['is_active' => false]);
+
+    app(SetQualification::class)->handle($this->teacher, $this->subject, QualificationLevel::Preferente, $this->jefe);
+
+    expect($kept->fresh()->level)->toBe(QualificationLevel::Preferente);
+
+    $other = Subject::factory()->create(['is_active' => false]);
+    $deleted = Subject::factory()->create();
+    $deleted->delete();
+
+    foreach ([$other, $deleted] as $subject) {
+        expect(fn () => app(SetQualification::class)->handle($this->teacher, $subject, QualificationLevel::Apto, $this->jefe))->toThrow(ValidationException::class);
+    }
 });

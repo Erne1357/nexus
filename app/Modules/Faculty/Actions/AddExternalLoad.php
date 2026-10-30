@@ -37,7 +37,7 @@ final class AddExternalLoad
             $existing = TeacherExternalLoad::withTrashed()
                 ->where('teacher_id', $locked->getKey())
                 ->where('term_id', $term->getKey())
-                ->whereRaw('lower(source) = ?', [mb_strtolower($data['source'])])
+                ->whereRaw('lower(source) = lower(?)', [$data['source']])
                 ->first();
 
             if ($existing !== null && ! $existing->trashed()) {

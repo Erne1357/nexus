@@ -16,7 +16,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * En una transacción vuelve a leer la fila con bloqueo, así el valor anterior de la bitácora es el confirmado. Si
  * nada cambió, no escribe, no registra ni avisa. Un origen que otra fila del mismo periodo ya tiene, o una fila ya
- * quitada, es un error.
+ * quitada, es un error; uno que tuvo una fila quitada la restaura y quita la editada.
  */
 final class UpdateExternalLoad
 {
@@ -43,15 +43,20 @@ final class UpdateExternalLoad
                 return $load;
             }
 
-            $taken = TeacherExternalLoad::withTrashed()
+            $clash = TeacherExternalLoad::withTrashed()
                 ->where('teacher_id', $locked->teacher_id)
                 ->where('term_id', $locked->term_id)
                 ->whereKeyNot($locked->getKey())
-                ->whereRaw('lower(source) = ?', [mb_strtolower($new['source'])])
-                ->exists();
+                ->whereRaw('lower(source) = lower(?)', [$new['source']])
+                ->lockForUpdate()
+                ->first();
 
-            if ($taken) {
+            if ($clash !== null && ! $clash->trashed()) {
                 throw ValidationException::withMessages(['source' => 'Ese origen ya tiene horas en el periodo.']);
+            }
+
+            if ($clash !== null) {
+                return $this->restoreInstead($locked, $clash, $new, $old);
             }
 
             $locked->forceFill(Arr::only($new, $changed))->save();
@@ -68,5 +73,40 @@ final class UpdateExternalLoad
 
             return $load;
         });
+    }
+
+    /**
+     * El origen nuevo es el de una fila quitada del periodo: se restaura con los valores nuevos y la editada se quita,
+     * como AddExternalLoad restaura un origen quitado; así el índice único no se rompe.
+     *
+     * @param  array{source: string, hours: int, notes: ?string}  $new
+     * @param  array{source: string, hours: int, notes: ?string}  $old
+     */
+    private function restoreInstead(TeacherExternalLoad $edited, TeacherExternalLoad $removed, array $new, array $old): TeacherExternalLoad
+    {
+        $before = $this->rules->logged($removed);
+        $edited->delete();
+        $removed->forceFill($new);
+        $removed->deleted_at = null;
+        $removed->save();
+
+        activity()
+            ->performedOn($edited)
+            ->event(ActivityEvent::Deleted)
+            ->withChanges(['old' => $old])
+            ->withProperties(['teacher_id' => $edited->teacher_id, 'term_id' => $edited->term_id])
+            ->log('Quitó unas horas fuera del ITCJ del docente al cambiarlas a un origen quitado');
+
+        activity()
+            ->performedOn($removed)
+            ->event(ActivityEvent::Created)
+            ->withChanges(['attributes' => $new, 'old' => $before])
+            ->withProperties(['teacher_id' => $removed->teacher_id, 'term_id' => $removed->term_id])
+            ->log('Restauró unas horas fuera del ITCJ del docente');
+
+        ExternalLoadChanged::dispatch($edited);
+        ExternalLoadChanged::dispatch($removed);
+
+        return $removed;
     }
 }

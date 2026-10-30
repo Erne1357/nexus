@@ -31,7 +31,7 @@ beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
-    $this->term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
+    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
 
     $this->docente = User::factory()->withRole(Role::Docente)->create(['username' => '1000001']);
     $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez', 'email' => 'ana@example.test', 'user_id' => $this->docente->id]);
@@ -438,6 +438,36 @@ describe('perfil', function () {
             ->and(Activity::where('id', '>', $this->activityBase)->where('event', 'created')->count())->toBe(1);
     });
 
+    it('S17: una materia inactiva o borrada es un error del campo materia, no se declara', function () {
+        $inactive = Subject::factory()->create(['department_id' => $this->sc->id, 'is_active' => false]);
+        $deleted = Subject::factory()->create(['department_id' => $this->sc->id]);
+        $deleted->delete();
+
+        foreach ([$inactive, $deleted] as $subject) {
+            teacherRecord($this->jefe, $this->ana)->set('tab', 'perfil')->call('createQualification')
+                ->set('qualSubjectId', $subject->id)->set('qualLevel', 'apto')->call('saveQualification')->assertHasErrors(['qualSubjectId']);
+        }
+
+        expect(TeacherSubjectQualification::count())->toBe(0);
+    });
+
+    it('lee el perfil de 10 materias sin una consulta por materia', function () {
+        foreach (range(1, 10) as $i) {
+            TeacherSubjectQualification::factory()->for($this->ana)->for(Subject::factory()->create(['department_id' => $this->sc->id]))->create();
+        }
+        $page = teacherRecord($this->jefe, $this->ana);
+        DB::enableQueryLog();
+        $page->set('tab', 'perfil');
+        $with10 = count(DB::getQueryLog());
+
+        TeacherSubjectQualification::query()->limit(5)->get()->each->delete();
+        $page = teacherRecord($this->jefe, $this->ana);
+        DB::flushQueryLog();
+        $page->set('tab', 'perfil');
+
+        expect($with10)->toBe(count(DB::getQueryLog()));
+    });
+
     it('S17: el jefe de SC no declara una materia de CB: 403 y nada se guarda', function () {
         teacherRecord($this->jefe, $this->ana)->set('tab', 'perfil')->call('createQualification')
             ->set('qualSubjectId', $this->calculo->id)->set('qualLevel', 'apto')->call('saveQualification')->assertForbidden();
@@ -555,7 +585,7 @@ describe('horas fuera del ITCJ', function () {
 
     it('no toca las horas de otro docente ni las de otro periodo', function () {
         $foreign = TeacherExternalLoad::factory()->for($this->beto)->for($this->term)->create();
-        $past = TeacherExternalLoad::factory()->for($this->ana)->for(Term::factory()->create())->create();
+        $past = TeacherExternalLoad::factory()->for($this->ana)->for(Term::factory()->create(['code' => '20281']))->create();
 
         teacherRecord($this->admin, $this->ana)->call('removeLoad', $foreign->id)->assertNotFound();
         teacherRecord($this->admin, $this->ana)->call('editLoad', $past->id)->assertNotFound();

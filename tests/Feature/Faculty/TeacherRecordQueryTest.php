@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
 beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC']);
     $this->ii = Department::factory()->create(['code' => 'II']);
-    $this->term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
+    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
     $this->user = User::factory()->create(['username' => '1000001']);
     $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000001', 'user_id' => $this->user->id]);
     TeacherDepartment::factory()->for($this->ana)->for($this->sc)->create(['is_primary' => false]);
@@ -126,7 +126,7 @@ describe('perfil, horas fuera del ITCJ e historial', function () {
     });
 
     it('las horas fuera del ITCJ son las del periodo, por origen, sin las quitadas', function () {
-        $other = Term::factory()->create();
+        $other = Term::factory()->create(['code' => '20281']);
         TeacherExternalLoad::factory()->for($this->ana)->for($this->term)->create(['source' => 'TecNM Virtual', 'hours' => 6]);
         TeacherExternalLoad::factory()->for($this->ana)->for($this->term)->create(['source' => 'Anáhuac', 'hours' => 4]);
         TeacherExternalLoad::factory()->for($this->ana)->for($this->term)->create(['source' => 'Quitada', 'hours' => 4, 'deleted_at' => now()]);
@@ -160,6 +160,16 @@ describe('perfil, horas fuera del ITCJ e historial', function () {
             ->and($history[1]['groups']->first()->campus->code)->toBe('C2')
             ->and($history[1]['evaluations']->mapWithKeys(fn ($e) => [$e->kind->value => (float) $e->score])->all())->toBe(['departamental' => 3.8, 'estudiantil' => 4.5])
             ->and($history[2]['evaluations'])->toHaveCount(0);
+    });
+
+    it('con el mismo grupo en dos campus, el orden es fijo por clave de campus', function () {
+        $subject = Subject::factory()->create();
+        $c1 = Campus::factory()->create(['code' => 'C1']);
+        $c2 = Campus::factory()->create(['code' => 'C2']);
+        TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20241', 'campus_id' => $c2->id, 'group_code' => '3A']);
+        TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20241', 'campus_id' => $c1->id, 'group_code' => '3A']);
+
+        expect(app(TeacherRecordQuery::class)->history($this->ana)->first()['groups']->map(fn ($group) => $group->campus->code)->all())->toBe(['C1', 'C2']);
     });
 
     it('usa el nombre del periodo de Nexus si lo tiene', function () {

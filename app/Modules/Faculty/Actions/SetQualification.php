@@ -9,6 +9,7 @@ use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -17,7 +18,10 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * TeacherPolicy (`manageQualification`, con la materia) antes de llamarla.
  *
  * En una transacción bloquea al docente y deja en la bitácora el nivel anterior y el nuevo. Si nada cambió, no
- * escribe, no registra ni avisa; si cambió, avisa con QualificationChanged después del commit.
+ * escribe, no registra ni avisa; si cambió, avisa con QualificationChanged después del commit. Una materia inactiva o
+ * borrada no se declara ni se restaura (error en `subject`); el nivel de una ya declarada sí se puede cambiar.
+ *
+ * @throws ValidationException
  */
 final class SetQualification
 {
@@ -32,6 +36,10 @@ final class SetQualification
                 ->where('teacher_id', $locked->getKey())
                 ->where('subject_id', $subject->getKey())
                 ->first();
+
+            if (($existing === null || $existing->trashed()) && (! $subject->is_active || $subject->trashed())) {
+                throw ValidationException::withMessages(['subject' => 'Esa materia está inactiva o borrada: no se puede declarar.']);
+            }
 
             if ($existing === null) {
                 $qualification = TeacherSubjectQualification::create([

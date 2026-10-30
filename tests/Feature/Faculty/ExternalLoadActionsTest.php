@@ -7,6 +7,7 @@ use App\Modules\Faculty\Actions\UpdateExternalLoad;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -19,7 +20,7 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->teacher = Teacher::factory()->create(['employee_number' => '1000001']);
-    $this->term = Term::factory()->current()->create();
+    $this->term = Term::factory()->current()->create(['code' => '20271']);
     $this->activityBase = (int) Activity::max('id');
 });
 
@@ -73,7 +74,7 @@ it('S16: un origen se repite solo en otro periodo u otro docente', function () {
 
     expect(loadErrorsOf(fn () => app(AddExternalLoad::class)->handle($this->teacher, $this->term, ['source' => 'tecnm virtual', 'hours' => 6])))->toHaveKey('source');
 
-    app(AddExternalLoad::class)->handle($this->teacher, Term::factory()->create(), ['source' => 'TecNM Virtual', 'hours' => 5]);
+    app(AddExternalLoad::class)->handle($this->teacher, Term::factory()->create(['code' => '20281']), ['source' => 'TecNM Virtual', 'hours' => 5]);
     app(AddExternalLoad::class)->handle(Teacher::factory()->create(), $this->term, ['source' => 'TecNM Virtual', 'hours' => 5]);
 
     expect(TeacherExternalLoad::count())->toBe(3);
@@ -118,4 +119,23 @@ it('quita con borrado lógico y bitácora; ponerlo de nuevo lo restaura', functi
 
     expect($restored->id)->toBe($load->id)->and($restored->trashed())->toBeFalse()->and($restored->hours)->toBe(9)
         ->and(TeacherExternalLoad::withTrashed()->count())->toBe(1);
+});
+
+it('cambiar el origen a uno quitado del periodo lo restaura con los valores nuevos y quita la fila editada', function () {
+    $a = app(AddExternalLoad::class)->handle($this->teacher, $this->term, ['source' => 'A', 'hours' => 5]);
+    $b = app(AddExternalLoad::class)->handle($this->teacher, $this->term, ['source' => 'B', 'hours' => 7]);
+    app(RemoveExternalLoad::class)->handle($b);
+
+    $result = app(UpdateExternalLoad::class)->handle($a, ['source' => 'b', 'hours' => 9]);
+
+    expect($result->id)->toBe($b->id)->and($result->trashed())->toBeFalse()->and($result->hours)->toBe(9)->and($result->source)->toBe('b')
+        ->and($a->fresh()->trashed())->toBeTrue()
+        ->and(TeacherExternalLoad::count())->toBe(1);
+});
+
+it('la base rechaza el mismo origen con otras mayúsculas', function () {
+    TeacherExternalLoad::factory()->for($this->teacher)->for($this->term)->create(['source' => 'TecNM Virtual']);
+
+    expect(fn () => TeacherExternalLoad::factory()->for($this->teacher)->for($this->term)->create(['source' => 'TECNM VIRTUAL']))
+        ->toThrow(UniqueConstraintViolationException::class);
 });

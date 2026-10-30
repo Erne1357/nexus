@@ -6,11 +6,11 @@ use App\Modules\Academic\Enums\DepartmentHeadKind;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Queries\DepartmentQuery;
-use App\Modules\Academic\Queries\SubjectQuery;
 use App\Modules\Core\Actions\ResetUserPassword;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\CampusQuery;
+use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Actions\AddExternalLoad;
 use App\Modules\Faculty\Actions\AddPosition;
@@ -31,6 +31,7 @@ use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
+use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Policies\TeacherPolicy;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
@@ -51,8 +52,8 @@ use Mary\Traits\Toast;
  * cifras, y cinco pestañas: Datos (sus datos, sus adscripciones: quitar y hacer principal), Plazas (agregar,
  * editar y quitar), Perfil (las materias que puede dar, apto o preferente, y sus «Horas fuera del ITCJ» del periodo
  * activo; S16 y S17, supuestos por confirmar) e Historial (grupos por periodo y evaluaciones, de solo lectura).
- * Disponibilidad muestra su lugar hasta que la tarea 1.14 la llene. «Acciones» trae darlo de baja o reactivarlo y «Restablecer contraseña», que es solo del
- * administrador.
+ * Disponibilidad muestra su lugar hasta que la tarea 1.14 la llene. «Acciones» trae darlo de baja o reactivarlo y
+ * «Restablecer contraseña», que es solo del administrador.
  *
  * Lo ven y cambian el admin, la subdirección y los jefes, cada quien los docentes de su alcance (TeacherPolicy). El
  * componente lee con TeacherQuery y TeacherRecordQuery, autoriza en mount(), en with() y en cada método (una
@@ -618,7 +619,7 @@ new #[Title('Ficha del docente')] class extends Component
         $this->showQualificationModal = true;
     }
 
-    public function saveQualification(TeacherQuery $teachers, TeacherRecordQuery $records, SubjectQuery $subjects, SetQualification $setQualification, ScopedContext $context): void
+    public function saveQualification(TeacherQuery $teachers, TeacherRecordQuery $records, SetQualification $setQualification, ScopedContext $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -631,11 +632,17 @@ new #[Title('Ficha del docente')] class extends Component
 
         // Al editar, la materia es la del renglón, no lo que mande el navegador.
         $subject = $this->editingQualificationId === null
-            ? $subjects->findOrFail($data['qualSubjectId'])
+            ? KeyLookup::findOrFail(Subject::withTrashed(), $data['qualSubjectId'])
             : Subject::withTrashed()->findOrFail($records->findQualification($teacher, $this->editingQualificationId)->subject_id);
         $this->authorize('manageQualification', [$teacher, $subject]);
 
-        $setQualification->handle($teacher, $subject, QualificationLevel::from($data['qualLevel']), $context->user(), $data['qualNotes']);
+        try {
+            $setQualification->handle($teacher, $subject, QualificationLevel::from($data['qualLevel']), $context->user(), $data['qualNotes']);
+        } catch (ValidationException $exception) {
+            $this->addError('qualSubjectId', (string) collect($exception->errors())->flatten()->first());
+
+            return;
+        }
 
         $this->success('Perfil actualizado', e("{$subject->code} · {$subject->name}"));
         $this->showQualificationModal = false;
@@ -760,13 +767,32 @@ new #[Title('Ficha del docente')] class extends Component
 
         return [
             'profile' => $profile,
-            'canQualify' => $profile->mapWithKeys(fn ($qualification): array => [$qualification->id => Gate::allows('manageQualification', [$teacher, $qualification->subject])])->all(),
+            'canQualify' => $this->qualifiable($profile, $teacher, $context),
             'loads' => $loads,
             'canManageLoads' => Gate::allows('manageExternalLoads', $teacher),
             'subjectOptions' => $this->showQualificationModal && $this->editingQualificationId === null
                 ? $records->qualifiableSubjects($teachers->coveredDepartments($context), $this->qualSearch)
                 : collect(),
         ];
+    }
+
+    /**
+     * Por materia del perfil, si el usuario puede cambiarla: cubre al docente (una vez) y el departamento de la
+     * materia, la misma regla de TeacherPolicy::manageQualification sin preguntarle a la Gate por cada renglón.
+     *
+     * @param  iterable<int, TeacherSubjectQualification>  $profile
+     * @return array<string, bool>
+     */
+    private function qualifiable(iterable $profile, Teacher $teacher, ScopedContext $context): array
+    {
+        $coversTeacher = Gate::allows('update', $teacher);
+        $allowed = [];
+
+        foreach ($profile as $qualification) {
+            $allowed[$qualification->id] = $coversTeacher && $context->coversDepartment(TeacherPolicy::EDITORS, (string) $qualification->subject?->department_id);
+        }
+
+        return $allowed;
     }
 
     private function activeTermOrFail(ScopedContext $context): Term
