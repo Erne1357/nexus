@@ -33,11 +33,11 @@ Calificaciones y actas, pagos, servicio social y residencias, titulación, contr
 | Rol en Nexus | Persona | Alcance |
 |---|---|---|
 | `admin` | Equipo de desarrollo / sistemas | Todo |
-| `subdireccion` | Subdirección Académica | Campus |
-| `jefe_departamento` | Jefe de departamento académico | Departamento en un campus |
+| `subdireccion` | Subdirección Académica | Todo el Tec |
+| `jefe_departamento` | Jefe de departamento académico | Departamento, en todo el Tec |
 | `jefe_proyecto_docente` | Jefe de proyecto docente | Departamento en un campus |
 | `coordinador` | Coordinador de carrera | Carrera en un campus |
-| `docente` | Profesor | Su propia carga |
+| `docente` | Profesor | Su propia carga, en cualquier campus |
 | `alumno` (R3) | Estudiante | Su propia inscripción |
 | `servicios_escolares` (R3) | Servicios Escolares / División | Campus |
 
