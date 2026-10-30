@@ -1,7 +1,8 @@
 {{--
     Anatomía de una pantalla de catálogo (DESIGN.md, "Layout"), la misma de Campus y Departamentos:
-    encabezado con búsqueda, filtros y una sola acción principal; tabla en una superficie blanca con
-    filete, la clave en Mono, el estado con su insignia y las acciones en btn-ghost; al pie, el rango
+    encabezado y, en su renglón, la barra de herramientas común (x-core::catalog-toolbar: búsqueda,
+    filtros y una sola acción principal); tabla en una superficie blanca con
+    filete, la clave en Mono, el estado con su insignia y «Editar» visible y lo demás en el menú «Acciones»; al pie, el rango
     y la paginación. Debajo de 768 px la tabla cede su lugar a renglones apilados (clave, nombre y
     estado; luego el detalle; luego las acciones), que no repiten los data-testid de la tabla.
 --}}
@@ -10,46 +11,33 @@
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             Las carreras y los campus donde se ofrecen. La oferta es la del campus activo de tu credencial. Una carrera solo se borra si no tiene planes de estudio.
         </x-slot:subtitle>
-
-        <x-slot:actions class="w-full flex-wrap md:w-auto">
-            <div class="w-full md:w-64">
-                <x-input
-                    wire:model.live.debounce.300ms="search"
-                    placeholder="Buscar por clave o nombre"
-                    aria-label="Buscar carreras"
-                    icon="o-magnifying-glass"
-                    clearable
-                />
-            </div>
-
-            <div class="w-full md:w-52">
-                <x-select
-                    wire:model.live="department"
-                    aria-label="Departamento"
-                    :options="$departmentOptions"
-                    placeholder="Todos los departamentos"
-                />
-            </div>
-
-            <div class="w-full md:w-44">
-                <x-select
-                    wire:model.live="status"
-                    aria-label="Estado"
-                    :options="$statuses"
-                    placeholder="Activas e inactivas"
-                />
-            </div>
-
-            <x-button label="Nueva carrera" icon="o-plus" class="btn-primary max-md:flex-1" wire:click="create" spinner="create" />
-        </x-slot:actions>
     </x-header>
+
+    <x-core::catalog-toolbar>
+        <x-slot:search>
+            <x-input
+                wire:model.live.debounce.300ms="search"
+                placeholder="Buscar por clave o nombre"
+                aria-label="Buscar carreras"
+                icon="o-magnifying-glass"
+                clearable
+            />
+        </x-slot:search>
+
+        <x-select wire:model.live="department" aria-label="Departamento" :options="$departmentOptions" placeholder="Todos los departamentos" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activas e inactivas" />
+
+        <x-slot:action>
+            <x-button label="Nueva carrera" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+        </x-slot:action>
+    </x-core::catalog-toolbar>
 
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
         <x-table
             :headers="$headers"
             :rows="$careers"
             :row-decoration="$rowDecoration"
-            class="max-md:hidden [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
+            class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
         >
             @scope('cell_code', $career)
                 <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $career->is_active])>{{ $career->code }}</span>

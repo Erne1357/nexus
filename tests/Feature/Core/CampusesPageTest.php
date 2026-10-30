@@ -137,9 +137,9 @@ describe('admin', function () {
         $cards = campusCardsOn($this->actingAs($this->admin)->get(route('core.campuses')));
 
         expect(array_keys($cards))->toBe(['C1', 'C2', 'EAD'])
-            ->and(campusTextOf($cards['C1']))->toBe('C1 Campus I Activo Presencial · Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00 Editar Desactivar')
+            ->and(campusTextOf($cards['C1']))->toBe('C1 Campus I Activo Presencial · Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00 Editar Acciones Desactivar')
             ->and(campusTextOf($cards['EAD']))->toStartWith('EAD Educación a Distancia Inactivo Mixta · ')
-            ->and(campusTextOf($cards['EAD']))->toEndWith('Editar Activar')
+            ->and(campusTextOf($cards['EAD']))->toEndWith('Editar Acciones Activar')
             ->and(campusClassesOf($cards['EAD']))->toContain('text-neutral')
             ->and(campusClassesOf($cards['EAD']->querySelector('.font-mono')))->not->toContain('font-semibold')
             ->and(campusClassesOf($cards['EAD']->querySelector('.badge')))->toContain('badge-neutral', 'badge-soft')

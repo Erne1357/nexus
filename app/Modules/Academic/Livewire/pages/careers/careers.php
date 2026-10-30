@@ -78,10 +78,10 @@ new #[Title('Carreras')] class extends Component
             'campus' => $campus,
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
-                ['key' => 'name', 'label' => 'Nombre'],
-                ['key' => 'department', 'label' => 'Departamento', 'sortable' => false],
-                ['key' => 'study_plans_count', 'label' => 'Planes'],
-                ['key' => 'offered_here', 'label' => $campus === null ? 'Se ofrece en el campus' : "Se ofrece en {$campus->code}"],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
+                ['key' => 'department', 'label' => 'Departamento', 'sortable' => false, 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'study_plans_count', 'label' => 'Planes', 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'offered_here', 'label' => $campus === null ? 'Se ofrece en el campus' : "Se ofrece en {$campus->code}", 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
             // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
