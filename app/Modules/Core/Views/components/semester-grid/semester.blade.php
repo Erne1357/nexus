@@ -13,7 +13,7 @@
     'max-md:bg-base-200' => $current,
     'max-md:bg-base-100' => ! $current,
 ]) }} aria-label="Semestre {{ $semester }}" data-semester="{{ $semester }}" style="--col: {{ $column }}">
-    <div class="flex items-start justify-between gap-1 max-md:col-span-2 max-md:px-0.5 md:col-(--col) md:row-start-1 md:px-2.5 md:pt-2.5">
+    <div data-semester-header class="flex items-start justify-between gap-1 max-md:col-span-2 max-md:px-0.5 md:col-(--col) md:row-start-1 md:px-2.5 md:pt-2.5">
         <h3 class="min-w-0 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
             Semestre {{ $semester }}@if ($note)<span class="sr-only">, {{ $note }}</span>@endif
             <span class="block font-mono text-xs normal-case tracking-normal">{{ $figures ?? '' }}</span>

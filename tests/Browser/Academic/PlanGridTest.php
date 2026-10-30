@@ -15,7 +15,9 @@ use Database\Seeders\DemoSeeder;
 | cierra el panel; desde «Especialidades» da de alta una especialidad y la renombra. Luego agrega una materia del
 | catálogo al pie de un semestre, la mueve desde el panel y la quita de la retícula (Esc en la confirmación no
 | cierra el panel). Por último, en el panel agrega un requisito: como seriación cierra un ciclo y el panel lo dice
-| con su cadena; como correquisito entra; volverlo seriación lo rechaza y el select regresa; y lo quita.
+| con su cadena; como correquisito entra; volverlo seriación lo rechaza y el select regresa; y lo quita. La
+| retícula es una cuadrícula perfecta: mosaicos del mismo tamaño, renglones alineados entre columnas, nueve
+| semestres a 1366 px sin desplazarse, las cadenas debajo y la barra de selección al resaltar una cadena.
 */
 
 beforeEach(function () {
@@ -44,11 +46,11 @@ it('el admin abre la retícula de un plan, ve una materia en el panel y gestiona
         ->assertScript($onChain('SCD-1022'), false)
         ->assertNoJavaScriptErrors();
 
-    // El foco está dentro del panel (x-trap); Esc lo cierra.
+    // El foco está dentro del panel (x-trap); Esc lo cierra, quita el resaltado y oculta la barra de selección.
     $page->keys('[data-testid="subject-panel"] [aria-label="Cerrar el panel"]', 'Escape')
-        ->waitForText('Toca una materia para verla en el panel')
-        ->assertScript("document.querySelector('[data-testid=subject-panel]') === null", true)
-        ->assertScript($onChain('ACF-0905'), false);
+        ->assertNotPresent('[data-testid="subject-panel"]')
+        ->assertScript($onChain('ACF-0905'), false)
+        ->assertScript("document.querySelector('[data-testid=selection-bar]').offsetHeight", 0);
 
     $page->click('@open-specialties')
         ->waitForText('Especialidades del plan')
@@ -179,4 +181,55 @@ it('en celular la leyenda de cadenas del plan va plegada y se abre con un toque;
     $page->resize(1440, 900)
         ->assertScript($hidden($chip), false)
         ->assertScript($hidden($toggle), true);
+});
+
+it('a 1440 px todos los mosaicos miden lo mismo, los de un renglón se alinean entre columnas y las cadenas van debajo', function () {
+    $software = Specialty::where('study_plan_id', $this->plan->id)->where('name', 'Ingeniería de Software')->sole();
+    $softwareCodes = Subject::whereIn('id', StudyPlanSubject::where('specialty_id', $software->id)->orderBy('semester')->pluck('subject_id'))->orderBy('code')->pluck('code');
+
+    $page = visit('/login')
+        ->fill('username', 'ana.admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/academic/plans/'.$this->plan->id)
+        ->resize(1440, 900)
+        ->assertSee('Cálculo Integral')
+        ->assertScript("new Set([...document.querySelectorAll('[data-subject]')].map((tile) => { const box = tile.getBoundingClientRect(); return Math.round(box.width) + 'x' + Math.round(box.height); })).size", 1)
+        ->assertScript("Math.round(document.querySelector('[data-subject]').getBoundingClientRect().height)", 104)
+        // El primer mosaico de cada semestre, en el mismo renglón de todas las columnas.
+        ->assertScript("new Set([...document.querySelectorAll('[data-testid=plan-grid] > section')].map((semester) => Math.round(semester.querySelector('[data-subject]').getBoundingClientRect().top))).size", 1)
+        // Cada especialidad empieza en el mismo renglón en todas sus columnas, debajo de su banda.
+        ->assertScript("(() => { const band = document.querySelector('[data-band=\"{$software->id}\"]').getBoundingClientRect(); return [...document.querySelectorAll('[data-subject]')].filter((tile) => ".json_encode($softwareCodes->all()).".includes(tile.dataset.subject)).every((tile) => tile.getBoundingClientRect().top > band.bottom); })()", true)
+        ->assertScript("document.querySelector('[data-testid=chain-legend]').getBoundingClientRect().top >= document.querySelector('[data-testid=plan-grid]').getBoundingClientRect().bottom", true)
+        ->assertNoJavaScriptErrors();
+
+    // Nueve semestres caben a 1366 px sin desplazar la caja, con la clave completa en cada mosaico.
+    $page->resize(1366, 900)
+        ->assertScript("(() => { const box = document.querySelector('[data-testid=plan-grid]').parentElement; return box.scrollWidth <= box.clientWidth; })()", true)
+        ->assertScript("[...document.querySelectorAll('[data-subject] > span:first-child > span:first-child')].every((key) => key.scrollWidth <= key.clientWidth)", true);
+});
+
+it('la barra de selección dice la cadena que se toca en la leyenda y Esc la quita', function () {
+    $bar = '[data-testid="selection-bar"]';
+
+    visit('/login')
+        ->fill('username', 'ana.admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/academic/plans/'.$this->plan->id)
+        ->assertScript("document.querySelector('{$bar}').offsetHeight", 0)
+        ->click('[data-testid="chain-legend"] [data-chain="0"]')
+        ->assertSeeIn($bar, 'Cadena de')
+        ->assertScript("document.querySelector('{$bar}').offsetHeight > 0", true)
+        ->assertSeeIn($bar, 'Quitar resaltado')
+        ->keys('[data-testid="chain-legend"] [data-chain="0"]', 'Escape')
+        ->assertScript("document.querySelector('{$bar}').offsetHeight", 0)
+        ->assertScript("document.querySelector('[data-testid=plan-grid]').hasAttribute('data-focus')", false)
+        ->click('[data-testid="chain-legend"] [data-chain="0"]')
+        ->assertScript("document.querySelector('{$bar}').offsetHeight > 0", true)
+        ->click("{$bar} button")
+        ->assertScript("document.querySelector('{$bar}').offsetHeight", 0)
+        ->assertNoJavaScriptErrors();
 });
