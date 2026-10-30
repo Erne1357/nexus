@@ -87,11 +87,9 @@ it('cada cadena de seriación tiene su color en la franja de sus materias y en l
         ->and($tile('ACF-0901')->getAttribute('data-chain'))->toBe('0')
         ->and($tile('ACF-0902')->getAttribute('data-chain'))->toBe('0')
         ->and($tile('ACF-0902')->getAttribute('data-prereqs'))->toBe('ACF-0901')
-        ->and($tile('ACF-0901')->getAttribute('class'))->toContain('shadow-[inset_5px_0_0_var(--chain)]')
-        ->and($tile('ACF-0901')->getAttribute('style'))->toContain('--chain: var(--color-chain-1)')
+        ->and($tile('ACF-0901')->getAttribute('class'))->toContain('[--chain:var(--color-chain-1)]', 'shadow-[inset_5px_0_0_var(--chain)]')
         ->and($tile('SCD-1018')->hasAttribute('data-chain'))->toBeFalse()
-        ->and($tile('SCD-1018')->getAttribute('class'))->not->toContain('--chain')
-        ->and($tile('SCD-1018')->getAttribute('style'))->not->toContain('--chain');
+        ->and($tile('SCD-1018')->getAttribute('class'))->not->toContain('--chain');
 });
 
 it('dice qué le falta a una materia que todavía no puede cursar', function () {
