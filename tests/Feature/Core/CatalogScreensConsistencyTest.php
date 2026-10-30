@@ -6,9 +6,10 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Models\Teacher;
 
 /*
-| Las cinco pantallas de catálogo de Académico, de Campus a Planes de estudio, comparten la forma
+| Las pantallas de catálogo, de Campus a Planes de estudio y Docentes, comparten la forma
 | (DESIGN.md, "Anatomía de una pantalla de catálogo"): una barra de herramientas común en su propio
 | renglón, con la búsqueda y los filtros a la izquierda y la acción principal a la derecha, y en cada
 | fila «Editar» visible y el resto plegado en el menú «Acciones», donde lo deshabilitado se queda con
@@ -28,6 +29,7 @@ dataset('catalog screens', [
     'Carreras' => ['academic.careers', 'CAR9', 'Nueva carrera', 'Buscar carreras'],
     'Materias' => ['academic.subjects', 'MAT9', 'Nueva materia', 'Buscar materias'],
     'Planes de estudio' => ['academic.plans', 'PLN9', 'Nuevo plan', 'Buscar planes'],
+    'Docentes' => ['faculty.teachers', '9000009', 'Nuevo docente', 'Buscar docentes'],
 ]);
 
 function seedCatalogRow(string $route, string $code): void
@@ -38,6 +40,7 @@ function seedCatalogRow(string $route, string $code): void
         'academic.careers' => Career::factory()->create(['code' => $code]),
         'academic.subjects' => Subject::factory()->create(['code' => $code]),
         'academic.plans' => StudyPlan::factory()->create(['code' => $code]),
+        'faculty.teachers' => Teacher::factory()->adscribedTo(Department::factory()->create(), Campus::factory()->create())->create(['employee_number' => $code]),
     };
 }
 

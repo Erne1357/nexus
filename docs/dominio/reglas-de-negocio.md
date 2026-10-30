@@ -101,6 +101,7 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Administrar edificios y salones | `admin`, `subdireccion` de su campus | |
 | Importar catálogos | `admin` | |
 | Administrar catálogos de Academic (departamentos, carreras, materias, planes y su retícula) | `admin` | En la fase 2 se abren a los jefes para validar (confirmado el 29 de octubre de 2026) |
+| Administrar docentes (listado, datos, adscripción, baja, plazas, disponibilidad, perfil y horas fuera del ITCJ) | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` | `subdireccion`, los docentes adscritos en su campus, de cualquier departamento; `jefe_departamento` y `jefe_proyecto_docente`, los adscritos a su departamento en su campus, aunque su adscripción principal sea otra. Editan sus datos y su adscripción (alta en su departamento, quitarla), la baja, las plazas, la disponibilidad, el perfil (el jefe, solo en las materias que imparte su departamento) y las horas fuera del ITCJ; dar de alta usuarios y reiniciar contraseñas es solo de `admin` (confirmado el 30 de octubre de 2026). Nombrar jefes es solo de `admin` (S7, supuesto por confirmar) |
 | Consultar alumnos (listado y ficha) | `admin`, `subdireccion`, `jefe_departamento`, `coordinador` | `subdireccion`, los de su campus; `jefe_departamento`, los de las carreras de su departamento en su campus; `coordinador`, los de su carrera en su campus. Solo lectura: vienen del SII (confirmado el 29 de octubre de 2026) |
 | Validar catálogos del departamento | `jefe_departamento` del departamento y campus | |
 | Enviar propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
@@ -115,6 +116,8 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Visto bueno | `subdireccion` | solo si `requires_subdireccion_approval` |
 | Publicar | `subdireccion`, o `jefe_departamento` si el campus no exige visto bueno | carga `closed` o `approved` |
 | Re-análisis | `coordinador`, `jefe_departamento` | nueva importación de kardex (R2) |
+
+Adscripciones de docentes (S8 y S9, supuestos por confirmar): una adscripción no se quita si es la única (para eso está la baja) ni si es la principal (primero se elige otra), y el jefe solo quita la de su departamento y campus. Dar de alta un docente con un número de empleado que ya existe no crea otro: la pantalla ofrece adscribirlo al departamento y campus de quien lo da de alta, sin cambiar sus datos, y si esa adscripción se había quitado, la restaura.
 
 Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se borra. Si solo se desactiva, sigue contando, porque una carrera inactiva puede tener todavía alumnos y grupos que atender, igual que un plan inactivo (confirmado el 29 de octubre de 2026). Core no depende de Academic, así que lo resuelve la tarea 1.8 al borrar.
 

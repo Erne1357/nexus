@@ -206,6 +206,7 @@ La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php
 2. **Barra de herramientas** (`<x-core::catalog-toolbar>`), en su propio renglón debajo del encabezado y su filete, igual en las cinco pantallas:
    - a la izquierda, la búsqueda (slot `search`, `md:w-64`) y después los filtros, todos de `md:w-52` y en el mismo orden: primero los de catálogo (departamento, carrera, tipo) y al final el de estado;
    - a la derecha, siempre en el mismo lugar (`md:ms-auto`), la **acción principal** (slot `action`), una sola y en `btn-primary`;
+   - una acción de toda la pantalla que no es la principal (como «Dar de alta usuarios» en Docentes) va en el mismo slot, antes de la principal y en `btn-ghost`; debajo de 768 px queda bajo la principal. Si el rol no la puede usar, se muestra deshabilitada con su motivo en un tooltip;
    - debajo de 768 px cada control ocupa todo el ancho, uno por renglón.
 3. **Tabla** (`x-table` en una superficie blanca con filete):
    - la clave primero, en Mono y sin partirse (`whitespace-nowrap`);
