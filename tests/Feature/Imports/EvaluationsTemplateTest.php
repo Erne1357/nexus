@@ -54,7 +54,7 @@ it('revisa la fila: docente, periodo, tipo y puntaje de 0 a 5', function (array 
     'puntaje de 5.01' => [['score' => '5.01'], 'score', 'El puntaje debe estar entre 0 y 5.'],
     'puntaje de -1' => [['score' => '-1'], 'score', 'El puntaje debe estar entre 0 y 5.'],
     'puntaje con texto' => [['score' => 'alto'], 'score', 'El puntaje debe estar entre 0 y 5.'],
-    'puntaje con tres decimales' => [['score' => '4.555'], 'score', 'El puntaje debe estar entre 0 y 5.'],
+    'puntaje con tres decimales' => [['score' => '4.555'], 'score', 'El puntaje admite hasta dos decimales.'],
     'sin puntaje' => [['score' => null], 'score', 'El campo puntaje es obligatorio.'],
 ]);
 
@@ -100,4 +100,27 @@ it('una evaluación borrada con la misma clave es error', function () {
     TeacherEvaluation::factory()->create(['teacher_id' => $this->teacher->id])->delete();
 
     expect($this->template->validate(evaluationRow(), $this->context)->errors)->toHaveKey('employee_number');
+});
+
+it('el origen SII se escribe al crear y reaplicar no lo pisa', function () {
+    $this->template->apply(evaluationRow(), $this->context);
+    TeacherEvaluation::query()->update(['source' => 'manual']);
+    $this->template->apply(evaluationRow(['score' => '3']), $this->context);
+
+    expect(TeacherEvaluation::sole())->source->toBe('manual')->score->toBe('3.00');
+});
+
+it('el fixture de evaluaciones se lee con sus encabezados y valida con 0 errores', function () {
+    foreach (['9000001', '9000002'] as $number) {
+        Teacher::factory()->create(['employee_number' => $number]);
+    }
+    $lines = array_map('str_getcsv', file(base_path('tests/Fixtures/imports/evaluations.csv'), FILE_IGNORE_NEW_LINES), array_fill(0, 4, ','), array_fill(0, 4, '"'), array_fill(0, 4, ''));
+    $header = array_shift($lines);
+
+    expect($header)->toBe(array_values($this->template->fields()));
+
+    foreach ($lines as $line) {
+        $row = $this->template->normalize(array_combine(array_keys($this->template->fields()), $line));
+        expect($this->template->validate($row, $this->context)->errors)->toBe([]);
+    }
 });

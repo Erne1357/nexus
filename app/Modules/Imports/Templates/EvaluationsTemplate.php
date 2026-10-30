@@ -57,7 +57,7 @@ class EvaluationsTemplate extends ImportTemplate
             'employee_number' => ['required', 'string', 'max:20'],
             'term_code' => ['required', 'string', 'regex:/^[0-9]{4}[123]$/'],
             'kind' => ['required', Rule::enum(EvaluationKind::class)],
-            'score' => ['required', 'numeric', 'between:0,5', 'decimal:0,2'],
+            'score' => ['bail', 'required', 'numeric', 'between:0,5', 'decimal:0,2'],
         ];
     }
 
@@ -95,7 +95,7 @@ class EvaluationsTemplate extends ImportTemplate
             'kind.enum' => 'El tipo debe ser estudiantil o departamental.',
             'score.numeric' => 'El puntaje debe estar entre 0 y 5.',
             'score.between' => 'El puntaje debe estar entre 0 y 5.',
-            'score.decimal' => 'El puntaje debe estar entre 0 y 5.',
+            'score.decimal' => 'El puntaje admite hasta dos decimales.',
         ];
     }
 
@@ -119,7 +119,12 @@ class EvaluationsTemplate extends ImportTemplate
 
     protected function attributes(array $row, ImportContext $context): array
     {
-        return ['score' => $row['score'], 'source' => 'SII'];
+        return ['score' => $row['score']];
+    }
+
+    protected function defaults(ImportContext $context): array
+    {
+        return ['source' => 'SII'];
     }
 
     private function teacherId(string $employeeNumber): ?string

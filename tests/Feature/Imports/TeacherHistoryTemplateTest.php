@@ -135,3 +135,31 @@ it('un lote con dos grupos y una fila repetida: dos válidas y la repetida es er
     expect($batch->rows()->orderBy('row_number')->pluck('status')->all())->toBe([RowStatus::Applied, RowStatus::Applied, RowStatus::Error])
         ->and(DB::table('teacher_subject_history')->count())->toBe(2);
 });
+
+it('una fila sin campus repetida en el archivo es error: ya viene en la fila 2', function () {
+    Storage::fake('imports');
+    $csv = "employee_number,subject_code,term_code,campus_code,group_code\n1234567,ACF-0901,20241,,5A\n1234567,ACF-0901,20241,,5A\n";
+    $batch = app(StoreImportBatch::class)->handle($this->admin, 'teacher_history', UploadedFile::fake()->createWithContent('h.csv', $csv));
+    $batch = app(ValidateImportBatch::class)->handle($batch);
+
+    $rows = $batch->rows()->orderBy('row_number')->get();
+
+    expect($rows->pluck('status')->all())->toBe([RowStatus::Valid, RowStatus::Error])
+        ->and(json_encode($rows[1]->errors))->toContain('ya viene en la fila 2');
+});
+
+it('el fixture de historial se lee con sus encabezados y valida con 0 errores', function () {
+    foreach (['9000001', '9000002'] as $number) {
+        Teacher::factory()->create(['employee_number' => $number]);
+    }
+    Subject::factory()->create(['code' => 'SCC-1010']);
+    $lines = array_map('str_getcsv', file(base_path('tests/Fixtures/imports/teacher_history.csv'), FILE_IGNORE_NEW_LINES), array_fill(0, 4, ','), array_fill(0, 4, '"'), array_fill(0, 4, ''));
+    $header = array_shift($lines);
+
+    expect($header)->toBe(array_values($this->template->fields()));
+
+    foreach ($lines as $line) {
+        $row = $this->template->normalize(array_combine(array_keys($this->template->fields()), $line));
+        expect($this->template->validate($row, $this->context)->errors)->toBe([]);
+    }
+});
