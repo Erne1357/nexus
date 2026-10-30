@@ -27,7 +27,7 @@ final class FacultyServiceProvider extends ModuleServiceProvider
     {
         return [
             new NavigationItem('Docentes', 'faculty.teachers', 'o-users', NavigationArea::RecursosHumanos,
-                ability: 'viewAny', arguments: [Teacher::class], childRoutes: ['faculty.teachers.show']),
+                ability: 'viewAny', arguments: [Teacher::class], childRoutes: ['faculty.teachers.show', 'faculty.teachers.availability']),
         ];
     }
 }

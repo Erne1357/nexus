@@ -123,6 +123,8 @@
                     @endif
                 </footer>
             </section>
+        @elseif ($tab === 'disponibilidad')
+            @include('faculty::teachers.availability-tab', ['teacher' => $record->teacher, 'term' => $record->term, 'availability' => $availability, 'editReason' => $availabilityReason])
         @elseif (in_array($tab, ['disponibilidad', 'perfil', 'historial'], true))
             <div class="flex flex-col items-center gap-2 rounded-box border border-dashed border-base-300 bg-base-100 px-5 py-10 text-center" data-testid="tab-pending">
                 <x-icon name="o-clock" class="h-6 w-6 text-neutral" aria-hidden="true" />

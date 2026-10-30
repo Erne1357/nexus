@@ -17,6 +17,7 @@ use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Policies\TeacherPolicy;
+use App\Modules\Faculty\Queries\AvailabilityGridQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
 use App\Modules\Faculty\Queries\TeacherRecordQuery;
@@ -128,7 +129,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context): array
+    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context, AvailabilityGridQuery $grids): array
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -162,6 +163,10 @@ new #[Title('Ficha del docente')] class extends Component
             'removingWarning' => $removing === null ? '' : $this->removalWarning($record, $removing),
             'removingPosition' => $this->removingPositionId === null ? null : $record->positions->firstWhere('id', $this->removingPositionId),
             'positionCounts' => $this->showPositionModal ? $this->positionCountsInTerm($record->term) : false,
+            'availability' => $this->tab === 'disponibilidad' && $record->term !== null
+                ? $grids->for($teacher, $record->term, $grids->profile($context->activeCampus()))
+                : null,
+            'availabilityReason' => Gate::allows('manageAvailability', $teacher) ? null : 'Solo quien administra al docente edita su disponibilidad.',
             'canReset' => Gate::allows('resetPassword', $teacher),
             'canDeactivate' => Gate::allows('deactivate', $teacher),
             'deactivateReason' => $context->isAdmin() || $context->has(Role::Subdireccion)

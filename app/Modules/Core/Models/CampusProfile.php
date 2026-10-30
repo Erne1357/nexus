@@ -121,11 +121,19 @@ final readonly class CampusProfile
         return implode(' · ', array_filter([
             $this->usesRooms ? 'Salones' : 'Sin salones',
             $this->usesTimeBlocks ? "bloques de {$this->blockMinutes} min" : 'sin bloques fijos',
-            self::dayNames($this->days).', '.self::clock($this->dayStart).' a '.self::clock($this->dayEnd),
+            $this->schedule(),
             $this->staffingMode === StaffingMode::Central ? 'asignación central' : null,
             $this->allowExternalTeachers ? 'docentes externos' : null,
             $this->requiresSubdireccionApproval ? 'visto bueno de Subdirección' : null,
         ]));
+    }
+
+    /**
+     * Sus días y su jornada, como en summary(): «lunes a viernes, 7:00 a 21:00».
+     */
+    public function schedule(): string
+    {
+        return self::dayNames($this->days).', '.self::clock($this->dayStart).' a '.self::clock($this->dayEnd);
     }
 
     /**
