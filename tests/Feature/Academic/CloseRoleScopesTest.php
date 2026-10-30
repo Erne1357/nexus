@@ -11,7 +11,7 @@ use App\Modules\Core\Queries\ScopedContext;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| CloseRoleScopes (supuesto S2): al borrar un departamento o una carrera, sus alcances vigentes que
+| CloseRoleScopes (confirmado el 29 de octubre de 2026): al borrar un departamento o una carrera, sus alcances vigentes que
 | empezaron antes de hoy terminan ayer; los que empiezan hoy o después se eliminan, porque el CHECK
 | `valid_to >= valid_from` impide cerrarlos antes de empezar; los vencidos y los de otro registro no
 | se tocan. Cada cambio queda en la bitácora sobre el usuario del alcance.

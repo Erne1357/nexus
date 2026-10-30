@@ -20,7 +20,7 @@ use Illuminate\Support\Collection;
  * de 2026).
  *
  * Si en un plan es una materia de especialidad, respeta la especialidad del alumno como el avance
- * (supuesto por confirmar, S3): quien ya aprobó o cursa materias de otra especialidad no la necesita.
+ * (confirmado el 29 de octubre de 2026): quien ya aprobó o cursa materias de otra especialidad no la necesita.
  * Para eso usa la retícula del plan (PlanGridQuery) y PlanGrid::progressFor(), la misma regla que
  * `subjects_pending`.
  *

@@ -15,7 +15,7 @@ use Illuminate\Validation\ValidationException;
  * - `code`: texto UTF-8 válido, en mayúsculas (como la importación de materias por plan), sin espacios,
  *   no vacío y único dentro de su plan, también contra las quitadas: la base lo exige igual.
  * - `name`: no vacío.
- * - Quitar: solo una especialidad sin materias en la retícula (supuesto por confirmar, S1).
+ * - Quitar: solo una especialidad sin materias en la retícula (confirmado el 29 de octubre de 2026).
  */
 final class SpecialtyRules
 {
