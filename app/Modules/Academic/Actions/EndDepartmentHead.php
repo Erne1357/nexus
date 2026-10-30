@@ -4,13 +4,11 @@ namespace App\Modules\Academic\Actions;
 
 use App\Modules\Academic\Events\DepartmentHeadEnded;
 use App\Modules\Academic\Models\DepartmentHead;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -55,8 +53,7 @@ final class EndDepartmentHead
                 'valid_from' => $locked->valid_from->toDateString(),
                 'valid_to' => $locked->valid_to?->toDateString(),
             ];
-            $what = "la jefatura de {$locked->user->name} como ".Str::lcfirst($locked->kind->label())
-                ." de {$locked->department->name}".self::in($locked->campus);
+            $what = "la jefatura de {$locked->user->name} como ".$locked->kind->position($locked->department->name, $locked->campus?->name);
             $missing = $scopes->isEmpty() ? '; no encontró su alcance' : '';
             $properties = ['department_head_id' => $locked->getKey(), 'role_scope_ids' => $scopes->modelKeys()];
 
@@ -123,11 +120,4 @@ final class EndDepartmentHead
             ->get();
     }
 
-    /**
-     * « en <campus>» para la bitácora; nada para el jefe, que es de todo el Tec.
-     */
-    private static function in(?Campus $campus): string
-    {
-        return $campus === null ? '' : " en {$campus->name}";
-    }
 }

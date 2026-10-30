@@ -86,10 +86,11 @@ docker compose exec -T postgres createdb -U nexus nexus_massive
 docker compose exec -T -e DB_DATABASE=nexus_massive app sh -c 'php artisan migrate:fresh --force && php artisan db:seed --class="Database\Seeders\MassiveSeeder" --force'
 docker compose exec -d -e DB_DATABASE=nexus_massive app php artisan serve --host=127.0.0.1 --port=8099
 docker compose exec -T -e LOGIN=coord.isc.c2 -w /app app node .github/scripts/review-screens.mjs alumnos=/students
+docker compose exec -T -e LOGIN=admin -w /app app node .github/scripts/review-screens.mjs materias=/academic/subjects
 ```
 
 - `review-screens.mjs` entra con `LOGIN` (contraseña `PASSWORD`, por omisión `password`, la de los usuarios demo), abre cada ruta a los anchos de `WIDTHS` (390, 768 y 1440 por omisión) y en claro y oscuro, guarda las capturas en `storage/app/review/` (ignorado por git) y reporta estado, tiempo de carga y desborde horizontal. Termina con error si alguna pantalla desborda, responde con error o lanza un error de JavaScript.
-- El admin, `subdir` y los `jefe.<depto>` trabajan en todos los campus activos, así que con el masivo (dos campus) no tienen uno activo. Las pantallas de un campus (alumnos) se revisan con un usuario de un solo campus, como `coord.isc.c2`, y las de admin (materias) con `LOGIN=admin`.
+- El admin, `subdir` y los `jefe.<depto>` trabajan en todos los campus activos (Campus I y Campus II lo están con `DemoSeeder` y con el masivo), así que no tienen un campus activo por omisión. Las pantallas de un campus (alumnos) se revisan con un usuario de un solo campus, como `coord.isc.c2`; las de admin (materias), con `LOGIN=admin`.
 - Las capturas se miran: el script encuentra desbordes, no textos cortados ni columnas que se parten en tres renglones.
 - Al terminar, detén el servidor (`docker compose restart app` o mata el proceso de `artisan serve`) y borra la base con `dropdb`.
 

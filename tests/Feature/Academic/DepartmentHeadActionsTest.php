@@ -19,11 +19,11 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| Jefaturas (confirmado el 30 de octubre de 2026): nombrar a un jefe de un departamento (de todo el Tec, sin
-| campus; confirmado el 30 de octubre de 2026) o a un jefe de proyecto docente de un departamento en un campus
-| (supuesto por confirmar) escribe, en la misma transacción, la fila de `department_heads`, el rol de spatie y un
-| alcance con el mismo campus, departamento y fechas. Terminarla cierra las dos con la regla de CloseRoleScopes:
-| la que ya empezó termina en el último día; la que empieza después, se borra.
+| Jefaturas (confirmado el 30 de octubre de 2026): nombrar a un jefe o a un jefe de proyecto docente de un
+| departamento escribe, en la misma transacción, la fila de `department_heads`, el rol de spatie y un alcance con
+| el mismo campus, departamento y fechas. Terminarla cierra las dos con la regla de CloseRoleScopes: la que ya
+| empezó termina en el último día; la que empieza después, se borra. El jefe es de todo el Tec, sin campus
+| (confirmado el 30 de octubre de 2026). El jefe de proyecto docente es de un campus (supuesto por confirmar).
 */
 
 beforeEach(function () {

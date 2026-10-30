@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 | "Reglas de datos"), y nada se borra físicamente: todo lleva borrado lógico (confirmado el 29 de octubre
 | de 2026). Un departamento tiene un solo jefe vigente para todo el Tec, sin campus (confirmado el 30 de
 | octubre de 2026). De jefe de proyecto docente puede haber varios a la vez (confirmado el 29 de octubre de
-| 2026), cada uno en un campus (supuesto por confirmar).
+| 2026). Cada jefe de proyecto docente es de un campus (supuesto por confirmar).
 */
 
 /**

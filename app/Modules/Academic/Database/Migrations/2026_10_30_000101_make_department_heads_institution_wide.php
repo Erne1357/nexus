@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * El jefe de departamento es uno por departamento para todo el Tec y la Subdirección Académica es de todo el Tec
  * (confirmado el 30 de octubre de 2026). El jefe de proyecto docente sigue en un departamento y un campus (supuesto
- * por confirmar).
+ * por confirmar). Cómo se convierten los datos que ya existen, abajo, también es un supuesto por confirmar.
  *
  * Esquema de `department_heads`:
  * - `campus_id` acepta nulo, y el CHECK `department_heads_campus_check` lo exige nulo para `jefe` y lleno para
@@ -41,8 +41,10 @@ use Illuminate\Support\Facades\DB;
  * - Quedan sin campus los que no se traslapan con uno anterior y se borran los demás. Así cada usuario tiene un solo
  *   alcance general en cada fecha.
  *
- * Es una corrección de esquema: no deja bitácora. Las jefaturas y alcances que se nombraron con Actions ya la tienen,
- * con su campus. down() regresa el esquema solo si ningún jefe quedó sin campus, porque no hay de dónde sacarlo.
+ * Es una corrección de esquema y no deja bitácora. El campus que tenían las filas `jefe`, y los alcances de
+ * Subdirección que se borran por traslaparse, no quedan registrados en ningún lado. Hoy solo hay datos de desarrollo
+ * y demo. Las jefaturas nombradas con AppointDepartmentHead conservan su campus en la bitácora de su nombramiento.
+ * down() regresa el esquema solo si ningún jefe quedó sin campus, porque no hay de dónde sacarlo.
  */
 return new class extends Migration
 {

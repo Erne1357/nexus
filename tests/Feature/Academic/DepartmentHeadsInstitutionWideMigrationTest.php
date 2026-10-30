@@ -121,7 +121,7 @@ it('deja un solo jefe vigente por departamento, sin campus: el más antiguo; los
         ->where('valid_from', '<=', '2026-10-30')->where(fn ($query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', '2026-10-30'))
         ->pluck('user_id', 'department_id')->all();
 
-    expect($current)->toBe([$sc->id => $a->id, $cb->id => $g->id, $ii->id => $f->id]);
+    expect($current)->toHaveCount(3)->toMatchArray([$sc->id => $a->id, $cb->id => $g->id, $ii->id => $f->id]);
 
     $context = fn (User $user): ScopedContext => app(ScopedContext::class)->forUser($user->fresh());
 

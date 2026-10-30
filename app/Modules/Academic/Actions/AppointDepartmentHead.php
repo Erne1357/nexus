@@ -12,7 +12,6 @@ use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 use Spatie\Permission\Models\Role as SpatieRole;
@@ -30,8 +29,8 @@ use Throwable;
  * ninguno para el jefe de proyecto docente, es una ValidationException sobre `campus`.
  *
  * Un usuario inactivo no se nombra: es una ValidationException sobre `user`. La base rechaza un segundo jefe vigente
- * del departamento, y a la misma persona dos veces jefe de proyecto docente del departamento en el campus con
- * fechas que se traslapan (confirmado el 29 de octubre de 2026). Los dos rechazos se vuelven una
+ * del departamento, y a la misma persona dos veces en el mismo cargo con fechas que se traslapan (confirmado el 29
+ * de octubre de 2026). Los dos rechazos se vuelven una
  * ValidationException sobre `user` y no se escribe nada. Deja la bitácora sobre el usuario, recarga ScopedContext
  * (también el del usuario autenticado) y avisa con DepartmentHeadAppointed después del commit.
  */
@@ -106,7 +105,7 @@ final class AppointDepartmentHead
                     'valid_from' => $validFrom,
                     'valid_to' => $validTo,
                 ]])
-                ->log("Nombró a {$user->name} ".Str::lcfirst($kind->label())." de {$department->name}".self::in($campus));
+                ->log("Nombró a {$user->name} ".$kind->position($department->name, $campus?->name));
 
             app(ScopedContext::class)->refresh();
 
@@ -133,17 +132,10 @@ final class AppointDepartmentHead
         }
 
         if (str_contains($message, 'department_heads_no_duplicate')) {
-            return ValidationException::withMessages(['user' => "{$user->name} ya es ".Str::lcfirst($kind->label())." de {$department->name}".self::in($campus).' en esas fechas.']);
+            return ValidationException::withMessages(['user' => "{$user->name} ya es ".$kind->position($department->name, $campus?->name).' en esas fechas.']);
         }
 
         return $exception;
     }
 
-    /**
-     * « en <campus>» para la bitácora y los mensajes; nada para el jefe, que es de todo el Tec.
-     */
-    private static function in(?Campus $campus): string
-    {
-        return $campus === null ? '' : " en {$campus->name}";
-    }
 }
