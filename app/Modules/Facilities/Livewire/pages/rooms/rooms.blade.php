@@ -26,21 +26,21 @@
             <x-button label="Nuevo salón" icon="o-plus" class="btn-primary mt-4" disabled title="Este campus no usa salones." />
         </div>
     @else
-        <x-core::catalog-toolbar>
+        <x-core::catalog-toolbar narrow>
             <x-slot:search>
                 <x-input
                     wire:model.live.debounce.300ms="search"
-                    placeholder="Buscar por clave o nombre"
+                    placeholder="Clave o nombre"
                     aria-label="Buscar salones"
                     icon="o-magnifying-glass"
                     clearable
                 />
             </x-slot:search>
 
-            <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Todos los edificios" />
-            <x-select wire:model.live="typeFilter" aria-label="Tipo" :options="$types" placeholder="Todos los tipos" />
-            <x-select wire:model.live="ownerFilter" aria-label="Dueño" :options="$ownerFilters" placeholder="Todos los dueños" />
-            <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activos e inactivos" />
+            <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Edificio" />
+            <x-select wire:model.live="typeFilter" aria-label="Tipo" :options="$types" placeholder="Tipo" />
+            <x-select wire:model.live="ownerFilter" aria-label="Dueño" :options="$ownerFilters" placeholder="Dueño" />
+            <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
 
             <x-slot:action>
                 @if ($canCreate)

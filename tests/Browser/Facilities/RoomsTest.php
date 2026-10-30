@@ -79,3 +79,11 @@ it('un coordinador no ve la opción Salones en el menú', function () {
         ->assertDontSee('Salones')
         ->assertNoJavaScriptErrors();
 });
+
+it('a 1440 px la búsqueda, los cuatro filtros y la acción de Salones caben en un renglón sin cortar textos', function () {
+    signInToRooms('subdireccion')
+        ->resize(1440, 900)
+        ->navigate('/facilities/rooms')
+        ->assertScript(catalogToolbarInOneRowScript(), true)
+        ->assertNoJavaScriptErrors();
+});

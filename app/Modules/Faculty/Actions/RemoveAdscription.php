@@ -24,18 +24,21 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * adscripciones, borra, pasa la principal si hace falta y deja bitácora sobre la quitada (con la principal que le
  * queda al docente) y sobre la principal nueva. Después del commit avisa con AdscriptionChanged. Una adscripción ya
  * quitada es un error en `adscription`.
+ *
+ * Devuelve lo que quien la llama necesita para avisar, con el mismo texto que la bitácora: la adscripción que pasó a
+ * ser la principal (`promoted`; null si la principal no cambió de lugar), cuántas le quedan (`remaining`) y el
+ * resultado en palabras (`outcome`: «queda sin departamento», «su adscripción principal pasa a IND» o null).
  */
 final class RemoveAdscription
 {
     /**
-     * @return TeacherDepartment|null la adscripción que pasó a ser la principal, o null si la principal no cambió
-     *                                de lugar (la quitada no era la principal, o era la única)
+     * @return array{promoted: ?TeacherDepartment, remaining: int, outcome: ?string}
      *
      * @throws ValidationException
      */
-    public function handle(TeacherDepartment $adscription): ?TeacherDepartment
+    public function handle(TeacherDepartment $adscription): array
     {
-        return DB::transaction(function () use ($adscription): ?TeacherDepartment {
+        return DB::transaction(function () use ($adscription): array {
             $teacher = Teacher::query()->lockForUpdate()->findOrFail($adscription->teacher_id);
             $adscriptions = TeacherDepartment::query()
                 ->where('teacher_id', $teacher->getKey())
@@ -60,9 +63,9 @@ final class RemoveAdscription
             $promoted?->forceFill(['is_primary' => true])->save();
 
             $outcome = match (true) {
-                $remaining->isEmpty() => '; queda sin departamento',
-                $promoted !== null => "; su adscripción principal pasa a {$codes[$promoted->department_id]}",
-                default => '',
+                $remaining->isEmpty() => 'queda sin departamento',
+                $promoted !== null => "su adscripción principal pasa a {$codes[$promoted->department_id]}",
+                default => null,
             };
 
             activity()
@@ -70,7 +73,7 @@ final class RemoveAdscription
                 ->event(ActivityEvent::Deleted)
                 ->withChanges(['old' => ['department_id' => $removed->department_id, 'is_primary' => $wasPrimary]])
                 ->withProperties(['teacher_id' => $teacher->getKey(), 'primary_adscription_id' => $primary?->getKey()])
-                ->log("Quitó al docente {$teacher->employee_number} del departamento {$from}{$outcome}");
+                ->log("Quitó al docente {$teacher->employee_number} del departamento {$from}".($outcome === null ? '' : "; {$outcome}"));
 
             if ($promoted !== null) {
                 activity()
@@ -83,7 +86,11 @@ final class RemoveAdscription
 
             AdscriptionChanged::dispatch($removed);
 
-            return $promoted;
+            return [
+                'promoted' => $promoted,
+                'remaining' => $remaining->count(),
+                'outcome' => $outcome,
+            ];
         });
     }
 }

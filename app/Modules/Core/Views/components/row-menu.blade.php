@@ -6,9 +6,14 @@
     arriba. Con `compact` (la tabla), entre 768 y 1199 px el botón queda solo con el icono. Los
     elementos son <x-core::row-menu-item>.
 
+    Con `icon` y `label` es el menú «Más acciones» de una barra de herramientas (DESIGN.md, "Anatomía de
+    una pantalla de catálogo"): el botón es solo ese icono, del alto de la acción principal, y `label` es su
+    nombre accesible. Sin `name` ni `label`, el nombre accesible es «Acciones».
+
     <x-core::row-menu :name="$campus->code" :compact="$inTable"> ...elementos... </x-core::row-menu>
+    <x-core::row-menu icon="o-ellipsis-vertical" label="Más acciones"> ...elementos... </x-core::row-menu>
 --}}
-@props(['name', 'compact' => false])
+@props(['name' => null, 'compact' => false, 'icon' => null, 'label' => null])
 
 <div
     x-data="{
@@ -61,16 +66,20 @@
         :id="$id('row-menu-trigger')"
         :popovertarget="$id('row-menu')"
         aria-haspopup="menu"
-        aria-label="Acciones de {{ $name }}"
-        class="btn btn-ghost btn-sm"
+        aria-label="{{ $label ?? ($name === null ? 'Acciones' : 'Acciones de '.$name) }}"
+        @class(['btn btn-ghost', 'btn-sm' => $icon === null, 'btn-square' => $icon !== null])
     >
-        @if ($compact)
-            <span class="min-[1200px]:hidden"><x-icon name="o-ellipsis-horizontal" class="h-4 w-4" aria-hidden="true" /></span>
+        @if ($icon !== null)
+            <x-icon :name="$icon" class="h-5 w-5" aria-hidden="true" />
+        @else
+            @if ($compact)
+                <span class="min-[1200px]:hidden"><x-icon name="o-ellipsis-horizontal" class="h-4 w-4" aria-hidden="true" /></span>
+            @endif
+            <span @class(['inline-flex items-center gap-1', 'max-[1200px]:hidden' => $compact])>
+                Acciones
+                <x-icon name="o-chevron-down" class="h-4 w-4" aria-hidden="true" />
+            </span>
         @endif
-        <span @class(['inline-flex items-center gap-1', 'max-[1200px]:hidden' => $compact])>
-            Acciones
-            <x-icon name="o-chevron-down" class="h-4 w-4" aria-hidden="true" />
-        </span>
     </button>
 
     <div

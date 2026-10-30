@@ -9,9 +9,11 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Models\Teacher;
+use Illuminate\Support\Facades\Blade;
 
 /*
-| Las siete pantallas de catálogo, de Campus a Planes de estudio más Edificios y Salones, comparten la forma
+| Las ocho pantallas de catálogo, de Campus a Planes de estudio más Edificios, Salones y Docentes, comparten la forma
 | (DESIGN.md, "Anatomía de una pantalla de catálogo"): una barra de herramientas común en su propio
 | renglón, con la búsqueda y los filtros a la izquierda y la acción principal a la derecha, y en cada
 | fila «Editar» visible y el resto plegado en el menú «Acciones», donde lo deshabilitado se queda con
@@ -33,6 +35,7 @@ dataset('catalog screens', [
     'Planes de estudio' => ['academic.plans', 'PLN9', 'Nuevo plan', 'Buscar planes'],
     'Edificios' => ['facilities.buildings', 'EDI9', 'Nuevo edificio', 'Buscar edificios'],
     'Salones' => ['facilities.rooms', 'SAL9', 'Nuevo salón', 'Buscar salones'],
+    'Docentes' => ['faculty.teachers', '9000009', 'Nuevo docente', 'Buscar docentes'],
 ]);
 
 function seedCatalogRow(string $route, string $code): void
@@ -45,6 +48,7 @@ function seedCatalogRow(string $route, string $code): void
         'academic.plans' => StudyPlan::factory()->create(['code' => $code]),
         'facilities.buildings' => Building::factory()->create(['code' => $code]),
         'facilities.rooms' => Room::factory()->create(['code' => $code]),
+        'faculty.teachers' => Teacher::factory()->adscribedTo(Department::factory()->create())->create(['employee_number' => $code]),
     };
 
     // Edificios y salones son de un campus: el admin, que no tiene uno por omisión, elige el de la fila.
@@ -68,6 +72,24 @@ it('usa la barra de herramientas común: búsqueda, filtros a la izquierda y la 
         ->and(strpos($toolbar->innerHTML, 'aria-label="Estado"'))->toBeLessThan(strpos($toolbar->innerHTML, $action))
         // Nada de la barra vive en el slot `actions` del encabezado.
         ->and($dom->querySelector('main h1')?->parentElement?->parentElement?->querySelector('input[type="search"], .btn-primary'))->toBeNull();
+})->with('catalog screens');
+
+it('con cuatro filtros o con «Más acciones», la búsqueda es md:w-56, los filtros md:w-40 y la opción «todos» de cada filtro dice solo su nombre; los demás, md:w-64 y md:w-52', function (string $route, string $code) {
+    seedCatalogRow($route, $code);
+
+    $toolbar = domOf($this->actingAs($this->admin)->get(route($route))->assertOk())->querySelector('[data-testid="catalog-toolbar"]');
+    $filters = $toolbar->querySelector('[data-testid="catalog-filters"]');
+    $selects = iterator_to_array($filters->querySelectorAll('select'));
+    $narrow = count($selects) >= 4 || $toolbar->querySelector('button[aria-label="Más acciones"]') !== null;
+
+    expect($toolbar->querySelector('[data-testid="catalog-search"]')->getAttribute('class'))->toContain($narrow ? 'md:w-56' : 'md:w-64')
+        ->and($filters->getAttribute('class'))->toContain($narrow ? 'md:[&>*]:w-40' : 'md:[&>*]:w-52');
+
+    if ($narrow) {
+        foreach ($selects as $select) {
+            expect(textOf($select->querySelector('option')))->toBe($select->getAttribute('aria-label'));
+        }
+    }
 })->with('catalog screens');
 
 it('cada fila lleva «Editar» visible y el botón «Acciones» con su menú', function (string $route, string $code) {
@@ -123,4 +145,10 @@ it('«Borrar» va en text-error y Planes muestra «Retícula» y «Editar» ante
 
     expect($delete->getAttribute('class'))->toContain('text-error')
         ->and(array_values(array_filter($labels)))->toBe(['Retícula de PLN9', 'Editar PLN9', 'Acciones de PLN9']);
+});
+
+it('un menú «Acciones» sin nombre ni etiqueta se anuncia como «Acciones»', function () {
+    $html = Blade::render('<x-core::row-menu><x-core::row-menu-item label="Algo" /></x-core::row-menu>');
+
+    expect(domOf($html)->querySelector('button[aria-haspopup="menu"]')->getAttribute('aria-label'))->toBe('Acciones');
 });
