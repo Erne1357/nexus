@@ -101,6 +101,9 @@ final class SeriationRules
     /**
      * Bloquea para compartir (`FOR SHARE`) las filas de la retícula de las dos materias: así RemovePlacement no
      * quita ninguna hasta que la Action termine, ni la Action escribe una seriación sobre una fila que se quitó.
+     * Solo bloquea esas filas (`FOR SHARE OF study_plan_subjects`): las materias del catálogo se leen sin bloqueo
+     * para saber si están borradas, así editar o desactivar una materia no espera a la seriación. Las Actions lo
+     * llaman antes de bloquear la seriación, en el mismo orden que RemovePlacement (la fila, luego su seriación).
      *
      * @throws ValidationException sobre `subject_id` o `prerequisite_subject_id` si una no está en la retícula
      */
@@ -111,7 +114,7 @@ final class SeriationRules
             ->whereNull('subjects.deleted_at')
             ->where('study_plan_subjects.study_plan_id', $plan->getKey())
             ->whereIn('study_plan_subjects.subject_id', [$subject->getKey(), $prerequisite->getKey()])
-            ->sharedLock()
+            ->lock('for share of study_plan_subjects')
             ->pluck('study_plan_subjects.subject_id')
             ->all();
 

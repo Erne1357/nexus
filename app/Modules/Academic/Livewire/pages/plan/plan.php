@@ -13,6 +13,7 @@ use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Academic\Queries\PlanGridEditorQuery;
 use App\Modules\Academic\Queries\StudyPlanQuery;
 use App\Modules\Academic\Rules\PlacementRules;
@@ -605,15 +606,17 @@ new #[Title('Retícula del plan')] class extends Component
 
     /**
      * Cambia el tipo del requisito `$id` del plan a `$kind`. Si como seriación cierra un ciclo, el error cae en
-     * `kind` y el panel lo muestra con su cadena; el select regresa al tipo que tiene. Si otra sesión lo quitó
-     * mientras tanto, lo dice.
+     * `kind` y el panel lo muestra con su cadena; el select regresa al tipo que tiene. Si otra sesión lo quitó,
+     * antes o mientras tanto, lo dice (prerequisite()).
      */
     public function changeKind(string $id, string $kind, StudyPlanQuery $plans, PlanGridEditorQuery $grids, UpdatePrerequisite $updatePrerequisite): void
     {
-        $plan = $this->plan($plans);
-        $this->authorize('editGrid', $plan);
+        $prerequisite = $this->prerequisite($id, $plans, $grids);
 
-        $prerequisite = $grids->prerequisiteOrFail($plan, $id);
+        if ($prerequisite === null) {
+            return;
+        }
+
         $this->resetValidation('kind');
         $this->cycle = null;
         $newKind = PrerequisiteKind::tryFrom($kind) ?? throw ValidationException::withMessages(['kind' => 'El tipo debe ser seriación o correquisito.']);
@@ -642,15 +645,16 @@ new #[Title('Retícula del plan')] class extends Component
     }
 
     /**
-     * Quita el requisito `$id` del plan: la materia deja de pedirlo. Si otra sesión lo quitó mientras tanto, lo
-     * dice.
+     * Quita el requisito `$id` del plan: la materia deja de pedirlo. Si otra sesión lo quitó, antes o mientras
+     * tanto, lo dice (prerequisite()).
      */
     public function removePrerequisite(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids, RemovePrerequisite $removePrerequisite): void
     {
-        $plan = $this->plan($plans);
-        $this->authorize('editGrid', $plan);
+        $prerequisite = $this->prerequisite($id, $plans, $grids);
 
-        $prerequisite = $grids->prerequisiteOrFail($plan, $id);
+        if ($prerequisite === null) {
+            return;
+        }
 
         try {
             $removePrerequisite->handle($prerequisite);
@@ -793,6 +797,32 @@ new #[Title('Retícula del plan')] class extends Component
     {
         $this->resetValidation(['prerequisite_subject_id', 'kind']);
         $this->reset('requisiteSearch', 'prerequisite_subject_id', 'kind', 'cycle');
+    }
+
+    /**
+     * Un requisito sin quitar del plan con permiso de editar la retícula; uno de otro plan, que no existe o con un
+     * id que no es uuid no existe (404). La excepción es uno de este plan que otra sesión quitó mientras el panel lo
+     * seguía mostrando: en lugar del 404 lo dice (prerequisiteGone()) y devuelve null. Saberlo cuesta una consulta,
+     * solo cuando no lo encuentra.
+     *
+     * @throws ModelNotFoundException<SubjectPrerequisite>
+     */
+    private function prerequisite(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids): ?SubjectPrerequisite
+    {
+        $plan = $this->plan($plans);
+        $this->authorize('editGrid', $plan);
+
+        try {
+            return $grids->prerequisiteOrFail($plan, $id);
+        } catch (ModelNotFoundException $exception) {
+            if (! $grids->prerequisiteWasRemoved($plan, $id)) {
+                throw $exception;
+            }
+
+            $this->prerequisiteGone();
+
+            return null;
+        }
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Actions\RemovePlacement;
+use App\Modules\Academic\Actions\RemovePrerequisite;
 use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
@@ -955,6 +956,29 @@ describe('seriación', function () {
             ->and(seriationActivitiesCount())->toBe(1);
     });
 
+    it('si otra sesión quitó un requisito que el panel todavía muestra, cambiarlo o quitarlo lo dice y no escribe', function (string $method) {
+        $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id);
+        $id = $this->integralNeedsNumerical->id;
+        app(RemovePrerequisite::class)->handle($this->integralNeedsNumerical);
+        $before = seriationSnapshot();
+
+        match ($method) {
+            'changeKind' => $component->call('changeKind', $id, 'seriacion'),
+            'kinds' => $component->set('kinds.'.$id, 'seriacion'),
+            default => $component->call($method, $id),
+        };
+
+        $component->assertStatus(200)
+            ->assertHasNoErrors()
+            ->assertSet('selectedId', $this->integralRow->id)
+            ->assertSet('kinds', [$this->integralNeedsCalculus->id => 'seriacion']);
+
+        expect(lastToastOf($component))->type->toBe('info')->title->toBe('Ese requisito ya no está.')->description->toBe('La retícula ya está al día.')
+            ->and(seriationSnapshot())->toBe($before)
+            ->and(seriationActivitiesCount())->toBe(1)
+            ->and(domOf($component)->querySelector('[data-requisite="SCC-1017"]'))->toBeNull();
+    })->with(['changeKind', 'kinds', 'removePrerequisite']);
+
     it('si otra sesión quita el requisito mientras se cambia o se quita, lo dice en lugar de fallar', function (string $method, array $arguments) {
         $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id);
         $removed = false;
@@ -1027,7 +1051,7 @@ describe('seriación', function () {
         planPage($this->admin, $this->plan)->call('select', $this->integralRow->id)->call('pickRequisite', $id)->assertNotFound();
     })->with(['no existe' => fakeKey(99), 'no uuid' => 'no-es-uuid']);
 
-    it('cambiar o quitar un requisito de otro plan, quitado o con un id que no es uuid no existe y no escribe (Review Focus 2)', function (string $method, Closure $id) {
+    it('cambiar o quitar un requisito de otro plan, también quitado, o con un id que no es uuid no existe y no escribe (Review Focus 2)', function (string $method, Closure $id) {
         $id = $id($this);
         $component = planPage($this->admin, $this->plan)->call('select', $this->integralRow->id);
         $before = seriationSnapshot();
@@ -1044,7 +1068,8 @@ describe('seriación', function () {
     })->with(function () {
         $ids = [
             'de otro plan' => fn () => SubjectPrerequisite::factory()->create()->id,
-            'quitado' => fn ($test) => tap(seriate($test->plan, $test->vectorial, $test->calculus))->delete()->id,
+            'quitado de otro plan' => fn () => tap(SubjectPrerequisite::factory()->create())->delete()->id,
+            'que no existe' => fn () => fakeKey(99),
             'no uuid' => fn () => 'no-es-uuid',
         ];
         $cases = [];

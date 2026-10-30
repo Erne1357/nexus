@@ -129,6 +129,15 @@ final class PlanGridEditorQuery
     }
 
     /**
+     * Si `$id` es un requisito del plan que se quitó: el panel lo seguía mostrando y otra sesión lo quitó, solo o
+     * con su materia. False si es de otro plan, sigue sin quitar, no existe o no es uuid.
+     */
+    public function prerequisiteWasRemoved(StudyPlan $plan, string $id): bool
+    {
+        return KeyLookup::find(SubjectPrerequisite::onlyTrashed()->where('study_plan_id', $plan->getKey()), $id) !== null;
+    }
+
+    /**
      * Una especialidad del plan, sin las quitadas.
      *
      * @throws ModelNotFoundException<Specialty> si no existe, es de otro plan o el id no es uuid

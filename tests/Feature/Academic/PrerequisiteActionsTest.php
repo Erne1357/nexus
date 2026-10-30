@@ -10,6 +10,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Academic\Rules\SeriationRules;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -162,13 +163,24 @@ describe('AddPrerequisite', function () {
         'materia fuera de la retícula' => [fn ($test) => [Subject::factory()->create(['code' => 'SCD-1018']), $test->calculus], 'subject_id', 'SCD-1018'],
     ]);
 
+    it('bloquea para compartir las filas de la retícula de las dos materias, no las materias del catálogo', function () {
+        DB::enableQueryLog();
+
+        addPrerequisite($this->plan, $this->integral, $this->calculus);
+
+        $locks = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'from "study_plan_subjects"') && str_contains($sql, ' for '));
+
+        expect($locks)->toHaveCount(1)
+            ->and($locks->first())->toContain('inner join "subjects"')->toEndWith('for share of study_plan_subjects');
+    });
+
     it('una materia no se pide a sí misma', function () {
         expect(prerequisiteErrors(fn () => addPrerequisite($this->plan, $this->integral, $this->integral, PrerequisiteKind::Correquisito)))
             ->toBe(['prerequisite_subject_id' => ['ACF-0902 no puede pedirse a sí misma.']])
             ->and(SubjectPrerequisite::count())->toBe(0);
     });
 
-    it('un requisito que ya pide es error, sea del tipo que sea, y no cambia nada', function (PrerequisiteKind $kind) {
+    it('un requisito que ya pide es error, sea del tipo que sea, y no cambia nada (supuesto por confirmar)', function (PrerequisiteKind $kind) {
         Event::fake([CurriculumChanged::class]);
         seriate($this->plan, $this->integral, $this->calculus);
 
