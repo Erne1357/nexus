@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Enums\RoomDefaultSource;
 use App\Modules\Facilities\Enums\RoomType;
@@ -58,14 +59,18 @@ it('un bloqueo conoce su salón y su periodo, y las horas vuelven como hora', fu
 });
 
 it('un salón por defecto conoce su materia, su campus y su salón', function () {
-    $default = SubjectRoomDefault::factory()->create(['priority' => 2, 'source' => RoomDefaultSource::Historial])->fresh();
+    $room = Room::factory()->create();
+    $subject = Subject::factory()->create();
+    $default = SubjectRoomDefault::factory()->create([
+        'subject_id' => $subject->id, 'room_id' => $room->id, 'priority' => 2, 'source' => RoomDefaultSource::Historial,
+    ])->fresh();
 
     expect($default)
         ->priority->toBe(2)
         ->source->toBe(RoomDefaultSource::Historial)
-        ->and($default->subject)->not->toBeNull()
-        ->and($default->room->is($default->room))->toBeTrue()
-        ->and($default->campus->id)->toBe($default->room->campus_id);
+        ->and($default->subject->is($subject))->toBeTrue()
+        ->and($default->room->is($room))->toBeTrue()
+        ->and($default->campus->is($room->campus))->toBeTrue();
 });
 
 it('los modelos llevan borrado lógico', function () {
