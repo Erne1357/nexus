@@ -270,3 +270,36 @@ it('un archivo del SII con columna de campus la ignora: los docentes no son de u
         ->and($rows[0]->status)->toBe(RowStatus::Valid)
         ->and($rows[1]->status)->toBe(RowStatus::Error);
 });
+
+it('busca cada docente una sola vez por corrida al validar', function () {
+    Teacher::factory()->create(['employee_number' => '1001']);
+    DB::enableQueryLog();
+
+    foreach (['SC', 'II', 'SC'] as $department) {
+        $this->template->validate(teacherRow(['department' => $department]), $this->context);
+    }
+
+    $lookups = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => preg_match('/from "teachers"/', $sql) === 1);
+
+    // Una en la base (parent::check) por fila y una sola de la plantilla.
+    expect($lookups)->toHaveCount(4);
+});
+
+it('en un archivo, un correo, grado o fecha de ingreso distintos en otro renglón del docente avisan y se queda el del primero', function () {
+    Storage::fake('imports');
+    Queue::fake();
+    $batch = ImportBatch::factory()->create(['template' => 'teachers', 'uploaded_by' => $this->context->user->id]);
+    $batch->update(['file_path' => "{$batch->id}.csv"]);
+    Storage::disk('imports')->put($batch->file_path, implode("\n", [
+        'número de empleado,nombre,departamento,correo,grado,activo,fecha de ingreso',
+        '1001,Ana López,SC,ana@example.test,Maestría,Sí,05/08/2015',
+        '1001,Ana López,II,otra@example.test,Doctorado,Sí,06/08/2016',
+    ]));
+
+    app(ValidateImportBatch::class)->handle($batch);
+    $second = $batch->rows()->where('row_number', 3)->sole();
+
+    expect($second->status)->toBe(RowStatus::Warning)
+        ->and(array_keys($second->warnings))->toBe(['email', 'degree', 'hired_on'])
+        ->and($second->normalized)->email->toBe('ana@example.test')->degree->toBe('maestria')->hired_on->toBe('2015-08-05');
+});

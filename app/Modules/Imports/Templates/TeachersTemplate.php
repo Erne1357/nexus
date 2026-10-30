@@ -13,19 +13,24 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Docentes del SII (tarea 10): número de empleado, nombre, departamento de su adscripción, correo, grado,
- * activo y fecha de ingreso. Los docentes son de toda la institución y su adscripción no tiene campus (confirmado
- * el 30 de octubre de 2026): si el archivo del SII trae una columna de campus, simplemente no se mapea (supuesto
- * por confirmar). Un docente con varias adscripciones viene en un renglón por departamento (S5, supuesto por
- * confirmar): la clave del archivo es el docente con su departamento, para que esos renglones no cuenten como repetidos, y el registro se busca por el número de
- * empleado. La primera adscripción de un docente es la principal; si ya tenía otra principal, la conserva y
- * avisa. El número se normaliza con `TeacherRules`, igual que uno capturado.
+ * Docentes del SII (tarea 10): número de empleado, nombre, departamento de su adscripción, correo, grado, activo y
+ * fecha de ingreso.
+ *
+ * Los docentes son de toda la institución y su adscripción no tiene campus (confirmado el 30 de octubre de 2026).
+ * Si el archivo del SII trae una columna de campus, simplemente no se mapea (supuesto por confirmar).
+ *
+ * Un docente con varias adscripciones viene en un renglón por departamento, y la clave del archivo es el docente
+ * con su departamento, para que esos renglones no cuenten como repetidos (S5, supuesto por confirmar). El registro
+ * se busca por el número de empleado, que se normaliza con `TeacherRules` igual que uno capturado. La primera
+ * adscripción de un docente es la principal; si ya tenía otra principal, la conserva y avisa. Los renglones de un
+ * mismo docente deben traer el mismo nombre, correo, grado y fecha de ingreso: si uno posterior trae otro, avisa y
+ * se queda el del primero.
  *
  * Como todo lo importado, no reactiva ni restaura (S4, supuesto por confirmar): el docente que el SII no marca
  * activo nace inactivo, uno activo que el archivo marca inactivo sigue activo con advertencia, y uno inactivo se
- * actualiza y sigue inactivo. No ofrece «desactivar faltantes»: es global, la exportación puede ser de un campus
- * y la baja desactiva usuarios. Un grado desconocido queda vacío con advertencia (S6, supuesto por confirmar).
- * Al aplicar el lote despacha el alta de usuarios de los docentes.
+ * actualiza y sigue inactivo. No ofrece «desactivar faltantes»: es global, la exportación puede ser de un campus y
+ * la baja desactiva usuarios. Un grado desconocido queda vacío con advertencia (S6, supuesto por confirmar). Al
+ * aplicar el lote despacha el alta de usuarios de los docentes.
  */
 class TeachersTemplate extends ImportTemplate
 {
@@ -33,6 +38,9 @@ class TeachersTemplate extends ImportTemplate
 
     /** @var array<string, Department|null> departamento por clave, en esta corrida */
     private array $departments = [];
+
+    /** @var array<string, Teacher> docente por número de empleado, en esta corrida (solo los que existen) */
+    private array $teachers = [];
 
     /** @var array<string, true> docentes cuya última fila aplicada solo agregó una adscripción */
     private array $adscriptionOnly = [];
@@ -80,7 +88,7 @@ class TeachersTemplate extends ImportTemplate
      */
     public function consistentAcrossRows(): ?array
     {
-        return ['group' => ['employee_number'], 'errors' => [], 'warnings' => ['name']];
+        return ['group' => ['employee_number'], 'errors' => [], 'warnings' => ['name', 'email', 'degree', 'hired_on']];
     }
 
     public function rules(): array
@@ -129,6 +137,7 @@ class TeachersTemplate extends ImportTemplate
      */
     public function apply(array $row, ImportContext $context): Model
     {
+        unset($this->teachers[$row['employee_number']]);
         $teacher = parent::apply($row, $context);
 
         if ($row['degree'] !== null && TeacherDegree::tryFrom($row['degree']) === null && $teacher->getAttribute('degree') !== null) {
@@ -180,7 +189,7 @@ class TeachersTemplate extends ImportTemplate
             $issues = $issues->withWarning('department', "El departamento {$row['department']} está inactivo.");
         }
 
-        $teacher = Teacher::withTrashed()->where('employee_number', $row['employee_number'])->first(['id', 'is_active', 'deleted_at']);
+        $teacher = $this->teacher($row['employee_number']);
 
         if ($teacher === null || $teacher->trashed()) {
             return $issues;
@@ -245,5 +254,14 @@ class TeachersTemplate extends ImportTemplate
     private function department(string $code): ?Department
     {
         return array_key_exists($code, $this->departments) ? $this->departments[$code] : $this->departments[$code] = Department::query()->where('code', $code)->first(['id', 'is_active']);
+    }
+
+    /**
+     * El docente con ese número, borrado o no, una vez por corrida. Solo se guarda el que existe, y apply() lo
+     * suelta: un docente que una fila acaba de dar de alta o cambiar no se lee viejo en la siguiente.
+     */
+    private function teacher(string $number): ?Teacher
+    {
+        return $this->teachers[$number] ??= Teacher::withTrashed()->where('employee_number', $number)->first(['id', 'is_active', 'deleted_at']);
     }
 }
