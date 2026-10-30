@@ -1,6 +1,12 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Enums\TeacherDegree;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Imports\Actions\ApplyImportBatch;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
@@ -147,4 +153,54 @@ it('lo exportado se vuelve a importar completo, en orden, con el motor real', fu
         ->and(DB::table('subject_prerequisites')->count())->toBe($exported['prerequisites']->count())
         ->and(DB::table('students')->count())->toBe($exported['students']->count())
         ->and(DB::table('kardex_records')->count())->toBe($exported['kardex']->count());
+});
+
+it('exporta docentes y plazas con el formato de sus plantillas, y se vuelven a importar sin errores', function () {
+    Queue::fake();
+    DB::statement('TRUNCATE teacher_positions, teacher_departments, teachers CASCADE');
+    $sistemas = Department::factory()->create(['code' => 'ZS']);
+    $industrial = Department::factory()->create(['code' => 'ZI']);
+    $campus = Campus::factory()->create(['code' => 'ZC']);
+    $ana = Teacher::factory()->adscribedTo($sistemas, $campus)->create(['employee_number' => '7001', 'degree' => TeacherDegree::Maestria, 'hired_on' => '2015-08-05', 'email' => 'ana@example.test']);
+    TeacherDepartment::factory()->for($ana)->for($industrial)->for($campus)->create(['is_primary' => false]);
+    $beto = Teacher::factory()->adscribedTo($sistemas, $campus)->inactive()->create(['employee_number' => '7002']);
+    Teacher::factory()->adscribedTo($sistemas, $campus)->create(['employee_number' => '7003'])->delete();
+    TeacherPosition::factory()->for($ana)->tiempoCompleto()->create(['valid_from' => '2026-08-01', 'valid_to' => '2026-12-31']);
+    TeacherPosition::factory()->for($beto)->asignatura(8)->create();
+
+    $this->artisan('imports:export-demo', ['--dir' => 'docentes'])->assertSuccessful();
+
+    $csv = function (string $template): array {
+        $stream = fopen(Storage::disk('imports')->path("docentes/{$template}.csv"), 'r');
+        $rows = [];
+        while (($row = fgetcsv($stream, escape: '')) !== false) {
+            $rows[] = $row;
+        }
+        fclose($stream);
+
+        return $rows;
+    };
+
+    expect($csv('teachers'))->toBe([
+        ['número de empleado', 'nombre', 'departamento', 'campus', 'correo', 'grado', 'activo', 'fecha de ingreso'],
+        ['7001', $ana->name, 'ZS', 'ZC', 'ana@example.test', 'Maestría', 'Sí', '05/08/2015'],
+        ['7001', $ana->name, 'ZI', 'ZC', 'ana@example.test', 'Maestría', 'Sí', '05/08/2015'],
+        ['7002', $beto->name, 'ZS', 'ZC', '', '', 'No', ''],
+    ])->and($csv('positions'))->toBe([
+        ['número de empleado', 'tipo de plaza', 'horas base', 'desde', 'hasta'],
+        ['7001', 'Tiempo completo', '40', '01/08/2026', '31/12/2026'],
+        ['7002', 'Asignatura', '8', '', ''],
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    foreach (['teachers', 'positions'] as $template) {
+        $batch = ImportBatch::factory()->create(['template' => $template, 'uploaded_by' => $admin->id]);
+        $batch->update(['file_path' => "{$batch->id}.csv"]);
+        Storage::disk('imports')->copy("docentes/{$template}.csv", $batch->file_path);
+
+        $batch = app(ValidateImportBatch::class)->handle($batch);
+
+        expect([$template, $batch->status->value, $batch->error_rows, $batch->total_rows])->toBe([$template, 'validated', 0, count($csv($template)) - 1]);
+    }
 });
