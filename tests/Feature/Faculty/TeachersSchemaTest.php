@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -9,12 +8,14 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /*
 | Integridad de docentes, adscripciones y plazas (docs/dominio/modelo-de-datos.md, "Faculty"). Las claves
-| naturales cuentan también los borrados; una sola adscripción principal sin borrar por docente; cada tipo
-| de plaza acepta solo sus horas base (S3, supuesto por confirmar).
+| naturales cuentan también los borrados; la adscripción es solo a un departamento, sin campus (confirmado el 30 de
+| octubre de 2026); una sola adscripción principal sin borrar por docente; cada tipo de plaza acepta solo sus horas
+| base (S3, supuesto por confirmar).
 */
 
 describe('docentes', function () {
@@ -43,26 +44,25 @@ describe('docentes', function () {
 });
 
 describe('adscripciones', function () {
-    it('es única por docente, departamento y campus, también contra una borrada', function () {
+    it('no tiene campus: el docente no es de un campus', function () {
+        expect(Schema::hasColumn('teacher_departments', 'campus_id'))->toBeFalse();
+    });
+
+    it('es única por docente y departamento, también contra una borrada', function () {
         $teacher = Teacher::factory()->create();
         $department = Department::factory()->create();
-        $campus = Campus::factory()->create();
-        TeacherDepartment::factory()->for($teacher)->for($department)->for($campus)->create(['is_primary' => false])->delete();
+        TeacherDepartment::factory()->for($teacher)->for($department)->create(['is_primary' => false])->delete();
 
-        expect(fn () => TeacherDepartment::factory()->for($teacher)->for($department)->for($campus)->create(['is_primary' => false]))
+        expect(fn () => TeacherDepartment::factory()->for($teacher)->for($department)->create(['is_primary' => false]))
             ->toThrow(UniqueConstraintViolationException::class);
     });
 
-    it('un docente puede estar en otro campus o en otro departamento', function () {
+    it('un docente puede estar en varios departamentos', function () {
         $teacher = Teacher::factory()->create();
-        $department = Department::factory()->create();
-        $campus = Campus::factory()->create();
-        TeacherDepartment::factory()->for($teacher)->for($department)->for($campus)->create(['is_primary' => true]);
+        TeacherDepartment::factory()->for($teacher)->create(['is_primary' => true]);
+        TeacherDepartment::factory()->for($teacher)->create(['is_primary' => false]);
 
-        TeacherDepartment::factory()->for($teacher)->for($department)->for(Campus::factory())->create(['is_primary' => false]);
-        TeacherDepartment::factory()->for($teacher)->for(Department::factory())->for($campus)->create(['is_primary' => false]);
-
-        expect($teacher->adscriptions()->count())->toBe(3);
+        expect($teacher->adscriptions()->count())->toBe(2);
     });
 
     it('rechaza dos principales sin borrar del mismo docente', function () {
@@ -88,7 +88,7 @@ describe('adscripciones', function () {
         expect(TeacherDepartment::count())->toBe(2);
     });
 
-    it('necesita un departamento y un campus que existan', function () {
+    it('necesita un departamento que exista', function () {
         $teacher = Teacher::factory()->create();
 
         expect(fn () => TeacherDepartment::factory()->for($teacher)->create(['department_id' => (string) Str::uuid7()]))

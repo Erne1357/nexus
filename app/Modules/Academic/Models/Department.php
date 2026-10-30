@@ -50,7 +50,7 @@ class Department extends Model
     }
 
     /**
-     * Quién lo dirige o lo dirigió, en cada campus.
+     * Quién lo dirige o lo dirigió: sus jefes, de todo el Tec, y sus jefes de proyecto docente, de cada campus.
      *
      * @return HasMany<DepartmentHead, $this>
      */

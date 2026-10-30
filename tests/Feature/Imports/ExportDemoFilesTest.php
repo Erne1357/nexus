@@ -101,10 +101,16 @@ it('escribe un archivo de salones por campus, que valida con 0 errores en su cam
     $files = Storage::disk('imports')->allFiles('demo');
     $rows = fn (string $campus): array => array_slice(demoCsv("rooms-{$campus}"), 1);
 
+    $exported = array_column($rows('C2'), 1);
+    $expected = DB::table('rooms')->where('campus_id', $c2->id)->whereNull('deleted_at')->pluck('code')->all();
+    $lab = collect($rows('C2'))->firstWhere(1, 'XA-1');
+
     expect($files)->toContain('demo/rooms-C1.csv', 'demo/rooms-C2.csv')
-        ->and(array_column($rows('C2'), 1))->toBe(['XA-1', 'XA-2'])
+        ->and(collect($exported)->sort()->values()->all())->toBe(collect($expected)->sort()->values()->all())
+        ->and(count($exported))->toBeGreaterThan(80)
+        ->and($exported)->toContain('XA-1', 'XA-2')->not->toContain('XA-3')
         ->and(array_column($rows('C1'), 1))->toBe(['XB-1'])
-        ->and($rows('C2')[0])->toBe(['XA', 'XA-1', 'Lab de prueba', 'laboratorio', '1200', $owner->code]);
+        ->and($lab)->toBe(['XA', 'XA-1', 'Lab de prueba', 'laboratorio', '1200', $owner->code]);
 
     foreach ([$c1, $c2] as $campus) {
         $batch = app(StoreImportBatch::class)->handle($admin, 'rooms', new UploadedFile(Storage::disk('imports')->path("demo/rooms-{$campus->code}.csv"), "rooms-{$campus->code}.csv", 'text/csv', null, true), $campus);
@@ -197,8 +203,14 @@ it('exporta el historial docente y las evaluaciones, y esos archivos validan con
     $this->artisan('imports:export-demo')->assertSuccessful();
     $admin = User::factory()->admin()->create();
 
-    expect(array_slice(demoCsv('teacher_history'), 1))->toHaveCount(2)
-        ->and(collect(array_slice(demoCsv('evaluations'), 1))->pluck(3)->all())->toBe(['3', '4.5']);
+    $history = array_slice(demoCsv('teacher_history'), 1);
+    $evaluations = array_slice(demoCsv('evaluations'), 1);
+    $mine = collect($evaluations)->where(0, '7654321')->pluck(3)->sort()->values()->all();
+
+    expect($history)->not->toBeEmpty()
+        ->and(collect($history)->where(0, '7654321')->pluck(4)->sort()->values()->all())->toBe(['5A', '5B'])
+        ->and($evaluations)->not->toBeEmpty()
+        ->and($mine)->toBe(['3', '4.5']);
 
     foreach (['teacher_history', 'evaluations'] as $template) {
         $batch = ImportBatch::factory()->create(['template' => $template, 'uploaded_by' => $admin->id]);
@@ -207,6 +219,6 @@ it('exporta el historial docente y las evaluaciones, y esos archivos validan con
 
         $batch = app(ValidateImportBatch::class)->handle($batch);
 
-        expect([$template, $batch->status->value, $batch->error_rows, $batch->total_rows])->toBe([$template, 'validated', 0, 2]);
+        expect([$template, $batch->status->value, $batch->error_rows, $batch->total_rows])->toBe([$template, 'validated', 0, count($template === 'evaluations' ? $evaluations : $history)]);
     }
 });

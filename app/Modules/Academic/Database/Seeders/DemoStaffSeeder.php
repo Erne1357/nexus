@@ -19,13 +19,15 @@ use RuntimeException;
 use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
- * Usuarios de prueba del demo, con su rol y su alcance vigentes desde hoy, en cada campus de `$campuses`:
+ * Usuarios de prueba del demo, con su rol y su alcance vigentes desde hoy:
  *
- * - `subdir.<campus>`: Subdirección Académica del campus.
- * - `jefe.<depto>.<campus>` y `jpd.<depto>.<campus>`: jefe y jefe de proyecto docente de cada departamento activo
- *   que coordina una carrera ofrecida en el campus o imparte una materia de sus planes vigentes, con su fila en
- *   `department_heads`.
+ * - `subdir`: Subdirección Académica, una para todo el Tec (sin campus).
+ * - `jefe.<depto>`: jefe de cada departamento activo de los campus de `$campuses`, de todo el Tec (sin campus).
+ * - `jpd.<depto>.<campus>`: jefe de proyecto docente del departamento en cada campus de `$campuses`.
  * - `coord.<carrera>.<campus>`: coordinador de cada carrera ofrecida en el campus (`alias` de data/careers.php).
+ *
+ * Los departamentos de un campus son los activos que coordinan una carrera ofrecida en él o imparten una materia de
+ * sus planes vigentes. Jefes y jefes de proyecto docente llevan su fila en `department_heads`.
  *
  * Entran con la contraseña `password` sin tener que cambiarla (supuesto S5, por confirmar). Requiere el catálogo
  * (AcademicDemoSeeder) y los roles (RoleSeeder). A un usuario que ya existe solo se le completan el rol y el
@@ -45,6 +47,9 @@ class DemoStaffSeeder extends Seeder
         $this->refuseProduction();
 
         $aliases = array_map(fn (array $career): string => $career['alias'], AcademicDemoSeeder::data('careers'));
+        $headed = [];
+
+        $this->user('subdir', 'Subdirección Académica', Role::Subdireccion, []);
 
         foreach ($campuses as $code) {
             $campus = Campus::query()->where('code', $code)->first()
@@ -52,16 +57,16 @@ class DemoStaffSeeder extends Seeder
             $suffix = Str::lower($code);
             $careers = $this->careersOfferedIn($campus);
 
-            $this->user("subdir.{$suffix}", "Subdirección Académica · {$campus->name}", Role::Subdireccion, ['campus_id' => $campus->id]);
-
             foreach ($this->departmentsOf($careers) as $department) {
-                $scope = ['campus_id' => $campus->id, 'department_id' => $department->id];
                 $slug = Str::lower($department->code);
 
-                $head = $this->user("jefe.{$slug}.{$suffix}", "Jefatura de {$department->name} · {$campus->name}", Role::JefeDepartamento, $scope);
-                $this->head($head, $department, $campus, DepartmentHeadKind::Jefe);
+                if (! isset($headed[$department->id])) {
+                    $head = $this->user("jefe.{$slug}", "Jefatura de {$department->name}", Role::JefeDepartamento, ['department_id' => $department->id]);
+                    $this->head($head, $department, null, DepartmentHeadKind::Jefe);
+                    $headed[$department->id] = true;
+                }
 
-                $projectLead = $this->user("jpd.{$slug}.{$suffix}", "Jefatura de proyecto docente de {$department->name} · {$campus->name}", Role::JefeProyectoDocente, $scope);
+                $projectLead = $this->user("jpd.{$slug}.{$suffix}", "Jefatura de proyecto docente de {$department->name} · {$campus->name}", Role::JefeProyectoDocente, ['campus_id' => $campus->id, 'department_id' => $department->id]);
                 $this->head($projectLead, $department, $campus, DepartmentHeadKind::JefeProyectoDocente);
             }
 
@@ -131,12 +136,14 @@ class DemoStaffSeeder extends Seeder
     }
 
     /**
-     * Su fila en `department_heads` desde hoy, salvo que ya la tenga o que el departamento ya tenga jefe vigente.
+     * Su fila en `department_heads` desde hoy, salvo que ya la tenga o que el departamento ya tenga jefe vigente. El
+     * jefe no lleva campus; el jefe de proyecto docente, el suyo.
      */
-    private function head(User $user, Department $department, Campus $campus, DepartmentHeadKind $kind): void
+    private function head(User $user, Department $department, ?Campus $campus, DepartmentHeadKind $kind): void
     {
         $heads = DepartmentHead::query()
-            ->where(['department_id' => $department->id, 'campus_id' => $campus->id, 'kind' => $kind])
+            ->where(['department_id' => $department->id, 'kind' => $kind])
+            ->when($campus !== null, fn (Builder $query) => $query->where('campus_id', $campus->id))
             ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()->toDateString()));
 
         $taken = $kind === DepartmentHeadKind::Jefe
@@ -146,7 +153,7 @@ class DemoStaffSeeder extends Seeder
         if (! $taken) {
             DepartmentHead::query()->create([
                 'department_id' => $department->id,
-                'campus_id' => $campus->id,
+                'campus_id' => $campus?->id,
                 'user_id' => $user->id,
                 'kind' => $kind,
                 'valid_from' => today()->toDateString(),

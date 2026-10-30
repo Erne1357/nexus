@@ -8,8 +8,8 @@ use App\Modules\Faculty\Listeners\BlockDepartmentDeletionWithTeachers;
 use Illuminate\Support\Facades\Event;
 
 /**
- * Módulo Faculty: docentes, sus adscripciones a departamentos y campus, y sus plazas
- * (docs/dominio/modelo-de-datos.md, "Faculty"). Depende de Core y Academic.
+ * Módulo Faculty: docentes, sus adscripciones a departamentos y sus plazas (docs/dominio/modelo-de-datos.md,
+ * "Faculty"). Depende de Core y Academic.
  */
 final class FacultyServiceProvider extends ModuleServiceProvider
 {
