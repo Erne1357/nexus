@@ -3,7 +3,6 @@
 namespace App\Modules\Faculty\Database\Factories;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
@@ -39,12 +38,12 @@ class TeacherFactory extends Factory
     }
 
     /**
-     * Con una adscripción al departamento y campus dados (la principal, salvo que se pida lo contrario).
+     * Con una adscripción al departamento dado (la principal, salvo que se pida lo contrario).
      */
-    public function adscribedTo(Department $department, Campus $campus, bool $primary = true): static
+    public function adscribedTo(Department $department, bool $primary = true): static
     {
         return $this->has(
-            TeacherDepartment::factory()->for($department)->for($campus)->state(['is_primary' => $primary]),
+            TeacherDepartment::factory()->for($department)->state(['is_primary' => $primary]),
             'adscriptions',
         );
     }
