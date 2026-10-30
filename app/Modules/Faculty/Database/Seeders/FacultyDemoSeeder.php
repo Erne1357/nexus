@@ -30,7 +30,7 @@ use RuntimeException;
  * tener varios; los jefes ya los puso DemoStaffSeeder). Requiere el catálogo (AcademicDemoSeeder) y los periodos.
  * Sin NEXUS_DEFAULT_PASSWORD, la provisión falla.
  *
- * Inserta con `DB::table()` en bloques de 1 000. Cada campus usa su propia semilla (`$seed` más una constante del
+ * Inserta con `DB::table()` en bloques de 1 000, todo un campus en una transacción. Cada campus usa su propia semilla (`$seed` más una constante del
  * campus): los docentes de Campus II son los mismos solo o junto con Campus I. Volver a sembrar no duplica: un
  * docente cuyo número de empleado ya existe, incluso borrado, no se toca. No corre en producción.
  */
@@ -74,7 +74,7 @@ class FacultyDemoSeeder extends Seeder
             $roster = (new TeacherRosterGenerator(new Randomizer(new Mt19937($seed + crc32($code)))))
                 ->generate($code, $count, array_map(fn (array $subjects): int => count($subjects), array_column($catalog, 'subjects')));
 
-            $heads[$code] = $this->insert($roster, $catalog, $campuses[$code], $otherCampus, $terms, $admin, $totals);
+            $heads[$code] = DB::transaction(fn (): array => $this->insert($roster, $catalog, $campuses[$code], $otherCampus, $terms, $admin, $totals));
         }
 
         $inserted = (hrtime(true) - $started) / 1e9;

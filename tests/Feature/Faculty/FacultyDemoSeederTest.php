@@ -173,8 +173,42 @@ it('los docentes de un campus son los mismos solo o junto con el otro', function
     expect($both)->toBe($alone)->and($alone)->toHaveCount(20);
 });
 
-it('se niega a sembrar en producción', function () {
+it('se niega a sembrar en producción sin insertar nada', function () {
+    seedDemoTeachers(['C2' => 1]);
+    $before = DB::table('teachers')->count();
+
     app()->detectEnvironment(fn () => 'production');
 
-    expect(fn () => seedDemoTeachers())->toThrow(RuntimeException::class);
+    expect(fn () => (new DatabaseSeeder)->setContainer(app())->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C2' => 5]]))
+        ->toThrow(RuntimeException::class, 'producción')
+        ->and(DB::table('teachers')->count())->toBe($before);
+});
+
+it('las plazas respetan las horas de su tipo y las vencidas y vigentes salen distintas', function () {
+    seedDemoTeachers();
+
+    $hours = ['tiempo_completo' => 40, 'tres_cuartos' => 30, 'medio_tiempo' => 20, 'honorarios' => 0];
+
+    foreach (DB::table('teacher_positions')->get() as $position) {
+        if ($position->kind === 'asignatura') {
+            expect($position->base_hours)->toBeBetween(1, 40);
+        } else {
+            expect($position->base_hours)->toBe($hours[$position->kind]);
+        }
+    }
+
+    expect(DB::table('teacher_positions')->where('valid_to', '<', '2026-10-30')->exists())->toBeTrue()
+        ->and(DB::table('teacher_positions')->whereNull('valid_to')->where(fn ($q) => $q->whereNull('valid_from')->orWhere('valid_from', '<=', '2026-10-30'))->exists())->toBeTrue();
+});
+
+it('ningún docente tiene bloques de disponibilidad traslapados en un día', function () {
+    seedDemoTeachers();
+
+    $overlaps = DB::table('teacher_availability as a')
+        ->join('teacher_availability as b', fn ($join) => $join->on('a.teacher_id', '=', 'b.teacher_id')->on('a.term_id', '=', 'b.term_id')->on('a.day', '=', 'b.day')->whereColumn('a.id', '<', 'b.id'))
+        ->whereColumn('a.starts_at', '<', 'b.ends_at')
+        ->whereColumn('b.starts_at', '<', 'a.ends_at')
+        ->count();
+
+    expect($overlaps)->toBe(0);
 });

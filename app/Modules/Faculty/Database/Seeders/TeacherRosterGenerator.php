@@ -302,7 +302,7 @@ final class TeacherRosterGenerator
                 $subject = $subjects[$key];
 
                 foreach (array_slice(['A', 'B'], 0, $this->random->getInt(1, 100) <= 25 ? 2 : 1) as $letter) {
-                    $history[] = ['term' => $term, 'subject' => $subject, 'group' => $semester.$letter, 'source' => $term === '20263' ? 'nexus' : 'import'];
+                    $history[] = ['term' => $term, 'subject' => $subject, 'group' => $semester.$letter, 'source' => 'import'];
                 }
             }
 
