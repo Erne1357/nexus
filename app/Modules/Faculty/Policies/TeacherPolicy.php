@@ -28,8 +28,9 @@ use Illuminate\Support\Collection;
  * - El jefe de proyecto docente, cuyo alcance lleva campus, administra a todos los docentes de su departamento,
  *   porque el docente no es de un campus.
  * - Nadie se da de baja ni se quita a sí mismo de un departamento, ni el admin.
- * - Dar de alta (`create`) en un departamento es de quien lo cubre; vale también para adscribir a un docente que ya
- *   existe (S9).
+ * - Dar de alta (`create`) en un departamento es de quien lo cubre. Adscribir a un docente que ya existe
+ *   (`adscribe`) es solo del admin y la Subdirección; a los jefes la pantalla solo les dice que el número ya está
+ *   registrado (S9).
  * - Nombrar jefes (S7), dar de alta usuarios y reiniciar contraseñas, solo el admin.
  *
  * No hay `delete`: un docente se da de baja. TeacherQuery lista con la misma regla, en SQL; si cambia aquí, cambia
@@ -131,6 +132,15 @@ final class TeacherPolicy
         }
 
         return $this->scope($user)->coversDepartment(self::EDITORS, $department instanceof Department ? $department->getKey() : $department);
+    }
+
+    /**
+     * Adscribir a un departamento a un docente que ya existe (S9, supuesto por confirmar): solo el admin y la
+     * Subdirección, que ven a todos los docentes; un jefe no puede ni saber de quién es un número que no cubre.
+     */
+    public function adscribe(User $user): bool
+    {
+        return $this->coversEveryone($this->scope($user));
     }
 
     public function appointHeads(User $user): bool
