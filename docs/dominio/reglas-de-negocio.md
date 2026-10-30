@@ -120,6 +120,8 @@ Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se
 
 Borrar departamentos (confirmado el 29 de octubre de 2026): un departamento solo se borra, de forma lógica, si no tiene carreras ni materias sin borrar; si no, se desactiva. Al borrarlo se cierran los alcances de sus jefes: los vigentes que empezaron antes de hoy terminan ayer y los que empiezan hoy o después se eliminan, porque `valid_to` no puede ser anterior a `valid_from`; cada cambio queda en la bitácora sobre el usuario (confirmado el 29 de octubre de 2026).
 
+Borrar departamentos con salones (S10, supuesto por confirmar): un departamento que es dueño de salones no borrados, activos o no, no se borra; Facilities lo veta con «Es dueño de N salones.» mediante `DepartmentDeleting`. Se desactiva, o se reasignan sus salones.
+
 Borrar carreras (confirmado el 29 de octubre de 2026): una carrera solo se borra, de forma lógica, si no tiene planes de estudio, ni siquiera borrados; si no, se desactiva. Al borrarla dejan de contar los alcances de sus coordinadores (igual que con los departamentos; confirmado el 29 de octubre de 2026).
 
 Oferta por campus: la oferta de una carrera inactiva nace inactiva (confirmado el 29 de octubre de 2026, la misma regla de la importación). Ofrecer crea, restaura o activa la fila de `career_campus` del campus y dejar de ofrecer la desactiva; ofrecer nunca desactiva una oferta activa (supuesto por confirmar).
