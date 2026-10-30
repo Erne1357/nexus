@@ -76,7 +76,7 @@
         </div>
     </div>
 
-    <div role="tablist" aria-label="Secciones de la ficha" class="tabs tabs-border overflow-x-auto">
+    <div role="tablist" aria-label="Secciones de la ficha" class="tabs tabs-border flex-nowrap overflow-x-auto">
         @foreach ($tabs as $key => [$label, $count])
             <button type="button" role="tab" id="tab-{{ $key }}" aria-controls="panel" aria-selected="{{ $tab === $key ? 'true' : 'false' }}" data-testid="tab-{{ $key }}"
                 wire:click="$set('tab', '{{ $key }}')" @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $tab === $key])>
@@ -259,10 +259,9 @@
             </div>
         @else
             <div class="grid items-start gap-5 desktop:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-                <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-datos">
+                <section class="@container overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-datos">
                     <header class="flex items-center justify-between gap-2 border-b border-base-300 px-5 py-3">
                         <h2 id="h-datos" class="text-lg font-bold">Datos</h2>
-                        <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" wire:click="editData" spinner="editData" />
                     </header>
                     <dl class="divide-y divide-base-300">
                         @foreach ([
@@ -272,12 +271,12 @@
                             ['Grado', $record->teacher->degree ? e($record->teacher->degree->label()) : '<span class="text-neutral">Sin grado</span>'],
                             ['Fecha de ingreso', $record->teacher->hired_on ? e($record->teacher->hired_on->format('d/m/Y')) : '<span class="text-neutral">Sin fecha</span>'],
                         ] as [$term, $value])
-                            <div class="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 px-5 py-2.5">
+                            <div class="grid gap-x-4 gap-y-1 px-5 py-2.5 @lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]">
                                 <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $term }}</dt>
                                 <dd class="min-w-0 break-words">{!! $value !!}</dd>
                             </div>
                         @endforeach
-                        <div class="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] items-center gap-x-4 px-5 py-2.5">
+                        <div class="grid gap-x-4 gap-y-1 px-5 py-2.5 @lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] @lg:items-center">
                             <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Usuario</dt>
                             <dd class="flex flex-wrap items-center gap-2">
                                 @if ($record->user)
