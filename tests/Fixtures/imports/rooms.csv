@@ -1,0 +1,6 @@
+edificio,clave,nombre,tipo,capacidad,departamento
+EA,ea-101,Aula 101,Aula,40,
+EA,EA-102,,AULA,"1,200",
+EL,EL-1,Laboratorio de Pruebas,Laboratorio,25,XA
+EL,EL-2,Sala de Cómputo 2,Centro de Cómputo,30,XA
+EZ,EZ-A,Auditorio Inventado,Auditorio,300,

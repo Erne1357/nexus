@@ -1,12 +1,12 @@
 {{--
     Anatomía de una pantalla de catálogo (DESIGN.md, "Layout"), la de Campus con los filtros de Materias: encabezado
-    y, en su renglón, la barra de herramientas común (búsqueda, filtros de departamento, campus, tipo de plaza y
-    estado, y a la derecha la acción principal; antes de ella, en btn-ghost, «Dar de alta usuarios», que es del
-    admin y a los demás se les muestra deshabilitada con su motivo). Tabla en una superficie blanca con filete: el
-    número en Mono, la adscripción principal y debajo las otras, las horas base del periodo activo en Mono, si tiene
-    usuario y el estado con su insignia; «Editar» visible y lo demás en «Acciones». Entre 768 y 1199 px se ocultan
-    el usuario y, debajo de 1024, la adscripción; debajo de 768 px la tabla cede su lugar a renglones apilados
-    (número, nombre y estado; luego el detalle; luego las acciones), que no repiten los data-testid de la tabla.
+    y, en su renglón, la barra de herramientas común (búsqueda, filtros de departamento, tipo de plaza y estado, y a
+    la derecha la acción principal con, a su lado, «Más acciones», que lleva «Dar de alta usuarios»: del admin, y a
+    los demás deshabilitada con su motivo). Tabla en una superficie blanca con filete: el número en Mono, el
+    departamento principal y debajo los otros, las horas base del periodo activo en Mono, si tiene usuario y el
+    estado con su insignia; «Editar» visible y lo demás en «Acciones». Entre 768 y 1199 px se ocultan el usuario y,
+    debajo de 1024, la adscripción; debajo de 768 px la tabla cede su lugar a renglones apilados (número, nombre y
+    estado; luego el detalle; luego las acciones), que no repiten los data-testid de la tabla.
 --}}
 <div>
     <x-header title="Docentes" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
@@ -19,40 +19,37 @@
         </x-slot:subtitle>
     </x-header>
 
-    <x-core::catalog-toolbar>
+    <x-core::catalog-toolbar narrow>
         <x-slot:search>
             <x-input
                 wire:model.live.debounce.300ms="search"
-                placeholder="Buscar por número o nombre"
+                placeholder="Número o nombre"
                 aria-label="Buscar docentes"
                 icon="o-magnifying-glass"
                 clearable
             />
         </x-slot:search>
 
-        <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$options['departments']" placeholder="Todos los departamentos" />
-        <x-select wire:model.live="campusFilter" aria-label="Campus" :options="$options['campuses']" placeholder="Todos los campus" />
-        <x-select wire:model.live="kindFilter" aria-label="Tipo de plaza" :options="$kinds" placeholder="Todas las plazas" />
-        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activos e inactivos" />
+        <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$options['departments']" placeholder="Departamento" />
+        <x-select wire:model.live="kindFilter" aria-label="Tipo de plaza" :options="$kinds" placeholder="Tipo de plaza" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
 
         <x-slot:action>
-            <div class="flex flex-col-reverse gap-2 md:flex-row">
-                @if ($canProvision)
-                    <x-button
-                        label="Dar de alta usuarios"
-                        icon="o-user-plus"
-                        class="btn-ghost"
-                        wire:click="provisionUsers"
-                        wire:confirm="¿Dar de alta usuarios? Se revisa el acceso de todos los docentes: los activos sin usuario lo reciben con la contraseña por defecto y los dados de baja lo pierden. Corre en segundo plano."
-                        spinner="provisionUsers"
-                    />
-                @else
-                    <span class="tooltip tooltip-left" data-tip="Solo el administrador da de alta usuarios.">
-                        <x-button label="Dar de alta usuarios" icon="o-user-plus" class="btn-ghost w-full" disabled />
-                    </span>
-                @endif
-
+            <div class="flex gap-2 [&>.btn-primary]:flex-1 md:[&>.btn-primary]:flex-none">
                 <x-button label="Nuevo docente" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+
+                <x-core::row-menu icon="o-ellipsis-vertical" label="Más acciones" class="shrink-0">
+                    @if ($canProvision)
+                        <x-core::row-menu-item
+                            label="Dar de alta usuarios"
+                            wire:click="provisionUsers"
+                            wire:confirm="¿Dar de alta usuarios? Se revisa el acceso de todos los docentes: los activos sin usuario lo reciben con la contraseña por defecto y los dados de baja lo pierden. Corre en segundo plano."
+                            spinner="provisionUsers"
+                        />
+                    @else
+                        <x-core::row-menu-item label="Dar de alta usuarios" reason="Solo el administrador da de alta usuarios." disabled />
+                    @endif
+                </x-core::row-menu>
             </div>
         </x-slot:action>
     </x-core::catalog-toolbar>
@@ -84,8 +81,8 @@
                 <x-core::status-badge :tone="$teacher->is_active ? 'success' : 'neutral'" :label="$teacher->is_active ? 'Activo' : 'Inactivo'" />
             @endscope
 
-            @scope('actions', $teacher)
-                @include('faculty::teachers.row-actions', ['teacher' => $teacher, 'inTable' => true])
+            @scope('actions', $teacher, $rowActions)
+                @include('faculty::teachers.row-actions', ['teacher' => $teacher, 'actions' => $rowActions[$teacher->id], 'inTable' => true])
             @endscope
 
             <x-slot:empty>
@@ -109,7 +106,7 @@
                         · {{ $teacher->user_id === null ? 'Sin usuario' : 'Con usuario' }}
                     </div>
 
-                    @include('faculty::teachers.row-actions', ['teacher' => $teacher, 'inTable' => false])
+                    @include('faculty::teachers.row-actions', ['teacher' => $teacher, 'actions' => $rowActions[$teacher->id], 'inTable' => false])
                 </li>
             @endforeach
         </ul>
@@ -149,7 +146,7 @@
             @if ($existingId !== null)
                 <x-alert
                     :title="'Ya existe el docente '.$existingLabel"
-                    description="No se da de alta otra vez: puedes adscribirlo a este departamento y campus sin cambiar sus datos."
+                    description="No se da de alta otra vez: puedes adscribirlo a este departamento sin cambiar sus datos."
                     icon="o-information-circle"
                     class="alert-info alert-soft"
                     data-testid="existing-teacher"
@@ -167,21 +164,10 @@
                             label="Departamento"
                             name="department_id"
                             wire:model.live="department_id"
-                            :options="$targets['departments']"
+                            :options="$targets"
                             placeholder="Elige el departamento"
-                            :disabled="count($targets['departments']) === 1"
-                            :hint="count($targets['departments']) === 1 ? 'Das de alta docentes solo en este departamento.' : null"
-                        />
-                    </div>
-                    <div class="md:col-span-2">
-                        <x-select
-                            label="Campus"
-                            name="campus_id"
-                            wire:model.live="campus_id"
-                            :options="$targets['campuses']"
-                            placeholder="Elige el campus"
-                            :disabled="count($targets['campuses']) === 1"
-                            :hint="count($targets['campuses']) === 1 ? 'Das de alta docentes solo en este campus.' : null"
+                            :disabled="count($targets) === 1"
+                            :hint="count($targets) === 1 ? 'Das de alta docentes solo en este departamento.' : null"
                         />
                     </div>
                 </div>
@@ -206,10 +192,10 @@
 
                 @if ($existingId === null)
                     <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="save" />
-                @elseif ($targetLabel !== null)
-                    <x-button :label="'Adscribir a '.$targetLabel" icon="o-link" class="btn-primary" wire:click="adscribeExisting" spinner="adscribeExisting" />
+                @elseif ($targetCode !== null)
+                    <x-button :label="'Adscribir a '.$targetCode" icon="o-link" class="btn-primary" wire:click="adscribeExisting" spinner="adscribeExisting" />
                 @else
-                    <span class="tooltip tooltip-left" data-tip="Elige el departamento y el campus.">
+                    <span class="tooltip tooltip-left" data-tip="Elige el departamento.">
                         <x-button label="Adscribir" icon="o-link" class="btn-primary" disabled />
                     </span>
                 @endif

@@ -63,7 +63,48 @@ final class ExportDemoFiles extends Command
             $this->components->twoColumnDetail("{$dir}/{$template}.csv", "{$count} filas");
         }
 
+        foreach ($this->roomFiles() as $name => $rows) {
+            $path = $disk->path("{$dir}/{$name}.csv");
+            $count = $this->write($path, $templates->get('rooms'), $rows());
+
+            if ($count === null) {
+                $this->components->error("No se pudo escribir {$dir}/{$name}.csv.");
+
+                return self::FAILURE;
+            }
+
+            $this->components->twoColumnDetail("{$dir}/{$name}.csv", "{$count} filas");
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Un archivo de salones por campus que los tenga (`rooms-<CAMPUS>.csv`): la plantilla `rooms` es de un campus, el
+     * del lote, y se sube una vez por campus. Salen los salones sin borrar, también los inactivos, con el tipo
+     * como lo reconoce la plantilla y el edificio por su clave.
+     *
+     * @return array<string, Closure(): iterable<int, list<scalar|null>>>
+     */
+    private function roomFiles(): array
+    {
+        $files = [];
+
+        $campuses = DB::table('campuses')->whereNull('deleted_at')
+            ->whereExists(fn (Builder $rooms) => $rooms->from('rooms')->whereColumn('rooms.campus_id', 'campuses.id')->whereNull('rooms.deleted_at'))
+            ->orderBy('code')->pluck('id', 'code');
+
+        foreach ($campuses as $code => $campusId) {
+            $files["rooms-{$code}"] = fn (): iterable => DB::table('rooms as r')
+                ->join('buildings as b', 'b.id', '=', 'r.building_id')
+                ->leftJoin('departments as d', fn ($join) => $join->on('d.id', '=', 'r.department_id')->whereNull('d.deleted_at'))
+                ->where('r.campus_id', $campusId)->whereNull('r.deleted_at')->whereNull('b.deleted_at')
+                ->orderBy('b.code')->orderBy('r.code')
+                ->get(['b.code as building', 'r.code', 'r.name', 'r.type', 'r.capacity', 'd.code as department'])
+                ->map(fn (object $r): array => [$r->building, $r->code, $r->name, $r->type, $r->capacity, $r->department]);
+        }
+
+        return $files;
     }
 
     /**

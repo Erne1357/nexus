@@ -3,7 +3,6 @@
 namespace App\Modules\Faculty\Actions;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Events\TeacherCreated;
 use App\Modules\Faculty\Models\Teacher;
@@ -15,16 +14,17 @@ use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Da de alta un docente activo adscrito al departamento y campus dados, con esa adscripción como principal. Recibe
- * datos ya validados en forma (el componente) y hace cumplir TeacherRules: número de empleado sin espacios y único
- * también entre los borrados, nombre no vacío y grado de TeacherDegree o vacío. Quién puede, y en qué departamento
- * y campus, lo decide TeacherPolicy (`create`) antes de llamarla.
+ * Da de alta un docente activo adscrito al departamento dado, con esa adscripción como principal; sin campus,
+ * porque el docente da clase en cualquier campus o modalidad (confirmado el 30 de octubre de 2026). Recibe datos ya
+ * validados en forma (el componente) y hace cumplir TeacherRules: número de empleado sin espacios y único también
+ * entre los borrados, nombre no vacío y grado de TeacherDegree o vacío. Quién puede, y en qué departamento, lo
+ * decide TeacherPolicy (`create`) antes de llamarla.
  *
  * En una transacción revisa el número, escribe y deja bitácora; si otra sesión guarda el mismo número entre la
  * revisión y el insert, la restricción única de la base responde con el mismo error. Luego AddAdscription pone la
- * adscripción principal y llama a SyncTeacherAccess, que le da usuario (username = número, contraseña por
- * defecto y cambio obligatorio) con el rol `docente`. Sin NEXUS_DEFAULT_PASSWORD falla y no deja nada a medias.
- * Después del commit avisa con TeacherCreated.
+ * adscripción principal y SyncTeacherAccess le da usuario (username = número, contraseña por defecto y cambio
+ * obligatorio) con el rol `docente`. Sin NEXUS_DEFAULT_PASSWORD falla y no deja nada a medias. Después del commit
+ * avisa con TeacherCreated.
  */
 final class CreateTeacher
 {
@@ -34,6 +34,7 @@ final class CreateTeacher
     public function __construct(
         private readonly TeacherRules $rules,
         private readonly AddAdscription $addAdscription,
+        private readonly SyncTeacherAccess $syncTeacherAccess,
     ) {}
 
     /**
@@ -42,13 +43,13 @@ final class CreateTeacher
      * @throws ValidationException
      * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
-    public function handle(array $data, Department $department, Campus $campus): Teacher
+    public function handle(array $data, Department $department): Teacher
     {
         $number = $this->rules->normalizeEmployeeNumber($data['employee_number']);
         $name = $this->rules->name($data['name']);
         $degree = $this->rules->degree($data['degree'] ?? null);
 
-        return DB::transaction(function () use ($data, $department, $campus, $number, $name, $degree): Teacher {
+        return DB::transaction(function () use ($data, $department, $number, $name, $degree): Teacher {
             $this->rules->ensureEmployeeNumberIsFree($number);
 
             try {
@@ -70,7 +71,8 @@ final class CreateTeacher
                 ->withChanges(['attributes' => $this->rules->logged($teacher, self::FIELDS)])
                 ->log("Dio de alta al docente {$teacher->employee_number}");
 
-            $this->addAdscription->handle($teacher, $department, $campus, primary: true);
+            $this->addAdscription->handle($teacher, $department, primary: true);
+            $this->syncTeacherAccess->handle($teacher);
 
             TeacherCreated::dispatch($teacher);
 

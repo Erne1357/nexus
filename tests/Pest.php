@@ -134,3 +134,31 @@ function textOf(?Element $element): string
 {
     return trim((string) preg_replace('/\s+/u', ' ', $element?->textContent ?? ''));
 }
+
+/**
+ * Expresión de JS para los browser tests: si la búsqueda, los filtros y la acción de la barra de herramientas de
+ * catálogo están en un mismo renglón y ningún texto de la búsqueda ni de los filtros se corta (DESIGN.md, "Anatomía
+ * de una pantalla de catálogo").
+ */
+function catalogToolbarInOneRowScript(): string
+{
+    return <<<'JS'
+        (() => {
+            const bar = document.querySelector('[data-testid=catalog-toolbar]');
+            const rects = [bar.querySelector('[data-testid=catalog-search]'), ...bar.querySelectorAll('[data-testid=catalog-filters] > *'), bar.lastElementChild]
+                .map((element) => element.getBoundingClientRect());
+            const oneRow = Math.max(...rects.map((rect) => rect.top)) < Math.min(...rects.map((rect) => rect.bottom));
+            const context = document.createElement('canvas').getContext('2d');
+            const fits = (element, text) => {
+                const style = getComputedStyle(element);
+                context.font = style.font;
+                return context.measureText(text).width <= element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+            };
+            const search = bar.querySelector('input');
+
+            return oneRow
+                && fits(search, search.placeholder)
+                && [...bar.querySelectorAll('select')].every((select) => fits(select, select.selectedOptions[0]?.text ?? ''));
+        })()
+        JS;
+}

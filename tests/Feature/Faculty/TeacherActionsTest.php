@@ -2,7 +2,6 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\AddAdscription;
 use App\Modules\Faculty\Actions\CreateTeacher;
@@ -21,14 +20,13 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Actions de Docentes (spec 4.2 y 4.3). El número de empleado va sin espacios y es único también contra los
-| borrados; dar de alta deja la adscripción principal, el usuario (SyncTeacherAccess) y la bitácora; editar sin
-| cambios no escribe; la baja desactiva su usuario y reactivarlo lo devuelve; adscribir a un docente que ya existe
-| (S9, supuesto por confirmar) agrega la adscripción sin tocar sus datos y restaura una que se había quitado.
+| borrados; dar de alta deja la adscripción principal (solo departamento: el docente no es de un campus), el usuario
+| (SyncTeacherAccess) y la bitácora; editar sin cambios no escribe; la baja desactiva su usuario y reactivarlo lo
+| devuelve; adscribir a un docente que ya existe (S9, supuesto por confirmar) agrega la adscripción sin tocar sus
+| datos y restaura una que se había quitado; si no tiene principal viva, esa queda como principal.
 */
 
 beforeEach(function () {
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
 });
@@ -36,7 +34,7 @@ beforeEach(function () {
 /**
  * @param  array<string, mixed>  $overrides
  */
-function newTeacher(array $overrides = [], ?Department $department = null, ?Campus $campus = null): Teacher
+function newTeacher(array $overrides = [], ?Department $department = null): Teacher
 {
     return app(CreateTeacher::class)->handle([
         'employee_number' => '1234567',
@@ -45,7 +43,7 @@ function newTeacher(array $overrides = [], ?Department $department = null, ?Camp
         'degree' => 'maestria',
         'hired_on' => '2015-08-17',
         ...$overrides,
-    ], $department ?? test()->sc, $campus ?? test()->c2);
+    ], $department ?? test()->sc);
 }
 
 /**
@@ -79,7 +77,6 @@ describe('alta', function () {
             ->and($teacher->adscriptions)->toHaveCount(1)
             ->and($teacher->adscriptions->sole())
             ->department_id->toBe($this->sc->id)
-            ->campus_id->toBe($this->c2->id)
             ->is_primary->toBeTrue()
             ->and($teacher->user)->not->toBeNull()
             ->and($teacher->user->username)->toBe('1234567')
@@ -110,7 +107,7 @@ describe('alta', function () {
                 'is_active' => true,
             ]])
             ->and(Activity::query()->where('subject_type', (new TeacherDepartment)->getMorphClass())->sole()->description)
-            ->toBe('Adscribió al docente 1234567 a SC en C2 (principal)')
+            ->toBe('Adscribió al docente 1234567 a SC (principal)')
             ->and(Activity::query()->where('description', 'Dio de alta al usuario 1234567')->exists())->toBeTrue();
         Event::assertDispatched(TeacherCreated::class, fn (TeacherCreated $event): bool => $event->teacher->is($teacher));
         Event::assertDispatched(AdscriptionChanged::class);
@@ -178,7 +175,7 @@ describe('alta', function () {
 
 describe('edición', function () {
     beforeEach(function () {
-        $this->teacher = Teacher::factory()->adscribedTo($this->sc, $this->c2)->create([
+        $this->teacher = Teacher::factory()->adscribedTo($this->sc)->create([
             'employee_number' => '7654321',
             'name' => 'Luis Gómez',
             'email' => null,
@@ -278,61 +275,73 @@ describe('baja y reactivación', function () {
 
 describe('adscripción de un docente que ya existe (S9)', function () {
     beforeEach(function () {
-        $this->teacher = Teacher::factory()->adscribedTo($this->ii, $this->c1)->create([
+        $this->teacher = Teacher::factory()->adscribedTo($this->ii)->create([
             'employee_number' => '5555555',
             'name' => 'Rosa Díaz',
             'email' => 'rosa@example.test',
         ]);
     });
 
-    it('agrega la adscripción, que no es la principal, sin tocar sus datos, y le abre el campus en su usuario', function () {
+    it('agrega la adscripción, que no es la principal, sin tocar sus datos ni su acceso', function () {
         Event::fake([AdscriptionChanged::class]);
-        $before = $this->teacher->fresh()->only(['employee_number', 'name', 'email', 'degree', 'is_active']);
+        $before = $this->teacher->fresh()->only(['employee_number', 'user_id', 'name', 'email', 'degree', 'is_active']);
 
-        $adscription = app(AddAdscription::class)->handle($this->teacher, $this->sc, $this->c2);
+        $adscription = app(AddAdscription::class)->handle($this->teacher, $this->sc);
 
         expect($adscription)
             ->teacher_id->toBe($this->teacher->id)
             ->department_id->toBe($this->sc->id)
-            ->campus_id->toBe($this->c2->id)
             ->is_primary->toBeFalse()
-            ->and($this->teacher->fresh()->only(['employee_number', 'name', 'email', 'degree', 'is_active']))->toBe($before)
+            ->and($this->teacher->fresh()->only(['employee_number', 'user_id', 'name', 'email', 'degree', 'is_active']))->toBe($before)
             ->and($this->teacher->adscriptions()->count())->toBe(2)
-            ->and($this->teacher->fresh()->user->roleScopes()->where('role', Role::Docente)->pluck('campus_id')->sort()->values()->all())
-            ->toBe(collect([$this->c1->id, $this->c2->id])->sort()->values()->all())
+            // Su usuario y su alcance de `docente` no dependen de sus departamentos (G3).
+            ->and(User::count())->toBe(0)
             ->and(Activity::query()->where('subject_type', $adscription->getMorphClass())->sole()->description)
-            ->toBe('Adscribió al docente 5555555 a SC en C2');
+            ->toBe('Adscribió al docente 5555555 a SC');
         Event::assertDispatched(AdscriptionChanged::class, fn (AdscriptionChanged $event): bool => $event->adscription->is($adscription));
     });
 
     it('restaura una adscripción que se había quitado', function () {
-        $removed = TeacherDepartment::factory()->for($this->teacher)->for($this->sc)->for($this->c2)->create(['is_primary' => false]);
+        $removed = TeacherDepartment::factory()->for($this->teacher)->for($this->sc)->create(['is_primary' => false]);
         $removed->delete();
 
-        $adscription = app(AddAdscription::class)->handle($this->teacher, $this->sc, $this->c2);
+        $adscription = app(AddAdscription::class)->handle($this->teacher, $this->sc);
 
         expect($adscription->id)->toBe($removed->id)
             ->and($adscription->fresh()->trashed())->toBeFalse()
             ->and(TeacherDepartment::withTrashed()->where('teacher_id', $this->teacher->id)->count())->toBe(2)
             ->and(Activity::query()->where('subject_type', $adscription->getMorphClass())->sole())
             ->event->toBe('restored')
-            ->description->toBe('Volvió a adscribir al docente 5555555 a SC en C2');
+            ->description->toBe('Volvió a adscribir al docente 5555555 a SC');
+    });
+
+    it('si el docente se quedó sin principal viva, la adscripción restaurada queda como principal', function () {
+        $alone = Teacher::factory()->create(['employee_number' => '6666666']);
+        $removed = TeacherDepartment::factory()->for($alone)->for($this->sc)->create(['is_primary' => false]);
+        $removed->delete();
+
+        $adscription = app(AddAdscription::class)->handle($alone, $this->sc);
+
+        expect($adscription->id)->toBe($removed->id)
+            ->and($adscription->fresh()->is_primary)->toBeTrue()
+            ->and(Activity::query()->where('subject_type', $adscription->getMorphClass())->sole()->description)
+            ->toBe('Volvió a adscribir al docente 6666666 a SC (principal)');
     });
 
     it('rechaza una adscripción que ya tiene', function () {
-        expect(teacherErrorsOf(fn () => app(AddAdscription::class)->handle($this->teacher, $this->ii, $this->c1)))
-            ->toBe(['adscription' => ['Rosa Díaz ya está adscrito a II en C1.']])
+        expect(teacherErrorsOf(fn () => app(AddAdscription::class)->handle($this->teacher, $this->ii)))
+            ->toBe(['adscription' => ['Rosa Díaz ya está adscrito a II.']])
             ->and(TeacherDepartment::withTrashed()->count())->toBe(1);
     });
 
     it('rechaza una segunda principal: cambiarla es a mano', function () {
-        expect(teacherErrorsOf(fn () => app(AddAdscription::class)->handle($this->teacher, $this->sc, $this->c2, primary: true)))
+        expect(teacherErrorsOf(fn () => app(AddAdscription::class)->handle($this->teacher, $this->sc, primary: true)))
             ->toBe(['adscription' => ['Rosa Díaz ya tiene una adscripción principal.']]);
     });
 
     it('la primera adscripción de un docente sin principal es la principal', function () {
         $loose = Teacher::factory()->create();
 
-        expect(app(AddAdscription::class)->handle($loose, $this->sc, $this->c2)->is_primary)->toBeTrue();
+        expect(app(AddAdscription::class)->handle($loose, $this->sc)->is_primary)->toBeTrue();
     });
 });

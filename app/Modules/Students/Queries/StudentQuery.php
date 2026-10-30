@@ -91,9 +91,10 @@ final class StudentQuery
     }
 
     /**
-     * Los alumnos del campus que el usuario puede ver: con cada alcance de StudentPolicy::VIEWERS en ese campus,
-     * los que covers() le daría, es decir, su departamento (de la carrera) y su carrera cuando el alcance los
-     * trae. Un alcance sin ninguno de los dos cubre todo el campus.
+     * Los alumnos del campus que el usuario puede ver: si trabaja en el campus (ScopedContext::canAccessCampus()),
+     * con cada alcance de StudentPolicy::VIEWERS de ese campus o sin campus (de todo el Tec), los que covers() le
+     * daría, es decir, su departamento (de la carrera) y su carrera cuando el alcance los trae. Un alcance sin
+     * ninguno de los dos cubre todo el campus.
      *
      * @return Builder<Student>
      */
@@ -105,8 +106,12 @@ final class StudentQuery
             return $query;
         }
 
-        $scopes = $context->scopes()->filter(fn (RoleScope $scope): bool => $scope->campus_id === $campus->id
-            && in_array($scope->role, StudentPolicy::VIEWERS, true));
+        if (! $context->canAccessCampus($campus)) {
+            return $query->whereRaw('false');
+        }
+
+        $scopes = $context->scopes()->filter(fn (RoleScope $scope): bool => in_array($scope->role, StudentPolicy::VIEWERS, true)
+            && ($scope->campus_id === null || $scope->campus_id === $campus->id));
 
         return $query->where(function (Builder $query) use ($scopes): void {
             $query->whereRaw('false');

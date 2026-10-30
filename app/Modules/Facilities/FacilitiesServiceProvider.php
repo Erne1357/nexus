@@ -3,8 +3,12 @@
 namespace App\Modules\Facilities;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Facilities\Listeners\BlockDepartmentDeletionWithRooms;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -15,6 +19,16 @@ use Illuminate\Support\Facades\Event;
  */
 final class FacilitiesServiceProvider extends ModuleServiceProvider
 {
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Edificios', 'facilities.buildings', 'o-building-office', NavigationArea::Academico,
+                ability: 'viewAny', arguments: [Building::class]),
+            new NavigationItem('Salones', 'facilities.rooms', 'o-rectangle-stack', NavigationArea::Academico,
+                ability: 'viewAny', arguments: [Room::class]),
+        ];
+    }
+
     public function boot(): void
     {
         parent::boot();
