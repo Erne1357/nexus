@@ -3,9 +3,11 @@
     un botón de alto fijo (104 px) y el ancho de su columna, que nada estira, en su renglón (`$row`, de SemesterGrid).
     Sus márgenes y su relleno están medidos para que la clave (ocho caracteres en Mono) y el icono quepan con nueve
     semestres a 1366 px: 4 px a cada lado de la columna (el mismo hueco que entre renglones) y 8 px de relleno.
-    De arriba abajo: la clave en Mono con `$icon` a la derecha; el nombre en dos renglones a lo más, partido con
-    guiones y completo en `title` (y en el texto, para lectores de pantalla); lo que va en el slot (texto `sr-only`);
-    un renglón de requisitos (`$requisites`, recortado y completo en su `title`); y al pie, `$start` y `$end` en Mono.
+    De arriba abajo: la clave en Mono con `$icon` a la derecha; el nombre, partido con guiones y completo en `title`
+    (y en el texto, para lectores de pantalla); lo que va en el slot (texto `sr-only`); un renglón de requisitos
+    (`$requisites`, recortado y completo en su `title`); y al pie, `$start` y `$end` en Mono. El nombre ocupa dos
+    renglones a lo más si hay requisitos y tres si no: el tercero toma el lugar del de requisitos y el mosaico mide
+    lo mismo, así «Fundamentos de…» no se repite en tantas materias.
     El relleno, el borde y el color de su estado llegan en `class`. `$chain` es su cadena de seriación: la franja a
     la izquierda (una sombra interior con el token chain-N, que no toca el borde). Con algo resaltado (`data-focus`
     en el marco), lo que no está en la cadena (`data-on-chain`) se atenúa, y el elegido (`data-me`) lleva anillo.
@@ -33,7 +35,11 @@
         <span class="truncate font-mono text-[12.5px] font-semibold leading-4 tracking-[-0.02em]">{{ $code }}</span>
         {{ $icon ?? '' }}
     </span>
-    <span @class(['mt-1 line-clamp-2 hyphens-auto break-words text-[13px] leading-4', 'text-base-content' => ! $muted]) lang="es" title="{{ $name }}">{{ $name }}</span>
+    <span @class([
+        'mt-1 hyphens-auto break-words text-[13px] leading-4',
+        isset($requisites) ? 'line-clamp-2' : 'line-clamp-3',
+        'text-base-content' => ! $muted,
+    ]) lang="es" title="{{ $name }}">{{ $name }}</span>
     {{ $slot }}
     <span class="mt-auto flex flex-col">
         @isset($requisites)

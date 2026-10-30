@@ -96,7 +96,7 @@ it('a 1440 px todos los mosaicos miden lo mismo, los de un renglón se alinean e
     $specialty = Specialty::factory()->for($plan)->create(['name' => 'Ciencia de Datos e Inteligencia Artificial Aplicada']);
     placeInPlan($plan, Subject::factory()->create(['code' => 'ACA-0910', 'name' => 'Taller de Investigación para el Desarrollo de Proyectos de Ingeniería en Sistemas Computacionales']));
     placeInPlan($plan, Subject::factory()->create(['code' => 'DAD-2401', 'name' => 'Aprendizaje Automático Supervisado y No Supervisado']), 2, $specialty);
-    $deep = Subject::factory()->create(['code' => 'DAD-2402', 'name' => 'Aprendizaje Profundo']);
+    $deep = Subject::factory()->create(['code' => 'DAD-2402', 'name' => 'Aprendizaje Profundo para Visión por Computadora y Lenguaje Natural']);
     placeInPlan($plan, $deep, 3, $specialty);
     seriate($plan, $deep, Subject::where('code', 'DAD-2401')->sole());
     $top = fn (string $code): string => "Math.round(document.querySelector('[data-subject=\"{$code}\"]').getBoundingClientRect().top)";
@@ -111,6 +111,10 @@ it('a 1440 px todos los mosaicos miden lo mismo, los de un renglón se alinean e
         ->assertSee('Aprendizaje Profundo')
         ->assertScript("new Set([...document.querySelectorAll('[data-subject]')].map((tile) => { const box = tile.getBoundingClientRect(); return Math.round(box.width) + 'x' + Math.round(box.height); })).size", 1)
         ->assertScript("Math.round(document.querySelector('[data-subject=\"ACA-0910\"]').getBoundingClientRect().height)", 104)
+        // Sin requisitos, el nombre largo usa tres renglones (el lugar del de requisitos); con requisitos, dos.
+        ->assertScript("Math.round(document.querySelector('[data-subject=\"ACA-0910\"] > [lang=es]').getBoundingClientRect().height)", 48)
+        ->assertScript("Math.round(document.querySelector('[data-subject=\"DAD-2402\"] > [lang=es]').getBoundingClientRect().height)", 32)
+        ->assertScript("[...document.querySelectorAll('[data-subject] > [lang=es]')].every((name) => name.getBoundingClientRect().bottom <= name.parentElement.querySelector(':scope > span:last-child').getBoundingClientRect().top)", true)
         ->assertScript($top('ACA-0910').' === '.$top('ACF-0902'), true)
         ->assertScript($top('DAD-2401').' === '.$top('DAD-2402'), true)
         ->assertScript("document.querySelector('[data-testid=chain-legend]').getBoundingClientRect().top >= document.querySelector('[data-testid=student-grid]').getBoundingClientRect().bottom", true)
