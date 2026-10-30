@@ -19,7 +19,7 @@ const widths = (process.env.WIDTHS || '390,768,1440').split(',').map(Number);
 const themes = (process.env.THEMES || 'light,dark').split(',');
 const out = process.env.OUT || '/app/storage/app/review';
 const pages = process.argv.slice(2).map((arg) => {
-  const [name, path] = arg.includes('=') ? arg.split('=') : [arg.replace(/\W+/g, '-').replace(/^-|-$/g, ''), arg];
+  const [name, path] = arg.includes('=') ? [arg.slice(0, arg.indexOf('=')), arg.slice(arg.indexOf('=') + 1)] : [arg.replace(/\W+/g, '-').replace(/^-|-$/g, ''), arg];
   return { name, path };
 });
 

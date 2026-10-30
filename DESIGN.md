@@ -120,7 +120,7 @@ Nexus apunta a sustituir todo el SII (académico, servicios escolares, recursos 
 4. **Una sola forma de hacer cada cosa.** Un tipo de tabla, de formulario, de modal y de insignia, tomados de MaryUI con los tokens de este archivo.
 5. **Sirve en cualquier pantalla,** del celular al proyector.
 
-**Base técnica.** MaryUI sobre daisyUI y Tailwind 4. Los componentes se usan tal cual y la identidad entra por tokens; no hay CSS por pantalla (CLAUDE.md, "Convenciones"). Iconos: Heroicons de MaryUI, contorno de 1.5. El movimiento del menú usa Alpine, que ya viene con Livewire.
+**Base técnica.** MaryUI sobre daisyUI y Tailwind 4. Los componentes se usan tal cual y la identidad entra por tokens; no hay CSS por pantalla (CLAUDE.md, "Convenciones"). Iconos: Heroicons de MaryUI, contorno de 1.5. Su tamaño va con `w-*` y `h-*`, nunca con `size-*`: MaryUI les pone `w-5 h-5` si la clase no trae un `w-` o un `h-`, y eso le gana a `size-*` (lo revisa `tests/Arch/BladeIconsTest.php`). El movimiento del menú usa Alpine, que ya viene con Livewire.
 
 **Pendientes:** códigos oficiales de color (los de aquí son aproximaciones de los institucionales), inicios por rol con la palabra gigante y los mosaicos vivos, diseño del editor de horarios (prototipo en fase 3), formato de los PDF publicados y guía de textos (tono, mayúsculas, nombres de botones).
 
@@ -269,7 +269,7 @@ La ficha del alumno muestra su retícula como la del SII, que es la que conocen 
 | Puede seleccionarla | `primary` sobre blanco | doble | `o-arrow-right-circle` |
 | No permitida aún | `neutral` sobre `base-200` | punteado | `o-lock-closed` |
 
-- Arriba de la retícula, la leyenda de los estados y hasta qué semestre puede seleccionar. La pestaña **Kárdex** muestra el historial por periodo, con el resultado en su insignia.
+- Arriba de la retícula, la leyenda de los estados y hasta qué semestre puede seleccionar. La pestaña **Kárdex** muestra el historial por periodo, del más antiguo al más reciente (FIFO: el primer periodo que cursó va arriba), con el resultado en su insignia.
 - **Cadenas de seriación.** Cada grupo de materias unidas por su seriación tiene su color, que se ve siempre como una **franja a la izquierda** de cada materia: una sombra interior, que no toca el borde del estado (`ChainColor::stripeClasses()`). Una leyenda nombra cada cadena por su primera materia y dice cuántas tiene. Tocar una materia resalta su cadena completa (lo que pide y lo que abre) y atenúa lo demás, y una línea dice qué pide y qué abre; tocar una cadena de la leyenda resalta todas sus materias; tocar lo mismo otra vez o Esc lo quita. Solo al tocar, no al pasar el cursor, y sin líneas entre materias (decidido por el usuario el 29 de octubre de 2026). Lo hace el componente Alpine `studentGrid` (`resources/js/app.js`). En celular (menos de 768 px) la leyenda de cadenas va plegada: «Cadenas de seriación (N)» se abre con un toque (decidido por el usuario el 29 de octubre de 2026).
 - **Tokens de las cadenas** (`--color-chain-1` a `--color-chain-12`, utilidades `chain-N`). Son elementos gráficos, así que piden 3:1; la razón es la mínima contra los rellenos de la retícula (blanco, `base-200` y los tintes al 10 % de cada tono). Con más de doce cadenas los colores se repiten, y la leyenda las distingue:
 

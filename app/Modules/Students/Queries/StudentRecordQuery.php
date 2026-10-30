@@ -178,7 +178,7 @@ final class StudentRecordQuery
      */
     private function kardex(Collection $records): array
     {
-        return $records->sortBy([['term_code', 'desc'], fn (KardexRecord $a, KardexRecord $b): int => strcmp($a->subject->code, $b->subject->code)])
+        return $records->sortBy([['term_code', 'asc'], fn (KardexRecord $a, KardexRecord $b): int => strcmp($a->subject->code, $b->subject->code)])
             ->groupBy('term_code')
             ->map(fn (Collection $rows, string $term): array => ['term' => $term, 'label' => self::termLabel($term), 'records' => $rows->values()->all()])
             ->values()
