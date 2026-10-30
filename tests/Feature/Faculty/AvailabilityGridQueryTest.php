@@ -172,7 +172,17 @@ describe('periodo anterior', function () {
         availabilityRow($this->teacher, $this->term, 1, '07:00', '08:00');
         availabilityRow($this->teacher, $agoDic, 1, '07:00', '08:00')->delete();
 
-        expect($this->grids->hasAvailability($this->teacher, $this->term))->toBeTrue()
-            ->and($this->grids->hasAvailability($this->teacher, $agoDic))->toBeFalse();
+        expect($this->grids->hasAvailability($this->teacher, $this->term, CampusProfile::fromArray([])))->toBeTrue()
+            ->and($this->grids->hasAvailability($this->teacher, $agoDic, CampusProfile::fromArray([])))->toBeFalse();
+    });
+
+    it('solo cuenta la disponibilidad que cae en los días y el horario del perfil', function () {
+        availabilityRow($this->teacher, $this->term, 6, '08:00', '10:00');
+        availabilityRow($this->teacher, $this->term, 1, '21:00', '22:00');
+        availabilityRow($this->teacher, $this->term, 2, '05:00', '07:00');
+
+        expect($this->grids->hasAvailability($this->teacher, $this->term, CampusProfile::fromArray([])))->toBeFalse()
+            ->and($this->grids->hasAvailability($this->teacher, $this->term, CampusProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6]])))->toBeTrue()
+            ->and($this->grids->hasAvailability($this->teacher, $this->term, CampusProfile::fromArray(['day_end' => '22:00'])))->toBeTrue();
     });
 });

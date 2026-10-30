@@ -577,10 +577,16 @@ document.addEventListener('alpine:init', () => {
 | Se elige una herramienta («No disponible», «Preferido» o «Borrar»; teclas N, P y B) y se pinta con clic o arrastre
 | (pointer capture en la cuadrícula; en pantalla táctil también, porque las celdas llevan touch-action: none). Pintar
 | sobre otro tipo lo reemplaza. El botón de un día pinta su columna y el de una hora, su renglón; Enter o Espacio
-| pintan la celda con el foco y las flechas, Inicio y Fin lo mueven (un solo botón de la cuadrícula en el orden de
-| tabulación). Lo pintado queda pendiente: la barra de guardar dice cuántos bloques cambiaron, «Descartar» vuelve a lo
-| guardado y «Guardar disponibilidad» manda los bloques marcados a save(). «Copiar de <periodo>» pide a copyPrevious()
-| la del semestre anterior y la deja pendiente.
+| pintan lo que tiene el foco y las flechas, Inicio y Fin lo mueven por las celdas y por los botones de los días (arriba)
+| y de las horas (a la izquierda), con un solo botón de la cuadrícula en el orden de tabulación. Lo pintado queda
+| pendiente: la barra de guardar dice cuántos bloques cambiaron, «Descartar» vuelve a lo guardado y «Guardar
+| disponibilidad» manda los bloques marcados a save(). «Copiar de <periodo>» pide a copyPrevious() la del semestre
+| anterior y la deja pendiente. Salir con bloques sin guardar pide confirmar (beforeunload y wire:navigate); Atrás y
+| Adelante no se pueden detener. Si una llamada al servidor falla, un toast lo dice y lo pendiente se queda.
+|
+| Cuando Livewire restaura la página de su caché (Atrás o Adelante tras wire:navigate) o el navegador la saca de su
+| bfcache, el x-data trae los tipos de cuando se abrió, no lo guardado después: el editor pide lo guardado a
+| currentKinds() y, mientras llega, no deja pintar ni guardar.
 |
 | Cada celda se actualiza a mano, como en studentGrid: su tipo en data-kind (que leen las utilidades del relleno y del
 | icono), data-continues, data-changed (el punto de «sin guardar»), su aria-label y su texto. Las cifras, las horas de
@@ -591,6 +597,12 @@ document.addEventListener('alpine:init', () => {
 const AVAILABILITY_TOOL_KEYS = { n: 'unavailable', p: 'preferred', b: '' };
 const AVAILABILITY_TOOLS = ['unavailable', 'preferred', ''];
 
+/** Si la página que se va a iniciar viene de la caché de wire:navigate (Atrás o Adelante): lo dice livewire:navigate. */
+let availabilityFromCache = false;
+document.addEventListener('livewire:navigate', (event) => {
+    availabilityFromCache = Boolean(event.detail?.history && event.detail?.cached);
+});
+
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('availabilityEditor', (config) => {
         // Fuera del estado de Alpine: los elementos y las celdas no necesitan ser reactivos.
@@ -600,6 +612,7 @@ document.addEventListener('alpine:init', () => {
         let elements = [];
         let painting = false;
         let last = null;
+        // [día, bloque] del botón con el foco; -1 en el bloque es el botón del día y -1 en el día, el de la hora.
         let focus = [0, 0];
 
         const minutes = config.blockMinutes;
@@ -637,6 +650,7 @@ document.addEventListener('alpine:init', () => {
             pending: 0,
             saving: false,
             copying: false,
+            syncing: false,
             figures: { available: 0, preferred: 0, unavailable: 0 },
             dayAvailable: [],
             ranges: [],
@@ -644,6 +658,65 @@ document.addEventListener('alpine:init', () => {
             init() {
                 elements = cells.map((day, d) => day.map((_, h) => this.$refs.grid.querySelector(`[data-d="${d}"][data-h="${h}"]`)));
                 this.refresh();
+
+                if (availabilityFromCache) {
+                    availabilityFromCache = false;
+                    this.sync();
+                }
+            },
+
+            /** Vuelve a lo guardado en el servidor, sin nada pendiente. */
+            async sync() {
+                this.syncing = true;
+
+                try {
+                    const kinds = await this.$wire.currentKinds();
+
+                    if (Array.isArray(kinds)) {
+                        cells = toCells(kinds);
+                        saved = toCells(kinds);
+                        this.refresh();
+                    }
+                } catch {
+                    this.failed('No se cargó la disponibilidad guardada');
+                } finally {
+                    this.syncing = false;
+                }
+            },
+
+            /** Toast de error de MaryUI para una llamada al servidor que no respondió. */
+            failed(title) {
+                window.toast?.({
+                    toast: {
+                        type: 'error',
+                        title,
+                        description: 'No hubo respuesta del servidor. Revisa tu conexión y vuelve a intentarlo.',
+                        icon: this.$refs.errorIcon?.innerHTML ?? '',
+                        css: 'alert-error',
+                        timeout: 5000,
+                    },
+                });
+            },
+
+            /** Al cerrar o recargar la pestaña con bloques sin guardar, el navegador pide confirmar. */
+            warnBeforeUnload(event) {
+                if (this.pending > 0) {
+                    event.preventDefault();
+                    event.returnValue = '';
+                }
+            },
+
+            /** Al ir a otra pantalla con wire:navigate con bloques sin guardar, pide confirmar; Atrás y Adelante, no. */
+            confirmLeave(event) {
+                if (this.pending === 0 || event.detail?.history) {
+                    return;
+                }
+
+                const blocks = this.pending === 1 ? '1 bloque sin guardar' : `${this.pending} bloques sin guardar`;
+
+                if (!window.confirm(`Tienes ${blocks}. ¿Salir sin guardar?`)) {
+                    event.preventDefault();
+                }
             },
 
             /** Una sola cuenta tras cada cambio: las celdas, las cifras, las horas de cada día y los rangos. */
@@ -712,20 +785,29 @@ document.addEventListener('alpine:init', () => {
                 return true;
             },
 
+            /** El botón de la cuadrícula en [día, bloque]: -1 en el bloque es el del día y -1 en el día, el de la hora. */
+            buttonAt(d, h) {
+                if (h === -1) {
+                    return this.$refs.grid.querySelector(`[data-day="${d}"]`);
+                }
+
+                return d === -1 ? this.$refs.grid.querySelector(`[data-hour="${h}"]`) : elements[d][h];
+            },
+
             moveFocus(d, h, giveFocus) {
-                elements[focus[0]][focus[1]].tabIndex = -1;
+                this.buttonAt(...focus).tabIndex = -1;
                 focus = [d, h];
-                elements[d][h].tabIndex = 0;
+                this.buttonAt(d, h).tabIndex = 0;
 
                 if (giveFocus) {
-                    elements[d][h].focus();
+                    this.buttonAt(d, h).focus();
                 }
             },
 
             down(event) {
                 const cell = event.target.closest('[data-d]');
 
-                if (!cell || event.button > 0) {
+                if (!cell || event.button > 0 || this.syncing) {
                     return;
                 }
 
@@ -776,6 +858,10 @@ document.addEventListener('alpine:init', () => {
             click(event) {
                 const cell = event.target.closest('[data-d]');
 
+                if (this.syncing) {
+                    return;
+                }
+
                 if (cell) {
                     if (event.detail === 0 && this.paint(Number(cell.dataset.d), Number(cell.dataset.h))) {
                         this.refresh();
@@ -798,24 +884,25 @@ document.addEventListener('alpine:init', () => {
                 this.refresh();
             },
 
+            /** Las flechas recorren celdas, días y horas; la esquina (sin botón) se salta quedándose en su lugar. */
             key(event) {
-                const cell = event.target.closest('[data-d]');
+                const button = event.target.closest('[data-d], [data-day], [data-hour]');
 
-                if (!cell) {
+                if (!button) {
                     return;
                 }
 
-                let d = Number(cell.dataset.d);
-                let h = Number(cell.dataset.h);
+                let d = button.dataset.d !== undefined ? Number(button.dataset.d) : (button.dataset.day !== undefined ? Number(button.dataset.day) : -1);
+                let h = button.dataset.h !== undefined ? Number(button.dataset.h) : (button.dataset.hour !== undefined ? Number(button.dataset.hour) : -1);
                 const lastDay = cells.length - 1;
                 const lastBlock = config.blocks.length - 1;
 
                 switch (event.key) {
                     case 'ArrowRight': d = Math.min(lastDay, d + 1); break;
-                    case 'ArrowLeft': d = Math.max(0, d - 1); break;
+                    case 'ArrowLeft': d = h === -1 ? Math.max(0, d - 1) : Math.max(-1, d - 1); break;
                     case 'ArrowDown': h = Math.min(lastBlock, h + 1); break;
-                    case 'ArrowUp': h = Math.max(0, h - 1); break;
-                    case 'Home': h = 0; break;
+                    case 'ArrowUp': h = d === -1 ? Math.max(0, h - 1) : Math.max(-1, h - 1); break;
+                    case 'Home': h = d === -1 ? 0 : (h === -1 ? -1 : 0); break;
                     case 'End': h = lastBlock; break;
                     default: return;
                 }
@@ -859,7 +946,7 @@ document.addEventListener('alpine:init', () => {
             },
 
             async save() {
-                if (this.saving) {
+                if (this.saving || this.syncing) {
                     return;
                 }
 
@@ -874,17 +961,23 @@ document.addEventListener('alpine:init', () => {
                 }));
 
                 try {
-                    if (await this.$wire.save(payload) === true) {
+                    const result = await this.$wire.save(payload);
+
+                    if (result === true) {
                         saved = sent;
                         this.refresh();
+                    } else if (result !== false) {
+                        this.failed('No se guardó la disponibilidad');
                     }
+                } catch {
+                    this.failed('No se guardó la disponibilidad');
                 } finally {
                     this.saving = false;
                 }
             },
 
             async copyPrevious() {
-                if (this.copying) {
+                if (this.copying || this.syncing) {
                     return;
                 }
 
@@ -896,7 +989,11 @@ document.addEventListener('alpine:init', () => {
                     if (Array.isArray(kinds)) {
                         cells = toCells(kinds);
                         this.refresh();
+                    } else if (kinds !== null) {
+                        this.failed('No se copió la disponibilidad');
                     }
+                } catch {
+                    this.failed('No se copió la disponibilidad');
                 } finally {
                     this.copying = false;
                 }

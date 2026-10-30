@@ -3,9 +3,11 @@
     regreso a la ficha; el encabezado con el periodo, el docente, el horario de la cuadrícula y «Copiar de <periodo>»;
     las cifras (disponible, preferido y no disponible contra las horas base del periodo); las herramientas, la
     cuadrícula y su leyenda y, a la derecha desde 1400 px (debajo antes), los rangos por día; y la barra de guardar,
-    pegada al pie mientras hay bloques sin guardar. Todo lo que cambia al pintar es del componente Alpine
-    `availabilityEditor` (resources/js/app.js), con `wire:ignore`: Livewire pinta la página una vez y save() y
-    copyPrevious() no la vuelven a pintar. Sin periodo activo, un aviso para elegirlo.
+    pegada al pie mientras hay bloques sin guardar (la única región `aria-live`). Todo lo que cambia al pintar es del
+    componente Alpine `availabilityEditor` (resources/js/app.js), con `wire:ignore`: Livewire pinta la página una vez y
+    save() y copyPrevious() no la vuelven a pintar. Salir con bloques sin guardar pide confirmar; si el navegador
+    restaura la página de su caché, el editor pide lo guardado (currentKinds()). Sin periodo activo, un aviso para
+    elegirlo.
 --}}
 <div class="space-y-5">
     <a href="{{ route('faculty.teachers.show', ['teacher' => $teacher->id, 'tab' => 'disponibilidad']) }}" wire:navigate class="inline-flex max-w-full items-center gap-1.5 font-medium text-primary">
@@ -20,7 +22,13 @@
             <p class="max-w-prose text-neutral">Elige un periodo en tu credencial: la disponibilidad de {{ $teacher->name }} es de un periodo.</p>
         </div>
     @else
-        <div wire:ignore x-data="availabilityEditor(@js($editor))" x-on:keydown.window="toolKey($event)" class="space-y-5">
+        <div wire:ignore x-data="availabilityEditor(@js($editor))" class="space-y-5" data-testid="availability-editor"
+            x-on:keydown.window="toolKey($event)"
+            x-on:beforeunload.window="warnBeforeUnload($event)"
+            x-on:livewire:navigate.document="confirmLeave($event)"
+            x-on:pageshow.window="$event.persisted && sync()">
+            <template x-ref="errorIcon"><x-icon name="o-x-circle" class="w-7 h-7" /></template>
+
             <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
                 <div class="min-w-0 flex-[1_1_30rem]">
                     <h1 class="flex flex-wrap items-center gap-3 text-[1.625rem] font-bold leading-tight md:text-3xl">
@@ -36,7 +44,7 @@
 
                 <div class="md:ms-auto max-md:w-full">
                     @if ($copyReason === null)
-                        <x-button :label="'Copiar de '.$previous->name" icon="o-document-duplicate" class="btn-outline max-md:w-full" x-on:click="copyPrevious()" x-bind:disabled="copying" data-testid="copy-previous" />
+                        <x-button :label="'Copiar de '.$previous->name" icon="o-document-duplicate" class="btn-outline max-md:w-full" x-on:click="copyPrevious()" x-bind:disabled="copying || syncing" data-testid="copy-previous" />
                     @else
                         <span class="tooltip tooltip-left max-md:tooltip-bottom max-md:block" data-tip="{{ $copyReason }}">
                             <x-button :label="$previous ? 'Copiar de '.$previous->name : 'Copiar del periodo anterior'" icon="o-document-duplicate" class="btn-outline max-md:w-full" disabled aria-label="Copiar del periodo anterior: {{ $copyReason }}" data-testid="copy-previous" />
@@ -46,7 +54,7 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 desktop:grid-cols-4" aria-live="polite" data-testid="availability-figures">
+            <div class="grid grid-cols-2 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 desktop:grid-cols-4" data-testid="availability-figures">
                 @foreach ([
                     ['Disponible', 'figures.available', $grid['summary']['available'], 'h de '.$grid['summary']['total']],
                     ['Preferido', 'figures.preferred', $grid['summary']['preferred'], 'h'],
@@ -104,8 +112,8 @@
                     <span x-text="pending === 1 ? '1 bloque sin guardar' : pending + ' bloques sin guardar'"></span>
                 </span>
                 <div class="ms-auto flex gap-2 max-md:ms-0 max-md:w-full">
-                    <x-button label="Descartar" icon="o-arrow-uturn-left" class="btn-ghost whitespace-nowrap max-md:flex-auto max-md:px-3 max-md:[&_svg]:hidden" x-on:click="discard()" x-bind:disabled="saving" data-testid="discard" />
-                    <x-button label="Guardar disponibilidad" icon="o-check" class="btn-primary whitespace-nowrap max-md:flex-auto max-md:px-3" x-on:click="save()" x-bind:disabled="saving" data-testid="save-availability" />
+                    <x-button label="Descartar" icon="o-arrow-uturn-left" class="btn-ghost whitespace-nowrap max-md:flex-auto max-md:px-3 max-md:[&_svg]:hidden" x-on:click="discard()" x-bind:disabled="saving || syncing" data-testid="discard" />
+                    <x-button label="Guardar disponibilidad" icon="o-check" class="btn-primary whitespace-nowrap max-md:flex-auto max-md:px-3" x-on:click="save()" x-bind:disabled="saving || syncing" data-testid="save-availability" />
                 </div>
             </div>
         </div>

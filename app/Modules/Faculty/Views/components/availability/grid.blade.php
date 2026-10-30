@@ -13,7 +13,8 @@
     En el editor las celdas, los días y las horas son botones que maneja el componente Alpine `availabilityEditor`
     (resources/js/app.js): pintar con clic o arrastre (`touch-none`: en pantalla táctil, el dedo pinta en las celdas y
     la página se desplaza desde la columna de horas o fuera de la cuadrícula), el día o la hora pintan su columna o su
-    renglón, y las flechas mueven el foco (un solo botón de la cuadrícula en el orden de tabulación). De solo lectura,
+    renglón, y las flechas mueven el foco por las celdas y por los botones de los días y las horas (un solo botón de la
+    cuadrícula en el orden de tabulación). De solo lectura,
     la cuadrícula se oculta a los lectores de pantalla: los rangos por día dicen lo mismo.
 --}}
 @props(['grid', 'interactive' => false, 'label' => 'Disponibilidad'])
@@ -57,8 +58,8 @@
 
         @foreach ($grid['blocks'] as $h => $block)
             @if ($interactive)
-                <button type="button" @class([$hourClasses, 'cursor-pointer hover:bg-base-200 hover:text-base-content', 'border-t-0' => $h === 0]) style="--row: {{ $h + 2 }}"
-                    data-hour="{{ $h }}" aria-label="Todos los días de {{ $block['label'] }} a {{ $block['end_label'] }}">{{ $block['label'] }}</button>
+                <button type="button" @class([$hourClasses, 'cursor-pointer hover:bg-base-200 hover:text-base-content focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary', 'border-t-0' => $h === 0]) style="--row: {{ $h + 2 }}"
+                    data-hour="{{ $h }}" tabindex="-1" aria-label="Todos los días de {{ $block['label'] }} a {{ $block['end_label'] }}">{{ $block['label'] }}</button>
             @else
                 <div @class([$hourClasses, 'border-t-0' => $h === 0]) style="--row: {{ $h + 2 }}">{{ $block['label'] }}</div>
             @endif
@@ -71,7 +72,7 @@
                         .'<span class="whitespace-nowrap text-[12.5px] text-neutral"><b class="font-mono font-semibold text-base-content"'.($interactive ? ' x-text="hours(dayAvailable['.$d.'])"' : '').'>'.e($day['available']).'</b> h<span class="@max-[40rem]:hidden"> disp.</span></span>';
                 @endphp
                 @if ($interactive)
-                    <button type="button" class="{{ $headClasses }} cursor-pointer hover:bg-base-200" style="--col: {{ $d + 2 }}" data-day="{{ $d }}" aria-label="Todo el {{ mb_strtolower($day['name']) }}">{!! $head !!}</button>
+                    <button type="button" class="{{ $headClasses }} cursor-pointer hover:bg-base-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary" style="--col: {{ $d + 2 }}" data-day="{{ $d }}" tabindex="-1" aria-label="Todo el {{ mb_strtolower($day['name']) }}">{!! $head !!}</button>
                 @else
                     <div class="{{ $headClasses }}" style="--col: {{ $d + 2 }}">{!! $head !!}</div>
                 @endif

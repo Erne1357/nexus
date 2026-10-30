@@ -162,6 +162,39 @@ it('vuelve a unir lo que se conserva fuera del horario con lo que no cambió, as
         ->and($row->fresh()->trashed())->toBeFalse();
 });
 
+describe('rangos que no caen en los bloques del perfil', function () {
+    beforeEach(function () {
+        $this->odd = TeacherAvailability::factory()->for($this->teacher)->for($this->term)->preferred()->create(['day' => 1, 'starts_at' => '07:30', 'ends_at' => '08:15']);
+    });
+
+    it('no ensancha uno cuyos bloques no se tocaron', function () {
+        // La cuadrícula muestra el lunes de 7:00 a 9:00 como preferido; solo se pinta el martes.
+        setAvailability($this->teacher, $this->term, [[1, '07:00', 'preferred'], [1, '08:00', 'preferred'], [2, '07:00']]);
+
+        expect(availabilityRows($this->teacher, $this->term))->toBe(['1 07:30-08:15 preferred', '2 07:00-08:00 unavailable'])
+            ->and($this->odd->fresh()->trashed())->toBeFalse();
+    });
+
+    it('si cambia uno de sus bloques, solo quita de él ese bloque', function () {
+        setAvailability($this->teacher, $this->term, [[1, '07:00'], [1, '08:00', 'preferred']]);
+
+        expect(availabilityRows($this->teacher, $this->term))->toBe(['1 07:00-08:00 unavailable', '1 08:00-08:15 preferred']);
+    });
+
+    it('borrar uno de sus bloques deja el resto', function () {
+        setAvailability($this->teacher, $this->term, [[1, '07:00', 'preferred']]);
+
+        expect(availabilityRows($this->teacher, $this->term))->toBe(['1 07:30-08:00 preferred']);
+    });
+
+    it('guardar lo que muestra la cuadrícula no escribe', function () {
+        setAvailability($this->teacher, $this->term, [[1, '07:00', 'preferred'], [1, '08:00', 'preferred']]);
+
+        expect(activitySince()->count())->toBe(0)
+            ->and(availabilityRows($this->teacher, $this->term))->toBe(['1 07:30-08:15 preferred']);
+    });
+});
+
 it('deja una entrada de bitácora con el antes y el después y avisa tras el commit', function () {
     setAvailability($this->teacher, $this->term, [[1, '07:00']]);
     $this->activityBase = (int) Activity::max('id');

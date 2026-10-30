@@ -19,15 +19,16 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * Las celdas son los bloques marcados (no disponible o preferido) del perfil de la cuadrícula; lo que no viene se
  * da por disponible. Cada celda debe caer en un día del perfil y empezar en uno de sus bloques, entre `day_start` y
- * `day_end`; una que no, o repetida, rechaza todo sin escribir (error en `cells`). Se guardan como rangos unidos
- * (AvailabilityRanges).
+ * `day_end`; una que no, o repetida, rechaza todo sin escribir (error en `cells`).
  *
- * Reemplaza lo de esos días y ese horario en el periodo; lo que el docente tenga en otros días u horas (capturado con
- * el perfil de otro campus) se conserva, también el pedazo de un rango que se sale del horario. Otro periodo no se
- * toca. En una transacción bloquea al docente, para que dos guardados no se crucen, y compara con lo guardado: si
- * nada cambia, no escribe, no registra ni avisa; si cambia, quita con borrado lógico las filas que ya no van, crea
- * las nuevas, deja una entrada de bitácora en el docente con el antes y el después del periodo y, después del commit,
- * avisa con AvailabilityChanged.
+ * Solo cambia los bloques cuyo tipo difiere del que muestra la cuadrícula con lo guardado (AvailabilityRanges::kindOver):
+ * de lo guardado quita el tramo de esos bloques (recortando o partiendo el rango que lo cruza) y pone el tipo nuevo;
+ * luego une los rangos contiguos del mismo tipo. Así un rango que no cae en los bloques del perfil (capturado con otro
+ * bloque u otro horario) se queda como está si no se tocó, y lo de otros días u horas del periodo, y otro periodo, no se
+ * tocan (supuestos por confirmar). En una transacción bloquea al docente, para que dos guardados no se crucen; si ningún
+ * bloque cambia, no escribe, no registra ni avisa. Si cambia, quita con borrado lógico las filas que ya no van, crea las
+ * nuevas, deja una entrada de bitácora en el docente con el antes y el después del periodo y, después del commit, avisa
+ * con AvailabilityChanged.
  */
 final class SetTeacherAvailability
 {
@@ -38,9 +39,13 @@ final class SetTeacherAvailability
      */
     public function handle(Teacher $teacher, Term $term, array $cells, CampusProfile $profile): void
     {
-        $ranges = AvailabilityRanges::merge($this->validated($cells, $profile), $profile->blockMinutes);
+        $wanted = [];
 
-        DB::transaction(function () use ($teacher, $term, $ranges, $profile): void {
+        foreach ($this->validated($cells, $profile) as $cell) {
+            $wanted[$cell['day']][$cell['starts_at']] = $cell['kind'];
+        }
+
+        DB::transaction(function () use ($teacher, $term, $wanted, $profile): void {
             Teacher::query()->whereKey($teacher->getKey())->lockForUpdate()->first();
 
             $rows = TeacherAvailability::query()
@@ -49,22 +54,26 @@ final class SetTeacherAvailability
                 ->orderBy('day')
                 ->orderBy('starts_at')
                 ->get();
+            $saved = array_map($this->rangeOf(...), $rows->all());
+            $changed = $this->changedBlocks($saved, $wanted, $profile);
 
-            $current = $rows->mapWithKeys(fn (TeacherAvailability $row): array => [self::key($this->rangeOf($row)) => $row])->all();
-            $kept = array_merge(...array_map(fn (TeacherAvailability $row): array => $this->outside($this->rangeOf($row), $profile), $rows->all()));
-            $final = AvailabilityRanges::join([...$kept, ...$ranges]);
-            $wanted = array_combine(array_map(self::key(...), $final), $final);
-
-            $removed = array_diff_key($current, $wanted);
-            $added = array_diff_key($wanted, $current);
-
-            if ($removed === [] && $added === []) {
+            if ($changed === []) {
                 return;
             }
 
-            TeacherAvailability::query()->whereKey(array_map(fn (TeacherAvailability $row): string => $row->getKey(), array_values($removed)))->delete();
+            $kept = $saved;
 
-            foreach ($added as $range) {
+            foreach ($changed as $block) {
+                $kept = AvailabilityRanges::cut($kept, $block['day'], $block['starts_at'], $block['ends_at']);
+            }
+
+            $final = AvailabilityRanges::join([...$kept, ...array_values(array_filter($changed, fn (array $block): bool => $block['kind'] !== null))]);
+            $current = $rows->mapWithKeys(fn (TeacherAvailability $row): array => [self::key($this->rangeOf($row)) => $row])->all();
+            $next = array_combine(array_map(self::key(...), $final), $final);
+
+            TeacherAvailability::query()->whereKey(array_map(fn (TeacherAvailability $row): string => $row->getKey(), array_values(array_diff_key($current, $next))))->delete();
+
+            foreach (array_diff_key($next, $current) as $range) {
                 TeacherAvailability::query()->create([
                     'teacher_id' => $teacher->getKey(),
                     'term_id' => $term->getKey(),
@@ -77,13 +86,41 @@ final class SetTeacherAvailability
                 ->event(ActivityEvent::Updated)
                 ->withChanges([
                     'attributes' => ['availability' => array_map(self::logged(...), $final)],
-                    'old' => ['availability' => array_map(fn (TeacherAvailability $row): array => self::logged($this->rangeOf($row)), $rows->all())],
+                    'old' => ['availability' => array_map(self::logged(...), $saved)],
                 ])
                 ->withProperties(['term_id' => $term->getKey()])
                 ->log('Cambió la disponibilidad del docente');
 
             AvailabilityChanged::dispatch($teacher, $term);
         });
+    }
+
+    /**
+     * Los bloques del perfil cuyo tipo pedido difiere del que la cuadrícula muestra con lo guardado, con el tipo nuevo
+     * (null es disponible).
+     *
+     * @param  list<array{day: int, starts_at: string, ends_at: string, kind: AvailabilityKind}>  $saved
+     * @param  array<int, array<string, AvailabilityKind>>  $wanted
+     * @return list<array{day: int, starts_at: string, ends_at: string, kind: ?AvailabilityKind}>
+     */
+    private function changedBlocks(array $saved, array $wanted, CampusProfile $profile): array
+    {
+        $changed = [];
+        $blocks = AvailabilityRanges::blocks($profile->dayStart, $profile->dayEnd, $profile->blockMinutes);
+
+        foreach ($profile->days as $day) {
+            $ofDay = array_filter($saved, fn (array $range): bool => $range['day'] === $day);
+
+            foreach ($blocks as $block) {
+                $kind = $wanted[$day][$block['starts_at']] ?? null;
+
+                if (AvailabilityRanges::kindOver($ofDay, $block['starts_at'], $block['ends_at']) !== $kind) {
+                    $changed[] = ['day' => $day, ...$block, 'kind' => $kind];
+                }
+            }
+        }
+
+        return $changed;
     }
 
     /**
@@ -133,36 +170,6 @@ final class SetTeacherAvailability
         }
 
         return $valid;
-    }
-
-    /**
-     * Lo de un rango guardado que queda fuera de la cuadrícula del perfil y se conserva: todo, si su día no está en el
-     * perfil; si no, lo que empieza antes de `day_start` o termina después de `day_end`.
-     *
-     * @param  array{day: int, starts_at: string, ends_at: string, kind: AvailabilityKind}  $range
-     * @return list<array{day: int, starts_at: string, ends_at: string, kind: AvailabilityKind}>
-     */
-    private function outside(array $range, CampusProfile $profile): array
-    {
-        if (! in_array($range['day'], $profile->days, true)) {
-            return [$range];
-        }
-
-        $start = AvailabilityRanges::minutes($profile->dayStart);
-        $end = AvailabilityRanges::minutes($profile->dayEnd);
-        $from = AvailabilityRanges::minutes($range['starts_at']);
-        $to = AvailabilityRanges::minutes($range['ends_at']);
-        $parts = [];
-
-        if ($from < $start) {
-            $parts[] = [...$range, 'ends_at' => AvailabilityRanges::clock(min($to, $start))];
-        }
-
-        if ($to > $end) {
-            $parts[] = [...$range, 'starts_at' => AvailabilityRanges::clock(max($from, $end))];
-        }
-
-        return $parts;
     }
 
     /**

@@ -76,6 +76,80 @@ final class AvailabilityRanges
     }
 
     /**
+     * Los bloques de una jornada: de `$dayStart` a `$dayEnd`, de `$blockMinutes` cada uno.
+     *
+     * @return list<array{starts_at: string, ends_at: string}>
+     */
+    public static function blocks(string $dayStart, string $dayEnd, int $blockMinutes): array
+    {
+        $blocks = [];
+
+        for ($minutes = self::minutes($dayStart); $minutes + $blockMinutes <= self::minutes($dayEnd); $minutes += $blockMinutes) {
+            $blocks[] = ['starts_at' => self::clock($minutes), 'ends_at' => self::clock($minutes + $blockMinutes)];
+        }
+
+        return $blocks;
+    }
+
+    /**
+     * El tipo con que se ve un bloque de un día: no disponible si algún rango no disponible lo toca, aunque sea en
+     * parte; si no, preferido si alguno preferido lo toca; null es disponible.
+     *
+     * @param  iterable<array{starts_at: string, ends_at: string, kind: AvailabilityKind}>  $ranges  Los rangos de ese día.
+     */
+    public static function kindOver(iterable $ranges, string $startsAt, string $endsAt): ?AvailabilityKind
+    {
+        $kind = null;
+
+        foreach ($ranges as $range) {
+            if (self::minutes($range['starts_at']) < self::minutes($endsAt) && self::minutes($range['ends_at']) > self::minutes($startsAt)) {
+                if ($range['kind'] === AvailabilityKind::Unavailable) {
+                    return AvailabilityKind::Unavailable;
+                }
+
+                $kind = $range['kind'];
+            }
+        }
+
+        return $kind;
+    }
+
+    /**
+     * Los rangos sin el tramo de `$startsAt` a `$endsAt` del día `$day`: el que lo cruza se recorta o se parte en dos;
+     * los de otros días no cambian.
+     *
+     * @param  list<array{day: int, starts_at: string, ends_at: string, kind: AvailabilityKind}>  $ranges
+     * @return list<array{day: int, starts_at: string, ends_at: string, kind: AvailabilityKind}>
+     */
+    public static function cut(array $ranges, int $day, string $startsAt, string $endsAt): array
+    {
+        $from = self::minutes($startsAt);
+        $to = self::minutes($endsAt);
+        $left = [];
+
+        foreach ($ranges as $range) {
+            $start = self::minutes($range['starts_at']);
+            $end = self::minutes($range['ends_at']);
+
+            if ($range['day'] !== $day || $end <= $from || $start >= $to) {
+                $left[] = $range;
+
+                continue;
+            }
+
+            if ($start < $from) {
+                $left[] = [...$range, 'ends_at' => $startsAt];
+            }
+
+            if ($end > $to) {
+                $left[] = [...$range, 'starts_at' => $endsAt];
+            }
+        }
+
+        return $left;
+    }
+
+    /**
      * Minutos desde la medianoche de `HH:MM` (o `HH:MM:SS`, como la da `time`).
      */
     public static function minutes(string $time): int

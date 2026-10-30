@@ -68,6 +68,22 @@ it('muestra el docente, el periodo activo, el horario y la cuadrícula con su re
         ->assertSee('Guardar disponibilidad');
 });
 
+it('la cuadrícula es una sola parada de tabulación: los botones de día y de hora no lo son', function () {
+    $grid = domOf(availabilityEditor($this->jefe, $this->ana))->querySelector('[data-testid="availability-grid"]');
+    $stops = array_filter(iterator_to_array($grid->querySelectorAll('button')), fn ($button): bool => $button->getAttribute('tabindex') !== '-1');
+
+    expect($grid->querySelectorAll('[data-day]')->length)->toBe(5)
+        ->and($grid->querySelectorAll('[data-hour]')->length)->toBe(14)
+        ->and(array_map(fn ($button): string => $button->getAttribute('data-d').'-'.$button->getAttribute('data-h'), array_values($stops)))->toBe(['0-0']);
+});
+
+it('solo la barra de guardar avisa a los lectores de pantalla', function () {
+    $live = domOf(availabilityEditor($this->jefe, $this->ana))->querySelectorAll('[aria-live]');
+
+    expect($live->length)->toBe(1)
+        ->and($live->item(0)->closest('[data-testid="save-bar"]'))->not->toBeNull();
+});
+
 it('el enlace de regreso lleva a la pestaña Disponibilidad de la ficha', function () {
     availabilityEditor($this->jefe, $this->ana)
         ->assertSeeHtml('href="'.route('faculty.teachers.show', ['teacher' => $this->ana->id, 'tab' => 'disponibilidad']).'"');
@@ -172,10 +188,32 @@ describe('copiar del periodo anterior', function () {
 
     it('queda deshabilitado con su motivo si el semestre anterior no tiene disponibilidad', function () {
         availabilityEditor($this->jefe, $this->ana)
-            ->assertSee('Ago-Dic 2026 no tiene disponibilidad capturada.')
+            ->assertSee('Ago-Dic 2026 no tiene disponibilidad en este horario.')
             ->call('copyPrevious')
             ->assertReturned(fn (mixed $returned): bool => $returned === null);
     });
+
+    it('queda deshabilitado si lo del semestre anterior cae fuera del horario de la cuadrícula', function () {
+        TeacherAvailability::factory()->for($this->ana)->for($this->previous)->create(['day' => 6, 'starts_at' => '08:00', 'ends_at' => '10:00']);
+
+        availabilityEditor($this->jefe, $this->ana)
+            ->assertSee('Ago-Dic 2026 no tiene disponibilidad en este horario.')
+            ->call('copyPrevious')
+            ->assertReturned(fn (mixed $returned): bool => $returned === null);
+    });
+});
+
+it('da lo guardado del periodo de la página, para cuando el navegador la restaura de su caché', function () {
+    $page = availabilityEditor($this->jefe, $this->ana);
+    TeacherAvailability::factory()->for($this->ana)->for($this->term)->preferred()->create(['day' => 2, 'starts_at' => '08:00', 'ends_at' => '10:00']);
+
+    $kinds = $page->call('currentKinds')->effects['returns'][0];
+
+    expect($kinds)->toHaveCount(5)
+        ->and($kinds[1][1])->toBe('preferred')
+        ->and($kinds[1][2])->toBe('preferred')
+        ->and($kinds[1][3])->toBeNull()
+        ->and($kinds[0])->toBe(array_fill(0, 14, null));
 });
 
 it('sin periodo activo pide elegirlo y no guarda', function () {
@@ -216,5 +254,6 @@ describe('alcance', function () {
     })->with([
         'guardar' => ['save', [[['day' => 1, 'starts_at' => '07:00', 'kind' => 'unavailable']]]],
         'copiar del periodo anterior' => ['copyPrevious', []],
+        'lo guardado' => ['currentKinds', []],
     ]);
 });

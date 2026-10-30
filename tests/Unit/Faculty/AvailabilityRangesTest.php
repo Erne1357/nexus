@@ -125,3 +125,32 @@ describe('join', function () {
         expect(AvailabilityRanges::join($ranges))->toBe($ranges);
     });
 });
+
+describe('bloques, tipo de un bloque y recorte', function () {
+    it('da los bloques de una jornada', function () {
+        expect(AvailabilityRanges::blocks('07:00', '09:00', 60))->toBe([
+            ['starts_at' => '07:00', 'ends_at' => '08:00'],
+            ['starts_at' => '08:00', 'ends_at' => '09:00'],
+        ])->and(AvailabilityRanges::blocks('08:00', '09:00', 30))->toHaveCount(2);
+    });
+
+    it('un bloque toma el tipo de un rango que lo toca aunque sea en parte, y el no disponible gana', function () {
+        $ranges = [availabilityRange(1, '07:30', '08:15', AvailabilityKind::Preferred), availabilityRange(1, '08:15', '08:30')];
+
+        expect(AvailabilityRanges::kindOver($ranges, '07:00', '08:00'))->toBe(AvailabilityKind::Preferred)
+            ->and(AvailabilityRanges::kindOver($ranges, '08:00', '09:00'))->toBe(AvailabilityKind::Unavailable)
+            ->and(AvailabilityRanges::kindOver($ranges, '09:00', '10:00'))->toBeNull()
+            ->and(AvailabilityRanges::kindOver($ranges, '06:00', '07:30'))->toBeNull();
+    });
+
+    it('quita un tramo de un día recortando o partiendo el rango que lo cruza', function () {
+        $ranges = [availabilityRange(1, '07:00', '10:00'), availabilityRange(1, '10:00', '11:00', AvailabilityKind::Preferred), availabilityRange(2, '08:00', '09:00')];
+
+        expect(AvailabilityRanges::cut($ranges, 1, '08:00', '09:00'))->toBe([
+            availabilityRange(1, '07:00', '08:00'),
+            availabilityRange(1, '09:00', '10:00'),
+            availabilityRange(1, '10:00', '11:00', AvailabilityKind::Preferred),
+            availabilityRange(2, '08:00', '09:00'),
+        ])->and(AvailabilityRanges::cut($ranges, 1, '06:00', '12:00'))->toBe([availabilityRange(2, '08:00', '09:00')]);
+    });
+});

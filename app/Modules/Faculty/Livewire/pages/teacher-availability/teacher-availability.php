@@ -20,7 +20,8 @@ use Mary\Traits\Toast;
  * 2026 («herramienta y pintar»). Se elige «No disponible», «Preferido» o «Borrar» (teclas N, P y B) y se pinta con
  * clic o arrastre; el día o la hora pintan su columna o su renglón. Lo pintado queda pendiente en el navegador (el
  * componente Alpine `availabilityEditor`, en resources/js/app.js) hasta «Guardar disponibilidad», que llama a save();
- * «Copiar de <periodo>» trae la del semestre anterior como punto de partida, sin guardarla.
+ * «Copiar de <periodo>» trae la del semestre anterior como punto de partida, sin guardarla, y currentKinds() da lo
+ * guardado cuando el navegador restaura la página de su caché.
  *
  * El periodo y el campus son los activos al abrir la página y se quedan fijos (`#[Locked]`): lo que se guarda es lo
  * que se vio aunque la credencial cambie en otra pestaña. El perfil de la cuadrícula es el de ese campus o, sin él, el
@@ -78,7 +79,7 @@ new #[Title('Disponibilidad')] class extends Component
             'previous' => $previous,
             'copyReason' => match (true) {
                 $previous === null => 'No hay un semestre anterior.',
-                ! $grids->hasAvailability($teacher, $previous) => "{$previous->name} no tiene disponibilidad capturada.",
+                ! $grids->hasAvailability($teacher, $previous, $profile) => "{$previous->name} no tiene disponibilidad en este horario.",
                 default => null,
             },
             'editor' => $grid === null ? null : $this->editorConfig($grid),
@@ -123,7 +124,7 @@ new #[Title('Disponibilidad')] class extends Component
     /**
      * La disponibilidad del semestre anterior (sin verano) en la cuadrícula de la página, como tipos por día y bloque
      * (null es disponible), para que el editor la pinte como pendiente. No guarda nada. Null, con un toast, si no hay
-     * periodo anterior o no tiene disponibilidad capturada.
+     * periodo anterior o no tiene disponibilidad en el horario de la cuadrícula.
      *
      * @return list<list<?string>>|null
      */
@@ -134,17 +135,34 @@ new #[Title('Disponibilidad')] class extends Component
         $this->authorize('manageAvailability', $teacher);
         $term = $this->term($terms);
         $previous = $term === null ? null : $grids->previousTerm($term);
+        $profile = $grids->profile($grids->campus($this->campusId));
 
-        if ($previous === null || ! $grids->hasAvailability($teacher, $previous)) {
-            $this->error('No se copió la disponibilidad', $previous === null ? 'No hay un semestre anterior.' : e("{$previous->name} no tiene disponibilidad capturada."));
+        if ($previous === null || ! $grids->hasAvailability($teacher, $previous, $profile)) {
+            $this->error('No se copió la disponibilidad', $previous === null ? 'No hay un semestre anterior.' : e("{$previous->name} no tiene disponibilidad en este horario."));
 
             return null;
         }
 
-        $grid = $grids->for($teacher, $previous, $grids->profile($grids->campus($this->campusId)));
         $this->info(e("Se copió la de {$previous->name}"), 'Falta guardarla.');
 
-        return $this->editorConfig($grid)['kinds'];
+        return $this->editorConfig($grids->for($teacher, $previous, $profile))['kinds'];
+    }
+
+    /**
+     * La disponibilidad guardada del periodo de la página, como tipos por día y bloque (null es disponible). El editor
+     * la pide cuando el navegador lo restaura de su caché (Atrás o Adelante), porque esa página trae los tipos de cuando
+     * se abrió y no lo guardado después. Null sin periodo.
+     *
+     * @return list<list<?string>>|null
+     */
+    #[Renderless]
+    public function currentKinds(TeacherQuery $teachers, TermQuery $terms, AvailabilityGridQuery $grids): ?array
+    {
+        $teacher = $teachers->findOrFail($this->teacherId);
+        $this->authorize('manageAvailability', $teacher);
+        $term = $this->term($terms);
+
+        return $term === null ? null : $this->editorConfig($grids->for($teacher, $term, $grids->profile($grids->campus($this->campusId))))['kinds'];
     }
 
     private function term(TermQuery $terms): ?Term

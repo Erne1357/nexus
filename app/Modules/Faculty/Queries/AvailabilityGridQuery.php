@@ -79,7 +79,8 @@ final class AvailabilityGridQuery
         $counts = ['unavailable' => 0, 'preferred' => 0];
 
         foreach ($profile->days as $day) {
-            $kinds = array_map(fn (array $block): ?AvailabilityKind => $this->kindOf($rows->get($day, collect())->all(), $block), $blocks);
+            $saved = $rows->get($day, collect())->map(fn (TeacherAvailability $row): array => ['starts_at' => substr($row->starts_at, 0, 5), 'ends_at' => substr($row->ends_at, 0, 5), 'kind' => $row->kind])->all();
+            $kinds = array_map(fn (array $block): ?AvailabilityKind => AvailabilityRanges::kindOver($saved, $block['starts_at'], $block['ends_at']), $blocks);
             $unavailable = count(array_filter($kinds, fn (?AvailabilityKind $kind): bool => $kind === AvailabilityKind::Unavailable));
             $counts['unavailable'] += $unavailable;
             $counts['preferred'] += count(array_filter($kinds, fn (?AvailabilityKind $kind): bool => $kind === AvailabilityKind::Preferred));
@@ -133,11 +134,18 @@ final class AvailabilityGridQuery
     }
 
     /**
-     * Si el docente tiene disponibilidad capturada (sin borrar) en el periodo.
+     * Si el docente tiene disponibilidad capturada (sin borrar) en el periodo que se vea en la cuadrícula del perfil: en
+     * uno de sus días y que toque su horario. Lo de otros días u horas no cuenta, porque copiarlo no traería nada.
      */
-    public function hasAvailability(Teacher $teacher, Term $term): bool
+    public function hasAvailability(Teacher $teacher, Term $term, CampusProfile $profile): bool
     {
-        return TeacherAvailability::query()->where('teacher_id', $teacher->getKey())->where('term_id', $term->getKey())->exists();
+        return TeacherAvailability::query()
+            ->where('teacher_id', $teacher->getKey())
+            ->where('term_id', $term->getKey())
+            ->whereIn('day', $profile->days)
+            ->where('starts_at', '<', $profile->dayEnd)
+            ->where('ends_at', '>', $profile->dayStart)
+            ->exists();
     }
 
     /**
@@ -161,34 +169,10 @@ final class AvailabilityGridQuery
      */
     private function blocks(CampusProfile $profile): array
     {
-        $blocks = [];
-
-        for ($minutes = AvailabilityRanges::minutes($profile->dayStart); $minutes + $profile->blockMinutes <= AvailabilityRanges::minutes($profile->dayEnd); $minutes += $profile->blockMinutes) {
-            $start = AvailabilityRanges::clock($minutes);
-            $end = AvailabilityRanges::clock($minutes + $profile->blockMinutes);
-            $blocks[] = ['starts_at' => $start, 'ends_at' => $end, 'label' => self::label($start), 'end_label' => self::label($end)];
-        }
-
-        return $blocks;
-    }
-
-    /**
-     * El tipo de un bloque: no disponible si algún rango no disponible lo toca, si no preferido si alguno preferido lo
-     * toca; null es disponible.
-     *
-     * @param  list<TeacherAvailability>  $rows
-     * @param  array{starts_at: string, ends_at: string}  $block
-     */
-    private function kindOf(array $rows, array $block): ?AvailabilityKind
-    {
-        $touching = array_filter($rows, fn (TeacherAvailability $row): bool => substr($row->starts_at, 0, 5) < $block['ends_at'] && substr($row->ends_at, 0, 5) > $block['starts_at']);
-        $kinds = array_map(fn (TeacherAvailability $row): AvailabilityKind => $row->kind, $touching);
-
-        return match (true) {
-            in_array(AvailabilityKind::Unavailable, $kinds, true) => AvailabilityKind::Unavailable,
-            in_array(AvailabilityKind::Preferred, $kinds, true) => AvailabilityKind::Preferred,
-            default => null,
-        };
+        return array_map(
+            fn (array $block): array => [...$block, 'label' => self::label($block['starts_at']), 'end_label' => self::label($block['ends_at'])],
+            AvailabilityRanges::blocks($profile->dayStart, $profile->dayEnd, $profile->blockMinutes),
+        );
     }
 
     /**
