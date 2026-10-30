@@ -10,6 +10,7 @@ use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use Illuminate\Support\Facades\Blade;
 
 /*
 | Las ocho pantallas de catálogo, de Campus a Planes de estudio más Edificios, Salones y Docentes, comparten la forma
@@ -144,4 +145,10 @@ it('«Borrar» va en text-error y Planes muestra «Retícula» y «Editar» ante
 
     expect($delete->getAttribute('class'))->toContain('text-error')
         ->and(array_values(array_filter($labels)))->toBe(['Retícula de PLN9', 'Editar PLN9', 'Acciones de PLN9']);
+});
+
+it('un menú «Acciones» sin nombre ni etiqueta se anuncia como «Acciones»', function () {
+    $html = Blade::render('<x-core::row-menu><x-core::row-menu-item label="Algo" /></x-core::row-menu>');
+
+    expect(domOf($html)->querySelector('button[aria-haspopup="menu"]')->getAttribute('aria-label'))->toBe('Acciones');
 });

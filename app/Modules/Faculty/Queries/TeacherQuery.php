@@ -143,12 +143,25 @@ final class TeacherQuery
     }
 
     /**
-     * El docente sin borrar con ese número de empleado (ya normalizado), para ofrecer adscribirlo en lugar de darlo
-     * de alta otra vez (S9, supuesto por confirmar).
+     * El docente con ese número de empleado (ya normalizado), para ofrecer adscribirlo en lugar de darlo de alta otra
+     * vez (S9, supuesto por confirmar); con `$withTrashed`, también si está borrado, para decir por qué no se puede.
      */
-    public function findByEmployeeNumber(string $number): ?Teacher
+    public function findByEmployeeNumber(string $number, bool $withTrashed = false): ?Teacher
     {
-        return Teacher::query()->with('adscriptions')->where('employee_number', $number)->first();
+        return Teacher::query()
+            ->when($withTrashed, fn (Builder $query) => $query->withTrashed())
+            ->with('adscriptions')
+            ->where('employee_number', $number)
+            ->first();
+    }
+
+    /**
+     * El docente que se va a adscribir (S9), aunque se haya borrado mientras tanto, para decirlo en el formulario en
+     * lugar de un 404; null si el id no existe o no es uuid (ADR-0014).
+     */
+    public function findForAdscription(string $id): ?Teacher
+    {
+        return KeyLookup::find(Teacher::withTrashed()->with('adscriptions'), $id);
     }
 
     /**

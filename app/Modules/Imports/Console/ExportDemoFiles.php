@@ -203,6 +203,25 @@ final class ExportDemoFiles extends Command
                 'kr.id',
                 fn (object $r): array => [$r->control_number, $r->code, $r->term_code, $r->grade === null ? null : (string) (float) $r->grade, $r->result, $r->attempt],
             ),
+
+            // Un renglón por grupo impartido; el campus puede ir vacío.
+            'teacher_history' => fn (): iterable => $this->chunked(
+                DB::table('teacher_subject_history as h')
+                    ->join('teachers as t', 't.id', '=', 'h.teacher_id')
+                    ->join('subjects as s', 's.id', '=', 'h.subject_id')
+                    ->leftJoin('campuses as k', 'k.id', '=', 'h.campus_id')
+                    ->whereNull('h.deleted_at')->whereNull('t.deleted_at')->whereNull('s.deleted_at')
+                    ->select(['h.id', 't.employee_number', 's.code', 'h.term_code', 'k.code as campus', 'h.group_code']),
+                'h.id',
+                fn (object $r): array => [$r->employee_number, $r->code, $r->term_code, $r->campus, $r->group_code],
+            ),
+
+            'evaluations' => fn (): iterable => DB::table('teacher_evaluations as e')
+                ->join('teachers as t', 't.id', '=', 'e.teacher_id')
+                ->whereNull('e.deleted_at')->whereNull('t.deleted_at')
+                ->orderBy('t.employee_number')->orderBy('e.term_code')->orderBy('e.kind')
+                ->get(['t.employee_number', 'e.term_code', 'e.kind', 'e.score'])
+                ->map(fn (object $r): array => [$r->employee_number, $r->term_code, $r->kind, (string) (float) $r->score]),
         ];
     }
 

@@ -8,7 +8,7 @@
 
     Con `icon` y `label` es el menú «Más acciones» de una barra de herramientas (DESIGN.md, "Anatomía de
     una pantalla de catálogo"): el botón es solo ese icono, del alto de la acción principal, y `label` es su
-    nombre accesible.
+    nombre accesible. Sin `name` ni `label`, el nombre accesible es «Acciones».
 
     <x-core::row-menu :name="$campus->code" :compact="$inTable"> ...elementos... </x-core::row-menu>
     <x-core::row-menu icon="o-ellipsis-vertical" label="Más acciones"> ...elementos... </x-core::row-menu>
@@ -66,7 +66,7 @@
         :id="$id('row-menu-trigger')"
         :popovertarget="$id('row-menu')"
         aria-haspopup="menu"
-        aria-label="{{ $label ?? 'Acciones de '.$name }}"
+        aria-label="{{ $label ?? ($name === null ? 'Acciones' : 'Acciones de '.$name) }}"
         @class(['btn btn-ghost', 'btn-sm' => $icon === null, 'btn-square' => $icon !== null])
     >
         @if ($icon !== null)
