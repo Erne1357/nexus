@@ -29,7 +29,8 @@ use Illuminate\Support\Collection;
  *   lo de X en cualquier departamento. coversDepartment() pregunta por un departamento sin campus.
  * - El docente nunca cubre por covers() ni por coversDepartment(): su acceso a su propia carga lo
  *   deciden las policies de Staffing y Scheduling por asignación. has(Role::Docente) y
- *   canAccessCampus() sí lo cuentan.
+ *   canAccessCampus() sí lo cuentan. Los campus de la credencial (campuses()) siguen a sus otros
+ *   roles si los tiene: el alcance de docente solo los decide para quien no ejerce otro rol.
  *
  * El contenedor la registra con `scoped` (una instancia por petición, por Octane) para el usuario
  * autenticado; forUser() da, y recuerda en esta instancia, la de otro usuario. Lo cargado se
@@ -52,6 +53,15 @@ final class ScopedContext
 
     /** @var Collection<int, RoleScope> */
     private Collection $scopes;
+
+    /**
+     * Si tiene algún alcance vigente y completo de un rol distinto de docente, aunque sea en un
+     * campus desactivado o borrado: entonces la credencial sigue a esos roles (campuses()).
+     */
+    private bool $holdsNonTeacherScope = false;
+
+    /** @var Collection<int, Campus>|null todos los campus activos, por código */
+    private ?Collection $activeCampuses = null;
 
     /** @var Collection<int, Campus>|null */
     private ?Collection $campuses = null;
@@ -214,8 +224,12 @@ final class ScopedContext
     }
 
     /**
-     * Campus activos donde trabaja, por código: lo que ofrece el selector de la credencial. Con un
-     * alcance sin campus, todos los activos.
+     * Campus activos donde trabaja, por código: lo que ofrece el selector de la credencial. Salen
+     * de sus alcances de roles distintos de docente si tiene alguno vigente, aunque su campus ya
+     * esté desactivado o borrado (entonces puede no quedar ninguno); solo quien no tiene otro rol
+     * que docente los toma de sus alcances de docente. Con un alcance sin campus de los que
+     * cuentan, todos los activos. Así, el alcance de docente de todo el Tec de un coordinador de C2
+     * no le ofrece otros campus, aunque canAccessCampus() diga que da clase en cualquiera.
      *
      * @return Collection<int, Campus>
      */
@@ -225,12 +239,27 @@ final class ScopedContext
             return new Collection;
         }
 
-        return $this->campuses ??= Campus::query()
-            ->where('is_active', true)
-            ->unless($this->admin || $this->scopes->contains(fn (RoleScope $scope): bool => $scope->campus_id === null),
-                fn (Builder $query) => $query->whereKey($this->scopes->pluck('campus_id')->unique()->all()))
-            ->orderBy('code')
-            ->get();
+        if ($this->campuses !== null) {
+            return $this->campuses;
+        }
+
+        if ($this->admin) {
+            return $this->campuses = $this->activeCampuses();
+        }
+
+        $scopes = $this->holdsNonTeacherScope
+            ? $this->scopes->reject(fn (RoleScope $scope): bool => $scope->role === Role::Docente)
+            : $this->scopes;
+
+        if ($scopes->contains(fn (RoleScope $scope): bool => $scope->campus_id === null)) {
+            return $this->campuses = $this->activeCampuses();
+        }
+
+        $campusIds = $scopes->pluck('campus_id')->all();
+
+        return $this->campuses = $this->activeCampuses()
+            ->filter(fn (Campus $campus): bool => in_array($campus->getKey(), $campusIds, true))
+            ->values();
     }
 
     /**
@@ -270,8 +299,18 @@ final class ScopedContext
     private function appliesIn(RoleScope $scope, string $campusId): bool
     {
         return $scope->campus_id === null
-            ? $this->campuses()->contains(fn (Campus $campus): bool => $campus->getKey() === $campusId)
+            ? $this->activeCampuses()->contains(fn (Campus $campus): bool => $campus->getKey() === $campusId)
             : $scope->campus_id === $campusId;
+    }
+
+    /**
+     * Todos los campus activos y no borrados, por código; se consultan una vez por petición.
+     *
+     * @return Collection<int, Campus>
+     */
+    private function activeCampuses(): Collection
+    {
+        return $this->activeCampuses ??= Campus::query()->where('is_active', true)->orderBy('code')->get();
     }
 
     /**
@@ -294,18 +333,22 @@ final class ScopedContext
     {
         $this->loaded = true;
         $this->loadedFor = $user?->getKey();
+        $this->activeCampuses = null;
         $this->campuses = null;
         $this->terms = [];
         $this->admin = $user?->hasRole(Role::Admin) ?? false;
-        $this->scopes = $user === null ? new Collection : $user->roleScopes()
+
+        $complete = $user === null ? new Collection : $user->roleScopes()
             ->current()
             ->whereIn('role', $user->getRoleNames()->all())
-            ->where(fn (Builder $query) => $query
-                ->whereNull('campus_id')
-                ->orWhereHas('campus', fn (Builder $query) => $query->where('is_active', true)))
+            ->withExists(['campus as campus_is_active' => fn (Builder $query) => $query->where('is_active', true)])
             ->get()
             ->filter(fn (RoleScope $scope): bool => collect($scope->role->scopeColumns())
-                ->every(fn (string $column): bool => $scope->{$column} !== null))
+                ->every(fn (string $column): bool => $scope->{$column} !== null));
+
+        $this->holdsNonTeacherScope = $complete->contains(fn (RoleScope $scope): bool => $scope->role !== Role::Docente);
+        $this->scopes = $complete
+            ->filter(fn (RoleScope $scope): bool => $scope->campus_id === null || $scope->campus_is_active)
             ->values();
     }
 }
