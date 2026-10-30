@@ -355,6 +355,34 @@ describe('alcance de todo el Tec (sin campus)', function () {
             ->and($context->canAccessCampus($this->c1))->toBeTrue();
     });
 
+    it('la credencial de un coordinador de un campus desactivado o borrado que también es docente de todo el Tec no ofrece ningún campus', function (string $retired) {
+        $user = User::factory()
+            ->withRole(Role::Docente)
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create();
+        $retired === 'borrado' ? $this->c2->delete() : $this->c2->update(['is_active' => false]);
+
+        $context = scopedContextOf($user);
+
+        expect($context->campuses())->toBeEmpty()
+            ->and($context->activeCampus())->toBeNull()
+            ->and($context->has(Role::Coordinador))->toBeFalse()
+            ->and($context->has(Role::Docente))->toBeTrue()
+            ->and($context->canAccessCampus($this->c1))->toBeTrue();
+    })->with(['desactivado', 'borrado']);
+
+    it('la credencial de un docente de todo el Tec con una coordinación en un campus desactivado y otra activa ofrece solo la activa', function () {
+        $c3 = Campus::factory()->create(['code' => 'C3']);
+        $user = User::factory()
+            ->withRole(Role::Docente)
+            ->withRole(Role::Coordinador, ['campus_id' => $c3->id, 'career_id' => careerKey(20)])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create();
+        $c3->update(['is_active' => false]);
+
+        expect(scopedContextOf($user)->campuses()->pluck('code')->all())->toBe(['C2']);
+    });
+
     it('con otro rol de todo el Tec, la credencial de un docente de todo el Tec ofrece todos los campus activos', function () {
         $context = scopedContextOf(User::factory()
             ->withRole(Role::Docente)
