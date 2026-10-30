@@ -30,20 +30,14 @@ function seedDemoTeachers(array $perCampus = ['C2' => 40], int $seed = 2027): vo
     $seeder->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => $perCampus, 'seed' => $seed]);
 }
 
-it('siembra los docentes pedidos de cada campus, con la adscripción principal en su campus', function () {
+it('siembra los docentes pedidos de cada campus, cada uno con su adscripción principal', function () {
     seedDemoTeachers(['C1' => 22, 'C2' => 25]);
 
-    $campusOf = DB::table('teacher_departments')
-        ->join('campuses', 'campuses.id', '=', 'teacher_departments.campus_id')
-        ->where('is_primary', true)
-        ->join('teachers', 'teachers.id', '=', 'teacher_departments.teacher_id')
-        ->selectRaw('campuses.code, count(*) as total')
-        ->groupBy('campuses.code')
-        ->pluck('total', 'code')
-        ->all();
+    $perCampus = DB::table('teachers')->selectRaw('substr(employee_number, 1, 2) as prefix, count(*) as total')->groupBy('prefix')->pluck('total', 'prefix')->all();
 
     expect(DB::table('teachers')->count())->toBe(47)
-        ->and($campusOf)->toEqual(['C1' => 22, 'C2' => 25]);
+        ->and($perCampus)->toEqual(['D1' => 22, 'D2' => 25])
+        ->and(DB::table('teacher_departments')->where('is_primary', true)->count())->toBe(47);
 });
 
 it('hay docentes de los cinco tipos de plaza, con varias plazas, vencidas, futuras y sin plaza', function () {
@@ -59,15 +53,16 @@ it('hay docentes de los cinco tipos de plaza, con varias plazas, vencidas, futur
         ->and(DB::table('teachers')->whereNotIn('id', DB::table('teacher_positions')->select('teacher_id'))->exists())->toBeTrue();
 });
 
-it('cada docente tiene una sola adscripción principal; hay con varias y con una en el otro campus', function () {
+it('cada docente tiene una sola adscripción principal; hay con dos o tres departamentos, sin repetir ninguno', function () {
     seedDemoTeachers();
 
     $primaries = DB::table('teacher_departments')->whereNull('deleted_at')->where('is_primary', true)->selectRaw('teacher_id, count(*) as total')->groupBy('teacher_id')->pluck('total');
-    $campuses = DB::table('teacher_departments')->selectRaw('teacher_id, count(distinct campus_id) as total')->groupBy('teacher_id')->pluck('total');
+    $departments = DB::table('teacher_departments')->selectRaw('teacher_id, count(*) as total, count(distinct department_id) as distinct_total')->groupBy('teacher_id')->get();
 
     expect($primaries->count())->toBe(40)->and($primaries->unique()->all())->toBe([1])
-        ->and($campuses->max())->toBe(2)
-        ->and(DB::table('teacher_departments')->selectRaw('teacher_id')->groupBy('teacher_id')->havingRaw('count(*) > 1')->exists())->toBeTrue();
+        ->and($departments->max('total'))->toBe(3)
+        ->and($departments->contains(fn ($row) => $row->total === 2))->toBeTrue()
+        ->and($departments->every(fn ($row) => $row->total === $row->distinct_total))->toBeTrue();
 });
 
 it('hay docentes de cada departamento con materias en el campus, inactivos, borrados, sin correo ni grado y con nombres largos', function () {

@@ -9,15 +9,15 @@ use Random\Randomizer;
  * el mismo Randomizer y los mismos datos da los mismos docentes, así que el seeder los puede insertar por bloques.
  *
  * Cada plantilla trae nombre (de listas, nunca reales), número de empleado (`D` + dígito del campus + consecutivo),
- * adscripciones (`dept` es la posición del departamento en la lista del seeder, `campus` es `own` u `other`),
- * plazas, disponibilidad del periodo actual, horas fuera del ITCJ, perfil, historial y evaluaciones. Las materias
+ * adscripciones (`dept` es la posición del departamento en la lista del seeder; sin campus, porque el docente no es
+ * de un campus, y sin repetir departamento), plazas, disponibilidad del periodo actual, horas fuera del ITCJ, perfil, historial y evaluaciones. Las materias
  * van por su posición en la lista de materias del departamento (`$subjectCounts`); un departamento sin materias no
  * da perfil ni historial.
  *
  * Los casos raros no dependen del azar sino del consecutivo, para que aparezcan aun con pocos docentes: cada 20
  * docentes se repiten los 20 escenarios de plazas (los cinco tipos, dos o tres plazas completas, vencidas, futuras
- * y sin plaza), y de los demás, los inactivos, borrados, sin correo, sin grado, de nombre muy largo, con una
- * segunda adscripción y con una en el otro campus.
+ * y sin plaza), y de los demás, los inactivos, borrados, sin correo, sin grado, de nombre muy largo y con dos o
+ * tres departamentos.
  */
 final class TeacherRosterGenerator
 {
@@ -128,21 +128,27 @@ final class TeacherRosterGenerator
     }
 
     /**
+     * La principal y, a veces, uno o dos departamentos más, distintos.
+     *
      * @param  list<int>  $subjectCounts
-     * @return list<array{dept: int, campus: string, primary: bool}>
+     * @return list<array{dept: int, primary: bool}>
      */
     private function adscriptions(int $i, array $subjectCounts): array
     {
         $departments = count($subjectCounts);
         $primary = $i < $departments ? $i : $this->weightedDepartment($subjectCounts);
-        $adscriptions = [['dept' => $primary, 'campus' => 'own', 'primary' => true]];
+        $adscriptions = [['dept' => $primary, 'primary' => true]];
 
         if ($departments > 1 && $i % 5 === 1) {
-            $adscriptions[] = ['dept' => ($primary + 1 + $this->random->getInt(0, $departments - 2)) % $departments, 'campus' => 'own', 'primary' => false];
+            $adscriptions[] = ['dept' => ($primary + 1 + $this->random->getInt(0, $departments - 2)) % $departments, 'primary' => false];
         }
 
         if ($i % 9 === 2) {
-            $adscriptions[] = ['dept' => $this->random->getInt(0, 1) === 0 ? $primary : $this->random->getInt(0, $departments - 1), 'campus' => 'other', 'primary' => false];
+            $free = array_values(array_diff(range(0, $departments - 1), array_column($adscriptions, 'dept')));
+
+            if ($free !== []) {
+                $adscriptions[] = ['dept' => $free[$this->random->getInt(0, count($free) - 1)], 'primary' => false];
+            }
         }
 
         return $adscriptions;

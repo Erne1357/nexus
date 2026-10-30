@@ -55,15 +55,19 @@ it('respeta las horas de cada tipo de plaza', function () {
     }
 });
 
-it('cada docente tiene una sola adscripción principal; algunos tienen varias y alguna está en el otro campus', function () {
+it('cada docente tiene una sola adscripción principal, sin campus ni departamentos repetidos; algunos tienen dos o tres', function () {
     $teachers = roster(60);
 
     foreach ($teachers as $teacher) {
-        expect(array_filter($teacher['adscriptions'], fn (array $adscription) => $adscription['primary']))->toHaveCount(1);
+        $departments = array_column($teacher['adscriptions'], 'dept');
+
+        expect(array_filter($teacher['adscriptions'], fn (array $adscription) => $adscription['primary']))->toHaveCount(1)
+            ->and(array_unique($departments))->toHaveCount(count($departments))
+            ->and(collect($teacher['adscriptions'])->every(fn (array $adscription) => array_keys($adscription) === ['dept', 'primary']))->toBeTrue();
     }
 
-    expect(collect($teachers)->contains(fn (array $teacher) => count($teacher['adscriptions']) > 1))->toBeTrue()
-        ->and(collect($teachers)->flatMap(fn (array $teacher) => $teacher['adscriptions'])->contains(fn (array $adscription) => $adscription['campus'] === 'other'))->toBeTrue();
+    expect(collect($teachers)->contains(fn (array $teacher) => count($teacher['adscriptions']) === 2))->toBeTrue()
+        ->and(collect($teachers)->contains(fn (array $teacher) => count($teacher['adscriptions']) === 3))->toBeTrue();
 });
 
 it('hay docentes de cada departamento, inactivos, borrados, sin correo, sin grado y con nombres muy largos', function () {
