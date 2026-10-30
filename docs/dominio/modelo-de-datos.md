@@ -99,13 +99,16 @@ erDiagram
     TEACHERS ||--o{ TEACHER_SUBJECT_HISTORY : historial
     TEACHERS ||--o{ TEACHER_SUBJECT_QUALIFICATIONS : perfil
     TEACHERS ||--o{ TEACHER_EVALUATIONS : evaluacion
-    DEPARTMENTS ||--o{ TEACHERS : pertenece
+    TEACHERS ||--o{ TEACHER_DEPARTMENTS : adscripcion
+    DEPARTMENTS ||--o{ TEACHER_DEPARTMENTS : adscritos
+    CAMPUSES ||--o{ TEACHER_DEPARTMENTS : adscritos
 ```
 
 | Tabla | Campos clave | Notas |
 |---|---|---|
-| `teachers` | `employee_number` (único), `user_id?`, `name`, `email?`, `department_id`, `home_campus_id`, `degree` (enum), `is_active`, `hired_on` | Un docente puede dar clase en varios campus; `home_campus_id` es solo administrativo. |
-| `teacher_positions` | `teacher_id`, `kind` (enum: `tiempo_completo`, `tres_cuartos`, `medio_tiempo`, `asignatura`, `honorarios`), `base_hours`, `valid_from`, `valid_to` | Las **horas base** vigentes en el periodo definen la prioridad. Máximo 40. |
+| `teachers` | `employee_number` (único, también contra borrados), `user_id?` (único), `name`, `email?`, `degree?` (enum `TeacherDegree`: `licenciatura`, `especialidad`, `maestria`, `doctorado`; CHECK), `hired_on?`, `is_active`, `deleted_at` | El departamento y el campus los da la adscripción (`teacher_departments`); ya no hay `department_id` ni `home_campus_id`. Un docente puede dar clase en varios campus. |
+| `teacher_departments` | `teacher_id`, `department_id`, `campus_id`, `is_primary`, `deleted_at` | **Adscripción**: departamento y campus de un docente (confirmado el 30 de octubre de 2026). Única por docente, departamento y campus, también contra borradas. A lo más una principal sin borrar por docente (índice parcial): la del SII, para RH y reportes; en el ranking cuentan todas igual. |
+| `teacher_positions` | `teacher_id`, `kind` (enum `PositionKind`: `tiempo_completo`, `tres_cuartos`, `medio_tiempo`, `asignatura`, `honorarios`), `base_hours`, `valid_from?`, `valid_to?`, `deleted_at` | Las **horas base** vigentes en el periodo definen la prioridad. Máximo 40 por plaza; un docente puede tener varias vigentes a la vez (confirmado el 30 de octubre de 2026). CHECK por tipo (S3, supuesto por confirmar): tiempo completo 40, tres cuartos 30, medio tiempo 20, honorarios 0, asignatura de 1 a 40; `valid_to` no puede ser anterior a `valid_from`; un límite nulo es sin límite. Clave de importación: docente, tipo y `valid_from`. |
 | `teacher_external_loads` | `teacher_id`, `term_id`, `source` (ej. `TecNM Virtual`), `hours`, `notes` | Se restan de la disponibilidad del docente en ese periodo. |
 | `teacher_availability` | `teacher_id`, `term_id`, `day`, `starts_at`, `ends_at`, `kind` (`unavailable` / `preferred`) | Por defecto todo bloque del campus está disponible; aquí solo excepciones y preferencias. |
 | `teacher_subject_history` | `teacher_id`, `subject_id`, `term_code`, `campus_id?`, `source` (`import` / `nexus`) | Una fila por vez que impartió la materia. Alimenta el desempate. Se importa del SII y Nexus la sigue llenando al publicar cargas. |
