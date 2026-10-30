@@ -13,7 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Evaluación docente de un periodo del SII, en escala de 1 a 5 (confirmado el 30 de octubre de 2026). Usa `term_code`, no `term_id`: vienen periodos que `terms` no tiene.
+ * Evaluación docente de un periodo del SII, en escala de 1 a 5 (confirmado el 30 de octubre de 2026). Usa
+ * `term_code`, no `term_id`: vienen periodos que `terms` no tiene.
  */
 #[Fillable(['teacher_id', 'term_code', 'kind', 'score', 'source'])]
 #[UseFactory(TeacherEvaluationFactory::class)]

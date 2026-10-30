@@ -13,7 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Horas que un docente da fuera de Nexus en un periodo (por ejemplo TecNM Virtual); se restan de sus horas disponibles (S16, supuesto por confirmar).
+ * Horas que un docente da fuera de Nexus en un periodo (por ejemplo TecNM Virtual); se restan de sus horas
+ * disponibles (S16, supuesto por confirmar).
  */
 #[Fillable(['teacher_id', 'term_id', 'source', 'hours', 'notes'])]
 #[UseFactory(TeacherExternalLoadFactory::class)]

@@ -16,7 +16,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Bloque de un docente en un periodo: no disponible o preferido. Por defecto todo bloque del campus está disponible; aquí solo van las excepciones y preferencias. No se traslapa con otro del mismo docente, periodo y día.
+ * Bloque de un docente en un periodo: no disponible o preferido. Por defecto todo bloque del campus está
+ * disponible; aquí solo van las excepciones y preferencias. No se traslapa con otro del mismo docente,
+ * periodo y día.
  */
 #[Fillable(['teacher_id', 'term_id', 'day', 'starts_at', 'ends_at', 'kind'])]
 #[UseFactory(TeacherAvailabilityFactory::class)]

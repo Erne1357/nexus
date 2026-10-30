@@ -15,7 +15,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Una vez que el docente impartió un grupo de una materia (una fila por grupo, confirmado el 30 de octubre de 2026). Alimenta el desempate del ranking. `term_code` es el código del SII, no llave a `terms`.
+ * Una vez que el docente impartió un grupo de una materia (una fila por grupo, confirmado el 30 de octubre
+ * de 2026). Alimenta el desempate del ranking. `term_code` es el código del SII, no llave a `terms`.
  */
 #[Fillable(['teacher_id', 'subject_id', 'term_code', 'campus_id', 'group_code', 'source'])]
 #[UseFactory(TeacherSubjectHistoryFactory::class)]
