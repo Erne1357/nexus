@@ -23,15 +23,15 @@
                 />
             </div>
 
-            <div class="w-[calc(50%-0.375rem)] md:w-56">
+            <div class="w-full md:w-56">
                 <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$departments" placeholder="Todos los departamentos" />
             </div>
 
-            <div class="w-[calc(50%-0.375rem)] md:w-44">
+            <div class="w-full md:w-44">
                 <x-select wire:model.live="kindFilter" aria-label="Tipo" :options="$kindFilters" placeholder="Todos los tipos" />
             </div>
 
-            <div class="flex-1 md:w-44 md:flex-none">
+            <div class="w-full md:w-44">
                 <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activas e inactivas" />
             </div>
 

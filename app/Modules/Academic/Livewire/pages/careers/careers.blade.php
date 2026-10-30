@@ -22,7 +22,7 @@
                 />
             </div>
 
-            <div class="flex-1 md:w-52 md:flex-none">
+            <div class="w-full md:w-52">
                 <x-select
                     wire:model.live="department"
                     aria-label="Departamento"
@@ -31,7 +31,7 @@
                 />
             </div>
 
-            <div class="flex-1 md:w-44 md:flex-none">
+            <div class="w-full md:w-44">
                 <x-select
                     wire:model.live="status"
                     aria-label="Estado"

@@ -66,7 +66,7 @@ new #[Title('Alumnos')] class extends Component
             // La carrera completa, el plan y los créditos son las columnas largas: se ocultan debajo de 1200 px.
             'headers' => [
                 ['key' => 'control_number', 'label' => 'Control'],
-                ['key' => 'name', 'label' => 'Nombre'],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-[1200px]:min-w-48 min-[1800px]:whitespace-nowrap'],
                 ['key' => 'career', 'label' => 'Carrera'],
                 ['key' => 'plan', 'label' => 'Plan', 'class' => 'max-[1200px]:hidden'],
                 ['key' => 'current_semester', 'label' => 'Semestre', 'class' => 'text-right'],

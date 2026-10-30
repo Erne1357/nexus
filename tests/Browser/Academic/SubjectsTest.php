@@ -53,3 +53,19 @@ it('el admin da de alta una materia y luego la edita desde la UI', function () {
 
     expect(Subject::where('code', 'SCD-1003')->sole()->credits)->toBe(6);
 });
+
+it('en el celular los filtros ocupan todo el ancho y sus marcadores se leen completos', function () {
+    Department::factory()->create(['name' => 'Ciencias Económico-Administrativas']);
+
+    $page = visit('/login')
+        ->fill('username', 'admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/academic/subjects')
+        ->resize(390, 844);
+
+    $page->screenshot(filename: 'subjects-390')
+        ->assertScript("[...document.querySelectorAll('select[aria-label]')].every(s => s.scrollWidth <= s.clientWidth + 1 && s.getBoundingClientRect().width > 300)", true)
+        ->assertScript('document.documentElement.scrollWidth <= window.innerWidth', true);
+});
