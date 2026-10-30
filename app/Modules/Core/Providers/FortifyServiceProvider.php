@@ -3,9 +3,11 @@
 namespace App\Modules\Core\Providers;
 
 use App\Modules\Core\Actions\RecordLogin;
+use App\Modules\Core\Actions\RequirePasswordChange;
 use App\Modules\Core\Actions\UpdateUserPassword;
 use App\Modules\Core\Http\Responses\PasswordUpdateResponse;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\DefaultPassword;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\RedirectResponse;
@@ -94,6 +96,10 @@ final class FortifyServiceProvider extends ServiceProvider
 
             if ($user === null || ! $user->is_active || ! $passwordMatches) {
                 return null;
+            }
+
+            if (app(DefaultPassword::class)->matches($request->string('password')->value())) {
+                app(RequirePasswordChange::class)->handle($user);
             }
 
             $timebox->returnEarly();
