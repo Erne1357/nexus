@@ -11,6 +11,7 @@ use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Enums\AccessSync;
+use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,19 +28,24 @@ use Spatie\Permission\Models\Role as SpatieRole;
  * "Acceso de docentes"). Es idempotente: correrla otra vez sin cambios en el docente no escribe nada.
  *
  * - Docente activo: su usuario es el ligado o, si no tiene, el de username = número de empleado, que se liga sin
- *   tocar su contraseña; si ese usuario ya es de otro docente, aunque esté borrado, devuelve `conflict` y no toca
- *   nada (S15, supuesto por confirmar). Si no existe, lo crea CreateStaffUser con la contraseña por defecto (o
+ *   tocar su contraseña (S15, supuesto por confirmar), solo si está activo, no es de otro docente (aunque esté
+ *   borrado) y no tiene más rol que `docente` (supuesto por confirmar): si no, devuelve `conflict` y no toca nada,
+ *   porque quien da de alta un docente no debe poder reactivar ni, con la baja, desactivar una cuenta de personal;
+ *   eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser con la contraseña por defecto (o
  *   `$passwordHash`, para reutilizar el hash de una corrida) y cambio obligatorio, con el correo del docente si
- *   ningún otro usuario lo usa. Luego activa el usuario, le da el rol `docente` y un alcance de `docente` por
- *   cada campus de sus adscripciones sin borrar; cierra el de un campus donde ya no tiene ninguna (S14, supuesto
- *   por confirmar), con la regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
- * - Docente inactivo o borrado (Baja, confirmado el 30 de octubre de 2026): desactiva su usuario, salvo que sea
- *   admin, y termina ayer cada jefatura suya vigente hoy (EndDepartmentHead). Sin usuario no hace nada: un
- *   docente inactivo no recibe usuario. Sus alcances de `docente` se quedan, para cuando se reactive.
+ *   ningún otro usuario lo usa (supuesto por confirmar). Luego activa el usuario ya ligado (reactivar al docente
+ *   lo devuelve), le da el rol `docente` y un alcance de `docente` por cada campus de sus adscripciones sin borrar;
+ *   cierra el de un campus donde ya no tiene ninguna (S14, supuesto por confirmar), con la regla de
+ *   CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
+ * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026):
+ *   desactiva su usuario, salvo que sea admin, y termina con fecha de ayer cada jefatura suya vigente o por
+ *   empezar (supuesto por confirmar; EndDepartmentHead borra las que empiezan hoy o después). Sin usuario no hace
+ *   nada: un docente inactivo no recibe usuario. Sus alcances de `docente` se quedan, para cuando se reactive.
  *
  * Cada cambio deja su bitácora: la liga sobre el docente, el alta (CreateStaffUser), el acceso (activo, roles y
  * campus de `docente`, valor anterior y nuevo) sobre el usuario y cada jefatura terminada (EndDepartmentHead).
- * Nunca registra contraseñas. Quién puede lo deciden las Actions y pantallas que la llaman.
+ * Nunca registra contraseñas. Si cambió algo, avisa con TeacherAccessChanged después del commit. Quién puede lo
+ * deciden las Actions y pantallas que la llaman.
  */
 final class SyncTeacherAccess
 {
@@ -64,6 +70,10 @@ final class SyncTeacherAccess
             $teacher->setRawAttributes($locked->getAttributes(), sync: true);
             $teacher->unsetRelation('user');
 
+            if ($result !== AccessSync::Unchanged && $result !== AccessSync::Conflict) {
+                TeacherAccessChanged::dispatch($teacher, $result);
+            }
+
             return $result;
         });
     }
@@ -76,7 +86,7 @@ final class SyncTeacherAccess
         if ($user === null) {
             $user = User::query()->where('username', $teacher->employee_number)->lockForUpdate()->first();
 
-            if ($user !== null && Teacher::withTrashed()->where('user_id', $user->getKey())->exists()) {
+            if ($user !== null && ! $this->linkable($user)) {
                 return AccessSync::Conflict;
             }
 
@@ -107,7 +117,10 @@ final class SyncTeacherAccess
             $changed = true;
         }
 
-        $heads = DepartmentHead::query()->where('user_id', $user->getKey())->currentOn(today())->get();
+        $heads = DepartmentHead::query()
+            ->where('user_id', $user->getKey())
+            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()->toDateString()))
+            ->get();
         $yesterday = today()->subDay()->toImmutable();
 
         foreach ($heads as $head) {
@@ -116,6 +129,17 @@ final class SyncTeacherAccess
         }
 
         return $changed ? AccessSync::Updated : AccessSync::Unchanged;
+    }
+
+    /**
+     * Si un usuario existente con el número del docente se puede ligar: activo, sin otro docente ligado (aunque esté
+     * borrado) y sin más rol de spatie que `docente` (S15 y supuesto por confirmar).
+     */
+    private function linkable(User $user): bool
+    {
+        return $user->is_active
+            && $user->getRoleNames()->diff([Role::Docente->value])->isEmpty()
+            && ! Teacher::withTrashed()->where('user_id', $user->getKey())->exists();
     }
 
     private function link(Teacher $teacher, User $user): void

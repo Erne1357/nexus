@@ -95,11 +95,15 @@ final class AppointDepartmentHead
     }
 
     /**
-     * El rechazo de una de las exclusiones de `department_heads` como error de validación; otro error de la base
-     * sigue igual.
+     * El rechazo de una de las exclusiones de `department_heads` (SQLSTATE 23P01, `exclusion_violation`) como error
+     * de validación; otro error de la base sigue igual, aunque su mensaje nombre la restricción.
      */
     private function overlapping(QueryException $exception, Department $department, Campus $campus, User $user, DepartmentHeadKind $kind): Throwable
     {
+        if ((string) ($exception->errorInfo[0] ?? $exception->getCode()) !== '23P01') {
+            return $exception;
+        }
+
         $message = $exception->getMessage();
 
         if (str_contains($message, 'department_heads_one_jefe')) {

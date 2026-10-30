@@ -13,6 +13,7 @@ use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -235,4 +236,30 @@ it('termina el alcance de su jefatura y no los de otras', function () {
     expect($context->covers(Role::JefeDepartamento, $this->c2, $this->sis->id))->toBeFalse()
         ->and($context->covers(Role::JefeDepartamento, $this->c2, $this->ind->id))->toBeTrue()
         ->and($context->covers(Role::JefeDepartamento, $this->c1, $this->sis->id))->toBeTrue();
+});
+
+it('solo vuelve error de validación el rechazo de una exclusión (SQLSTATE 23P01); otro error de la base sigue igual', function () {
+    DepartmentHead::creating(function (): never {
+        $previous = new PDOException('SQLSTATE[23505]: Unique violation: department_heads_one_jefe');
+        $previous->errorInfo = ['23505', 7, 'department_heads_one_jefe'];
+
+        throw new QueryException('pgsql', 'insert into department_heads', [], $previous);
+    });
+
+    expect(fn () => appointHead($this->user, $this->sis, $this->c2))->toThrow(QueryException::class);
+
+    expect(RoleScope::count())->toBe(0)
+        ->and(Activity::count())->toBe(0);
+});
+
+it('termina antes de tiempo una jefatura que tenía fecha de fin, con su alcance', function () {
+    $head = appointHead($this->user, $this->sis, $this->c2, to: today()->addMonths(2)->toImmutable());
+
+    app(EndDepartmentHead::class)->handle($head, today()->subDay()->toImmutable());
+
+    $yesterday = today()->subDay()->toDateString();
+
+    expect($head->fresh()->valid_to->toDateString())->toBe($yesterday)
+        ->and(RoleScope::sole()->valid_to->toDateString())->toBe($yesterday)
+        ->and(app(ScopedContext::class)->forUser($this->user)->covers(Role::JefeDepartamento, $this->c2, $this->sis->id))->toBeFalse();
 });

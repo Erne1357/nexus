@@ -12,8 +12,10 @@ use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Support\DefaultPassword;
 use App\Modules\Faculty\Actions\SyncTeacherAccess;
 use App\Modules\Faculty\Enums\AccessSync;
+use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Activitylog\Models\Activity;
 
@@ -290,4 +292,85 @@ it('usa el hash de contraseña que se le da', function () {
     app(SyncTeacherAccess::class)->handle($teacher, $hash);
 
     expect($teacher->fresh()->user->password)->toBe($hash);
+});
+
+it('no liga un usuario inactivo con su número: conflict y sigue inactivo', function () {
+    $user = User::factory()->create(['username' => '1234567', 'is_active' => false]);
+    $teacher = Teacher::factory()->adscribedTo($this->sis, $this->c2)->create(['employee_number' => '1234567']);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Conflict);
+
+    expect($teacher->fresh()->user_id)->toBeNull()
+        ->and($user->fresh()->is_active)->toBeFalse()
+        ->and($user->fresh()->roles)->toBeEmpty()
+        ->and(RoleScope::count())->toBe(0)
+        ->and(Activity::count())->toBe(0);
+});
+
+it('no liga un usuario con su número que tiene otro rol: conflict y no lo toca', function (Role $role) {
+    $scope = match ($role) {
+        Role::Admin => [],
+        Role::Subdireccion => ['campus_id' => $this->c2->id],
+        default => ['campus_id' => $this->c2->id, 'department_id' => $this->sis->id],
+    };
+    $user = User::factory()->withRole($role, $scope)->create(['username' => '1234567']);
+    $scopes = RoleScope::count();
+    $teacher = Teacher::factory()->adscribedTo($this->sis, $this->c2)->create(['employee_number' => '1234567']);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Conflict);
+
+    expect($teacher->fresh()->user_id)->toBeNull()
+        ->and($user->fresh()->is_active)->toBeTrue()
+        ->and($user->fresh()->getRoleNames()->all())->toBe([$role->value])
+        ->and(RoleScope::count())->toBe($scopes)
+        ->and(Activity::count())->toBe(0);
+})->with([
+    'admin' => Role::Admin,
+    'subdirección' => Role::Subdireccion,
+    'jefe de departamento' => Role::JefeDepartamento,
+]);
+
+it('liga un usuario activo con su número que solo tiene el rol docente', function () {
+    $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create(['username' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis, $this->c2)->create(['employee_number' => '1234567']);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Linked)
+        ->and($teacher->fresh()->user_id)->toBe($user->id)
+        ->and(teachingCampuses($user))->toBe(['C2']);
+});
+
+it('la baja borra también la jefatura que todavía no empieza, y al reactivarlo no vuelve', function () {
+    $teacher = Teacher::factory()->adscribedTo($this->sis, $this->c2)->create();
+    syncAccess($teacher);
+    $user = $teacher->fresh()->user;
+    $head = app(AppointDepartmentHead::class)->handle($this->sis, $this->c2, $user, DepartmentHeadKind::Jefe, today()->addDays(5)->toImmutable());
+
+    $teacher->update(['is_active' => false]);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Updated)
+        ->and(DepartmentHead::find($head->id))->toBeNull()
+        ->and(RoleScope::where('role', Role::JefeDepartamento)->exists())->toBeFalse();
+
+    $teacher->update(['is_active' => true]);
+    syncAccess($teacher);
+    $this->travel(10)->days();
+
+    $context = app(ScopedContext::class)->forUser($user->fresh());
+
+    expect($context->has(Role::JefeDepartamento))->toBeFalse()
+        ->and($context->has(Role::Docente))->toBeTrue();
+});
+
+it('avisa con TeacherAccessChanged después del commit solo cuando cambia algo', function () {
+    Event::fake([TeacherAccessChanged::class]);
+    $teacher = Teacher::factory()->adscribedTo($this->sis, $this->c2)->create();
+    $taken = User::factory()->create(['username' => '7654321', 'is_active' => false]);
+    $conflicted = Teacher::factory()->create(['employee_number' => '7654321']);
+
+    syncAccess($teacher);
+    syncAccess($teacher->fresh());
+    syncAccess($conflicted);
+
+    Event::assertDispatchedTimes(TeacherAccessChanged::class, 1);
+    Event::assertDispatched(TeacherAccessChanged::class, fn (TeacherAccessChanged $event): bool => $event->teacher->is($teacher) && $event->result === AccessSync::Created);
 });
