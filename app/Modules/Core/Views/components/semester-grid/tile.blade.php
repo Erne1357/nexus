@@ -13,12 +13,22 @@
 --}}
 @props(['row', 'code', 'name', 'chain' => null, 'muted' => false])
 
+@php
+    // Un color por cadena, en clases completas: Tailwind solo publica los tokens chain-N que encuentra escritos.
+    $chainColors = [
+        '[--chain:var(--color-chain-1)]', '[--chain:var(--color-chain-2)]', '[--chain:var(--color-chain-3)]',
+        '[--chain:var(--color-chain-4)]', '[--chain:var(--color-chain-5)]', '[--chain:var(--color-chain-6)]',
+        '[--chain:var(--color-chain-7)]', '[--chain:var(--color-chain-8)]', '[--chain:var(--color-chain-9)]',
+        '[--chain:var(--color-chain-10)]', '[--chain:var(--color-chain-11)]', '[--chain:var(--color-chain-12)]',
+    ];
+@endphp
+
 <button type="button" {{ $attributes->class([
     'flex h-26 min-w-0 cursor-pointer flex-col overflow-hidden rounded-field border p-2 text-left transition-opacity motion-reduce:transition-none md:col-(--col) md:row-(--row) md:mx-1',
     'group-data-[focus]/grid:not-data-[on-chain]:opacity-20 group-data-[focus]/grid:not-data-[on-chain]:grayscale',
     'data-[me]:ring-2 data-[me]:ring-primary data-[me]:ring-offset-2 data-[me]:ring-offset-base-100',
-    'shadow-[inset_5px_0_0_var(--chain)] pl-3' => $chain !== null,
-]) }} style="--row: {{ $row }}{{ $chain === null ? '' : '; --chain: var(--color-chain-'.($chain % 12 + 1).')' }}">
+    $chain === null ? '' : $chainColors[$chain % 12].' shadow-[inset_5px_0_0_var(--chain)] pl-3',
+]) }} style="--row: {{ $row }}">
     <span class="-mr-0.5 flex h-4 shrink-0 items-center justify-between">
         <span class="truncate font-mono text-[12.5px] font-semibold leading-4 tracking-[-0.02em]">{{ $code }}</span>
         {{ $icon ?? '' }}

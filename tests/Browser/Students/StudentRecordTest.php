@@ -114,6 +114,10 @@ it('a 1440 px todos los mosaicos miden lo mismo, los de un renglón se alinean e
         ->assertScript($top('ACA-0910').' === '.$top('ACF-0902'), true)
         ->assertScript($top('DAD-2401').' === '.$top('DAD-2402'), true)
         ->assertScript("document.querySelector('[data-testid=chain-legend]').getBoundingClientRect().top >= document.querySelector('[data-testid=student-grid]').getBoundingClientRect().bottom", true)
+        // La segunda cadena también lleva su franja: cada token chain-N existe en el CSS.
+        ->assertScript("document.querySelector('[data-subject=\"DAD-2402\"]').dataset.chain", '1')
+        ->assertScript("getComputedStyle(document.querySelector('[data-subject=\"DAD-2402\"]')).boxShadow.includes('inset')", true)
+        ->assertScript("[...Array(12).keys()].every((n) => getComputedStyle(document.documentElement).getPropertyValue('--color-chain-' + (n + 1)).trim() !== '')", true)
         // El icono de cada estado de la leyenda queda dentro de su recuadro.
         ->assertScript("[...document.querySelectorAll('[data-testid=standing-legend] svg')].every((icon) => { const i = icon.getBoundingClientRect(), b = icon.parentElement.getBoundingClientRect(); return i.left >= b.left && i.right <= b.right && i.top >= b.top && i.bottom <= b.bottom; })", true)
         ->assertNoJavaScriptErrors();
