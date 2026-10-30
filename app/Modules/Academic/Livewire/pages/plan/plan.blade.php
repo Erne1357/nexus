@@ -58,8 +58,13 @@
 
     <div class="space-y-3" x-on:keydown.escape.window="if ($wire.chainFocus !== null && ! $wire.showDrawer && document.body.dataset.menu !== 'open') $wire.clearFocus()">
         @if ($grid['chains'] !== [])
-            <div class="flex flex-wrap items-center gap-1.5" data-testid="chain-legend">
-                <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Cadenas de seriación</span>
+            <div x-data="{ open: false }" data-testid="chain-legend">
+                {{-- En celular (menos de 768 px) la leyenda va plegada tras este botón; desde md siempre está abierta. --}}
+                <button type="button" data-testid="chain-legend-toggle" class="btn btn-sm btn-ghost md:hidden" aria-controls="plan-chain-chips" x-bind:aria-expanded="open.toString()" aria-expanded="false" @click="open = ! open">
+                    Cadenas de seriación ({{ count($grid['chains']) }})
+                </button>
+                <div id="plan-chain-chips" class="flex flex-wrap items-center gap-1.5" x-bind:class="open ? '' : 'max-md:hidden'">
+                <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral max-md:hidden">Cadenas de seriación</span>
                 @foreach ($grid['chains'] as $chain)
                     <button type="button" data-chain="{{ $chain['index'] }}" aria-pressed="{{ $chainFocus === $chain['index'] ? 'true' : 'false' }}" wire:click="focusChain({{ $chain['index'] }})"
                         style="--chain: var(--color-chain-{{ $chain['index'] % 12 + 1 }})" wire:key="chain-{{ $chain['index'] }}"
@@ -69,6 +74,7 @@
                         <span class="font-mono text-neutral">{{ $chain['size'] }}</span>
                     </button>
                 @endforeach
+                </div>
             </div>
         @endif
         <p class="min-h-6 text-neutral" aria-live="polite" data-testid="chain-info">{{ $info }}</p>

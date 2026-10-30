@@ -126,3 +126,31 @@ it('el listado de alumnos no desborda y «Ver ficha» queda en una línea con no
     $page->resize(1440, 900)
         ->assertScript("(() => { const a = document.querySelector('table [data-testid^=show-]'); return a.getBoundingClientRect().height < 48; })()", true);
 });
+
+it('en celular la leyenda de cadenas va plegada y se abre con un toque; en escritorio siempre está abierta', function () {
+    $student = Student::where('control_number', '24111234')->sole();
+    $chip = '[data-chain-chip][data-chain="0"]';
+    $hidden = fn (string $selector): string => "document.querySelector('{$selector}').offsetParent === null";
+    $toggle = '[data-testid="chain-legend-toggle"]';
+
+    $page = visit('/login')
+        ->fill('username', '19110002')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/students/'.$student->id)
+        ->resize(390, 900)
+        ->assertSeeIn($toggle, 'Cadenas de seriación (')
+        ->assertScript($hidden($chip), true)
+        ->assertScript("document.querySelector('{$toggle}').getAttribute('aria-expanded')", 'false')
+        ->click($toggle)
+        ->assertScript($hidden($chip), false)
+        ->assertScript("document.querySelector('{$toggle}').getAttribute('aria-expanded')", 'true')
+        ->click($chip)
+        ->assertSee('Cadena de Cálculo Diferencial: 2 materias.')
+        ->assertNoJavaScriptErrors();
+
+    $page->resize(1440, 900)
+        ->assertScript($hidden($chip), false)
+        ->assertScript($hidden($toggle), true);
+});
