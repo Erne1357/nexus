@@ -44,6 +44,7 @@ docker compose exec app php artisan migrate --seed          # roles, campus y us
 ```
 
 - El seeder crea el usuario `admin` con `must_change_password`. Su contraseña inicial sale de `ADMIN_INITIAL_PASSWORD` en `.env`; en local, si no la defines, se genera una y se imprime en la consola. El primer acceso pide cambiarla.
+- Los usuarios nuevos de personal reciben la contraseña por defecto de `NEXUS_DEFAULT_PASSWORD` en `.env` (vacía en `.env.example`; el repositorio es público, así que el valor no se versiona). Quien entra con ella debe cambiarla y no puede volver a elegirla; sin la variable, crear usuarios de personal falla con un mensaje claro.
 - El contenedor `vite` instala `node_modules` al arrancar (incluye Playwright para los browser tests).
 
 - App: http://localhost · Vite: http://localhost:5173
