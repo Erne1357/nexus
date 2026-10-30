@@ -248,7 +248,7 @@ El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados
 | Editor de retícula del plan | Retícula de cada plan de estudios (Académico › Planes de estudio) | **Decidido (tarea 1.8):** variante A, columnas por semestre y panel lateral; ver "Retícula del plan (editor)", abajo |
 | Inicio por rol | Inicio | Palabra gigante y mosaicos vivos (por diseñar) |
 | Checklist con contadores | Validación de catálogos | Cómo mostrar diferencias contra el periodo anterior |
-| Cuadrícula día x hora | Editor de horarios, disponibilidad docente, vista por salón | Interacción por clic o arrastrar; colores por carrera o por estado |
+| Cuadrícula día x hora | Disponibilidad docente; editor de horarios y vista por salón (fase 3) | **Decidido por el usuario el 30 de octubre de 2026 (tarea 1.12) para la disponibilidad:** variante A, herramienta y pintar; ver "Cuadrícula día x hora", abajo. Los colores por carrera o por estado del editor de horarios, por decidir |
 | Ranking con desglose | Asignación docente | Cómo presentar el desglose sin exponer evaluaciones a quien no debe |
 | Tablero de estado | Choques, avance de validación, carga por docente | Jerarquía visual de duro vs blando |
 | Consulta pública | Horarios publicados | Impresión y PDF |
@@ -260,6 +260,32 @@ Forma de la ficha del alumno, decidida el 30 de octubre de 2026 (variante A, pes
 - **Pestañas** `tabs tabs-border`: Datos, Plazas, Disponibilidad, Perfil e Historial, la activa en `?tab=`. Las que aún no tienen contenido muestran un estado vacío con borde punteado.
 - **Datos:** dos columnas desde 1280 px (datos | adscripciones). Una adscripción es solo un departamento (código en Mono y nombre; sin campus), con la insignia «Principal» o «Hacer principal», y «Quitar de <depto>» por renglón, deshabilitado con su motivo si el rol no cubre ese departamento o es el propio docente. **Plazas:** una lista de renglones en cuadrícula (tipo, horas, desde, hasta, estado, acciones) que se apila debajo de 768 px, con las horas base del periodo al pie. Fechas `dd/mm/aaaa`.
 - Agregar o editar una plaza y quitar una adscripción (el aviso dice qué principal queda) o una plaza se hacen en un `x-modal`; lo que no se puede quitar queda deshabilitado con su motivo.
+- **Disponibilidad:** el resumen del periodo activo en un renglón, la cuadrícula de solo lectura con los rangos por día y «Editar disponibilidad», que abre el editor; ver "Cuadrícula día x hora".
+
+### Cuadrícula día x hora
+La disponibilidad de un docente en un periodo, decidida el 30 de octubre de 2026 (variante A, «herramienta y pintar»; maquetas en `.impeccable/mocks/decision/docente/`). Las piezas son de Faculty: `x-faculty::availability.grid`, `.ranges`, `.legend` y `.swatch` (`app/Modules/Faculty/Views/components/availability/`).
+
+- **Forma:** una columna por día del perfil del campus y un renglón por bloque, de 36 px (`h-9`), en una caja blanca con filete. La primera columna (52 px) lleva la hora en Mono; el encabezado de cada día, en `bg-secondary/40`, su nombre como etiqueta y sus horas disponibles («13 h disp.»). Si la caja mide menos de 640 px (consulta de contenedor), las celdas solo llevan el icono, los días su nombre corto y la columna de horas mide 44 px: a 390 px cabe sin desplazarse. Cada día es un `role="group"` con `display: contents`.
+- **Tipos** (`AvailabilityKind::fillClasses()` e `icon()`), con el tipo en `data-kind` y sus variantes de utilidades:
+
+| Tipo | Relleno | Icono |
+|---|---|---|
+| Disponible | `base-100` | — |
+| No disponible | rayas a 135° de `neutral` al 9 y al 20 % sobre `base-100` | `o-no-symbol` en `secondary-muted` |
+| Preferido | `success/15` | `o-star` en `success` |
+
+- **Rangos en la cuadrícula:** la primera celda de un rango dice su tipo y la segunda sus horas en Mono («9:00–13:00»); las que siguen a otra del mismo tipo no llevan filete arriba (`data-continues`), así el rango se ve como un bloque. Debajo, la **leyenda** con muestras de 24 px.
+- **Rangos por día:** el día con sus horas disponibles y cada rango con su icono, su tipo y sus horas en Mono, o «Disponible todo el día». En el editor van a la derecha desde 1400 px (360 px, pegados arriba al desplazarse) y debajo antes; bajo 768 px el día va arriba de sus rangos.
+- **Editor** (`faculty::pages.teacher-availability`, `/faculty/teachers/{teacher}/availability`), página hija de la ficha (decidido por el usuario el 30 de octubre de 2026):
+  - encabezado: el enlace al docente (a su pestaña Disponibilidad), «Disponibilidad» con la insignia del periodo, el docente, el horario de la cuadrícula y el bloque; a la derecha, «Copiar de <periodo>» (`btn-outline`), deshabilitado con su motivo si no hay semestre anterior o no tiene disponibilidad capturada;
+  - cifras: disponible (de cuántas), preferido, no disponible y las horas base del periodo con sus plazas; cuatro columnas desde 1200 px y dos antes;
+  - herramientas: un `join` de radios «No disponible», «Preferido» y «Borrar», cada uno con su muestra y su tecla en `kbd` (N, P, B); la elegida en `btn-primary`. Bajo 768 px ocupan el ancho y no muestran la tecla;
+  - pintar: clic o arrastre con la herramienta elegida; pintar sobre otro tipo lo reemplaza (decidido por el usuario el 30 de octubre de 2026). El botón de un día pinta su columna y el de una hora, su renglón. Un arrastre rápido pinta también las celdas que el puntero saltó;
+  - teclado: las flechas, Inicio y Fin mueven el foco (un solo botón de la cuadrícula en el orden de tabulación) y Enter o Espacio pintan; N, P y B eligen la herramienta, salvo al escribir o con el menú o un diálogo abierto;
+  - pantalla táctil: las celdas llevan `touch-none`, así tocar pinta una celda y arrastrar el dedo pinta las que recorre; la página se desplaza desde la columna de horas, los encabezados o fuera de la cuadrícula;
+  - lo pintado queda pendiente: cada celda cambiada lleva un punto `info` arriba a la derecha y «sin guardar» en su nombre accesible. La **barra de guardar**, pegada al pie (`sticky`, `shadow-float`), dice «N bloques sin guardar», con «Descartar» (`btn-ghost`) y «Guardar disponibilidad» (`btn-primary`, la acción principal); solo se ve con cambios;
+  - lo maneja el componente Alpine `availabilityEditor` (`resources/js/app.js`) dentro de `wire:ignore`; `save()` y `copyPrevious()` no vuelven a pintar la página y avisan con un toast.
+- **En la ficha** (pestaña Disponibilidad): el resumen en un renglón, la cuadrícula de solo lectura (oculta a los lectores de pantalla, porque los rangos por día dicen lo mismo) con los rangos a su lado si la caja mide 900 px o más, la leyenda y «Editar disponibilidad» (`btn-outline btn-sm`). Sin periodo activo, pide elegirlo.
 
 ### Retícula del alumno
 La ficha del alumno muestra su retícula como la del SII, que es la que conocen alumnos y coordinadores (aprobado el 29 de octubre de 2026, maquetas de la tarea 1.6). Desde el 30 de octubre de 2026 es una **cuadrícula perfecta**: los mosaicos tienen un tamaño fijo, así un plan con más o menos materias se ve parecido y las dos retículas se parecen lo más posible (pedido por el usuario).
