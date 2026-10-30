@@ -64,7 +64,7 @@ new #[Title('Departamentos')] class extends Component
                 ['key' => 'code', 'label' => 'Clave'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'careers_count', 'label' => 'Carreras'],
-                ['key' => 'subjects_count', 'label' => 'Materias'],
+                ['key' => 'subjects_count', 'label' => 'Materias', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
             // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.

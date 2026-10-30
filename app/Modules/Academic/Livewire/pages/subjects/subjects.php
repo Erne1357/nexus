@@ -105,11 +105,11 @@ new #[Title('Materias')] class extends Component
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
-                ['key' => 'department', 'label' => 'Departamento'],
-                ['key' => 'hours', 'label' => 'HT-HP-Créditos'],
+                ['key' => 'department', 'label' => 'Departamento', 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'hours', 'label' => 'HT-HP-Créditos', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'kind', 'label' => 'Tipo', 'class' => 'max-[1535px]:hidden'],
                 ['key' => 'needs_lab', 'label' => 'Laboratorio', 'class' => 'max-[1535px]:hidden'],
-                ['key' => 'study_plans_count', 'label' => 'Planes'],
+                ['key' => 'study_plans_count', 'label' => 'Planes', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
             // DESIGN.md, "Insignias de estado": la fila de una inactiva pasa a text-neutral.

@@ -88,3 +88,22 @@ it('el menú de la última fila se ve completo, Esc lo cierra y el foco vuelve a
         ->and($page->script("document.activeElement.getAttribute('aria-haspopup')"))->toBe('menu');
     $page->assertNoJavaScriptErrors();
 });
+
+it('a 768 px ninguna tabla se desplaza de lado y «Acciones» de la primera fila queda dentro de la caja', function (string $path, string $code) {
+    $page = signedInAt1440($path, $code)->resize(768, 900)->navigate($path)->assertSee($code);
+
+    $inside = $page->script("(() => {
+        const button = document.querySelector('table tbody tr button[aria-label=\"Acciones de {$code}\"]').getBoundingClientRect();
+        const container = document.querySelector('table').parentElement;
+        const box = container.getBoundingClientRect();
+
+        return container.scrollWidth <= container.clientWidth && button.right <= box.right && button.left >= box.left;
+    })()");
+
+    expect($inside)->toBeTrue();
+    $page->assertNoJavaScriptErrors();
+})->with([
+    'Materias' => ['/academic/subjects', 'MAT01'],
+    'Planes de estudio' => ['/academic/plans', 'PLN-01'],
+    'Carreras' => ['/academic/careers', 'CAR01'],
+]);
