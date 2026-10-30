@@ -7,12 +7,21 @@
 | El menú se transforma con FLIP: mide dónde está cada elemento, cambia de estado, mide dónde quedó,
 | lo devuelve a su lugar anterior con un transform y lo deja llegar. Al abrir, con la curva de abrir,
 | en cascada por área y por entrada; el buscador entra primero y los nombres y las entradas de las
-| demás áreas, cuando su icono aterriza. Al cerrar, lo que se va se desvanece en 110 ms y lo demás
-| regresa con la curva de asentar, sin rebote. Con prefers-reduced-motion todo cambia sin animar.
+| demás áreas, cuando su icono aterriza. Al cerrar, todo en un solo tiempo: la cortina se recoge, lo
+| que se queda regresa junto con ella (la curva de asentar, sin rebote ni cascada) y lo que se va se
+| desvanece a la vez en una copia del menú abierto. Lo que espera para moverse lleva fill backwards:
+| sin él se pintaría en su lugar final mientras espera. Con prefers-reduced-motion todo cambia sin
+| animar.
 */
 
 /** Lo que tarda el menú en asentarse; un abrir o cerrar pedido mientras espera a que termine. */
 const SETTLE_MS = 440;
+
+/** Al cerrar, lo que se queda regresa en lo que tarda la cortina en recogerse (duration-[420ms] del Blade). */
+const RETURN_MS = 420;
+
+/** Al cerrar, lo que se va se desvanece en este tiempo, mientras la cortina empieza a recogerse. */
+const LEAVE_MS = 120;
 
 /** El buscador recibe el cursor cuando ya entró. */
 const FOCUS_SEARCH_MS = 260;
@@ -47,6 +56,28 @@ const searchableLabel = (entry) => {
 };
 
 const isRendered = (element) => element.getClientRects().length > 0;
+
+/** Lo único que conserva la copia del menú que se desvanece al cerrar: lo que decide cómo se ve. */
+const GHOST_ATTRIBUTES = new Set(['class', 'style', 'hidden', 'data-current', 'data-active', 'type', 'placeholder']);
+
+/**
+ * Dónde se ve un elemento del menú, para el FLIP: si se ve (su caja) y el punto que el ojo sigue, el
+ * centro del icono o el principio del texto. Entre el menú cerrado y el abierto el icono cambia de
+ * ancho y el nombre de relleno: si el FLIP alineara las cajas, los dos brincarían al empezar.
+ */
+const placeOf = (item) => {
+    const box = item.getBoundingClientRect();
+
+    if (item.dataset.menuFlip === 'icon') {
+        return { shown: box.width > 0, x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    }
+
+    const text = document.createRange();
+    text.selectNodeContents(item);
+    const { left, top } = text.getBoundingClientRect();
+
+    return { shown: box.width > 0, x: left, y: top };
+};
 
 const numberFrom = (element, property) => Number(element.style.getPropertyValue(property)) || 0;
 
@@ -144,7 +175,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        async setMenu(open) {
+        setMenu(open) {
             const menu = document.getElementById('nexus-menu');
 
             // Nunca dos movimientos encimados: lo que se pida mientras uno corre, se hace al terminar.
@@ -165,22 +196,12 @@ document.addEventListener('alpine:init', () => {
             const reduce = reducedMotion();
             const items = [...menu.querySelectorAll('[data-menu-flip]')];
 
+            // Dónde está cada elemento, con lo que lleve de un movimiento anterior.
+            const first = new Map(items.map((item) => [item, placeOf(item)]));
+
             if (!open && !reduce) {
-                const leaving = items.filter((item) => isRendered(item) && !this.staysWhenClosed(item));
-
-                // Una animación cancelada (al cambiar de página a medio cerrar) no es un error.
-                await Promise.all(leaving.map((item, index) => item.animate(
-                    [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-4px)' }],
-                    { duration: 110, delay: (leaving.length - index) * 3, easing: 'ease-in', fill: 'forwards' },
-                ).finished.catch(() => {})));
-
-                // reset() lo cerró sin animar mientras se desvanecía.
-                if (!this.busy) {
-                    return;
-                }
+                this.fadeOut(menu, items);
             }
-
-            const first = new Map(items.map((item) => [item, item.getBoundingClientRect()]));
 
             this.apply(open);
             items.forEach((item) => item.getAnimations().forEach((animation) => animation.cancel()));
@@ -215,9 +236,10 @@ document.addEventListener('alpine:init', () => {
         },
 
         /**
-         * Lleva cada elemento de donde estaba (first) a donde quedó. Lo que no se veía entra en
-         * su lugar: el buscador de inmediato; lo demás, cuando su icono aterriza (en el celular, en
-         * cascada).
+         * Lleva cada elemento de donde estaba (first) a donde quedó. Al abrir, lo que no se veía entra
+         * en su lugar: el buscador de inmediato; lo demás, cuando su icono aterriza (en el celular, en
+         * cascada). Al cerrar, todo regresa junto con la cortina, y lo que no se veía (lo que ocultó la
+         * búsqueda) aparece en su lugar a la vez.
          */
         play(items, first, open) {
             const phone = isPhone();
@@ -226,34 +248,36 @@ document.addEventListener('alpine:init', () => {
 
             // Primero todas las lecturas y después todas las animaciones, para no forzar el layout
             // en cada elemento.
-            const last = new Map(items.map((item) => [item, item.getBoundingClientRect()]));
+            const last = new Map(items.map((item) => [item, placeOf(item)]));
 
             items.forEach((item, order) => {
                 const from = first.get(item);
                 const to = last.get(item);
 
-                if (!to.width) {
+                if (!to.shown) {
                     return;
                 }
 
                 const area = numberFrom(item, '--c');
                 const index = numberFrom(item, '--i');
 
-                if (!from.width) {
-                    const delay = item.dataset.menuFlip === 'search'
+                if (!from.shown) {
+                    const delay = !open ? 0 : item.dataset.menuFlip === 'search'
                         ? 90
                         : (phone ? 120 + order * 14 : 340 + area * 35 + index * 22);
 
                     item.animate(
                         [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }],
-                        { duration: 320, delay, easing: spring, fill: 'backwards' },
+                        open
+                            ? { duration: 320, delay, easing: spring, fill: 'backwards' }
+                            : { duration: RETURN_MS, easing: settle },
                     );
 
                     return;
                 }
 
-                const dx = from.left - to.left;
-                const dy = from.top - to.top;
+                const dx = from.x - to.x;
+                const dy = from.y - to.y;
 
                 if (!dx && !dy) {
                     return;
@@ -262,10 +286,64 @@ document.addEventListener('alpine:init', () => {
                 item.animate(
                     [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
                     open
-                        ? { duration: 580, delay: area * 30 + index * 14, easing: spring }
-                        : { duration: 420, delay: index * 6, easing: settle },
+                        ? { duration: 580, delay: area * 30 + index * 14, easing: spring, fill: 'backwards' }
+                        : { duration: RETURN_MS, easing: settle },
                 );
             });
+        },
+
+        /**
+         * Al cerrar, lo que se va desaparece del menú en cuanto cambia el estado. Para que se desvanezca
+         * mientras la cortina ya se recoge, queda una copia del menú abierto con solo lo que se va, sin
+         * nada que se pueda tocar, leer ni buscar: se desvanece recortada con la cortina y se quita. Va
+         * debajo del menú, así lo que regresa pasa por encima de ella.
+         */
+        fadeOut(menu, items) {
+            const leaving = new Set(items.filter((item) => isRendered(item) && !this.staysWhenClosed(item)));
+
+            if (leaving.size === 0) {
+                return;
+            }
+
+            // Clonar copia también lo escrito en el buscador.
+            const copy = menu.cloneNode(true);
+            const twins = copy.querySelectorAll('[data-menu-flip]');
+
+            items.forEach((item, index) => {
+                if (!leaving.has(item)) {
+                    twins[index].style.visibility = 'hidden';
+                } else if (item.getAnimations().length > 0) {
+                    // A medio abrir: la copia sale de donde iba, no de donde terminaría.
+                    const { opacity, transform } = getComputedStyle(item);
+                    twins[index].style.opacity = opacity;
+                    twins[index].style.transform = transform;
+                }
+            });
+
+            // Sin ids, nombres accesibles, enlaces ni directivas: nada que una prueba o un lector confunda con el menú.
+            [copy, ...copy.querySelectorAll('*')].forEach((element) => {
+                if (!(element instanceof SVGElement)) {
+                    [...element.attributes]
+                        .filter(({ name }) => !GHOST_ATTRIBUTES.has(name))
+                        .forEach(({ name }) => element.removeAttribute(name));
+                }
+            });
+
+            // Las utilidades del menú abierto leen data-menu="open" de un ancestro.
+            const ghost = document.createElement('div');
+            ghost.dataset.menu = 'open';
+            ghost.dataset.menuGhost = '';
+            ghost.inert = true;
+            ghost.append(copy);
+            menu.before(ghost);
+            copy.scrollTop = menu.scrollTop;
+
+            const curtain = getComputedStyle(document.body).getPropertyValue('--panel-clip').trim();
+            copy.animate([{ clipPath: 'inset(0)' }, { clipPath: curtain }], { duration: RETURN_MS, easing: settleEasing() });
+            // Cancelada (al cambiar de página a medio cerrar) también se quita; no es un error.
+            copy.animate([{ opacity: 1 }, { opacity: 0 }], { duration: LEAVE_MS, easing: 'ease-out', fill: 'forwards' })
+                .finished.catch(() => {})
+                .finally(() => ghost.remove());
         },
 
         /** Cambia de estado sin animar: <body data-menu>, la liebre, el contenido y la búsqueda. */
@@ -368,6 +446,7 @@ document.addEventListener('alpine:init', () => {
             this.timers.forEach((timer) => clearTimeout(timer));
             this.timers = [];
             document.querySelectorAll('#nexus-menu [data-menu-flip]').forEach((item) => item.getAnimations().forEach((animation) => animation.cancel()));
+            document.querySelectorAll('[data-menu-ghost]').forEach((ghost) => ghost.remove());
             this.apply(false);
             this.menuTarget = false;
             this.cardOpen = false;
