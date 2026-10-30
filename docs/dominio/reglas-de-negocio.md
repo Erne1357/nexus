@@ -122,6 +122,14 @@ Borrar departamentos (confirmado el 29 de octubre de 2026): un departamento solo
 
 Borrar departamentos con salones (S10, supuesto por confirmar): un departamento que es dueño de salones no borrados, activos o no, no se borra; Facilities lo veta con «Es dueño de N salones.» mediante `DepartmentDeleting`. Se desactiva, o se reasignan sus salones.
 
+Desactivar un edificio con salones activos (supuesto por confirmar): un edificio se puede desactivar aunque tenga salones activos; los salones no cambian.
+
+Edificio inactivo en un salón (supuesto por confirmar): un edificio desactivado sigue disponible para elegirse como edificio de un salón y aparece marcado «(inactivo)».
+
+Características de un salón (supuesto por confirmar): son una lista libre de etiquetas que se escriben separadas por comas; se recortan, y se quitan las vacías y las repetidas sin distinguir mayúsculas.
+
+Bloqueos que se repiten o empalman (supuesto por confirmar): un bloqueo de un salón puede repetir o empalmarse con otro bloqueo del mismo salón, porque no tiene clave natural.
+
 Borrar carreras (confirmado el 29 de octubre de 2026): una carrera solo se borra, de forma lógica, si no tiene planes de estudio, ni siquiera borrados; si no, se desactiva. Al borrarla dejan de contar los alcances de sus coordinadores (igual que con los departamentos; confirmado el 29 de octubre de 2026).
 
 Oferta por campus: la oferta de una carrera inactiva nace inactiva (confirmado el 29 de octubre de 2026, la misma regla de la importación). Ofrecer crea, restaura o activa la fila de `career_campus` del campus y dejar de ofrecer la desactiva; ofrecer nunca desactiva una oferta activa (supuesto por confirmar).
