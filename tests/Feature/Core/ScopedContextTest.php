@@ -103,6 +103,8 @@ describe('alcance por rol', function () {
 
         expect($context->has(Role::Docente))->toBeTrue()
             ->and($context->canAccessCampus($this->c2))->toBeTrue()
+            ->and($context->canAccessCampus($this->c1))->toBeFalse()
+            ->and($context->campuses()->pluck('code')->all())->toBe(['C2'])
             ->and($context->isAdmin())->toBeFalse()
             ->and(collect($management)->contains(fn (Role $role): bool => $context->has($role)))->toBeFalse()
             ->and($context->covers($management, $this->c2, department: fakeKey(10), career: fakeKey(20)))->toBeFalse();
@@ -342,12 +344,51 @@ describe('alcance de todo el Tec (sin campus)', function () {
             ->and($context->canAccessCampus($this->c1))->toBeTrue();
     });
 
+    it('la credencial de un coordinador de C2 que también es docente de todo el Tec ofrece solo C2, aunque da clase en cualquiera', function () {
+        $context = scopedContextOf(User::factory()
+            ->withRole(Role::Docente)
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create());
+
+        expect($context->campuses()->pluck('code')->all())->toBe(['C2'])
+            ->and($context->activeCampus()?->is($this->c2))->toBeTrue()
+            ->and($context->canAccessCampus($this->c1))->toBeTrue();
+    });
+
+    it('con otro rol de todo el Tec, la credencial de un docente de todo el Tec ofrece todos los campus activos', function () {
+        $context = scopedContextOf(User::factory()
+            ->withRole(Role::Docente)
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+            ->create());
+
+        expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2'])
+            ->and($context->activeCampus())->toBeNull();
+    });
+
     it('un alcance sin campus de un usuario inactivo no cuenta', function () {
         $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion)->create(['is_active' => false]));
 
         expect($context->has(Role::Subdireccion))->toBeFalse()
             ->and($context->covers(Role::Subdireccion, $this->c2))->toBeFalse()
             ->and($context->coversDepartment(Role::Subdireccion, fakeKey(10)))->toBeFalse()
+            ->and($context->canAccessCampus($this->c2))->toBeFalse()
+            ->and($context->campuses())->toBeEmpty();
+    });
+
+    it('no toma los alcances de otro usuario: los alcances sin campus o de campus activo son solo los suyos', function () {
+        $withoutScopes = User::factory()->create()->assignRole([Role::Subdireccion, Role::JefeDepartamento]);
+        User::factory()
+            ->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+            ->create();
+
+        $context = scopedContextOf($withoutScopes);
+
+        expect($context->has(Role::Subdireccion))->toBeFalse()
+            ->and($context->has(Role::JefeDepartamento))->toBeFalse()
+            ->and($context->scopes())->toBeEmpty()
+            ->and($context->covers([Role::Subdireccion, Role::JefeDepartamento], $this->c2, department: fakeKey(10)))->toBeFalse()
+            ->and($context->coversDepartment([Role::Subdireccion, Role::JefeDepartamento], fakeKey(10)))->toBeFalse()
             ->and($context->canAccessCampus($this->c2))->toBeFalse()
             ->and($context->campuses())->toBeEmpty();
     });
