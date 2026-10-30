@@ -3,6 +3,8 @@
 namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\DefaultPassword;
+use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -17,13 +19,15 @@ use Laravel\Fortify\Contracts\UpdatesUserPasswords;
  *
  * A diferencia de las demás Actions, valida su entrada: el controlador de Fortify le pasa la
  * petición sin validar. Exige la contraseña actual y una nueva confirmada, distinta de la actual
- * y conforme a Password::defaults() (FortifyServiceProvider de Core). Rota el remember token,
- * así que ninguna cookie de "recordarme" anterior vuelve a servir; las demás sesiones abiertas
+ * y conforme a Password::defaults() (FortifyServiceProvider de Core). Rechaza también la contraseña
+ * por defecto (DefaultPassword) como contraseña nueva. Rota el remember token, así que ninguna cookie de "recordarme" anterior vuelve a servir; las demás sesiones abiertas
  * las cierra AuthenticateSession en su siguiente petición. La bitácora registra el cambio, nunca
  * la contraseña.
  */
 final class UpdateUserPassword implements UpdatesUserPasswords
 {
+    public function __construct(private readonly DefaultPassword $defaultPassword) {}
+
     /**
      * @param  array<string, mixed>  $input
      *
@@ -33,7 +37,7 @@ final class UpdateUserPassword implements UpdatesUserPasswords
     {
         $validated = Validator::make($input, [
             'current_password' => ['required', 'string', 'current_password:'.config('fortify.guard')],
-            'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password'],
+            'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password', $this->notTheDefaultPassword()],
         ])->validate();
 
         DB::transaction(function () use ($user, $validated): void {
@@ -50,5 +54,14 @@ final class UpdateUserPassword implements UpdatesUserPasswords
                 ->event('password-changed')
                 ->log('Cambió su contraseña');
         });
+    }
+
+    private function notTheDefaultPassword(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            if (is_string($value) && $this->defaultPassword->matches($value)) {
+                $fail('No puedes usar la contraseña por defecto.');
+            }
+        };
     }
 }

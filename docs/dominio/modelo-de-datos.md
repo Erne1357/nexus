@@ -82,10 +82,12 @@ Nada se borra físicamente en Academic: todas sus tablas llevan soft deletes, ta
 
 | Tabla | Campos clave | Notas |
 |---|---|---|
-| `buildings` | `campus_id`, `code`, `name`, `is_active` | |
-| `rooms` | `building_id`, `code`, `name`, `type` (enum: `aula`, `laboratorio`, `taller`, `sala_computo`, `auditorio`), `capacity`, `department_id?` (dueño), `features` (json), `is_active` | `capacity` es el dato que más cambia y que los jefes validan cada periodo. |
-| `room_blocks` | `room_id`, `term_id?`, `day`, `starts_at`, `ends_at`, `reason` | Bloqueos (mantenimiento, reservado). |
-| `subject_room_defaults` | `subject_id`, `campus_id`, `room_id`, `priority`, `source` (`manual` / `historial`) | Salón por defecto o sugerido. El historial se alimenta de cargas anteriores. |
+| `buildings` | `campus_id`, `code`, `name`, `is_active`, `deleted_at` | `code` única por campus, también contra un edificio borrado. Única también (`id`, `campus_id`) para la llave compuesta de `rooms`. |
+| `rooms` | `campus_id`, `building_id`, `code`, `name?`, `type` (enum: `aula`, `laboratorio`, `taller`, `sala_computo`, `auditorio`), `capacity` (> 0), `department_id?` (dueño), `features` (jsonb, lista), `is_active`, `deleted_at` | `campus_id` explícito, como toda tabla de la carga académica; la llave compuesta (`building_id`, `campus_id`) a `buildings` impide que el campus se separe del de su edificio. `code` única por campus, también contra un salón borrado. Única también (`id`, `campus_id`) para `subject_room_defaults`. `capacity` es el dato que más cambia y que los jefes validan cada periodo. |
+| `room_blocks` | `room_id`, `term_id?` (nulo: todos los periodos), `day` (1 = lunes a 6 = sábado, como `campuses.settings.days`), `starts_at`, `ends_at` (`time`, `ends_at > starts_at`), `reason`, `deleted_at` | Bloqueos (mantenimiento, reservado). |
+| `subject_room_defaults` | `subject_id`, `campus_id`, `room_id`, `priority` (≥ 1), `source` (`manual` / `historial`), `deleted_at` | Salón por defecto o sugerido. Única por materia, campus y salón, también contra una fila borrada; la llave compuesta (`room_id`, `campus_id`) a `rooms` exige un salón del campus. Solo modelo y factory en la fase 1: la llenan la fase 3 y el historial de cargas anteriores. |
+
+Facilities lleva borrado lógico en todas sus tablas; una clave natural la sigue ocupando un registro borrado.
 
 ## Faculty
 
