@@ -312,13 +312,15 @@ new #[Title('Retícula del plan')] class extends Component
 
         $byId = array_column($rows, null, 'subject_id');
         $seriation = fn (array $requisites): array => array_column(array_filter($requisites, fn (array $requisite): bool => $requisite['kind'] === 'seriacion'), 'subject_id');
+        // Se salta un requisito que no es materia de esta retícula: PlanGridEditorQuery ya los filtra, pero el
+        // recorrido no depende de eso.
         $walk = function (string $start, string $direction) use ($byId, $seriation): array {
             $seen = [];
             $pending = [$start];
 
             while ($pending !== []) {
-                foreach ($seriation($byId[array_pop($pending)][$direction]) as $next) {
-                    if (! isset($seen[$next])) {
+                foreach ($seriation($byId[array_pop($pending)][$direction] ?? []) as $next) {
+                    if (isset($byId[$next]) && ! isset($seen[$next])) {
                         $seen[$next] = true;
                         $pending[] = $next;
                     }

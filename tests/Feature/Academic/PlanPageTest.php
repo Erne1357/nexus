@@ -178,6 +178,21 @@ describe('admin', function () {
             ->assertSet('panel', 'specialties');
     });
 
+    it('el resaltado se salta un requisito que no está en la retícula en lugar de fallar', function () {
+        $requisite = fn (string $id, string $code): array => ['prerequisite_id' => fakeKey(1), 'subject_id' => $id, 'code' => $code, 'name' => "Materia {$code}", 'semester' => 1, 'kind' => 'seriacion'];
+        $rows = [
+            ['subject_id' => 'a', 'code' => 'A-1', 'name' => 'Materia A-1', 'chain' => null, 'requires' => [$requisite('b', 'B-1'), $requisite('fuera', 'X-1')], 'required_by' => []],
+            ['subject_id' => 'b', 'code' => 'B-1', 'name' => 'Materia B-1', 'chain' => null, 'requires' => [$requisite('otra-fuera', 'Y-1')], 'required_by' => [$requisite('a', 'A-1'), $requisite('fuera', 'X-1')]],
+        ];
+        $component = planPage($this->admin, $this->plan)->instance();
+
+        // highlight() es privado: se llama con una retícula armada a mano, que PlanGridEditorQuery nunca da.
+        $highlight = (fn (): array => $this->highlight(['chains' => []], $rows, $rows[0]))->call($component);
+
+        expect($highlight['onChain'])->toBe(['a' => true, 'b' => true])
+            ->and($highlight['focused'])->toBeTrue();
+    });
+
     it('una fila de otro plan, quitada o con un id que no es uuid no existe', function (Closure $id) {
         planPage($this->admin, $this->plan)->call('select', $id($this))->assertNotFound();
     })->with([
