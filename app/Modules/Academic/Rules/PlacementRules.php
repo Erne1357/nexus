@@ -13,11 +13,10 @@ use Illuminate\Validation\ValidationException;
  * (docs/dominio/modelo-de-datos.md, `study_plan_subjects`; reglas-de-negocio.md, "Retícula del plan"). Cada
  * regla rota es una ValidationException sobre su campo.
  *
- * - `semester`: de 1 a `semesters_count` del plan; si el plan no los tiene capturados, de 1 a 12 (supuesto por
- *   confirmar).
- * - `subject_id`: una materia del catálogo, sin borrar y activa (supuesto por confirmar), que todavía no está en
+ * - `semester`: de 1 a `semesters_count` del plan; si el plan no los tiene capturados, de 1 a 12 (confirmado el 29 de octubre de 2026).
+ * - `subject_id`: una materia del catálogo, sin borrar y activa (confirmado el 29 de octubre de 2026), que todavía no está en
  *   la retícula del plan.
- * - `specialty_id`: una especialidad del mismo plan, sin quitar y activa (supuesto por confirmar); null es el
+ * - `specialty_id`: una especialidad del mismo plan, sin quitar y activa (confirmado el 29 de octubre de 2026); null es el
  *   tronco común.
  *
  * Lo que lee para decidir lo lee dentro de la transacción de la Action y lo bloquea para compartir
@@ -26,7 +25,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class PlacementRules
 {
-    /** Hasta qué semestre se pone una materia en un plan sin semestres capturados (supuesto por confirmar). */
+    /** Hasta qué semestre se pone una materia en un plan sin semestres capturados (confirmado el 29 de octubre de 2026). */
     public const int SEMESTERS_WITHOUT_COUNT = 12;
 
     /** El error de una especialidad que no es del plan, que se quitó o con un id que no es uuid. */

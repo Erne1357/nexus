@@ -12,7 +12,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Quita (borrado lógico) una especialidad de su plan. Solo una sin materias en la retícula: es la corrección
  * de una captura por error, porque quitar una especialidad de verdad «ya sería otro plan» (reglas-de-negocio.md,
- * "Especialidades"; S1, supuesto por confirmar). Con materias, una ValidationException sobre `specialty` que
+ * "Especialidades"; confirmado el 29 de octubre de 2026). Con materias, una ValidationException sobre `specialty` que
  * dice cuántas. Quién puede lo decide StudyPlanPolicy (`editGrid`) antes de llamarla.
  *
  * Vuelve a leer la especialidad con bloqueo (`lockForUpdate`), así las materias que cuenta son las de ese

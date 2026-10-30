@@ -11,8 +11,8 @@ use InvalidArgumentException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Cierra los alcances (`role_scopes`) de un departamento o una carrera que se borra (supuesto S2 de
- * reglas-de-negocio.md): Core no depende de Academic, así que lo hace quien borra. Los alcances
+ * Cierra los alcances (`role_scopes`) de un departamento o una carrera que se borra (reglas-de-negocio.md,
+ * confirmado el 29 de octubre de 2026): Core no depende de Academic, así que lo hace quien borra. Los alcances
  * vigentes que empezaron antes de hoy terminan ayer (`valid_to`); los que empiezan hoy o después se
  * eliminan, porque el CHECK `valid_to >= valid_from` impide cerrarlos antes de empezar; los ya
  * vencidos no se tocan. Cada cambio deja su entrada en la bitácora sobre el usuario del alcance.

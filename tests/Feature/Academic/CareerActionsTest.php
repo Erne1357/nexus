@@ -24,7 +24,7 @@ use Spatie\Activitylog\Models\Activity;
 | Actions de Carrera. Crear y editar hacen cumplir la clave normalizada y única, también entre las
 | borradas, y un departamento que existe; SetCareerOffering ofrece, deja de ofrecer y restaura la
 | oferta de un campus (la de una carrera inactiva nace inactiva, como en la importación); borrar solo
-| si no tiene planes, ni siquiera borrados, y cierra los alcances de sus coordinadores (supuesto S2).
+| si no tiene planes, ni siquiera borrados, y cierra los alcances de sus coordinadores (confirmado el 29 de octubre de 2026).
 */
 
 beforeEach(function () {

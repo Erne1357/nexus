@@ -118,7 +118,7 @@ describe('PlaceSubject', function () {
             ->and(StudyPlanSubject::count())->toBe(0);
     })->with(['cero' => 0, 'negativo' => -1, 'después del último' => 10]);
 
-    it('sin semestres capturados, el semestre llega hasta 12 (supuesto por confirmar)', function () {
+    it('sin semestres capturados, el semestre llega hasta 12', function () {
         $this->plan->update(['semesters_count' => null]);
 
         expect(placeSubject($this->plan, $this->subject, 12)->semester)->toBe(12)

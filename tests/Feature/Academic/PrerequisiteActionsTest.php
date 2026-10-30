@@ -180,7 +180,7 @@ describe('AddPrerequisite', function () {
             ->and(SubjectPrerequisite::count())->toBe(0);
     });
 
-    it('un requisito que ya pide es error, sea del tipo que sea, y no cambia nada (supuesto por confirmar)', function (PrerequisiteKind $kind) {
+    it('un requisito que ya pide es error, sea del tipo que sea, y no cambia nada', function (PrerequisiteKind $kind) {
         Event::fake([CurriculumChanged::class]);
         seriate($this->plan, $this->integral, $this->calculus);
 
