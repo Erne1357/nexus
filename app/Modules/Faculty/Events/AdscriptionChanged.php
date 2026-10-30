@@ -8,7 +8,8 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Cambió una adscripción de un docente: se agregó o se restauró una que se había quitado (AddAdscription). Sale
+ * Cambió una adscripción de un docente: se agregó o se restauró una que se había quitado (AddAdscription), se quitó
+ * (RemoveAdscription) o cambió la principal (SetPrimaryAdscription). Sale
  * después del commit.
  */
 final class AdscriptionChanged implements ShouldDispatchAfterCommit

@@ -243,6 +243,7 @@ El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados
 | Listado con filtros, tabla y acción principal | Todos los catálogos | **Decidido:** la anatomía de arriba |
 | Formulario en modal | Catálogos | **Decidido:** modal para crear y editar; página completa si no cabe o tiene pasos |
 | Asistente de pasos | Importación | **Decidido (tarea 1.2):** `x-steps` de MaryUI como indicador, con los pasos hechos en `primary`; el contenido de cada paso en una `x-card` debajo. Lo que corre en la cola se muestra en la misma tarjeta con `x-progress` (indeterminado si no se sabe el total) y su texto, y la URL guarda en qué va (`?lote=`) para retomarlo |
+| Ficha del docente | Docentes › Ficha | **Decidido por el usuario el 30 de octubre de 2026 (tarea 1.13):** variante A, pestañas; ver "Ficha del docente", abajo |
 | Retícula del alumno | Ficha del alumno; propuesta del coordinador (fase 2) | **Decidido (tarea 1.6):** ver "Retícula del alumno", abajo |
 | Editor de retícula del plan | Retícula de cada plan de estudios (Académico › Planes de estudio) | **Decidido (tarea 1.8):** variante A, columnas por semestre y panel lateral; ver "Retícula del plan (editor)", abajo |
 | Inicio por rol | Inicio | Palabra gigante y mosaicos vivos (por diseñar) |
@@ -251,6 +252,14 @@ El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados
 | Ranking con desglose | Asignación docente | Cómo presentar el desglose sin exponer evaluaciones a quien no debe |
 | Tablero de estado | Choques, avance de validación, carga por docente | Jerarquía visual de duro vs blando |
 | Consulta pública | Horarios publicados | Impresión y PDF |
+
+### Ficha del docente
+Forma de la ficha del alumno, decidida el 30 de octubre de 2026 (variante A, pestañas), en [`teacher.blade.php`](app/Modules/Faculty/Livewire/pages/teacher/teacher.blade.php):
+- **Encabezado:** enlace «Docentes», nombre, número en Mono y estado; debajo, adscripción principal, grado e ingreso. A la derecha «Editar datos» (`btn-outline`) y «Acciones» (`x-core::row-menu`: baja o reactivación y «Restablecer contraseña», deshabilitada con su motivo para quien no es admin).
+- **Cifras:** franja de superficie blanca con filete: horas base del periodo activo, plazas que cuentan y adscripciones; en celular se apilan.
+- **Pestañas** `tabs tabs-border`: Datos, Plazas, Disponibilidad, Perfil e Historial, la activa en `?tab=`. Las que aún no tienen contenido muestran un estado vacío con borde punteado.
+- **Datos:** dos columnas desde 1280 px (datos | adscripciones). **Plazas:** una lista de renglones en cuadrícula (tipo, horas, desde, hasta, estado, acciones) que se apila debajo de 768 px, con las horas base del periodo al pie. Fechas `dd/mm/aaaa`.
+- Agregar o editar una plaza y quitar una adscripción o plaza se hacen en un `x-modal`; lo que no se puede quitar queda deshabilitado con su motivo.
 
 ### Retícula del alumno
 La ficha del alumno muestra su retícula como la del SII, que es la que conocen alumnos y coordinadores (aprobado el 29 de octubre de 2026, maquetas de la tarea 1.6). Desde el 30 de octubre de 2026 es una **cuadrícula perfecta**: los mosaicos tienen un tamaño fijo, así un plan con más o menos materias se ve parecido y las dos retículas se parecen lo más posible (pedido por el usuario).

@@ -517,3 +517,14 @@ describe('menú', function () {
             ->and(seesTeachersMenu($docente))->toBeFalse();
     });
 });
+
+it('cada docente de la lista enlaza a su ficha, y el menú de Docentes se queda marcado dentro de ella', function () {
+    $response = $this->actingAs($this->admin)->get(route('faculty.teachers'))->assertOk();
+    $link = domOf($response)->querySelector('a[data-testid="record-1000001"]');
+
+    expect($link)->not->toBeNull()
+        ->and($link->getAttribute('href'))->toBe(route('faculty.teachers.show', $this->ana->id));
+
+    $this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk();
+    expect(collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))->first(fn (NavigationItem $item): bool => $item->label === 'Docentes')->owns('faculty.teachers.show'))->toBeTrue();
+});

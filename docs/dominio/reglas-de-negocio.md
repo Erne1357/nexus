@@ -117,7 +117,7 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Publicar | `subdireccion`, o `jefe_departamento` si el campus no exige visto bueno | carga `closed` o `approved` |
 | Re-análisis | `coordinador`, `jefe_departamento` | nueva importación de kardex (R2) |
 
-Adscripciones de docentes (S8 y S9, supuestos por confirmar): una adscripción no se quita si es la única (para eso está la baja) ni si es la principal (primero se elige otra), y el jefe solo quita la de su departamento y campus. Dar de alta un docente con un número de empleado que ya existe no crea otro: la pantalla ofrece adscribirlo al departamento y campus de quien lo da de alta, sin cambiar sus datos, y si esa adscripción se había quitado, la restaura.
+Adscripciones de docentes (S8 y S9, supuestos por confirmar): una adscripción no se quita si es la única (para eso está la baja) ni si es la principal (primero se elige otra), y el jefe solo quita la de su departamento y campus; quien cubre al docente puede cambiar cuál es la principal. Si al quitar una adscripción el jefe deja de cubrir al docente, la ficha lo regresa a la lista. Dar de alta un docente con un número de empleado que ya existe no crea otro: la pantalla ofrece adscribirlo al departamento y campus de quien lo da de alta, sin cambiar sus datos, y si esa adscripción se había quitado, la restaura.
 
 Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se borra. Si solo se desactiva, sigue contando, porque una carrera inactiva puede tener todavía alumnos y grupos que atender, igual que un plan inactivo (confirmado el 29 de octubre de 2026). Core no depende de Academic, así que lo resuelve la tarea 1.8 al borrar.
 

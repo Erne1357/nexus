@@ -10,11 +10,13 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use Dom\Element;
 use Dom\HTMLDocument;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
 use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
+use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
 /*
@@ -133,4 +135,14 @@ function domOf(TestResponse|Testable|string $html): HTMLDocument
 function textOf(?Element $element): string
 {
     return trim((string) preg_replace('/\s+/u', ' ', $element?->textContent ?? ''));
+}
+
+/**
+ * La bitácora escrita después del arranque de la prueba (la bitácora es inmutable: no se vacía).
+ *
+ * @return Builder<Activity>
+ */
+function activitySince(): Builder
+{
+    return Activity::query()->where('id', '>', test()->activityBase);
 }
