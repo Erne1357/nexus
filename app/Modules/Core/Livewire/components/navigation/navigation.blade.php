@@ -62,18 +62,23 @@
                 @if ($area['current']) data-current @endif
                 class="contents"
             >
-                {{-- Icono del área: en la franja cerrado, encabezado de su columna abierto. Un clic abre el menú. --}}
-                <span
+                {{--
+                    Icono del área: en la franja cerrado, encabezado de su columna abierto. Lleva a la última
+                    página que visitaste del área o a su principal; no abre el menú (eso es de la liebre).
+                    Cerrado, su nombre sale en un tooltip a la derecha.
+                --}}
+                <a
+                    href="{{ $area['href'] }}"
+                    wire:navigate
                     data-menu-flip="icon"
                     data-keep
-                    aria-hidden="true"
-                    title="{{ $area['area']->label() }}"
+                    aria-label="{{ $area['area']->label() }}"
+                    data-tip="{{ $area['area']->label() }}"
                     style="{{ $area['style'] }}"
-                    x-on:click="openMenu()"
-                    class="grid h-10 w-11 place-items-center place-self-center rounded-lg text-secondary-muted transition-colors duration-300 ease-settle [grid-column:1] [grid-row:var(--c)] [--open-col:var(--c)] [--open-row:3] in-data-current:bg-(--current-icon) in-data-current:text-base-content max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:var(--base-t)] in-data-[menu=closed]:cursor-pointer in-data-[menu=open]:w-[30px] in-data-[menu=open]:justify-self-start in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] max-md:mt-3 max-md:w-10 max-md:[grid-area:auto]"
+                    class="tooltip tooltip-right grid h-10 w-11 place-items-center place-self-center rounded-lg text-secondary-muted transition-colors duration-300 ease-settle [grid-column:1] [grid-row:var(--c)] [--open-col:var(--c)] [--open-row:3] hover:text-base-content focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary in-data-current:bg-(--current-icon) in-data-current:text-base-content max-desktop:[--open-col:var(--col-t)] max-desktop:[--open-row:var(--base-t)] in-data-[menu=open]:w-[30px] in-data-[menu=open]:justify-self-start in-data-[menu=open]:[grid-column:var(--open-col)] in-data-[menu=open]:[grid-row:var(--open-row)] in-data-[menu=open]:before:hidden in-data-[menu=open]:after:hidden max-md:mt-3 max-md:w-10 max-md:[grid-area:auto]"
                 >
                     <x-icon :name="$area['area']->icon()" class="w-[18px] h-[18px]" />
-                </span>
+                </a>
 
                 {{-- Nombre del área: el grupo ya lo lleva en aria-label. --}}
                 <span

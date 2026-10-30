@@ -11,7 +11,8 @@ use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 | Layout en el navegador. DemoCatalog (tests/Fixtures/Modules) agrega "Saludo", para coordinadores,
 | en Servicios escolares, y "Elementos", solo para el admin, en Recursos humanos, a "Inicio" de Core
 | (Académico). Cerrado, el menú muestra el área de la pantalla; las demás se ven al abrirlo con la
-| liebre. El campus, el periodo y el tema están en la tarjeta de la credencial.
+| liebre. Los iconos de área no abren el menú: llevan a la última página que visitaste del área. El
+| campus, el periodo y el tema están en la tarjeta de la credencial.
 */
 
 beforeEach(function () {
@@ -62,6 +63,23 @@ it('navegación muestra solo lo permitido por rol', function () {
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Saludo')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Elementos')
         ->assertSee('Administración')
+        ->assertNoJavaScriptErrors();
+});
+
+it('el icono de otra área lleva a la última página que visitaste de ella, con el menú cerrado; el menú lo abre la liebre', function () {
+    $page = signInFromBrowser('admin');
+
+    $page->navigate('/campus?search=Campus')
+        ->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
+        ->click('[data-menu-area="datos"] [data-menu-flip="icon"]')
+        ->assertPathIs('/imports')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->click('[data-menu-area="academico"] [data-menu-flip="icon"]')
+        ->assertPathIs('/campus')
+        ->assertQueryStringHas('search', 'Campus')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->click('@hare')
+        ->assertScript('document.body.dataset.menu', 'open')
         ->assertNoJavaScriptErrors();
 });
 
