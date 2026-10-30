@@ -5,9 +5,9 @@ namespace App\Modules\Academic\Enums;
 use App\Modules\Core\Enums\Role;
 
 /**
- * Qué dirige un jefe de departamento en un campus (`department_heads.kind`). Hay un solo jefe vigente por
- * departamento y campus; de jefe de proyecto docente puede haber varios (confirmado el 29 de octubre de
- * 2026).
+ * Qué cargo tiene alguien en un departamento (`department_heads.kind`). El jefe es uno vigente por departamento para
+ * todo el Tec, sin campus (confirmado el 30 de octubre de 2026). De jefe de proyecto docente puede haber varios
+ * (confirmado el 29 de octubre de 2026), cada uno en un campus (supuesto por confirmar).
  */
 enum DepartmentHeadKind: string
 {

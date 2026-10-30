@@ -12,6 +12,12 @@ La migración de `department_heads` corre `create extension if not exists btree_
 
 Las dos usan `daterange(valid_from, valid_to, '[]')`, con los dos extremos incluidos y `valid_to` nulo como abierto, y no cuentan las filas borradas.
 
+**Cambio del 30 de octubre de 2026:** el jefe pasó a ser uno por departamento para todo el Tec. La migración `2026_10_30_000101` redefine las dos exclusiones:
+- `department_heads_one_jefe` ya no lleva campus;
+- `department_heads_no_duplicate` aplica solo al jefe de proyecto docente, por departamento, campus y persona.
+
+La decisión de usar `btree_gist` no cambia.
+
 ## Consecuencias
 - Toda base de Nexus (desarrollo, pruebas, CI y producción) necesita la extensión. Viene con la imagen oficial de PostgreSQL 18 y es *trusted* desde PostgreSQL 13, así que basta el dueño de la base, sin superusuario.
 - La fase 3 la reutiliza para los empalmes de salón y de docente (`docs/dominio/modelo-de-datos.md`, "Scheduling").
