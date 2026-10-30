@@ -57,7 +57,7 @@ it('no lleva textos de ayuda: la retícula se explica con su leyenda y el punter
 
 it('los encabezados de semestre solo dicen el semestre y cuántas acreditó; el suyo lleva su fondo y lo dice a lectores de pantalla', function () {
     $page = domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id]));
-    $header = fn (int $semester) => $page->querySelector('section[data-semester="'.$semester.'"] h3');
+    $header = fn (int $semester) => $page->querySelector('section[data-semester="'.$semester.'"] [data-semester-header]');
 
     expect(textOf($header(1)))->toBe('Semestre 1, su semestre 1 de 1')
         ->and(textOf($header(1)->querySelector('.sr-only')))->toBe(', su semestre')

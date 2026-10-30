@@ -78,7 +78,7 @@
                             <x-slot:actions>
                                 <x-button
                                     icon="o-plus"
-                                    class="btn-ghost btn-xs btn-square -mt-1 -mr-1 shrink-0 text-neutral hover:text-base-content"
+                                    class="btn-ghost btn-xs btn-square -my-1 -mr-1 shrink-0 text-neutral hover:text-base-content"
                                     tooltip-left="Agregar materia"
                                     wire:click="openAdd({{ $semester }})"
                                     spinner="openAdd({{ $semester }})"

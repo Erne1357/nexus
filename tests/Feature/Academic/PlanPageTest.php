@@ -106,7 +106,7 @@ describe('admin', function () {
     it('muestra cada semestre con sus materias, el tronco común antes que cada especialidad', function () {
         $page = domOf(planPage($this->admin, $this->plan));
         $semester = fn (int $number): string => textOf($page->querySelector('[data-semester="'.$number.'"]'));
-        $header = fn (int $number): string => textOf($page->querySelector('[data-semester="'.$number.'"] h3'));
+        $header = fn (int $number): string => textOf($page->querySelector('[data-semester="'.$number.'"] [data-semester-header]'));
 
         expect($page->querySelectorAll('[data-testid="plan-grid"] > section'))->toHaveCount(4)
             ->and($header(1))->toBe('Semestre 1 5 cr')
