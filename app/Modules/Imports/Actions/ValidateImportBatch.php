@@ -29,7 +29,7 @@ use Throwable;
  * Una fila sin error que repite la clave natural de otra anterior sin error del mismo archivo es error
  * y dice en qué fila está la primera: la que se aplica. Se encuentra en SQL por `key_hash` (la clave
  * como texto, así que 20111234 número y "20111234" texto son la misma), para no tener en memoria las
- * claves de un kardex completo. Al terminar, el lote queda `validated` con sus cuentas (las filas con
+ * claves de un kardex completo. Una parte vacía de la clave (el campus del historial) cuenta como un valor más. Al terminar, el lote queda `validated` con sus cuentas (las filas con
  * advertencia cuentan como válidas).
  *
  * Un archivo que no se puede leer, o sin la columna de la clave natural, deja el lote `failed` con el
@@ -184,7 +184,7 @@ final class ValidateImportBatch
             'errors' => $this->json((object) $issues->errors),
             'warnings' => $this->json((object) $issues->warnings),
             'status' => $status->value,
-            'key_hash' => in_array(null, $key, true) ? null : hash('sha256', $this->json(array_map(strval(...), array_values($key)))),
+            'key_hash' => hash('sha256', $this->json(array_map(fn (mixed $value): ?string => $value === null ? null : (string) $value, array_values($key)))),
             'created_at' => now(),
             'updated_at' => now(),
         ];

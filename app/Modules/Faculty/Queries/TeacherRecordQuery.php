@@ -121,7 +121,8 @@ final class TeacherRecordQuery
 
         return $qualifications
             ->each(fn (TeacherSubjectQualification $qualification) => $qualification->setAttribute('taught_count', (int) ($taught[$qualification->subject_id] ?? 0)))
-            ->sortBy([[fn (TeacherSubjectQualification $qualification): int => $qualification->level === QualificationLevel::Preferente ? 0 : 1, 'asc'], [fn (TeacherSubjectQualification $qualification): string => (string) $qualification->subject?->code, 'asc']])
+            ->sort(fn (TeacherSubjectQualification $a, TeacherSubjectQualification $b): int => [$a->level === QualificationLevel::Preferente ? 0 : 1, (string) $a->subject?->code, $a->id]
+                <=> [$b->level === QualificationLevel::Preferente ? 0 : 1, (string) $b->subject?->code, $b->id])
             ->values();
     }
 
@@ -160,13 +161,8 @@ final class TeacherRecordQuery
                 'campus' => fn (BelongsTo $campus) => $campus->withTrashed()->select(['id', 'code']),
             ])
             ->get()
-            ->sortBy([
-                ['term_code', 'asc'],
-                [fn (TeacherSubjectHistory $row): string => (string) $row->subject?->code, 'asc'],
-                ['group_code', 'asc'],
-                [fn (TeacherSubjectHistory $row): string => (string) $row->campus?->code, 'asc'],
-                ['id', 'asc'],
-            ])
+            ->sort(fn (TeacherSubjectHistory $a, TeacherSubjectHistory $b): int => [$a->term_code, (string) $a->subject?->code, $a->group_code, (string) $a->campus?->code, $a->id]
+                <=> [$b->term_code, (string) $b->subject?->code, $b->group_code, (string) $b->campus?->code, $b->id])
             ->groupBy('term_code');
         $evaluations = TeacherEvaluation::query()->where('teacher_id', $teacher->getKey())->orderBy('kind')->get()->groupBy('term_code');
         $codes = $groups->keys()->merge($evaluations->keys())->unique()->sort()->values();
