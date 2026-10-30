@@ -76,7 +76,7 @@
         @endif
         <p class="min-h-6 text-neutral" x-ref="info" aria-live="polite" data-testid="chain-info">Toca una materia o una cadena para resaltarla; Esc la quita.</p>
 
-        <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100 max-md:overflow-visible max-md:border-0 max-md:bg-transparent">
+        <div class="relative overflow-x-auto rounded-box border border-base-300 bg-base-100 max-md:overflow-visible max-md:border-0 max-md:bg-transparent">
             <div class="group/grid flex min-w-max max-md:min-w-0 max-md:flex-col max-md:gap-3 md:min-w-full" data-testid="student-grid" x-ref="grid">
                 @foreach ($record->semesters as $semester => $cells)
                     <section @class([
