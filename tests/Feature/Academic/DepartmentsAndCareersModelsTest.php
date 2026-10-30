@@ -37,13 +37,16 @@ it('una carrera lista los campus donde se ofrece, con su estado, sin los que se 
         ->and($campuses->pluck('pivot.is_active')->all())->toBe([true, false]);
 });
 
-it('un jefe pertenece a su departamento, su campus y su usuario, y el departamento lista sus jefes', function () {
+it('un jefe pertenece a su departamento y su usuario, sin campus, y el departamento lista sus jefes', function () {
     $head = DepartmentHead::factory()->create();
+    $projectLead = DepartmentHead::factory()->projectLead()->for($head->department)->create();
 
-    expect($head->department->heads->modelKeys())->toBe([$head->id])
-        ->and($head->campus)->toBeInstanceOf(Campus::class)
+    expect($head->department->heads->modelKeys())->toEqualCanonicalizing([$head->id, $projectLead->id])
+        ->and($head->campus)->toBeNull()
         ->and($head->user)->toBeInstanceOf(User::class)
-        ->and($head->kind)->toBe(DepartmentHeadKind::Jefe);
+        ->and($head->kind)->toBe(DepartmentHeadKind::Jefe)
+        ->and($projectLead->campus)->toBeInstanceOf(Campus::class)
+        ->and($projectLead->kind)->toBe(DepartmentHeadKind::JefeProyectoDocente);
 });
 
 it('currentOn da los jefes vigentes en una fecha, con el último día incluido', function () {

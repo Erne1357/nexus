@@ -270,7 +270,7 @@ it('dar de baja desactiva su usuario y termina su jefatura vigente', function ()
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
     syncAccess($teacher);
     $user = $teacher->fresh()->user;
-    $head = app(AppointDepartmentHead::class)->handle($this->sis, $this->c2, $user, DepartmentHeadKind::Jefe, today()->subMonth()->toImmutable());
+    $head = app(AppointDepartmentHead::class)->handle($this->sis, null, $user, DepartmentHeadKind::Jefe, today()->subMonth()->toImmutable());
     $past = DepartmentHead::factory()->projectLead()->create([
         'department_id' => $this->ind->id,
         'campus_id' => $this->c2->id,
@@ -310,7 +310,7 @@ it('la baja de un docente sin departamento desactiva su usuario', function () {
 it('un docente que también es admin queda activo al darlo de baja, pero su jefatura termina', function () {
     $user = User::factory()->admin()->create(['username' => '1234567']);
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567', 'user_id' => $user->id]);
-    $head = app(AppointDepartmentHead::class)->handle($this->sis, $this->c2, $user, DepartmentHeadKind::Jefe, today()->subMonth()->toImmutable());
+    $head = app(AppointDepartmentHead::class)->handle($this->sis, null, $user, DepartmentHeadKind::Jefe, today()->subMonth()->toImmutable());
 
     $teacher->update(['is_active' => false]);
 
@@ -417,7 +417,7 @@ it('la baja borra también la jefatura que todavía no empieza, y al reactivarlo
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
     syncAccess($teacher);
     $user = $teacher->fresh()->user;
-    $head = app(AppointDepartmentHead::class)->handle($this->sis, $this->c2, $user, DepartmentHeadKind::Jefe, today()->addDays(5)->toImmutable());
+    $head = app(AppointDepartmentHead::class)->handle($this->sis, null, $user, DepartmentHeadKind::Jefe, today()->addDays(5)->toImmutable());
 
     $teacher->update(['is_active' => false]);
 
