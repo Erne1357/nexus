@@ -326,8 +326,86 @@
                     @endforeach
                 </section>
             </div>
+
+            @if ($canAppoint)
+                <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-jef" data-testid="headships">
+                    <header class="flex flex-wrap items-center justify-between gap-2 border-b border-base-300 px-5 py-3">
+                        <h2 id="h-jef" class="text-lg font-bold">Jefaturas <span class="font-mono text-neutral">{{ $headships->count() }}</span></h2>
+                        @if ($record->teacher->is_active)
+                            <x-button label="Nombrar jefatura" icon="o-plus" class="btn-outline btn-sm" wire:click="createHeadship" spinner="createHeadship" data-testid="add-headship" />
+                        @else
+                            <span class="tooltip tooltip-left" data-tip="Un docente inactivo no se nombra: reactívalo primero.">
+                                <x-button label="Nombrar jefatura" icon="o-plus" class="btn-outline btn-sm" disabled data-testid="add-headship" aria-label="Nombrar jefatura: un docente inactivo no se nombra" />
+                            </span>
+                        @endif
+                    </header>
+
+                    @forelse ($headships as $head)
+                        @php($ended = $head->status === 'terminada')
+                        <div wire:key="headship-{{ $head->id }}" @class(['grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_8rem_8rem_9rem_auto]', 'text-neutral' => $ended])>
+                            <div class="min-w-0">
+                                <span @class(['font-semibold', 'font-normal' => $ended])>{{ $head->kind->label() }}</span>
+                                <span class="block text-sm text-neutral">{{ $head->department?->name }}{{ $head->campus ? ' · '.$head->campus->name : ' · Todo el Tec' }}</span>
+                            </div>
+                            <span class="max-md:col-span-2"><span class="text-neutral md:hidden">Desde </span>{{ $head->valid_from->format('d/m/Y') }}</span>
+                            <span class="max-md:col-span-2"><span class="text-neutral md:hidden">Hasta </span>{{ $head->valid_to?->format('d/m/Y') ?? 'Sin fecha' }}</span>
+                            <span class="max-md:col-span-2">
+                                <x-core::status-badge
+                                    :tone="['vigente' => 'success', 'por_empezar' => 'info', 'terminada' => 'neutral'][$head->status]"
+                                    :label="['vigente' => 'Vigente', 'por_empezar' => 'Por empezar', 'terminada' => 'Terminada'][$head->status]"
+                                />
+                            </span>
+                            <span class="flex justify-end max-md:col-span-2 max-md:justify-start max-md:-ms-3">
+                                @unless ($ended)
+                                    <x-button label="Terminar" icon="o-stop-circle" class="btn-ghost btn-sm text-error" wire:click="confirmEndHeadship('{{ $head->id }}')" spinner="confirmEndHeadship('{{ $head->id }}')" :data-testid="'end-headship-'.$head->id" aria-label="Terminar la jefatura de {{ $head->department?->name }}" />
+                                @endunless
+                            </span>
+                        </div>
+                    @empty
+                        <p class="px-5 py-6 text-center text-neutral" data-testid="headships-empty">No tiene jefaturas.</p>
+                    @endforelse
+                </section>
+            @endif
         @endif
     </div>
+
+    @if ($canAppoint)
+        <x-modal wire:model="showHeadshipModal" title="Nombrar jefatura" :subtitle="$record->teacher->name" box-class="max-w-2xl" separator>
+            <x-form wire:submit="saveHeadship" no-separator>
+                <div class="grid gap-4 md:grid-cols-2">
+                    <x-select label="Cargo" name="headKind" wire:model.live="headKind" :options="$headKinds" placeholder="Elige el cargo" />
+                    <x-select label="Departamento" name="headDepartmentId" wire:model="headDepartmentId" :options="$departmentOptions" placeholder="Elige el departamento" />
+                    @if ($headKind === \App\Modules\Academic\Enums\DepartmentHeadKind::JefeProyectoDocente->value)
+                        <x-select label="Campus" name="headCampusId" wire:model="headCampusId" :options="$campusOptions" placeholder="Elige el campus" />
+                    @elseif ($headKind !== '')
+                        <p class="self-end pb-2 text-sm text-neutral md:col-span-2">El jefe de departamento es de todo el Tec: no lleva campus.</p>
+                    @endif
+                    <x-input label="Desde" name="headFrom" wire:model="headFrom" type="date" />
+                    <x-input label="Hasta (si tiene)" name="headTo" wire:model="headTo" type="date" hint="Vacío es sin fecha de fin." />
+                </div>
+                @unless ($record->user)
+                    <p class="text-sm text-neutral">Todavía no tiene usuario: se le crea con la contraseña por defecto antes de nombrarlo.</p>
+                @endunless
+
+                <x-slot:actions>
+                    <x-button label="Cancelar" @click="$wire.showHeadshipModal = false" />
+                    <x-button label="Nombrar" type="submit" icon="o-check" class="btn-primary" spinner="saveHeadship" data-testid="save-headship" />
+                </x-slot:actions>
+            </x-form>
+        </x-modal>
+
+        <x-modal wire:model="showEndHeadshipModal" title="Terminar jefatura" box-class="max-w-lg" separator>
+            @if ($endingHeadship)
+                <p>¿Terminar la jefatura de <b>{{ $endingHeadship->kind->label() }}</b> de <b>{{ $record->teacher->name }}</b>? Su alcance termina con ella. Si todavía no empieza, se quita.</p>
+                <x-input label="Último día" name="endLastDay" wire:model="endLastDay" type="date" class="mt-3" />
+            @endif
+
+            <x-slot:actions>
+                <x-button label="Cancelar" @click="$wire.showEndHeadshipModal = false" />
+                <x-button label="Terminar jefatura" icon="o-stop-circle" class="btn-error" wire:click="endHeadship" spinner="endHeadship" data-testid="confirm-end-headship" />
+            </x-slot:actions>
+        </x-modal>
+    @endif
 
     <x-modal wire:model="showDataModal" title="Editar datos" box-class="max-w-2xl" separator>
         <x-form wire:submit="saveData" no-separator>
