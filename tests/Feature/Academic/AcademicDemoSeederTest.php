@@ -260,7 +260,7 @@ it('crea los usuarios de prueba con su alcance', function () {
         ->and($context('jpd.sc.c2')->covers(Role::JefeProyectoDocente, $c2, $sc->id))->toBeTrue()
         ->and($context('subdir.c2')->covers(Role::Subdireccion, $c2))->toBeTrue()
         ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'campus_id' => $c2->id, 'kind' => DepartmentHeadKind::Jefe])->sole()->user->username)->toBe('jefe.sc.c2')
-        ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'campus_id' => $c2->id, 'kind' => DepartmentHeadKind::JefeProyectoDocente])->sole()->user->username)->toBe('jpd.sc.c2')
+        ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'campus_id' => $c2->id, 'kind' => DepartmentHeadKind::JefeProyectoDocente])->whereHas('user', fn ($query) => $query->where('username', 'jpd.sc.c2'))->sole()->user->username)->toBe('jpd.sc.c2')
         ->and(Hash::check('password', $coordinator->password))->toBeTrue()
         ->and($coordinator->must_change_password)->toBeFalse();
 });
@@ -313,7 +313,7 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
         ->and($scopes->countBy(fn (RoleScope $scope): string => "{$scope->user_id}|{$scope->role->value}|{$scope->campus_id}|{$scope->department_id}|{$scope->career_id}")->max())->toBe(1)
         ->and($staff->filter(fn (User $user): bool => str_ends_with($user->username, '.c1')))->toHaveCount(25)
         ->and($staff->filter(fn (User $user): bool => str_ends_with($user->username, '.c2')))->toHaveCount(15)
-        ->and(DepartmentHead::query()->currentOn(now())->count())->toBe($staff->filter(fn (User $user): bool => preg_match('/^(jefe|jpd)\./', $user->username) === 1)->count());
+        ->and(DepartmentHead::query()->currentOn(now())->whereHas('user', fn ($query) => $query->where('username', 'like', 'jefe.%')->orWhere('username', 'like', 'jpd.%'))->count())->toBe($staff->filter(fn (User $user): bool => preg_match('/^(jefe|jpd)\./', $user->username) === 1)->count());
 
     foreach ($staff as $user) {
         $role = $roleOf[strtok($user->username, '.')];
