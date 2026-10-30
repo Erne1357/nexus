@@ -14,7 +14,7 @@
 
 <x-badge {{ $attributes->class([$tone->classes(), 'h-6.5 gap-1.5 font-medium whitespace-nowrap']) }}>
     @if ($icon)
-        <x-icon :name="$icon" class="size-3.5" aria-hidden="true" />
+        <x-icon :name="$icon" class="w-3.5 h-3.5" aria-hidden="true" />
     @endif
     {{ $label }}
 </x-badge>

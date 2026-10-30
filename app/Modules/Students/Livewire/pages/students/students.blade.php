@@ -33,7 +33,7 @@
 
     @if ($campus === null)
         <div class="rounded-box border border-base-300 bg-base-100 px-6 py-10 text-center text-neutral" data-testid="students-no-campus">
-            <x-icon name="o-building-office-2" class="mx-auto mb-2 size-8" />
+            <x-icon name="o-building-office-2" class="mx-auto mb-2 w-8 h-8" />
             <p>Elige un campus en tu credencial para ver a sus alumnos.</p>
         </div>
     @else
@@ -72,7 +72,7 @@
 
                 @scope('actions', $student)
                     <a href="{{ route('students.show', $student) }}" wire:navigate class="btn btn-ghost btn-sm whitespace-nowrap" aria-label="Ver la ficha de {{ $student->control_number }}" data-testid="show-{{ $student->control_number }}">
-                        <x-icon name="o-eye" class="size-4" /><span class="whitespace-nowrap max-[1200px]:hidden">Ver ficha</span>
+                        <x-icon name="o-eye" class="w-4 h-4" /><span class="whitespace-nowrap max-[1200px]:hidden">Ver ficha</span>
                     </a>
                 @endscope
 
@@ -94,7 +94,7 @@
                             @if ($student->progress) · <span class="font-mono">{{ $student->progress->credits_approved }}</span> créditos @endif
                         </div>
                         <a href="{{ route('students.show', $student) }}" wire:navigate class="btn btn-ghost btn-sm -ml-3">
-                            <x-icon name="o-eye" class="size-4" />Ver ficha
+                            <x-icon name="o-eye" class="w-4 h-4" />Ver ficha
                         </a>
                     </li>
                 @empty

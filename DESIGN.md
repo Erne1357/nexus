@@ -120,7 +120,7 @@ Nexus apunta a sustituir todo el SII (académico, servicios escolares, recursos 
 4. **Una sola forma de hacer cada cosa.** Un tipo de tabla, de formulario, de modal y de insignia, tomados de MaryUI con los tokens de este archivo.
 5. **Sirve en cualquier pantalla,** del celular al proyector.
 
-**Base técnica.** MaryUI sobre daisyUI y Tailwind 4. Los componentes se usan tal cual y la identidad entra por tokens; no hay CSS por pantalla (CLAUDE.md, "Convenciones"). Iconos: Heroicons de MaryUI, contorno de 1.5. El movimiento del menú usa Alpine, que ya viene con Livewire.
+**Base técnica.** MaryUI sobre daisyUI y Tailwind 4. Los componentes se usan tal cual y la identidad entra por tokens; no hay CSS por pantalla (CLAUDE.md, "Convenciones"). Iconos: Heroicons de MaryUI, contorno de 1.5. Su tamaño va con `w-*` y `h-*`, nunca con `size-*`: MaryUI les pone `w-5 h-5` si la clase no trae un `w-` o un `h-`, y eso le gana a `size-*` (lo revisa `tests/Arch/BladeIconsTest.php`). El movimiento del menú usa Alpine, que ya viene con Livewire.
 
 **Pendientes:** códigos oficiales de color (los de aquí son aproximaciones de los institucionales), inicios por rol con la palabra gigante y los mosaicos vivos, diseño del editor de horarios (prototipo en fase 3), formato de los PDF publicados y guía de textos (tono, mayúsculas, nombres de botones).
 

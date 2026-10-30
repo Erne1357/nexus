@@ -11,7 +11,7 @@
 --}}
 <div class="space-y-5">
     <a href="{{ route('academic.plans') }}" wire:navigate data-testid="back-to-plans" class="inline-flex items-center gap-1.5 font-medium text-primary">
-        <x-icon name="o-chevron-left" class="size-4" />Planes de estudio
+        <x-icon name="o-chevron-left" class="w-4 h-4" />Planes de estudio
     </a>
 
     <div>
