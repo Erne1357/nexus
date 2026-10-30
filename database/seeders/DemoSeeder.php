@@ -9,6 +9,7 @@ use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\RoleSeeder;
+use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -37,6 +38,7 @@ class DemoSeeder extends Seeder
 
         $this->callWith(AcademicDemoSeeder::class, ['campuses' => ['C2']]);
         $this->callWith(DemoStaffSeeder::class, ['campuses' => ['C2']]);
+        $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C2']]);
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C2' => 35]]);
     }
 }

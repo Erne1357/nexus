@@ -9,6 +9,7 @@ use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\RoleSeeder;
+use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -41,7 +42,9 @@ class MassiveSeeder extends Seeder
         $this->callWith(AcademicDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
         $this->callWith(DemoStaffSeeder::class, ['campuses' => ['C1', 'C2']]);
 
-        $this->command?->info(sprintf('Base y catálogo: %.1f s.', (hrtime(true) - $started) / 1e9));
+        $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
+
+        $this->command?->info(sprintf('Base, catálogo e instalaciones: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $started = hrtime(true);
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C1' => 670, 'C2' => 660]]);
