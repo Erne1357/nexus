@@ -75,6 +75,48 @@ class Teacher extends Model
     }
 
     /**
+     * @return HasMany<TeacherAvailability, $this>
+     */
+    public function availability(): HasMany
+    {
+        return $this->hasMany(TeacherAvailability::class);
+    }
+
+    /**
+     * @return HasMany<TeacherExternalLoad, $this>
+     */
+    public function externalLoads(): HasMany
+    {
+        return $this->hasMany(TeacherExternalLoad::class);
+    }
+
+    /**
+     * @return HasMany<TeacherSubjectHistory, $this>
+     */
+    public function history(): HasMany
+    {
+        return $this->hasMany(TeacherSubjectHistory::class);
+    }
+
+    /**
+     * El perfil: las materias que el jefe declara que puede dar.
+     *
+     * @return HasMany<TeacherSubjectQualification, $this>
+     */
+    public function qualifications(): HasMany
+    {
+        return $this->hasMany(TeacherSubjectQualification::class);
+    }
+
+    /**
+     * @return HasMany<TeacherEvaluation, $this>
+     */
+    public function evaluations(): HasMany
+    {
+        return $this->hasMany(TeacherEvaluation::class);
+    }
+
+    /**
      * @param  Builder<self>  $query
      */
     #[Scope]
