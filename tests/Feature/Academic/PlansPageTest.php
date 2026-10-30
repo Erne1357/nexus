@@ -72,11 +72,15 @@ describe('admin', function () {
             ->and($rows['ISIC-2025-001'])->toContain('—', 'Sin materias', 'Inactivo');
     });
 
-    it('no enlaza a la retícula mientras no exista academic.plans.show', function () {
-        $html = $this->actingAs($this->admin)->get(route('academic.plans'))->getContent();
+    it('enlaza a la retícula de cada plan, en la tabla y en los renglones del celular', function () {
+        $page = domOf($this->actingAs($this->admin)->get(route('academic.plans')));
+        $links = fn (string $scope): array => array_map(
+            fn ($link): string => $link->getAttribute('href'),
+            iterator_to_array($page->querySelectorAll($scope.' a[aria-label="Retícula de ISIC-2010-224"]')),
+        );
 
-        expect(Route::has('academic.plans.show'))->toBeFalse()
-            ->and($html)->not->toContain('Retícula de ');
+        expect($links('table'))->toBe([route('academic.plans.show', $this->plan224)])
+            ->and($links('[data-testid="plan-cards"]'))->toBe([route('academic.plans.show', $this->plan224)]);
     });
 
     it('en el celular apila cada plan en data-testid="plan-cards"', function () {

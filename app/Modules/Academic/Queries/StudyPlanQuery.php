@@ -45,4 +45,17 @@ final class StudyPlanQuery
     {
         return KeyLookup::findOrFail(StudyPlan::query(), $id);
     }
+
+    /**
+     * El plan de la retícula (academic::pages.plan), sin los borrados, con su carrera aunque esté borrada.
+     *
+     * @throws ModelNotFoundException<StudyPlan>
+     */
+    public function findWithCareerOrFail(string $id): StudyPlan
+    {
+        return KeyLookup::findOrFail(
+            StudyPlan::query()->with(['career' => fn ($query) => $query->withTrashed()->select(['id', 'code', 'name'])]),
+            $id,
+        );
+    }
 }
