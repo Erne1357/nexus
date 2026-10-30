@@ -306,7 +306,16 @@ El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/pla
   - Es un diálogo: `role="dialog"`, `aria-modal="true"` y `aria-labelledby` con el título del panel. MaryUI pone la trampa de foco, Esc e `inert`.
   - Esc, el velo o la X lo cierran y quitan la selección.
   - Sus secciones son «Lugar en la retícula», «Pide» y «La piden».
-  - Las tareas 1.8.9 y 1.8.10 las vuelven editables: «Guardar lugar», el tipo y el quitar de cada requisito, «Agregar requisito» con el error de ciclo, «Quitar de la retícula…» y «Agregar materia» al pie de cada semestre.
+  - «Lugar en la retícula» es un formulario: semestre, especialidad («Ninguna (tronco común)»; una inactiva aparece deshabilitada, salvo la que ya tiene la materia), «Obligatoria» y «Guardar lugar» (`btn-primary btn-sm`). Los errores caen en su campo.
+  - Al pie, fijo, «Cada cambio queda en la bitácora.» y «Quitar de la retícula…» (`btn-ghost text-error`). Abre una confirmación que lista la seriación que se va, como materia y como requisito con su tipo, qué materias se quedan sin seriación y que cambia el avance de los alumnos del plan; Academic no da la cifra de alumnos, que es de Students.
+  - La tarea 1.8.10 vuelve editables el tipo y el quitar de cada requisito y agrega «Agregar requisito» con el error de ciclo.
+- **«Agregar materia»** es un botón punteado al pie de cada semestre (hasta el último que se ofrece; en columnas angostas su texto se parte en dos renglones centrados). Un plan sin semestres ni materias lo ofrece en su estado vacío, en el semestre 1. Abre un modal:
+  - busca en el catálogo por clave o nombre, desde dos letras y con todas las palabras;
+  - lista las primeras 8 coincidencias con la clave en Mono, el nombre, el departamento y `HT-HP-C`, y al pie cuántas son;
+  - las que ya están en la retícula, las inactivas y las borradas se ven atenuadas, con el motivo en lugar del departamento, y no se eligen;
+  - la elegida lleva un anillo `primary`, y el botón dice «Agregar CLAVE»;
+  - debajo van el semestre, la especialidad y «Obligatoria».
+- **Los modales de la retícula** («Agregar materia» y la confirmación de quitar) van en la página y no dentro del panel, porque el panel se desliza con `transform` y los encerraría. Esc los cierra sin cerrar el panel.
 - **La leyenda de cadenas** resalta la cadena que se toca. Tocarla otra vez o Esc quita el resaltado.
 - **Especialidades**, en el mismo panel. Cada una muestra su clave, su estado, su nombre y cuántas materias tiene. Sus acciones:
   - «Renombrar», en su lugar;
