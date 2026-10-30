@@ -25,7 +25,8 @@ use Spatie\Activitylog\Models\Activity;
 | todos) y los jefes de departamento y de proyecto docente (a los de su departamento). Tabla con número, nombre,
 | adscripción principal y otras, horas base del periodo activo, usuario y estado; filtros de departamento, tipo de
 | plaza y estado. Alta en un modal con el departamento de quien da de alta (el jefe, el suyo; el admin y la
-| Subdirección lo eligen); un número que ya existe ofrece adscribirlo (S9). En «Acciones»: «Quitar de <código>»
+| Subdirección lo eligen); con un número que ya existe, el admin y la Subdirección pueden adscribirlo y a los jefes
+| solo se les dice que está registrado (S9). En «Acciones»: «Quitar de <código>»
 | por cada departamento que cubre (RemoveAdscription) y «Desactivar/Activar» (solo admin y Subdirección); nadie se
 | quita ni se da de baja a sí mismo. «Dar de alta usuarios» va en «Más acciones», es del admin y encola
 | ProvisionTeacherUsersJob.
@@ -237,6 +238,55 @@ describe('admin', function () {
         expect(TeacherDepartment::where('teacher_id', $this->beto->id)->count())->toBe(1);
     });
 
+    it('al número de un docente dado de baja no le ofrece adscribirlo: pide reactivarlo primero', function () {
+        Livewire::actingAs($this->admin)
+            ->test('faculty::pages.teachers')
+            ->call('create')
+            ->set('department_id', $this->sc->id)
+            ->set('employee_number', '1000003')
+            ->assertHasErrors('employee_number')
+            ->assertSee('Ese número es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.')
+            ->assertDontSee('Adscribir a SC');
+    });
+
+    it('si el docente se dio de baja o se borró mientras tanto, «Adscribir» lo dice en el número y no escribe', function (string $change) {
+        $page = Livewire::actingAs($this->admin)
+            ->test('faculty::pages.teachers')
+            ->call('create')
+            ->set('department_id', $this->sc->id)
+            ->set('employee_number', '1000002')
+            ->assertSee('Adscribir a SC');
+
+        $change === 'baja' ? $this->beto->update(['is_active' => false]) : $this->beto->delete();
+
+        $page->call('adscribeExisting')
+            ->assertOk()
+            ->assertHasErrors('employee_number')
+            ->assertSee($change === 'baja'
+                ? 'Ese número es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.'
+                : 'Ese número pertenece a un docente borrado; pide a Subdirección que lo revise.');
+
+        expect(TeacherDepartment::withTrashed()->where('teacher_id', $this->beto->id)->count())->toBe(1);
+    })->with(['dado de baja' => 'baja', 'borrado' => 'borrado']);
+
+    it('el número de un docente borrado lo dice en el formulario, sin callejón sin salida', function () {
+        $this->beto->delete();
+
+        Livewire::actingAs($this->admin)
+            ->test('faculty::pages.teachers')
+            ->call('create')
+            ->set('department_id', $this->sc->id)
+            ->set('name', 'Otro')
+            ->set('employee_number', '1000002')
+            ->assertHasErrors('employee_number')
+            ->assertSee('Ese número pertenece a un docente borrado; pide a Subdirección que lo revise.')
+            ->call('save')
+            ->assertHasErrors('employee_number')
+            ->assertSet('showModal', true);
+
+        expect(Teacher::withTrashed()->where('employee_number', '1000002')->count())->toBe(1);
+    });
+
     it('edita los datos de un docente sin cambiar su número', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
@@ -392,6 +442,20 @@ describe('Subdirección, una para todo el Tec', function () {
         expect(Teacher::where('employee_number', '2000005')->sole()->adscriptions()->sole()->department_id)->toBe($this->cb->id);
     });
 
+    it('adscribe a un departamento a un docente que ya existe, sin cambiar sus datos (S9)', function () {
+        $page = Livewire::actingAs($this->subdireccion)
+            ->test('faculty::pages.teachers')
+            ->call('create')
+            ->set('department_id', $this->sc->id)
+            ->set('employee_number', '1000002')
+            ->assertSee('Ya existe el docente 1000002 · Beto Ruiz')
+            ->call('adscribeExisting')
+            ->assertHasNoErrors();
+
+        expect($this->beto->adscriptions()->where('department_id', $this->sc->id)->exists())->toBeTrue()
+            ->and(lastToastOf($page))->title->toBe('Docente adscrito a SC');
+    });
+
     it('da de baja y ve «Dar de alta usuarios» deshabilitado con su motivo', function () {
         Livewire::actingAs($this->subdireccion)->test('faculty::pages.teachers')->call('toggleActive', $this->beto->id);
 
@@ -437,18 +501,36 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
         expect(Teacher::where('employee_number', '2000004')->exists())->toBeFalse();
     });
 
-    it('adscribe a su departamento a un docente de otro departamento que ya existe (S9)', function () {
-        $page = Livewire::actingAs($this->jefe)
+    it('con el número de un docente que ya existe solo le dice que está registrado, sin decir de quién (S9, supuesto por confirmar)', function () {
+        Livewire::actingAs($this->jefe)
             ->test('faculty::pages.teachers')
             ->call('create')
-            ->set('employee_number', '1000003')
-            ->assertSee('Adscribir a SC')
-            ->call('adscribeExisting')
-            ->assertHasNoErrors();
+            ->set('name', 'Otro nombre')
+            ->set('employee_number', '1000002')
+            ->assertHasErrors('employee_number')
+            ->assertSee('Ese número ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.')
+            ->assertDontSee('Beto Ruiz')
+            ->assertDontSee('Adscribir a')
+            ->call('save')
+            ->assertHasErrors('employee_number')
+            ->assertDontSee('Beto Ruiz');
 
-        expect($this->carla->adscriptions()->where('department_id', $this->sc->id)->exists())->toBeTrue()
-            ->and($this->carla->fresh()->is_active)->toBeFalse()
-            ->and(lastToastOf($page))->title->toBe('Docente adscrito a SC');
+        expect(Teacher::count())->toBe(5)
+            ->and($this->beto->adscriptions()->count())->toBe(1);
+    });
+
+    it('recibe 403 al adscribir a un docente que ya existe, aunque lo llame directo sobre una página que abrió el admin', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('faculty::pages.teachers')
+            ->call('create')
+            ->set('department_id', $this->sc->id)
+            ->set('employee_number', '1000002')
+            ->assertSee('Adscribir a SC');
+
+        $this->actingAs($this->jefe);
+        $page->call('adscribeExisting')->assertForbidden();
+
+        expect($this->beto->adscriptions()->count())->toBe(1);
     });
 
     it('en «Acciones» solo ofrece «Quitar de SC»; «Desactivar» queda deshabilitado con su motivo', function () {

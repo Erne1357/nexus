@@ -125,7 +125,7 @@ El jefe de proyecto docente lo es de un departamento en un campus, lo más restr
 
 Adscripciones de docentes: qué hace «Quitar de mi departamento» y qué principal queda está en "Reglas de datos". Nadie se quita a sí mismo de un departamento (supuesto por confirmar).
 
-Dar de alta un docente con un número de empleado que ya existe no crea otro: la pantalla ofrece adscribirlo al departamento de quien lo da de alta, sin cambiar sus datos; si esa adscripción se había quitado, la restaura, y si el docente no tiene principal, esa queda como principal (S9, supuesto por confirmar).
+Dar de alta un docente con un número de empleado que ya existe no crea otro. El admin y la Subdirección pueden adscribir a ese docente a un departamento sin cambiar sus datos; si esa adscripción se había quitado, la restaura, y si el docente no tiene principal, esa queda como principal. Solo se adscribe a un docente activo: al de uno dado de baja primero se le reactiva. A un jefe de departamento o de proyecto docente la pantalla solo le dice que el número ya está registrado, sin decir de quién es, y que pida a Subdirección que lo adscriba a su departamento. Si el número es de un docente borrado, lo dice, para que Subdirección lo revise (S9, supuesto por confirmar).
 
 Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se borra. Si solo se desactiva, sigue contando, porque una carrera inactiva puede tener todavía alumnos y grupos que atender, igual que un plan inactivo (confirmado el 29 de octubre de 2026). Core no depende de Academic, así que lo resuelve la tarea 1.8 al borrar.
 
