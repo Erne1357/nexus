@@ -4,6 +4,7 @@ namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Navigation\RecentPages;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Session\Session;
@@ -11,14 +12,16 @@ use Illuminate\Contracts\Session\Session;
 /**
  * Fija en la sesión el campus y el periodo activos del usuario autenticado (selector de la
  * credencial). El campus debe estar entre los que ScopedContext::campuses() le ofrece; cualquier
- * periodo vale. `null` olvida la elección y deja el de omisión. Solo escribe en la sesión, así que
- * no abre transacción ni deja bitácora.
+ * periodo vale. `null` olvida la elección y deja el de omisión. También olvida las páginas que el
+ * menú recuerda por área (RecentPages): una ficha de otro campus ya no se abriría. Solo escribe en la
+ * sesión, así que no abre transacción ni deja bitácora.
  */
 final class SetActiveContext
 {
     public function __construct(
         private readonly ScopedContext $context,
         private readonly Session $session,
+        private readonly RecentPages $recentPages,
     ) {}
 
     /**
@@ -38,5 +41,7 @@ final class SetActiveContext
             ScopedContext::ACTIVE_CAMPUS => $campus?->getKey(),
             ScopedContext::ACTIVE_TERM => $term?->getKey(),
         ]);
+
+        $this->recentPages->forget();
     }
 }

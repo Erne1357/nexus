@@ -3,6 +3,7 @@
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Navigation\RecentPages;
 use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -15,6 +16,11 @@ use Livewire\Component;
  *
  * El área actual es la de la entrada de la pantalla (Navigation::forRoute) si el usuario la ve; si
  * no, la primera que ve. La entrada activa es esa misma entrada.
+ *
+ * El icono de cada área es un enlace: el del área actual lleva a su primera entrada (la principal);
+ * el de las demás, a la última página que el usuario visitó de esa área (RecentPages) o, si no ha
+ * visitado ninguna, a su primera entrada. Al pintarse en una página completa, el menú anota esa
+ * página como la última de su área.
  *
  * Cada elemento lleva su lugar en la retícula del menú abierto: `--c` es el número de área, que en
  * escritorio es también su columna y, cerrado, su renglón en la franja de iconos; `--i`, el de la
@@ -36,15 +42,20 @@ new class extends Component
     #[Locked]
     public ?string $route = null;
 
-    public function mount(?string $route = null): void
+    public function mount(RecentPages $recentPages, ?string $route = null): void
     {
         $this->route = $route ?? request()->route()?->getName();
+
+        // Solo la página que se pidió cuenta como visita, no una ruta que llega dada.
+        if ($route === null && $this->route !== null) {
+            $recentPages->remember($this->route, request()->getRequestUri());
+        }
     }
 
     /**
-     * @return array{areas: list<array{area: NavigationArea, current: bool, style: string, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string}>}>}
+     * @return array{areas: list<array{area: NavigationArea, current: bool, href: string, style: string, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string}>}>}
      */
-    public function with(Navigation $navigation, ScopedContext $context): array
+    public function with(Navigation $navigation, ScopedContext $context, RecentPages $recentPages): array
     {
         $groups = $navigation->visibleByArea($context);
         $routeItem = $this->route === null ? null : $navigation->forRoute($this->route);
@@ -76,9 +87,13 @@ new class extends Component
                 ];
             }
 
+            $current = $group['area'] === $currentArea;
+            $main = route($group['items'][0]->route);
+
             $areas[] = [
                 'area' => $group['area'],
-                'current' => $group['area'] === $currentArea,
+                'current' => $current,
+                'href' => $current ? $main : ($recentPages->last($group['area']) ?? $main),
                 'style' => "{$number}; {$tablet}",
                 'entries' => $entries,
             ];

@@ -6,7 +6,9 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Navigation\RecentPages;
 use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Students\Models\Student;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Support\Facades\Route;
@@ -306,8 +308,7 @@ describe('menú', function () {
             'Datos' => ['Cargas'],
         ])
             ->and(array_map(fn (Element $name): string => textOf($name), iterator_to_array($page->querySelectorAll('[data-menu-area] [data-menu-flip="name"]'))))
-            ->toBe(['Académico', 'Recursos humanos', 'Datos'])
-            ->and($page->querySelector('[data-menu-area] [data-menu-flip="icon"]')?->getAttribute('aria-hidden'))->toBe('true');
+            ->toBe(['Académico', 'Recursos humanos', 'Datos']);
     });
 
     it('no muestra el área de las entradas que el rol no ve', function () {
@@ -409,5 +410,102 @@ describe('menú', function () {
             ->and($styleOf('S3'))->toBe('--c: 2; --i: 3; --col-t: 2; --base-t: 3')
             ->and($styleOf('H1'))->toBe('--c: 3; --i: 1; --col-t: 3; --base-t: 3')
             ->and($styleOf('D1'))->toBe('--c: 4; --i: 1; --col-t: 1; --base-t: 8');
+    });
+});
+
+/**
+ * El icono de un área en el menú de una página: el enlace que viaja entre la franja y su columna.
+ */
+function areaIconIn(HTMLDocument $page, string $area): ?Element
+{
+    return $page->querySelector('#nexus-menu [data-menu-area="'.$area.'"] [data-menu-flip="icon"]');
+}
+
+/*
+| Los iconos de área (DESIGN.md, "Navigation"): un clic lleva a la última página que visitaste del área,
+| con su consulta, o a su primera entrada si no has visitado ninguna; el del área actual, a su primera
+| entrada. No abren el menú: eso es de la liebre, Ctrl K y el buscador de la banda.
+*/
+describe('iconos de área', function () {
+    beforeEach(function () {
+        $this->actingAs(User::factory()->admin()->create());
+    });
+
+    it('cada icono es un enlace con el nombre de su área, que navega y no abre el menú', function () {
+        $page = domOf($this->get(route('home'))->assertOk());
+        $icon = areaIconIn($page, 'datos');
+
+        expect($icon?->localName)->toBe('a')
+            ->and($icon->getAttribute('aria-label'))->toBe('Datos')
+            ->and($icon->getAttribute('data-tip'))->toBe('Datos')
+            ->and($icon->hasAttribute('wire:navigate'))->toBeTrue()
+            ->and($icon->hasAttribute('aria-hidden'))->toBeFalse()
+            ->and($page->saveHtml($icon))->not->toContain('openMenu');
+    });
+
+    it('sin visitas, el icono de un área lleva a su primera entrada visible', function () {
+        $page = domOf($this->get(route('home'))->assertOk());
+
+        expect(areaIconIn($page, 'servicios_escolares')->getAttribute('href'))->toBe(route('students.index'))
+            ->and(areaIconIn($page, 'datos')->getAttribute('href'))->toBe(route('imports.wizard'));
+    });
+
+    it('desde otra área, el icono lleva a la última página que visitaste del área, con su consulta', function () {
+        $this->get(route('core.campuses', ['search' => 'norte']))->assertOk();
+        $this->get(route('academic.subjects', ['search' => 'cal']))->assertOk();
+
+        $page = domOf($this->get(route('imports.wizard'))->assertOk());
+
+        expect(areaIconIn($page, 'academico')->getAttribute('href'))->toBe(route('academic.subjects', ['search' => 'cal'], false));
+    });
+
+    it('guarda la página con una sola barra al inicio: una petición a //campus no deja un enlace a otro host', function () {
+        $this->get(route('home'))->assertOk();
+        app(RecentPages::class)->remember('core.campuses', '//campus?search=norte');
+
+        expect(app(RecentPages::class)->last(NavigationArea::Academico))->toBe('/campus?search=norte');
+    });
+
+    it('una pantalla hija cuenta como página de su área: la ficha de un alumno, con su pestaña', function () {
+        $uri = route('students.show', ['student' => Student::factory()->create(), 'tab' => 'kardex'], false);
+        $this->get($uri)->assertOk();
+
+        $page = domOf($this->get(route('home'))->assertOk());
+
+        expect(areaIconIn($page, 'servicios_escolares')->getAttribute('href'))->toBe($uri);
+    });
+
+    it('el icono del área actual lleva a su primera entrada, aunque estés en otra página del área', function () {
+        $page = domOf($this->get(route('core.campuses', ['search' => 'norte']))->assertOk());
+
+        expect(areaIconIn($page, 'academico')->getAttribute('href'))->toBe(route('home'));
+    });
+
+    it('no recuerda una página cuya entrada el usuario no ve', function () {
+        app()->instance(Navigation::class, new Navigation([
+            new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
+            new NavigationItem('Oculta', 'core.campuses', 'o-eye-slash', NavigationArea::Datos,
+                visible: static fn (): bool => false),
+            new NavigationItem('Importaciones', 'imports.wizard', 'o-arrow-up-tray', NavigationArea::Datos),
+        ]));
+
+        $this->get(route('core.campuses'))->assertOk();
+
+        $page = domOf($this->get(route('home'))->assertOk());
+
+        expect(areaIconIn($page, 'datos')->getAttribute('href'))->toBe(route('imports.wizard'));
+    });
+
+    it('al cambiar el campus o el periodo activo, olvida las páginas que visitaste', function () {
+        $this->get(route('core.campuses', ['search' => 'norte']))->assertOk();
+
+        Livewire::test('core::components.context-switcher')
+            ->set('campusId', $this->campus->id)
+            ->call('apply')
+            ->assertHasNoErrors();
+
+        $page = domOf($this->get(route('imports.wizard'))->assertOk());
+
+        expect(areaIconIn($page, 'academico')->getAttribute('href'))->toBe(route('home'));
     });
 });
