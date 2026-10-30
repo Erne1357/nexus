@@ -15,6 +15,9 @@ use Random\Randomizer;
  * Los periodos son `AAAA1` (Ene-Jun) y `AAAA3` (Ago-Dic); en `AAAA2` (verano) algunos repiten lo reprobado. Las
  * materias del periodo en curso quedan «cursando» sin calificación; en un periodo anterior solo si el perfil pide
  * `ungraded` («sin calificar»). Con la misma semilla en el `Randomizer` da el mismo kardex.
+ *
+ * Supuesto: una materia «sin calificar» gasta su oportunidad (el alumno la repite con la siguiente) y nunca se
+ * deja así en el curso especial. Un alumno de baja o egresado no tiene materias en el periodo en curso.
  */
 final class TrajectorySimulator
 {
@@ -138,11 +141,11 @@ final class TrajectorySimulator
         $regular = count(array_filter($terms, fn (string $term): bool => ! str_ends_with($term, '2')));
 
         if ($status === 'baja_temporal' || $status === 'baja_definitiva') {
-            return $this->random->getInt(0, max(0, $regular - 2));
+            return $regular < 2 ? -1 : $this->random->getInt(0, $regular - 2);
         }
 
         if ($status === 'egresado') {
-            return max(0, $regular - 2);
+            return $regular - 2;
         }
 
         return $regular - 1;
@@ -270,7 +273,7 @@ final class TrajectorySimulator
             return ['baja', null];
         }
 
-        if ($ungraded > 0 && $attempt < self::MAX_ATTEMPTS && $this->random->nextFloat() < $ungraded) {
+        if (! $graduate && $ungraded > 0 && $attempt < self::MAX_ATTEMPTS && $this->random->nextFloat() < $ungraded) {
             return ['cursando', null];
         }
 

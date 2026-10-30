@@ -391,29 +391,31 @@ class StudentsDemoSeeder extends Seeder
             return;
         }
 
-        $started = hrtime(true);
-        $students = array_map(fn (array $item): array => [...$item['student'], 'created_at' => $now, 'updated_at' => $now], $buffer);
+        DB::transaction(function () use ($buffer, $now, &$timing, &$totals): void {
+            $started = hrtime(true);
+            $students = array_map(fn (array $item): array => [...$item['student'], 'created_at' => $now, 'updated_at' => $now], $buffer);
 
-        DB::table('students')->insertOrIgnore($students);
+            DB::table('students')->insertOrIgnore($students);
 
-        $ids = DB::table('students')->whereIn('control_number', array_column($students, 'control_number'))->pluck('id', 'control_number')->all();
-        $timing['students'] += (hrtime(true) - $started) / 1e9;
-        $totals['students'] += count($students);
+            $ids = DB::table('students')->whereIn('control_number', array_column($students, 'control_number'))->pluck('id', 'control_number')->all();
+            $timing['students'] += (hrtime(true) - $started) / 1e9;
+            $totals['students'] += count($students);
 
-        $started = hrtime(true);
-        $rows = [];
+            $started = hrtime(true);
+            $rows = [];
 
-        foreach ($buffer as $item) {
-            foreach ($item['kardex'] as $row) {
-                $rows[] = [...$row, 'student_id' => $ids[$item['student']['control_number']], 'created_at' => $now, 'updated_at' => $now];
+            foreach ($buffer as $item) {
+                foreach ($item['kardex'] as $row) {
+                    $rows[] = [...$row, 'student_id' => $ids[$item['student']['control_number']], 'created_at' => $now, 'updated_at' => $now];
+                }
             }
-        }
 
-        foreach (array_chunk($rows, self::CHUNK) as $chunk) {
-            DB::table('kardex_records')->insertOrIgnore($chunk);
-        }
+            foreach (array_chunk($rows, self::CHUNK) as $chunk) {
+                DB::table('kardex_records')->insertOrIgnore($chunk);
+            }
 
-        $timing['kardex'] += (hrtime(true) - $started) / 1e9;
-        $totals['kardex'] += count($rows);
+            $timing['kardex'] += (hrtime(true) - $started) / 1e9;
+            $totals['kardex'] += count($rows);
+        });
     }
 }

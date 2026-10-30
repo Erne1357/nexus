@@ -143,3 +143,7 @@ it('reprobar el curso especial termina la trayectoria', function () {
 
     $this->fail('Ninguna semilla llegó a reprobar el curso especial.');
 });
+
+it('un alumno de baja admitido en el periodo en curso no cursa nada', function (string $status) {
+    expect(simulateTrajectory(5, ['status' => $status], '20263'))->toBe([]);
+})->with(['baja_temporal', 'baja_definitiva', 'egresado']);
