@@ -26,7 +26,7 @@
             <x-button label="Nuevo salón" icon="o-plus" class="btn-primary mt-4" disabled title="Este campus no usa salones." />
         </div>
     @else
-        <x-core::catalog-toolbar>
+        <x-core::catalog-toolbar narrow>
             <x-slot:search>
                 <x-input
                     wire:model.live.debounce.300ms="search"

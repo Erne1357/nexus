@@ -7,23 +7,27 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 
 /*
-| Docentes en el navegador: el jefe de Sistemas y Computación de Campus II entra por el icono de Recursos humanos,
-| da de alta un docente (con su departamento y su campus, sin elegirlos) y lo ve en su lista. El coordinador no ve
-| el área.
+| Docentes en el navegador: el jefe de Sistemas y Computación (de todo el Tec) entra por el icono de Recursos
+| humanos, da de alta un docente (con su departamento, sin elegirlo) y lo ve en su lista; al escribir el número de
+| uno que ya existe lo adscribe a su departamento (S9). A 1440 px la búsqueda y los filtros caben en un renglón.
+| El coordinador no ve el área.
 */
 
 beforeEach(function () {
-    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-    Teacher::factory()->adscribedTo($this->sc, $this->c2)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
+    Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
 
-    User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])
-        ->create(['username' => 'jefe.sc.c2', 'name' => 'Julia Jefa']);
+    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create(['username' => 'jefe.sc', 'name' => 'Julia Jefa']);
 });
 
-it('el jefe de SC en C2 da de alta un docente y lo ve en su lista', function () {
+/**
+ * Si la búsqueda y los filtros de la barra de herramientas de catálogo están en un mismo renglón.
+ */
+const CATALOG_FILTERS_IN_ONE_ROW = "(() => { const tops = [...document.querySelectorAll('[data-testid=catalog-toolbar] > div:first-child, [data-testid=catalog-filters] > *')].map((el) => Math.round(el.getBoundingClientRect().top)); return new Set(tops).size === 1; })()";
+
+it('el jefe de SC da de alta un docente y lo ve en su lista', function () {
     visit('/login')
-        ->fill('username', 'jefe.sc.c2')
+        ->fill('username', 'jefe.sc')
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
@@ -41,17 +45,15 @@ it('el jefe de SC en C2 da de alta un docente y lo ve en su lista', function () 
         ->assertSee('Gabriel Mora')
         ->assertNoJavaScriptErrors();
 
-    expect(Teacher::where('employee_number', '2000010')->sole()->adscriptions()->sole())
-        ->department_id->toBe($this->sc->id)
-        ->campus_id->toBe($this->c2->id);
+    expect(Teacher::where('employee_number', '2000010')->sole()->adscriptions()->sole()->department_id)->toBe($this->sc->id);
 });
 
 it('al escribir el número de un docente que ya existe, el jefe lo adscribe a su departamento sin darlo de alta otra vez (S9)', function () {
     $industrial = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
-    $existing = Teacher::factory()->adscribedTo($industrial, $this->c2)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
+    $existing = Teacher::factory()->adscribedTo($industrial)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
 
     visit('/login')
-        ->fill('username', 'jefe.sc.c2')
+        ->fill('username', 'jefe.sc')
         ->fill('password', 'password')
         ->press('Entrar')
         ->navigate('/faculty/teachers')
@@ -60,16 +62,32 @@ it('al escribir el número de un docente que ya existe, el jefe lo adscribe a su
         ->fill('employee_number', '1000002')
         ->keys('input[name="employee_number"]', 'Tab')
         ->waitForText('Ya existe el docente 1000002 · Beto Ruiz')
-        ->press('Adscribir a SC en C2')
-        ->waitForText('Docente adscrito a SC en C2')
+        ->press('Adscribir a SC')
+        ->waitForText('Docente adscrito a SC')
         ->assertSee('Beto Ruiz')
         ->assertNoJavaScriptErrors();
 
     expect($existing->adscriptions()->pluck('department_id')->all())->toContain($this->sc->id);
 });
 
+it('a 1440 px la búsqueda y los filtros caben en un renglón y «Más acciones» abre «Dar de alta usuarios»', function () {
+    User::factory()->admin()->create(['username' => 'admin']);
+
+    visit('/login')
+        ->fill('username', 'admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->resize(1440, 900)
+        ->navigate('/faculty/teachers')
+        ->assertScript(CATALOG_FILTERS_IN_ONE_ROW, true)
+        ->click('[data-testid="catalog-toolbar"] button[aria-label="Más acciones"]')
+        ->assertVisible('[data-testid="catalog-toolbar"] [role="menuitem"]')
+        ->assertSeeIn('[data-testid="catalog-toolbar"] [role="menu"]', 'Dar de alta usuarios')
+        ->assertNoJavaScriptErrors();
+});
+
 it('el coordinador no ve el área de Recursos humanos', function () {
-    User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create(['username' => 'coord']);
+    User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(20)])->create(['username' => 'coord']);
 
     visit('/login')
         ->fill('username', 'coord')

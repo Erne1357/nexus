@@ -3,7 +3,8 @@
     catálogo"), la misma en todas: en su propio renglón debajo del título, nunca en el slot `actions`
     de x-header. A la izquierda, `search` (md:w-64) y luego los filtros del slot por omisión, cada uno
     de md:w-52, los de catálogo primero y el de estado al final; a la derecha, siempre en el mismo
-    lugar, la acción principal en `action`. Debajo de 768 px cada control ocupa todo el ancho.
+    lugar, la acción principal en `action`. Debajo de 768 px cada control ocupa todo el ancho. Con cuatro
+    filtros, `narrow` los deja de md:w-44 para que la búsqueda y los filtros quepan en un renglón desde 1440 px.
 
     <x-core::catalog-toolbar>
         <x-slot:search><x-input ... /></x-slot:search>
@@ -11,14 +12,14 @@
         <x-slot:action><x-button class="btn-primary" ... /></x-slot:action>
     </x-core::catalog-toolbar>
 --}}
-@props(['search', 'action' => null])
+@props(['search', 'action' => null, 'narrow' => false])
 
 <div {{ $attributes->class(['mb-4 flex flex-wrap items-start gap-x-2.5 gap-y-3', 'md:items-center']) }} data-testid="catalog-toolbar">
     <div class="w-full md:w-64">
         {{ $search }}
     </div>
 
-    <div class="contents [&>*]:w-full md:[&>*]:w-52">
+    <div @class(['contents [&>*]:w-full', 'md:[&>*]:w-44' => $narrow, 'md:[&>*]:w-52' => ! $narrow]) data-testid="catalog-filters">
         {{ $slot }}
     </div>
 

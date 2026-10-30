@@ -204,9 +204,9 @@ La captura pesada (editor de horarios, asignación) se diseña para escritorio, 
 La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php), que copian todos los catálogos:
 1. **Encabezado** (`x-header`): el título y una línea que explica la pantalla. Nada más: la barra de herramientas no va en su slot `actions`, porque según el ancho subiría junto al título o caería debajo.
 2. **Barra de herramientas** (`<x-core::catalog-toolbar>`), en su propio renglón debajo del encabezado y su filete, igual en las cinco pantallas:
-   - a la izquierda, la búsqueda (slot `search`, `md:w-64`) y después los filtros, todos de `md:w-52` y en el mismo orden: primero los de catálogo (departamento, carrera, tipo) y al final el de estado;
+   - a la izquierda, la búsqueda (slot `search`, `md:w-64`) y después los filtros, todos de `md:w-52` y en el mismo orden: primero los de catálogo (departamento, carrera, tipo) y al final el de estado. Con cuatro filtros (Salones), son de `md:w-44` (`<x-core::catalog-toolbar narrow>`), más angostos para que quepan en un renglón desde 1440 px (decidido por el usuario el 30 de octubre de 2026); la búsqueda y los cuatro filtros caben, y la acción principal baja al renglón siguiente, a la derecha;
    - a la derecha, siempre en el mismo lugar (`md:ms-auto`), la **acción principal** (slot `action`), una sola y en `btn-primary`;
-   - una acción de toda la pantalla que no es la principal (como «Dar de alta usuarios» en Docentes) va en el mismo slot, antes de la principal y en `btn-ghost`; debajo de 768 px queda bajo la principal. Si el rol no la puede usar, se muestra deshabilitada con su motivo en un tooltip;
+   - las acciones de toda la pantalla que no son la principal (como «Dar de alta usuarios» en Docentes) van en **«Más acciones»**, un botón de icono (`o-ellipsis-vertical`, con `aria-label="Más acciones"`) a la derecha de la principal, que abre el mismo menú de "Acciones de fila" (`<x-core::row-menu icon="o-ellipsis-vertical" label="Más acciones">`); lo que el rol no permite se queda en el menú, deshabilitado y con su motivo escrito (decidido por el usuario el 30 de octubre de 2026);
    - debajo de 768 px cada control ocupa todo el ancho, uno por renglón.
 3. **Tabla** (`x-table` en una superficie blanca con filete):
    - la clave primero, en Mono y sin partirse (`whitespace-nowrap`);

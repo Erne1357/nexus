@@ -2,20 +2,22 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Queries\DepartmentQuery;
-use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Support\DefaultPassword;
 use App\Modules\Faculty\Actions\AddAdscription;
 use App\Modules\Faculty\Actions\CreateTeacher;
+use App\Modules\Faculty\Actions\RemoveAdscription;
 use App\Modules\Faculty\Actions\SetTeacherActive;
 use App\Modules\Faculty\Actions\UpdateTeacher;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Jobs\ProvisionTeacherUsersJob;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Policies\TeacherPolicy;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Rules\TeacherRules;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -27,16 +29,17 @@ use Livewire\WithPagination;
 use Mary\Traits\Toast;
 
 /**
- * Catálogo de Docentes (tarea 1.12, spec 4.3), con la forma de Campus y los filtros de Materias: tabla con búsqueda
- * por número o nombre y filtros de departamento, campus, tipo de plaza y estado; alta y edición en un modal;
- * activar o desactivar desde «Acciones». Un docente no se borra: se da de baja, y su usuario con él.
+ * Catálogo de Docentes (tarea 1.12, spec 4.3 con la adenda del 30 de octubre de 2026), con la forma de Campus y los
+ * filtros de Materias: tabla con búsqueda por número o nombre y filtros de departamento, tipo de plaza y estado;
+ * alta y edición en un modal; en «Acciones», «Quitar de <depto>» y «Desactivar/Activar». Un docente no se borra: se
+ * da de baja, y su usuario con él. Los docentes son de todo el Tec: la adscripción es solo de un departamento.
  *
- * Lo ven el admin, la subdirección, los jefes de departamento y los jefes de proyecto docente, cada quien los
- * docentes de su alcance (TeacherPolicy; TeacherQuery lista con la misma regla). El alta lleva la adscripción de
- * quien da de alta: el jefe, la suya, sin elegirla; la subdirección elige el departamento en su campus; el admin,
- * departamento y campus. Si el número ya existe, no se da de alta otra vez: se ofrece adscribirlo a ese departamento
- * y campus sin cambiar sus datos (S9, supuesto por confirmar). El admin además encola «Dar de alta usuarios»
- * (ProvisionTeacherUsersJob).
+ * Lo ven el admin y la Subdirección, a todos, y los jefes de departamento y de proyecto docente, a los de su
+ * departamento (TeacherPolicy; TeacherQuery lista con la misma regla). El alta lleva el departamento de quien da de
+ * alta: el jefe, el suyo, sin elegirlo; el admin y la Subdirección lo eligen. Si el número ya existe, no se da de
+ * alta otra vez: se ofrece adscribirlo a ese departamento sin cambiar sus datos (S9, supuesto por confirmar). La baja
+ * es solo del admin y la Subdirección; los jefes quitan al docente de su departamento (RemoveAdscription). El admin
+ * además encola «Dar de alta usuarios» (ProvisionTeacherUsersJob) desde «Más acciones».
  *
  * El componente lee con TeacherQuery, autoriza en mount() y en cada acción (una petición puede llegar con una página
  * que abrió otra sesión), valida la forma de los datos y llama a las Actions, que hacen cumplir las reglas. Los
@@ -53,10 +56,6 @@ new #[Title('Docentes')] class extends Component
     /** Id del departamento de una adscripción; '' son todos. */
     #[Session]
     public string $departmentFilter = '';
-
-    /** Id del campus de una adscripción; '' son todos. */
-    #[Session]
-    public string $campusFilter = '';
 
     /** Valor de PositionKind; '' son todos. */
     #[Session]
@@ -92,10 +91,8 @@ new #[Title('Docentes')] class extends Component
     /** `Y-m-d`; '' es sin fecha. */
     public string $hired_on = '';
 
-    /** La adscripción del alta. */
+    /** El departamento del alta. */
     public string $department_id = '';
-
-    public string $campus_id = '';
 
     public function mount(): void
     {
@@ -114,7 +111,6 @@ new #[Title('Docentes')] class extends Component
             $context,
             $this->search,
             $this->departmentFilter === '' ? null : $this->departmentFilter,
-            $this->campusFilter === '' ? null : $this->campusFilter,
             PositionKind::tryFrom($this->kindFilter),
             match ($this->status) {
                 'active' => true,
@@ -122,15 +118,16 @@ new #[Title('Docentes')] class extends Component
                 default => null,
             },
         );
-        $targets = $this->showModal && $this->editingId === null ? $teachers->adscriptionTargets($context) : ['departments' => [], 'campuses' => []];
+        $targets = $this->showModal && $this->editingId === null ? $teachers->adscriptionTargets($context) : [];
 
         return [
             'teachers' => $page,
             'hours' => $teachers->baseHoursFor($term, $page),
+            'rowActions' => $this->rowActions($page, $context),
             'term' => $term,
             'options' => $options,
             'targets' => $targets,
-            'targetLabel' => $this->targetLabel($targets),
+            'targetCode' => collect($targets)->firstWhere('id', $this->department_id)['code'] ?? null,
             'kinds' => array_map(fn (PositionKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], PositionKind::cases()),
             'degrees' => array_map(fn (TeacherDegree $degree): array => ['id' => $degree->value, 'name' => $degree->label()], TeacherDegree::cases()),
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
@@ -151,7 +148,7 @@ new #[Title('Docentes')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'departmentFilter', 'campusFilter', 'kindFilter', 'status'], true)) {
+        if (in_array($property, ['search', 'departmentFilter', 'kindFilter', 'status'], true)) {
             $this->resetPage();
         }
     }
@@ -175,17 +172,11 @@ new #[Title('Docentes')] class extends Component
         $this->authorize('create', Teacher::class);
 
         $this->resetValidation();
-        $this->reset('editingId', 'existingId', 'existingLabel', 'employee_number', 'name', 'email', 'degree', 'hired_on', 'department_id', 'campus_id');
+        $this->reset('editingId', 'existingId', 'existingLabel', 'employee_number', 'name', 'email', 'degree', 'hired_on', 'department_id');
 
-        // Lo que no tiene más que una opción ya va elegido: el jefe no elige su departamento ni la subdirección su campus.
+        // Si solo puede dar de alta en un departamento (el jefe, el suyo), ya va elegido.
         $targets = $teachers->adscriptionTargets($context);
-        $campusIds = array_column($targets['campuses'], 'id');
-        $this->department_id = count($targets['departments']) === 1 ? $targets['departments'][0]['id'] : '';
-        $this->campus_id = match (true) {
-            count($campusIds) === 1 => $campusIds[0],
-            in_array($context->activeCampus()?->id, $campusIds, true) => $context->activeCampus()->id,
-            default => '',
-        };
+        $this->department_id = count($targets) === 1 ? $targets[0]['id'] : '';
         $this->showModal = true;
     }
 
@@ -195,7 +186,7 @@ new #[Title('Docentes')] class extends Component
         $this->authorize('update', $teacher);
 
         $this->resetValidation();
-        $this->reset('existingId', 'existingLabel', 'department_id', 'campus_id');
+        $this->reset('existingId', 'existingLabel', 'department_id');
         $this->editingId = $teacher->id;
         $this->employee_number = $teacher->employee_number;
         $this->name = $teacher->name;
@@ -225,14 +216,14 @@ new #[Title('Docentes')] class extends Component
         }
 
         $data = $this->validatedData(creating: true);
-        [$department, $campus] = $this->allowedTarget($teachers, $context);
+        $department = $this->allowedDepartment($teachers, $context);
 
         // El docente nuevo recibe usuario con la contraseña por defecto.
         if ($this->defaultPasswordIsMissing($defaultPassword, 'No se pudo dar de alta al docente')) {
             return;
         }
 
-        $teacher = $createTeacher->handle($data, $department, $campus);
+        $teacher = $createTeacher->handle($data, $department);
 
         if ($teacher->user_id === null) {
             $this->warning('Docente creado sin usuario', $this->describe($teacher).e(": ya hay un usuario {$teacher->employee_number} que no se puede ligar; lo resuelve el administrador."));
@@ -244,10 +235,9 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * S9: adscribe al docente que ya existe con el número capturado al departamento y campus del alta, sin cambiar
-     * sus datos.
+     * S9: adscribe al docente que ya existe con el número capturado al departamento del alta, sin cambiar sus datos.
      */
-    public function adscribeExisting(AddAdscription $addAdscription, TeacherQuery $teachers, ScopedContext $context, DefaultPassword $defaultPassword): void
+    public function adscribeExisting(AddAdscription $addAdscription, TeacherQuery $teachers, ScopedContext $context): void
     {
         $this->authorize('create', Teacher::class);
 
@@ -256,18 +246,34 @@ new #[Title('Docentes')] class extends Component
         }
 
         $teacher = $teachers->findOrFail($this->existingId);
-        $this->validate(['department_id' => ['required', 'string'], 'campus_id' => ['required', 'string']]);
-        [$department, $campus] = $this->allowedTarget($teachers, $context);
+        $this->validate(['department_id' => ['required', 'string']]);
+        $department = $this->allowedDepartment($teachers, $context);
 
-        // Adscribirlo sincroniza su acceso: un docente activo sin usuario lo recibe con la contraseña por defecto.
-        if ($teacher->is_active && $teacher->user_id === null && $this->defaultPasswordIsMissing($defaultPassword, 'No se pudo adscribir al docente')) {
-            return;
-        }
+        $addAdscription->handle($teacher, $department);
 
-        $addAdscription->handle($teacher, $department, $campus);
-
-        $this->success(e("Docente adscrito a {$department->code} en {$campus->code}"), $this->describe($teacher));
+        $this->success(e("Docente adscrito a {$department->code}"), $this->describe($teacher));
         $this->showModal = false;
+    }
+
+    /**
+     * «Quitar de mi departamento»: quita una adscripción del docente; si era la principal, la principal pasa a la más
+     * antigua que le quede, y sin ninguna el docente sigue activo (RemoveAdscription).
+     */
+    public function removeAdscription(string $id, TeacherQuery $teachers, RemoveAdscription $removeAdscription): void
+    {
+        $adscription = $teachers->findAdscriptionOrFail($id);
+        $this->authorize('removeAdscription', [Teacher::class, $adscription]);
+
+        $teacher = $adscription->teacher ?? abort(404);
+        $rest = $teacher->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription));
+        $promoted = $removeAdscription->handle($adscription);
+        $outcome = match (true) {
+            $rest->isEmpty() => '; queda sin departamento',
+            $promoted !== null => '; su adscripción principal pasa a '.$rest->firstWhere('id', $promoted->id)?->department?->code,
+            default => '',
+        };
+
+        $this->success(e("Docente quitado de {$adscription->department?->code}"), $this->describe($teacher).e($outcome));
     }
 
     public function toggleActive(string $id, TeacherQuery $teachers, SetTeacherActive $setTeacherActive, DefaultPassword $defaultPassword): void
@@ -314,12 +320,11 @@ new #[Title('Docentes')] class extends Component
             'degree' => 'grado',
             'hired_on' => 'fecha de ingreso',
             'department_id' => 'departamento',
-            'campus_id' => 'campus',
         ];
     }
 
     /**
-     * Los datos validados en forma. El número y la adscripción solo en un alta: el número no se edita.
+     * Los datos validados en forma. El número y el departamento solo en un alta: el número no se edita.
      *
      * @return array{employee_number?: string, name: string, email: string, degree: string, hired_on: string}
      */
@@ -329,7 +334,6 @@ new #[Title('Docentes')] class extends Component
             ...($creating ? [
                 'employee_number' => ['required', 'string', 'max:255'],
                 'department_id' => ['required', 'string'],
-                'campus_id' => ['required', 'string'],
             ] : []),
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -347,25 +351,80 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * El departamento y el campus del alta, si están entre los que puede elegir y TeacherPolicy le deja dar de alta
-     * en esa pareja (un jefe con dos alcances no puede cruzarlos); si no, un error en el departamento.
-     *
-     * @return array{0: Department, 1: Campus}
+     * El departamento del alta, si está entre los que puede elegir y TeacherPolicy le deja dar de alta en él; si no,
+     * un error en el departamento.
      *
      * @throws ValidationException
      */
-    private function allowedTarget(TeacherQuery $teachers, ScopedContext $context): array
+    private function allowedDepartment(TeacherQuery $teachers, ScopedContext $context): Department
     {
-        $targets = $teachers->adscriptionTargets($context);
-        $allowed = in_array($this->department_id, array_column($targets['departments'], 'id'), true)
-            && in_array($this->campus_id, array_column($targets['campuses'], 'id'), true)
-            && Gate::allows('create', [Teacher::class, $this->campus_id, $this->department_id]);
+        $allowed = in_array($this->department_id, array_column($teachers->adscriptionTargets($context), 'id'), true)
+            && Gate::allows('create', [Teacher::class, $this->department_id]);
 
         if (! $allowed) {
-            throw ValidationException::withMessages(['department_id' => 'No das de alta docentes en ese departamento y campus.']);
+            throw ValidationException::withMessages(['department_id' => 'No das de alta docentes en ese departamento.']);
         }
 
-        return [app(DepartmentQuery::class)->findOrFail($this->department_id), app(CampusQuery::class)->findOrFail($this->campus_id)];
+        return app(DepartmentQuery::class)->findOrFail($this->department_id);
+    }
+
+    /**
+     * Las acciones de cada fila del menú «Acciones», ya decididas con TeacherPolicy: «Quitar de <depto>» por cada
+     * adscripción a un departamento que cubre (las de otros departamentos no se muestran), con el aviso de qué
+     * principal queda; y «Desactivar/Activar», deshabilitado con su motivo si no le toca. Sin consultas: las
+     * adscripciones ya vienen con la página.
+     *
+     * @param  LengthAwarePaginator<int, Teacher>  $teachers
+     * @return array<string, array{removals: list<array{id: string, label: string, confirm: string, reason: ?string}>, deactivateReason: ?string}>
+     */
+    private function rowActions(LengthAwarePaginator $teachers, ScopedContext $context): array
+    {
+        $actions = [];
+
+        foreach ($teachers as $teacher) {
+            $removals = [];
+
+            foreach ($teacher->adscriptions as $adscription) {
+                if (! $context->coversDepartment(TeacherPolicy::EDITORS, $adscription->department_id)) {
+                    continue;
+                }
+
+                $adscription->setRelation('teacher', $teacher);
+                $removals[] = [
+                    'id' => $adscription->id,
+                    'label' => 'Quitar de '.$adscription->department?->code,
+                    'confirm' => $this->removalWarning($teacher, $adscription),
+                    'reason' => Gate::allows('removeAdscription', [Teacher::class, $adscription]) ? null : 'No te puedes quitar a ti mismo de un departamento.',
+                ];
+            }
+
+            $actions[$teacher->id] = [
+                'removals' => $removals,
+                'deactivateReason' => match (true) {
+                    Gate::allows('deactivate', $teacher) => null,
+                    $teacher->user_id !== null && $teacher->user_id === $context->user()?->getKey() => 'No te puedes dar de baja a ti mismo.',
+                    default => 'Solo el administrador y la Subdirección dan de baja a un docente.',
+                },
+            ];
+        }
+
+        return $actions;
+    }
+
+    /**
+     * El aviso antes de quitar una adscripción: qué principal le queda, con la regla de RemoveAdscription (la más
+     * antigua de las que quedan; las adscripciones llegan en ese orden detrás de la principal).
+     */
+    private function removalWarning(Teacher $teacher, TeacherDepartment $adscription): string
+    {
+        $rest = $teacher->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription));
+        $outcome = match (true) {
+            $rest->isEmpty() => 'Se queda sin departamento, pero sigue activo.',
+            $adscription->is_primary => 'Sigue activo y su adscripción principal pasa a '.$rest->first()->department?->code.'.',
+            default => 'Sigue activo y su adscripción principal no cambia.',
+        };
+
+        return "¿Quitar al docente {$teacher->employee_number} de {$adscription->department?->code}? {$outcome}";
     }
 
     /**
@@ -410,32 +469,15 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * «SC en C2»: el destino del alta, con las claves del departamento y del campus elegidos; null si falta uno.
+     * Olvida el departamento o el tipo del filtro que no están entre las opciones: los filtros se recuerdan en la
+     * sesión, y uno que ya no existe dejaría la lista vacía sin verse en su select.
      *
-     * @param  array{departments: list<array{id: string, code: string, name: string}>, campuses: list<array{id: string, code: string, name: string}>}  $targets
-     */
-    private function targetLabel(array $targets): ?string
-    {
-        $department = collect($targets['departments'])->firstWhere('id', $this->department_id);
-        $campus = collect($targets['campuses'])->firstWhere('id', $this->campus_id);
-
-        return $department === null || $campus === null ? null : "{$department['code']} en {$campus['code']}";
-    }
-
-    /**
-     * Olvida el departamento, el campus o el tipo del filtro que no están entre las opciones: los filtros se
-     * recuerdan en la sesión, y uno que ya no existe dejaría la lista vacía sin verse en su select.
-     *
-     * @param  array{departments: list<array{id: string, name: string}>, campuses: list<array{id: string, name: string}>}  $options
+     * @param  array{departments: list<array{id: string, name: string}>}  $options
      */
     private function forgetFiltersOutside(array $options): void
     {
         if ($this->departmentFilter !== '' && ! in_array($this->departmentFilter, array_column($options['departments'], 'id'), true)) {
             $this->departmentFilter = '';
-        }
-
-        if ($this->campusFilter !== '' && ! in_array($this->campusFilter, array_column($options['campuses'], 'id'), true)) {
-            $this->campusFilter = '';
         }
 
         if ($this->kindFilter !== '' && PositionKind::tryFrom($this->kindFilter) === null) {

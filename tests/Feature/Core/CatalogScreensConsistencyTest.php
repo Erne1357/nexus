@@ -73,6 +73,15 @@ it('usa la barra de herramientas común: búsqueda, filtros a la izquierda y la 
         ->and($dom->querySelector('main h1')?->parentElement?->parentElement?->querySelector('input[type="search"], .btn-primary'))->toBeNull();
 })->with('catalog screens');
 
+it('con cuatro filtros, los filtros son angostos (md:w-44) para caber en un renglón desde 1440 px; con menos, md:w-52', function (string $route, string $code) {
+    seedCatalogRow($route, $code);
+
+    $filters = domOf($this->actingAs($this->admin)->get(route($route))->assertOk())->querySelector('[data-testid="catalog-toolbar"] [data-testid="catalog-filters"]');
+    $count = count($filters->querySelectorAll('select'));
+
+    expect($filters->getAttribute('class'))->toContain($count >= 4 ? 'md:[&>*]:w-44' : 'md:[&>*]:w-52');
+})->with('catalog screens');
+
 it('cada fila lleva «Editar» visible y el botón «Acciones» con su menú', function (string $route, string $code) {
     seedCatalogRow($route, $code);
 
