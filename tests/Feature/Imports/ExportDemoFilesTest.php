@@ -92,15 +92,12 @@ it('no corre en producción', function () {
 });
 
 it('avisa y falla si no puede abrir un archivo', function () {
-    $this->artisan('imports:export-demo');
-    $path = Storage::disk('imports')->path('demo/departments.csv');
-    chmod($path, 0444);
-
-    if (is_writable($path)) {
-        $this->markTestSkipped('Corre como root: el archivo de solo lectura sí se puede escribir.');
-    }
+    // Un directorio donde va el archivo: fopen falla también como root.
+    Storage::disk('imports')->makeDirectory('demo/departments.csv');
 
     $this->artisan('imports:export-demo')->expectsOutputToContain('No se pudo escribir demo/departments.csv')->assertFailed();
+
+    expect(Storage::disk('imports')->allFiles())->toBe([]);
 });
 
 it('lo exportado se vuelve a importar completo, en orden, con el motor real', function () {
