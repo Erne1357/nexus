@@ -10,7 +10,7 @@ use Symfony\Component\Finder\Finder;
 it('da el tamaño de cada x-icon con w-* y h-*, no con size-*', function () {
     $offenders = [];
 
-    foreach (Finder::create()->files()->in([app_path(), resource_path('views')])->name('*.blade.php') as $file) {
+    foreach (Finder::create()->files()->in([dirname(__DIR__, 2).'/app', dirname(__DIR__, 2).'/resources/views'])->name('*.blade.php') as $file) {
         preg_match_all('/<x-icon\b(?:[^"\'>]|"[^"]*"|\'[^\']*\')*>/', $file->getContents(), $tags);
 
         foreach ($tags[0] as $tag) {
