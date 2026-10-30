@@ -15,7 +15,8 @@ use RuntimeException;
  * Edificios, salones, bloqueos y salones por defecto demo para probar las pantallas con datos verosímiles. Los
  * edificios y los grupos de salones viven en `data/buildings.php` (nombres inventados al estilo del ITCJ); las
  * capacidades, las características, los bloqueos y los salones por defecto salen de una semilla, así que la misma
- * semilla da lo mismo.
+ * semilla da lo mismo. Cada campus tiene su propio generador (semilla + clave del campus): sembrar solo Campus II da
+ * lo mismo que sembrarlo junto con Campus I.
  *
  * Campus II da unos 7 edificios y 90 salones; Campus I, unos 12 y 180. Hay los cinco tipos de salón, con y sin
  * departamento dueño (los departamentos del catálogo de AcademicDemoSeeder), inactivos, un edificio inactivo, un
@@ -72,13 +73,13 @@ class FacilitiesDemoSeeder extends Seeder
             ?? throw new RuntimeException('Falta el periodo '.self::BLOCK_TERM.': corre antes DemoTermSeeder.');
         $departmentIds = DB::table('departments')->pluck('id', 'code')->all();
         $data = self::data();
-        $random = new Randomizer(new Mt19937($seed));
         $now = CarbonImmutable::now();
 
-        DB::transaction(function () use ($campuses, $campusIds, $termId, $departmentIds, $data, $random, $now): void {
+        DB::transaction(function () use ($campuses, $campusIds, $termId, $departmentIds, $data, $seed, $now): void {
             foreach ($campuses as $code) {
                 $buildings = $data[$code] ?? throw new InvalidArgumentException("No hay edificios demo para el campus {$code}.");
                 $campusId = $campusIds[$code];
+                $random = new Randomizer(new Mt19937(($seed + crc32($code)) & 0x7FFFFFFF));
 
                 $this->seedBuildings($campusId, $buildings, $now);
                 $this->seedRooms($campusId, $buildings, $departmentIds, $random, $now);

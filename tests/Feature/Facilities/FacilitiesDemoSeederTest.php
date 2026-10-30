@@ -136,18 +136,60 @@ it('volver a sembrar no duplica nada', function () {
     expect(facilitiesCounts())->toBe($first);
 });
 
-it('con la misma semilla salen los mismos salones', function () {
-    seedDemoFacilities(['C2'], 7);
-    $a = Room::withTrashed()->orderBy('code')->get(['code', 'capacity', 'type'])->toArray();
+/**
+ * Lo sembrado de un campus sin ids, para comparar corridas.
+ *
+ * @return array<string, mixed>
+ */
+function facilitiesSnapshot(string $campusCode): array
+{
+    $campus = campusId($campusCode);
+    $roomCodes = DB::table('rooms')->pluck('code', 'id');
+    $subjectCodes = DB::table('subjects')->pluck('code', 'id');
 
+    return [
+        'buildings' => DB::table('buildings')->where('campus_id', $campus)->orderBy('code')->get(['code', 'name', 'is_active', 'deleted_at'])->map(fn ($row) => ['deleted_at' => $row->deleted_at !== null] + (array) $row)->all(),
+        'rooms' => DB::table('rooms')->where('campus_id', $campus)->orderBy('code')->get(['code', 'name', 'type', 'capacity', 'features', 'is_active', 'deleted_at'])->map(fn ($row) => ['deleted_at' => $row->deleted_at !== null] + (array) $row)->all(),
+        'blocks' => DB::table('room_blocks')->whereIn('room_id', DB::table('rooms')->where('campus_id', $campus)->select('id'))->get()
+            ->map(fn ($row): string => implode('|', [$roomCodes[$row->room_id], $row->term_id === null ? '-' : 'T', $row->day, $row->starts_at, $row->ends_at, $row->reason]))->sort()->values()->all(),
+        'defaults' => DB::table('subject_room_defaults')->where('campus_id', $campus)->get()
+            ->map(fn ($row): string => implode('|', [$subjectCodes[$row->subject_id], $roomCodes[$row->room_id], $row->priority, $row->source]))->sort()->values()->all(),
+    ];
+}
+
+function wipeFacilities(): void
+{
     DB::table('subject_room_defaults')->delete();
     DB::table('room_blocks')->delete();
     DB::table('rooms')->delete();
     DB::table('buildings')->delete();
-    seedDemoFacilities(['C2'], 7);
-    $b = Room::withTrashed()->orderBy('code')->get(['code', 'capacity', 'type'])->toArray();
+}
 
-    expect($b)->toBe($a);
+it('con la misma semilla salen los mismos salones, características, bloqueos y salones por defecto', function () {
+    seedDemoFacilities(['C2'], 7);
+    $a = facilitiesSnapshot('C2');
+
+    wipeFacilities();
+    seedDemoFacilities(['C2'], 7);
+
+    expect(facilitiesSnapshot('C2'))->toBe($a)
+        ->and($a['blocks'])->not->toBeEmpty()
+        ->and($a['defaults'])->not->toBeEmpty();
+});
+
+it('Campus II sale igual sembrado solo o junto con Campus I, y no suma nada al cambiar la lista de campus', function () {
+    seedDemoFacilities(['C2']);
+    $alone = facilitiesSnapshot('C2');
+
+    wipeFacilities();
+    seedDemoFacilities(['C1', 'C2']);
+
+    expect(facilitiesSnapshot('C2'))->toBe($alone);
+
+    $counts = facilitiesCounts();
+    seedDemoFacilities(['C2']);
+
+    expect(facilitiesCounts())->toBe($counts);
 });
 
 it('se niega a correr en producción', function () {

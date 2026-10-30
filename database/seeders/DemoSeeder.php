@@ -16,7 +16,7 @@ use Illuminate\Database\Seeder;
 
 /**
  * Datos demo de Campus II para desarrollo, demostraciones y browser tests: lo base, los periodos, el catálogo
- * académico de sus 6 carreras, los usuarios de prueba y unos 200 alumnos con su kárdex
+ * académico de sus 6 carreras, los usuarios de prueba, sus edificios y salones (con bloqueos y salones por defecto) y unos 200 alumnos con su kárdex
  * (docs/arquitectura/testing.md, "Datos de prueba"). No corre en producción.
  *
  *     php artisan migrate:fresh --seed --seeder='Database\Seeders\DemoSeeder'

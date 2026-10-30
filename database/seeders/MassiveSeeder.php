@@ -15,8 +15,8 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
- * Volumen para probar pantallas y rendimiento: lo base, los periodos, el catálogo y los usuarios de Campus I y
- * Campus II, y unos 12 mil alumnos (670 por cada una de las 12 carreras de Campus I y 660 por cada una de las 6 de
+ * Volumen para probar pantallas y rendimiento: lo base, los periodos, el catálogo, los usuarios, los edificios y
+ * salones de Campus I y Campus II, y unos 12 mil alumnos (670 por cada una de las 12 carreras de Campus I y 660 por cada una de las 6 de
  * Campus II) con unos 360 mil renglones de kárdex y su avance. Imprime lo que tarda cada parte. No corre en
  * producción.
  *
