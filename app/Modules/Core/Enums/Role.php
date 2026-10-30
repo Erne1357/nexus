@@ -33,17 +33,20 @@ enum Role: string
 
     /**
      * Columnas de `role_scopes` que un alcance de este rol debe llenar para contar en
-     * ScopedContext (columna "Alcance" de PROJECT.md). Admin no necesita alcance; al docente,
-     * cuyo alcance es su propia carga, se le pide el campus donde la tiene.
+     * ScopedContext (columna "Alcance" de PROJECT.md). Admin no necesita alcance. La subdirección
+     * y el docente son de todo el Tec, y el jefe de departamento lo es de un departamento en todo
+     * el Tec: su alcance no pide campus, y sin campus vale en todos los activos. El jefe de
+     * proyecto docente y el coordinador sí piden campus. Un alcance con un campus que su rol no
+     * pide sigue valiendo solo en ese campus.
      *
      * @return list<'campus_id'|'department_id'|'career_id'>
      */
     public function scopeColumns(): array
     {
         return match ($this) {
-            self::Admin => [],
-            self::Subdireccion, self::Docente => ['campus_id'],
-            self::JefeDepartamento, self::JefeProyectoDocente => ['campus_id', 'department_id'],
+            self::Admin, self::Subdireccion, self::Docente => [],
+            self::JefeDepartamento => ['department_id'],
+            self::JefeProyectoDocente => ['campus_id', 'department_id'],
             self::Coordinador => ['campus_id', 'career_id'],
         };
     }

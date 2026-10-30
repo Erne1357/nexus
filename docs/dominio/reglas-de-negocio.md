@@ -97,16 +97,16 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 
 | Acción | Quién | Condición |
 |---|---|---|
-| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, solo en sus campus y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin` |
-| Administrar edificios y salones | `admin`, `subdireccion` de su campus | |
+| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin` |
+| Administrar edificios y salones | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo |
 | Importar catálogos | `admin` | |
 | Administrar catálogos de Academic (departamentos, carreras, materias, planes y su retícula) | `admin` | En la fase 2 se abren a los jefes para validar (confirmado el 29 de octubre de 2026) |
-| Consultar alumnos (listado y ficha) | `admin`, `subdireccion`, `jefe_departamento`, `coordinador` | `subdireccion`, los de su campus; `jefe_departamento`, los de las carreras de su departamento en su campus; `coordinador`, los de su carrera en su campus. Solo lectura: vienen del SII (confirmado el 29 de octubre de 2026) |
-| Validar catálogos del departamento | `jefe_departamento` del departamento y campus | |
+| Consultar alumnos (listado y ficha) | `admin`, `subdireccion`, `jefe_departamento`, `coordinador` | `subdireccion`, los de cualquier campus; `jefe_departamento`, los de las carreras de su departamento en cualquier campus; `coordinador`, los de su carrera en su campus. Solo lectura: vienen del SII (confirmado el 29 de octubre de 2026) |
+| Validar catálogos del departamento | `jefe_departamento` del departamento | |
 | Enviar propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
-| Asignar docente | `jefe_departamento`, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
+| Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
@@ -115,6 +115,10 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Visto bueno | `subdireccion` | solo si `requires_subdireccion_approval` |
 | Publicar | `subdireccion`, o `jefe_departamento` si el campus no exige visto bueno | carga `closed` o `approved` |
 | Re-análisis | `coordinador`, `jefe_departamento` | nueva importación de kardex (R2) |
+
+Alcance de cada rol: la Subdirección Académica es una para todo el Tec y el jefe de departamento es uno por departamento para todo el Tec, así que su alcance no lleva campus y vale en cada campus activo (confirmado el 30 de octubre de 2026). El coordinador lo es de una carrera en un campus, porque sus alumnos son de un campus (confirmado el 30 de octubre de 2026). Los docentes no están atados a un campus: dan clase en cualquier campus o modalidad (confirmado el 30 de octubre de 2026); por eso un alcance de `docente` sin campus vale en todos los campus activos.
+
+El jefe de proyecto docente lo es de un departamento en un campus, lo más restrictivo mientras no se decida si también es de todo el Tec (supuesto por confirmar).
 
 Un alcance (`role_scopes`) deja de contar cuando su carrera o su departamento se borra. Si solo se desactiva, sigue contando, porque una carrera inactiva puede tener todavía alumnos y grupos que atender, igual que un plan inactivo (confirmado el 29 de octubre de 2026). Core no depende de Academic, así que lo resuelve la tarea 1.8 al borrar.
 
