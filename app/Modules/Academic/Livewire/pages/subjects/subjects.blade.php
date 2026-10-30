@@ -1,6 +1,6 @@
 {{--
-    Anatomía de una pantalla de catálogo (DESIGN.md, "Layout"), la misma de Departamentos: encabezado
-    con búsqueda, filtros y una sola acción principal; tabla en una superficie blanca con filete, la
+    Anatomía de una pantalla de catálogo (DESIGN.md, "Layout"), la misma de Departamentos: encabezado y, en su renglón, la barra de herramientas común (x-core::catalog-toolbar: búsqueda,
+    filtros y una sola acción principal); tabla en una superficie blanca con filete, la
     clave en Mono, las horas y los créditos en Mono (HT-HP-créditos), el estado con su insignia y las
     acciones en btn-ghost; al pie, el rango y la paginación. Entre 768 y 1199 px se ocultan el tipo y
     el laboratorio; debajo de 768 px la tabla cede su lugar a renglones apilados (clave, nombre y
@@ -11,40 +11,34 @@
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             El catálogo de materias con sus horas y créditos; su lugar en cada plan está en la retícula. Una materia no se borra: se desactiva, y solo si ningún alumno la necesita todavía.
         </x-slot:subtitle>
-
-        <x-slot:actions class="w-full flex-wrap md:w-auto">
-            <div class="w-full md:w-64">
-                <x-input
-                    wire:model.live.debounce.300ms="search"
-                    placeholder="Buscar por clave o nombre"
-                    aria-label="Buscar materias"
-                    icon="o-magnifying-glass"
-                    clearable
-                />
-            </div>
-
-            <div class="w-full md:w-56">
-                <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$departments" placeholder="Todos los departamentos" />
-            </div>
-
-            <div class="w-full md:w-44">
-                <x-select wire:model.live="kindFilter" aria-label="Tipo" :options="$kindFilters" placeholder="Todos los tipos" />
-            </div>
-
-            <div class="w-full md:w-44">
-                <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activas e inactivas" />
-            </div>
-
-            <x-button label="Nueva materia" icon="o-plus" class="btn-primary max-md:flex-1" wire:click="create" spinner="create" />
-        </x-slot:actions>
     </x-header>
+
+    <x-core::catalog-toolbar>
+        <x-slot:search>
+            <x-input
+                wire:model.live.debounce.300ms="search"
+                placeholder="Buscar por clave o nombre"
+                aria-label="Buscar materias"
+                icon="o-magnifying-glass"
+                clearable
+            />
+        </x-slot:search>
+
+        <x-select wire:model.live="departmentFilter" aria-label="Departamento" :options="$departments" placeholder="Todos los departamentos" />
+        <x-select wire:model.live="kindFilter" aria-label="Tipo" :options="$kindFilters" placeholder="Todos los tipos" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activas e inactivas" />
+
+        <x-slot:action>
+            <x-button label="Nueva materia" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+        </x-slot:action>
+    </x-core::catalog-toolbar>
 
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
         <x-table
             :headers="$headers"
             :rows="$subjects"
             :row-decoration="$rowDecoration"
-            class="max-md:hidden [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
+            class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
         >
             @scope('cell_code', $subject)
                 <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $subject->is_active])>{{ $subject->code }}</span>

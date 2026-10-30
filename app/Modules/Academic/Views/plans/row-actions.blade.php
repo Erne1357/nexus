@@ -1,6 +1,6 @@
 {{--
     Acciones de un plan, las mismas en la tabla y en los renglones apilados del celular
-    (academic::pages.plans). «Retícula» enlaza a academic.plans.show solo cuando esa ruta existe
+    (academic::pages.plans): «Retícula» y «Editar» visibles y lo demás plegado en «Acciones». «Retícula» enlaza a academic.plans.show solo cuando esa ruta existe
     (la crea la tarea 1.8.8). En la tabla (`$inTable`), «Editar» queda solo con su icono entre 768 y
     1199 px y lleva el data-testid del browser test. No hay «Borrar»: un plan se desactiva.
 --}}
@@ -27,11 +27,12 @@
         <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
     </x-button>
 
-    <x-button
-        :label="$plan->is_active ? 'Desactivar' : 'Activar'"
-        wire:click="toggleActive('{{ $plan->id }}')"
-        wire:confirm="{{ $plan->is_active ? '¿Desactivar el plan '.$plan->code.'?' : '¿Activar el plan '.$plan->code.'?' }}"
-        class="btn-ghost btn-sm"
-        spinner="toggleActive('{{ $plan->id }}')"
-    />
+    <x-core::row-menu :name="$plan->code" :compact="$inTable">
+        <x-core::row-menu-item
+            :label="$plan->is_active ? 'Desactivar' : 'Activar'"
+            wire:click="toggleActive('{{ $plan->id }}')"
+            wire:confirm="{{ $plan->is_active ? '¿Desactivar el plan '.$plan->code.'?' : '¿Activar el plan '.$plan->code.'?' }}"
+            :spinner="'toggleActive(\''.$plan->id.'\')'"
+        />
+    </x-core::row-menu>
 </div>

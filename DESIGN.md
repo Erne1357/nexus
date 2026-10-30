@@ -202,16 +202,27 @@ La captura pesada (editor de horarios, asignación) se diseña para escritorio, 
 
 ### Anatomía de una pantalla de catálogo
 La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php), que copian todos los catálogos:
-1. **Encabezado** (`x-header`):
-   - título y una línea que explica la pantalla;
-   - a la derecha, búsqueda, filtro de estado y la **acción principal**, una sola y en `btn-primary`.
-2. **Tabla** (`x-table` en una superficie blanca con filete):
-   - la clave primero, en Mono;
+1. **Encabezado** (`x-header`): el título y una línea que explica la pantalla. Nada más: la barra de herramientas no va en su slot `actions`, porque según el ancho subiría junto al título o caería debajo.
+2. **Barra de herramientas** (`<x-core::catalog-toolbar>`), en su propio renglón debajo del encabezado y su filete, igual en las cinco pantallas:
+   - a la izquierda, la búsqueda (slot `search`, `md:w-64`) y después los filtros, todos de `md:w-52` y en el mismo orden: primero los de catálogo (departamento, carrera, tipo) y al final el de estado;
+   - a la derecha, siempre en el mismo lugar (`md:ms-auto`), la **acción principal** (slot `action`), una sola y en `btn-primary`;
+   - debajo de 768 px cada control ocupa todo el ancho, uno por renglón.
+3. **Tabla** (`x-table` en una superficie blanca con filete):
+   - la clave primero, en Mono y sin partirse (`whitespace-nowrap`);
+   - el nombre con un ancho mínimo (`min-w-52` desde 1200 px) para que no pase de dos renglones;
    - el estado con su insignia;
-   - las acciones a la derecha en `btn-ghost`, con su motivo en tooltip cuando están deshabilitadas;
-   - paginación al pie, con el rango («Campus C1 a TNV · 1–5 de 5»).
-3. **Formulario en modal** (`x-modal` + `x-form`) para crear y editar. Página completa solo si el formulario no cabe o tiene pasos.
-4. **Avisos** con el `Toast` de MaryUI: título corto y el registro, escapado con `e()`.
+   - las acciones a la derecha (ver "Acciones de fila");
+   - paginación al pie, con el rango («Campus C1 a TNV · 1–5 de 5»);
+   - **cabe en su caja** a 1440 y a 1024 px: lo que no cabe son columnas descriptivas largas, que se ocultan (`max-[1200px]:hidden`, y `max-[1535px]:hidden` en Materias y Planes, que tienen más). Si aun así no cabe, la caja se desplaza de lado, nunca la página.
+4. **Formulario en modal** (`x-modal` + `x-form`) para crear y editar. Página completa solo si el formulario no cabe o tiene pasos.
+5. **Avisos** con el `Toast` de MaryUI: título corto y el registro, escapado con `e()`.
+
+#### Acciones de fila
+El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados del celular:
+- **Visible, solo lo frecuente:** «Editar» (y «Retícula» en Planes), en `btn-ghost btn-sm`. Lo demás se pliega en un botón **«Acciones»** (`btn-ghost btn-sm`, con `o-chevron-down`) que abre `<x-core::row-menu>`; entre 768 y 1199 px, en la tabla, los botones quedan solo con su icono (`o-ellipsis-horizontal` en «Acciones») y su nombre accesible (`aria-label="Acciones de <CLAVE>"`).
+- **Dentro del menú**, un `<x-core::row-menu-item>` por acción: Desactivar o Activar, Ofrecer en el campus, Borrar (en `text-error`). Conservan su `wire:confirm`, su `spinner` y su `data-testid`.
+- **Lo deshabilitado se queda en el menú, deshabilitado, con su motivo escrito en un segundo renglón** del elemento («Borrar — Solo se borra una carrera sin planes de estudio.»). Nada se oculta por permiso y un tooltip no lo ve quien usa teclado o pantalla táctil.
+- **El menú no se corta:** es un `popover` del navegador, en la capa superior, así que la caja con `overflow` de la tabla ni el pie de la página lo cortan. Se abre debajo del botón y, si no cabe, arriba. Esc o un clic fuera lo cierran y el foco vuelve al botón; las flechas, Inicio y Fin recorren los elementos.
 
 ### Cómo se hace una pantalla nueva
 1. Copia la forma de Campus: el componente MFC, la Query, la Action y la Policy (skill `nexus-module`).
@@ -258,7 +269,7 @@ La ficha del alumno muestra su retícula como la del SII, que es la que conocen 
 | Puede seleccionarla | `primary` sobre blanco | doble | `o-arrow-right-circle` |
 | No permitida aún | `neutral` sobre `base-200` | punteado | `o-lock-closed` |
 
-- Arriba de la retícula, la leyenda de los estados y hasta qué semestre puede seleccionar. La pestaña **Kárdex** muestra el historial por periodo, con el resultado en su insignia.
+- Arriba de la retícula, la leyenda de los estados y hasta qué semestre puede seleccionar. La pestaña **Kárdex** muestra el historial por periodo, del más antiguo al más reciente (FIFO: el primer periodo que cursó va arriba), con el resultado en su insignia.
 - **Cadenas de seriación.** Cada grupo de materias unidas por su seriación tiene su color, que se ve siempre como una **franja a la izquierda** de cada materia: una sombra interior, que no toca el borde del estado (`ChainColor::stripeClasses()`). Una leyenda nombra cada cadena por su primera materia y dice cuántas tiene. Tocar una materia resalta su cadena completa (lo que pide y lo que abre) y atenúa lo demás, y una línea dice qué pide y qué abre; tocar una cadena de la leyenda resalta todas sus materias; tocar lo mismo otra vez o Esc lo quita. Solo al tocar, no al pasar el cursor, y sin líneas entre materias (decidido por el usuario el 29 de octubre de 2026). Lo hace el componente Alpine `studentGrid` (`resources/js/app.js`). En celular (menos de 768 px) la leyenda de cadenas va plegada: «Cadenas de seriación (N)» se abre con un toque (decidido por el usuario el 29 de octubre de 2026).
 - **Tokens de las cadenas** (`--color-chain-1` a `--color-chain-12`, utilidades `chain-N`). Son elementos gráficos, así que piden 3:1; la razón es la mínima contra los rellenos de la retícula (blanco, `base-200` y los tintes al 10 % de cada tono). Con más de doce cadenas los colores se repiten, y la leyenda las distingue:
 
@@ -347,7 +358,7 @@ Radios contenidos: insignias 4 px, campos y botones 6 px, tablas y superficies 8
 ### Buttons
 - **Principal** (`btn-primary`): azul espacio, texto blanco, 40 px de alto. Una por pantalla.
 - **Secundaria** (`btn-ghost`): texto azul sin fondo; las acciones de fila.
-- **Deshabilitada:** se muestra con su motivo en un tooltip («Solo el administrador da de alta campus.»), no desaparece.
+- **Deshabilitada:** se muestra con su motivo, no desaparece. Un botón suelto lo lleva en un tooltip («Solo el administrador da de alta campus.»); un elemento del menú «Acciones» lo lleva escrito en un segundo renglón (ver "Acciones de fila").
 
 ### Insignias de estado
 Rectangulares, de 26 px, con icono y texto, iguales en toda la aplicación. Se pintan siempre con el componente de Core `<x-core::status-badge>`, nunca con `x-badge` y clases sueltas: su `tone` (el enum `StatusTone` de Core o su valor) pone las clases y el icono de la tabla, `label` es obligatorio porque el color nunca va solo, el icono queda oculto a los lectores de pantalla y `icon` lo cambia cuando la tabla da dos.
