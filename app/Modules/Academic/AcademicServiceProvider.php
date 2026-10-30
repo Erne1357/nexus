@@ -4,6 +4,7 @@ namespace App\Modules\Academic;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
@@ -24,6 +25,8 @@ final class AcademicServiceProvider extends ModuleServiceProvider
                 ability: 'viewAny', arguments: [Career::class]),
             new NavigationItem('Materias', 'academic.subjects', 'o-book-open', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Subject::class]),
+            new NavigationItem('Planes de estudio', 'academic.plans', 'o-rectangle-group', NavigationArea::Academico,
+                ability: 'viewAny', arguments: [StudyPlan::class], childRoutes: ['academic.plans.show']),
         ];
     }
 }
