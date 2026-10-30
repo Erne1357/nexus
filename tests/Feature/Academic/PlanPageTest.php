@@ -162,7 +162,7 @@ describe('admin', function () {
 
         expect(textOf($page->querySelector('[data-testid="chain-legend"] [data-chain="0"]')))->toBe('Cálculo Diferencial 3')
             ->and($tile('ACF-0904')->getAttribute('data-chain'))->toBe('0')
-            ->and($tile('ACF-0901')->getAttribute('style'))->toContain('--chain: var(--color-chain-1)')
+            ->and($tile('ACF-0901')->getAttribute('class'))->toContain('[--chain:var(--color-chain-1)]')
             ->and($tile('SCC-1017')->hasAttribute('data-chain'))->toBeFalse();
     });
 

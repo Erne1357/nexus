@@ -200,7 +200,7 @@ it('a 1440 px todos los mosaicos miden lo mismo, los de un renglón se alinean e
         // El primer mosaico de cada semestre, en el mismo renglón de todas las columnas.
         ->assertScript("new Set([...document.querySelectorAll('[data-testid=plan-grid] > section')].map((semester) => Math.round(semester.querySelector('[data-subject]').getBoundingClientRect().top))).size", 1)
         // Cada especialidad empieza en el mismo renglón en todas sus columnas, debajo de su banda.
-        ->assertScript("(() => { const band = document.querySelector('[data-band=\"{$software->id}\"]').getBoundingClientRect(); return [...document.querySelectorAll('[data-subject]')].filter((tile) => ".json_encode($softwareCodes->all()).".includes(tile.dataset.subject)).every((tile) => tile.getBoundingClientRect().top > band.bottom); })()", true)
+        ->assertScript("(() => { const band = document.querySelector('[data-band=\"{$software->id}\"]').getBoundingClientRect(); return [...document.querySelectorAll('[data-subject]')].filter((tile) => ".json_encode($softwareCodes->all()).'.includes(tile.dataset.subject)).every((tile) => tile.getBoundingClientRect().top > band.bottom); })()', true)
         ->assertScript("document.querySelector('[data-testid=chain-legend]').getBoundingClientRect().top >= document.querySelector('[data-testid=plan-grid]').getBoundingClientRect().bottom", true)
         ->assertNoJavaScriptErrors();
 
