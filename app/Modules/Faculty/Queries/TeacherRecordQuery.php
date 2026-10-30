@@ -144,7 +144,12 @@ final class TeacherRecordQuery
      * del SII con grupos o evaluaciones, su nombre, los grupos que impartió (materia y campus; una fila por grupo) y
      * sus evaluaciones por tipo. Cuatro consultas sin importar cuántos periodos sean.
      *
-     * @return Collection<int, array{code: string, label: string, groups: Collection<int, TeacherSubjectHistory>, evaluations: Collection<int, TeacherEvaluation>}>
+     * @return Collection<int, array{
+     *     code: string,
+     *     label: string,
+     *     groups: Collection<int, TeacherSubjectHistory>,
+     *     evaluations: Collection<int, TeacherEvaluation>
+     * }>
      */
     public function history(Teacher $teacher): Collection
     {
@@ -155,7 +160,13 @@ final class TeacherRecordQuery
                 'campus' => fn (BelongsTo $campus) => $campus->withTrashed()->select(['id', 'code']),
             ])
             ->get()
-            ->sortBy([['term_code', 'asc'], [fn (TeacherSubjectHistory $row): string => (string) $row->subject?->code, 'asc'], ['group_code', 'asc']])
+            ->sortBy([
+                ['term_code', 'asc'],
+                [fn (TeacherSubjectHistory $row): string => (string) $row->subject?->code, 'asc'],
+                ['group_code', 'asc'],
+                [fn (TeacherSubjectHistory $row): string => (string) $row->campus?->code, 'asc'],
+                ['id', 'asc'],
+            ])
             ->groupBy('term_code');
         $evaluations = TeacherEvaluation::query()->where('teacher_id', $teacher->getKey())->orderBy('kind')->get()->groupBy('term_code');
         $codes = $groups->keys()->merge($evaluations->keys())->unique()->sort()->values();
