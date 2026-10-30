@@ -47,7 +47,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Módulo | Fase que lo crea | Estado |
 |---|---|---|
 | Core | 0 | ✅ (base de R1; periodos y notificaciones en fase 2) |
-| Academic | 1 | 🟨 (1.7 hecha por A, acordado en #22: modelos #116 y #117; CRUD, plantillas y seeder siguen con B) |
+| Academic | 1 | 🟨 (1.7 a 1.10 hechas: modelos #116 y #117; CRUD y retícula #135, #136, #137, #139, #142, #144, #145; seeder demo #138, #140, #141; faltan 1.11 a 1.16) |
 | Facilities | 1 | ⬜ |
 | Faculty | 1 | ⬜ |
 | Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
