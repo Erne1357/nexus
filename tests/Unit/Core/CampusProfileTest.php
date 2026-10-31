@@ -99,6 +99,13 @@ it('se resume en una línea para la columna Perfil de flujo de la tabla de campu
     ],
 ]);
 
+it('dice sus días y su horario, como en el resumen', function (array $settings, string $schedule) {
+    expect(CampusProfile::fromArray($settings)->schedule())->toBe($schedule);
+})->with([
+    'presencial por omisión' => [[], 'lunes a viernes, 7:00 a 21:00'],
+    'dos días seguidos' => [['days' => [5, 6], 'day_start' => '08:00', 'day_end' => '14:00'], 'viernes y sábado, 8:00 a 14:00'],
+]);
+
 it('rechaza un perfil con valores inválidos', function (array $settings) {
     expect(fn () => CampusProfile::fromArray($settings))->toThrow(InvalidArgumentException::class);
 })->with([
