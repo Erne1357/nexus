@@ -16,7 +16,7 @@ final class TeacherBaseHoursQuery
 {
     /**
      * @param  list<string>|null  $teacherIds  Solo estos docentes; null, todos los no borrados.
-     * @return array<string, int> Horas base por id de docente.
+     * @return array<string, int> Horas base por id de docente, en orden de id.
      */
     public function forTerm(Term $term, ?array $teacherIds = null): array
     {
@@ -38,6 +38,7 @@ final class TeacherBaseHoursQuery
             ->leftJoinSub($hours, 'current_positions', 'current_positions.teacher_id', '=', 'teachers.id')
             ->when($teacherIds !== null, fn ($query) => $query->whereIn('teachers.id', $teacherIds))
             ->selectRaw('teachers.id, coalesce(current_positions.base_hours, 0) as base_hours')
+            ->orderBy('teachers.id')
             ->pluck('base_hours', 'id')
             ->map(fn ($hours): int => (int) $hours)
             ->all();

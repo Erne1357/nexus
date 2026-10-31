@@ -568,3 +568,458 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 });
+
+/*
+| availabilityEditor: el editor de disponibilidad de un docente (DESIGN.md, "Cuadrícula día x hora"; variante A,
+| «herramienta y pintar», elegida por el usuario el 30 de octubre de 2026). Vive en faculty::pages.teacher-availability,
+| dentro de wire:ignore: Livewire pinta la cuadrícula una vez y aquí se lleva lo que cambia.
+|
+| Se elige una herramienta («No disponible», «Preferido» o «Borrar»; teclas N, P y B) y se pinta con clic o arrastre
+| (pointer capture en la cuadrícula; en pantalla táctil también, porque las celdas llevan touch-action: none). Pintar
+| sobre otro tipo lo reemplaza. El botón de un día pinta su columna y el de una hora, su renglón; Enter o Espacio
+| pintan lo que tiene el foco y las flechas, Inicio y Fin lo mueven por las celdas y por los botones de los días (arriba)
+| y de las horas (a la izquierda), con un solo botón de la cuadrícula en el orden de tabulación. Lo pintado queda
+| pendiente: la barra de guardar dice cuántos bloques cambiaron, «Descartar» vuelve a lo guardado y «Guardar
+| disponibilidad» manda los bloques marcados a save(). «Copiar de <periodo>» pide a copyPrevious() la del semestre
+| anterior y la deja pendiente. Salir con bloques sin guardar pide confirmar (beforeunload y wire:navigate); Atrás y
+| Adelante no se pueden detener. Si una llamada al servidor falla, un toast lo dice y lo pendiente se queda.
+|
+| Cuando Livewire restaura la página de su caché (Atrás o Adelante tras wire:navigate) o el navegador la saca de su
+| bfcache, el x-data trae los tipos de cuando se abrió, no lo guardado después: el editor pide lo guardado a
+| currentKinds() y vuelve a poner encima lo pintado sin guardar (de la caché de wire:navigate lo lee de las celdas,
+| que salieron con data-changed), que sigue pendiente. Mientras trae lo guardado o mientras guarda, no deja pintar.
+|
+| Cada celda se actualiza a mano, como en studentGrid: su tipo en data-kind (que leen las utilidades del relleno y del
+| icono), data-continues, data-changed (el punto de «sin guardar»), su aria-label y su texto. Las cifras, las horas de
+| cada día y los rangos por día son estado de Alpine. config trae los días ({day, name}), los bloques ({starts_at,
+| label, end_label}), blockMinutes, el tipo de cada celda (kinds[día][bloque], null es disponible) y el nombre de cada
+| tipo (labels; '' es disponible).
+*/
+const AVAILABILITY_TOOL_KEYS = { n: 'unavailable', p: 'preferred', b: '' };
+const AVAILABILITY_TOOLS = ['unavailable', 'preferred', ''];
+
+/** Si la página que se va a iniciar viene de la caché de wire:navigate (Atrás o Adelante): lo dice livewire:navigate. */
+let availabilityFromCache = false;
+document.addEventListener('livewire:navigate', (event) => {
+    availabilityFromCache = Boolean(event.detail?.history && event.detail?.cached);
+});
+
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('availabilityEditor', (config) => {
+        // Fuera del estado de Alpine: los elementos y las celdas no necesitan ser reactivos.
+        const toCells = (kinds) => kinds.map((day) => day.map((kind) => kind ?? ''));
+        let cells = toCells(config.kinds);
+        let saved = cells.map((day) => [...day]);
+        let elements = [];
+        let painting = false;
+        let last = null;
+        // [día, bloque] del botón con el foco; -1 en el bloque es el botón del día y -1 en el día, el de la hora.
+        let focus = [0, 0];
+
+        const minutes = config.blockMinutes;
+        const hours = (count) => {
+            const value = (count * minutes) / 60;
+
+            return Number.isInteger(value) ? value : Math.round(value * 10) / 10;
+        };
+
+        /** Los rangos unidos de un día: [{ kind, from, to }] con `to` exclusivo, como los guarda SetTeacherAvailability. */
+        const runsOf = (day) => {
+            const runs = [];
+
+            day.forEach((kind, block) => {
+                const last = runs[runs.length - 1];
+
+                if (!kind) {
+                    return;
+                }
+
+                if (last && last.kind === kind && last.to === block) {
+                    last.to = block + 1;
+                } else {
+                    runs.push({ kind, from: block, to: block + 1 });
+                }
+            });
+
+            return runs;
+        };
+
+        const span = (run) => `${config.blocks[run.from].label}–${config.blocks[run.to - 1].end_label}`;
+
+        return {
+            tool: 'unavailable',
+            pending: 0,
+            saving: false,
+            copying: false,
+            syncing: false,
+            figures: { available: 0, preferred: 0, unavailable: 0 },
+            dayAvailable: [],
+            ranges: [],
+
+            init() {
+                elements = cells.map((day, d) => day.map((_, h) => this.$refs.grid.querySelector(`[data-d="${d}"][data-h="${h}"]`)));
+                const restored = availabilityFromCache;
+                availabilityFromCache = false;
+
+                // La página de la caché de wire:navigate se guardó al salir con lo pintado sin guardar en cada celda
+                // (data-kind con data-changed); el x-data, en cambio, trae lo de cuando se abrió. Se recupera de ahí.
+                if (restored) {
+                    elements.forEach((day, d) => day.forEach((element, h) => {
+                        if (element.hasAttribute('data-changed')) {
+                            cells[d][h] = element.dataset.kind ?? '';
+                        }
+                    }));
+                }
+
+                this.refresh();
+
+                if (restored) {
+                    this.sync();
+                }
+            },
+
+            /**
+             * Trae lo guardado en el servidor y vuelve a poner encima lo pintado sin guardar, que sigue pendiente: ni lo
+             * guardado viejo de la página ni el trabajo sin guardar se pierden.
+             */
+            async sync() {
+                this.syncing = true;
+                const painted = cells.map((day, d) => day.map((kind, h) => (kind !== saved[d][h] ? kind : null)));
+
+                try {
+                    const kinds = await this.$wire.currentKinds();
+
+                    if (Array.isArray(kinds)) {
+                        saved = toCells(kinds);
+                        cells = saved.map((day, d) => day.map((kind, h) => painted[d][h] ?? kind));
+                        this.refresh();
+                    }
+                } catch {
+                    this.failed('No se cargó la disponibilidad guardada');
+                } finally {
+                    this.syncing = false;
+                }
+            },
+
+            /** Mientras se trae lo guardado o se guarda, no se pinta: la barra de pendientes no queda desfasada. */
+            busy() {
+                return this.syncing || this.saving;
+            },
+
+            /** Toast de error de MaryUI para una llamada al servidor que no respondió. */
+            failed(title) {
+                window.toast?.({
+                    toast: {
+                        type: 'error',
+                        title,
+                        description: 'No hubo respuesta del servidor. Revisa tu conexión y vuelve a intentarlo.',
+                        icon: this.$refs.errorIcon?.innerHTML ?? '',
+                        css: 'alert-error',
+                        timeout: 5000,
+                    },
+                });
+            },
+
+            /** Al cerrar o recargar la pestaña con bloques sin guardar, el navegador pide confirmar. */
+            warnBeforeUnload(event) {
+                if (this.pending > 0) {
+                    event.preventDefault();
+                    event.returnValue = '';
+                }
+            },
+
+            /** Al ir a otra pantalla con wire:navigate con bloques sin guardar, pide confirmar; Atrás y Adelante, no. */
+            confirmLeave(event) {
+                if (this.pending === 0 || event.detail?.history) {
+                    return;
+                }
+
+                const blocks = this.pending === 1 ? '1 bloque sin guardar' : `${this.pending} bloques sin guardar`;
+
+                if (!window.confirm(`Tienes ${blocks}. ¿Salir sin guardar?`)) {
+                    event.preventDefault();
+                }
+            },
+
+            /** Una sola cuenta tras cada cambio: las celdas, las cifras, las horas de cada día y los rangos. */
+            refresh() {
+                let pending = 0;
+                let unavailable = 0;
+                let preferred = 0;
+                const dayAvailable = [];
+                const ranges = [];
+
+                cells.forEach((day, d) => {
+                    const runs = runsOf(day);
+                    let dayUnavailable = 0;
+
+                    day.forEach((kind, h) => {
+                        const element = elements[d][h];
+                        const block = config.blocks[h];
+                        const continues = kind !== '' && h > 0 && day[h - 1] === kind;
+                        const changed = kind !== saved[d][h];
+                        const run = runs.find((candidate) => h >= candidate.from && h < candidate.to);
+                        const text = element.querySelector('[data-text]');
+
+                        if (kind === '') {
+                            element.removeAttribute('data-kind');
+                        } else {
+                            element.dataset.kind = kind;
+                        }
+
+                        element.toggleAttribute('data-continues', continues);
+                        element.toggleAttribute('data-changed', changed);
+                        element.setAttribute('aria-label', `${config.days[d].name} de ${block.label} a ${block.end_label}: ${config.labels[kind]}${changed ? ', sin guardar' : ''}`);
+                        text.textContent = kind !== '' && !continues ? config.labels[kind] : (run && h === run.from + 1 ? span(run) : '');
+                        text.toggleAttribute('data-mono', Boolean(run) && h === run.from + 1);
+
+                        pending += changed ? 1 : 0;
+                        dayUnavailable += kind === 'unavailable' ? 1 : 0;
+                        preferred += kind === 'preferred' ? 1 : 0;
+                    });
+
+                    unavailable += dayUnavailable;
+                    dayAvailable.push(day.length - dayUnavailable);
+                    ranges.push(runs.map((run) => ({ key: `${run.kind}-${run.from}-${run.to}`, kind: run.kind, label: config.labels[run.kind], time: span(run) })));
+                    this.$refs.grid.querySelector(`[data-day-group="${d}"]`)
+                        ?.setAttribute('aria-label', `${config.days[d].name}: ${hours(day.length - dayUnavailable)} h disponibles`);
+                });
+
+                const total = cells.length * config.blocks.length;
+                this.pending = pending;
+                this.figures = { available: total - unavailable, preferred, unavailable };
+                this.dayAvailable = dayAvailable;
+                this.ranges = ranges;
+            },
+
+            /** Horas de unos bloques: enteras si caben, si no con un decimal. */
+            hours(count) {
+                return hours(count);
+            },
+
+            paint(d, h) {
+                if (cells[d][h] === this.tool) {
+                    return false;
+                }
+
+                cells[d][h] = this.tool;
+
+                return true;
+            },
+
+            /** El botón de la cuadrícula en [día, bloque]: -1 en el bloque es el del día y -1 en el día, el de la hora. */
+            buttonAt(d, h) {
+                if (h === -1) {
+                    return this.$refs.grid.querySelector(`[data-day="${d}"]`);
+                }
+
+                return d === -1 ? this.$refs.grid.querySelector(`[data-hour="${h}"]`) : elements[d][h];
+            },
+
+            moveFocus(d, h, giveFocus) {
+                this.buttonAt(...focus).tabIndex = -1;
+                focus = [d, h];
+                this.buttonAt(d, h).tabIndex = 0;
+
+                if (giveFocus) {
+                    this.buttonAt(d, h).focus();
+                }
+            },
+
+            down(event) {
+                const cell = event.target.closest('[data-d]');
+
+                if (!cell || event.button > 0 || this.busy()) {
+                    return;
+                }
+
+                event.preventDefault();
+                painting = true;
+                last = [Number(cell.dataset.d), Number(cell.dataset.h)];
+                this.$refs.grid.setPointerCapture(event.pointerId);
+                this.moveFocus(...last, false);
+
+                if (this.paint(...last)) {
+                    this.refresh();
+                }
+            },
+
+            /** Pinta también las celdas entre la anterior y esta, por si el puntero saltó alguna al moverse rápido. */
+            move(event) {
+                if (!painting) {
+                    return;
+                }
+
+                const cell = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-d]');
+
+                if (!cell || !this.$refs.grid.contains(cell)) {
+                    return;
+                }
+
+                const [d, h] = [Number(cell.dataset.d), Number(cell.dataset.h)];
+                const steps = Math.max(Math.abs(d - last[0]), Math.abs(h - last[1]));
+                let changed = false;
+
+                for (let step = 1; step <= steps; step++) {
+                    changed = this.paint(Math.round(last[0] + ((d - last[0]) * step) / steps), Math.round(last[1] + ((h - last[1]) * step) / steps)) || changed;
+                }
+
+                last = [d, h];
+
+                if (changed) {
+                    this.refresh();
+                }
+            },
+
+            stop() {
+                painting = false;
+                last = null;
+            },
+
+            /** El clic del ratón en una celda ya pintó al bajar; aquí solo Enter o Espacio (detail 0), el día y la hora. */
+            click(event) {
+                const cell = event.target.closest('[data-d]');
+
+                if (this.busy()) {
+                    return;
+                }
+
+                if (cell) {
+                    if (event.detail === 0 && this.paint(Number(cell.dataset.d), Number(cell.dataset.h))) {
+                        this.refresh();
+                    }
+
+                    return;
+                }
+
+                const day = event.target.closest('[data-day]');
+                const hour = event.target.closest('[data-hour]');
+
+                if (day) {
+                    cells[Number(day.dataset.day)].forEach((_, h) => this.paint(Number(day.dataset.day), h));
+                } else if (hour) {
+                    cells.forEach((_, d) => this.paint(d, Number(hour.dataset.hour)));
+                } else {
+                    return;
+                }
+
+                this.refresh();
+            },
+
+            /** Las flechas recorren celdas, días y horas; la esquina (sin botón) se salta quedándose en su lugar. */
+            key(event) {
+                const button = event.target.closest('[data-d], [data-day], [data-hour]');
+
+                if (!button) {
+                    return;
+                }
+
+                let d = button.dataset.d !== undefined ? Number(button.dataset.d) : (button.dataset.day !== undefined ? Number(button.dataset.day) : -1);
+                let h = button.dataset.h !== undefined ? Number(button.dataset.h) : (button.dataset.hour !== undefined ? Number(button.dataset.hour) : -1);
+                const lastDay = cells.length - 1;
+                const lastBlock = config.blocks.length - 1;
+
+                switch (event.key) {
+                    case 'ArrowRight': d = Math.min(lastDay, d + 1); break;
+                    case 'ArrowLeft': d = h === -1 ? Math.max(0, d - 1) : Math.max(-1, d - 1); break;
+                    case 'ArrowDown': h = Math.min(lastBlock, h + 1); break;
+                    case 'ArrowUp': h = d === -1 ? Math.max(0, h - 1) : Math.max(-1, h - 1); break;
+                    case 'Home': h = d === -1 ? 0 : (h === -1 ? -1 : 0); break;
+                    case 'End': h = lastBlock; break;
+                    default: return;
+                }
+
+                event.preventDefault();
+                this.moveFocus(d, h, true);
+            },
+
+            /** N, P y B eligen la herramienta, salvo al escribir, con un modificador o con el menú o un diálogo abierto. */
+            toolKey(event) {
+                if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.('input, select, textarea, [contenteditable]')
+                    || document.body.dataset.menu === 'open' || document.querySelector('dialog[open]')) {
+                    return;
+                }
+
+                const tool = AVAILABILITY_TOOL_KEYS[event.key.toLowerCase()];
+
+                if (tool !== undefined) {
+                    this.tool = tool;
+                }
+            },
+
+            /** Las flechas recorren las herramientas, como un grupo de radios. */
+            toolArrow(event) {
+                const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+
+                if (!step) {
+                    return;
+                }
+
+                event.preventDefault();
+                const group = event.currentTarget;
+                const index = (AVAILABILITY_TOOLS.indexOf(this.tool) + step + AVAILABILITY_TOOLS.length) % AVAILABILITY_TOOLS.length;
+                this.tool = AVAILABILITY_TOOLS[index];
+                this.$nextTick(() => group.querySelector(`[data-tool="${this.tool}"]`)?.focus());
+            },
+
+            discard() {
+                cells = saved.map((day) => [...day]);
+                this.refresh();
+            },
+
+            async save() {
+                if (this.saving || this.syncing) {
+                    return;
+                }
+
+                this.saving = true;
+                const sent = cells.map((day) => [...day]);
+                const payload = [];
+
+                sent.forEach((day, d) => day.forEach((kind, h) => {
+                    if (kind !== '') {
+                        payload.push({ day: config.days[d].day, starts_at: config.blocks[h].starts_at, kind });
+                    }
+                }));
+
+                try {
+                    const result = await this.$wire.save(payload);
+
+                    if (result === true) {
+                        saved = sent;
+                        this.refresh();
+                    } else if (result !== false) {
+                        this.failed('No se guardó la disponibilidad');
+                    }
+                } catch {
+                    this.failed('No se guardó la disponibilidad');
+                } finally {
+                    this.saving = false;
+                }
+            },
+
+            async copyPrevious() {
+                if (this.copying || this.busy()) {
+                    return;
+                }
+
+                this.copying = true;
+
+                try {
+                    const kinds = await this.$wire.copyPrevious();
+
+                    if (Array.isArray(kinds)) {
+                        cells = toCells(kinds);
+                        this.refresh();
+                    } else if (kinds !== null) {
+                        this.failed('No se copió la disponibilidad');
+                    }
+                } catch {
+                    this.failed('No se copió la disponibilidad');
+                } finally {
+                    this.copying = false;
+                }
+            },
+        };
+    });
+});

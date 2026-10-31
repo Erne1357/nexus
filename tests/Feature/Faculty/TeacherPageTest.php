@@ -8,6 +8,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherEvaluation;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
@@ -22,8 +23,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Ficha del docente (`/faculty/teachers/{teacher}`, faculty::pages.teacher; spec 4.3 y S8). Cinco pestañas: Datos
-| (datos, adscripciones: quitar y hacer principal), Plazas (agregar, editar y quitar) y, para las tareas
-| siguientes, Disponibilidad, Perfil e Historial. Cada quien ve y cambia a los docentes de su alcance
+| (datos, adscripciones: quitar y hacer principal), Plazas (agregar, editar y quitar), Disponibilidad (de solo
+| lectura, con el enlace al editor), Perfil e Historial. Cada quien ve y cambia a los docentes de su alcance
 | (TeacherPolicy); cada método vuelve a autorizar. «Restablecer contraseña» es solo del administrador.
 */
 
@@ -69,10 +70,6 @@ describe('ficha', function () {
         teacherRecord($this->admin, $this->ana)->set('tab', 'plazas')->assertSee('Tiempo completo');
         teacherRecord($this->admin, $this->ana)->set('tab', 'nada')->assertSet('tab', 'datos');
     });
-
-    it('las pestañas que vienen después muestran un estado vacío', function (string $tab) {
-        teacherRecord($this->admin, $this->ana)->set('tab', $tab)->assertSeeHtml('data-testid="tab-pending"');
-    })->with(['disponibilidad']);
 
     it('no dice «horas extras» en ninguna pestaña', function (string $tab) {
         $page = teacherRecord($this->admin, $this->ana)->set('tab', $tab);
@@ -643,5 +640,33 @@ describe('historial', function () {
         $page->set('tab', 'historial');
 
         expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(30);
+    });
+});
+
+describe('disponibilidad', function () {
+    it('muestra el resumen del periodo, la cuadrícula de solo lectura, los rangos por día y el enlace al editor', function () {
+        TeacherAvailability::factory()->for($this->ana)->for($this->term)->create(['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00']);
+        TeacherAvailability::factory()->for($this->ana)->for($this->term)->preferred()->create(['day' => 3, 'starts_at' => '10:00', 'ends_at' => '11:00']);
+
+        $dom = domOf(teacherRecord($this->jefe, $this->ana)->set('tab', 'disponibilidad'));
+        $section = $dom->querySelector('[data-testid="availability"]');
+
+        expect(textOf($section->querySelector('header')))->toBe('Disponibilidad Ene-Jun 2027 Editar disponibilidad')
+            ->and($section->querySelector('[data-testid="edit-availability"]')->getAttribute('href'))->toBe(route('faculty.teachers.availability', $this->ana->id))
+            ->and(textOf($section->querySelector('p')))->toBe('Disponible 68 h de 70 Preferido 1 h No disponible 2 h Horas base 40 h')
+            ->and(textOf($section->querySelector('[data-testid="availability-ranges"]')))->toBe(
+                'Lunes 12 h disp. No disponible 7:00–9:00 Martes 14 h disp. Disponible todo el día Miércoles 14 h disp. Preferido 10:00–11:00 '
+                .'Jueves 14 h disp. Disponible todo el día Viernes 14 h disp. Disponible todo el día'
+            )
+            ->and($section->querySelector('[data-testid="availability-grid"]')->getAttribute('aria-hidden'))->toBe('true')
+            ->and($section->querySelector('[data-testid="availability-grid"] button'))->toBeNull();
+    });
+
+    it('sin periodo activo pide elegirlo', function () {
+        $this->term->update(['is_current' => false]);
+
+        teacherRecord($this->admin, $this->ana)->set('tab', 'disponibilidad')
+            ->assertSee('Elige un periodo en tu credencial')
+            ->assertDontSee('Editar disponibilidad');
     });
 });

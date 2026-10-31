@@ -4,8 +4,9 @@
     «Acciones» (baja o reactivación y «Restablecer contraseña», deshabilitada con su motivo para quien no es
     administrador); una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
     pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil (materias apto/preferente y «Horas fuera del
-    ITCJ») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad muestra su lugar hasta que
-    la tarea 1.14 la llene. Agregar o editar una plaza y quitar una adscripción o una plaza
+    ITCJ») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad es la vista de solo lectura
+    del periodo activo con el enlace al editor (faculty::teachers.availability-tab). Agregar o editar una plaza y quitar
+    una adscripción o una plaza
     se hacen en un modal. Los renglones de adscripciones y plazas son una cuadrícula que se apila debajo de 768 px.
 --}}
 <div class="space-y-5">
@@ -252,11 +253,7 @@
                 </section>
             </div>
         @elseif ($tab === 'disponibilidad')
-            <div class="flex flex-col items-center gap-2 rounded-box border border-dashed border-base-300 bg-base-100 px-5 py-10 text-center" data-testid="tab-pending">
-                <x-icon name="o-clock" class="h-6 w-6 text-neutral" aria-hidden="true" />
-                <p class="font-semibold">{{ $tabs[$tab][0] }}</p>
-                <p class="max-w-prose text-neutral">Aquí irán el resumen de su disponibilidad del periodo y el enlace al editor. Todavía no está disponible.</p>
-            </div>
+            @include('faculty::teachers.availability-tab', ['teacher' => $record->teacher, 'term' => $record->term, 'availability' => $availability, 'editReason' => $availabilityReason])
         @else
             <div class="grid items-start gap-5 desktop:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
                 <section class="@container overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-datos">

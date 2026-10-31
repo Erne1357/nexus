@@ -33,6 +33,7 @@ use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Policies\TeacherPolicy;
+use App\Modules\Faculty\Queries\AvailabilityGridQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
 use App\Modules\Faculty\Queries\TeacherRecordQuery;
@@ -52,8 +53,9 @@ use Mary\Traits\Toast;
  * cifras, y cinco pestañas: Datos (sus datos, sus adscripciones: quitar y hacer principal), Plazas (agregar,
  * editar y quitar), Perfil (las materias que puede dar, apto o preferente, y sus «Horas fuera del ITCJ» del periodo
  * activo; S16 y S17, supuestos por confirmar) e Historial (grupos por periodo y evaluaciones, de solo lectura).
- * Disponibilidad muestra su lugar hasta que la tarea 1.14 la llene. «Acciones» trae darlo de baja o reactivarlo y
- * «Restablecer contraseña», que es solo del administrador.
+ * Disponibilidad muestra la del periodo activo, de solo lectura (AvailabilityGridQuery), y lleva al editor
+ * (faculty::pages.teacher-availability). «Acciones» trae darlo de baja o reactivarlo y «Restablecer contraseña», que es
+ * solo del administrador.
  *
  * Lo ven y cambian el admin, la subdirección y los jefes, cada quien los docentes de su alcance (TeacherPolicy). El
  * componente lee con TeacherQuery y TeacherRecordQuery, autoriza en mount(), en with() y en cada método (una
@@ -197,7 +199,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context, DepartmentQuery $departments, CampusQuery $campuses): array
+    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context, DepartmentQuery $departments, CampusQuery $campuses, AvailabilityGridQuery $grids): array
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -224,6 +226,10 @@ new #[Title('Ficha del docente')] class extends Component
         $tabData = match ($this->tab) {
             'perfil' => $this->profileData($teacher, $records, $teachers, $context, $record->term),
             'historial' => ['history' => $records->history($teacher)],
+            'disponibilidad' => [
+                'availability' => $record->term === null ? null : $grids->for($teacher, $record->term, $grids->profile($context->activeCampus())),
+                'availabilityReason' => Gate::allows('manageAvailability', $teacher) ? null : 'Solo quien administra al docente edita su disponibilidad.',
+            ],
             default => [],
         };
 
