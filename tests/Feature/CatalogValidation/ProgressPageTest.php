@@ -20,6 +20,8 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -106,6 +108,45 @@ describe('quién entra', function () {
 
     it('un invitado va al login', function () {
         $this->get(route('catalog-validation.progress'))->assertRedirect(route('login'));
+    });
+});
+
+describe('salones en una sola columna', function () {
+    it('con dos campus abiertos hay una columna «Salones» con una insignia por campus', function () {
+        $html = progressPage()->html();
+
+        expect(substr_count($html, 'data-testid="column-rooms"'))->toBe(1)
+            ->and($html)->toContain('data-testid="cell-SIS-rooms:'.$this->c1->id.'"')
+            ->and($html)->toContain('data-testid="cell-SIS-rooms:'.$this->c2->id.'"')
+            ->and($html)->toContain('aria-label="Campus I: Pendiente"');
+    });
+
+    it('con un campus filtrado la columna lleva una sola insignia', function () {
+        $html = progressPage()->set('campus', $this->c1->id)->html();
+
+        expect(substr_count($html, 'data-testid="column-rooms"'))->toBe(1)
+            ->and($html)->toContain('data-testid="cell-SIS-rooms:'.$this->c1->id.'"')
+            ->and($html)->not->toContain('data-testid="cell-SIS-rooms:'.$this->c2->id.'"');
+    });
+
+    it('el total de Salones cuenta por campus', function () {
+        CatalogReview::query()->where('campus_id', $this->c1->id)->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+
+        $html = progressPage()->html();
+
+        expect($html)->toContain('data-testid="total-rooms:'.$this->c1->id.'"')
+            ->and($html)->toContain('data-testid="total-rooms:'.$this->c2->id.'"');
+        progressPage()->assertSeeInOrder(['C1', '1 de 2', 'C2', '0 de 2']);
+    });
+
+    it('trae una leyenda de símbolos debajo de la matriz', function () {
+        progressPage()->assertSeeHtml('data-testid="progress-legend"');
+    });
+});
+
+describe('recordar a todos', function () {
+    it('pinta cuántos jefes se recordarán en la insignia del botón', function () {
+        expect(progressPage()->html())->toMatch('/data-testid="remind-all".*?badge[^>]*>\s*1\s*</s');
     });
 });
 
@@ -228,6 +269,29 @@ describe('drawer', function () {
             ->assertSee('Validó Dra. Ana Soto')
             ->assertSee('ACF-0901')->assertSee('Contabilidad financiera')->assertSee('Las horas deben ser 3.')
             ->assertSee('Marcar como resuelta');
+    });
+
+    it('un salón sin nombre se muestra con su clave y no como un registro que ya no está', function () {
+        $building = Building::factory()->create(['campus_id' => $this->c2->id]);
+        $room = Room::factory()->create(['building_id' => $building->id, 'code' => 'NEE1', 'name' => null, 'department_id' => $this->sis->id]);
+        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->where('campus_id', $this->c2->id)->sole();
+        CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar la clave.', 'flagged_by' => $this->jefeSis->id]);
+
+        progressPage()->call('open', $this->sis->id)->assertSee('NEE1')->assertDontSee('Registro ya no disponible');
+    });
+
+    it('agrupa las observaciones por catálogo y registro', function () {
+        $flag = progressMakeFlag($this->sis);
+        CatalogReviewFlag::factory()->on($flag->flaggable)->create(['review_id' => $flag->review_id, 'flag' => ReviewFlag::Duplicate, 'comment' => 'Otra más.', 'flagged_by' => $this->jefeSis->id]);
+
+        $html = progressPage()->call('open', $this->sis->id)->html();
+
+        expect(substr_count($html, 'data-testid="drawer-record-'))->toBe(1)
+            ->and($html)->toContain('Las horas deben ser 3.')->toContain('Otra más.');
+    });
+
+    it('el pie del drawer no repite «Cerrar» y los estados se llaman igual que en la matriz', function () {
+        progressPage()->call('open', $this->sis->id)->assertDontSee('Sin abrir');
     });
 
     it('un id que no es de un departamento activo no abre nada', function () {

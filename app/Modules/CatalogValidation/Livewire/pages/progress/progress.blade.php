@@ -36,9 +36,7 @@
             <x-select wire:model.live="status" aria-label="Estado" :options="[['id' => 'pending', 'name' => 'Con pendientes'], ['id' => 'validated', 'name' => 'Todo validado']]" placeholder="Estado" placeholder-value="" />
 
             <x-slot:action>
-                <x-button label="Recordar a todos los pendientes" icon="o-bell" class="btn-primary" wire:click="remind" spinner="remind" data-testid="remind-all" :disabled="$board['remindable']['departments'] === 0">
-                    <span class="badge badge-sm badge-neutral" aria-label="{{ $pendingHeads }} jefes por recordar">{{ $pendingHeads }}</span>
-                </x-button>
+                <x-button label="Recordar a todos los pendientes" icon="o-bell" class="btn-primary" wire:click="remind" spinner="remind" data-testid="remind-all" :disabled="$board['remindable']['departments'] === 0" :badge="$pendingHeads" badge-classes="badge-neutral badge-sm" title="{{ $pendingHeads }} {{ $pendingHeads === 1 ? 'jefe por recordar' : 'jefes por recordar' }}" />
             </x-slot:action>
         </x-core::catalog-toolbar>
 
@@ -78,33 +76,45 @@
                     <p class="font-semibold">Ningún departamento coincide con el filtro.</p>
                 </div>
             @else
-                <div class="hidden lg:block">
-                    <table class="w-full table-fixed text-sm">
+                @php($generalColumns = array_values(array_filter($board['columns'], fn (array $column): bool => $column['campus'] === null)))
+                @php($roomColumns = array_values(array_filter($board['columns'], fn (array $column): bool => $column['campus'] !== null)))
+                <div class="hidden overflow-x-auto lg:block" data-testid="progress-scroll">
+                    <table class="w-full min-w-[56rem] text-sm">
                         <caption class="sr-only">Estado de cada catálogo por departamento</caption>
                         <thead class="bg-base-200 text-start">
                             <tr class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
-                                <th scope="col" class="w-[20%] px-4 py-3 text-start font-medium">Departamento</th>
-                                @foreach ($board['columns'] as $column)
-                                    <th scope="col" class="px-2 py-3 text-start font-medium">{{ $column['catalog']->label() }}<span class="block text-[11px] font-normal normal-case tracking-normal">{{ $column['campus']?->name ?? 'Todo el Tec' }}</span></th>
+                                <th scope="col" class="sticky left-0 z-10 w-52 min-w-52 max-w-52 bg-base-200 px-4 py-2.5 text-start font-medium">Departamento</th>
+                                @foreach ($generalColumns as $column)
+                                    <th scope="col" class="px-2 py-2.5 text-start font-medium">{{ $column['catalog']->label() }}</th>
                                 @endforeach
-                                <th scope="col" class="w-20 px-2 py-3 text-start font-medium">Validados</th>
-                                <th scope="col" class="w-16 px-2 py-3 text-start font-medium">Obs.</th>
-                                <th scope="col" class="w-36 px-2 py-3"><span class="sr-only">Acciones</span></th>
+                                @if ($roomColumns !== [])
+                                    <th scope="col" class="whitespace-nowrap px-1.5 py-2.5 text-start font-medium" data-testid="column-rooms">Salones</th>
+                                @endif
+                                <th scope="col" class="whitespace-nowrap px-1.5 py-2.5 text-start font-medium">Validados</th>
+                                <th scope="col" class="px-2 py-2.5 text-start font-medium">Obs.</th>
+                                <th scope="col" class="w-24 px-1.5 py-2.5"><span class="sr-only">Acciones</span></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-base-300">
                             @foreach ($board['rows'] as $row)
                                 @php($department = $row['department'])
                                 <tr wire:key="row-{{ $department->id }}" class="align-top" data-testid="progress-row-{{ $department->code }}">
-                                    <td class="px-4 py-3">
+                                    <td class="sticky left-0 z-10 w-52 min-w-52 max-w-52 bg-base-100 px-4 py-2.5">
                                         @include('catalog-validation::progress.who', ['row' => $row, 'campuses' => $campuses])
                                     </td>
-                                    @foreach ($board['columns'] as $column)
-                                        <td class="px-2 py-3" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']]])</td>
+                                    @foreach ($generalColumns as $column)
+                                        <td class="px-2 py-2.5" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']]])</td>
                                     @endforeach
-                                    <td class="px-2 py-3 whitespace-nowrap"><span class="font-semibold tabular-nums">{{ $row['validated'] }} de {{ $row['total'] }}</span></td>
-                                    <td class="px-2 py-3">@include('catalog-validation::progress.flags', ['row' => $row])</td>
-                                    <td class="px-2 py-2.5">
+                                    @if ($roomColumns !== [])
+                                        <td class="px-2 py-2.5"><div class="flex gap-1">
+                                            @foreach ($roomColumns as $column)
+                                                <span data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'roomCampus' => $column['campus']])</span>
+                                            @endforeach
+                                        </div></td>
+                                    @endif
+                                    <td class="px-2 py-2.5 whitespace-nowrap"><span class="font-semibold tabular-nums">{{ $row['validated'] }} de {{ $row['total'] }}</span></td>
+                                    <td class="px-2 py-2.5">@include('catalog-validation::progress.flags', ['row' => $row])</td>
+                                    <td class="px-2 py-2">
                                         <div class="flex items-center justify-end gap-1">
                                             @include('catalog-validation::progress.actions', ['row' => $row, 'inTable' => true])
                                         </div>
@@ -113,18 +123,25 @@
                             @endforeach
                         </tbody>
                         <tfoot class="border-t border-base-300 bg-base-200/60" data-testid="progress-totals">
-                            <tr>
-                                <th scope="row" class="px-4 py-3 text-start font-semibold">Total del Tec<span class="block text-xs font-normal text-neutral">{{ count($board['rows']) }} {{ count($board['rows']) === 1 ? 'departamento' : 'departamentos' }}</span></th>
-                                @foreach ($board['columns'] as $column)
+                            <tr class="align-top">
+                                <th scope="row" class="sticky left-0 z-10 bg-base-200 px-4 py-2.5 text-start font-semibold">Total del Tec<span class="block text-xs font-normal text-neutral">{{ count($board['rows']) }} {{ count($board['rows']) === 1 ? 'departamento' : 'departamentos' }}</span></th>
+                                @foreach ($generalColumns as $column)
                                     @php($totals = $board['totals'][$column['key']])
-                                    <td class="px-2 py-3" data-testid="total-{{ $column['key'] }}">
-                                        <span class="tabular-nums">{{ $totals['validated'] }} de {{ $totals['total'] }}</span>
-                                        <span class="block text-xs text-neutral">{{ $totals['unvalidated'] }} sin validar</span>
+                                    <td class="px-2 py-2.5" data-testid="total-{{ $column['key'] }}">
+                                        <span class="whitespace-nowrap tabular-nums">{{ $totals['validated'] }} de {{ $totals['total'] }}</span>
                                         <i class="mt-1 block h-1 overflow-hidden rounded-full bg-base-300" aria-hidden="true"><b class="block h-full bg-success" style="width: {{ $totals['total'] === 0 ? 0 : $totals['validated'] / $totals['total'] * 100 }}%"></b></i>
                                     </td>
                                 @endforeach
-                                <td class="px-2 py-3 whitespace-nowrap"><span class="font-semibold tabular-nums">{{ array_sum(array_column($board['rows'], 'validated')) }} de {{ array_sum(array_column($board['rows'], 'total')) }}</span></td>
-                                <td class="px-2 py-3 font-mono font-semibold tabular-nums">{{ array_sum(array_column($board['rows'], 'open_flags')) }}</td>
+                                @if ($roomColumns !== [])
+                                    <td class="px-2 py-2.5">
+                                        @foreach ($roomColumns as $column)
+                                            @php($totals = $board['totals'][$column['key']])
+                                            <p class="whitespace-nowrap tabular-nums" data-testid="total-{{ $column['key'] }}"><span class="font-mono text-xs text-neutral">{{ $column['campus']->code }}</span> {{ $totals['validated'] }} de {{ $totals['total'] }}</p>
+                                        @endforeach
+                                    </td>
+                                @endif
+                                <td class="px-2 py-2.5 whitespace-nowrap"><span class="font-semibold tabular-nums">{{ array_sum(array_column($board['rows'], 'validated')) }} de {{ array_sum(array_column($board['rows'], 'total')) }}</span></td>
+                                <td class="px-2 py-2.5 font-mono font-semibold tabular-nums">{{ array_sum(array_column($board['rows'], 'open_flags')) }}</td>
                                 <td></td>
                             </tr>
                         </tfoot>
@@ -139,14 +156,20 @@
                                 <div class="min-w-0">@include('catalog-validation::progress.who', ['row' => $row, 'campuses' => $campuses, 'stacked' => true])</div>
                                 <p class="whitespace-nowrap text-sm"><span class="font-semibold tabular-nums">{{ $row['validated'] }} de {{ $row['total'] }}</span></p>
                             </div>
-                            <dl class="grid grid-cols-[7.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
-                                @foreach ($board['columns'] as $column)
-                                    <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $column['catalog']->label() }}@if ($column['campus']) <span class="block normal-case tracking-normal">{{ $column['campus']->code }}</span>@endif</dt>
-                                    <dd>@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'inline' => true])</dd>
-                                @endforeach
-                                <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Observaciones</dt>
-                                <dd>@include('catalog-validation::progress.flags', ['row' => $row])</dd>
-                            </dl>
+                            @php($unvalidated = array_filter($board['columns'], fn (array $column): bool => $row['cells'][$column['key']]?->status !== \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated))
+                            @if ($unvalidated === [])
+                                <p class="text-sm text-neutral">Todo validado</p>
+                            @else
+                                <dl class="grid grid-cols-[7.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
+                                    @foreach ($unvalidated as $column)
+                                        <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $column['catalog']->label() }}@if ($column['campus']) <span class="font-mono normal-case tracking-normal">{{ $column['campus']->code }}</span>@endif</dt>
+                                        <dd>@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']]])</dd>
+                                    @endforeach
+                                </dl>
+                            @endif
+                            @if ($row['open_flags'] > 0)
+                                <p class="text-sm text-neutral">Observaciones abiertas: @include('catalog-validation::progress.flags', ['row' => $row])</p>
+                            @endif
                             <div class="flex items-center justify-between gap-2">
                                 @include('catalog-validation::progress.actions', ['row' => $row, 'inTable' => false])
                             </div>
@@ -154,15 +177,22 @@
                     @endforeach
                 </ul>
 
-                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
+                <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-base-300 px-4 py-2.5 text-sm text-neutral" data-testid="progress-legend">
                     <p>{{ count($board['rows']) }} {{ count($board['rows']) === 1 ? 'departamento' : 'departamentos' }}</p>
-                    <p>Cada departamento valida <span class="font-mono tabular-nums">{{ count($board['columns']) }}</span> catálogos</p>
+                    <p class="flex flex-wrap items-center gap-x-4 gap-y-1 max-lg:hidden">
+                        <span class="inline-flex items-center gap-1"><x-icon name="o-check-circle" class="h-4 w-4" aria-hidden="true" />Validado</span>
+                        <span class="inline-flex items-center gap-1"><x-icon name="o-eye" class="h-4 w-4" aria-hidden="true" />En revisión</span>
+                        <span class="inline-flex items-center gap-1"><x-icon name="o-clock" class="h-4 w-4" aria-hidden="true" />Pendiente</span>
+                        @if ($roomColumns !== [])
+                            <span>Salones: {{ collect($roomColumns)->map(fn (array $column): string => $column['campus']->code.' '.$column['campus']->name)->implode(' · ') }}</span>
+                        @endif
+                    </p>
                 </div>
             @endif
         </div>
     @endif
 
-    <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="progress-drawer-title" data-testid="progress-drawer">
+    <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="progress-drawer-title" data-testid="progress-drawer">
         @if ($detail !== null)
             @include('catalog-validation::progress.drawer', ['row' => $detail['row'], 'flags' => $detail['flags'], 'columns' => $board['columns'] ?? [], 'term' => $term])
         @endif
