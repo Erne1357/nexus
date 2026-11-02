@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Enums\StaffingMode;
+use Illuminate\Support\Arr;
 use InvalidArgumentException;
 
 /**
@@ -19,9 +20,11 @@ final readonly class CampusProfile
     /**
      * Bloques, horario y días: supuesto 4 de PROJECT.md (bloque de 1 h, 7:00 a 21:00, lunes a viernes).
      * Sin visto bueno obligatorio de Subdirección: ADR-0008 (se activa por configuración). Sin
-     * docentes externos: los de presencial son del ITCJ.
+     * docentes externos: los de presencial son del ITCJ. Sin que los jefes corrijan sus salones al validar
+     * (`heads_edit_rooms`): lo restrictivo mientras se confirma (CV-S5); Campus I lo activa (CV2, confirmado el
+     * 2 de noviembre de 2026; reglas-de-negocio.md, "Validación de catálogos").
      *
-     * @var array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool}
+     * @var array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool, heads_edit_rooms: bool}
      */
     public const array DEFAULTS = [
         'uses_rooms' => true,
@@ -33,6 +36,7 @@ final readonly class CampusProfile
         'days' => [1, 2, 3, 4, 5],
         'allow_external_teachers' => false,
         'requires_subdireccion_approval' => false,
+        'heads_edit_rooms' => false,
     ];
 
     /** Días ISO-8601 (1 = lunes) que admite `group_sessions.day`. */
@@ -55,6 +59,7 @@ final readonly class CampusProfile
         public array $days,
         public bool $allowExternalTeachers,
         public bool $requiresSubdireccionApproval,
+        public bool $headsEditRooms,
     ) {}
 
     /**
@@ -89,13 +94,14 @@ final readonly class CampusProfile
             days: self::days($settings['days']),
             allowExternalTeachers: self::bool($settings, 'allow_external_teachers'),
             requiresSubdireccionApproval: self::bool($settings, 'requires_subdireccion_approval'),
+            headsEditRooms: self::bool($settings, 'heads_edit_rooms'),
         );
     }
 
     /**
      * El arreglo que se guarda en `campuses.settings`.
      *
-     * @return array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool}
+     * @return array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool, heads_edit_rooms: bool}
      */
     public function toArray(): array
     {
@@ -109,12 +115,14 @@ final readonly class CampusProfile
             'days' => $this->days,
             'allow_external_teachers' => $this->allowExternalTeachers,
             'requires_subdireccion_approval' => $this->requiresSubdireccionApproval,
+            'heads_edit_rooms' => $this->headsEditRooms,
         ];
     }
 
     /**
      * El perfil en una línea para la tabla de campus: salones, bloques, días y jornada, y lo que se
-     * aparta del flujo presencial (asignación central, docentes externos, visto bueno de Subdirección).
+     * aparta del flujo presencial (asignación central, docentes externos, visto bueno de Subdirección y, si
+     * usa salones, que los jefes los corrijan al validar).
      */
     public function summary(): string
     {
@@ -125,6 +133,7 @@ final readonly class CampusProfile
             $this->staffingMode === StaffingMode::Central ? 'asignación central' : null,
             $this->allowExternalTeachers ? 'docentes externos' : null,
             $this->requiresSubdireccionApproval ? 'visto bueno de Subdirección' : null,
+            $this->usesRooms && $this->headsEditRooms ? 'los jefes corrigen salones' : null,
         ]));
     }
 
@@ -151,9 +160,7 @@ final readonly class CampusProfile
             return $names[0].' a '.$names[$count - 1];
         }
 
-        $last = array_pop($names);
-
-        return $names === [] ? $last : implode(', ', $names).' y '.$last;
+        return Arr::join($names, ', ', ' y ');
     }
 
     /**

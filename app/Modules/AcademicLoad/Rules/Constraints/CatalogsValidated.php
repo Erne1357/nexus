@@ -8,6 +8,7 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use Illuminate\Support\Arr;
 
 /**
  * HC-14 (como la reescribe D2): la carga de un departamento no sale de borrador hasta que estén validados
@@ -48,8 +49,7 @@ final class CatalogsValidated
         }
 
         $labels = array_map(fn (Catalog $catalog): string => $catalog->label(), $pending);
-        $last = array_pop($labels);
-        $list = $labels === [] ? $last : implode(', ', $labels).' y '.$last;
+        $list = Arr::join($labels, ', ', ' y ');
 
         return ["HC-14: faltan por validar los catálogos de {$list}."];
     }

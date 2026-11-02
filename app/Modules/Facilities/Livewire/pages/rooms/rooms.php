@@ -341,15 +341,7 @@ new #[Title('Salones')] class extends Component
             'type' => ['required', Rule::enum(RoomType::class)],
             'capacity' => ['required', 'integer', 'min:1', 'max:100000'],
             'department_id' => ['nullable', 'string'],
-            'features' => ['nullable', 'string', 'max:1000', function (string $attribute, mixed $value, callable $fail): void {
-                foreach ($this->featureList((string) $value) as $feature) {
-                    if (mb_strlen($feature) > 40) {
-                        $fail('Cada característica admite hasta 40 caracteres.');
-
-                        return;
-                    }
-                }
-            }],
+            'features' => ['nullable', 'string', 'max:1000', app(RoomRules::class)->validateFeatureLength(...)],
         ]);
 
         return [
@@ -357,16 +349,8 @@ new #[Title('Salones')] class extends Component
             'name' => $data['name'] ?? null,
             'capacity' => (int) $data['capacity'],
             'department_id' => ($data['department_id'] ?? '') === '' ? null : $data['department_id'],
-            'features' => $this->featureList((string) $data['features']),
+            'features' => app(RoomRules::class)->featureList((string) $data['features']),
         ];
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function featureList(string $text): array
-    {
-        return array_map(trim(...), preg_split('/[,\n]/', $text) ?: []);
     }
 
     /**

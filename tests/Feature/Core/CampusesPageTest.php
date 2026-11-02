@@ -355,6 +355,19 @@ describe('subdirección', function () {
         expect($this->c1->fresh()->profile->requiresSubdireccionApproval)->toBeTrue();
     });
 
+    it('decide si los jefes corrigen sus salones al validar', function () {
+        Livewire::actingAs($this->subdireccion)
+            ->test('core::pages.campuses')
+            ->call('edit', $this->c1->id)
+            ->assertSet('settings.heads_edit_rooms', false)
+            ->assertSee('Los jefes corrigen sus salones al validar')
+            ->set('settings.heads_edit_rooms', true)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        expect($this->c1->fresh()->profile->headsEditRooms)->toBeTrue();
+    });
+
     it('no cambia código, nombre, modalidad ni estado aunque llame directo al componente', function () {
         $page = Livewire::actingAs($this->subdireccion)
             ->test('core::pages.campuses')
