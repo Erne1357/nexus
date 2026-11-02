@@ -33,4 +33,18 @@ enum Stage: string
 
     /** 9. Re-análisis con calificaciones (R2). */
     case Reanalysis = 'reanalysis';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::CatalogValidation => 'Validación de catálogos',
+            self::Proposal => 'Propuesta por carrera',
+            self::Scheduling => 'Horarios y cupos',
+            self::Staffing => 'Asignación docente',
+            self::Rooms => 'Salones y acuerdos',
+            self::Closing => 'Cierre y aprobación',
+            self::Publication => 'Publicación',
+            self::Reanalysis => 'Re-análisis',
+        };
+    }
 }

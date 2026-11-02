@@ -3,11 +3,14 @@
 namespace App\Modules\Core;
 
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Events\TermCalendarChanged;
+use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\Facades\Event;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
@@ -29,6 +32,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function boot(): void
     {
         parent::boot();
+
+        Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
