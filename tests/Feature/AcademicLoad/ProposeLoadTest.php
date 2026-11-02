@@ -10,6 +10,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /*
@@ -116,4 +117,18 @@ it('HC-14: la revisión de salones de otro campus no cuenta', function () {
     CatalogReview::factory()->rooms()->validated()->create(['term_id' => $load->term_id, 'department_id' => $load->department_id]);
 
     expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Salones.');
+});
+
+it('HC-14: lee las revisiones con bloqueo compartido al proponer', function () {
+    $load = loadWith();
+    validateGenerals($load);
+    validateRooms($load);
+    $sql = [];
+    DB::listen(function ($query) use (&$sql) {
+        $sql[] = $query->sql;
+    });
+
+    app(ProposeLoad::class)->handle($load, test()->user);
+
+    expect(collect($sql)->filter(fn (string $s) => str_contains($s, 'catalog_reviews') && str_contains($s, 'for share')))->toHaveCount(1);
 });

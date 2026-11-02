@@ -20,9 +20,14 @@ final class CatalogReviewQuery
      * campus) falta o no está validada, y los salones si el perfil del campus usa salones y la revisión del
      * periodo, el campus y el departamento falta o no está validada. En el orden del enum Catalog.
      *
+     * Con `$lock` las revisiones que lee quedan con bloqueo compartido (FOR SHARE) hasta el fin de la
+     * transacción: quien valida HC-14 dentro de una transacción (CatalogsValidated, desde TransitionLoad)
+     * impide que otra sesión des-valide un catálogo entre la lectura y el cambio de estado. Fuera de una
+     * transacción no tiene efecto.
+     *
      * @return list<Catalog>
      */
-    public function pendingFor(Term|string $term, Campus $campus, Department|string $department): array
+    public function pendingFor(Term|string $term, Campus $campus, Department|string $department, bool $lock = false): array
     {
         $termId = $term instanceof Term ? $term->getKey() : $term;
         $departmentId = $department instanceof Department ? $department->getKey() : $department;
@@ -33,6 +38,7 @@ final class CatalogReviewQuery
             ->where('term_id', $termId)
             ->where('department_id', $departmentId)
             ->where('status', ReviewStatus::Validated)
+            ->when($lock, fn ($query) => $query->sharedLock())
             ->where(fn ($query) => $query->whereNull('campus_id')->orWhere('campus_id', $campus->getKey()))
             ->get()
             ->filter(fn (CatalogReview $review): bool => $review->catalog->isGeneral() === ($review->campus_id === null))

@@ -16,7 +16,9 @@ final class CatalogsValidated
     public function __construct(private readonly CatalogReviewQuery $reviews) {}
 
     /**
-     * El motivo de bloqueo, o nada si no falta ningún catálogo.
+     * El motivo de bloqueo, o nada si no falta ningún catálogo. Lee las revisiones con bloqueo compartido: la
+     * carga ya está bloqueada por TransitionLoad y sin esto una revisión des-validada en paralelo podría
+     * colarse entre la lectura y el cambio de estado.
      *
      * @return list<string>
      */
@@ -24,7 +26,7 @@ final class CatalogsValidated
     {
         $load->loadMissing('campus');
 
-        $pending = $this->reviews->pendingFor($load->term_id, $load->campus, $load->department_id);
+        $pending = $this->reviews->pendingFor($load->term_id, $load->campus, $load->department_id, lock: true);
 
         if ($pending === []) {
             return [];

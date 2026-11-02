@@ -7,6 +7,7 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
+use Illuminate\Support\Facades\DB;
 
 /*
 | CatalogReviewQuery::pendingFor: los catálogos que bloquean HC-14 para la carga de un departamento en un
@@ -48,4 +49,18 @@ it('no cuenta las revisiones de otro periodo, otro departamento ni los salones d
     CatalogReview::factory()->rooms()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
     expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))->toHaveCount(5);
+});
+
+it('con lock lee las revisiones con FOR SHARE y sin él no', function () {
+    $queries = [];
+    DB::listen(function ($query) use (&$queries) {
+        $queries[] = $query->sql;
+    });
+
+    app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department);
+    expect(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'for share')))->toBeEmpty();
+
+    $queries = [];
+    app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department, lock: true);
+    expect(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'catalog_reviews') && str_contains($sql, 'for share')))->toHaveCount(1);
 });
