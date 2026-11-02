@@ -82,7 +82,7 @@ it('guarda en la caché solo las ventanas, no el estado', function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-05', 'America/Ciudad_Juarez'));
     expect(termCalendarFor($this->term, $this->campus, Stage::Proposal)->status)->toBe(StageStatus::InProgress);
 
-    expect(Cache::has(TermCalendarQuery::key($this->term->id, $this->campus->id)))->toBeTrue();
+    expect(Cache::has(TermCalendarQuery::key($this->term->id)))->toBeTrue();
 
     $this->travelTo(CarbonImmutable::parse('2026-11-20', 'America/Ciudad_Juarez'));
     expect(termCalendarFor($this->term, $this->campus, Stage::Proposal)->status)->toBe(StageStatus::Finished);
@@ -133,4 +133,23 @@ it('storedWindows da la general y las de campus de una etapa tal como están gua
 
     expect(app(TermCalendarQuery::class)->storedWindows($this->term, Stage::Proposal)->pluck('campus_id')->sort()->values()->all())
         ->toEqual(collect([null, $this->campus->id])->sort()->values()->all());
+});
+
+it('lee todos los campus de una sola entrada de caché por periodo', function () {
+    $other = Campus::factory()->create();
+    app(SetTermStage::class)->handle($this->term, Stage::Proposal, null, '2027-01-04', '2027-01-15');
+    app(SetTermStage::class)->handle($this->term, Stage::Scheduling, $other, '2027-01-18', '2027-01-29');
+    Cache::flush();
+
+    $reads = [];
+    Cache::spy();
+    Cache::shouldReceive('remember')->andReturnUsing(function (string $key, $ttl, Closure $callback) use (&$reads) {
+        $reads[] = $key;
+
+        return $callback();
+    });
+
+    app(TermCalendarQuery::class)->ownWindows($this->term, [$this->campus, $other]);
+
+    expect(array_unique($reads))->toBe([TermCalendarQuery::key($this->term->id)]);
 });

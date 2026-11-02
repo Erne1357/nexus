@@ -17,8 +17,9 @@ use Illuminate\Support\Facades\Cache;
  * Stage, cada una con la ventana de su campus si la tiene, si no la general, si no ninguna. Sin campus,
  * solo las generales. Solo informa (D4).
  *
- * Se guardan en la caché de la aplicación las filas crudas, con la clave
- * `core.term-calendar.{term_id}.{campus_id|all}`; el estado respecto a hoy (America/Ciudad_Juarez)
+ * Se guardan en la caché de la aplicación las filas crudas, una entrada por periodo con la clave
+ * `core.term-calendar.{term_id}` que trae la ventana general y la de cada campus (por `general` o id de campus, y
+ * por etapa); todas las lecturas salen de ella. El estado respecto a hoy (America/Ciudad_Juarez)
  * se calcula en cada lectura, fuera de la caché. ForgetTermCalendar la borra al cambiar el calendario.
  */
 final class TermCalendarQuery
@@ -28,7 +29,7 @@ final class TermCalendarQuery
      */
     public function for(Term $term, ?Campus $campus): array
     {
-        $rows = Cache::remember(self::key($term->getKey(), $campus?->getKey()), now()->addDay(), fn (): array => $this->rows($term, $campus));
+        $rows = $this->cachedRows($term);
         $today = today()->toImmutable();
 
         return array_map(function (Stage $stage) use ($rows, $campus, $today): StageWindow {
@@ -105,22 +106,29 @@ final class TermCalendarQuery
         return TermStage::query()->where('term_id', $term->getKey())->where('stage', $stage->value)->get();
     }
 
-    public static function key(string $termId, ?string $campusId): string
+    public static function key(string $termId): string
     {
-        return 'core.term-calendar.'.$termId.'.'.($campusId ?? 'all');
+        return 'core.term-calendar.'.$termId;
+    }
+
+    /**
+     * @return array<string, array<string, array{starts_on: string, ends_on: string}>>
+     */
+    private function cachedRows(Term $term): array
+    {
+        return Cache::remember(self::key($term->getKey()), now()->addDay(), fn (): array => $this->rows($term));
     }
 
     /**
      * @return array<string, array<string, array{starts_on: string, ends_on: string}>> por `general` o
      *                                                                                 campus, y por etapa
      */
-    private function rows(Term $term, ?Campus $campus): array
+    private function rows(Term $term): array
     {
         $rows = [];
 
         TermStage::query()
             ->where('term_id', $term->getKey())
-            ->where(fn ($query) => $query->whereNull('campus_id')->when($campus !== null, fn ($query) => $query->orWhere('campus_id', $campus->getKey())))
             ->get()
             ->each(function (TermStage $window) use (&$rows): void {
                 $rows[$window->campus_id ?? 'general'][$window->stage->value] = [
