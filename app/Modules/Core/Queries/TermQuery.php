@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -40,6 +41,19 @@ final class TermQuery
             ->join('campuses', 'campuses.id', '=', 'term_openings.campus_id')
             ->orderBy('campuses.code')
             ->select('term_openings.*')
+            ->get();
+    }
+
+    /**
+     * Los periodos que se abrieron en un campus, del más reciente al más antiguo.
+     *
+     * @return Collection<int, Term>
+     */
+    public function openedIn(Campus $campus): Collection
+    {
+        return Term::query()
+            ->whereIn('id', TermOpening::query()->where('campus_id', $campus->getKey())->select('term_id'))
+            ->orderByDesc('starts_on')
             ->get();
     }
 
