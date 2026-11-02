@@ -66,13 +66,13 @@ it('al enviar, avisa al jefe de cada departamento con cuántas materias y grupos
         $message = $notification->message($this->jefeCb);
 
         return $message->title === 'Ingeniería en Sistemas Computacionales envió su propuesta'
-            && $message->body === 'Campus II · 2 materias de Ciencias Básicas, 5 grupos'
+            && $message->body === 'Campus II · 2 materias, 5 grupos'
             && $message->route === 'academic-load.inbox'
             && $message->parameters === ['depto' => 'CB', 'carrera' => $this->career->id]
             && $message->termId === $this->proposal->term_id
             && $message->campusId === $this->campus->id;
     });
-    Notification::assertSentTo($this->jefeSc, ProposalSubmitted::class, fn (ProposalSubmitted $notification) => $notification->message($this->jefeSc)->body === 'Campus II · 1 materia de Sistemas y Computación, 1 grupo');
+    Notification::assertSentTo($this->jefeSc, ProposalSubmitted::class, fn (ProposalSubmitted $notification) => $notification->message($this->jefeSc)->body === 'Campus II · 1 materia, 1 grupo');
     Notification::assertNotSentTo($this->coordinador, ProposalSubmitted::class);
 });
 
