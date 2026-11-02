@@ -424,3 +424,18 @@ describe('departamentos desactivados y partes de otro periodo o campus', functio
             ->and(fn () => $query->reviewOrFail($this->cb, $part->id, $this->term->id, Campus::factory()->create()->id))->toThrow(ModelNotFoundException::class);
     });
 });
+
+it('dice qué otros departamentos regresaron la propuesta de una parte pendiente, sin consultas por fila', function () {
+    $isc = offeredCareer('ISC');
+    $proposal = inboxProposal($isc, ProposalStatus::Returned);
+    ProposalReview::factory()->create(['career_proposal_id' => $proposal->id, 'department_id' => $this->cb->id]);
+    ProposalReview::factory()->returned('Revisa.')->create(['career_proposal_id' => $proposal->id, 'department_id' => $this->sc->id]);
+    $iind = offeredCareer('IIND');
+    $sent = inboxProposal($iind);
+    ProposalReview::factory()->create(['career_proposal_id' => $sent->id, 'department_id' => $this->cb->id]);
+
+    $rows = collect(inboxOf()->careers)->keyBy(fn (array $row): string => $row['career']->code);
+
+    expect($rows['ISC']['correctionBy'])->toBe(['SC'])
+        ->and($rows['IIND']['correctionBy'])->toBe([]);
+});
