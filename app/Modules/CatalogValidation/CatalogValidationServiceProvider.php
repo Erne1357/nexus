@@ -37,7 +37,7 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Validación de catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico,
+            new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico,
                 visible: static fn (ScopedContext $context): bool => $context->has(Role::JefeDepartamento) || $context->has(Role::Subdireccion)),
         ];
     }
