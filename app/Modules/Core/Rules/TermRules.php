@@ -57,6 +57,23 @@ final class TermRules
     }
 
     /**
+     * El código que sigue al más reciente: 1 pasa a 2, 2 a 3 y 3 al 1 del año siguiente (20273 -> 20281); null si
+     * `$latest` no tiene la forma del código.
+     */
+    public function nextCode(?string $latest): ?string
+    {
+        if ($latest === null || preg_match('/^[0-9]{4}[123]$/', trim($latest)) !== 1) {
+            return null;
+        }
+
+        $latest = trim($latest);
+        $year = (int) substr($latest, 0, 4);
+        $period = (int) $latest[4];
+
+        return $period === 3 ? ($year + 1).'1' : $year.($period + 1);
+    }
+
+    /**
      * Revisa un código ya normalizado; `$except` es el periodo que lo conserva al editarse.
      *
      * @throws ValidationException

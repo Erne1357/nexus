@@ -40,19 +40,15 @@
             class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
         >
             @scope('cell_code', $term)
-                <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['font-mono text-[15px] tabular-nums text-primary hover:underline', 'font-semibold' => $term->is_current])>{{ $term->code }}</a>
+                <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['font-mono text-[15px] tabular-nums text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary', 'font-semibold' => $term->is_current])>{{ $term->code }}</a>
             @endscope
 
             @scope('cell_name', $term)
-                <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['hover:underline', 'font-semibold' => $term->is_current])>{{ $term->name }}</a>
+                <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary', 'font-semibold' => $term->is_current])>{{ $term->name }}</a>
             @endscope
 
-            @scope('cell_starts_on', $term)
-                <span class="tabular-nums">{{ $term->starts_on->format('d/m/Y') }}</span>
-            @endscope
-
-            @scope('cell_ends_on', $term)
-                <span class="tabular-nums">{{ $term->ends_on->format('d/m/Y') }}</span>
+            @scope('cell_dates', $term)
+                <span class="tabular-nums"><span class="whitespace-nowrap">{{ $term->starts_on->format('d/m/Y') }} –</span> <span class="whitespace-nowrap">{{ $term->ends_on->format('d/m/Y') }}</span></span>
             @endscope
 
             @scope('cell_opened_in', $term)
@@ -61,7 +57,7 @@
 
             @scope('cell_is_current', $term)
                 @if ($term->is_current)
-                    <x-core::status-badge tone="success" label="Actual" />
+                    <x-core::status-badge tone="primary" label="Actual" />
                 @endif
             @endscope
 
@@ -79,10 +75,10 @@
                 <li wire:key="term-card-{{ $term->id }}" class="space-y-1 px-4 py-3">
                     <div class="flex items-center gap-2.5">
                         <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $term->is_current])>{{ $term->code }}</span>
-                        <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['min-w-0 flex-1', 'font-semibold' => $term->is_current])>{{ $term->name }}</a>
+                        <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['min-w-0 flex-1 text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary', 'font-semibold' => $term->is_current])>{{ $term->name }}</a>
 
                         @if ($term->is_current)
-                            <x-core::status-badge tone="success" label="Actual" />
+                            <x-core::status-badge tone="primary" label="Actual" />
                         @endif
                     </div>
 

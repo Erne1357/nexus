@@ -77,11 +77,21 @@ class TermForm extends Form
     {
         $suggestion = $rules->suggestedName($code);
 
-        if ($suggestion !== null && ($this->name === '' || $this->name === $this->suggestedName)) {
-            $this->name = $suggestion;
+        if ($this->name === '' || $this->name === $this->suggestedName) {
+            $this->name = $suggestion ?? '';
         }
 
         $this->suggestedName = $suggestion ?? $this->suggestedName;
+    }
+
+    /**
+     * Deja el formulario de un alta con el código que sigue al más reciente y su nombre sugerido, y sin fechas.
+     */
+    public function prefillNext(?string $latestCode, TermRules $rules): void
+    {
+        $this->reset();
+        $this->code = $rules->nextCode($latestCode) ?? '';
+        $this->suggestName($this->code, $rules);
     }
 
     /**
@@ -110,8 +120,18 @@ class TermForm extends Form
      */
     public function submit(Closure $action): mixed
     {
-        /** @var array{code: string, name: string, starts_on: string, ends_on: string} $data */
-        $data = $this->validate();
+        try {
+            /** @var array{code: string, name: string, starts_on: string, ends_on: string} $data */
+            $data = $this->validate();
+        } catch (ValidationException $e) {
+            foreach ($this->formatErrors($e) as $field => $messages) {
+                foreach ($messages as $message) {
+                    $e->validator->errors()->add($field, $message);
+                }
+            }
+
+            throw $e;
+        }
 
         try {
             return $action($data);
@@ -120,5 +140,36 @@ class TermForm extends Form
                 collect($e->errors())->mapWithKeys(fn (array $messages, string $field): array => ["form.{$field}" => $messages])->all(),
             );
         }
+    }
+
+    /**
+     * Los errores de formato que decide TermRules (código y orden de las fechas), para mostrarlos en el mismo envío
+     * que los de campos vacíos y no en el siguiente. No pisa un error que ya trae el campo.
+     *
+     * @return array<string, list<string>>
+     */
+    private function formatErrors(ValidationException $e): array
+    {
+        $rules = app(TermRules::class);
+        $errors = [];
+        $existing = $e->errors();
+
+        if (! isset($existing['form.code'])) {
+            try {
+                $rules->normalizeCode($this->code);
+            } catch (ValidationException $format) {
+                $errors['form.code'] = $format->errors()['code'];
+            }
+        }
+
+        if (! isset($existing['form.starts_on']) && ! isset($existing['form.ends_on'])) {
+            try {
+                $rules->dates($this->starts_on, $this->ends_on);
+            } catch (ValidationException $order) {
+                $errors['form.ends_on'] = $order->errors()['ends_on'];
+            }
+        }
+
+        return $errors;
     }
 }

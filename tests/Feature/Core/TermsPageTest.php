@@ -48,7 +48,7 @@ describe('admin y subdirección', function () {
         $this->actingAs($this->{$who})
             ->get(route('core.terms'))
             ->assertOk()
-            ->assertSeeInOrder(['Código', 'Nombre', 'Inicio', 'Fin', 'Abierto en', 'Estado'])
+            ->assertSeeInOrder(['Código', 'Nombre', 'Fechas', 'Abierto en', 'Estado'])
             ->assertSeeInOrder(['20271', 'Ene-Jun 2027', '18/01/2027', '11/06/2027', 'Actual', '20263', 'Ago-Dic 2026', '17/08/2026']);
     })->with(['admin', 'subdireccion']);
 
@@ -120,6 +120,47 @@ describe('admin y subdirección', function () {
             ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Periodo creado')->description->toBe('20272 · Verano 2027');
     })->with(['admin', 'subdireccion']);
 
+    it('abre «Nuevo periodo» con el código que sigue al más reciente, su nombre sugerido y sin fechas', function (string $latest, string $next, string $name) {
+        $this->t1->update(['code' => '19991']);
+        $this->t2->update(['code' => '19981']);
+        Term::factory()->create(['code' => $latest, 'starts_on' => '2010-01-01', 'ends_on' => '2010-02-01']);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.terms')
+            ->call('create')
+            ->assertSet('form.code', $next)
+            ->assertSet('form.name', $name)
+            ->assertSet('form.starts_on', '')
+            ->assertSet('form.ends_on', '');
+    })->with([
+        ['20271', '20272', 'Verano 2027'],
+        ['20272', '20273', 'Ago-Dic 2027'],
+        ['20273', '20281', 'Ene-Jun 2028'],
+    ]);
+
+    it('muestra en el mismo envío los errores de campos vacíos y los de formato', function () {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.terms')
+            ->call('create')
+            ->set('form.code', '2027')
+            ->set('form.name', 'X')
+            ->set('form.starts_on', '2027-06-21')
+            ->call('save')
+            ->assertHasErrors(['form.code', 'form.ends_on' => 'required'])
+            ->assertSee('El código lleva el año y el periodo');
+    });
+
+    it('recorta «Abierto en» a tres códigos y «+N» con la lista completa', function () {
+        foreach (['C2', 'C3', 'C4', 'C5'] as $code) {
+            TermOpening::factory()->for($this->t1)->for(Campus::factory()->create(['code' => $code]))->create();
+        }
+
+        $this->actingAs($this->admin)
+            ->get(route('core.terms'))
+            ->assertSee('+2')
+            ->assertSee('title="C2, C3, C4, C5"', false);
+    });
+
     it('sugiere el nombre con el código mientras el nombre esté vacío o sea la sugerencia anterior', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.terms')
@@ -172,6 +213,8 @@ describe('admin y subdirección', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.terms')
             ->call('create')
+            ->set('form.code', '')
+            ->set('form.name', '')
             ->set('form.starts_on', 'mañana')
             ->call('save')
             ->assertHasErrors(['form.code' => 'required', 'form.name' => 'required', 'form.starts_on' => 'date_format', 'form.ends_on' => 'required'])
