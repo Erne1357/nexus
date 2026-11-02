@@ -5,6 +5,8 @@ namespace App\Modules\AcademicLoad\Queries;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Specialty;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
@@ -88,7 +90,7 @@ final class CareerProposalQuery
     /**
      * Todo lo que muestra la página (ProposalOverview). Un número fijo de consultas, sin importar cuántas filas
      * tenga: la propuesta con su periodo, campus y carrera; las filas, sus materias y los departamentos de las
-     * materias; las partes y sus departamentos; y una por departamento involucrado para sus catálogos sin
+     * materias; las partes y sus departamentos; las especialidades de las materias en su plan; y una por departamento involucrado para sus catálogos sin
      * validar (CatalogReviewQuery::pendingFor, HC-14). Esa última solo se arma con `$withPendingCatalogs`, que
      * es lo que pide el diálogo de enviar: sin él, `pendingCatalogs` queda vacío.
      */
@@ -117,6 +119,21 @@ final class CareerProposalQuery
             ->with(['department' => fn ($query) => $query->withTrashed()])
             ->get();
 
+        $placements = StudyPlanSubject::withTrashed()
+            ->whereIn('study_plan_id', $items->pluck('study_plan_id')->unique()->all())
+            ->whereIn('subject_id', $items->pluck('subject_id')->all())
+            ->whereNotNull('specialty_id')
+            ->get(['study_plan_id', 'subject_id', 'specialty_id'])
+            ->mapWithKeys(fn (StudyPlanSubject $placement): array => ["{$placement->study_plan_id}|{$placement->subject_id}" => $placement->specialty_id]);
+        $specialtyOf = $items
+            ->filter(fn (ProposalItem $item): bool => $placements->has("{$item->study_plan_id}|{$item->subject_id}"))
+            ->mapWithKeys(fn (ProposalItem $item): array => [$item->subject_id => $placements["{$item->study_plan_id}|{$item->subject_id}"]])
+            ->all();
+        $inProposal = array_count_values(array_values($specialtyOf));
+        $specialties = Specialty::withTrashed()->whereIn('id', array_keys($inProposal))->orderBy('code')->get(['id', 'name'])
+            ->map(fn (Specialty $specialty): array => ['id' => $specialty->id, 'name' => $specialty->name, 'subjects' => $inProposal[$specialty->id]])
+            ->all();
+
         $requested = $items->filter(fn (ProposalItem $item): bool => $item->requested_groups > 0);
 
         $pendingCatalogs = ! $withPendingCatalogs ? [] : $requested
@@ -142,6 +159,8 @@ final class CareerProposalQuery
             ],
             pendingCatalogs: $pendingCatalogs,
             anomalies: ProposalAnomalies::fromSettings(),
+            specialtyOf: $specialtyOf,
+            specialties: $specialties,
         );
     }
 }

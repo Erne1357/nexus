@@ -18,7 +18,7 @@ it('cada estado de la propuesta tiene su etiqueta, el tono de su insignia y si s
 })->with([
     [ProposalStatus::Draft, 'Borrador', StatusTone::Draft, true],
     [ProposalStatus::Submitted, 'Enviada', StatusTone::Info, false],
-    [ProposalStatus::Returned, 'Regresada', StatusTone::Warning, true],
+    [ProposalStatus::Returned, 'Regresada', StatusTone::Error, true],
     [ProposalStatus::Accepted, 'Aceptada', StatusTone::Success, false],
 ]);
 
