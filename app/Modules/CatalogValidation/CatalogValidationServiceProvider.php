@@ -4,6 +4,7 @@ namespace App\Modules\CatalogValidation;
 
 use App\Modules\CatalogValidation\Listeners\CreateReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnCampusUpdated;
+use App\Modules\CatalogValidation\Listeners\NotifyPendingReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
@@ -25,8 +26,9 @@ use Illuminate\Support\Facades\Event;
  * (docs/dominio/modelo-de-datos.md, "CatalogValidation"). Depende de Imports y de lo que está a su izquierda.
  *
  * Escucha a Core, que no depende de CatalogValidation: al abrir un periodo en un campus crea las revisiones
- * que falten, y si un campus empieza a usar salones, las de salones de los periodos abiertos en él. Escucha a
- * Faculty: la captura del jefe sobre un docente suyo inicia la revisión de docentes (CV-S4).
+ * que falten y avisa a los jefes que tienen catálogos por validar, y si un campus empieza a usar salones, las de
+ * salones de los periodos abiertos en él. Escucha a Faculty: la captura del jefe sobre un docente suyo inicia la
+ * revisión de docentes (CV-S4).
  */
 final class CatalogValidationServiceProvider extends ModuleServiceProvider
 {
@@ -35,6 +37,7 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         Event::listen(TermOpened::class, CreateReviewsOnTermOpened::class);
+        Event::listen(TermOpened::class, NotifyPendingReviewsOnTermOpened::class);
         Event::listen(CampusUpdated::class, CreateRoomsReviewsOnCampusUpdated::class);
 
         foreach ([AvailabilityChanged::class, QualificationChanged::class, ExternalLoadChanged::class, TeacherUpdated::class, AdscriptionChanged::class, PositionChanged::class] as $event) {

@@ -7,7 +7,7 @@ use Livewire\Component;
 
 /**
  * La banda del layout (DESIGN.md, "Estructura"): la liebre, que abre y cierra el menú completo;
- * «Nexus»; la ruta (área › pantalla); «Buscar o ir a…», y la credencial de quien trabaja, que se abre
+ * «Nexus»; la ruta (área › pantalla); «Buscar o ir a…»; la campana de notificaciones, y la credencial de quien trabaja, que se abre
  * como tarjeta con el selector de campus y periodo, el tema, el cambio de contraseña y el cierre de
  * sesión. Abrir y cerrar lo hace el componente Alpine `nexusShell` (resources/js/app.js).
  *

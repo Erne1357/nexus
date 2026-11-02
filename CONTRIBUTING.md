@@ -25,7 +25,19 @@ docker compose exec -w /app/.worktrees/feature-<issue>-<slug> app php artisan te
 
 Después de traer `develop` a la carpeta principal, recarga los workers de Octane con `docker compose exec app php artisan octane:reload` (y corre `migrate` si llegaron migraciones): guardan el código en memoria y, sin recargarlos, el navegador sigue mostrando la versión anterior.
 
-Nunca corras `docker compose up` desde un worktree: comparte el nombre de proyecto con el repo principal y lo pisaría. Los contenedores `app` y `queue` sirven siempre el código de la carpeta principal: en un worktree se prueba con `php artisan test`, no en el navegador. El `.env` copiado comparte base de datos, Valkey y cola con el repo principal, así que no corras `migrate` de una rama sin mezclar contra la base de desarrollo.
+Nunca corras `docker compose up` desde un worktree: comparte el nombre de proyecto con el repo principal y lo pisaría. Los contenedores `app` y `queue` sirven siempre el código de la carpeta principal. El `.env` copiado comparte base de datos, Valkey y cola con el repo principal, así que no corras `migrate` de una rama sin mezclar contra la base de desarrollo.
+
+**Ver un worktree en el navegador.** `.github/scripts/worktree-preview.sh` levanta un contenedor aparte (misma imagen, volumen y red que `app`) que sirve el worktree en otro puerto con su propia base, su cookie de sesión, sus prefijos de Valkey y la cola en `sync`, así que no toca http://localhost ni la base `nexus`. Cada persona usa su puerto y su base (por ejemplo `8091` con `nexus_review_b` y `8092` con `nexus_review_c`):
+
+```bash
+.github/scripts/worktree-preview.sh build feature-<issue>-<slug>                    # assets compilados del worktree (watch para iterar)
+.github/scripts/worktree-preview.sh up    feature-<issue>-<slug> 8092 nexus_review_c
+.github/scripts/worktree-preview.sh seed  feature-<issue>-<slug> 8092 nexus_review_c   # DemoSeeder y 20271 abierto en C2; todos con `password`
+docker exec -e BASE=http://127.0.0.1:8000 nexus-preview-8092 node .github/scripts/review-screens.mjs inicio=/
+.github/scripts/worktree-preview.sh down  feature-<issue>-<slug> 8092 --drop nexus_review_c
+```
+
+Con otro worktree en el mismo puerto basta `down` y `up` con el nuevo directorio: la base se conserva. Si la rama trae migraciones, corre `docker exec nexus-preview-<puerto> php artisan migrate` (o `seed` de nuevo).
 
 **Pruebas en paralelo.** `RefreshDatabase` migra y revierte sobre una sola base, así que dos worktrees corriendo pruebas a la vez sobre `nexus_test` se pisan. Dale a cada worktree su propia base de pruebas y selecciónala con `DB_DATABASE` (`phpunit.xml` lo permite porque no lo fuerza):
 
