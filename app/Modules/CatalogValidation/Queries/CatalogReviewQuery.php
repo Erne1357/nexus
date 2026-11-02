@@ -5,9 +5,12 @@ namespace App\Modules\CatalogValidation\Queries;
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
+use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -54,6 +57,21 @@ final class CatalogReviewQuery
             ->all();
 
         return array_values(array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true)));
+    }
+
+    /**
+     * Los departamentos cuya revisión puede abrir el usuario, por clave: los que cubre como jefe y, en lectura, todos
+     * si es Subdirección o admin (CatalogReviewPolicy::view, CV-S1).
+     *
+     * @return Collection<int, Department>
+     */
+    public function departmentsFor(ScopedContext $context): Collection
+    {
+        return Department::query()
+            ->orderBy('code')
+            ->get()
+            ->filter(fn (Department $department): bool => $context->coversDepartment([Role::Subdireccion, Role::JefeDepartamento], $department->getKey()))
+            ->values();
     }
 
     /**
@@ -136,5 +154,21 @@ final class CatalogReviewQuery
             'removed' => $removed,
             'open_flags' => $review->flags()->whereNull('resolved_at')->count(),
         ];
+    }
+
+    /**
+     * Los motivos por los que reabrir la revisión se vetaría hoy (CV5), para que la pantalla deshabilite «Reabrir»
+     * con su motivo. Despacha CatalogReviewReopening sin transacción ni bloqueo: sus listeners solo leen (el de
+     * AcademicLoad cuenta las cargas del departamento que ya salieron de borrador), y ReopenReview vuelve a
+     * preguntar, ya con bloqueo, al escribir. Sin motivos, la lista va vacía.
+     *
+     * @return list<string>
+     */
+    public function reopeningVetoes(CatalogReview $review): array
+    {
+        $event = new CatalogReviewReopening($review);
+        event($event);
+
+        return $event->reasons();
     }
 }
