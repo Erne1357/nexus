@@ -9,6 +9,9 @@ use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\RoleSeeder;
+use App\Modules\Core\Database\Seeders\TermCalendarDemoSeeder;
+use App\Modules\Core\Database\Seeders\TermHistorySeeder;
+use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
@@ -56,5 +59,11 @@ class MassiveSeeder extends Seeder
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C1' => 670, 'C2' => 660]]);
 
         $this->command?->info(sprintf('Alumnos, kárdex y avance en total: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $started = hrtime(true);
+        $this->call([TermHistorySeeder::class, TermCalendarDemoSeeder::class]);
+        $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C1', 'C2'], '20263' => ['C1', 'C2']]]);
+
+        $this->command?->info(sprintf('Periodos, calendarios y aperturas: %.1f s.', (hrtime(true) - $started) / 1e9));
     }
 }
