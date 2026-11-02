@@ -24,6 +24,14 @@ abstract class NexusNotification extends Notification
     abstract public function message(object $notifiable): NotificationMessage;
 
     /**
+     * El nombre del tipo de aviso en español, para el filtro de «Todas las notificaciones».
+     */
+    public static function typeLabel(): string
+    {
+        return Str::headline(class_basename(static::class));
+    }
+
+    /**
      * @return list<string>
      */
     public function via(object $notifiable): array

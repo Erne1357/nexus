@@ -20,6 +20,11 @@ use App\Modules\Core\Queries\ScopedContext;
  */
 final class ProposalSubmitted extends NexusNotification
 {
+    public static function typeLabel(): string
+    {
+        return 'Propuesta enviada';
+    }
+
     public function __construct(
         private readonly CareerProposal $proposal,
         private readonly Department $department,

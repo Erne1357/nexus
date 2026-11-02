@@ -20,6 +20,11 @@ use App\Modules\Core\Queries\ScopedContext;
  */
 final class CatalogReviewsPending extends NexusNotification
 {
+    public static function typeLabel(): string
+    {
+        return 'Catálogos por validar';
+    }
+
     /**
      * @param  list<Catalog>  $pending
      */

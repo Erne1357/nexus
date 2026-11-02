@@ -12,7 +12,7 @@ use Mary\Traits\Toast;
 
 /**
  * «Todas las notificaciones» (se llega desde «Ver todas» de la campana; no está en el menú): la lista completa
- * del usuario, de 25 en 25, con el filtro Todas / Sin leer (`?filtro=`), «Marcar todas como leídas» y abrir cada
+ * del usuario, de 25 en 25, con el filtro Todas / Sin leer (`?filtro=`) y por tipo de aviso (`?tipo=`), agrupada por día, «Marcar todas como leídas» y abrir cada
  * una con OpenNotification, igual que la campana (OpensNotifications). Solo ve y abre las suyas: la consulta parte
  * de su relación.
  */
@@ -24,14 +24,25 @@ new #[Title('Notificaciones')] class extends Component
     #[Url(as: 'filtro', except: 'todas')]
     public string $filter = 'todas';
 
-    public function mount(): void
+    /** La llave del tipo de aviso (`proposal-returned`), o vacío para todos; va en la URL. */
+    #[Url(as: 'tipo', except: '')]
+    public string $type = '';
+
+    public function mount(NotificationQuery $notifications, ScopedContext $context): void
     {
         $this->normalizeFilter();
+        $this->normalizeType($notifications, $context);
     }
 
     public function updatedFilter(): void
     {
         $this->normalizeFilter();
+        $this->resetPage();
+    }
+
+    public function updatedType(NotificationQuery $notifications, ScopedContext $context): void
+    {
+        $this->normalizeType($notifications, $context);
         $this->resetPage();
     }
 
@@ -44,18 +55,25 @@ new #[Title('Notificaciones')] class extends Component
         $onlyUnread = $this->filter === 'sin-leer';
 
         if ($user === null) {
-            return ['items' => new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE), 'unread' => 0, 'total' => 0, 'onlyUnread' => $onlyUnread];
+            return ['items' => new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE), 'unread' => 0, 'total' => 0, 'onlyUnread' => $onlyUnread, 'types' => [], 'showCampus' => false];
         }
 
-        $items = $notifications->paginated($user, $onlyUnread);
+        $showCampus = $context->campuses()->count() > 1;
+        $items = $notifications->paginated($user, $onlyUnread, type: $this->type, withCampus: $showCampus);
 
         // Al leer avisos con el filtro «Sin leer», la página en curso puede quedar después de la última.
         if ($items->currentPage() > max(1, $items->lastPage())) {
             $this->setPage($items->lastPage());
-            $items = $notifications->paginated($user, $onlyUnread);
+            $items = $notifications->paginated($user, $onlyUnread, type: $this->type, withCampus: $showCampus);
         }
 
-        return ['items' => $items, ...$notifications->counts($user), 'onlyUnread' => $onlyUnread];
+        return [
+            'items' => $items,
+            ...$notifications->counts($user),
+            'onlyUnread' => $onlyUnread,
+            'types' => collect($notifications->types($user))->map(fn (string $label, string $key): array => ['id' => $key, 'name' => $label])->values()->all(),
+            'showCampus' => $showCampus,
+        ];
     }
 
     /**
@@ -65,6 +83,18 @@ new #[Title('Notificaciones')] class extends Component
     {
         if (! in_array($this->filter, ['todas', 'sin-leer'], true)) {
             $this->filter = 'todas';
+        }
+    }
+
+    /**
+     * Un `?tipo=` que no es de ninguno de sus avisos vuelve a todos.
+     */
+    private function normalizeType(NotificationQuery $notifications, ScopedContext $context): void
+    {
+        $user = $context->user();
+
+        if ($this->type !== '' && ($user === null || ! array_key_exists($this->type, $notifications->types($user)))) {
+            $this->type = '';
         }
     }
 };
