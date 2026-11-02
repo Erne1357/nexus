@@ -1,0 +1,44 @@
+<?php
+
+namespace App\Modules\AcademicLoad\Database\Factories;
+
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalItem;
+use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * Fila de primer semestre con 30 elegibles, 30 esperados y un grupo solicitado.
+ *
+ * @extends Factory<ProposalItem>
+ */
+#[UseModel(ProposalItem::class)]
+class ProposalItemFactory extends Factory
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            'career_proposal_id' => CareerProposal::factory(),
+            'subject_id' => Subject::factory(),
+            'study_plan_id' => StudyPlan::factory(),
+            'semester' => 1,
+            'eligible_students' => 30,
+            'expected_students' => 30,
+            'requested_groups' => 1,
+            'notes' => null,
+        ];
+    }
+
+    /**
+     * Una materia que no se pide: cero grupos.
+     */
+    public function withoutGroups(): static
+    {
+        return $this->state(['requested_groups' => 0]);
+    }
+}
