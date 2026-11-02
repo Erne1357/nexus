@@ -1,11 +1,19 @@
 <?php
 
+use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
+use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Database\Seeders\AdminUserSeeder;
+use App\Modules\Core\Database\Seeders\CampusSeeder;
+use App\Modules\Core\Database\Seeders\DemoTermSeeder;
+use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherEvaluation;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
@@ -13,7 +21,9 @@ use App\Modules\Imports\Actions\ApplyImportBatch;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
 use App\Modules\Imports\Models\ImportBatch;
-use Database\Seeders\DemoSeeder;
+use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use Illuminate\Database\Seeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -26,9 +36,29 @@ use Illuminate\Support\Facades\Storage;
 
 const DEMO_TEMPLATES = ['departments', 'careers', 'study_plans', 'subjects', 'prerequisites', 'students', 'kardex', 'teachers', 'positions'];
 
+/*
+| El demo de DemoSeeder (los mismos seeders) con menos docentes y alumnos: lo que prueba este archivo (cada
+| plantilla se exporta y vuelve a entrar sin errores) no depende del volumen, y sembrar el demo completo en
+| cada prueba hacía de este archivo el más lento de la suite (con cobertura, más que todo lo demás junto en un
+| proceso paralelo).
+*/
 beforeEach(function () {
     Storage::fake('imports');
-    $this->seed(DemoSeeder::class);
+
+    (new class extends Seeder
+    {
+        use WithoutModelEvents;
+
+        public function run(): void
+        {
+            $this->call([RoleSeeder::class, CampusSeeder::class, AdminUserSeeder::class, DemoTermSeeder::class]);
+            $this->callWith(AcademicDemoSeeder::class, ['campuses' => ['C2']]);
+            $this->callWith(DemoStaffSeeder::class, ['campuses' => ['C2']]);
+            $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C2']]);
+            $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C2' => 15]]);
+            $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C2' => 4]]);
+        }
+    })->setContainer(app())->__invoke();
 });
 
 it('escribe un archivo por plantilla en la carpeta pedida', function () {
