@@ -257,8 +257,13 @@ new #[Title('Bandeja del departamento')] class extends Component
         $selected = $this->selected($inbox);
         $canDecide = $selected !== null && $selected['decidable'] && Gate::allows('decide', $selected['review']);
         $allItems = $selected === null ? [] : $inbox->rowsFor($selected['career']->getKey());
-        $anomalous = array_values(array_filter($allItems, fn (array $entry): bool => $entry['anomalies'] !== []));
-        $items = $this->onlyAnomalies && $anomalous !== [] ? $anomalous : $allItems;
+        $anomalous = $this->anomalousRows($allItems);
+
+        if ($anomalous === []) {
+            $this->onlyAnomalies = false;
+        }
+
+        $items = $this->onlyAnomalies ? $anomalous : $allItems;
         $submitted = array_values(array_filter($rows, fn (array $row): bool => $row['status'] !== InboxStatus::NotSubmitted));
         $target = $this->reviewId === null ? null : $this->targetOf($rows, $this->reviewId);
         $catalogsUrl = Route::has('catalog-validation.review') ? route('catalog-validation.review', ['department' => $inbox->department->getKey()]) : null;
@@ -281,7 +286,7 @@ new #[Title('Bandeja del departamento')] class extends Component
             'chips' => $this->chips($inbox),
             'anomalyCounts' => array_combine(array_map(fn (array $row): string => $row['career']->getKey(), $rows), array_column($rows, 'anomalies')),
             'target' => $target,
-            'targetAnomalies' => $target === null ? [] : $this->anomalousRows($inbox, $target['career']->getKey()),
+            'targetAnomalies' => $target === null ? [] : $this->anomalousRows($inbox->rowsFor($target['career']->getKey())),
             'parallelsTarget' => $this->parallelsTarget($inbox),
         ];
     }
@@ -478,13 +483,14 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * Las filas de la carrera con alguna anomalía.
+     * De las filas de una carrera, las que tienen alguna anomalía.
      *
+     * @param  list<array{item: ProposalItem, total: array{careers: int, groups: int, expected: int}, anomalies: list<string>}>  $rows
      * @return list<array{item: ProposalItem, total: array{careers: int, groups: int, expected: int}, anomalies: list<string>}>
      */
-    private function anomalousRows(DepartmentInbox $inbox, string $careerId): array
+    private function anomalousRows(array $rows): array
     {
-        return array_values(array_filter($inbox->rowsFor($careerId), fn (array $entry): bool => $entry['anomalies'] !== []));
+        return array_values(array_filter($rows, fn (array $entry): bool => $entry['anomalies'] !== []));
     }
 
     /**
@@ -500,6 +506,8 @@ new #[Title('Bandeja del departamento')] class extends Component
 
         if ($next !== null) {
             $this->careerId = (string) array_search($next, $left, true);
+            $this->onlyAnomalies = false;
+            $this->dispatch('inbox-detail-opened');
         }
     }
 

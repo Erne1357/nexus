@@ -485,7 +485,8 @@ describe('HC-14: aceptar bloqueado sin validación', function () {
             ->assertSeeHtml('data-testid="validate-catalogs"')
             ->assertSeeHtml(route('catalog-validation.review', ['department' => $this->cb->id]))
             ->assertSee(mb_strtolower(Catalog::Teachers->label()))
-            ->assertDontSeeHtml('data-testid="accept-block"')
+            ->assertSeeHtml('data-testid="accept-block"')
+            ->assertSeeHtml('text-sm text-neutral lg:hidden')
             ->assertSeeHtml('data-testid="accept-part"')
             ->assertSeeHtml('disabled');
     });
@@ -671,6 +672,23 @@ describe('segunda crítica con volumen', function () {
             ->assertDontSee('Cálculo Diferencial');
 
         inboxPageAs($this->jefe, ['carrera' => $this->isc->id, 'anomalias' => '1'])->assertSet('onlyAnomalies', true);
+    });
+
+    it('el filtro de anomalías se apaga solo en una carrera sin anomalías y al pasar a la siguiente', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id, 'anomalias' => '1'])->assertSet('onlyAnomalies', false);
+
+        ProposalItem::query()->where('career_proposal_id', $this->iscProposal->id)->update(['expected_students' => 1, 'requested_groups' => 3]);
+        $page = inboxPageAs($this->jefe, ['carrera' => $this->isc->id])->set('onlyAnomalies', true);
+        $page->call('confirmReturn', $this->iscPart->id)->set('comment', 'x')->call('returnPart')
+            ->assertSet('onlyAnomalies', false)
+            ->assertDispatched('inbox-detail-opened');
+    });
+
+    it('la nota de la fila se lee en pantalla angosta con su texto visible y un solo data-testid por variante', function () {
+        $page = inboxPageAs($this->jefe, ['carrera' => $this->isc->id]);
+
+        $page->assertSeeHtml('data-testid="row-note-inline"');
+        expect(substr_count($page->html(), 'data-testid="row-note"'))->toBe(1);
     });
 
     it('sin materias con anomalías no ofrece el filtro', function () {

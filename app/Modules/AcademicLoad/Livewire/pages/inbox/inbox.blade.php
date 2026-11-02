@@ -8,16 +8,23 @@
     Al cerrar la confirmación o un drawer (Esc, el velo, Cancelar o al decidir), el foco vuelve al botón que lo abrió
     (`data-opens`); si la lista se repintó lo busca de nuevo, y si ya no está, lo deja en el título del detalle.
 --}}
-<div class="space-y-5" x-on:inbox-detail-opened.window="$nextTick(() => setTimeout(() => revealDetail(), 60))"
+<div class="space-y-5" x-on:inbox-detail-opened.window="pendingReveal = true; $nextTick(() => revealDetail())"
     x-on:click.capture="const trigger = $event.target.closest('[data-opens]'); if (trigger) { opener = trigger.dataset.opens }"
     x-data="{
         opener: null,
+        pendingReveal: false,
         revealDetail() {
             const detail = this.$root.querySelector('[data-testid=inbox-detail]')
-            if (detail.getBoundingClientRect().top < 80 || window.innerWidth < 1024) { detail.scrollIntoView({ block: 'start' }) }
-            this.$root.querySelector('[data-testid=inbox-detail-title]')?.focus({ preventScroll: true })
+            if (! this.pendingReveal || ! detail) { return }
+            const title = detail.querySelector('[data-testid=inbox-detail-title]')
+            if (! title) { return }
+            this.pendingReveal = false
+            const offset = parseFloat(getComputedStyle(detail).scrollMarginTop) || 0
+            if (detail.getBoundingClientRect().top < offset || window.innerWidth < 1024) { detail.scrollIntoView({ block: 'start' }) }
+            title.focus({ preventScroll: true })
         },
         init() {
+            Livewire.hook('morphed', ({ component }) => { if (component.id === this.$wire.id) { this.revealDetail() } })
             for (const key of ['showAccept', 'showReturn', 'showParallels']) {
                 this.$wire.$watch(key, (open) => {
                     if (open || this.opener === null) { return }

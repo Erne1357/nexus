@@ -67,7 +67,7 @@ final class DepartmentInboxQuery
             ->get()
             ->keyBy('career_proposal_id');
 
-        $correctionBy = $this->returnedByOthers($department, $proposals->keys()->all());
+        $correctionBy = $this->returnedByOthers($department, $reviews->keys()->all());
         $items = $this->requestedItems($department, $reviews->keys()->all());
         $careers = $this->careers($campus, $reviews->keys()->map(fn (string $id): string => $proposals->get($id)->career_id)->all());
         $proposalsByCareer = $proposals->keyBy('career_id');
@@ -207,7 +207,7 @@ final class DepartmentInboxQuery
      * Las claves de los otros departamentos que regresaron cada propuesta, por id de propuesta y por clave; una
      * sola consulta. Es lo que la bandeja muestra como «en corrección por».
      *
-     * @param  list<string>  $proposalIds
+     * @param  list<string>  $proposalIds  las propuestas con parte de este departamento
      * @return Collection<string, list<string>>
      */
     private function returnedByOthers(Department $department, array $proposalIds): Collection
@@ -217,7 +217,9 @@ final class DepartmentInboxQuery
             ->whereIn('proposal_reviews.career_proposal_id', $proposalIds)
             ->where('proposal_reviews.department_id', '!=', $department->getKey())
             ->where('proposal_reviews.status', ProposalReviewStatus::Returned)
+            ->whereNull('departments.deleted_at')
             ->orderBy('departments.code')
+            ->toBase()
             ->get(['proposal_reviews.career_proposal_id', 'departments.code'])
             ->groupBy('career_proposal_id')
             ->map(fn (Collection $rows): array => $rows->pluck('code')->unique()->values()->all());

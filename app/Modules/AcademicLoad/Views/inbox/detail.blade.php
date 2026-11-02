@@ -28,8 +28,8 @@
 
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <x-core::status-badge :tone="$selected['status']->tone()" :label="$selected['status']->label()" data-testid="career-status" />
-            @if ($selected['decidable'] && $selected['proposal']->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Returned)
-                <p class="text-sm" data-testid="proposal-in-correction"><span class="font-semibold">En corrección{{ $selected['correctionBy'] !== [] ? ' por '.implode(', ', $selected['correctionBy']) : '' }}.</span></p>
+            @if ($selected['correctionBy'] !== [])
+                <p class="text-sm" data-testid="proposal-in-correction"><span class="font-semibold">En corrección por {{ implode(', ', $selected['correctionBy']) }}.</span></p>
             @endif
             <p class="text-sm text-neutral">
                 @if ($review === null)
@@ -42,8 +42,8 @@
                     {{ $selected['groups'] }} grupos · {{ $selected['expected'] }} esperados · {{ $selected['subjects'] }} {{ $selected['subjects'] === 1 ? 'materia' : 'materias' }}
                 @endif
             </p>
-            @if ($acceptBlock !== null && $canDecide && $inbox->pendingCatalogs === [])
-                <p class="text-sm text-neutral" data-testid="accept-block">{{ $acceptBlock }}</p>
+            @if ($acceptBlock !== null && $canDecide)
+                <p @class(['text-sm text-neutral', 'lg:hidden' => $inbox->pendingCatalogs !== []]) data-testid="accept-block">{{ $acceptBlock }}</p>
             @endif
         </div>
 
@@ -96,12 +96,11 @@
                                 <p class="line-clamp-2 text-sm font-semibold" title="{{ $item->subject->name }}">{{ $item->subject->name }}</p>
                                 <p class="flex flex-wrap items-center gap-x-1 text-sm text-neutral"><span class="whitespace-nowrap font-mono text-[15px] font-semibold text-base-content">{{ $item->subject->code }}</span> · <span class="whitespace-nowrap">semestre {{ $item->semester }}</span>
                                     @if ($item->notes)
-                                        <span class="tooltip ms-1 @[40rem]:hidden" data-tip="{{ $item->notes }}" data-testid="row-note">
-                                            <span class="flex h-6 w-6 items-center justify-center"><x-icon name="o-chat-bubble-left-ellipsis" class="h-5 w-5 text-neutral" /></span>
-                                            <span class="sr-only">Nota del coordinador: {{ $item->notes }}</span>
-                                        </span>
-                                    @endif
+                                        @endif
                                 </p>
+                                @if ($item->notes)
+                                    <p class="mt-1 flex items-start gap-1.5 text-sm @[40rem]:hidden" data-testid="row-note-inline"><x-icon name="o-chat-bubble-left-ellipsis" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" /><span class="line-clamp-3"><span class="sr-only">Nota del coordinador: </span>{{ $item->notes }}</span></p>
+                                @endif
                             </div>
                             <span role="cell" class="hidden text-right font-mono text-[15px] font-semibold tabular-nums text-neutral @[40rem]:col-start-2 @[40rem]:row-start-1 @[40rem]:block" title="Elegibles">{{ $item->eligible_students }}</span>
                             <span role="cell" class="text-right font-mono text-[15px] font-semibold tabular-nums @[40rem]:col-start-3 @[40rem]:row-start-1" title="Esperados">{{ $item->expected_students }}<span class="text-sm font-normal text-neutral @[40rem]:sr-only"> esp.</span></span>
@@ -120,7 +119,7 @@
 
                             <div role="cell" class="hidden text-sm @[40rem]:col-start-6 @[40rem]:row-start-1 @[40rem]:flex @[40rem]:justify-center">
                                 @if ($item->notes)
-                                    <span class="tooltip tooltip-left" data-tip="{{ $item->notes }}" data-testid="row-note">
+                                    <span class="tooltip tooltip-left" data-tip="{{ $item->notes }}" data-testid="row-note" tabindex="0">
                                         <span class="flex h-8 w-8 items-center justify-center"><x-icon name="o-chat-bubble-left-ellipsis" class="h-5 w-5 text-neutral" /></span>
                                         <span class="sr-only">Nota del coordinador: {{ $item->notes }}</span>
                                     </span>
