@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\Core\Enums\StatusTone;
 
@@ -33,3 +34,19 @@ it('cada estado de revisión tiene su etiqueta y el tono de su insignia', functi
     [ReviewStatus::InReview, 'En revisión', StatusTone::Info],
     [ReviewStatus::Validated, 'Validado', StatusTone::Success],
 ]);
+
+it('cada tipo de observación tiene su etiqueta', function (ReviewFlag $flag, string $label) {
+    expect($flag->label())->toBe($label);
+})->with([
+    [ReviewFlag::Inactive, 'Debe desactivarse'],
+    [ReviewFlag::WrongCapacity, 'Capacidad incorrecta'],
+    [ReviewFlag::Duplicate, 'Duplicado'],
+    [ReviewFlag::MissingData, 'Faltan datos'],
+    [ReviewFlag::Other, 'Otra'],
+]);
+
+it('la capacidad incorrecta solo se observa en salones; lo demás, en cualquier catálogo (supuesto por confirmar)', function (Catalog $catalog) {
+    expect(ReviewFlag::WrongCapacity->appliesTo($catalog))->toBe($catalog === Catalog::Rooms)
+        ->and(ReviewFlag::Inactive->appliesTo($catalog))->toBeTrue()
+        ->and(ReviewFlag::Other->appliesTo($catalog))->toBeTrue();
+})->with(Catalog::cases());

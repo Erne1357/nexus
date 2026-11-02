@@ -203,6 +203,7 @@ new #[Title('Campus')] class extends Component
             'settings.days.*' => 'día',
             'settings.allow_external_teachers' => 'admite docentes externos',
             'settings.requires_subdireccion_approval' => 'requiere visto bueno de Subdirección',
+            'settings.heads_edit_rooms' => 'los jefes corrigen sus salones al validar',
         ];
     }
 
@@ -255,6 +256,7 @@ new #[Title('Campus')] class extends Component
             'settings.days.*' => ['integer'],
             'settings.allow_external_teachers' => ['required', 'boolean'],
             'settings.requires_subdireccion_approval' => ['required', 'boolean'],
+            'settings.heads_edit_rooms' => ['required', 'boolean'],
         ];
     }
 
@@ -277,6 +279,7 @@ new #[Title('Campus')] class extends Component
             'days' => array_values(array_map(intval(...), $settings['days'])),
             'allow_external_teachers' => (bool) $settings['allow_external_teachers'],
             'requires_subdireccion_approval' => (bool) $settings['requires_subdireccion_approval'],
+            'heads_edit_rooms' => (bool) $settings['heads_edit_rooms'],
         ];
     }
 
