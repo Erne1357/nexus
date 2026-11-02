@@ -93,3 +93,24 @@ it('niega todo a un admin desactivado', function () {
 
     expect(reviewAbilitiesOf($admin, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false));
 });
+
+it('el tablero de avance y el recordatorio son de Subdirección y del admin (tarea 2.5, supuesto por confirmar)', function (string $who, bool $allowed) {
+    $user = match ($who) {
+        'admin' => User::factory()->admin()->create(),
+        'subdirección' => User::factory()->withRole(Role::Subdireccion, [])->create(),
+        'jefe de departamento' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(),
+        'jefe de proyecto docente' => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => test()->c1->id, 'department_id' => departmentKey(10)])->create(),
+        'coordinador' => User::factory()->withRole(Role::Coordinador, ['campus_id' => test()->c1->id, 'career_id' => careerKey(20)])->create(),
+        'docente' => User::factory()->withRole(Role::Docente, [])->create(),
+    };
+
+    expect($user->can('viewProgress', CatalogReview::class))->toBe($allowed)
+        ->and($user->can('remind', CatalogReview::class))->toBe($allowed);
+})->with([
+    ['admin', true],
+    ['subdirección', true],
+    ['jefe de departamento', false],
+    ['jefe de proyecto docente', false],
+    ['coordinador', false],
+    ['docente', false],
+]);
