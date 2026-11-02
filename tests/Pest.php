@@ -12,8 +12,10 @@ use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
 use Spatie\Activitylog\Models\Activity;
@@ -30,10 +32,21 @@ pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature', 'Bro
 | Los browser tests cargan el CSS y el JS compilados (`npm run build`), porque la banda, la credencial
 | y el menú no funcionan sin ellos (TestCase los quita para el resto). Usan siempre el manifiesto,
 | aunque corra el servidor de desarrollo de Vite: Chromium, dentro del contenedor, no llega a él.
+|
+| Su servidor atiende todas las peticiones con la misma aplicación, y la sesión conserva en memoria los
+| datos de la petición anterior: el `url.intended` que dejó otra página (una tardía de la prueba que
+| acababa) llegaba a la sesión de la siguiente, y entrar llevaba a otra pantalla. Al terminar cada
+| petición se vacía, como en FPM u Octane; lo guardado ya está en el manejador.
 */
 pest()->beforeEach(function () {
     $this->withVite();
     app(Vite::class)->useHotFile(storage_path('framework/testing/vite-hot-ignorado'));
+
+    Event::listen(RequestHandled::class, function (): void {
+        if (app()->resolved('session')) {
+            app('session')->driver()->flush();
+        }
+    });
 })->in('Browser');
 
 /**

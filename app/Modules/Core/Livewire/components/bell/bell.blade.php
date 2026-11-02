@@ -74,11 +74,7 @@
             </div>
 
             <ul role="list" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                @foreach ($items as $item)
-                    <li wire:key="notification-{{ $item['id'] }}" class="border-b border-base-300 last:border-b-0">
-                        @include('core::notifications.item', ['item' => $item])
-                    </li>
-                @endforeach
+                @include('core::notifications.list', ['rows' => $items, 'showCampus' => $showCampus])
             </ul>
 
             <div class="flex-none border-t border-base-300 p-1.5">
