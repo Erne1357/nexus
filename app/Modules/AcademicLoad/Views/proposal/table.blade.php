@@ -17,8 +17,9 @@
             </div>
             @foreach ($items as $item)
                 @php($lock = $locks[$item->id] ?? null)
+                @php($readonly = $lock !== null || ! $canEdit)
                 @php($dimmed = $department !== '' && $item->subject->department->code !== $department)
-                <div wire:key="row-{{ $item->id }}-{{ $item->expected_students }}-{{ $item->requested_groups }}" data-testid="row-{{ $item->subject->code }}"
+                <div wire:key="row-{{ $item->id }}-{{ $rejections }}-{{ $item->expected_students }}-{{ $item->requested_groups }}" data-testid="row-{{ $item->subject->code }}"
                     @class([
                         'grid items-center gap-x-3 gap-y-1 px-4 py-2 [&:not(:first-of-type)]:border-t border-base-300 grid-cols-[minmax(0,1fr)_auto_auto] md:grid-cols-[6.5rem_minmax(0,1fr)_3rem_4.5rem_5.5rem_5.5rem]',
                         'opacity-35' => $dimmed,
@@ -32,13 +33,13 @@
                     <span class="text-right font-mono text-sm text-neutral tabular-nums" title="Elegibles"><span class="md:hidden">Elegibles </span>{{ $item->eligible_students }}</span>
                     <label class="flex items-center gap-1.5 text-sm md:contents">
                         <span class="text-neutral md:sr-only">Esperados</span>
-                        <input type="number" min="0" max="{{ \App\Modules\AcademicLoad\Rules\ProposalItemRules::MAX_EXPECTED_STUDENTS }}" value="{{ $item->expected_students }}" @disabled($lock !== null)
+                        <input type="number" min="0" max="{{ \App\Modules\AcademicLoad\Rules\ProposalItemRules::MAX_EXPECTED_STUDENTS }}" value="{{ $item->expected_students }}" @disabled($readonly)
                             wire:change="saveCell('{{ $item->id }}', 'expected_students', $event.target.value)" aria-label="Esperados de {{ $item->subject->code }}"
                             class="input input-sm w-full text-right font-mono tabular-nums" data-field="expected_students" />
                     </label>
                     <label class="flex items-center gap-1.5 text-sm md:contents">
                         <span class="text-neutral md:sr-only">Grupos</span>
-                        <input type="number" min="0" max="{{ \App\Modules\AcademicLoad\Rules\ProposalItemRules::MAX_REQUESTED_GROUPS }}" value="{{ $item->requested_groups }}" @disabled($lock !== null)
+                        <input type="number" min="0" max="{{ \App\Modules\AcademicLoad\Rules\ProposalItemRules::MAX_REQUESTED_GROUPS }}" value="{{ $item->requested_groups }}" @disabled($readonly)
                             wire:change="saveCell('{{ $item->id }}', 'requested_groups', $event.target.value)" aria-label="Grupos de {{ $item->subject->code }}"
                             class="input input-sm w-full text-right font-mono tabular-nums" data-field="requested_groups" />
                     </label>

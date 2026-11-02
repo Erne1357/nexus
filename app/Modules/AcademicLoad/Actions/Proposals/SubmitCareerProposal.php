@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Rules\ProposalAvailability;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -28,7 +29,8 @@ use Illuminate\Validation\ValidationException;
  * - un departamento nuevo recibe su parte pendiente;
  * - la de un departamento al que ya no se le piden grupos se borra (no es catálogo; queda en la bitácora).
  *
- * Queda enviada, o aceptada si todas las partes que quedan ya estaban aceptadas, con quién y cuándo se envió.
+ * Vuelve a exigir lo de armarla (ProposalAvailability): periodo abierto en el campus y carrera ofrecida en él, sobre
+ * `term` o `career` (supuesto por confirmar). Queda enviada, o aceptada si todas las partes que quedan ya estaban aceptadas, con quién y cuándo se envió.
  * Deja bitácora de la propuesta y, después del commit, avisa con CareerProposalSubmitted y los departamentos
  * pendientes. Con catálogos sin validar de un departamento involucrado no se bloquea: el aviso lo muestra la
  * página (CareerProposalQuery). Quién puede enviar lo decide CareerProposalPolicy::submit antes de llamarla;
@@ -36,6 +38,8 @@ use Illuminate\Validation\ValidationException;
  */
 final class SubmitCareerProposal
 {
+    public function __construct(private readonly ProposalAvailability $availability) {}
+
     /**
      * @throws ValidationException
      */
@@ -48,6 +52,13 @@ final class SubmitCareerProposal
             if (! $from->isEditable()) {
                 throw ValidationException::withMessages(['status' => $from === ProposalStatus::Accepted ? 'La propuesta ya se aceptó.' : 'La propuesta ya se envió.']);
             }
+
+            $proposal->load([
+                'term',
+                'campus' => fn ($query) => $query->withTrashed(),
+                'career' => fn ($query) => $query->withTrashed(),
+            ]);
+            $this->availability->ensure($proposal->term, $proposal->campus, $proposal->career);
 
             $involved = $this->involvedDepartments($proposal);
 
@@ -93,12 +104,6 @@ final class SubmitCareerProposal
 
             $to = $pending === [] ? ProposalStatus::Accepted : ProposalStatus::Submitted;
             $proposal->update(['status' => $to, 'submitted_by' => $actor->getKey(), 'submitted_at' => now()]);
-            $proposal->load([
-                'term',
-                'campus' => fn ($query) => $query->withTrashed(),
-                'career' => fn ($query) => $query->withTrashed(),
-            ]);
-
             activity()
                 ->performedOn($proposal)
                 ->causedBy($actor)

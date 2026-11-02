@@ -340,3 +340,63 @@ describe('ruta y menú', function () {
             ->and($labels($jefe))->not->toContain('Propuesta de carrera');
     });
 });
+
+describe('solo lectura, propuesta fija y rechazos', function () {
+    it('a subdirección la tabla le deshabilita todos los campos', function () {
+        $html = proposalPageAs($this->subdirection, ['carrera' => $this->career->id, 'vista' => 'tabla'])->assertSeeHtml('data-field="requested_groups"')->html();
+
+        preg_match_all('/<input[^>]*type="number"[^>]*>/', $html, $inputs);
+
+        expect($inputs[0])->not->toBeEmpty()
+            ->and(array_filter($inputs[0], fn (string $input): bool => ! str_contains($input, 'disabled')))->toBeEmpty();
+    });
+
+    it('al coordinador la tabla le deja los campos de las filas editables', function () {
+        $html = proposalPageAs($this->coordinator, ['vista' => 'tabla'])->html();
+
+        preg_match_all('/<input[^>]*type="number"[^>]*>/', $html, $inputs);
+
+        expect(array_filter($inputs[0], fn (string $input): bool => ! str_contains($input, 'disabled')))->not->toBeEmpty();
+    });
+
+    it('sigue pintando y escribiendo en la propuesta con la que entró aunque la credencial cambie', function () {
+        $otherTerm = Term::factory()->create(['code' => '20273']);
+        $page = proposalPageAs($this->coordinator)->assertSee('Cálculo Diferencial');
+
+        Term::query()->update(['is_current' => false]);
+        $otherTerm->update(['is_current' => true]);
+
+        $page->call('setView', 'tabla')->assertSee('Cálculo Diferencial')->call('saveCell', $this->calculus->id, 'requested_groups', '5');
+
+        expect($this->calculus->fresh()->requested_groups)->toBe(5);
+    });
+
+    it('tras un rechazo repinta la fila para que el campo vuelva al valor guardado', function () {
+        $key = fn (int $rejections): string => "row-{$this->calculus->id}-{$rejections}-";
+        $page = proposalPageAs($this->coordinator, ['vista' => 'tabla'])->assertSeeHtml($key(0));
+
+        $page->call('saveCell', $this->calculus->id, 'requested_groups', '99')
+            ->assertSeeHtml($key(1))
+            ->assertDontSeeHtml($key(0))
+            ->assertSeeHtml('value="2" ');
+
+        expect($this->calculus->fresh()->requested_groups)->toBe(2);
+    });
+
+    it('calcula los catálogos pendientes solo al abrir la confirmación de envío', function () {
+        proposalPageAs($this->coordinator)
+            ->assertViewHas('overview', fn ($overview): bool => $overview->pendingCatalogs === [])
+            ->call('confirmSubmit')
+            ->assertViewHas('overview', fn ($overview): bool => count($overview->pendingCatalogs) === 2);
+    });
+
+    it('no envía si el periodo se cerró en el campus y lo dice', function () {
+        $page = proposalPageAs($this->coordinator);
+        TermOpening::query()->delete();
+
+        $page->call('confirmSubmit')->call('submit');
+
+        expect($this->proposal->fresh()->status)->toBe(ProposalStatus::Draft)
+            ->and(lastToastOf($page)['description'])->toContain('no está abierto');
+    });
+});

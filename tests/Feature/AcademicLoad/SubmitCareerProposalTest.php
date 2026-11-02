@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
@@ -12,6 +13,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -33,6 +35,8 @@ beforeEach(function () {
         'campus_id' => Campus::factory()->create(['code' => 'C2'])->id,
         'career_id' => Career::factory()->create(['code' => 'ISC'])->id,
     ]);
+    TermOpening::factory()->create(['term_id' => $this->proposal->term_id, 'campus_id' => $this->proposal->campus_id]);
+    CareerCampus::factory()->create(['career_id' => $this->proposal->career_id, 'campus_id' => $this->proposal->campus_id]);
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->sc = Department::factory()->create(['code' => 'SC']);
     $this->ii = Department::factory()->create(['code' => 'II']);
@@ -258,3 +262,25 @@ describe('al reenviar una propuesta regresada', function () {
         Event::assertDispatched(CareerProposalSubmitted::class, fn (CareerProposalSubmitted $event): bool => $event->pendingDepartmentIds === []);
     });
 });
+
+it('no envía si el periodo ya no está abierto en el campus y no escribe nada', function () {
+    proposalRowIn($this->cb, 1);
+    TermOpening::query()->delete();
+
+    expect(submitErrors())->toBe(['term' => ['El periodo 20271 no está abierto en C2.']])
+        ->and($this->proposal->fresh()->status)->toBe(ProposalStatus::Draft)
+        ->and(ProposalReview::query()->count())->toBe(0)
+        ->and(Activity::query()->count())->toBe(0);
+});
+
+it('no envía si la carrera ya no se ofrece en el campus y no escribe nada', function (Closure $stopOffering) {
+    proposalRowIn($this->cb, 1);
+    $stopOffering();
+
+    expect(submitErrors())->toBe(['career' => ['ISC no se ofrece en C2.']])
+        ->and($this->proposal->fresh()->status)->toBe(ProposalStatus::Draft)
+        ->and(ProposalReview::query()->count())->toBe(0);
+})->with([
+    'oferta inactiva' => [fn () => CareerCampus::query()->update(['is_active' => false])],
+    'oferta borrada' => [fn () => CareerCampus::query()->get()->each->delete()],
+]);

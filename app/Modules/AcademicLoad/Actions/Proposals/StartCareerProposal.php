@@ -4,16 +4,15 @@ namespace App\Modules\AcademicLoad\Actions\Proposals;
 
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
-use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\CareerProposalStarted;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
+use App\Modules\AcademicLoad\Rules\ProposalAvailability;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Students\Queries\EligibleStudentsQuery;
 use Illuminate\Database\Eloquent\Builder;
@@ -47,7 +46,7 @@ final class StartCareerProposal
      */
     private const array OUTSIDE_PROPOSAL = [SubjectKind::Residencia->value, SubjectKind::ServicioSocial->value, SubjectKind::Complementaria->value];
 
-    public function __construct(private readonly EligibleStudentsQuery $eligibleStudents) {}
+    public function __construct(private readonly EligibleStudentsQuery $eligibleStudents, private readonly ProposalAvailability $availability) {}
 
     /**
      * @throws ValidationException si el periodo no está abierto en el campus o la carrera no se ofrece en él
@@ -61,7 +60,7 @@ final class StartCareerProposal
         }
 
         return DB::transaction(function () use ($term, $campus, $career, $actor): CareerProposal {
-            $this->ensureCanStart($term, $campus, $career);
+            $this->availability->ensure($term, $campus, $career);
 
             $now = now();
             $inserted = CareerProposal::query()->insertOrIgnore([
@@ -113,32 +112,6 @@ final class StartCareerProposal
             ->where('term_id', $term->getKey())
             ->where('campus_id', $campus->getKey())
             ->where('career_id', $career->getKey());
-    }
-
-    /**
-     * @throws ValidationException
-     */
-    private function ensureCanStart(Term $term, Campus $campus, Career $career): void
-    {
-        $opened = TermOpening::query()
-            ->where('term_id', $term->getKey())
-            ->where('campus_id', $campus->getKey())
-            ->exists();
-
-        if (! $opened) {
-            throw ValidationException::withMessages(['term' => "El periodo {$term->code} no está abierto en {$campus->code}."]);
-        }
-
-        $offered = CareerCampus::query()
-            ->where('career_id', $career->getKey())
-            ->where('campus_id', $campus->getKey())
-            ->where('is_active', true)
-            ->sharedLock()
-            ->exists();
-
-        if (! $offered) {
-            throw ValidationException::withMessages(['career' => "{$career->code} no se ofrece en {$campus->code}."]);
-        }
     }
 
     /**

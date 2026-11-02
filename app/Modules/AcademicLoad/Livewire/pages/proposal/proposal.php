@@ -12,11 +12,8 @@ use App\Modules\AcademicLoad\Queries\ProposalOverview;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Support\SemesterGrid;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -65,6 +62,18 @@ new #[Title('Propuesta de carrera')] class extends Component
     #[Locked]
     public ?string $proposalId = null;
 
+    /**
+     * Las carreras que el usuario puede ver en el campus, para el selector, y por qué no hay propuesta que
+     * mostrar. Se resuelven al entrar y al cambiar de carrera, no en cada pintado.
+     *
+     * @var list<array{id: string, name: string}>
+     */
+    #[Locked]
+    public array $careers = [];
+
+    #[Locked]
+    public ?string $message = null;
+
     /** La fila abierta en el panel. */
     #[Locked]
     public ?string $itemId = null;
@@ -79,13 +88,15 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     public string $notes = '';
 
+    /** Sube con cada rechazo: la tabla repinta sus campos con lo guardado, no con lo que se tecleó. */
+    public int $rejections = 0;
+
     public function mount(ScopedContext $context, CareerProposalQuery $proposals): void
     {
         abort_unless($context->has(Role::Coordinador) || $context->has(Role::Subdireccion), 403);
 
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'reticula';
-        $this->startProposal($context, $proposals);
-        $this->forgetUnknownDepartment($proposals);
+        $this->resolve($context, $proposals);
     }
 
     /**
@@ -94,7 +105,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     public function updatedCareerId(ScopedContext $context, CareerProposalQuery $proposals): void
     {
         $this->reset('department', 'onlyDepartment', 'itemId', 'showDrawer', 'showSubmit');
-        $this->startProposal($context, $proposals);
+        $this->resolve($context, $proposals);
     }
 
     public function setView(string $view): void
@@ -219,35 +230,30 @@ new #[Title('Propuesta de carrera')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(ScopedContext $context, CareerProposalQuery $proposals): array
+    public function with(CareerProposalQuery $proposals): array
     {
-        $situation = $this->situation($context, $proposals);
-        $proposal = $situation['proposal'];
-
-        $data = [
-            'message' => $situation['message'],
-            'term' => $situation['term'],
-            'campus' => $situation['campus'],
-            'career' => $situation['career'],
-            'careers' => $situation['careers']->map(fn (Career $career): array => ['id' => $career->id, 'name' => "{$career->code} · {$career->name}"])->all(),
-            'proposal' => $proposal,
-            'overview' => null,
-        ];
-
-        if ($proposal === null) {
-            return $data;
+        if ($this->proposalId === null) {
+            return ['proposal' => null, 'overview' => null];
         }
 
-        $overview = $proposals->overview($proposal);
-        $locks = $this->locks($overview);
-        $canEdit = Gate::allows('update', $proposal);
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $overview = $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit);
+        $departments = $overview->departments();
+
+        $known = $this->department === '' || in_array($this->department, array_map(fn (array $row): string => $row['department']->code, $departments), true);
+
+        if (! $known) {
+            $this->reset('department', 'onlyDepartment');
+        }
 
         return [
-            ...$data,
+            'proposal' => $proposal,
             'overview' => $overview,
-            'departments' => $overview->departments(),
-            'locks' => $locks,
-            'canEdit' => $canEdit,
+            'departments' => $departments,
+            'department' => $this->department,
+            'onlyDepartment' => $this->onlyDepartment,
+            'locks' => $this->locks($overview),
+            'canEdit' => Gate::allows('update', $proposal),
             'canSubmit' => Gate::allows('submit', $proposal),
             'layout' => SemesterGrid::place(array_map(
                 fn (array $items): array => array_fill_keys(array_map(fn (ProposalItem $item): string => $item->subject->code, $items), null),
@@ -255,37 +261,42 @@ new #[Title('Propuesta de carrera')] class extends Component
             )),
             'tableSemesters' => $this->tableSemesters($overview),
             'selected' => $this->itemId === null ? null : $this->findItem($overview, $this->itemId),
-            'suggested' => SuggestedGroups::fromSettings(),
             'maxExpected' => ProposalItemRules::MAX_EXPECTED_STUDENTS,
             'maxGroups' => ProposalItemRules::MAX_REQUESTED_GROUPS,
         ];
     }
 
     /**
-     * El periodo, el campus y la carrera de la credencial, la propuesta si existe y, si no hay qué mostrar, por qué.
-     * Una carrera pedida por la URL que el usuario no cubre es 403.
-     *
-     * @return array{term: ?Term, campus: ?Campus, careers: Collection<int, Career>, career: ?Career, proposal: ?CareerProposal, message: ?string}
+     * Resuelve con la credencial el periodo, el campus y la carrera, y deja en propiedades bloqueadas la
+     * propuesta que se muestra (`proposalId`), las carreras del selector y, si no hay propuesta, por qué. Si falta
+     * y quien entra puede armarla, la arma (StartCareerProposal). Una carrera pedida por la URL que el usuario
+     * no cubre es 403. Después, la página pinta y escribe siempre en esa propuesta.
      */
-    private function situation(ScopedContext $context, CareerProposalQuery $proposals): array
+    private function resolve(ScopedContext $context, CareerProposalQuery $proposals): void
     {
-        $none = ['term' => null, 'campus' => null, 'careers' => new Collection, 'career' => null, 'proposal' => null];
+        $this->proposalId = null;
+        $this->careers = [];
+
         $campus = $context->activeCampus();
 
         if ($campus === null) {
-            return [...$none, 'message' => 'Elige un campus en tu credencial para ver la propuesta de carrera.'];
+            $this->message = 'Elige un campus en tu credencial para ver la propuesta de carrera.';
+
+            return;
         }
 
         $term = $context->activeTerm();
 
         if ($term === null) {
-            return [...$none, 'campus' => $campus, 'message' => 'No hay un periodo activo: elige uno en tu credencial.'];
+            $this->message = 'No hay un periodo activo: elige uno en tu credencial.';
+
+            return;
         }
 
-        $none = [...$none, 'campus' => $campus, 'term' => $term];
-
         if (! $proposals->termIsOpen($term, $campus)) {
-            return [...$none, 'message' => "El periodo {$term->code} no está abierto en este campus."];
+            $this->message = "El periodo {$term->code} no está abierto en este campus.";
+
+            return;
         }
 
         $careers = $proposals->careersFor($context, $campus);
@@ -293,55 +304,26 @@ new #[Title('Propuesta de carrera')] class extends Component
 
         abort_if($this->careerId !== '' && $career === null, 403);
 
+        $this->careers = $careers->map(fn (Career $career): array => ['id' => $career->id, 'name' => "{$career->code} · {$career->name}"])->all();
+
         if ($career === null) {
-            return [...$none, 'message' => 'Este campus no ofrece carreras cuya propuesta puedas ver.'];
+            $this->message = 'Este campus no ofrece carreras cuya propuesta puedas ver.';
+
+            return;
         }
 
         $proposal = $proposals->findFor($term, $campus, $career);
 
-        return [
-            ...$none,
-            'careers' => $careers,
-            'career' => $career,
-            'proposal' => $proposal,
-            'message' => $proposal === null ? "{$career->code} todavía no arma su propuesta para el periodo {$term->code}." : null,
-        ];
-    }
-
-    /**
-     * Arma la propuesta de la carrera elegida si falta y quien entra puede armarla; guarda su id.
-     */
-    private function startProposal(ScopedContext $context, CareerProposalQuery $proposals): void
-    {
-        $situation = $this->situation($context, $proposals);
-        $this->proposalId = $situation['proposal']?->id;
-
-        if ($situation['proposal'] !== null || $situation['career'] === null) {
-            return;
+        if ($proposal === null && Gate::allows('create', [CareerProposal::class, $campus, $career])) {
+            try {
+                $proposal = app(StartCareerProposal::class)->handle($term, $campus, $career, auth()->user());
+            } catch (ValidationException $e) {
+                $this->report($e);
+            }
         }
 
-        if (! Gate::allows('create', [CareerProposal::class, $situation['campus'], $situation['career']])) {
-            return;
-        }
-
-        try {
-            $this->proposalId = app(StartCareerProposal::class)->handle($situation['term'], $situation['campus'], $situation['career'], auth()->user())->id;
-        } catch (ValidationException $e) {
-            $this->report($e);
-        }
-    }
-
-    private function forgetUnknownDepartment(CareerProposalQuery $proposals): void
-    {
-        if ($this->department === '' || $this->proposalId === null) {
-            return;
-        }
-
-        $codes = array_map(fn (array $row): string => $row['department']->code, $proposals->overview($proposals->findOrFail($this->proposalId))->departments());
-
-        if (! in_array($this->department, $codes, true)) {
-            $this->department = '';
-        }
+        $this->proposalId = $proposal?->id;
+        $this->message = $proposal === null ? "{$career->code} todavía no arma su propuesta para el periodo {$term->code}." : null;
     }
 
     /**
@@ -376,6 +358,8 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     private function report(ValidationException $e): void
     {
+        $this->rejections++;
+
         foreach ($e->errors() as $field => $messages) {
             $this->addError($field, $messages[0]);
         }

@@ -47,7 +47,9 @@ final class CareerProposalQuery
     }
 
     /**
-     * Las carreras ofrecidas en el campus (activas y sin borrar), por clave, de las que el usuario puede ver la
+     * Las carreras ofrecidas en el campus, por clave: las que tienen oferta `career_campus` activa y no están
+     * borradas. No se mira `careers.is_active` a propósito: una carrera inactiva puede tener todavía alumnos, y
+     * lo que decide es su oferta en el campus. De ellas, las de las que el usuario puede ver la
      * propuesta: el coordinador, las de sus alcances; la subdirección y el admin, todas (CareerProposalPolicy).
      *
      * @return Collection<int, Career>
@@ -86,9 +88,10 @@ final class CareerProposalQuery
      * Todo lo que muestra la página (ProposalOverview). Un número fijo de consultas, sin importar cuántas filas
      * tenga: la propuesta con su periodo, campus y carrera; las filas, sus materias y los departamentos de las
      * materias; las partes y sus departamentos; y una por departamento involucrado para sus catálogos sin
-     * validar (CatalogReviewQuery::pendingFor, HC-14).
+     * validar (CatalogReviewQuery::pendingFor, HC-14). Esa última solo se arma con `$withPendingCatalogs`, que
+     * es lo que pide el diálogo de enviar: sin él, `pendingCatalogs` queda vacío.
      */
-    public function overview(CareerProposal $proposal): ProposalOverview
+    public function overview(CareerProposal $proposal, bool $withPendingCatalogs = true): ProposalOverview
     {
         $proposal->loadMissing([
             'term',
@@ -115,7 +118,7 @@ final class CareerProposalQuery
 
         $requested = $items->filter(fn (ProposalItem $item): bool => $item->requested_groups > 0);
 
-        $pendingCatalogs = $requested
+        $pendingCatalogs = ! $withPendingCatalogs ? [] : $requested
             ->map(fn (ProposalItem $item): Department => $item->subject->department)
             ->unique(fn (Department $department): string => $department->getKey())
             ->sortBy(fn (Department $department): string => $department->code)
