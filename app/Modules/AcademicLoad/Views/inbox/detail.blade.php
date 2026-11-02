@@ -9,7 +9,7 @@
 @php($review = $selected['review'])
 @php($rowGrid = '@2xl:grid-cols-[minmax(0,1fr)_4.75rem_4.75rem_3.75rem_minmax(9rem,12rem)_2.25rem]')
 <div class="@container" data-testid="inbox-detail-body">
-    <div class="sticky top-(--shell-top) z-20 space-y-3 rounded-t-box border-b border-base-300 bg-base-100 px-4 py-3 sm:px-5" data-testid="inbox-detail-header">
+    <div class="z-20 md:sticky md:top-(--shell-top) space-y-3 rounded-t-box border-b border-base-300 bg-base-100 px-4 py-3 sm:px-5" data-testid="inbox-detail-header">
         <button type="button" wire:click="back" class="btn btn-sm lg:hidden max-md:h-11 max-md:min-h-11" data-testid="inbox-back"><x-icon name="o-chevron-left" class="h-4 w-4" />Carreras</button>
 
         <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
