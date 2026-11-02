@@ -47,7 +47,8 @@ final class ValidationProgressQuery
     /**
      * La matriz del periodo para los campus dados (los abiertos, o el que filtra la pantalla).
      *
-     * `columns`: Docentes, Materias, Planes y Carreras, y una de Salones por campus que usa salones. `rows`: cada
+     * `columns`: Docentes, Materias, Planes y Carreras, y una de Salones por campus que usa salones; `general_columns` y
+     * `room_columns` las traen ya separadas (la pantalla pinta Salones en una sola columna con una insignia por campus). `rows`: cada
      * departamento activo, con sus revisiones por columna (nula si falta), cuántas lleva validadas del total, sus
      * pendientes y en revisión, las observaciones abiertas, el jefe vigente, el estado de su carga por campus
      * (evento LoadStatusesRequested) y el último recordatorio en los campus del alcance. El jefe sale de lo mismo que
@@ -61,8 +62,10 @@ final class ValidationProgressQuery
      *                                             Con `$departmentId`, solo ese departamento (para el drawer de uno que los filtros dejaron fuera).
      * @return array{
      *     columns: list<array{key: string, catalog: Catalog, campus: ?Campus}>,
+     *     general_columns: list<array{key: string, catalog: Catalog, campus: ?Campus}>,
+     *     room_columns: list<array{key: string, catalog: Catalog, campus: ?Campus}>,
      *     rows: list<array<string, mixed>>,
-     *     totals: array<string, array{validated: int, in_review: int, total: int, unvalidated: int}>,
+     *     totals: array<string, array{validated: int, in_review: int, total: int}>,
      *     global: array{validated: int, in_review: int, pending: int, total: int, percent: int},
      *     flags: array{open: int, departments: int, resolved: int},
      *     remindable: array{departments: int, heads: int}
@@ -135,6 +138,7 @@ final class ValidationProgressQuery
                     $heads->get($department->getKey())->isEmpty() => 'No tiene jefe vigente.',
                     default => null,
                 },
+                'pending_columns' => array_values(array_filter($columns, fn (array $column): bool => $cells[$column['key']]?->status !== ReviewStatus::Validated)),
                 'total' => $total,
                 'open_flags' => (int) ($flags->get($department->getKey())?->open ?? 0),
                 'resolved_flags' => (int) ($flags->get($department->getKey())?->resolved ?? 0),
@@ -172,11 +176,10 @@ final class ValidationProgressQuery
                 'validated' => $validated,
                 'in_review' => count(array_filter($cells, fn (?CatalogReview $review): bool => $review?->status === ReviewStatus::InReview)),
                 'total' => count($rows),
-                'unvalidated' => count($rows) - $validated,
             ];
         }
 
-        return ['columns' => $columns, 'rows' => $rows, 'totals' => $totals, 'global' => $global, 'flags' => $summary, 'remindable' => $remindableHeads];
+        return ['columns' => $columns, 'general_columns' => array_values(array_filter($columns, fn (array $column): bool => $column['campus'] === null)), 'room_columns' => array_values(array_filter($columns, fn (array $column): bool => $column['campus'] !== null)), 'rows' => $rows, 'totals' => $totals, 'global' => $global, 'flags' => $summary, 'remindable' => $remindableHeads];
     }
 
     /**

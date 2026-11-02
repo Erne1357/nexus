@@ -36,7 +36,11 @@
             <x-select wire:model.live="status" aria-label="Estado" :options="[['id' => 'pending', 'name' => 'Con pendientes'], ['id' => 'validated', 'name' => 'Todo validado']]" placeholder="Estado" placeholder-value="" />
 
             <x-slot:action>
-                <x-button label="Recordar a todos los pendientes" icon="o-bell" class="btn-primary" wire:click="remind" spinner="remind" data-testid="remind-all" :disabled="$board['remindable']['departments'] === 0" :badge="$pendingHeads" badge-classes="badge-neutral badge-sm" title="{{ $pendingHeads }} {{ $pendingHeads === 1 ? 'jefe por recordar' : 'jefes por recordar' }}" />
+                <x-button icon="o-bell" class="btn-primary" wire:click="remind" spinner="remind" data-testid="remind-all" :disabled="$board['remindable']['departments'] === 0" :title="$board['remindable']['departments'] === 0 ? 'Ningún departamento visible tiene jefe con catálogos pendientes.' : null">
+                    Recordar a todos los pendientes
+                    <span class="badge badge-sm badge-neutral" aria-hidden="true" data-testid="remind-all-badge">{{ $pendingHeads }}</span>
+                    <span class="sr-only" data-testid="remind-all-count">{{ $pendingHeads }} {{ $pendingHeads === 1 ? 'jefe por recordar' : 'jefes por recordar' }}</span>
+                </x-button>
             </x-slot:action>
         </x-core::catalog-toolbar>
 
@@ -76,8 +80,8 @@
                     <p class="font-semibold">Ningún departamento coincide con el filtro.</p>
                 </div>
             @else
-                @php($generalColumns = array_values(array_filter($board['columns'], fn (array $column): bool => $column['campus'] === null)))
-                @php($roomColumns = array_values(array_filter($board['columns'], fn (array $column): bool => $column['campus'] !== null)))
+                @php($generalColumns = $board['general_columns'])
+                @php($roomColumns = $board['room_columns'])
                 <div class="hidden overflow-x-auto lg:block" data-testid="progress-scroll">
                     <table class="w-full min-w-[56rem] text-sm">
                         <caption class="sr-only">Estado de cada catálogo por departamento</caption>
@@ -156,14 +160,13 @@
                                 <div class="min-w-0">@include('catalog-validation::progress.who', ['row' => $row, 'campuses' => $campuses, 'stacked' => true])</div>
                                 <p class="whitespace-nowrap text-sm"><span class="font-semibold tabular-nums">{{ $row['validated'] }} de {{ $row['total'] }}</span></p>
                             </div>
-                            @php($unvalidated = array_filter($board['columns'], fn (array $column): bool => $row['cells'][$column['key']]?->status !== \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated))
-                            @if ($unvalidated === [])
+                            @if ($row['pending_columns'] === [])
                                 <p class="text-sm text-neutral">Todo validado</p>
                             @else
                                 <dl class="grid grid-cols-[7.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
-                                    @foreach ($unvalidated as $column)
+                                    @foreach ($row['pending_columns'] as $column)
                                         <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $column['catalog']->label() }}@if ($column['campus']) <span class="font-mono normal-case tracking-normal">{{ $column['campus']->code }}</span>@endif</dt>
-                                        <dd>@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']]])</dd>
+                                        <dd>@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'showDate' => true])</dd>
                                     @endforeach
                                 </dl>
                             @endif

@@ -13,7 +13,12 @@
 @php($title = $status->label().($when ? ' · '.$when->timezone(config('app.timezone'))->translatedFormat('j M Y, H:i') : ''))
 @php($icon = match ($status) { \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated => 'o-check-circle', \App\Modules\CatalogValidation\Enums\ReviewStatus::InReview => 'o-eye', default => 'o-clock' })
 @if ($roomCampus ?? null)
-    <x-core::status-badge :tone="$status->tone()" :label="$roomCampus->code" :icon="$icon" class="text-xs [&_svg]:h-3 [&_svg]:w-3" :title="$roomCampus->name.': '.$title" aria-label="{{ $roomCampus->name }}: {{ $status->label() }}" />
+    <x-core::status-badge :tone="$status->tone()" :label="$roomCampus->code" :icon="$icon" class="text-xs [&_svg]:h-3 [&_svg]:w-3" :title="$roomCampus->name.': '.$title" data-testid="room-badge-{{ $roomCampus->code }}"><span class="sr-only">, {{ \Illuminate\Support\Str::lower($status->label()) }}</span></x-core::status-badge>
 @else
-    <x-core::status-badge :tone="$status->tone()" :label="$status->label()" :icon="$icon" class="text-xs [&_svg]:h-3 [&_svg]:w-3" :title="$title" />
+    <span @class(['inline-flex flex-wrap items-center gap-x-2 gap-y-0.5' => $showDate ?? false])>
+        <x-core::status-badge :tone="$status->tone()" :label="$status->label()" :icon="$icon" class="text-xs [&_svg]:h-3 [&_svg]:w-3" :title="$title" />
+        @if (($showDate ?? false) && $when)
+            <span class="text-xs text-neutral tabular-nums">{{ $when->timezone(config('app.timezone'))->isToday() ? 'hoy' : $when->timezone(config('app.timezone'))->translatedFormat('j M') }}</span>
+        @endif
+    </span>
 @endif

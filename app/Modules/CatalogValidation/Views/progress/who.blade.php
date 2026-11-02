@@ -10,12 +10,13 @@
         <span class="font-semibold leading-snug underline decoration-transparent underline-offset-4 group-hover:decoration-current group-focus-visible:decoration-current">{{ $department->name }}</span>
     </button>
     <p class="truncate text-sm text-neutral" title="{{ $row['heads']->pluck('name')->implode(', ') }}">{{ $row['heads']->isEmpty() ? 'Sin jefe vigente' : $row['heads']->pluck('name')->implode(', ') }}</p>
-    <p class="whitespace-nowrap text-xs text-neutral">
-        Carga:
-        @foreach ($campuses as $campus)
-            @if ($load = $row['loads'][$campus->id] ?? null)
-                <span class="whitespace-nowrap" data-testid="load-{{ $department->code }}-{{ $campus->code }}">{{ $campuses->count() > 1 ? $campus->code.' ' : '' }}<span class="font-medium text-base-content">{{ $load['label'] }}</span></span>@if (! $loop->last) · @endif
-            @endif
-        @endforeach
-    </p>
+    @php($shownLoads = $campuses->map(fn ($campus) => ['campus' => $campus, 'load' => $row['loads'][$campus->id] ?? null])->filter(fn (array $entry): bool => $entry['load'] !== null)->values())
+    @if ($shownLoads->isNotEmpty())
+        <p class="whitespace-nowrap text-xs text-neutral" data-testid="loads-{{ $department->code }}">
+            Carga:
+            @foreach ($shownLoads as $entry)
+                <span class="whitespace-nowrap" data-testid="load-{{ $department->code }}-{{ $entry['campus']->code }}">{{ $campuses->count() > 1 ? $entry['campus']->code.' ' : '' }}<span class="font-medium text-base-content">{{ $entry['load']['label'] }}</span></span>@if (! $loop->last) · @endif
+            @endforeach
+        </p>
+    @endif
 </div>
