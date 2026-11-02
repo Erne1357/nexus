@@ -3,8 +3,10 @@
 namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
+use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
 use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
+use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermOpened;
@@ -29,6 +31,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
         Event::listen(TermOpened::class, CreateLoadsOnTermOpened::class);
         Event::listen(DepartmentDeleting::class, BlockDepartmentDeletionWithLoads::class);
+        Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
     }
 
     /**

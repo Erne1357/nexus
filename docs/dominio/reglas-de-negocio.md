@@ -124,7 +124,7 @@ Etapa 3 de `docs/proceso/proceso-propuesto.md`: el coordinador pide, por cada ma
 - Por materia, los alumnos esperados van de 0 a 1000, los grupos de 0 a 30 y las notas llevan hasta 500 caracteres (supuesto por confirmar).
 - Enviar exige al menos una materia con grupos (supuesto por confirmar). Las partes son las de los departamentos de las materias con grupos: a un departamento cuyas materias van todas con cero grupos no se le pide nada (supuesto por confirmar).
 - Al reenviar, la parte aceptada se queda como está, las demás vuelven a pendiente y se limpia su comentario, que queda en la bitácora, y la parte de un departamento al que ya no se le piden grupos desaparece. Si todas las partes que quedan ya estaban aceptadas, la propuesta queda aceptada al reenviarla (supuestos por confirmar).
-- El aviso a los jefes de que tienen una propuesta por revisar llega con la campana de notificaciones (tarea 2.9).
+- Al enviar o reenviar la propuesta, el jefe de cada departamento con su parte pendiente recibe un aviso en la campana con cuántas materias y grupos le pide la carrera, que lo lleva a la bandeja de su departamento (tarea 2.8); los departamentos que ya la aceptaron no reciben nada (supuesto por confirmar).
 
 ## Aprobaciones y permisos
 

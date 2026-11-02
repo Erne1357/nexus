@@ -118,7 +118,7 @@ final class SubmitCareerProposal
                 ->log(($from === ProposalStatus::Returned ? 'Reenvió' : 'Envió')
                     ." la propuesta de {$proposal->career->code} en {$proposal->campus->code} para el periodo {$proposal->term->code}");
 
-            CareerProposalSubmitted::dispatch($proposal, $pending);
+            CareerProposalSubmitted::dispatch($proposal, $pending, $from === ProposalStatus::Returned);
 
             return $proposal;
         });
