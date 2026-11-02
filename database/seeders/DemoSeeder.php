@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
@@ -50,5 +51,6 @@ class DemoSeeder extends Seeder
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C2']]]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
+        $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C2']]);
     }
 }
