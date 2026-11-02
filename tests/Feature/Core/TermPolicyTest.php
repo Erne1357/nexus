@@ -25,6 +25,7 @@ function termAbilities(User $user, Term $term): array
         $user->can('update', $term),
         $user->can('makeCurrent', $term),
         $user->can('manageCalendar', $term),
+        $user->can('open', $term),
     ];
 }
 
