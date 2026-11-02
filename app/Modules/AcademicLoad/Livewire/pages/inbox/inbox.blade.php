@@ -31,13 +31,13 @@
     }">
     @if ($inbox === null)
         <div>
-            <h1 class="text-[1.625rem] font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
+            <h1 class="text-2xl font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="inbox-empty">{{ $message }}</div>
     @else
         <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
             <div class="min-w-0">
-                <h1 class="text-[1.625rem] font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
+                <h1 class="text-2xl font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
                 <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                     <span class="font-medium text-base-content" data-testid="inbox-department-name">{{ $inbox->department->name }}</span>
                     <span>{{ $inbox->campus->name }}</span>

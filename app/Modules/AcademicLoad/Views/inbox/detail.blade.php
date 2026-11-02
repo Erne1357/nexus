@@ -7,7 +7,7 @@
 --}}
 @php($career = $selected['career'])
 @php($review = $selected['review'])
-@php($rowGrid = '@[40rem]:grid-cols-[minmax(0,1fr)_4rem_4.25rem_3.25rem_minmax(8rem,11rem)_2rem]')
+@php($rowGrid = '@[40rem]:grid-cols-[minmax(0,1fr)_4.25rem_4.5rem_3.25rem_minmax(9rem,12rem)_2rem]')
 <div class="@container" data-testid="inbox-detail-body">
     <div class="z-20 md:sticky md:top-(--shell-top) space-y-3 rounded-t-box border-b border-base-300 bg-base-100 px-4 py-3 sm:px-5" data-testid="inbox-detail-header">
         <button type="button" wire:click="back" class="btn btn-sm lg:hidden max-md:h-11 max-md:min-h-11" data-testid="inbox-back"><x-icon name="o-chevron-left" class="h-4 w-4" />Carreras</button>
@@ -94,7 +94,7 @@
                             @class(['grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1 py-2 @[40rem]:min-h-12', $rowGrid])>
                             <div role="cell" class="min-w-0 @[40rem]:col-start-1 @[40rem]:row-start-1">
                                 <p class="line-clamp-2 text-sm font-semibold" title="{{ $item->subject->name }}">{{ $item->subject->name }}</p>
-                                <p class="flex items-center gap-x-1 text-sm text-neutral"><span class="font-mono text-[15px] font-semibold text-base-content">{{ $item->subject->code }}</span> · <span class="whitespace-nowrap">semestre {{ $item->semester }}</span>
+                                <p class="flex flex-wrap items-center gap-x-1 text-sm text-neutral"><span class="whitespace-nowrap font-mono text-[15px] font-semibold text-base-content">{{ $item->subject->code }}</span> · <span class="whitespace-nowrap">semestre {{ $item->semester }}</span>
                                     @if ($item->notes)
                                         <span class="tooltip ms-1 @[40rem]:hidden" data-tip="{{ $item->notes }}" data-testid="row-note">
                                             <span class="flex h-6 w-6 items-center justify-center"><x-icon name="o-chat-bubble-left-ellipsis" class="h-5 w-5 text-neutral" /></span>
@@ -114,7 +114,7 @@
                                 @endif
                                 @if ($chip !== null)
                                     <button type="button" wire:click="openParallels('{{ $item->subject_id }}')" data-opens="parallels-{{ $item->subject_id }}" data-testid="parallels-chip"
-                                        class="btn btn-sm btn-soft btn-primary max-md:h-11 max-md:min-h-11">{{ $chip['label'] }}</button>
+                                        class="btn btn-sm btn-soft btn-primary h-auto min-h-8 max-w-full whitespace-normal py-1 text-left leading-tight max-md:min-h-11">{{ $chip['label'] }}</button>
                                 @endif
                             </div>
 
