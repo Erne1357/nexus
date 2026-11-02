@@ -55,9 +55,8 @@ new #[Title('Periodos')] class extends Component
             'canCreate' => Gate::allows('create', Term::class),
             'headers' => [
                 ['key' => 'code', 'label' => 'Código'],
-                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
-                ['key' => 'starts_on', 'label' => 'Inicio'],
-                ['key' => 'ends_on', 'label' => 'Fin'],
+                ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-28 min-[1200px]:min-w-44'],
+                ['key' => 'dates', 'label' => 'Fechas', 'sortable' => false],
                 ['key' => 'opened_in', 'label' => 'Abierto en', 'sortable' => false],
                 ['key' => 'is_current', 'label' => 'Estado'],
             ],
@@ -85,13 +84,13 @@ new #[Title('Periodos')] class extends Component
         $this->form->suggestName($value, $rules);
     }
 
-    public function create(): void
+    public function create(TermQuery $terms, TermRules $rules): void
     {
         $this->authorize('create', Term::class);
 
         $this->resetValidation();
         $this->reset('editingId');
-        $this->form->reset();
+        $this->form->prefillNext($terms->latestCode(), $rules);
         $this->showModal = true;
     }
 

@@ -11,15 +11,16 @@
     @else
         @if ($calendar !== null)
             <div class="mb-6">
-                @include('core::terms.mini-timeline', ['timeline' => $calendar['timeline'], 'caption' => $calendar['caption']])
+                @include('core::terms.mini-timeline', ['timeline' => $calendar['timeline'], 'caption' => $calendar['caption'], 'termUrl' => $calendar['termUrl']])
             </div>
         @endif
 
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             @foreach ($blocks as $block)
-                <x-card :title="$block['title']" shadow>
-                    {{ $block['description'] }}
-                </x-card>
+                <section class="rounded-box border border-base-300 bg-base-100 p-4" data-testid="role-block">
+                    <h2 class="text-lg font-bold leading-tight">{{ $block['title'] }}</h2>
+                    <p class="mt-1.5">{{ $block['description'] }}</p>
+                </section>
             @endforeach
         </div>
     @endif

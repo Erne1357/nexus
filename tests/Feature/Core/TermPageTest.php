@@ -12,6 +12,7 @@ use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
@@ -66,6 +67,7 @@ describe('admin y subdirección', function () {
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertSeeInOrder(['Validación de catálogos', 'En curso', 'quedan 7 días', 'Propuesta por carrera', 'Próxima', 'empieza en 5 días', 'Horarios y cupos', 'Asignación docente', 'Salones y acuerdos', 'Cierre y aprobación', 'Publicación', 'Re-análisis', 'Sin fecha'])
             ->assertSee('Nov 2026')
+            ->assertSee('noviembre 2026')
             ->assertSee('Hoy 12 nov')
             ->assertViewHas('timeline', fn ($timeline): bool => count($timeline->rows) === 8
                 && $timeline->from->toDateString() === '2026-11-09'
@@ -82,12 +84,50 @@ describe('admin y subdirección', function () {
             ->assertViewHas('timeline', fn ($timeline): bool => count($timeline->rows[2]['campuses']) === 1 && $timeline->rows[2]['campuses'][0]['code'] === 'C1');
     });
 
-    it('sin ninguna fecha muestra las etapas sin fecha y ninguna semana', function () {
-        Livewire::actingAs($this->admin)
+    it('sin ninguna fecha dice que no hay calendario y lista las 8 etapas con «Poner fechas»', function () {
+        $page = Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertViewHas('timeline', fn ($timeline): bool => ! $timeline->hasRange() && count($timeline->rows) === 8)
             ->assertDontSee('Hoy 12 nov')
-            ->assertSee('Sin fecha');
+            ->assertSee('Este periodo no tiene calendario.')
+            ->assertSee('data-slot="copy-calendar"', false)
+            ->assertDontSee('Sin fecha')
+            ->assertDontSee('border-dashed', false);
+
+        expect(substr_count($page->html(), 'Poner fechas'))->toBe(8);
+
+        $page->call('editStage', 'scheduling')->assertSet('showDrawer', true)->assertSee('Etapa 3 de 8');
+    });
+
+    it('las etapas se anuncian por su contenido: el botón no sustituye su nombre accesible', function () {
+        termPageStage($this->term, Stage::Proposal, null, '2026-11-17', '2026-11-24');
+
+        $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id]);
+
+        expect($page->html())->toMatch('/<button[^>]*data-testid="stage-proposal"/')
+            ->and(preg_match('/<button[^>]*data-testid="stage-proposal"[^>]*>/', $page->html(), $match))->toBe(1)
+            ->and($match[0])->not->toContain('aria-label');
+        $page->assertSee('Próxima')->assertSee('17–24 nov');
+    });
+
+    it('las insignias de estado llevan el tono de su barra y la terminada va atenuada', function () {
+        termPageStage($this->term, Stage::CatalogValidation, null, '2026-11-02', '2026-11-05');
+        termPageStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        termPageStage($this->term, Stage::Scheduling, null, '2026-11-20', '2026-12-04');
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeHtml('badge-info badge-soft')
+            ->assertSeeHtml('badge-neutral badge-soft')
+            ->assertSeeHtml('badge-success badge-soft')
+            ->assertSeeHtml('bg-success/35')
+            ->assertSee('Terminada');
+    });
+
+    it('«Actual» usa el tono primario', function () {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeHtml('badge-primary');
     });
 
     it('edita el periodo desde el modal y lo confirma con un toast', function () {
@@ -173,10 +213,32 @@ describe('sección «Campus»', function () {
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->assertSeeInOrder(['Campus', 'C1', 'Campus I', 'No abierto en este periodo', 'C2', 'Campus II', 'Abrir en Campus II', 'Calendario'])
+            ->assertSeeInOrder(['Abierto en', 'Abrir en Campus I', 'Abrir en Campus II', 'Calendario', 'Campus', 'C1', 'Campus I', 'No abierto en este periodo', 'C2', 'Campus II'])
             ->assertSee('Abrir en Campus I')
             ->assertDontSee('Abrir en Campus III')
             ->assertSee('¿Abrir el periodo 20271 en Campus II?');
+    });
+
+    it('el resumen muestra los códigos abiertos y un botón por campus pendiente', function () {
+        $this->c3->update(['is_active' => false]);
+        TermOpening::factory()->for($this->term)->for($this->c2)->create(['opened_by' => $this->admin->id]);
+
+        $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id]);
+
+        expect(preg_match('/data-testid="campus-summary".*?<\/section>/s', $page->html(), $match))->toBe(1)
+            ->and($match[0])->toContain('data-testid="opened-C2"')->toContain('Abrir en Campus I')
+            ->not->toContain('Abrir en Campus II')->not->toContain('data-testid="open-menu"');
+    });
+
+    it('con más de dos campus pendientes el resumen ofrece un solo menú «Abrir en…»', function () {
+        Campus::factory()->create(['code' => 'C4', 'name' => 'Campus IV']);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeHtml('data-testid="open-menu"')
+            ->assertSee('Abrir en…')
+            ->assertSee('ningún campus')
+            ->assertDontSee('Abrir en Campus I');
     });
 
     it('abre el periodo en Campus II, crea cargas y revisiones y lo dice en un toast', function (string $who) {
@@ -222,6 +284,7 @@ describe('sección «Campus»', function () {
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertSee('C3')
             ->assertSee('Campus inactivo')
+            ->assertSeeHtml('badge-neutral badge-soft')
             ->assertDontSee('data-testid="complete-C3"', escape: false)
             ->assertDontSee('data-testid="open-C3"', escape: false);
     });
@@ -299,6 +362,9 @@ describe('panel de una etapa', function () {
             ->set('general.ends_on', '2026-12-11')
             ->assertSee('Usa las fechas generales');
         expect($previewOf($page))->toContain('23 nov – 11 dic')->not->toContain('20 nov – 4 dic');
+
+        $page->set('general.ends_on', '');
+        expect($previewOf($page))->toContain('Fechas generales incompletas.')->not->toContain('Sin fechas generales.');
 
         $page->call('clearGeneral');
         expect($previewOf($page))->toContain('Sin fechas generales.')->not->toContain('Usa las fechas generales');
@@ -504,6 +570,121 @@ describe('panel de una etapa', function () {
     });
 });
 
+describe('copiar el calendario de otro periodo', function () {
+    beforeEach(function () {
+        termPageStage($this->other, Stage::CatalogValidation, null, '2026-08-17', '2026-08-28');
+        termPageStage($this->other, Stage::Proposal, null, '2026-08-24', '2026-09-04');
+        termPageStage($this->other, Stage::Proposal, $this->c1, '2026-08-26', '2026-09-08');
+    });
+
+    it('el admin copia el calendario a un periodo vacío y lo dice en un toast', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSee('Copiar de otro periodo')
+            ->call('openCopy')
+            ->assertSet('showCopy', true)
+            ->set('sourceId', $this->other->id)
+            ->assertSee('Fechas corridas 23 semanas hacia adelante.')
+            ->assertSee('Validación de catálogos')
+            ->assertSee('25 ene – 5 feb')
+            ->assertSee('Copiar calendario')
+            ->assertDontSee('Reemplazar calendario')
+            ->call('copyCalendar')
+            ->assertHasNoErrors()
+            ->assertSet('showCopy', false);
+
+        expect(TermStage::where('term_id', $this->term->id)->count())->toBe(3)
+            ->and(termPageWindows($this->term, Stage::CatalogValidation))->toBe(['general' => '2027-01-25/2027-02-05'])
+            ->and(lastToastOf($page))->title->toBe('Calendario copiado')->description->toBe('3 ventanas copiadas de 20263');
+    });
+
+    it('con ventanas previas el botón dice «Reemplazar calendario» y pide confirmar', function () {
+        termPageStage($this->term, Stage::Staffing, null, '2027-02-01', '2027-02-05');
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openCopy')
+            ->set('sourceId', $this->other->id)
+            ->assertSee('Reemplazar calendario')
+            ->assertSee('Se reemplazará la ventana actual del periodo.')
+            ->assertSeeHtml('wire:confirm="Se reemplazará la ventana actual del periodo."')
+            ->call('copyCalendar');
+
+        expect(termPageWindows($this->term, Stage::Staffing))->toBe([])
+            ->and(TermStage::where('term_id', $this->term->id)->count())->toBe(3);
+    });
+
+    it('dice cuántas de las ventanas que reemplaza son de campus inactivos', function () {
+        termPageStage($this->term, Stage::Staffing, $this->c3, '2027-02-01', '2027-02-05');
+        termPageStage($this->term, Stage::Rooms, $this->c3, '2027-02-08', '2027-02-12');
+        $this->c3->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSee('Este periodo no tiene calendario.')
+            ->call('openCopy')
+            ->set('sourceId', $this->other->id)
+            ->assertSeeHtml('wire:confirm="Se reemplazarán las 2 ventanas actuales del periodo, 2 de ellas de campus inactivos."')
+            ->call('copyCalendar');
+
+        expect(TermStage::where('term_id', $this->term->id)->count())->toBe(3);
+    });
+
+    it('calcula la vista previa al elegir el periodo, no en cada petición', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openCopy')
+            ->set('sourceId', $this->other->id);
+
+        DB::enableQueryLog();
+        $page->call('$refresh');
+        $queries = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'term_stages') && str_contains($sql, '"term_id" = ?'))->count();
+        DB::disableQueryLog();
+
+        expect($queries)->toBe(0);
+    });
+
+    it('lista lo que no se copia por un campus inactivo', function () {
+        $this->c1->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openCopy')
+            ->set('sourceId', $this->other->id)
+            ->assertSee('No se copian: C1 · Propuesta por carrera (campus inactivo)');
+    });
+
+    it('queda deshabilitado con su motivo si ningún otro periodo tiene calendario', function () {
+        TermStage::query()->delete();
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeHtml('data-tip="Ningún otro periodo tiene calendario."')
+            ->assertDontSeeHtml('wire:click="openCopy"');
+    });
+
+    it('rechaza como error del campo el mismo periodo, uno sin calendario y un id inválido, sin 500', function (string $case) {
+        $empty = Term::factory()->create(['code' => '20281', 'starts_on' => '2027-08-16', 'ends_on' => '2027-12-10']);
+        $id = match ($case) {
+            'mismo' => $this->term->id,
+            'sin calendario' => $empty->id,
+            'desconocido' => fakeKey(999),
+            'no uuid' => 'no-es-un-uuid',
+            'vacío' => '',
+        };
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openCopy')
+            ->set('sourceId', $id)
+            ->call('copyCalendar')
+            ->assertHasErrors('sourceId')
+            ->assertSet('showCopy', true);
+
+        expect(TermStage::where('term_id', $this->term->id)->count())->toBe(0);
+    })->with(['mismo', 'sin calendario', 'desconocido', 'no uuid', 'vacío']);
+});
+
 describe('otros roles e invitados', function () {
     $roles = [
         'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
@@ -544,6 +725,22 @@ describe('otros roles e invitados', function () {
             ->and($this->term->fresh())->name->toBe('Ene-Jun 2027')->is_current->toBeTrue()
             ->and(Activity::count())->toBe(0);
     })->with($roles)->with(['edit', 'save', 'makeCurrent', 'editStage', 'clearGeneral', 'addCampusWindow', 'removeCampusWindow', 'saveStage', 'openIn', 'completeIn']);
+
+    it('no pueden elegir el periodo de origen ni copiar aunque la página la abriera el admin', function () {
+        termPageStage($this->other, Stage::Proposal, null, '2026-08-24', '2026-09-04');
+        $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();
+        $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id])->call('openCopy');
+
+        $this->actingAs($user);
+        $page->set('sourceId', $this->other->id)->assertForbidden();
+
+        $this->actingAs($this->admin);
+        $page = Livewire::test('core::pages.term', ['term' => $this->term->id])->call('openCopy')->set('sourceId', $this->other->id);
+        $this->actingAs($user);
+        $page->call('copyCalendar')->assertForbidden();
+
+        expect(TermStage::where('term_id', $this->term->id)->count())->toBe(0);
+    });
 
     it('no pueden cambiar el código aunque la página la abriera el admin', function () {
         $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();

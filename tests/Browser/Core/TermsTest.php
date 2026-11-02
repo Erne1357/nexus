@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Core\Actions\SetTermStage;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -65,7 +67,7 @@ it('el admin da de alta un periodo, lo edita y lo marca como actual desde la UI'
     $page->click('table [aria-label="Acciones de 20271"]')
         ->click('@make-current-20271')
         ->wait(1)
-        ->assertPresent('table .badge-success')
+        ->assertPresent('table .badge-primary')
         ->assertNoJavaScriptErrors();
 
     expect(Term::where('code', '20271')->sole()->is_current)->toBeTrue();
@@ -121,4 +123,26 @@ it('el admin abre el periodo en Campus II desde la ficha y ve quién y cuándo',
         ->assertNoJavaScriptErrors();
 
     expect(TermOpening::where('term_id', $term->id)->count())->toBe(1);
+});
+
+it('el admin copia el calendario de otro periodo a un periodo vacío y ve las barras', function () {
+    $source = Term::factory()->create(['code' => '20263', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    $target = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
+    app(SetTermStage::class)->handle($source, Stage::CatalogValidation, null, '2026-08-17', '2026-08-28');
+    app(SetTermStage::class)->handle($source, Stage::Proposal, null, '2026-08-24', '2026-09-04');
+
+    signInToTerms('admin')
+        ->navigate('/terms/'.$target->id)
+        ->assertSee('Este periodo no tiene calendario.')
+        ->click('@copy-calendar')
+        ->waitForText('Copiar el calendario de otro periodo')
+        ->select('@copy-source', $source->id)
+        ->waitForText('Fechas corridas 23 semanas hacia adelante.')
+        ->assertSee('25 ene – 5 feb')
+        ->click('@copy-confirm')
+        ->waitForText('2 ventanas copiadas de 20263')
+        ->assertPresent('[data-testid="stage-catalog_validation"] i')
+        ->assertNoJavaScriptErrors();
+
+    expect(TermStage::where('term_id', $target->id)->count())->toBe(2);
 });

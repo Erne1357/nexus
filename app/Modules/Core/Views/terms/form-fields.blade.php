@@ -9,7 +9,7 @@
             <x-input label="Código" name="code" wire:model="form.code" class="w-full" disabled hint="{{ $form->codeLock }}" data-testid="term-code-locked" />
         </div>
     @else
-        <x-input label="Código" name="code" wire:model.live.debounce.300ms="form.code" placeholder="20271" hint="Año y periodo: 1 Ene-Jun, 2 Verano, 3 Ago-Dic." />
+        <x-input label="Código" name="code" wire:model.live.debounce.300ms="form.code" placeholder="Ej. 20281" hint="Año y periodo: 1 Ene-Jun, 2 Verano, 3 Ago-Dic." />
     @endif
     <x-input label="Nombre" name="name" wire:model="form.name" />
     <x-input label="Inicio" name="starts_on" type="date" wire:model="form.starts_on" />
