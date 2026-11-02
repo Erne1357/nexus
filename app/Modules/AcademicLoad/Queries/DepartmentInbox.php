@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
+use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -43,6 +44,7 @@ final readonly class DepartmentInbox
         public array $pendingCatalogs,
         public array $careers,
         public array $subjects,
+        public ProposalAnomalies $anomalies = new ProposalAnomalies,
     ) {}
 
     /**
@@ -72,14 +74,20 @@ final readonly class DepartmentInbox
 
     /**
      * Las filas con grupos que la carrera le pide al departamento, cada una con el total de su materia en las
-     * partes que cuentan para los paralelos (en cero si ninguna la cuenta); vacío si la carrera no tiene parte.
+     * partes que cuentan para los paralelos (en cero si ninguna la cuenta) y
      *
-     * @return list<array{item: ProposalItem, total: array{careers: int, groups: int, expected: int}}>
+     * con lo raro de la fila para marcarlo sin bloquear la decisión (ProposalAnomalies).
+     *
+     * @return list<array{item: ProposalItem, total: array{careers: int, groups: int, expected: int}, anomalies: list<string>}>
      */
     public function rowsFor(string $careerId): array
     {
         return array_map(
-            fn (ProposalItem $item): array => ['item' => $item, 'total' => $this->totalFor($item->subject_id)],
+            fn (ProposalItem $item): array => [
+                'item' => $item,
+                'total' => $this->totalFor($item->subject_id),
+                'anomalies' => $this->anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups),
+            ],
             $this->career($careerId)['rows'] ?? [],
         );
     }

@@ -12,11 +12,14 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\DepartmentInbox;
 use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
+use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
@@ -193,6 +196,14 @@ describe('con lo que piden varias carreras', function () {
             ['ACF-0901', 'Cálculo Diferencial', false, 1, 65, 60, 2, null, ['careers' => 2, 'groups' => 4, 'expected' => 100]],
             ['ACF-0902', 'Física', true, 2, 35, 30, 1, 'Con laboratorio', ['careers' => 1, 'groups' => 1, 'expected' => 30]],
         ]);
+    });
+
+    it('marca lo raro de cada fila sin bloquear (anomalías), con el mínimo por grupo del parámetro global', function () {
+        expect(array_column(inboxOf()->rowsFor($this->isc->id), 'anomalies'))->toBe([[], []]);
+
+        Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => ProposalAnomalies::SETTING, 'value' => 40]);
+
+        expect(array_column(inboxOf()->rowsFor($this->isc->id), 'anomalies'))->toBe([['2 grupos para 60 alumnos'], ['1 grupo para 30 alumnos']]);
     });
 
     it('las filas de una parte regresada se ven, y su total no la cuenta; sin parte no hay filas', function () {
