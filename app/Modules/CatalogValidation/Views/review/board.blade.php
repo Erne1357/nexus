@@ -1,6 +1,6 @@
 {{--
     El tablero (variante C): la tarjeta de avance (HC-14) y una tarjeta por revisión. Toda la tarjeta abre la lista:
-    el título es un enlace estirado con `after:absolute after:inset-0` y los botones van encima (`relative z-10`), así
+    los indicadores de docentes (readiness) son enlaces a la lista filtrada; el título es un enlace estirado con `after:absolute after:inset-0` y los botones van encima (`relative z-10`), así
     no hay botones anidados en un enlace. Reabrir deshabilitado con su motivo escrito cuando la carga ya salió de
     borrador (CV5); quien solo lee (Subdirección, admin) no ve Validar ni Reabrir.
 --}}
@@ -56,6 +56,10 @@
 
             @include('catalog-validation::review.who', ['review' => $review])
             @include('catalog-validation::review.counters', ['summary' => $card['summary']])
+
+            @if ($card['readiness'] !== null)
+                @include('catalog-validation::review.readiness', ['counts' => $card['readiness'], 'term' => $term, 'department' => $department])
+            @endif
 
             <div class="relative z-10 mt-auto flex gap-2">
                 <a href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $review->catalog->value]) }}" wire:navigate class="btn btn-outline flex-1">Abrir lista</a>

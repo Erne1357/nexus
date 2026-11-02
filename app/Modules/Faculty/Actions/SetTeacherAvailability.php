@@ -103,7 +103,7 @@ final class SetTeacherAvailability
                 ->withProperties(['term_id' => $term->getKey()])
                 ->log('Cambió la disponibilidad del docente');
 
-            AvailabilityChanged::dispatch($teacher, $term);
+            AvailabilityChanged::dispatch($teacher, $term, auth()->user());
         });
 
         return $marked;

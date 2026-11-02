@@ -10,7 +10,7 @@
     @if ($teachers)
         <a href="{{ route('faculty.teachers.show', $record->id) }}" wire:navigate class="btn btn-ghost btn-sm" aria-label="Ficha de {{ $code }}" @if ($inTable) data-testid="record-{{ $code }}" @endif>
             <x-icon name="o-identification" class="h-4 w-4" aria-hidden="true" />
-            <span @class(['max-[1200px]:hidden' => $inTable])>Ficha</span>
+            <span @class(['max-[1535px]:hidden' => $inTable])>Ficha</span>
         </a>
         <x-button
             icon="o-chat-bubble-left-ellipsis"
@@ -20,7 +20,7 @@
             class="btn-ghost btn-sm"
             spinner="edit('{{ $record->id }}')"
         >
-            <span @class(['max-[1200px]:hidden' => $inTable])>Observaciones</span>
+            <span @class(['max-[1535px]:hidden' => $inTable])>Observaciones</span>
         </x-button>
     @else
         <x-button
@@ -36,6 +36,10 @@
     @endif
 
     <x-core::row-menu :name="$code" :compact="$inTable">
+        @if ($teachers)
+            <x-core::row-menu-item label="Disponibilidad" :href="route('faculty.teachers.availability', $record->id)" />
+        @endif
+
         @if ($card['canFlag'])
             <x-core::row-menu-item
                 label="Agregar observación"

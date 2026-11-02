@@ -76,7 +76,7 @@ final class UpdateTeacher
                 ])
                 ->log("Actualizó al docente {$teacher->employee_number}");
 
-            TeacherUpdated::dispatch($teacher, $changed);
+            TeacherUpdated::dispatch($teacher, $changed, auth()->user());
 
             return $teacher;
         });

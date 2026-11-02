@@ -69,7 +69,7 @@ final class UpdateExternalLoad
                 ->withProperties(['teacher_id' => $locked->teacher_id, 'term_id' => $locked->term_id])
                 ->log('Cambió unas horas fuera del ITCJ del docente');
 
-            ExternalLoadChanged::dispatch($locked);
+            ExternalLoadChanged::dispatch($locked, auth()->user());
 
             return $load;
         });
@@ -104,8 +104,8 @@ final class UpdateExternalLoad
             ->withProperties(['teacher_id' => $removed->teacher_id, 'term_id' => $removed->term_id])
             ->log('Restauró unas horas fuera del ITCJ del docente');
 
-        ExternalLoadChanged::dispatch($edited);
-        ExternalLoadChanged::dispatch($removed);
+        ExternalLoadChanged::dispatch($edited, auth()->user());
+        ExternalLoadChanged::dispatch($removed, auth()->user());
 
         return $removed;
     }

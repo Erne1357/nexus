@@ -49,10 +49,10 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Core | 0 | ✅ (base de R1; periodos y calendario de etapas #178; apertura por campus #179; notificaciones y campana #183) |
 | Academic | 1 | 🟨 (1.7 a 1.10 hechas: modelos #116 y #117; CRUD y retícula #135, #136, #137, #139, #142, #144, #145; seeder demo #138, #140, #141; faltan 1.11 a 1.16) |
 | Facilities | 1 | ✅ (1.15 hecha: modelos #158; pantallas de edificios y salones #161; plantilla `rooms` #162; seeders demo y masivo #163) |
-| Faculty | 1 | ✅ (modelos #159 y #160; usuarios, roles y jefaturas #164; seeders #165; adscripción sin campus #168; pantalla de docentes #169; ficha #170; perfil y horas fuera del ITCJ #173; jefaturas en la ficha #174; editor de disponibilidad #175. Sus plantillas de 1.13 están en Imports: #171 y #172) |
+| Faculty | 1 | ✅ (modelos #159 y #160; usuarios, roles y jefaturas #164; seeders #165; adscripción sin campus #168; pantalla de docentes #169; ficha #170; perfil y horas fuera del ITCJ #173; jefaturas en la ficha #174; editor de disponibilidad #175; perfil y disponibilidad desde la validación, 2.6, #190. Sus plantillas de 1.13 están en Imports: #171 y #172) |
 | Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
 | Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120) |
-| CatalogValidation | 2 | 🟨 (base y revisiones al abrir el periodo #179; validación del jefe, 2.4, #184 y #185; faltan el tablero de avance, 2.5, y la captura docente, 2.6) |
+| CatalogValidation | 2 | 🟨 (base y revisiones al abrir el periodo #179; validación del jefe, 2.4, #184 y #185; captura docente desde la validación, 2.6, #190; falta el tablero de avance, 2.5) |
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179; máquina de estados con HC-14 #180; propuesta de carrera #187; bandeja del departamento con HC-20 y paralelos #188) |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
 | Staffing | 3 | ⬜ |

@@ -87,7 +87,7 @@ final class SetQualification
             ->withProperties(['teacher_id' => $qualification->teacher_id])
             ->log($message);
 
-        QualificationChanged::dispatch($qualification);
+        QualificationChanged::dispatch($qualification, auth()->user() ?? $qualification->qualifier);
 
         return $qualification;
     }

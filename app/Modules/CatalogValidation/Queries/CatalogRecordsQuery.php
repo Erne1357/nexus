@@ -23,11 +23,12 @@ final class CatalogRecordsQuery
     public function __construct(private readonly CatalogContentsQuery $contents) {}
 
     /**
-     * Una página de registros por clave. `$flag` es `with` (con observación abierta), `without` (sin ella) o vacío.
+     * Una página de registros por clave. `$flag` es `with` (con observación abierta), `without` (sin ella) o vacío;
+     * `$onlyIds`, si no es null, deja solo esos registros (el filtro «Falta» de docentes).
      *
      * @return LengthAwarePaginator<int, Model>
      */
-    public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15): LengthAwarePaginator
+    public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15, ?array $onlyIds = null): LengthAwarePaginator
     {
         $query = $this->contents->query($review);
         $model = $query->getModel();
@@ -47,6 +48,10 @@ final class CatalogRecordsQuery
         if ($flag === 'with' || $flag === 'without') {
             $open = $review->flags()->whereNull('resolved_at')->where('flaggable_type', $model->getMorphClass())->select('flaggable_id');
             $flag === 'with' ? $query->whereIn($model->qualifyColumn('id'), $open) : $query->whereNotIn($model->qualifyColumn('id'), $open);
+        }
+
+        if ($onlyIds !== null) {
+            $query->whereIn($model->qualifyColumn('id'), $onlyIds);
         }
 
         return $query->paginate($perPage);

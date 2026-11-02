@@ -60,7 +60,7 @@ final class AddExternalLoad
                 ->withProperties(['teacher_id' => $locked->getKey(), 'term_id' => $term->getKey()])
                 ->log("Agregó {$data['hours']} h fuera del ITCJ ({$data['source']}) al docente {$locked->employee_number}");
 
-            ExternalLoadChanged::dispatch($load);
+            ExternalLoadChanged::dispatch($load, auth()->user());
 
             return $load;
         });

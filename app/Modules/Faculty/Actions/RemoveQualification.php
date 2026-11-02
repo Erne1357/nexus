@@ -33,7 +33,7 @@ final class RemoveQualification
                 ->withProperties(['teacher_id' => $locked->teacher_id])
                 ->log('Quitó una materia del perfil del docente');
 
-            QualificationChanged::dispatch($locked);
+            QualificationChanged::dispatch($locked, auth()->user());
         });
     }
 }

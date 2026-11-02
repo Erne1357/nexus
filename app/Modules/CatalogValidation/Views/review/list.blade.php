@@ -43,6 +43,9 @@
             <x-input wire:model.live.debounce.300ms="search" :placeholder="$review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers ? 'Número o nombre' : 'Clave o nombre'" aria-label="Buscar registros" icon="o-magnifying-glass" clearable />
         </x-slot:search>
 
+        @if ($review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers)
+            <x-select wire:model.live="missing" aria-label="Falta" :options="$missingFilters" placeholder="Falta" />
+        @endif
         <x-select wire:model.live="flagFilter" aria-label="Observación" :options="$flagFilters" placeholder="Observación" />
         <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
     </x-core::catalog-toolbar>
@@ -90,6 +93,29 @@
                 <span class="font-mono" title="{{ $record->career?->name }}">{{ $record->career?->code }}</span>
             @endscope
 
+            @scope('cell_availability', $record, $readiness)
+                @if (! $record->is_active)
+                    <span class="text-neutral" aria-label="Sin dato: docente inactivo">—</span>
+                @elseif ($readiness[$record->id]['has_availability'] ?? false)
+                    <x-core::status-badge tone="success" label="Capturada" />
+                @else
+                    <x-core::status-badge tone="warning" label="Falta" />
+                @endif
+            @endscope
+
+            @scope('cell_profile', $record, $readiness)
+                @php($subjects = $readiness[$record->id]['subjects'] ?? 0)
+                <span @class(['block text-end font-mono tabular-nums', 'text-warning' => $subjects === 0 && $record->is_active])>{{ $subjects === 0 && ! $record->is_active ? '—' : $subjects }}</span>
+            @endscope
+
+            @scope('cell_external', $record, $readiness)
+                <span class="block text-end font-mono tabular-nums">{{ $readiness[$record->id]['external_hours'] ?? 0 }}</span>
+            @endscope
+
+            @scope('cell_base', $record, $readiness)
+                <span class="block text-end font-mono tabular-nums">{{ $readiness[$record->id]['base_hours'] ?? 0 }}</span>
+            @endscope
+
             @scope('cell_flags', $record, $flagMap)
                 @include('catalog-validation::review.flag-badge', ['flags' => $flagMap[$record->id] ?? []])
             @endscope
@@ -123,6 +149,15 @@
                                 @break
                             @case (\App\Modules\CatalogValidation\Enums\Catalog::Rooms)
                                 <span class="font-mono">{{ $record->building?->code }}</span> · <span class="font-mono tabular-nums">{{ $record->capacity }}</span> lugares · {{ $record->type->label() }}
+                                @break
+                            @case (\App\Modules\CatalogValidation\Enums\Catalog::Teachers)
+                                @php($ready = $readiness[$record->id] ?? null)
+                                @if ($record->is_active)
+                                    <x-core::status-badge :tone="($ready['has_availability'] ?? false) ? 'success' : 'warning'" :label="($ready['has_availability'] ?? false) ? 'Disponibilidad capturada' : 'Sin disponibilidad'" />
+                                @else
+                                    <span>Docente inactivo</span>
+                                @endif
+                                · <span class="font-mono tabular-nums">{{ $ready['subjects'] ?? 0 }}</span> materias en perfil · <span class="font-mono tabular-nums">{{ $ready['external_hours'] ?? 0 }}</span> h fuera
                                 @break
                             @case (\App\Modules\CatalogValidation\Enums\Catalog::StudyPlans)
                                 <span class="font-mono">{{ $record->career?->code }}</span>
