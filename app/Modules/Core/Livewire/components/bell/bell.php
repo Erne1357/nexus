@@ -1,25 +1,23 @@
 <?php
 
-use App\Modules\Core\Actions\MarkAllNotificationsRead;
-use App\Modules\Core\Actions\OpenNotification;
+use App\Modules\Core\Livewire\Concerns\OpensNotifications;
 use App\Modules\Core\Queries\NotificationQuery;
 use App\Modules\Core\Queries\ScopedContext;
-use Illuminate\Auth\Access\AuthorizationException;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
 /**
  * La campana de la banda (tarea 2.9; opción A de la maqueta, elegida el 2 de noviembre de 2026): el botón
  * con las no leídas y, al abrirlo, una tarjeta flotante con la misma forma que la de la credencial con las
- * notificaciones recientes del usuario (NotificationQuery) y «Marcar todas como leídas». Abrir una la marca
+ * notificaciones recientes del usuario (NotificationQuery), «Marcar todas como leídas» y, al pie, «Ver todas (N)», que lleva a core.notifications. Abrir una la marca
  * leída y lleva a su pantalla (OpenNotification); si ya no está disponible, lo avisa con un toast y se queda.
- * La banda la carga en diferido (lazy). Se refresca cada minuto mientras está a la vista: un conteo y las 15
- * recientes, para que la tarjeta abra sin esperar al servidor. Abrir y cerrar es de Alpine; cerrar la credencial al
- * abrirla usa el componente nexusShell de <body>.
+ * La banda la carga en diferido (lazy). Se refresca cada minuto mientras está a la vista, con dos consultas (el
+ * total y las no leídas juntos, y las 15 recientes) para que la tarjeta abra sin esperar al servidor, y en
+ * cuanto otra parte de la pantalla cambia las notificaciones (`notifications-changed`).
  */
 new class extends Component
 {
-    use Toast;
+    use OpensNotifications, Toast;
 
     /**
      * Lo que se ve mientras llega la campana (la banda la carga en diferido, para no sumar sus consultas a las
@@ -42,11 +40,12 @@ new class extends Component
     public function with(ScopedContext $context, NotificationQuery $notifications): array
     {
         $user = $context->user();
-        $unread = $user === null ? 0 : $notifications->unreadCount($user);
+        ['total' => $total, 'unread' => $unread] = $user === null ? ['total' => 0, 'unread' => 0] : $notifications->counts($user);
 
         return [
             'unread' => $unread,
             'badge' => $unread > 99 ? '99+' : (string) $unread,
+            'total' => $total,
             'items' => $user === null ? collect() : $notifications->recent($user),
             'label' => match (true) {
                 $unread === 0 => 'Notificaciones: sin notificaciones nuevas',
@@ -55,39 +54,5 @@ new class extends Component
                 default => "Notificaciones: {$unread} sin leer",
             },
         ];
-    }
-
-    public function open(string $id, OpenNotification $openNotification, ScopedContext $context): mixed
-    {
-        $user = $context->user();
-
-        if ($user === null) {
-            return null;
-        }
-
-        try {
-            $target = $openNotification->handle($user, $id);
-        } catch (AuthorizationException $exception) {
-            $this->error($exception->getMessage());
-
-            return null;
-        }
-
-        if ($target->url === null) {
-            $this->warning($target->problem ?? 'Esa pantalla no está disponible.');
-
-            return null;
-        }
-
-        return $this->redirect($target->url, navigate: true);
-    }
-
-    public function markAllRead(MarkAllNotificationsRead $markAllNotificationsRead, ScopedContext $context): void
-    {
-        $user = $context->user();
-
-        if ($user !== null) {
-            $markAllNotificationsRead->handle($user);
-        }
     }
 };

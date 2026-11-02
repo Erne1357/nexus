@@ -337,6 +337,7 @@ Los avisos del proceso van por el canal `database` de Laravel (tarea 2.9; el cor
 - A quién: `Core\Queries\RecipientsQuery::for($role, $campus, $department, $career)`, con la misma regla de alcance que las policies, solo por alcance (`ScopedContext::coversWithScope`): el admin que no tiene ese alcance no los recibe.
 - Cuándo: una Action del módulo que avisa (por ejemplo `NotifyPendingReviews`), llamada desde un listener en cola que se encola después del commit (`ShouldQueue` con `$afterCommit`), para que un cambio revertido no avise y avisar a muchos no haga esperar a quien hizo el cambio.
 - Al abrirlo (`OpenNotification`): se marca leído, la credencial pasa al periodo y el campus del aviso, y la clase decide si el destino sigue disponible (`NexusNotification::unavailableReason`: la ruta existe y, según la clase, el registro y el alcance), y la ruta tiene que aceptar los parámetros guardados. Si no, la campana lo dice en un toast en lugar de llevarlo.
+- La tarjeta de la campana muestra las 15 más recientes y «Ver todas (N)» lleva a la página `core.notifications` (`/notifications`): todas las del usuario, de 25 en 25, con filtro Todas / Sin leer.
 - Las llaves son UUIDv7: Laravel clona la notificación por destinatario y `__clone` le da a cada copia la suya.
 
 ## Colas y trabajos en segundo plano
