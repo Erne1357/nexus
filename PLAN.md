@@ -46,14 +46,14 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 
 | Módulo | Fase que lo crea | Estado |
 |---|---|---|
-| Core | 0 | ✅ (base de R1; periodos y calendario de etapas #178; apertura y notificaciones en fase 2) |
+| Core | 0 | ✅ (base de R1; periodos y calendario de etapas #178; apertura por campus #179; notificaciones en fase 2) |
 | Academic | 1 | 🟨 (1.7 a 1.10 hechas: modelos #116 y #117; CRUD y retícula #135, #136, #137, #139, #142, #144, #145; seeder demo #138, #140, #141; faltan 1.11 a 1.16) |
 | Facilities | 1 | ✅ (1.15 hecha: modelos #158; pantallas de edificios y salones #161; plantilla `rooms` #162; seeders demo y masivo #163) |
 | Faculty | 1 | ✅ (modelos #159 y #160; usuarios, roles y jefaturas #164; seeders #165; adscripción sin campus #168; pantalla de docentes #169; ficha #170; perfil y horas fuera del ITCJ #173; jefaturas en la ficha #174; editor de disponibilidad #175. Sus plantillas de 1.13 están en Imports: #171 y #172) |
 | Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
 | Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120) |
-| CatalogValidation | 2 | ⬜ |
-| AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | ⬜ |
+| CatalogValidation | 2 | 🟨 (base y revisiones al abrir el periodo #179) |
+| AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179) |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
 | Staffing | 3 | ⬜ |
 | Demand | 5 | ⬜ |
@@ -80,4 +80,4 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | 2026-10-27 | Fase 1: la tarea 1.7 (modelos de Academic, B) va primero y se mezcla a más tardar el día 2, porque la 1.4 (A) y la 1.11, la 1.14 y la 1.15 (C) tienen llaves foráneas a sus tablas. Mientras, A hace la 1.3 y C los edificios de la 1.15 ([fase-1](docs/plan/fase-1-catalogos-importacion.md#reparto)). |
 | 2026-10-29 | Identidad visual definida y `DESIGN.md` como norma para toda pantalla ([ADR-0015](docs/decisiones/0015-identidad-visual.md)): credencial con áreas, menú que se transforma, paleta institucional y la liebre como marca. Construir el shell en la app queda en el issue #108. |
 | 2026-10-30 | Alcance general contra alcance por campus: carreras, materias, planes de estudio y retículas, docentes, jefes de departamento (uno por departamento) y la Subdirección (una para todo el Tec) son de toda la institución; se atan a un campus los alumnos, los coordinadores (por carrera y campus), la oferta de carreras, los salones y las cargas. El jefe de proyecto docente queda por departamento y campus mientras se confirma (supuesto). Cambios en Core, Academic y Faculty en #166, #167 y #168; detalle en [PROJECT.md](PROJECT.md) y [reglas de negocio](docs/dominio/reglas-de-negocio.md). |
-| 2026-11-01 | Fase 2 abierta por A (tareas 2.1 a 2.3). Decisiones del usuario: el periodo se abre por campus (hoy solo C2); docentes, materias, planes y carreras se validan una vez por periodo para todo el Tec y los salones por campus (HC-14 reescrita); abrir un periodo no cierra el anterior; el calendario de etapas solo informa. Mapa de módulos: `CatalogValidation --> AcademicLoad` ([ADR-0017](docs/decisiones/0017-catalog-validation-antes-de-academic-load.md), en el PR de la 2.2). |
+| 2026-11-01 | Fase 2 abierta por A (tareas 2.1 a 2.3). Decisiones del usuario: el periodo se abre por campus (hoy solo C2); docentes, materias, planes y carreras se validan una vez por periodo para todo el Tec y los salones por campus (HC-14 reescrita); abrir un periodo no cierra el anterior; el calendario de etapas solo informa. Mapa de módulos: `CatalogValidation --> AcademicLoad` ([ADR-0017](docs/decisiones/0017-catalog-validation-antes-de-academic-load.md), #179). |
