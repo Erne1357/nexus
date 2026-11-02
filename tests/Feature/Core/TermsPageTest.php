@@ -3,10 +3,12 @@
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
@@ -46,9 +48,49 @@ describe('admin y subdirección', function () {
         $this->actingAs($this->{$who})
             ->get(route('core.terms'))
             ->assertOk()
-            ->assertSeeInOrder(['Código', 'Nombre', 'Inicio', 'Fin', 'Estado'])
+            ->assertSeeInOrder(['Código', 'Nombre', 'Inicio', 'Fin', 'Abierto en', 'Estado'])
             ->assertSeeInOrder(['20271', 'Ene-Jun 2027', '18/01/2027', '11/06/2027', 'Actual', '20263', 'Ago-Dic 2026', '17/08/2026']);
     })->with(['admin', 'subdireccion']);
+
+    it('muestra en «Abierto en» los códigos de los campus donde se abrió, también uno desactivado, sin consultar por periodo', function () {
+        $c2 = Campus::factory()->create(['code' => 'C2']);
+        $ead = Campus::factory()->create(['code' => 'EAD']);
+        TermOpening::factory()->for($this->t1)->for($ead)->create();
+        TermOpening::factory()->for($this->t1)->for($c2)->create();
+        TermOpening::factory()->for($this->t2)->for($this->campus)->create();
+        $ead->update(['is_active' => false]);
+
+        $this->actingAs($this->admin)
+            ->get(route('core.terms'))
+            ->assertSeeInOrder(['Abierto en', '20271', 'C2', 'EAD', '20263', 'C1']);
+
+        $queries = 0;
+        DB::listen(function () use (&$queries): void {
+            $queries++;
+        });
+        Livewire::actingAs($this->admin)->test('core::pages.terms');
+        $withThree = $queries;
+
+        Term::factory()->count(5)->create()->each(fn (Term $term) => TermOpening::factory()->for($term)->for($c2)->create());
+        $queries = 0;
+        Livewire::actingAs($this->admin)->test('core::pages.terms');
+
+        expect($queries)->toBe($withThree);
+    });
+
+    it('deshabilita el código con su motivo al editar un periodo abierto, y no al dar de alta', function () {
+        TermOpening::factory()->for($this->t1)->for($this->campus)->create();
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.terms')
+            ->call('edit', $this->t1->id)
+            ->assertSee('data-testid="term-code-locked"', false)
+            ->assertSee('El código ya no se puede cambiar: el periodo se abrió en C1.')
+            ->call('edit', $this->t2->id)
+            ->assertDontSee('data-testid="term-code-locked"', false)
+            ->call('create')
+            ->assertDontSee('data-testid="term-code-locked"', false);
+    });
 
     it('busca por código o nombre', function () {
         Livewire::actingAs($this->admin)

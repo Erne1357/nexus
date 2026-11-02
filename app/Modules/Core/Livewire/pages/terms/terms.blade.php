@@ -55,6 +55,10 @@
                 <span class="tabular-nums">{{ $term->ends_on->format('d/m/Y') }}</span>
             @endscope
 
+            @scope('cell_opened_in', $term)
+                @include('core::terms.opened-in', ['term' => $term])
+            @endscope
+
             @scope('cell_is_current', $term)
                 @if ($term->is_current)
                     <x-core::status-badge tone="success" label="Actual" />
@@ -83,6 +87,10 @@
                     </div>
 
                     <div class="text-neutral">{{ $term->starts_on->format('d/m/Y') }} al {{ $term->ends_on->format('d/m/Y') }}</div>
+
+                    @if ($term->opened_campus_codes !== [])
+                        <div class="flex items-center gap-1.5 text-neutral">Abierto en @include('core::terms.opened-in', ['term' => $term])</div>
+                    @endif
 
                     @include('core::terms.row-actions', ['term' => $term, 'inTable' => false])
                 </li>
