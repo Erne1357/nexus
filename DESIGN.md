@@ -247,7 +247,7 @@ El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados
 | Retícula del alumno | Ficha del alumno; propuesta del coordinador (fase 2) | **Decidido (tarea 1.6):** ver "Retícula del alumno", abajo |
 | Editor de retícula del plan | Retícula de cada plan de estudios (Académico › Planes de estudio) | **Decidido (tarea 1.8):** variante A, columnas por semestre y panel lateral; ver "Retícula del plan (editor)", abajo |
 | Inicio por rol | Inicio | Palabra gigante y mosaicos vivos (por diseñar) |
-| Checklist con contadores | Validación de catálogos | Cómo mostrar diferencias contra el periodo anterior |
+| Checklist con contadores | Validación de catálogos | **Decidido por el usuario el 2 de noviembre de 2026:** variante C, tablero de tarjetas: una tarjeta de avance («N de 5 validados») y una por catálogo, con altas y bajas contra la foto anterior o «Primer periodo en Nexus»; toda la tarjeta abre la lista del catálogo (`?catalogo=`), que sigue la anatomía de catálogo y edita en un drawer, en [`review.blade.php`](app/Modules/CatalogValidation/Livewire/pages/review/review.blade.php) |
 | Cuadrícula día x hora | Disponibilidad docente; editor de horarios y vista por salón (fase 3) | **Decidido por el usuario el 30 de octubre de 2026 (tarea 1.12) para la disponibilidad:** variante A, herramienta y pintar; ver "Cuadrícula día x hora", abajo. Los colores por carrera o por estado del editor de horarios, por decidir |
 | Ranking con desglose | Asignación docente | Cómo presentar el desglose sin exponer evaluaciones a quien no debe |
 | Tablero de estado | Choques, avance de validación, carga por docente | Jerarquía visual de duro vs blando |
