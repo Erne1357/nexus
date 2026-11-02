@@ -64,6 +64,14 @@ it('el jefe corrige los salones solo si el perfil del campus de la revisión lo 
         ->and(reviewAbilitiesOf($jefe, $this->roomsC2))->toBe(reviewAbilities(true, false, true, true, true, true));
 });
 
+it('niega corregir salones en un campus sin salones aunque el perfil deje corregirlos', function () {
+    $campus = Campus::factory()->create(['code' => 'XX', 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false, 'heads_edit_rooms' => true]]);
+    $review = CatalogReview::factory()->rooms($campus)->create(['department_id' => departmentKey(10)]);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
+
+    expect($jefe->can('correct', $review))->toBeFalse();
+});
+
 it('niega los salones de un campus desactivado al jefe y a Subdirección', function (Role $role, array $scope) {
     $this->c1->update(['is_active' => false]);
     $user = User::factory()->withRole($role, $scope)->create();

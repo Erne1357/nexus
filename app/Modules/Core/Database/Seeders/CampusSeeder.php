@@ -19,8 +19,8 @@ use Illuminate\Database\Seeder;
  * - C1: los jefes corrigen sus salones al validar los catálogos (CV2, confirmado el 2 de noviembre de 2026).
  *   En los demás campus no, mientras se confirma (CV-S5, supuesto por confirmar).
  *
- * Solo crea los campus que faltan (también entre los borrados): volver a sembrar no pisa un
- * perfil ya editado.
+ * Crea los campus que faltan (también entre los borrados). A uno existente solo le agrega las claves del
+ * perfil que no tiene en `settings`: volver a sembrar no pisa un perfil ya editado.
  */
 class CampusSeeder extends Seeder
 {
@@ -38,12 +38,22 @@ class CampusSeeder extends Seeder
     public function run(): void
     {
         foreach (self::CAMPUSES as $campus) {
-            Campus::withTrashed()->firstOrCreate(['code' => $campus['code']], [
+            $profile = CampusProfile::fromArray($campus['profile'])->toArray();
+
+            $record = Campus::withTrashed()->firstOrCreate(['code' => $campus['code']], [
                 'name' => $campus['name'],
                 'modality' => $campus['modality'],
-                'settings' => CampusProfile::fromArray($campus['profile'])->toArray(),
+                'settings' => $profile,
                 'is_active' => $campus['is_active'],
             ]);
+
+            if (! $record->wasRecentlyCreated) {
+                $missing = array_diff_key($profile, $record->settings ?? []);
+
+                if ($missing !== []) {
+                    $record->forceFill(['settings' => [...($record->settings ?? []), ...$missing]])->save();
+                }
+            }
         }
     }
 }

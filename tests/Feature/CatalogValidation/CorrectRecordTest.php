@@ -86,13 +86,12 @@ it('CV1: corrige un plan sin cambiar su clave ni su carrera', function () {
     $career = Career::factory()->create(['department_id' => $this->department->id]);
     $plan = StudyPlan::factory()->for($career)->create(['code' => 'ISIC-2010']);
 
-    cvCorrect($review, $plan, ['code' => 'OTRA', 'career_id' => Career::factory()->create(['department_id' => $this->department->id])->id, 'name' => 'Plan 2010', 'is_active' => false]);
+    cvCorrect($review, $plan, ['code' => 'OTRA', 'career_id' => Career::factory()->create(['department_id' => $this->department->id])->id, 'name' => 'Plan 2010']);
 
     expect($plan->fresh())
         ->code->toBe('ISIC-2010')
         ->career_id->toBe($career->id)
-        ->name->toBe('Plan 2010')
-        ->is_active->toBeFalse();
+        ->name->toBe('Plan 2010');
 });
 
 it('CV2: corrige un salón del campus de la revisión sin cambiar su clave, su dueño ni su edificio', function () {
@@ -124,6 +123,27 @@ it('sin cambios no escribe ni pasa la revisión a en revisión', function () {
 
     expect($review->fresh()->status)->toBe(ReviewStatus::Pending)
         ->and(Activity::count())->toBe(0);
+});
+
+it('CV-S3: el jefe no activa ni desactiva carreras ni planes; lo resuelve el admin', function () {
+    $career = Career::factory()->create(['department_id' => $this->department->id]);
+    $plan = StudyPlan::factory()->for($career)->create();
+
+    cvCorrect(cvReviewOf(Catalog::Careers), $career, ['name' => 'Otra', 'is_active' => false]);
+    cvCorrect(cvReviewOf(Catalog::StudyPlans), $plan, ['name' => 'Otro plan', 'is_active' => false]);
+
+    expect($career->fresh())->name->toBe('Otra')->is_active->toBeTrue()
+        ->and($plan->fresh())->name->toBe('Otro plan')->is_active->toBeTrue();
+});
+
+it('un modelo que ya se guardó antes en la petición y una corrección sin cambios no pasan la revisión a en revisión', function () {
+    $review = cvReviewOf(Catalog::Careers);
+    $career = Career::factory()->create(['department_id' => $this->department->id]);
+    $career->update(['name' => 'Cambiada antes']);
+
+    cvCorrect($review, $career, ['name' => 'Cambiada antes']);
+
+    expect($review->fresh()->status)->toBe(ReviewStatus::Pending);
 });
 
 it('rechaza un registro que no es de la revisión', function (Closure $record) {

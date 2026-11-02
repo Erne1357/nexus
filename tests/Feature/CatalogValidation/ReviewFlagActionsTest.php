@@ -106,7 +106,7 @@ describe('ResolveFlag', function () {
     it('la marca resuelta con quién y cuándo, con bitácora y aviso', function () {
         Event::fake([CatalogReviewFlagResolved::class]);
 
-        app(ResolveFlag::class)->handle($this->flag, $this->actor);
+        app(ResolveFlag::class)->handle($this->review, $this->flag, $this->actor);
 
         $entry = Activity::sole();
         expect($this->flag->fresh())
@@ -122,20 +122,27 @@ describe('ResolveFlag', function () {
 
     it('es idempotente: una ya resuelta no cambia ni deja otra entrada', function () {
         $first = User::factory()->create();
-        app(ResolveFlag::class)->handle($this->flag, $first);
+        app(ResolveFlag::class)->handle($this->review, $this->flag, $first);
         Event::fake([CatalogReviewFlagResolved::class]);
 
-        app(ResolveFlag::class)->handle($this->flag->fresh(), $this->actor);
+        app(ResolveFlag::class)->handle($this->review, $this->flag->fresh(), $this->actor);
 
         expect($this->flag->fresh()->resolved_by)->toBe($first->id)
             ->and(Activity::count())->toBe(1);
         Event::assertNotDispatched(CatalogReviewFlagResolved::class);
     });
 
+    it('rechaza una observación que no es de la revisión que se pasa', function () {
+        $other = CatalogReview::factory()->general(Catalog::Careers)->create(['department_id' => $this->review->department_id]);
+
+        expect(fn () => app(ResolveFlag::class)->handle($other, $this->flag, $this->actor))->toThrow(ValidationException::class)
+            ->and($this->flag->fresh()->resolved_at)->toBeNull();
+    });
+
     it('se resuelve aunque la revisión ya esté validada', function () {
         $this->review->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->actor->id, 'validated_at' => now()]);
 
-        app(ResolveFlag::class)->handle($this->flag, $this->actor);
+        app(ResolveFlag::class)->handle($this->review, $this->flag, $this->actor);
 
         expect($this->flag->fresh()->resolved_at)->not->toBeNull();
     });
