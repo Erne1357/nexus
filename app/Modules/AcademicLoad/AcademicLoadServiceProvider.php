@@ -3,14 +3,22 @@
 namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
+use App\Modules\AcademicLoad\Events\CareerProposalReturned;
+use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
 use App\Modules\AcademicLoad\Listeners\BlockReviewReopeningAfterDraft;
 use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
+use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
+use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
+use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -33,5 +41,20 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(DepartmentDeleting::class, BlockDepartmentDeletionWithLoads::class);
         Event::listen(CatalogReviewReopening::class, BlockReviewReopeningAfterDraft::class);
         Event::listen(LoadStatusesRequested::class, ReportLoadStatuses::class);
+        Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
+        Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
+    }
+
+    /**
+     * @return list<NavigationItem>
+     */
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::Academico,
+                visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador) || $context->has(Role::Subdireccion)),
+            new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico,
+                visible: static fn (ScopedContext $context): bool => $context->has(Role::JefeDepartamento) || $context->has(Role::JefeProyectoDocente) || $context->has(Role::Subdireccion)),
+        ];
     }
 }
