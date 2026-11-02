@@ -92,9 +92,9 @@ describe('admin y subdirección', function () {
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('edit')
             ->assertSet('showModal', true)
-            ->assertSet('code', '20271')
-            ->assertSet('starts_on', '2027-01-25')
-            ->set('name', 'Primavera 2027')
+            ->assertSet('form.code', '20271')
+            ->assertSet('form.starts_on', '2027-01-25')
+            ->set('form.name', 'Primavera 2027')
             ->call('save')
             ->assertHasNoErrors()
             ->assertSet('showModal', false)
@@ -108,16 +108,16 @@ describe('admin y subdirección', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('edit')
-            ->set('name', '')
-            ->set('code', '2027')
+            ->set('form.name', '')
+            ->set('form.code', '2027')
             ->call('save')
-            ->assertHasErrors(['name' => 'required'])
+            ->assertHasErrors(['form.name' => 'required'])
             ->assertSee('El campo nombre es obligatorio.')
-            ->set('name', 'X')
+            ->set('form.name', 'X')
             ->call('save')
-            ->assertHasErrors('code')
+            ->assertHasErrors('form.code')
             ->assertSee('El código lleva el año y el periodo')
-            ->set('code', '20263')
+            ->set('form.code', '20263')
             ->call('save')
             ->assertSee('Ya existe un periodo con el código 20263.');
     });
@@ -400,7 +400,7 @@ describe('otros roles e invitados', function () {
         $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id]);
 
         match ($method) {
-            'save' => $page->call('edit')->set('name', 'Otro'),
+            'save' => $page->call('edit')->set('form.name', 'Otro'),
             'saveStage' => $page->call('editStage', 'staffing')->set('general.starts_on', '2026-11-24')->set('general.ends_on', '2026-12-04'),
             'removeCampusWindow' => $page->call('editStage', 'staffing')->call('addCampusWindow', $this->c2->id),
             default => null,
@@ -426,7 +426,7 @@ describe('otros roles e invitados', function () {
         $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id])->call('edit');
 
         $this->actingAs($user);
-        $page->set('code', '20272')->assertForbidden();
+        $page->set('form.code', '20272')->assertForbidden();
 
         expect($this->term->fresh()->code)->toBe('20271');
     });

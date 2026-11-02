@@ -4,6 +4,7 @@ use App\Modules\Core\Actions\MakeTermCurrent;
 use App\Modules\Core\Actions\SaveStageWindows;
 use App\Modules\Core\Actions\UpdateTerm;
 use App\Modules\Core\Enums\Stage;
+use App\Modules\Core\Livewire\Forms\TermForm;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\CampusQuery;
@@ -41,17 +42,7 @@ new #[Title('Ficha del periodo')] class extends Component
 
     public bool $showModal = false;
 
-    /** El último nombre que sugirió el código: mientras el nombre sea ese (o esté vacío) se vuelve a sugerir. */
-    #[Locked]
-    public string $suggestedName = '';
-
-    public string $code = '';
-
-    public string $name = '';
-
-    public string $starts_on = '';
-
-    public string $ends_on = '';
+    public TermForm $form;
 
     /** `showDrawer` no puede ser #[Locked]: el x-drawer lo cierra desde el navegador. */
     public bool $showDrawer = false;
@@ -109,17 +100,11 @@ new #[Title('Ficha del periodo')] class extends Component
     /**
      * Sugiere el nombre del periodo con el código, si el usuario no escribió uno propio.
      */
-    public function updatedCode(string $value, TermQuery $terms, TermRules $rules): void
+    public function updatedFormCode(string $value, TermQuery $terms, TermRules $rules): void
     {
         $this->authorize('update', $terms->findOrFail($this->termId));
 
-        $suggestion = $rules->suggestedName($value);
-
-        if ($suggestion !== null && ($this->name === '' || $this->name === $this->suggestedName)) {
-            $this->name = $suggestion;
-        }
-
-        $this->suggestedName = $suggestion ?? $this->suggestedName;
+        $this->form->suggestName($value, $rules);
     }
 
     public function edit(TermQuery $terms, TermRules $rules): void
@@ -128,11 +113,7 @@ new #[Title('Ficha del periodo')] class extends Component
         $this->authorize('update', $term);
 
         $this->resetValidation();
-        $this->code = $term->code;
-        $this->name = $term->name;
-        $this->starts_on = $term->starts_on->toDateString();
-        $this->ends_on = $term->ends_on->toDateString();
-        $this->suggestedName = $rules->suggestedName($term->code) ?? '';
+        $this->form->fillFrom($term, $rules);
         $this->showModal = true;
     }
 
@@ -141,12 +122,7 @@ new #[Title('Ficha del periodo')] class extends Component
         $term = $terms->findOrFail($this->termId);
         $this->authorize('update', $term);
 
-        $term = $updateTerm->handle($term, $this->validate([
-            'code' => ['required', 'string', 'max:255'],
-            'name' => ['required', 'string', 'max:255'],
-            'starts_on' => ['required', 'date'],
-            'ends_on' => ['required', 'date'],
-        ]));
+        $term = $this->form->submit(fn (array $data): Term => $updateTerm->handle($term, $data));
 
         $this->showModal = false;
         $this->success('Periodo actualizado', $this->describe($term));
@@ -286,10 +262,6 @@ new #[Title('Ficha del periodo')] class extends Component
     protected function validationAttributes(): array
     {
         return [
-            'code' => 'código',
-            'name' => 'nombre',
-            'starts_on' => 'inicio',
-            'ends_on' => 'fin',
             'general.starts_on' => 'inicio',
             'general.ends_on' => 'fin',
             'own.*.starts_on' => 'inicio',
@@ -303,8 +275,6 @@ new #[Title('Ficha del periodo')] class extends Component
     protected function messages(): array
     {
         return [
-            'starts_on.date' => 'El campo :attribute debe ser una fecha válida.',
-            'ends_on.date' => 'El campo :attribute debe ser una fecha válida.',
             'general.starts_on.date_format' => 'El campo :attribute debe ser una fecha válida.',
             'general.ends_on.date_format' => 'El campo :attribute debe ser una fecha válida.',
             'own.*.starts_on.date_format' => 'El campo :attribute debe ser una fecha válida.',

@@ -65,9 +65,9 @@ describe('admin y subdirección', function () {
             ->test('core::pages.terms')
             ->call('create')
             ->assertSet('showModal', true)
-            ->set('code', '20272')
-            ->set('starts_on', '2027-06-21')
-            ->set('ends_on', '2027-07-30')
+            ->set('form.code', '20272')
+            ->set('form.starts_on', '2027-06-21')
+            ->set('form.ends_on', '2027-07-30')
             ->call('save')
             ->assertHasNoErrors()
             ->assertSet('showModal', false);
@@ -82,15 +82,15 @@ describe('admin y subdirección', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.terms')
             ->call('create')
-            ->set('code', '20271x')
-            ->assertSet('name', '')
-            ->set('code', '20273')
-            ->assertSet('name', 'Ago-Dic 2027')
-            ->set('code', '20281')
-            ->assertSet('name', 'Ene-Jun 2028')
-            ->set('name', 'Mi nombre')
-            ->set('code', '20282')
-            ->assertSet('name', 'Mi nombre');
+            ->set('form.code', '20271x')
+            ->assertSet('form.name', '')
+            ->set('form.code', '20273')
+            ->assertSet('form.name', 'Ago-Dic 2027')
+            ->set('form.code', '20281')
+            ->assertSet('form.name', 'Ene-Jun 2028')
+            ->set('form.name', 'Mi nombre')
+            ->set('form.code', '20282')
+            ->assertSet('form.name', 'Mi nombre');
     });
 
     it('edita un periodo', function () {
@@ -98,9 +98,9 @@ describe('admin y subdirección', function () {
             ->test('core::pages.terms')
             ->call('edit', $this->t2->id)
             ->assertSet('showModal', true)
-            ->assertSet('code', '20263')
-            ->assertSet('starts_on', '2026-08-17')
-            ->set('name', 'Otoño 2026')
+            ->assertSet('form.code', '20263')
+            ->assertSet('form.starts_on', '2026-08-17')
+            ->set('form.name', 'Otoño 2026')
             ->call('save')
             ->assertHasNoErrors()
             ->assertSet('showModal', false);
@@ -130,9 +130,9 @@ describe('admin y subdirección', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.terms')
             ->call('create')
-            ->set('starts_on', 'mañana')
+            ->set('form.starts_on', 'mañana')
             ->call('save')
-            ->assertHasErrors(['code' => 'required', 'name' => 'required', 'starts_on' => 'date', 'ends_on' => 'required'])
+            ->assertHasErrors(['form.code' => 'required', 'form.name' => 'required', 'form.starts_on' => 'date_format', 'form.ends_on' => 'required'])
             ->assertSee('El campo código es obligatorio.')
             ->assertSee('El campo nombre es obligatorio.')
             ->assertSee('El campo inicio debe ser una fecha válida.')
@@ -146,23 +146,23 @@ describe('admin y subdirección', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.terms')
             ->call('create')
-            ->set('code', '2027')
-            ->set('name', 'X')
-            ->set('starts_on', '2027-06-21')
-            ->set('ends_on', '2027-07-30')
+            ->set('form.code', '2027')
+            ->set('form.name', 'X')
+            ->set('form.starts_on', '2027-06-21')
+            ->set('form.ends_on', '2027-07-30')
             ->call('save')
-            ->assertHasErrors('code')
+            ->assertHasErrors('form.code')
             ->assertSee('El código lleva el año y el periodo');
 
-        $page->set('code', '20271')
+        $page->set('form.code', '20271')
             ->call('save')
-            ->assertHasErrors('code')
+            ->assertHasErrors('form.code')
             ->assertSee('Ya existe un periodo con el código 20271.');
 
-        $page->set('code', '20272')
-            ->set('ends_on', '2027-06-01')
+        $page->set('form.code', '20272')
+            ->set('form.ends_on', '2027-06-01')
             ->call('save')
-            ->assertHasErrors('ends_on')
+            ->assertHasErrors('form.ends_on')
             ->assertSee('La fecha de fin no puede ser anterior a la de inicio.');
 
         expect(Term::count())->toBe(2);
@@ -188,9 +188,9 @@ describe('otros roles e invitados', function () {
         $page = Livewire::actingAs($this->admin)->test('core::pages.terms');
 
         if ($editFirst) {
-            $page->call('edit', $this->t2->id)->set('name', 'Otro');
+            $page->call('edit', $this->t2->id)->set('form.name', 'Otro');
         } elseif ($method === 'save') {
-            $page->call('create')->set('code', '20272')->set('name', 'Verano')->set('starts_on', '2027-06-21')->set('ends_on', '2027-07-30');
+            $page->call('create')->set('form.code', '20272')->set('form.name', 'Verano')->set('form.starts_on', '2027-06-21')->set('form.ends_on', '2027-07-30');
         }
 
         $this->actingAs($user);
@@ -206,6 +206,15 @@ describe('otros roles e invitados', function () {
         'guardar un alta' => ['save', false],
         'guardar una edición' => ['save', true],
     ]);
+
+    it('no pueden sugerir el nombre con el código aunque la página la abriera el admin', function (bool $editing) {
+        $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
+        $page = Livewire::actingAs($this->admin)->test('core::pages.terms');
+        $editing ? $page->call('edit', $this->t2->id) : $page->call('create');
+
+        $this->actingAs($user);
+        $page->set('form.code', '20272')->assertForbidden();
+    })->with([false, true]);
 
     it('un invitado va al login', function () {
         $this->get(route('core.terms'))->assertRedirect('/login');
