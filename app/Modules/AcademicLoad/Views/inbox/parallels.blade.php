@@ -24,16 +24,16 @@
                     <th scope="col">Carrera</th>
                     <th scope="col" class="text-right">Piden</th>
                     <th scope="col" class="text-right">Completos</th>
-                    <th scope="col" class="text-right">Al mixto</th>
+                    <th scope="col" class="text-right">Al mixto (alumnos)</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($parallels->careers as $code => $career)
-                    <tr>
-                        <th scope="row" class="font-mono text-[15px] font-semibold">{{ $code }}</th>
-                        <td class="text-right font-mono tabular-nums">{{ $career['requested'] }}</td>
-                        <td class="text-right font-mono tabular-nums">{{ $career['full'] }}</td>
-                        <td class="text-right font-mono tabular-nums">{{ $career['remainder'] }}</td>
+                    <tr @class(['bg-base-200 font-semibold' => $code === ($selected['career']->code ?? null)]) data-current="{{ $code === ($selected['career']->code ?? null) ? 'true' : 'false' }}">
+                        <th scope="row" class="font-mono text-[15px] font-semibold">{{ $code }}@if ($code === ($selected['career']->code ?? null)) <span class="font-sans text-sm font-normal text-base-content">(elegida)</span>@endif</th>
+                        <td class="text-right font-mono tabular-nums text-base-content">{{ $career['requested'] }}</td>
+                        <td class="text-right font-mono tabular-nums text-base-content">{{ $career['full'] }}</td>
+                        <td class="text-right font-mono tabular-nums text-base-content">{{ $career['remainder'] }}</td>
                     </tr>
                 @endforeach
             </tbody>

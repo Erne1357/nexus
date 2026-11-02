@@ -33,6 +33,12 @@ function signInToShell()
         ->assertScript('window.Alpine?.$data(document.body).menuOpen === false');
 }
 
+it('cada página llega con su propia sesión: lo que otra dejó pendiente no la manda a otro lado al entrar', function () {
+    visit('/imports')->assertPathIs('/login');
+
+    signInToShell()->assertNoJavaScriptErrors();
+});
+
 it('la liebre abre el menú con el cursor en el buscador; buscar filtra y Esc lo cierra', function () {
     $page = signInToShell()
         ->assertVisible('a[data-label="Campus"]')
