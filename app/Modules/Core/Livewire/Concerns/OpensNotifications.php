@@ -4,6 +4,7 @@ namespace App\Modules\Core\Livewire\Concerns;
 
 use App\Modules\Core\Actions\MarkAllNotificationsRead;
 use App\Modules\Core\Actions\OpenNotification;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Livewire\Attributes\On;
@@ -48,9 +49,20 @@ trait OpensNotifications
         $user = $context->user();
 
         if ($user !== null) {
-            $markAllNotificationsRead->handle($user);
+            $markAllNotificationsRead->handle($user, $this->classesToMarkRead($user));
             $this->dispatch('notifications-changed');
         }
+    }
+
+    /**
+     * Los tipos de aviso que marca «Marcar todas como leídas»: vacío, todos (la campana). La página lo acota al
+     * tipo que filtra.
+     *
+     * @return list<string>
+     */
+    protected function classesToMarkRead(User $user): array
+    {
+        return [];
     }
 
     /**

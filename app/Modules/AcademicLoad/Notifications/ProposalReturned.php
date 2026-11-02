@@ -21,6 +21,11 @@ use Illuminate\Support\Str;
  */
 final class ProposalReturned extends NexusNotification
 {
+    public static function typeKey(): string
+    {
+        return 'proposal-returned';
+    }
+
     public static function typeLabel(): string
     {
         return 'Propuesta regresada';

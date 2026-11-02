@@ -1,5 +1,6 @@
 <?php
 
+use AlphaNs\SameName;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
@@ -262,4 +263,92 @@ it('la lista de la página tiene un ancho legible', function () {
     Livewire::actingAs(User::factory()->create())->test('core::pages.notifications')
         ->assertSeeHtml('data-testid="notifications-list"')
         ->assertSeeHtml('max-w-3xl');
+});
+
+it('los contadores cuentan solo el tipo elegido', function () {
+    $ana = User::factory()->create();
+    $ana->notify(new PageNotice('Uno'));
+    $ana->notify(new PageNotice('Uno bis'));
+    $ana->notify(new OtherPageNotice('Dos'));
+    $ana->notifications()->where('data->title', 'Uno')->first()->markAsRead();
+
+    $component = Livewire::actingAs($ana)->withQueryParams(['tipo' => 'page-notice'])->test('core::pages.notifications');
+
+    expect($component->viewData('total'))->toBe(2)
+        ->and($component->viewData('unread'))->toBe(1);
+});
+
+it('con un tipo elegido, marcar todas como leídas solo marca ese tipo y se deshabilita si no hay sin leer', function () {
+    $ana = User::factory()->create();
+    $ana->notify(new PageNotice('Uno'));
+    $ana->notify(new OtherPageNotice('Dos'));
+
+    Livewire::actingAs($ana)->withQueryParams(['tipo' => 'page-notice'])->test('core::pages.notifications')
+        ->call('markAllRead')
+        ->assertSeeHtml('data-testid="mark-all-read"')
+        ->assertSeeHtmlInOrder(['data-testid="mark-all-read"', 'disabled']);
+
+    expect($ana->unreadNotifications()->count())->toBe(1)
+        ->and($ana->unreadNotifications()->first()->data['title'])->toBe('Dos');
+});
+
+it('las claves de tipo son únicas aunque dos clases compartan el nombre corto', function () {
+    eval('namespace AlphaNs; final class SameName extends \\App\\Modules\\Core\\Notifications\\NexusNotification { public function message(object $n): \\App\\Modules\\Core\\Notifications\\NotificationMessage { return new \\App\\Modules\\Core\\Notifications\\NotificationMessage(title: "A", body: "b", icon: "o-bell", route: "home"); } }');
+    eval('namespace BetaNs; final class SameName extends \\App\\Modules\\Core\\Notifications\\NexusNotification { public function message(object $n): \\App\\Modules\\Core\\Notifications\\NotificationMessage { return new \\App\\Modules\\Core\\Notifications\\NotificationMessage(title: "B", body: "b", icon: "o-bell", route: "home"); } }');
+
+    $ana = User::factory()->create();
+    $ana->notify(new SameName);
+    $ana->notify(new BetaNs\SameName);
+
+    expect(SameName::typeKey())->not->toBe(BetaNs\SameName::typeKey());
+
+    Livewire::actingAs($ana)->withQueryParams(['tipo' => SameName::typeKey()])->test('core::pages.notifications')
+        ->assertSee('A')
+        ->assertViewHas('total', 1);
+});
+
+it('un tipo que ya no existe se normaliza también al pintar', function () {
+    $ana = User::factory()->create();
+    $ana->notify(new PageNotice('Uno'));
+
+    $component = Livewire::actingAs($ana)->withQueryParams(['tipo' => 'page-notice'])->test('core::pages.notifications');
+    $ana->notifications()->delete();
+    $ana->notify(new OtherPageNotice('Dos'));
+
+    $component->call('$refresh')->assertSet('type', '')->assertSee('Dos');
+});
+
+it('«Esta semana» empieza en lunes sin importar el locale de Carbon', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-04 12:00', 'America/Ciudad_Juarez'));
+    $ana = User::factory()->create();
+    $ana->notify(new PageNotice('Domingo'));
+    $ana->notifications()->update(['created_at' => CarbonImmutable::parse('2026-11-01 09:00', 'America/Ciudad_Juarez')]);
+
+    $previous = CarbonImmutable::getLocale();
+    CarbonImmutable::setLocale('en_US');
+
+    try {
+        Livewire::actingAs($ana)->test('core::pages.notifications')
+            ->assertSeeHtml('data-testid="group-antes"')
+            ->assertDontSeeHtml('data-testid="group-semana"');
+    } finally {
+        CarbonImmutable::setLocale($previous);
+    }
+});
+
+it('un aviso de la noche del día anterior en UTC sigue siendo de hoy en Ciudad Juárez', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-05 03:00', 'UTC'));
+    $ana = User::factory()->create();
+    $ana->notify(new PageNotice('De la tarde'));
+    $ana->notifications()->update(['created_at' => CarbonImmutable::parse('2026-11-05 02:00', 'UTC')]);
+
+    Livewire::actingAs($ana)->test('core::pages.notifications')->assertSeeHtml('data-testid="group-hoy"');
+});
+
+it('cada grupo y cada renglón conservan su separador', function () {
+    $ana = User::factory()->create();
+    $ana->notify(new PageNotice('Uno'));
+
+    Livewire::actingAs($ana)->test('core::pages.notifications')
+        ->assertSeeHtml('class="border-b border-base-300 last:border-b-0" data-testid="group-hoy"');
 });

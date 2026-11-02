@@ -5,7 +5,7 @@
     el usuario trabaja en más de uno). Cada grupo lleva un encabezado de 11.5 px en mayúsculas, como los de tabla.
 --}}
 @foreach (collect($rows)->groupBy('group') as $group => $groupRows)
-    <li wire:key="notification-group-{{ $group }}" data-testid="group-{{ $group }}">
+    <li wire:key="notification-group-{{ $group }}" class="border-b border-base-300 last:border-b-0" data-testid="group-{{ $group }}">
         <h3 class="border-b border-base-300 bg-base-200 px-4 py-1.5 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $groupRows->first()['group_label'] }}</h3>
 
         <ul role="list">

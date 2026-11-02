@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Livewire\Concerns\OpensNotifications;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\NotificationQuery;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -28,10 +29,9 @@ new #[Title('Notificaciones')] class extends Component
     #[Url(as: 'tipo', except: '')]
     public string $type = '';
 
-    public function mount(NotificationQuery $notifications, ScopedContext $context): void
+    public function mount(): void
     {
         $this->normalizeFilter();
-        $this->normalizeType($notifications, $context);
     }
 
     public function updatedFilter(): void
@@ -40,9 +40,8 @@ new #[Title('Notificaciones')] class extends Component
         $this->resetPage();
     }
 
-    public function updatedType(NotificationQuery $notifications, ScopedContext $context): void
+    public function updatedType(): void
     {
-        $this->normalizeType($notifications, $context);
         $this->resetPage();
     }
 
@@ -58,22 +57,41 @@ new #[Title('Notificaciones')] class extends Component
             return ['items' => new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE), 'unread' => 0, 'total' => 0, 'onlyUnread' => $onlyUnread, 'types' => [], 'showCampus' => false];
         }
 
+        // Los tipos se calculan una vez por pintado. Un `?tipo=` que ya no es de ninguno de sus avisos (o que
+        // se tecleó a mano) vuelve a todos.
+        $typeMap = $notifications->typeMap($user);
+
+        if ($this->type !== '' && ! array_key_exists($this->type, $typeMap)) {
+            $this->type = '';
+        }
+
+        $classes = $this->type === '' ? [] : $typeMap[$this->type]['classes'];
         $showCampus = $context->campuses()->count() > 1;
-        $items = $notifications->paginated($user, $onlyUnread, type: $this->type, withCampus: $showCampus);
+        $items = $notifications->paginated($user, $onlyUnread, classes: $classes, withCampus: $showCampus);
 
         // Al leer avisos con el filtro «Sin leer», la página en curso puede quedar después de la última.
         if ($items->currentPage() > max(1, $items->lastPage())) {
             $this->setPage($items->lastPage());
-            $items = $notifications->paginated($user, $onlyUnread, type: $this->type, withCampus: $showCampus);
+            $items = $notifications->paginated($user, $onlyUnread, classes: $classes, withCampus: $showCampus);
         }
 
         return [
             'items' => $items,
-            ...$notifications->counts($user),
+            ...$notifications->counts($user, $classes),
             'onlyUnread' => $onlyUnread,
-            'types' => collect($notifications->types($user))->map(fn (string $label, string $key): array => ['id' => $key, 'name' => $label])->values()->all(),
+            'types' => collect($typeMap)->map(fn (array $type, string $key): array => ['id' => $key, 'name' => $type['label']])->values()->all(),
             'showCampus' => $showCampus,
         ];
+    }
+
+    /**
+     * Con un tipo elegido, «Marcar todas como leídas» marca solo ese tipo.
+     *
+     * @return list<string>
+     */
+    protected function classesToMarkRead(User $user): array
+    {
+        return $this->type === '' ? [] : (app(NotificationQuery::class)->typeMap($user)[$this->type]['classes'] ?? []);
     }
 
     /**
@@ -83,18 +101,6 @@ new #[Title('Notificaciones')] class extends Component
     {
         if (! in_array($this->filter, ['todas', 'sin-leer'], true)) {
             $this->filter = 'todas';
-        }
-    }
-
-    /**
-     * Un `?tipo=` que no es de ninguno de sus avisos vuelve a todos.
-     */
-    private function normalizeType(NotificationQuery $notifications, ScopedContext $context): void
-    {
-        $user = $context->user();
-
-        if ($this->type !== '' && ($user === null || ! array_key_exists($this->type, $notifications->types($user)))) {
-            $this->type = '';
         }
     }
 };

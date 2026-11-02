@@ -32,6 +32,15 @@ abstract class NexusNotification extends Notification
     }
 
     /**
+     * La llave del tipo en la URL del filtro (`?tipo=`). Por omisión sale del nombre completo de la clase, así que
+     * dos clases con el mismo nombre corto en módulos distintos no chocan; una clase puede declarar una más corta.
+     */
+    public static function typeKey(): string
+    {
+        return Str::kebab(str_replace('\\', '', static::class));
+    }
+
+    /**
      * @return list<string>
      */
     public function via(object $notifiable): array

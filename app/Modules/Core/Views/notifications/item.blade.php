@@ -27,7 +27,7 @@
         @endunless
         <span @class(['block leading-[1.3] [overflow-wrap:anywhere]', 'font-bold' => ! $item['read'], 'font-medium' => $item['read']])>
             @if (($showCampus ?? false) && $item['campus'] !== null)
-                <span data-testid="notification-campus" class="me-1.5 font-mono text-[15px] font-semibold text-neutral">{{ $item['campus'] }}</span>
+                <span data-testid="notification-campus" class="me-1.5 font-mono text-sm font-semibold text-neutral">{{ $item['campus'] }}</span>
             @endif
             {{ $item['title'] }}
         </span>
