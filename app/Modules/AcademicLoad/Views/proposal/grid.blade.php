@@ -2,8 +2,8 @@
     La vista «Retícula» de la propuesta (maqueta C; mismas piezas y medidas que "Retícula del alumno" y "Retícula del
     plan (editor)" de DESIGN.md): semestres en columnas con los mosaicos de Core (core::semester-grid), uno por
     materia, y las bandas de especialidad del plan. Cada mosaico dice, de arriba abajo, su clave y el icono del estado
-    de la parte de su departamento, el nombre, «Eleg. N · Esp. N» (con el código del departamento solo si no es el
-    mayoritario de la carrera, `$majority`) y «Grupos N» en Mono de 15 px con el conteo de anomalías a la vista. Lo
+    de la parte de su departamento, el nombre, «Eleg. N · Esp. N» y, al pie, el código del departamento solo si no es el
+    mayoritario de la carrera (`$majority`), también en los regresados y aceptados, y «Grupos N» en Mono de 15 px con el conteo de anomalías a la vista. Lo
     pinta el estado de esa parte (`$parts`, en `data-tone`): regresada en error con su icono, aceptada con relleno
     tenue y candado (o palomita si toda la propuesta está bloqueada, `$generalLock`), pendiente neutra y sin grupos
     punteada. Con un departamento elegido (`data-focus` en el marco) las materias de los demás (`other`) van sin
@@ -63,9 +63,6 @@
                         :data-on-chain="$department !== '' && $code === $department ? '' : null"
                         :title="$title !== '' ? $title : null" data-opener data-testid="tile-{{ $item->subject->code }}" data-part="{{ $part }}" data-tone="{{ $tone }}">
                         <x-slot:icon>
-                            @if ($code !== $majority && ! in_array($part, ['returned', 'accepted'], true))
-                                <span class="font-mono text-xs font-normal" data-testid="dept-{{ $item->subject->code }}" title="{{ $item->subject->department->name }}">{{ $code }}</span>
-                            @endif
                             @if ($part === 'returned')
                                 <x-icon name="o-arrow-uturn-left" class="w-4 h-4 shrink-0" aria-hidden="true" />
                                 <span class="sr-only">Regresada por {{ $code }}</span>
@@ -82,6 +79,9 @@
                         <x-slot:requisites class="flex items-baseline" data-testid="figures-{{ $item->subject->code }}" title="Elegibles {{ $item->eligible_students }} · Esperados {{ $item->expected_students }}"><span class="truncate"><span class="min-[1600px]:hidden">El.</span><span class="max-[1599px]:hidden">Eleg.</span> <span class="font-mono">{{ $item->eligible_students }}</span> · <span class="min-[1600px]:hidden">Es.</span><span class="max-[1599px]:hidden">Esp.</span> <span class="font-mono">{{ $item->expected_students }}</span></span></x-slot:requisites>
                         <x-slot:start><span data-testid="groups-{{ $item->subject->code }}"><span class="font-sans text-xs font-normal">Grupos</span> <span class="text-[15px] font-semibold">{{ $item->requested_groups }}</span></span></x-slot:start>
                         <x-slot:end>
+                            @if ($code !== $majority)
+                                <span class="font-normal" data-testid="dept-{{ $item->subject->code }}" title="{{ $item->subject->department->name }}">{{ $code }}</span>
+                            @endif
                             @if ($anomalies !== [])
                                 <span class="inline-flex items-center gap-0.5 font-semibold text-warning" data-testid="anomaly-{{ $item->subject->code }}">
                                     <x-icon name="o-exclamation-triangle" class="w-4 h-4" aria-hidden="true" />

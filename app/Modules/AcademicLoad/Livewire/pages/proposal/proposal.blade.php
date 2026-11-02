@@ -82,14 +82,16 @@
                     @php
                         $partCode = $part['department']->code;
                         $total = count($part['items']);
+                        $position = $returnedAt === null ? 0 : min($returnedAt, $total - 1);
                         $here = $department === $partCode && $returnedAt !== null && $total > 1;
-                        $text = $part['department']->name.' regresó su parte'.($part['comment'] ? ": “{$part['comment']}”" : '').' · '.$part['subjects'].' '.($part['subjects'] === 1 ? 'materia' : 'materias');
+                        $lead = $part['department']->name.' regresó su parte';
+                        $rest = ($part['comment'] ? ": “{$part['comment']}”" : '').' · '.$part['subjects'].' '.($part['subjects'] === 1 ? 'materia' : 'materias');
                     @endphp
                     <x-alert icon="o-arrow-uturn-left" class="alert-error alert-soft min-h-0 items-center gap-x-2 py-1.5 text-sm" wire:key="returned-{{ $partCode }}" data-testid="returned-{{ $partCode }}">
-                        <span class="min-w-0 md:truncate" title="{{ $text }}"><span class="font-semibold">{{ $part['department']->name }} regresó su parte</span>@if ($part['comment']): “{{ $part['comment'] }}”@endif · {{ $part['subjects'] }} {{ $part['subjects'] === 1 ? 'materia' : 'materias' }}</span>
+                        <span class="min-w-0 md:truncate" title="{{ $lead.$rest }}"><span class="font-semibold">{{ $lead }}</span>{{ $rest }}</span>
                         <x-slot:actions>
-                            <x-button :label="$here ? ($returnedAt + 1).' de '.$total.' ›' : 'Ver'" class="btn-xs btn-ghost" wire:click="showDepartment('{{ $partCode }}')"
-                                :aria-label="$here ? 'Ir a la siguiente materia regresada de '.$part['department']->name.': '.($returnedAt + 1).' de '.$total : 'Ver las materias de '.$part['department']->name" data-testid="see-{{ $partCode }}" />
+                            <x-button :label="$here ? ($position + 1).' de '.$total.' ›' : 'Ver'" class="btn-xs btn-ghost" wire:click="showDepartment('{{ $partCode }}')"
+                                :aria-label="$here ? 'Ir a la siguiente materia regresada de '.$part['department']->name.': '.($position + 1).' de '.$total : 'Ver las materias de '.$part['department']->name" data-testid="see-{{ $partCode }}" />
                         </x-slot:actions>
                     </x-alert>
                 @endforeach

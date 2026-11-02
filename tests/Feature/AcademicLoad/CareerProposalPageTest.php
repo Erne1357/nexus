@@ -723,4 +723,45 @@ describe('segunda crítica con volumen', function () {
     it('limita el ancho de la tabla', function () {
         proposalPageAs($this->coordinator, ['vista' => 'tabla'])->assertSeeHtml('data-table-width');
     });
+
+    it('«N de M ›» nunca pasa de M cuando la lista se achica', function () {
+        $page = proposalPageAs($this->coordinator)
+            ->call('showDepartment', 'SC')->call('showDepartment', 'SC')->call('showDepartment', 'SC')
+            ->assertSee('3 de 3');
+
+        $this->late->update(['requested_groups' => 0]);
+        $this->early->update(['requested_groups' => 0]);
+
+        $page->call('$refresh')->assertDontSee('3 de 1')->assertDontSee('3 de 2')->assertSet('returnedAt', null);
+    });
+
+    it('cambiar de vista o de departamento reinicia el recorrido de «Ver»', function () {
+        proposalPageAs($this->coordinator)->call('showDepartment', 'SC')->assertSet('returnedAt', 0)->call('setView', 'tabla')->assertSet('returnedAt', null);
+        proposalPageAs($this->coordinator)->call('showDepartment', 'SC')->call('pickDepartment', 'CB')->assertSet('returnedAt', null);
+    });
+
+    it('guardar bien una celda limpia los errores de toda la fila', function () {
+        proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+            ->call('saveCell', $this->networks->id, 'expected_students', '99999')
+            ->assertSeeHtml('data-testid="cell-error-SCD-1015-expected_students"')
+            ->call('saveCell', $this->networks->id, 'requested_groups', '2')
+            ->assertDontSeeHtml('data-testid="cell-error-SCD-1015-expected_students"');
+    });
+
+    it('el código del departamento minoritario se ve también en mosaicos regresados y aceptados', function () {
+        foreach ([['ACF-0902', 2], ['ACF-0903', 3], ['ACF-0904', 4]] as [$code, $semester]) {
+            proposalPageRow($this->proposal, $this->cb, $code, "Materia {$code}", $semester, 1, 30);
+        }
+        ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
+
+        $html = proposalPageAs($this->coordinator)->html();
+
+        expect($html)->toContain('data-testid="dept-SCD-1015"')->and(proposalPageTag($html, 'tile-SCD-1015'))->toContain('data-part="returned"');
+    });
+
+    it('en solo lectura la celda no lleva un label que apunte a un campo inexistente', function () {
+        $html = proposalPageAs($this->subdirection, ['carrera' => $this->career->id, 'vista' => 'tabla'])->html();
+
+        expect($html)->not->toContain('for="cell-'.$this->calculus->id.'-requested_groups"');
+    });
 });

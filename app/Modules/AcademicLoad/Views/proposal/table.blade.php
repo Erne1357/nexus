@@ -75,16 +75,19 @@
                                     $cell = "{$item->id}.{$field}";
                                     $cellError = $cellErrors[$cell] ?? null;
                                 @endphp
-                                <div class="group/cell relative flex flex-col gap-0.5 md:items-stretch" data-cell="{{ $cell }}">
-                                    <label for="cell-{{ $item->id }}-{{ $field }}" class="text-[11.5px] font-medium uppercase tracking-[0.09em] md:sr-only">{{ $label }}</label>
+                                <div class="group/cell flex flex-col gap-0.5 md:items-stretch" data-cell="{{ $cell }}">
                                     @if ($readonly)
+                                        <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] md:sr-only">{{ $label }}</span>
                                         <span class="font-mono text-sm tabular-nums md:text-right" data-readonly-cell="{{ $field }}">{{ $value }}</span>
                                     @else
-                                        <input type="text" id="cell-{{ $item->id }}-{{ $field }}" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $max) }}" autocomplete="off" value="{{ $value }}"
-                                            oninput="this.value = this.value.replace(/\D/g, '')" wire:change="saveCell('{{ $item->id }}', '{{ $field }}', $event.target.value)"
-                                            aria-label="{{ $label }} de {{ $item->subject->code }}" @if ($cellError) aria-invalid="true" aria-describedby="cell-error-{{ $item->id }}-{{ $field }}" @endif
-                                            @class(['input input-sm w-full text-right font-mono text-sm tabular-nums group-data-[saved]/cell:input-success', 'input-error' => $cellError]) data-field="{{ $field }}" />
-                                        <x-icon name="o-check" class="pointer-events-none absolute start-2 top-1.5 hidden h-4 w-4 text-success group-data-[saved]/cell:block md:top-1.5" aria-hidden="true" />
+                                        <label for="cell-{{ $item->id }}-{{ $field }}" class="text-[11.5px] font-medium uppercase tracking-[0.09em] md:sr-only">{{ $label }}</label>
+                                        <div class="relative">
+                                            <input type="text" id="cell-{{ $item->id }}-{{ $field }}" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $max) }}" autocomplete="off" value="{{ $value }}"
+                                                oninput="this.value = this.value.replace(/\D/g, '')" wire:change="saveCell('{{ $item->id }}', '{{ $field }}', $event.target.value)"
+                                                aria-label="{{ $label }} de {{ $item->subject->code }}" @if ($cellError) aria-invalid="true" aria-describedby="cell-error-{{ $item->id }}-{{ $field }}" @endif
+                                                @class(['input input-sm w-full text-right font-mono text-sm tabular-nums group-data-[saved]/cell:input-success', 'input-error' => $cellError]) data-field="{{ $field }}" />
+                                            <x-icon name="o-check" class="pointer-events-none absolute start-2 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-success group-data-[saved]/cell:block" aria-hidden="true" />
+                                        </div>
                                         <span class="sr-only" role="status" data-saved-status></span>
                                         @if ($cellError)
                                             <span id="cell-error-{{ $item->id }}-{{ $field }}" class="text-xs text-error md:text-right" data-testid="cell-error-{{ $item->subject->code }}-{{ $field }}">{{ $cellError }}</span>
