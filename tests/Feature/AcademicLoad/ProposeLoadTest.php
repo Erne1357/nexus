@@ -44,7 +44,7 @@ function validateRooms(AcademicLoad $load): void
 function blockedReason(AcademicLoad $load): string
 {
     try {
-        app(ProposeLoad::class)->handle($load);
+        app(ProposeLoad::class)->handle($load, test()->user);
     } catch (ValidationException $e) {
         return $e->errors()['status'][0];
     }
@@ -53,7 +53,8 @@ function blockedReason(AcademicLoad $load): string
 }
 
 beforeEach(function () {
-    $this->actingAs(User::factory()->admin()->create());
+    $this->user = User::factory()->admin()->create();
+    $this->actingAs($this->user);
 });
 
 it('HC-14: con los cuatro generales y los salones validados la carga pasa a propuesta', function () {
@@ -61,7 +62,7 @@ it('HC-14: con los cuatro generales y los salones validados la carga pasa a prop
     validateGenerals($load);
     validateRooms($load);
 
-    app(ProposeLoad::class)->handle($load, 'Adelante');
+    app(ProposeLoad::class)->handle($load, test()->user, 'Adelante');
 
     expect($load->fresh()->status)->toBe(LoadStatus::Proposed)
         ->and($load->transitions()->firstOrFail()->comment)->toBe('Adelante');
@@ -95,7 +96,7 @@ it('HC-14: no exige salones si el perfil del campus no los usa', function () {
     $load = loadWith($campus);
     validateGenerals($load);
 
-    app(ProposeLoad::class)->handle($load);
+    app(ProposeLoad::class)->handle($load, test()->user);
 
     expect($load->fresh()->status)->toBe(LoadStatus::Proposed);
 });

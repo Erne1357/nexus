@@ -6,9 +6,8 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioned;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\User;
 use Closure;
-use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -22,25 +21,22 @@ use Illuminate\Validation\ValidationException;
  * motivos de bloqueo: los de la guarda que da quien llama (reglas de los módulos de la izquierda) y los del
  * veto de LoadTransitioning (módulos de la derecha). Con cualquier motivo, una ValidationException sobre
  * `status` con todos y no se escribe nada. Si no, cambia el estado, agrega la fila de `load_transitions`
- * (HC-18), deja bitácora de la carga y, después del commit, avisa con LoadTransitioned. Quién puede
+ * (HC-18), deja bitácora de la carga y, después del commit, avisa con LoadTransitioned. Quien transita se
+ * recibe como parámetro (no sale de la sesión) para que también pueda llamarla un job o un comando. Quién puede
  * transitar lo decide AcademicLoadPolicy antes de llamarla.
  */
 final class TransitionLoad
 {
-    public function __construct(private readonly AuthFactory $auth) {}
-
     /**
      * @param  Closure(AcademicLoad): list<string>  $guard  motivos que bloquean la transición; vacío si puede seguir
      *
      * @throws ValidationException si el diagrama no la permite o hay motivos de bloqueo
-     * @throws AuthorizationException si no hay usuario autenticado
      */
-    public function handle(AcademicLoad $load, LoadStatus $to, ?string $comment, Closure $guard): AcademicLoad
+    public function handle(AcademicLoad $load, LoadStatus $to, User $actor, ?string $comment, Closure $guard): AcademicLoad
     {
-        $userId = $this->auth->guard()->id() ?? throw new AuthorizationException('Inicia sesión para cambiar el estado de la carga.');
         $comment = $comment === null || trim($comment) === '' ? null : trim($comment);
 
-        return DB::transaction(function () use ($load, $to, $comment, $guard, $userId): AcademicLoad {
+        return DB::transaction(function () use ($load, $to, $comment, $guard, $actor): AcademicLoad {
             $load->setRawAttributes($load->newQuery()->lockForUpdate()->findOrFail($load->getKey())->getAttributes(), sync: true);
             $from = $load->status;
 
@@ -64,7 +60,7 @@ final class TransitionLoad
             $load->transitions()->create([
                 'from_status' => $from,
                 'to_status' => $to,
-                'user_id' => $userId,
+                'user_id' => $actor->getKey(),
                 'comment' => $comment,
             ]);
 
@@ -72,6 +68,7 @@ final class TransitionLoad
 
             activity()
                 ->performedOn($load)
+                ->causedBy($actor)
                 ->event('transitioned')
                 ->withChanges(['old' => ['status' => $from->value], 'attributes' => ['status' => $to->value]])
                 ->withProperties(['comment' => $comment])

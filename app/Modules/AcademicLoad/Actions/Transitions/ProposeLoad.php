@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Actions\Transitions;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Rules\Constraints\CatalogsValidated;
+use App\Modules\Core\Models\User;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -23,8 +24,8 @@ final class ProposeLoad
     /**
      * @throws ValidationException
      */
-    public function handle(AcademicLoad $load, ?string $comment = null): AcademicLoad
+    public function handle(AcademicLoad $load, User $actor, ?string $comment = null): AcademicLoad
     {
-        return $this->transition->handle($load, LoadStatus::Proposed, $comment, $this->catalogsValidated->reasons(...));
+        return $this->transition->handle($load, LoadStatus::Proposed, $actor, $comment, $this->catalogsValidated->reasons(...));
     }
 }

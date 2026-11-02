@@ -7,7 +7,6 @@ use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\Core\Models\User;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
@@ -18,9 +17,9 @@ use Spatie\Activitylog\Models\Activity;
 | de la guarda y del veto de LoadTransitioning, y escribe estado, historial (HC-18), bitácora y evento.
 */
 
-function transition(AcademicLoad $load, LoadStatus $to, ?string $comment = null, ?Closure $guard = null): AcademicLoad
+function transition(AcademicLoad $load, LoadStatus $to, ?string $comment = null, ?Closure $guard = null, ?User $actor = null): AcademicLoad
 {
-    return app(TransitionLoad::class)->handle($load, $to, $comment, $guard ?? fn (): array => []);
+    return app(TransitionLoad::class)->handle($load, $to, $actor ?? test()->user, $comment, $guard ?? fn (): array => []);
 }
 
 beforeEach(function () {
@@ -141,9 +140,12 @@ it('usa el estado bloqueado de la base y no el del modelo desactualizado', funct
     expect($load->fresh()->status)->toBe(LoadStatus::Published);
 });
 
-it('exige un usuario autenticado', function () {
+it('usa al actor recibido como causante y autor aunque nadie haya iniciado sesión', function () {
     auth()->logout();
+    $actor = User::factory()->admin()->create();
 
-    expect(fn () => transition(AcademicLoad::factory()->create(), LoadStatus::Proposed))
-        ->toThrow(AuthorizationException::class, 'Inicia sesión para cambiar el estado de la carga.');
+    transition(AcademicLoad::factory()->create(), LoadStatus::Proposed, actor: $actor);
+
+    expect(LoadTransition::query()->firstOrFail()->user_id)->toBe($actor->id)
+        ->and(Activity::query()->where('event', 'transitioned')->firstOrFail()->causer_id)->toBe($actor->id);
 });
