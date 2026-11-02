@@ -69,6 +69,18 @@ it('siembra el perfil presencial de PROJECT.md en Campus I y Campus II', functio
         ->and($profile->requiresSubdireccionApproval)->toBeFalse();
 })->with(['C1', 'C2']);
 
+it('deja que los jefes corrijan sus salones al validar solo en Campus I', function () {
+    $this->seed(DatabaseSeeder::class);
+
+    expect(Campus::orderBy('code')->get()->mapWithKeys(fn (Campus $campus) => [$campus->code => $campus->profile->headsEditRooms])->all())->toBe([
+        'C1' => true,
+        'C2' => false,
+        'EAD' => false,
+        'ENL' => false,
+        'TNMV' => false,
+    ]);
+});
+
 it('siembra EAD con clases de lunes a sábado y docentes propios', function () {
     $this->seed(DatabaseSeeder::class);
 

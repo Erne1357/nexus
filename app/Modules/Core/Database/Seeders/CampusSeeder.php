@@ -16,6 +16,9 @@ use Illuminate\Database\Seeder;
  * - EAD: virtual de lunes a jueves y presencial viernes y sábado (glosario, PROJECT.md).
  * - TNMV: docentes del TecNM, es decir, externos al ITCJ (glosario, PROJECT.md).
  * - ENL: nada documentado más allá de su modalidad.
+ * - C1: los jefes corrigen sus salones al validar los catálogos (confirmado el 2 de noviembre de 2026); en los
+ *   demás campus no, mientras se confirma (supuesto por confirmar, reglas-de-negocio.md, "Validación de
+ *   catálogos").
  *
  * Solo crea los campus que faltan (también entre los borrados): volver a sembrar no pisa un
  * perfil ya editado.
@@ -26,7 +29,7 @@ class CampusSeeder extends Seeder
      * @var list<array{code: string, name: string, modality: Modality, is_active: bool, profile: array<string, mixed>}>
      */
     private const array CAMPUSES = [
-        ['code' => 'C1', 'name' => 'Campus I', 'modality' => Modality::Presencial, 'is_active' => true, 'profile' => []],
+        ['code' => 'C1', 'name' => 'Campus I', 'modality' => Modality::Presencial, 'is_active' => true, 'profile' => ['heads_edit_rooms' => true]],
         ['code' => 'C2', 'name' => 'Campus II', 'modality' => Modality::Presencial, 'is_active' => true, 'profile' => []],
         ['code' => 'EAD', 'name' => 'EAD', 'modality' => Modality::Mixta, 'is_active' => false, 'profile' => ['days' => [1, 2, 3, 4, 5, 6]]],
         ['code' => 'ENL', 'name' => 'EnLínea', 'modality' => Modality::EnLinea, 'is_active' => false, 'profile' => []],
