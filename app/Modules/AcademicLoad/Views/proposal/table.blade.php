@@ -12,6 +12,9 @@
                 <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Semestre {{ $semester }}</h3>
                 <span class="font-mono text-xs text-neutral">{{ collect($items)->sum('requested_groups') }} gr</span>
             </div>
+            <div class="grid grid-cols-[6.5rem_minmax(0,1fr)_3rem_4.5rem_5.5rem_5.5rem] gap-x-3 px-4 pt-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral max-md:hidden" aria-hidden="true">
+                <span>Clave</span><span>Materia</span><span>Depto.</span><span class="text-right">Elegibles</span><span class="text-right">Esperados</span><span class="text-right">Grupos</span>
+            </div>
             @foreach ($items as $item)
                 @php($lock = $locks[$item->id] ?? null)
                 @php($dimmed = $department !== '' && $item->subject->department->code !== $department)
