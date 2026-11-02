@@ -22,10 +22,11 @@ use App\Modules\Core\Models\Term;
  * - la carga del departamento en el campus, o null si no existe, y sus catálogos sin validar (HC-14), que
  *   bloquean aceptar (canAccept());
  * - cada carrera ofrecida en el campus, y la que ya no se ofrece pero tiene una parte del departamento, con el
- *   estado de lo que le pide (InboxStatus), si la parte se puede decidir (pendiente y la propuesta enviada), sus
- *   totales para el departamento y sus filas (rowsFor()). Sin parte, totales en cero y sin filas;
- * - por materia del departamento pedida en las partes que cuentan (aceptadas, y pendientes de una propuesta
- *   enviada), la sugerencia de paralelos (ParallelGroups) y sus esperados.
+ *   estado de lo que le pide (InboxStatus), si la parte se puede decidir (pendiente, con la propuesta enviada o
+ *   regresada por otro departamento; ProposalReviewRules::isDecidable), sus totales para el departamento y sus
+ *   filas (rowsFor()). Sin parte, totales en cero y sin filas;
+ * - por materia del departamento pedida en las partes que cuentan (aceptadas, y las que se pueden decidir), la
+ *   sugerencia de paralelos (ParallelGroups) y sus esperados.
  */
 final readonly class DepartmentInbox
 {

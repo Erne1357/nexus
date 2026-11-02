@@ -28,7 +28,9 @@ use Spatie\Activitylog\Models\Activity;
 | "Propuesta de carrera"). Aceptar exige los catálogos del departamento validados (HC-14); la propuesta queda
 | aceptada cuando todas sus partes lo están, y la carga del departamento en el campus pasa de borrador a
 | propuesta con la primera parte que acepta (confirmado el 2 de noviembre de 2026). Solo se decide una parte
-| pendiente de una propuesta enviada, y sin la carga del departamento no se acepta (supuestos por confirmar).
+| pendiente, con la propuesta enviada o regresada por otro departamento; aceptada con la propuesta regresada, queda
+| congelada para el coordinador (confirmado el 2 de noviembre de 2026). Sin la carga del departamento no se acepta
+| (supuesto por confirmar).
 */
 
 beforeEach(function () {
@@ -180,7 +182,37 @@ it('cuando todas las partes quedan aceptadas la propuesta queda aceptada, y el a
     Event::assertDispatched(ProposalReviewAccepted::class, fn (ProposalReviewAccepted $event): bool => $event->proposalAccepted);
 });
 
-it('no decide una parte ya aceptada o regresada', function (string $state, string $message) {
+describe('con la propuesta regresada por otro departamento', function () {
+    beforeEach(function () {
+        $this->proposal->update(['status' => ProposalStatus::Returned]);
+        $this->otherPart->update(['status' => ProposalReviewStatus::Returned, 'comment' => 'Pide un grupo más de Redes.', 'decided_by' => User::factory()->create()->id, 'decided_at' => now()]);
+    });
+
+    it('acepta la parte pendiente, la propuesta sigue regresada y la carga pasa a propuesta', function () {
+        Event::fake([ProposalReviewAccepted::class]);
+
+        $part = acceptPart();
+
+        expect($part->fresh()->status)->toBe(ProposalReviewStatus::Accepted)
+            ->and($part->decided_by)->toBe($this->actor->id)
+            ->and($this->proposal->fresh()->status)->toBe(ProposalStatus::Returned)
+            ->and($this->otherPart->fresh())->status->toBe(ProposalReviewStatus::Returned)->comment->toBe('Pide un grupo más de Redes.')
+            ->and($this->load->fresh()->status)->toBe(LoadStatus::Proposed)
+            ->and(Activity::query()->where('event', 'accepted')->sole()->properties['proposal_status'])->toBe(['old' => 'returned', 'attributes' => 'returned']);
+        Event::assertDispatched(ProposalReviewAccepted::class, fn (ProposalReviewAccepted $event): bool => $event->proposalAccepted === false);
+    });
+
+    it('HC-14: también exige los catálogos del departamento validados', function () {
+        CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::Subjects)->update(['status' => 'pending']);
+
+        expect(acceptErrors())->toBe(['catalogs' => ['HC-14: faltan por validar los catálogos de Materias.']])
+            ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending)
+            ->and($this->load->fresh()->status)->toBe(LoadStatus::Draft);
+    });
+});
+
+it('no decide una parte ya aceptada o regresada, con la propuesta enviada o regresada', function (string $state, string $message, ProposalStatus $proposalStatus) {
+    $this->proposal->update(['status' => $proposalStatus]);
     $this->part->update(match ($state) {
         'accepted' => ['status' => ProposalReviewStatus::Accepted, 'decided_by' => $this->actor->id, 'decided_at' => now()],
         'returned' => ['status' => ProposalReviewStatus::Returned, 'comment' => 'Falta un grupo.', 'decided_by' => $this->actor->id, 'decided_at' => now()],
@@ -192,9 +224,12 @@ it('no decide una parte ya aceptada o regresada', function (string $state, strin
 })->with([
     'aceptada' => ['accepted', 'CB ya aceptó su parte.'],
     'regresada' => ['returned', 'CB ya regresó su parte.'],
+])->with([
+    'enviada' => [ProposalStatus::Submitted],
+    'regresada' => [ProposalStatus::Returned],
 ]);
 
-it('no decide con la propuesta en borrador, regresada o aceptada', function (ProposalStatus $status, string $message) {
+it('no decide con la propuesta en borrador o aceptada', function (ProposalStatus $status, string $message) {
     $this->proposal->update(['status' => $status]);
 
     expect(acceptErrors())->toBe(['status' => [$message]])
@@ -202,7 +237,6 @@ it('no decide con la propuesta en borrador, regresada o aceptada', function (Pro
         ->and($this->load->fresh()->status)->toBe(LoadStatus::Draft);
 })->with([
     'borrador' => [ProposalStatus::Draft, 'La propuesta todavía no se envía.'],
-    'regresada' => [ProposalStatus::Returned, 'La propuesta está regresada: se decide cuando el coordinador la reenvíe.'],
     'aceptada' => [ProposalStatus::Accepted, 'La propuesta ya se aceptó.'],
 ]);
 
@@ -213,9 +247,9 @@ it('usa el estado de la base y no el de los modelos que llegaron', function () {
     expect(acceptErrors($stale))->toBe(['status' => ['CB ya aceptó su parte.']]);
 
     DB::table('proposal_reviews')->where('id', $this->part->id)->update(['status' => 'pending']);
-    DB::table('career_proposals')->where('id', $this->proposal->id)->update(['status' => 'returned']);
+    DB::table('career_proposals')->where('id', $this->proposal->id)->update(['status' => 'draft']);
 
-    expect(acceptErrors($stale))->toHaveKey('status');
+    expect(acceptErrors($stale))->toBe(['status' => ['La propuesta todavía no se envía.']]);
 });
 
 it('sin la carga del departamento en el campus no acepta y lo dice', function () {

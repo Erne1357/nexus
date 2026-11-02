@@ -271,17 +271,28 @@ describe('con lo que piden varias carreras', function () {
     });
 });
 
-it('una parte pendiente de una propuesta que otro departamento regresó se ve pendiente, no se decide y no cuenta para los paralelos', function () {
+it('una parte pendiente de una propuesta que otro departamento regresó se ve pendiente, se decide y cuenta para los paralelos y el total de la materia', function () {
     $isc = offeredCareer('ISC');
     $proposal = inboxProposal($isc, ProposalStatus::Returned);
     inboxPart($proposal, $this->cb);
     inboxPart($proposal, $this->sc, 'returned');
     inboxRow($proposal, $this->calculo, 60, 2);
+    $iind = inboxProposal(offeredCareer('IIND'), ProposalStatus::Accepted);
+    inboxPart($iind, $this->cb, 'accepted');
+    inboxRow($iind, $this->calculo, 40, 2);
 
     $inbox = inboxOf();
 
-    expect(inboxCareersOf($inbox))->toBe([['ISC', 'pending', false, 1, 2, 60, null]])
-        ->and($inbox->subjects)->toBe([]);
+    expect(inboxCareersOf($inbox))->toBe([
+        ['ISC', 'pending', true, 1, 2, 60, null],
+        ['IIND', 'accepted', false, 1, 2, 40, null],
+    ])
+        ->and($inbox->subjects[0]['parallels']->careers)->toBe([
+            'IIND' => ['expected' => 40, 'requested' => 2, 'full' => 1, 'remainder' => 5],
+            'ISC' => ['expected' => 60, 'requested' => 2, 'full' => 1, 'remainder' => 25],
+        ])
+        ->and($inbox->subjects[0]['parallels']->suggested)->toBe(3)
+        ->and($inbox->rowsFor($isc->id)[0]['total'])->toBe(['careers' => 2, 'groups' => 4, 'expected' => 100]);
 });
 
 it('una parte aceptada de una propuesta regresada sigue contando para los paralelos', function () {
