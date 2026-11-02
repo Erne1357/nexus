@@ -65,7 +65,7 @@ it('el admin da de alta un periodo, lo edita y lo marca como actual desde la UI'
     $page->click('table [aria-label="Acciones de 20271"]')
         ->click('@make-current-20271')
         ->wait(1)
-        ->assertPresent('table .badge-success')
+        ->assertPresent('table .badge-primary')
         ->assertNoJavaScriptErrors();
 
     expect(Term::where('code', '20271')->sole()->is_current)->toBeTrue();

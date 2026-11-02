@@ -66,6 +66,7 @@ describe('admin y subdirección', function () {
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertSeeInOrder(['Validación de catálogos', 'En curso', 'quedan 7 días', 'Propuesta por carrera', 'Próxima', 'empieza en 5 días', 'Horarios y cupos', 'Asignación docente', 'Salones y acuerdos', 'Cierre y aprobación', 'Publicación', 'Re-análisis', 'Sin fecha'])
             ->assertSee('Nov 2026')
+            ->assertSee('noviembre 2026')
             ->assertSee('Hoy 12 nov')
             ->assertViewHas('timeline', fn ($timeline): bool => count($timeline->rows) === 8
                 && $timeline->from->toDateString() === '2026-11-09'
@@ -82,12 +83,50 @@ describe('admin y subdirección', function () {
             ->assertViewHas('timeline', fn ($timeline): bool => count($timeline->rows[2]['campuses']) === 1 && $timeline->rows[2]['campuses'][0]['code'] === 'C1');
     });
 
-    it('sin ninguna fecha muestra las etapas sin fecha y ninguna semana', function () {
-        Livewire::actingAs($this->admin)
+    it('sin ninguna fecha dice que no hay calendario y lista las 8 etapas con «Poner fechas»', function () {
+        $page = Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertViewHas('timeline', fn ($timeline): bool => ! $timeline->hasRange() && count($timeline->rows) === 8)
             ->assertDontSee('Hoy 12 nov')
-            ->assertSee('Sin fecha');
+            ->assertSee('Este periodo no tiene calendario.')
+            ->assertSee('data-slot="copy-calendar"', false)
+            ->assertDontSee('Sin fecha')
+            ->assertDontSee('border-dashed', false);
+
+        expect(substr_count($page->html(), 'Poner fechas'))->toBe(8);
+
+        $page->call('editStage', 'scheduling')->assertSet('showDrawer', true)->assertSee('Etapa 3 de 8');
+    });
+
+    it('las etapas se anuncian por su contenido: el botón no sustituye su nombre accesible', function () {
+        termPageStage($this->term, Stage::Proposal, null, '2026-11-17', '2026-11-24');
+
+        $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id]);
+
+        expect($page->html())->toMatch('/<button[^>]*data-testid="stage-proposal"/')
+            ->and(preg_match('/<button[^>]*data-testid="stage-proposal"[^>]*>/', $page->html(), $match))->toBe(1)
+            ->and($match[0])->not->toContain('aria-label');
+        $page->assertSee('Próxima')->assertSee('17–24 nov');
+    });
+
+    it('las insignias de estado llevan el tono de su barra y la terminada va atenuada', function () {
+        termPageStage($this->term, Stage::CatalogValidation, null, '2026-11-02', '2026-11-05');
+        termPageStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        termPageStage($this->term, Stage::Scheduling, null, '2026-11-20', '2026-12-04');
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeHtml('badge-info badge-soft')
+            ->assertSeeHtml('badge-neutral badge-soft')
+            ->assertSeeHtml('badge-success badge-soft')
+            ->assertSeeHtml('bg-success/35')
+            ->assertSee('Terminada');
+    });
+
+    it('«Actual» usa el tono primario', function () {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeHtml('badge-primary');
     });
 
     it('edita el periodo desde el modal y lo confirma con un toast', function () {
@@ -173,10 +212,32 @@ describe('sección «Campus»', function () {
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->assertSeeInOrder(['Campus', 'C1', 'Campus I', 'No abierto en este periodo', 'C2', 'Campus II', 'Abrir en Campus II', 'Calendario'])
+            ->assertSeeInOrder(['Abierto en', 'Abrir en Campus I', 'Abrir en Campus II', 'Calendario', 'Campus', 'C1', 'Campus I', 'No abierto en este periodo', 'C2', 'Campus II'])
             ->assertSee('Abrir en Campus I')
             ->assertDontSee('Abrir en Campus III')
             ->assertSee('¿Abrir el periodo 20271 en Campus II?');
+    });
+
+    it('el resumen muestra los códigos abiertos y un botón por campus pendiente', function () {
+        $this->c3->update(['is_active' => false]);
+        TermOpening::factory()->for($this->term)->for($this->c2)->create(['opened_by' => $this->admin->id]);
+
+        $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id]);
+
+        expect(preg_match('/data-testid="campus-summary".*?<\/section>/s', $page->html(), $match))->toBe(1)
+            ->and($match[0])->toContain('data-testid="opened-C2"')->toContain('Abrir en Campus I')
+            ->not->toContain('Abrir en Campus II')->not->toContain('data-testid="open-menu"');
+    });
+
+    it('con más de dos campus pendientes el resumen ofrece un solo menú «Abrir en…»', function () {
+        Campus::factory()->create(['code' => 'C4', 'name' => 'Campus IV']);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeHtml('data-testid="open-menu"')
+            ->assertSee('Abrir en…')
+            ->assertSee('ningún campus')
+            ->assertDontSee('Abrir en Campus I');
     });
 
     it('abre el periodo en Campus II, crea cargas y revisiones y lo dice en un toast', function (string $who) {
@@ -222,6 +283,7 @@ describe('sección «Campus»', function () {
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertSee('C3')
             ->assertSee('Campus inactivo')
+            ->assertSeeHtml('badge-neutral badge-soft')
             ->assertDontSee('data-testid="complete-C3"', escape: false)
             ->assertDontSee('data-testid="open-C3"', escape: false);
     });
@@ -299,6 +361,9 @@ describe('panel de una etapa', function () {
             ->set('general.ends_on', '2026-12-11')
             ->assertSee('Usa las fechas generales');
         expect($previewOf($page))->toContain('23 nov – 11 dic')->not->toContain('20 nov – 4 dic');
+
+        $page->set('general.ends_on', '');
+        expect($previewOf($page))->toContain('Fechas generales incompletas.')->not->toContain('Sin fechas generales.');
 
         $page->call('clearGeneral');
         expect($previewOf($page))->toContain('Sin fechas generales.')->not->toContain('Usa las fechas generales');

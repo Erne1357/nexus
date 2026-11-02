@@ -5,7 +5,7 @@
     sin ella, «Agregar ventana propia» y las fechas generales que usa. Los campos se llaman como las claves de las
     Actions (general.starts_on, own.{campus}.ends_on), así sus errores caen en su campo. Nada se guarda hasta
     «Guardar». `$editing` trae la etapa, su número, su ventana general efectiva y `generalPreview`, las fechas generales que se editan
-    en el panel (lo que usan los campus sin ventana propia); `close()` es del x-drawer.
+    en el panel (lo que usan los campus sin ventana propia; null si no forman una ventana) y `generalEmpty`, si ambas están vacías; `close()` es del x-drawer.
 --}}
 @php($window = $editing['window'])
 
@@ -14,7 +14,7 @@
         <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2.5">
                 <span class="font-mono text-sm font-semibold text-neutral">Etapa {{ $editing['number'] }} de {{ count(\App\Modules\Core\Enums\Stage::cases()) }}</span>
-                <x-core::status-badge :tone="$window->status->tone()" :label="$window->status->label()" />
+                <x-core::status-badge :tone="$window->status->tone()" :label="$window->status->label()" :icon="$window->status->icon()" />
             </div>
             <h2 id="stage-drawer-title" class="mt-1.5 text-xl font-bold leading-tight">{{ $editing['stage']->label() }}</h2>
             <p class="mt-0.5 text-neutral">{{ $term->name }} · <span class="font-mono">{{ $term->code }}</span></p>
@@ -42,7 +42,7 @@
                     data-testid="campus-{{ $campus->code }}"
                 >
                     <div class="flex flex-wrap items-center gap-x-2.5 gap-y-2">
-                        <b class="text-[15px] font-bold">{{ $campus->name }}</b>
+                        <b class="text-base font-bold">{{ $campus->name }}</b>
                         <span class="font-mono text-sm text-neutral">{{ $campus->code }}</span>
 
                         <span class="ms-auto">
@@ -61,7 +61,7 @@
                         </div>
                     @else
                         <p class="flex flex-wrap items-center justify-between gap-x-3 text-neutral" data-testid="general-preview-{{ $campus->code }}">
-                            {{ $editing['generalPreview'] === null ? 'Sin fechas generales.' : 'Usa las fechas generales' }}
+                            {{ $editing['generalPreview'] !== null ? 'Usa las fechas generales' : ($editing['generalEmpty'] ? 'Sin fechas generales.' : 'Fechas generales incompletas.') }}
                             @if ($editing['generalPreview'] !== null)
                                 <span class="font-mono text-base-content">{{ $editing['generalPreview'] }}</span>
                             @endif

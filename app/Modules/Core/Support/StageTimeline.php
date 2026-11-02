@@ -18,9 +18,11 @@ final readonly class StageTimeline
 {
     private const array MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
+    private const array MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
     /**
      * @param  list<CarbonImmutable>  $weeks  el lunes de cada semana del rango
-     * @param  list<array{label: string, days: int}>  $months  cada mes del rango y los días del rango que cubre
+     * @param  list<array{label: string, short: string, full: string, days: int}>  $months  cada mes del rango (rótulo «Nov 2026», corto «Nov» y completo «noviembre 2026») y los días del rango que cubre
      * @param  float|null  $today  la marca de hoy, como porcentaje del rango; null si cae fuera de él
      * @param  list<array{window: StageWindow, left: float|null, width: float|null, campuses: list<array{code: string, window: StageWindow, left: float, width: float}>}>  $rows  una por etapa, en el orden en que llegaron
      */
@@ -150,7 +152,7 @@ final readonly class StageTimeline
     }
 
     /**
-     * @return list<array{label: string, days: int}>
+     * @return list<array{label: string, short: string, full: string, days: int}>
      */
     private static function months(CarbonImmutable $from, int $days): array
     {
@@ -164,7 +166,12 @@ final readonly class StageTimeline
             if ($last !== null && $months[$last]['label'] === $label) {
                 $months[$last]['days']++;
             } else {
-                $months[] = ['label' => $label, 'days' => 1];
+                $months[] = [
+                    'label' => $label,
+                    'short' => self::MONTHS[$date->month - 1],
+                    'full' => self::MONTH_NAMES[$date->month - 1].' '.$date->year,
+                    'days' => 1,
+                ];
             }
         }
 

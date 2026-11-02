@@ -22,8 +22,8 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 
 /**
- * Ficha del periodo (tarea 2.1, maqueta B «Línea de tiempo»): su encabezado con «Editar» y «Marcar como actual», y el
- * calendario de sus 8 etapas como una línea de tiempo (core::terms.timeline) con la barra general de cada etapa y una
+ * Ficha del periodo (tarea 2.1, maqueta B «Línea de tiempo»): su encabezado con «Editar» y «Marcar como actual», el
+ * resumen de campus en un renglón (dónde se abrió y «Abrir en…» para los campus que faltan) y el calendario de sus 8 etapas como una línea de tiempo (core::terms.timeline) con la barra general de cada etapa y una
  * barra delgada por cada campus con ventana propia. Tocar una etapa abre su panel lateral (x-drawer): las fechas
  * generales y, por cada campus activo, una ventana propia opcional que se agrega y se quita. La sección «Campus»
  * (tarea 2.2, maqueta B) lista los campus activos, y los que se abrieron y ya no están activos, solo lectura: abre el
@@ -82,18 +82,22 @@ new #[Title('Ficha del periodo')] class extends Component
         $active = $campuses->active();
         $general = $calendar->for($term, null);
         $stage = $this->stage === null ? null : Stage::from($this->stage);
+        $campusRows = $terms->campusRows($term, $active);
 
         return [
             'term' => $term,
             'timeline' => StageTimeline::build($general, $calendar->ownWindows($term, $active), today()->toImmutable()),
             'campuses' => $active,
-            'campusRows' => $terms->campusRows($term, $active),
+            'campusRows' => $campusRows,
+            'openedRows' => $campusRows->filter(fn (array $row): bool => $row['opening'] !== null)->values(),
+            'pendingRows' => $campusRows->filter(fn (array $row): bool => $row['opening'] === null && $row['actionable'])->values(),
             'canOpen' => Gate::allows('open', $term),
             'editing' => $stage === null ? null : [
                 'stage' => $stage,
                 'number' => array_search($stage, Stage::cases(), true) + 1,
                 'window' => collect($general)->firstWhere('stage', $stage),
                 'generalPreview' => $this->generalPreview(),
+                'generalEmpty' => trim((string) ($this->general['starts_on'] ?? '')) === '' && trim((string) ($this->general['ends_on'] ?? '')) === '',
             ],
             'canUpdate' => Gate::allows('update', $term),
             'canMakeCurrent' => Gate::allows('makeCurrent', $term),
