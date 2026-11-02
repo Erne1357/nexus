@@ -6,6 +6,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 
 /**
  * Veta reabrir una revisión de catálogo validada si alguna carga del departamento en el periodo ya salió de
@@ -38,8 +39,7 @@ final class BlockReviewReopeningAfterDraft
             return;
         }
 
-        $last = array_pop($campuses);
-        $list = $campuses === [] ? $last : implode(', ', $campuses).' y '.$last;
+        $list = Arr::join($campuses, ', ', ' y ');
 
         $event->block("La carga académica de {$review->department->code} ya salió de borrador en {$list}.");
     }

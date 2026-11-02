@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Enums\StaffingMode;
+use Illuminate\Support\Arr;
 use InvalidArgumentException;
 
 /**
@@ -159,9 +160,7 @@ final readonly class CampusProfile
             return $names[0].' a '.$names[$count - 1];
         }
 
-        $last = array_pop($names);
-
-        return $names === [] ? $last : implode(', ', $names).' y '.$last;
+        return Arr::join($names, ', ', ' y ');
     }
 
     /**

@@ -34,11 +34,19 @@ final class CatalogContentsQuery
      */
     public function records(CatalogReview $review): array
     {
-        $query = $this->query($review);
+        return $this->rows($this->query($review), $review->catalog);
+    }
+
+    /**
+     * @param  Builder<Model>  $query
+     * @return list<array{id: string, code: string, name: ?string, is_active: bool}>
+     */
+    private function rows(Builder $query, Catalog $catalog): array
+    {
         $model = $query->getModel();
 
         return $query
-            ->get([$model->qualifyColumn('id'), $model->qualifyColumn($this->codeColumn($review->catalog)).' as code', $model->qualifyColumn('name'), $model->qualifyColumn('is_active')])
+            ->get([$model->qualifyColumn('id'), $model->qualifyColumn($this->codeColumn($catalog)).' as code', $model->qualifyColumn('name'), $model->qualifyColumn('is_active')])
             ->map(fn (Model $record): array => [
                 'id' => $record->getKey(),
                 'code' => $record->getAttribute('code'),
@@ -55,10 +63,12 @@ final class CatalogContentsQuery
      */
     public function snapshot(CatalogReview $review): array
     {
-        return array_values(array_map(
+        $query = $this->query($review);
+
+        return array_map(
             fn (array $record): array => ['id' => $record['id'], 'code' => $record['code'], 'name' => $record['name']],
-            array_filter($this->records($review), fn (array $record): bool => $record['is_active']),
-        ));
+            $this->rows($query->where($query->getModel()->qualifyColumn('is_active'), true), $review->catalog),
+        );
     }
 
     /**

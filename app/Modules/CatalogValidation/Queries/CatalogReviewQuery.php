@@ -119,14 +119,14 @@ final class CatalogReviewQuery
         $added = $removed = null;
 
         if ($previous !== null) {
-            $previousIds = array_column($previous, 'id');
-            $activeIds = array_column($active, 'id');
+            $previousIds = array_flip(array_column($previous, 'id'));
+            $activeIds = array_flip(array_column($active, 'id'));
 
             $added = array_values(array_map(
                 fn (array $record): array => ['id' => $record['id'], 'code' => $record['code'], 'name' => $record['name']],
-                array_filter($active, fn (array $record): bool => ! in_array($record['id'], $previousIds, true)),
+                array_filter($active, fn (array $record): bool => ! isset($previousIds[$record['id']])),
             ));
-            $removed = array_values(array_filter($previous, fn (array $record): bool => ! in_array($record['id'], $activeIds, true)));
+            $removed = array_values(array_filter($previous, fn (array $record): bool => ! isset($activeIds[$record['id']])));
         }
 
         return [

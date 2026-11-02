@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
+use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\StaffingMode;
@@ -79,6 +80,17 @@ it('deja que los jefes corrijan sus salones al validar solo en Campus I', functi
         'ENL' => false,
         'TNMV' => false,
     ]);
+});
+
+it('a un Campus I existente sin la clave del perfil se la agrega en true; si ya la tiene en false, la respeta', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'settings' => array_diff_key(CampusProfile::DEFAULTS, ['heads_edit_rooms' => 1])]);
+
+    $this->seed(CampusSeeder::class);
+    expect($c1->fresh()->profile->headsEditRooms)->toBeTrue();
+
+    $c1->update(['settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => false]]);
+    $this->seed(CampusSeeder::class);
+    expect($c1->fresh()->profile->headsEditRooms)->toBeFalse();
 });
 
 it('siembra EAD con clases de lunes a sábado y docentes propios', function () {

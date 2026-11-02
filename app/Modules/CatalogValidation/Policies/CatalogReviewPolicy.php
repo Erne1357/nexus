@@ -16,7 +16,7 @@ use App\Modules\Core\Queries\ScopedContext;
  * - El jefe de departamento, que es de todo el Tec: en las revisiones generales, si cubre el departamento; en
  *   las de salones, si además su alcance vale en el campus de la revisión (D2).
  * - Corrige materias, carreras y planes (CV1) y, solo si el perfil del campus de la revisión lo permite
- *   (`heads_edit_rooms`), sus salones (CV2); confirmado el 2 de noviembre de 2026.
+ *   (`uses_rooms` y `heads_edit_rooms`), sus salones (CV2); confirmado el 2 de noviembre de 2026.
  * - Corregir, validar, reabrir y poner observaciones: solo ese jefe; ni el admin ni Subdirección (CV-S1,
  *   supuesto por confirmar).
  * - Ver la revisión y sus observaciones, y marcar una observación como resuelta: ese jefe, el admin y
@@ -44,7 +44,7 @@ final class CatalogReviewPolicy
             return false;
         }
 
-        return $review->catalog->isGeneral() || ($review->campus instanceof Campus && $review->campus->profile->headsEditRooms);
+        return $review->catalog->isGeneral() || ($review->campus instanceof Campus && $review->campus->profile->usesRooms && $review->campus->profile->headsEditRooms);
     }
 
     public function validate(User $user, CatalogReview $review): bool

@@ -24,7 +24,9 @@ use Illuminate\Validation\ValidationException;
  * CatalogReviewPolicy::correct antes de llamarla.
  *
  * Quita lo que ata el registro al SII o a su departamento (CV-S3, supuesto por confirmar): la clave, el
- * departamento, la carrera dueña de un plan y el edificio y el campus de un salón. Todo en una transacción con
+ * departamento, la carrera dueña de un plan y el edificio y el campus de un salón; tampoco activa ni desactiva carreras ni
+ * planes, que no tienen veto de desactivación: si quiere darlos de baja, les pone la observación «Inactivo»
+ * y lo resuelve el admin. Las materias sí, porque SubjectDeactivating las veta. Todo en una transacción con
  * la revisión bloqueada (así no se cruza con ValidateReview): exige que no esté validada y que el registro sea
  * suyo, delega y, si algo cambió, pasa la revisión a en revisión (StartReview, CV-S4).
  */
@@ -59,6 +61,7 @@ final class CorrectRecord
             $this->rules->ensureContains($review, $record);
 
             $record->discardChanges();
+            $record->syncChanges();
 
             match ($review->catalog) {
                 Catalog::Subjects => $this->updateSubject->handle($record, $data),
@@ -83,8 +86,9 @@ final class CorrectRecord
     private static function lockedFields(Catalog $catalog): array
     {
         return match ($catalog) {
-            Catalog::Subjects, Catalog::Careers => ['code', 'department_id'],
-            Catalog::StudyPlans => ['code', 'career_id'],
+            Catalog::Subjects => ['code', 'department_id'],
+            Catalog::Careers => ['code', 'department_id', 'is_active'],
+            Catalog::StudyPlans => ['code', 'career_id', 'is_active'],
             Catalog::Rooms => ['code', 'department_id', 'building_id', 'campus_id'],
             Catalog::Teachers => [],
         };
