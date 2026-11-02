@@ -83,6 +83,16 @@ final class CatalogContentsQuery
     }
 
     /**
+     * Los registros de la revisión como consulta, por clave, para listarlos paginados (CatalogRecordsQuery).
+     *
+     * @return Builder<Model>
+     */
+    public function builder(CatalogReview $review): Builder
+    {
+        return $this->query($review);
+    }
+
+    /**
      * @return Builder<Model>
      */
     private function query(CatalogReview $review): Builder

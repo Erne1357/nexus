@@ -4,9 +4,13 @@ namespace App\Modules\CatalogValidation;
 
 use App\Modules\CatalogValidation\Listeners\CreateReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnCampusUpdated;
+use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\CampusUpdated;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -24,5 +28,17 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
 
         Event::listen(TermOpened::class, CreateReviewsOnTermOpened::class);
         Event::listen(CampusUpdated::class, CreateRoomsReviewsOnCampusUpdated::class);
+    }
+
+    /**
+     * Una entrada, en Académico, para quien revisa catálogos: el jefe de departamento y Subdirección (que, igual
+     * que el admin, la abre en lectura). Que el departamento sea el suyo lo decide la pantalla.
+     */
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Validación de catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico,
+                visible: static fn (ScopedContext $context): bool => $context->has(Role::JefeDepartamento) || $context->has(Role::Subdireccion)),
+        ];
     }
 }

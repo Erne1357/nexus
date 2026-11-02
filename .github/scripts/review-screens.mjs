@@ -9,7 +9,7 @@
 //     materias=/academic/subjects reticula=/academic/plans/<id>
 //
 // Variables: BASE (http://127.0.0.1:8099), LOGIN (admin), PASSWORD (password), WIDTHS (390,768,1440),
-// THEMES (light,dark), OUT (/app/storage/app/review, ignorado por git), FULL=1 para capturar la página entera.
+// THEMES (light,dark), CAMPUS (texto del campus que se elige en la credencial), OUT (/app/storage/app/review, ignorado por git), FULL=1 para capturar la página entera.
 import { chromium } from 'playwright';
 
 const base = process.env.BASE || 'http://127.0.0.1:8099';
@@ -38,6 +38,17 @@ await page.goto(`${base}/login`);
 await page.fill('input[name="username"]', login);
 await page.fill('input[name="password"]', password);
 await Promise.all([page.waitForURL(`${base}/`), page.click('button[type="submit"]')]);
+
+// CAMPUS=<texto de la opción> elige ese campus en la credencial (jefes con varios campus no tienen uno activo).
+if (process.env.CAMPUS) {
+  await page.evaluate((text) => {
+    const select = document.querySelector('select[name="campus"]');
+    const option = [...select.options].find((candidate) => candidate.text.includes(text));
+    select.value = option.value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, process.env.CAMPUS);
+  await page.waitForTimeout(1500);
+}
 
 let failed = false;
 
