@@ -105,25 +105,66 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 - Abrir un periodo no cierra el anterior: sus cargas siguen en el estado en que estaban y se siguen trabajando eligiéndolo en la credencial, porque hay procesos atados al periodo y no a sus fechas, como la carga del siguiente semestre o el cierre de residencias. Varios periodos pueden estar abiertos a la vez (confirmado el 1 de noviembre de 2026).
 - Al abrir un periodo en un campus se crean una carga académica en borrador por cada departamento activo, las revisiones de catálogo generales de cada departamento activo si el periodo todavía no las tenía, y la de salones de cada departamento activo en ese campus si su perfil usa salones (supuesto por confirmar). Docentes, materias, planes y carreras se validan una vez por periodo y departamento, para todo el Tec; los salones, por departamento en cada campus (confirmado el 1 de noviembre de 2026). Volver a abrir un campus ya abierto solo crea lo que falte, como lo de un departamento nuevo; si el campus empieza a usar salones, se crean solas las revisiones de salones que falten en los periodos abiertos en él (supuestos por confirmar).
 - El código de un periodo ya no se cambia una vez abierto en algún campus (supuesto por confirmar).
-- El aviso a los jefes de que tienen catálogos por validar llega con la campana de notificaciones (tarea 2.9).
+- El aviso a los jefes de que tienen catálogos por validar llega con la campana de notificaciones (tarea 2.9). Le llega al jefe de departamento, que es quien valida, de cada departamento activo que tenga catálogos sin validar del periodo en ese campus, contados igual que HC-14, y dice cuáles son. Sale al abrir el periodo en el campus y, a demanda, con el recordatorio del tablero de avance (tarea 2.5). Volver a abrir un campus ya abierto, o abrir el periodo en otro campus (que trae sus propios salones), vuelve a avisar a quien todavía tenga pendientes, también de los catálogos generales (supuesto por confirmar).
+- Cada notificación lleva a la pantalla de lo que avisa, con la credencial en el periodo y el campus del aviso. Si esa pantalla o lo que avisa ya no está disponible para quien la abre, la campana se lo dice en lugar de llevarlo (confirmado el 2 de noviembre de 2026): por ejemplo, si el departamento se borró o ya no es su jefe.
 - La carga solo cambia de estado por el diagrama de `docs/proceso/proceso-propuesto.md`, y cada cambio queda en su historial con quién lo hizo (HC-18). De `closed` pasa a `approved` solo si el campus exige el visto bueno de Subdirección, y directo a `published` solo si no lo exige.
+
+## Validación de catálogos
+
+Cada jefe de departamento revisa, corrige y valida los catálogos de su departamento en cada periodo: docentes, materias, planes y carreras una vez para todo el Tec, y sus salones en cada campus (D2, confirmado el 1 de noviembre de 2026). Mientras no estén validados, la carga del departamento no sale de borrador (HC-14).
+
+Confirmado el 2 de noviembre de 2026:
+
+- **CV1.** Mientras su revisión del periodo no esté validada, el jefe de departamento corrige los registros de su departamento: materias, carreras y planes. Los docentes los sigue corrigiendo desde Docentes (fila «Administrar docentes»). Las altas siguen siendo del admin.
+- **CV2.** El jefe también corrige los salones de su departamento en el campus de la revisión, si el perfil de flujo del campus lo permite (`heads_edit_rooms`, ver "Parámetros por campus"). Campus I lo permite.
+- **CV3.** Al validar se guarda una foto de los registros activos del catálogo. Las altas y bajas de un periodo se cuentan contra la foto de la última validación anterior del mismo departamento, catálogo y campus. En el primer periodo no hay foto, así que no se cuentan.
+- **CV4.** Las observaciones sobre registros no bloquean validar.
+- **CV5.** El jefe puede reabrir una revisión validada mientras ninguna carga de su departamento en el periodo haya salido de borrador: en ningún campus, si el catálogo es general; en el campus de la revisión, si son salones.
+
+Supuestos por confirmar:
+
+- **CV-S1.** Corregir, validar, reabrir y poner observaciones es solo del jefe de departamento que cubre el departamento; ni el admin ni Subdirección. Ver la revisión y sus observaciones, y marcar una observación como resuelta, es de ese jefe, del admin y de Subdirección.
+- **CV-S2.** Las observaciones, como las correcciones, se ponen solo mientras la revisión no está validada; para cambiar algo de una validada, primero se reabre. Una observación «otra» lleva comentario, y «capacidad incorrecta» solo se pone en salones. Una observación se resuelve con quién y cuándo, también con la revisión ya validada, y no se borra.
+- **CV-S3.** Al corregir, el jefe no cambia lo que ata el registro al SII o a su departamento: la clave, el departamento, la carrera dueña de un plan, ni el edificio o el campus de un salón. Lo demás que acepta la edición del catálogo sí, con las mismas reglas y vetos. Las materias se activan y desactivan con su veto (no se desactiva una que los alumnos todavía necesitan). Las carreras y los planes no tienen veto de desactivación, así que el jefe no los activa ni desactiva desde la validación: si quiere darlos de baja, les pone la observación «Inactivo» y lo resuelve el admin (supuesto por confirmar).
+- **CV-S4.** La revisión pasa de pendiente a en revisión con la primera corrección u observación del jefe, no por solo abrirla.
+- **CV-S5.** Por omisión un campus no deja que los jefes corrijan sus salones (`heads_edit_rooms` en `false`). Campus II, EAD, EnLínea y TecNM Virtual quedan así.
+- **CV-S6.** Al reabrir, la revisión vuelve a en revisión sin quién ni cuándo se validó. Su foto se queda hasta la siguiente validación, pero mientras no esté validada no cuenta como la validación anterior del periodo siguiente.
+
+## Propuesta de carrera
+
+Etapa 3 de `docs/proceso/proceso-propuesto.md`: el coordinador pide, por cada materia de la retícula de su carrera en su campus, cuántos alumnos espera y cuántos grupos abrir.
+
+- Cada propuesta pide materias de varios departamentos. Cada departamento decide su parte, que es todo lo que esa carrera le pide: la acepta o la regresa con comentario. La propuesta queda aceptada cuando todos los departamentos involucrados aceptaron su parte; si uno la regresa, vuelve al coordinador (confirmado el 2 de noviembre de 2026).
+- Precarga de cada materia: los alumnos esperados son los elegibles, y los grupos son `ceil(esperados / 35)`, o `ceil(esperados / 25)` si la materia lleva laboratorio (`needs_lab`), con el tamaño objetivo de `demand.target_group_size` ("Elegibilidad y demanda"). El coordinador corrige los dos (confirmado el 2 de noviembre de 2026).
+- Una propuesta enviada queda de solo lectura. Si un departamento la regresa, el coordinador la corrige y la reenvía, y lo que ya le aceptaron no cambia: las materias de un departamento que aceptó su parte quedan bloqueadas (confirmado el 2 de noviembre de 2026).
+- Enviarla con catálogos sin validar de algún departamento involucrado da un aviso, no la bloquea ("Aprobaciones y permisos").
+- La propuesta solo se arma en un periodo abierto en el campus (`term_openings`) y para una carrera que se ofrece en él (`career_campus` activa) (supuesto por confirmar). Enviarla, o reenviarla, lo vuelve a revisar: si el periodo ya no está abierto en el campus o la carrera ya no se ofrece en él, no se envía (supuesto por confirmar).
+- Sus materias son las de la retícula de los planes activos de la carrera, solo las materias activas, como pide HC-13 (supuesto por confirmar).
+- Residencia profesional, servicio social y actividades complementarias no entran a la propuesta: no abren grupos de clase (confirmado el 2 de noviembre de 2026). Se reconocen por su tipo de materia y, como la exportación del SII no trae el tipo, también por no tener horas de clase (teoría más práctica en cero) (supuesto por confirmar). Una materia que está en dos planes activos es una sola fila, con el plan y el semestre del primer plan activo por clave (supuesto por confirmar).
+- Los elegibles de cada fila son los del momento en que se arma la propuesta; volver a abrirla no la arma de nuevo ni cambia sus filas (supuesto por confirmar).
+- El tamaño objetivo se lee del parámetro global `demand.target_group_size` (`{"default": 35, "lab": 25}`). Si no existe, o uno de sus dos valores no es un entero mayor que cero, ese valor es 35 o 25 (supuesto por confirmar).
+- Por materia, los alumnos esperados van de 0 a 1000, los grupos de 0 a 30 y las notas llevan hasta 500 caracteres (supuesto por confirmar).
+- Enviar exige al menos una materia con grupos (supuesto por confirmar). Las partes son las de los departamentos de las materias con grupos: a un departamento cuyas materias van todas con cero grupos no se le pide nada (supuesto por confirmar).
+- Al reenviar, la parte aceptada se queda como está, las demás vuelven a pendiente y se limpia su comentario, que queda en la bitácora, y la parte de un departamento al que ya no se le piden grupos desaparece. Si todas las partes que quedan ya estaban aceptadas, la propuesta queda aceptada al reenviarla (supuestos por confirmar).
+- Al enviar o reenviar la propuesta, el jefe de cada departamento con su parte pendiente recibe un aviso en la campana con cuántas materias y grupos le pide la carrera, que lo lleva a la bandeja de su departamento (tarea 2.8); los departamentos que ya la aceptaron no reciben nada (supuesto por confirmar).
 
 ## Aprobaciones y permisos
 
 | Acción | Quién | Condición |
 |---|---|---|
 | Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin`. Dar de alta y editar periodos, marcar el actual y armar su calendario es de los dos, en todo el Tec (supuesto por confirmar) |
-| Administrar edificios y salones | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo |
+| Administrar edificios y salones | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo. Al validar sus catálogos, el `jefe_departamento` corrige los salones de su departamento si el perfil del campus lo permite (CV2) |
 | Importar catálogos | `admin` | |
 | Administrar catálogos de Academic (departamentos, carreras, materias, planes y su retícula) | `admin` | En la fase 2 se abren a los jefes para validar (confirmado el 29 de octubre de 2026) |
 | Administrar docentes (listado, datos, adscripción, plazas, disponibilidad, perfil y horas fuera del ITCJ) | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` | `admin` y `subdireccion`, a todos los docentes, también a los que no tienen departamento; `jefe_departamento` y `jefe_proyecto_docente`, a los adscritos a su departamento, aunque su adscripción principal sea otra; el perfil, solo en las materias que imparte su departamento (confirmado el 30 de octubre de 2026). El jefe de proyecto docente administra a los docentes de su departamento aunque su alcance sea de un campus, porque el docente no es de un campus (supuesto por confirmar) |
 | Dar de baja o reactivar a un docente (desactiva su usuario y termina sus jefaturas) | `admin`, `subdireccion` | Los jefes y los jefes de proyecto docente no dan de baja: solo quitan al docente de su departamento (confirmado el 30 de octubre de 2026). Nadie se da de baja a sí mismo (supuesto por confirmar) |
 | Dar de alta usuarios de docentes, reiniciar contraseñas y nombrar jefes | `admin` | Supuesto por confirmar (nombrar jefes es S7) |
 | Consultar alumnos (listado y ficha) | `admin`, `subdireccion`, `jefe_departamento`, `coordinador` | `subdireccion`, los de cualquier campus; `jefe_departamento`, los de las carreras de su departamento en cualquier campus; `coordinador`, los de su carrera en su campus. Solo lectura: vienen del SII (confirmado el 29 de octubre de 2026) |
-| Validar catálogos del departamento | `jefe_departamento` del departamento | |
+| Validar catálogos del departamento | `jefe_departamento` del departamento | Corrige materias, carreras y planes de su departamento (CV1) y sus salones si el perfil del campus lo permite (CV2), mientras la revisión no esté validada. Reabre una validada mientras ninguna carga de su departamento haya salido de borrador (CV5). Ver la revisión y resolver observaciones también es de `admin` y `subdireccion` (CV-S1, supuesto por confirmar). Ver "Validación de catálogos" |
 | Ver la carga académica | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` | `jefe_departamento`, la de su departamento en cualquier campus; `jefe_proyecto_docente`, la de su departamento en su campus (supuesto por confirmar) |
 | Proponer la carga (sale de borrador) | `admin`, `jefe_departamento` del departamento | HC-14; la bandeja del departamento (tarea 2.8) la propone al aceptar las propuestas de las carreras y agregará esa condición (supuesto por confirmar) |
-| Enviar propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
+| Ver la propuesta de carrera | `admin`, `subdireccion`, `coordinador` de la carrera y campus | `subdireccion`, la de cualquier carrera y campus, solo lectura (supuesto por confirmar) |
+| Armar, corregir y enviar la propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
@@ -185,6 +226,7 @@ Seriación del plan: en el panel de una materia de la retícula se le agrega un 
 | `days` | lunes a viernes | EAD: lunes a sábado |
 | `requires_subdireccion_approval` | `false` por defecto; configurable | |
 | `allow_external_teachers` | `false` | TecNM Virtual: `true` |
+| `heads_edit_rooms` | C1: `true` (CV2, confirmado el 2 de noviembre de 2026); C2: `false` (CV-S5, supuesto por confirmar) | `false` (CV-S5, supuesto por confirmar) |
 
 ## Reglas de datos
 

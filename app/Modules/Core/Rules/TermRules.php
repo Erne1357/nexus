@@ -7,6 +7,7 @@ use App\Modules\Core\Models\TermOpening;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use DateTimeInterface;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -107,8 +108,7 @@ final class TermRules
             return null;
         }
 
-        $last = array_pop($codes);
-        $list = $codes === [] ? $last : implode(', ', $codes).' y '.$last;
+        $list = Arr::join($codes, ', ', ' y ');
 
         return "El código ya no se puede cambiar: el periodo se abrió en {$list}.";
     }
