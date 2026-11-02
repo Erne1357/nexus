@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
@@ -69,5 +70,10 @@ class MassiveSeeder extends Seeder
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'massive']);
 
         $this->command?->info(sprintf('Periodos, calendarios y aperturas: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $started = hrtime(true);
+        $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
+
+        $this->command?->info(sprintf('Propuestas de carrera y bandejas: %.1f s.', (hrtime(true) - $started) / 1e9));
     }
 }
