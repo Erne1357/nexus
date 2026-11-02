@@ -27,6 +27,8 @@ use App\Modules\Core\Queries\RecipientsQuery;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
+use Random\Engine\Mt19937;
+use Random\Randomizer;
 use RuntimeException;
 
 /**
@@ -49,6 +51,9 @@ use RuntimeException;
 final class AcademicLoadDemoSeeder extends Seeder
 {
     use RefusesProduction;
+
+    /** Generador con semilla: la misma da los mismos datos. */
+    private Randomizer $random;
 
     private const array RETURN_COMMENTS = [
         'Los esperados no llenan los grupos pedidos; ajusta los grupos y vuelve a enviar.',
@@ -73,7 +78,7 @@ final class AcademicLoadDemoSeeder extends Seeder
     public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, int $returnEvery = 4, int $pendingEvery = 3, int $readOlderThan = 3): void
     {
         $this->refuseProduction();
-        mt_srand($seed);
+        $this->random = new Randomizer(new Mt19937($seed));
 
         $termModel = Term::query()->where('code', $term)->first() ?? throw new RuntimeException("El periodo {$term} no existe: corre antes DemoTermSeeder.");
         $previousQueue = config('queue.default');
@@ -149,7 +154,7 @@ final class AcademicLoadDemoSeeder extends Seeder
 
                 try {
                     if ($decision % $returnEvery === 0) {
-                        app(ReturnProposalReview::class)->handle($part, self::RETURN_COMMENTS[mt_rand(0, count(self::RETURN_COMMENTS) - 1)], $head);
+                        app(ReturnProposalReview::class)->handle($part, self::RETURN_COMMENTS[$this->random->getInt(0, count(self::RETURN_COMMENTS) - 1)], $head);
                     } elseif ($validated) {
                         app(AcceptProposalReview::class)->handle($part, $head);
                     }
@@ -176,13 +181,13 @@ final class AcademicLoadDemoSeeder extends Seeder
         $items = ProposalItem::query()->where('career_proposal_id', $proposal->id)->where('expected_students', '>', 0)->orderBy('id')->get();
 
         foreach ($items as $item) {
-            if (mt_rand(1, 100) > 30) {
+            if ($this->random->getInt(1, 100) > 30) {
                 continue;
             }
 
-            $expected = min(ProposalItemRules::MAX_EXPECTED_STUDENTS, max(0, $item->expected_students + mt_rand(-8, 12)));
-            $groups = min(ProposalItemRules::MAX_REQUESTED_GROUPS, max(0, $item->requested_groups + mt_rand(-1, 1)));
-            $notes = mt_rand(1, 100) <= 25 ? self::NOTES[mt_rand(0, count(self::NOTES) - 1)] : $item->notes;
+            $expected = min(ProposalItemRules::MAX_EXPECTED_STUDENTS, max(0, $item->expected_students + $this->random->getInt(-8, 12)));
+            $groups = min(ProposalItemRules::MAX_REQUESTED_GROUPS, max(0, $item->requested_groups + $this->random->getInt(-1, 1)));
+            $notes = $this->random->getInt(1, 100) <= 25 ? self::NOTES[$this->random->getInt(0, count(self::NOTES) - 1)] : $item->notes;
 
             try {
                 app(UpdateProposalItem::class)->handle($item, $expected, $groups, $notes, $coordinator);
