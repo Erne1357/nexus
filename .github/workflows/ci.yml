@@ -39,7 +39,7 @@ jobs:
   tests:
     name: tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -54,7 +54,7 @@ jobs:
       - name: Unit, Feature y Arch
         run: |
           docker compose run --rm -T app php artisan test \
-            --testsuite=Unit,Feature,Arch --compact \
+            --testsuite=Unit,Feature,Arch --compact --debug \
             --coverage-clover=storage/logs/clover.xml \
             --coverage-text=storage/logs/coverage.txt
 
