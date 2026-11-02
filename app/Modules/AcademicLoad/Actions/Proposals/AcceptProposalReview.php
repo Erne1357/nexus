@@ -15,6 +15,7 @@ use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * El departamento acepta su parte de una propuesta de carrera: todo lo que esa carrera le pide
@@ -43,6 +44,17 @@ final class AcceptProposalReview
      * @throws ValidationException
      */
     public function handle(ProposalReview $review, User $actor): ProposalReview
+    {
+        try {
+            return $this->accept($review, $actor);
+        } catch (Throwable $e) {
+            $review->refresh();
+
+            throw $e;
+        }
+    }
+
+    private function accept(ProposalReview $review, User $actor): ProposalReview
     {
         return DB::transaction(function () use ($review, $actor): ProposalReview {
             $proposal = CareerProposal::query()

@@ -152,7 +152,7 @@ new #[Title('Bandeja del departamento')] class extends Component
         }
 
         $this->showAccept = false;
-        $this->success('Parte aceptada', e($this->label($query, $review)));
+        $this->success('Parte aceptada', e($this->label($review)));
     }
 
     /**
@@ -188,7 +188,7 @@ new #[Title('Bandeja del departamento')] class extends Component
 
         $this->showReturn = false;
         $this->comment = '';
-        $this->warning('Parte regresada', e($this->label($query, $review)));
+        $this->warning('Parte regresada', e($this->label($review)));
     }
 
     /**
@@ -212,9 +212,9 @@ new #[Title('Bandeja del departamento')] class extends Component
             'inbox' => $inbox,
             'rows' => $rows,
             'visible' => $this->filter === 'pendientes'
-                ? array_values(array_filter($rows, fn (array $row): bool => $row['status'] === InboxStatus::Pending))
+                ? array_values(array_filter($rows, fn (array $row): bool => $row['decidable']))
                 : $rows,
-            'pendingCount' => count(array_filter($rows, fn (array $row): bool => $row['status'] === InboxStatus::Pending)),
+            'pendingCount' => count(array_filter($rows, fn (array $row): bool => $row['decidable'])),
             'acceptedCount' => count(array_filter($rows, fn (array $row): bool => $row['status'] === InboxStatus::Accepted)),
             'submittedCount' => count($submitted),
             'selected' => $selected,
@@ -259,7 +259,7 @@ new #[Title('Bandeja del departamento')] class extends Component
             return;
         }
 
-        $departments = $inbox->departmentsFor($context, $campus);
+        $departments = $inbox->departmentsFor($context, $campus, $term);
         $department = $this->department === '' ? $departments->first() : $departments->first(fn (Department $department): bool => $department->code === $this->department);
 
         abort_if($this->department !== '' && $department === null, 403);
@@ -294,20 +294,25 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * La parte del departamento de la página por un id del cliente, con la policy de decidirla.
+     * La parte del departamento de la página, en su periodo y campus, por un id del cliente, con las policies de
+     * ver la bandeja y de decidir la parte; sin armar la bandeja.
      */
     private function decidable(string $id, DepartmentInboxQuery $query): ProposalReview
     {
-        $inbox = $this->inbox($query);
-        $review = $query->reviewOrFail($inbox->department, $id);
+        abort_if($this->departmentId === null || $this->campusId === null, 403);
 
+        [$campus, $department] = $query->scopeOf($this->campusId, $this->departmentId);
+        $this->authorize('viewAny', [ProposalReview::class, $campus, $department]);
+
+        $review = $query->reviewOrFail($department, $id, $this->termId, $this->campusId);
+        $review->setRelation('department', $department);
         $this->authorize('decide', $review);
 
         return $review;
     }
 
     /**
-     * La carrera abierta: la elegida, o la primera pendiente, o la primera con parte, o la primera.
+     * La carrera abierta: la elegida, o la primera que se puede decidir, o la primera con parte, o la primera.
      *
      * @return array<string, mixed>|null
      */
@@ -320,7 +325,7 @@ new #[Title('Bandeja del departamento')] class extends Component
         }
 
         foreach ($inbox->careers as $row) {
-            if ($row['status'] === InboxStatus::Pending) {
+            if ($row['decidable']) {
                 return $row;
             }
         }
@@ -349,11 +354,9 @@ new #[Title('Bandeja del departamento')] class extends Component
         return null;
     }
 
-    private function label(DepartmentInboxQuery $query, ProposalReview $review): string
+    private function label(ProposalReview $review): string
     {
-        $row = $this->targetOf($this->inbox($query)->careers, $review->getKey());
-
-        return ($row['career']->code ?? '').' · '.$this->inbox($query)->department->code;
+        return "{$review->proposal->career->code} · {$review->department->code}";
     }
 
     private function acceptBlock(DepartmentInbox $inbox): string
@@ -399,7 +402,13 @@ new #[Title('Bandeja del departamento')] class extends Component
         }
 
         if ($parallels->mixed > 0) {
-            $parts[] = $parallels->mixed.($parallels->mixed === 1 ? ' mixto' : ' mixtos').' ('.implode(' + ', $parallels->mixedShares).')';
+            $parts[] = $parallels->isMixed()
+                ? $parallels->mixed.($parallels->mixed === 1 ? ' mixto' : ' mixtos').' ('.collect($parallels->mixedShares)->map(fn (int $share, string $code): string => "{$share} de {$code}")->implode(' + ').')'
+                : '1 más de '.array_key_first($parallels->mixedShares).' ('.array_sum($parallels->mixedShares).')';
+        }
+
+        if ($parts === []) {
+            return "Piden {$parallels->requested} · sin alumnos esperados";
         }
 
         $verb = match (true) {

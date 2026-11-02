@@ -22,7 +22,7 @@
                 <span class="truncate text-sm" title="{{ $career->name }}">{{ $career->name }}</span>
                 <span class="text-[12.5px] text-neutral">
                     @if ($row['review'] === null)
-                        Sin propuesta
+                        {{ $row['proposal'] === null || $row['proposal']->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Draft ? 'Sin propuesta' : 'Sin materias de este departamento' }}
                     @else
                         {{ $row['groups'] }} grupos · {{ $row['expected'] }} esperados · {{ $row['subjects'] }} {{ $row['subjects'] === 1 ? 'materia' : 'materias' }}
                     @endif

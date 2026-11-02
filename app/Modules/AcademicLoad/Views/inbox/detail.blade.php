@@ -13,7 +13,11 @@
             <h2 class="text-xl font-bold leading-tight"><span class="font-mono">{{ $career->code }}</span> · {{ $career->name }}</h2>
             <p class="mt-1 text-sm text-neutral">
                 @if ($review === null)
-                    Todavía no envía su propuesta.
+                    @if ($selected['proposal'] === null || $selected['proposal']->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Draft)
+                        Todavía no envía su propuesta.
+                    @else
+                        No le pide materias a {{ $inbox->department->name }}.
+                    @endif
                 @else
                     {{ $selected['groups'] }} grupos · {{ $selected['expected'] }} esperados · {{ $selected['subjects'] }} {{ $selected['subjects'] === 1 ? 'materia' : 'materias' }}
                 @endif

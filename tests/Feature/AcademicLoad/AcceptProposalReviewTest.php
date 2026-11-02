@@ -276,3 +276,12 @@ it('no avisa ni transita si la transacción externa se revierte', function () {
     expect($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending)
         ->and($this->load->fresh()->status)->toBe(LoadStatus::Draft);
 });
+
+it('si la carga no puede proponerse, el modelo recibido no queda aceptado en memoria', function () {
+    Event::listen(LoadTransitioning::class, fn (LoadTransitioning $event) => $event->block('Hay grupos sin docente.'));
+
+    acceptErrors();
+
+    expect($this->part->status)->toBe(ProposalReviewStatus::Pending)
+        ->and($this->part->decided_by)->toBeNull();
+});

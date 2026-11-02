@@ -43,7 +43,7 @@ final class ProposalReturned extends NexusNotification
 
     public static function unavailableReason(User $user, NotificationMessage $message): ?string
     {
-        $career = KeyLookup::find(Career::query(), $message->parameters['carrera'] ?? null);
+        $career = KeyLookup::find(Career::query()->withTrashed(), $message->parameters['carrera'] ?? null);
         $exists = $career !== null && $message->termId !== null && $message->campusId !== null && CareerProposal::query()
             ->where('term_id', $message->termId)
             ->where('campus_id', $message->campusId)

@@ -135,7 +135,7 @@ describe('jefe de departamento', function () {
             ->assertSee('bastan 3')
             ->assertSee('1 ISC')
             ->assertSee('1 IIND')
-            ->assertSee('1 mixto');
+            ->assertSee('1 mixto (5 de IIND + 25 de ISC)');
     });
 
     it('acepta una parte, lo dice en un aviso y lleva la carga a Propuesta', function () {
@@ -203,6 +203,68 @@ describe('jefe de departamento', function () {
         $this->iscPart->update(['status' => ProposalReviewStatus::Accepted]);
 
         $page->call('accept')->assertHasErrors('status');
+    });
+});
+
+describe('lo que se decide y se cuenta', function () {
+    it('abre por omisión la primera parte que se puede decidir y solo esas cuentan como pendientes', function () {
+        $this->iindProposal->update(['status' => ProposalStatus::Returned]);
+
+        inboxPageAs($this->jefe)
+            ->assertViewHas('selected', fn (array $row): bool => $row['career']->code === 'ISC')
+            ->assertViewHas('pendingCount', 1)
+            ->set('filter', 'pendientes')
+            ->assertViewHas('visible', fn (array $rows): bool => count($rows) === 1 && $rows[0]['career']->code === 'ISC');
+    });
+
+    it('no decide una parte de otro campus ni de otro periodo aunque llegue su id', function () {
+        $otherCampus = Campus::factory()->create(['code' => 'C1']);
+        $otherTerm = Term::factory()->create(['code' => '20272']);
+        $career = inboxPageCareer('IGEM', 'Gestión');
+        $elsewhere = CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'campus_id' => $otherCampus->id, 'career_id' => $career->id]);
+        $later = CareerProposal::factory()->submitted()->create(['term_id' => $otherTerm->id, 'campus_id' => $this->campus->id, 'career_id' => $career->id]);
+        $foreign = [
+            ProposalReview::factory()->create(['career_proposal_id' => $elsewhere->id, 'department_id' => $this->cb->id]),
+            ProposalReview::factory()->create(['career_proposal_id' => $later->id, 'department_id' => $this->cb->id]),
+        ];
+
+        foreach ($foreign as $part) {
+            inboxPageAs($this->jefe)->call('confirmAccept', $part->id)->assertNotFound();
+            inboxPageAs($this->jefe)->call('confirmReturn', $part->id)->assertNotFound();
+            expect($part->fresh()->status)->toBe(ProposalReviewStatus::Pending);
+        }
+    });
+
+    it('conserva la bandeja de un departamento desactivado que tiene partes en el periodo y campus', function () {
+        $this->cb->update(['is_active' => false]);
+
+        inboxPageAs($this->jefe)->assertOk()->assertSee('Ciencias Básicas')->assertSee('ISC')->assertViewHas('canDecide', true);
+    });
+});
+
+describe('textos de la sugerencia de paralelos y del detalle', function () {
+    it('dice de qué carrera es cada resto cuando un grupo es de una sola carrera', function () {
+        ProposalItem::query()->where('career_proposal_id', $this->iindProposal->id)->update(['expected_students' => 70]);
+
+        inboxPageAs($this->jefe)->assertSee('1 más de ISC (25)')->assertDontSee('mixto');
+    });
+
+    it('sin alumnos esperados no deja el texto cortado', function () {
+        ProposalItem::query()->update(['expected_students' => 0]);
+
+        inboxPageAs($this->jefe)->assertSee('Piden 4 · sin alumnos esperados')->assertDontSee('bastan 0');
+    });
+
+    it('distingue la carrera sin propuesta de la que no le pide materias al departamento', function () {
+        $sent = inboxPageCareer('IGEM', 'Gestión');
+        CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'career_id' => $sent->id]);
+        $draft = inboxPageCareer('ILOG', 'Logística');
+        CareerProposal::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'career_id' => $draft->id]);
+        $none = inboxPageCareer('IEM', 'Electromecánica');
+
+        inboxPageAs($this->jefe, ['carrera' => $sent->id])->assertSee('No le pide materias a Ciencias Básicas.')->assertDontSee('Todavía no envía');
+        inboxPageAs($this->jefe, ['carrera' => $draft->id])->assertSee('Todavía no envía su propuesta.');
+        inboxPageAs($this->jefe, ['carrera' => $none->id])->assertSee('Todavía no envía su propuesta.');
     });
 });
 

@@ -378,3 +378,26 @@ describe('departamentos de la bandeja de un usuario', function () {
         expect(app(DepartmentInboxQuery::class)->departmentsFor(app(ScopedContext::class)->forUser($jefe), $this->campus))->toBeEmpty();
     });
 });
+
+describe('departamentos desactivados y partes de otro periodo o campus', function () {
+    it('incluye al departamento desactivado solo si tiene partes en el periodo y campus', function () {
+        $this->cb->update(['is_active' => false]);
+        $this->sc->update(['is_active' => false]);
+        $isc = offeredCareer('ISC');
+        inboxPart(inboxProposal($isc), $this->cb);
+        $subdireccion = app(ScopedContext::class)->forUser(User::factory()->withRole(Role::Subdireccion)->create());
+        $codes = fn (?Term $term) => app(DepartmentInboxQuery::class)->departmentsFor($subdireccion, $this->campus, $term)->pluck('code')->all();
+
+        expect($codes($this->term))->toContain('CB')->not->toContain('SC')
+            ->and($codes(null))->not->toContain('CB');
+    });
+
+    it('la parte se busca solo en el periodo y campus dados', function () {
+        $part = inboxPart(inboxProposal(offeredCareer('ISC')), $this->cb);
+        $query = app(DepartmentInboxQuery::class);
+
+        expect($query->reviewOrFail($this->cb, $part->id, $this->term->id, $this->campus->id)->id)->toBe($part->id)
+            ->and(fn () => $query->reviewOrFail($this->cb, $part->id, Term::factory()->create()->id, $this->campus->id))->toThrow(ModelNotFoundException::class)
+            ->and(fn () => $query->reviewOrFail($this->cb, $part->id, $this->term->id, Campus::factory()->create()->id))->toThrow(ModelNotFoundException::class);
+    });
+});

@@ -62,3 +62,11 @@ it('se abre en la propuesta y deja de abrirse si ya no coordina la carrera en es
         ->and(ProposalReturned::unavailableReason($this->otroCampus, $message))->toBe('Ya no coordinas Ingeniería en Sistemas Computacionales en ese campus.')
         ->and(ProposalReturned::unavailableReason($this->coordinador, NotificationMessage::fromArray([...$this->coordinador->notifications()->first()->data, 'parameters' => ['carrera' => fakeKey(70), 'depto' => 'CB']])))->toBe('Esa propuesta ya no existe.');
 });
+
+it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe', function () {
+    app(ReturnProposalReview::class)->handle($this->part, 'Revisa Cálculo.', $this->jefe);
+    $message = NotificationMessage::fromArray($this->coordinador->notifications()->first()->data);
+    Career::query()->whereKey($this->proposal->career_id)->delete();
+
+    expect(ProposalReturned::unavailableReason($this->coordinador, $message))->toBeNull();
+});

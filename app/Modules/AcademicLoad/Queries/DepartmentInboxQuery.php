@@ -102,14 +102,21 @@ final class DepartmentInboxQuery
 
     /**
      * Los departamentos cuya bandeja puede ver el usuario en el campus (los que cubre con alguno de los roles que
-     * ven la carga), por clave: el del jefe, o todos para subdirección y admin.
+     * ven la carga), por clave: el del jefe, o todos para subdirección y admin. Con `$term`, también el que se
+     * desactivó o se borró pero tiene partes en ese periodo y campus, para que lo pendiente se pueda decidir.
      *
      * @return Collection<int, Department>
      */
-    public function departmentsFor(ScopedContext $context, Campus $campus): Collection
+    public function departmentsFor(ScopedContext $context, Campus $campus, ?Term $term = null): Collection
     {
         return Department::query()
-            ->where('is_active', true)
+            ->withTrashed()
+            ->where(fn ($query) => $query
+                ->where(fn ($current) => $current->whereNull('deleted_at')->where('is_active', true))
+                ->when($term !== null, fn ($query) => $query->orWhereIn('id', ProposalReview::query()
+                    ->select('department_id')
+                    ->whereIn('career_proposal_id', CareerProposal::query()->select('id')->where('term_id', $term->getKey())->where('campus_id', $campus->getKey()))))
+            )
             ->orderBy('code')
             ->get()
             ->filter(fn (Department $department): bool => $context->covers(AcademicLoadPolicy::VIEWERS, $campus, department: $department->getKey()))
@@ -123,17 +130,42 @@ final class DepartmentInboxQuery
      */
     public function inboxOf(string $termId, string $campusId, string $departmentId): DepartmentInbox
     {
-        return $this->inbox(KeyLookup::findOrFail(Term::query(), $termId), KeyLookup::findOrFail(Campus::query(), $campusId), KeyLookup::findOrFail(Department::query(), $departmentId));
+        return $this->inbox(
+            KeyLookup::findOrFail(Term::query(), $termId),
+            KeyLookup::findOrFail(Campus::query(), $campusId),
+            KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId),
+        );
     }
 
     /**
-     * La parte de un departamento por un id que llega del cliente; la de otro departamento no existe.
+     * El campus y el departamento de la bandeja, por los ids que guardó la página, sin armarla: lo que pide
+     * ProposalReviewPolicy::viewAny antes de decidir una parte.
+     *
+     * @return array{0: Campus, 1: Department}
+     */
+    public function scopeOf(string $campusId, string $departmentId): array
+    {
+        return [
+            KeyLookup::findOrFail(Campus::query(), $campusId),
+            KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId),
+        ];
+    }
+
+    /**
+     * La parte de un departamento por un id que llega del cliente, con su propuesta y la carrera de esta; la de
+     * otro departamento no existe. Con `$termId` y `$campusId`, tampoco la de otro periodo u otro campus.
      *
      * @throws ModelNotFoundException<ProposalReview>
      */
-    public function reviewOrFail(Department $department, string $id): ProposalReview
+    public function reviewOrFail(Department $department, string $id, ?string $termId = null, ?string $campusId = null): ProposalReview
     {
-        return KeyLookup::findOrFail(ProposalReview::query()->where('department_id', $department->getKey()), $id);
+        $query = ProposalReview::query()
+            ->where('department_id', $department->getKey())
+            ->with(['proposal.career' => fn ($career) => $career->withTrashed()])
+            ->when($termId !== null, fn ($query) => $query->whereHas('proposal', fn ($proposal) => $proposal->where('term_id', $termId)))
+            ->when($campusId !== null, fn ($query) => $query->whereHas('proposal', fn ($proposal) => $proposal->where('campus_id', $campusId)));
+
+        return KeyLookup::findOrFail($query, $id);
     }
 
     /**
