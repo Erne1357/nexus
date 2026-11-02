@@ -20,5 +20,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0014](0014-uuidv7-como-llave-primaria.md) | UUIDv7 como llave primaria en todo modelo de Nexus; se editaron una sola vez las migraciones de la fase 0 | Aceptada | 2026-10-27 |
 | [0015](0015-identidad-visual.md) | Identidad visual: credencial con áreas, menú que se transforma, paleta institucional, Atkinson Hyperlegible y la liebre como marca | Aceptada | 2026-10-29 |
 | [0016](0016-btree-gist-para-exclusiones-por-fecha.md) | Extensión `btree_gist` para restricciones de exclusión por rango de fechas (un jefe a la vez) | Aceptada | 2026-10-29 |
+| [0017](0017-catalog-validation-antes-de-academic-load.md) | CatalogValidation a la izquierda de AcademicLoad: la carga lee el estado de las revisiones de catálogo (HC-14) | Aceptada | 2026-11-01 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.

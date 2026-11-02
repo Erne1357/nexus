@@ -22,6 +22,7 @@ flowchart LR
     Facilities --> Imports
     Students --> Imports
     Imports --> CatalogValidation
+    CatalogValidation --> AcademicLoad
     Academic --> AcademicLoad
     Students --> Demand --> AcademicLoad
     AcademicLoad --> Scheduling
