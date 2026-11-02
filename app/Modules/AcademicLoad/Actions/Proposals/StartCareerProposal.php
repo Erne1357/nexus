@@ -148,8 +148,8 @@ final class StartCareerProposal
     /**
      * Las materias activas de la retícula de los planes activos de la carrera, sin lo borrado ni lo quitado de la
      * retícula, una vez cada una: la del primer plan por clave. Sin residencia, servicio social ni actividades
-     * complementarias, que no abren grupos de clase, y sin las materias sin horas de clase, que es como se
-     * reconocen cuando el SII no trae su tipo.
+     * complementarias, que no abren grupos de clase, y sin las materias sin horas de clase, tengan o no capturado
+     * su tipo, porque el SII no lo trae (confirmado el 2 de noviembre de 2026).
      *
      * @return Collection<int, object{subject_id: string, study_plan_id: string, semester: int, needs_lab: bool}>
      */

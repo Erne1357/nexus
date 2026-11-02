@@ -184,7 +184,7 @@ describe('jefe de departamento', function () {
             ->assertHasErrors('comment');
     });
 
-    it('una parte aceptada, regresada o de una propuesta regresada no ofrece botones y muestra el comentario', function () {
+    it('una parte aceptada o regresada no ofrece botones y muestra el comentario', function () {
         $this->iscPart->update(['status' => ProposalReviewStatus::Returned, 'comment' => 'Revisa los esperados.']);
         $this->iscProposal->update(['status' => ProposalStatus::Returned]);
 
@@ -208,6 +208,7 @@ describe('jefe de departamento', function () {
 
 describe('lo que se decide y se cuenta', function () {
     it('abre por omisión la primera parte que se puede decidir y solo esas cuentan como pendientes', function () {
+        $this->iindPart->update(['status' => ProposalReviewStatus::Returned, 'comment' => 'Revisa los esperados.']);
         $this->iindProposal->update(['status' => ProposalStatus::Returned]);
 
         inboxPageAs($this->jefe)
@@ -215,6 +216,57 @@ describe('lo que se decide y se cuenta', function () {
             ->assertViewHas('pendingCount', 1)
             ->set('filter', 'pendientes')
             ->assertViewHas('visible', fn (array $rows): bool => count($rows) === 1 && $rows[0]['career']->code === 'ISC');
+    });
+
+    describe('con la propuesta regresada por otro departamento', function () {
+        beforeEach(function () {
+            $this->iscPart->update(['status' => ProposalReviewStatus::Accepted]);
+            $this->iindProposal->update(['status' => ProposalStatus::Returned]);
+            ProposalReview::factory()->returned('Pide un grupo más de Redes.')->create(['career_proposal_id' => $this->iindProposal->id, 'department_id' => $this->sc->id]);
+        });
+
+        it('la parte pendiente se abre por omisión, entra en Pendientes y ofrece Aceptar y Regresar', function () {
+            inboxPageAs($this->jefe)
+                ->assertViewHas('selected', fn (array $row): bool => $row['career']->code === 'IIND')
+                ->assertViewHas('pendingCount', 1)
+                ->assertViewHas('canDecide', true)
+                ->assertSee('Pendiente')
+                ->assertSeeHtml('data-testid="accept-part"')
+                ->assertSeeHtml('data-testid="return-part"')
+                ->assertSeeHtml('data-testid="proposal-in-correction"')
+                ->set('filter', 'pendientes')
+                ->assertViewHas('visible', fn (array $rows): bool => count($rows) === 1 && $rows[0]['career']->code === 'IIND');
+        });
+
+        it('aceptarla la deja aceptada y la propuesta sigue regresada', function () {
+            inboxPageAs($this->jefe, ['carrera' => $this->iind->id])
+                ->call('confirmAccept', $this->iindPart->id)
+                ->call('accept')
+                ->assertHasNoErrors()
+                ->assertSet('showAccept', false)
+                ->assertDontSeeHtml('data-testid="accept-part"');
+
+            expect($this->iindPart->fresh()->status)->toBe(ProposalReviewStatus::Accepted)
+                ->and($this->iindProposal->fresh()->status)->toBe(ProposalStatus::Returned);
+        });
+
+        it('regresarla la deja regresada con su comentario y la propuesta sigue regresada', function () {
+            inboxPageAs($this->jefe, ['carrera' => $this->iind->id])
+                ->call('confirmReturn', $this->iindPart->id)
+                ->set('comment', 'Sin docentes para Cálculo.')
+                ->call('returnPart')
+                ->assertHasNoErrors()
+                ->assertSee('Sin docentes para Cálculo.');
+
+            expect($this->iindPart->fresh())->status->toBe(ProposalReviewStatus::Returned)->comment->toBe('Sin docentes para Cálculo.')
+                ->and($this->iindProposal->fresh()->status)->toBe(ProposalStatus::Returned);
+        });
+    });
+
+    it('una parte pendiente de una propuesta enviada no muestra el aviso de la propuesta en corrección', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertSeeHtml('data-testid="accept-part"')
+            ->assertDontSeeHtml('data-testid="proposal-in-correction"');
     });
 
     it('no decide una parte de otro campus ni de otro periodo aunque llegue su id', function () {

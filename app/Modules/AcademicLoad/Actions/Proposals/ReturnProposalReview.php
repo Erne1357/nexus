@@ -19,10 +19,13 @@ use Illuminate\Validation\ValidationException;
  *
  * Recorta el comentario y exige que no quede vacío y lleve hasta 1000 caracteres (ProposalReviewRules, supuesto
  * por confirmar), como ValidationException sobre `comment`. En una transacción bloquea la propuesta y luego la
- * parte (el estado que vale es el de la base, como en SubmitCareerProposal) y exige la propuesta enviada y la
- * parte pendiente, sobre `status`. Marca la parte regresada con su comentario, quién y cuándo, y la propuesta
- * regresada. Deja bitácora de la parte y, después del commit, avisa con CareerProposalReturned. Quién puede lo
- * decide ProposalReviewPolicy::decide antes de llamarla; quien regresa se recibe como parámetro.
+ * parte (el estado que vale es el de la base, como en SubmitCareerProposal y UpdateProposalItem) y exige la parte
+ * pendiente con la propuesta enviada o ya regresada por otro departamento (ProposalReviewRules; confirmado el 2 de
+ * noviembre de 2026), sobre `status`. Marca la parte regresada con su comentario, quién y cuándo, y la propuesta
+ * regresada (si ya lo estaba, sigue así). Deja bitácora de la parte y, después del commit, avisa con
+ * CareerProposalReturned, también cuando la propuesta ya estaba regresada: el coordinador recibe el comentario de
+ * cada departamento. Quién puede lo decide ProposalReviewPolicy::decide antes de llamarla; quien regresa se recibe
+ * como parámetro.
  */
 final class ReturnProposalReview
 {

@@ -7,7 +7,6 @@ use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\InboxStatus;
-use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -15,6 +14,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\AcademicLoadPolicy;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
+use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Models\Campus;
@@ -31,14 +31,19 @@ use Illuminate\Support\Collection;
  */
 final class DepartmentInboxQuery
 {
-    public function __construct(private readonly CatalogReviewQuery $catalogReviews) {}
+    public function __construct(
+        private readonly CatalogReviewQuery $catalogReviews,
+        private readonly ProposalReviewRules $reviewRules,
+    ) {}
 
     /**
-     * Todo lo que muestra la bandeja (DepartmentInbox). Un número fijo de consultas, sin importar cuántas carreras,
-     * partes o filas haya: la carga; los catálogos sin validar (CatalogReviewQuery::pendingFor, HC-14); las
-     * propuestas del periodo y campus; las partes del departamento, cada una con su propuesta ya puesta (para
-     * ProposalReviewPolicy::decide sin otra consulta); las filas con grupos de sus materias en esas partes, con sus
-     * materias; las carreras, y el tamaño objetivo de los grupos (SuggestedGroups).
+     * Todo lo que muestra la bandeja (DepartmentInbox); una parte se decide si ProposalReviewRules::isDecidable lo
+     * dice: pendiente, con la propuesta enviada o regresada por otro departamento (confirmado el 2 de noviembre de
+     * 2026). Un número fijo de consultas, sin importar cuántas carreras, partes o filas haya: la carga; los
+     * catálogos sin validar (CatalogReviewQuery::pendingFor, HC-14); las propuestas del periodo y campus; las partes
+     * del departamento, cada una con su propuesta ya puesta (para ProposalReviewPolicy::decide sin otra consulta);
+     * las filas con grupos de sus materias en esas partes, con sus materias; las carreras, y el tamaño objetivo de
+     * los grupos (SuggestedGroups).
      */
     public function inbox(Term $term, Campus $campus, Department $department): DepartmentInbox
     {
@@ -74,7 +79,7 @@ final class DepartmentInboxQuery
                 return [
                     'career' => $career,
                     'status' => InboxStatus::ofPart($review?->status),
-                    'decidable' => $review?->status === ProposalReviewStatus::Pending && $proposal->status === ProposalStatus::Submitted,
+                    'decidable' => $review !== null && $this->reviewRules->isDecidable($proposal->status, $review->status),
                     'proposal' => $proposal,
                     'review' => $review,
                     'subjects' => $requested->count(),
@@ -214,9 +219,9 @@ final class DepartmentInboxQuery
     }
 
     /**
-     * La sugerencia de paralelos de cada materia con las partes que cuentan: las aceptadas y las pendientes de una
-     * propuesta enviada (supuesto por confirmar), con el tamaño objetivo de la materia. Por clave de materia; las
-     * carreras, por clave.
+     * La sugerencia de paralelos de cada materia con las partes que cuentan: las aceptadas y las que se pueden
+     * decidir, que son las pendientes de una propuesta enviada o regresada por otro departamento (supuesto por
+     * confirmar), con el tamaño objetivo de la materia. Por clave de materia; las carreras, por clave.
      *
      * @param  Collection<int, array{career: Career, status: InboxStatus, decidable: bool, proposal: ?CareerProposal, review: ?ProposalReview, rows: list<ProposalItem>}>  $careers
      * @return list<array{subject: Subject, expected: int, parallels: ParallelGroups}>
