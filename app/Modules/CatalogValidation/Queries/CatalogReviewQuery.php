@@ -79,8 +79,8 @@ final class CatalogReviewQuery
 
     /**
      * La última revisión validada, con foto, del mismo departamento, catálogo y campus en un periodo que empieza
-     * antes que el de `$review` (confirmado el 2 de noviembre de 2026): contra su foto se cuentan las altas y las
-     * bajas. Una reabierta no cuenta aunque conserve su foto. Nula en el primer periodo.
+     * antes que el de `$review` (CV3, confirmado el 2 de noviembre de 2026): contra su foto se cuentan las altas y las
+     * bajas. Una reabierta no cuenta aunque conserve su foto (CV-S6, supuesto por confirmar). Nula en el primer periodo.
      */
     public function previousValidation(CatalogReview $review): ?CatalogReview
     {

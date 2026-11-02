@@ -15,11 +15,12 @@ use App\Modules\Core\Queries\ScopedContext;
  *
  * - El jefe de departamento, que es de todo el Tec: en las revisiones generales, si cubre el departamento; en
  *   las de salones, si además su alcance vale en el campus de la revisión (D2).
- * - Corregir, validar, reabrir y poner observaciones: solo ese jefe; ni el admin ni Subdirección (supuesto
- *   por confirmar). Los salones los corrige solo si el perfil del campus de la revisión lo permite
- *   (`heads_edit_rooms`; confirmado para Campus I el 2 de noviembre de 2026, por configuración en los demás).
+ * - Corrige materias, carreras y planes (CV1) y, solo si el perfil del campus de la revisión lo permite
+ *   (`heads_edit_rooms`), sus salones (CV2); confirmado el 2 de noviembre de 2026.
+ * - Corregir, validar, reabrir y poner observaciones: solo ese jefe; ni el admin ni Subdirección (CV-S1,
+ *   supuesto por confirmar).
  * - Ver la revisión y sus observaciones, y marcar una observación como resuelta: ese jefe, el admin y
- *   Subdirección (supuesto por confirmar).
+ *   Subdirección (CV-S1, supuesto por confirmar).
  *
  * El estado de la revisión (corregir y observar mientras no está validada, reabrir una validada) lo hacen
  * cumplir las Actions. Que ninguna carga del departamento haya salido de borrador al reabrir lo veta

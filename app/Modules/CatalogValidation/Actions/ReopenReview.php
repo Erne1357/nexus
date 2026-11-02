@@ -13,8 +13,8 @@ use Illuminate\Validation\ValidationException;
 /**
  * Reabre una revisión validada: queda en revisión, sin quién ni cuándo se validó, para que el jefe vuelva a
  * corregir (CV5). La foto se conserva hasta la siguiente validación, pero una reabierta ya no cuenta como la
- * validación anterior del periodo siguiente (CatalogReviewQuery::previousValidation solo lee validadas). Quién
- * puede lo decide CatalogReviewPolicy::reopen antes de llamarla.
+ * validación anterior del periodo siguiente (CatalogReviewQuery::previousValidation solo lee validadas; CV-S6,
+ * supuesto por confirmar). Quién puede lo decide CatalogReviewPolicy::reopen antes de llamarla.
  *
  * En una transacción relee la revisión con bloqueo y, antes de escribir, despacha CatalogReviewReopening: si
  * un módulo de la derecha la veta (AcademicLoad, porque una carga del departamento ya salió de borrador),

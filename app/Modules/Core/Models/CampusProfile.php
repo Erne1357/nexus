@@ -20,8 +20,8 @@ final readonly class CampusProfile
      * Bloques, horario y días: supuesto 4 de PROJECT.md (bloque de 1 h, 7:00 a 21:00, lunes a viernes).
      * Sin visto bueno obligatorio de Subdirección: ADR-0008 (se activa por configuración). Sin
      * docentes externos: los de presencial son del ITCJ. Sin que los jefes corrijan sus salones al validar
-     * (`heads_edit_rooms`): confirmado para Campus I el 2 de noviembre de 2026; en los demás, lo restrictivo
-     * mientras se confirma (reglas-de-negocio.md, "Validación de catálogos").
+     * (`heads_edit_rooms`): lo restrictivo mientras se confirma (CV-S5); Campus I lo activa (CV2, confirmado el
+     * 2 de noviembre de 2026; reglas-de-negocio.md, "Validación de catálogos").
      *
      * @var array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool, heads_edit_rooms: bool}
      */

@@ -16,9 +16,8 @@ use Illuminate\Database\Seeder;
  * - EAD: virtual de lunes a jueves y presencial viernes y sábado (glosario, PROJECT.md).
  * - TNMV: docentes del TecNM, es decir, externos al ITCJ (glosario, PROJECT.md).
  * - ENL: nada documentado más allá de su modalidad.
- * - C1: los jefes corrigen sus salones al validar los catálogos (confirmado el 2 de noviembre de 2026); en los
- *   demás campus no, mientras se confirma (supuesto por confirmar, reglas-de-negocio.md, "Validación de
- *   catálogos").
+ * - C1: los jefes corrigen sus salones al validar los catálogos (CV2, confirmado el 2 de noviembre de 2026).
+ *   En los demás campus no, mientras se confirma (CV-S5, supuesto por confirmar).
  *
  * Solo crea los campus que faltan (también entre los borrados): volver a sembrar no pisa un
  * perfil ya editado.
