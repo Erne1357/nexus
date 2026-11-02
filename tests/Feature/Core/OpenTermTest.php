@@ -1,8 +1,14 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -154,4 +160,88 @@ it('pide una sesión: sin usuario no sabe quién abre', function () {
         ->toThrow(AuthorizationException::class, 'Inicia sesión para abrir el periodo.');
 
     expect(TermOpening::count())->toBe(0);
+});
+
+describe('con los módulos que lo escuchan (AcademicLoad y CatalogValidation)', function () {
+    beforeEach(function () {
+        $this->term = Term::factory()->create(['code' => '20271']);
+        $this->c2 = Campus::factory()->create(['code' => 'C2']);
+        Department::factory()->create(['code' => 'D1']);
+        Department::factory()->create(['code' => 'D2']);
+        Department::factory()->create(['code' => 'D3']);
+        Department::factory()->inactive()->create(['code' => 'D8']);
+        Department::factory()->create(['code' => 'D9'])->delete();
+    });
+
+    it('abrir en C2 crea la carga en borrador y las revisiones de cada departamento activo, y lo reporta', function () {
+        expect(openTerm($this->term, $this->c2))->toBe(['15 revisiones de catálogo nuevas', '3 cargas académicas nuevas']);
+
+        $loads = AcademicLoad::query()->with('department')->get();
+        $reviews = CatalogReview::query()->with('department')->get();
+
+        expect($loads->map(fn (AcademicLoad $load): string => $load->department->code)->sort()->values()->all())->toBe(['D1', 'D2', 'D3'])
+            ->and($loads->every(fn (AcademicLoad $load): bool => $load->campus_id === $this->c2->id && $load->status === LoadStatus::Draft))->toBeTrue()
+            ->and($reviews->where('campus_id', null)->count())->toBe(12)
+            ->and($reviews->where('catalog', Catalog::Rooms)->pluck('campus_id')->unique()->all())->toBe([$this->c2->id])
+            ->and($reviews->pluck('department.code')->unique()->sort()->values()->all())->toBe(['D1', 'D2', 'D3'])
+            ->and(Activity::sole()->properties['report'])->toBe(['15 revisiones de catálogo nuevas', '3 cargas académicas nuevas']);
+    });
+
+    it('volver a abrir en C2 no crea nada y devuelve el reporte vacío', function () {
+        openTerm($this->term, $this->c2);
+
+        expect(openTerm($this->term, $this->c2))->toBe([])
+            ->and(AcademicLoad::count())->toBe(3)
+            ->and(CatalogReview::count())->toBe(15);
+    });
+
+    it('completar la apertura crea solo lo del departamento nuevo', function () {
+        openTerm($this->term, $this->c2);
+        Department::factory()->create(['code' => 'D4']);
+
+        expect(openTerm($this->term, $this->c2))->toBe(['5 revisiones de catálogo nuevas', '1 carga académica nueva']);
+    });
+
+    it('abrir después en C1 crea las cargas y los salones de C1, sin repetir las revisiones generales', function () {
+        openTerm($this->term, $this->c2);
+        $c1 = Campus::factory()->create(['code' => 'C1']);
+
+        expect(openTerm($this->term, $c1))->toBe(['3 revisiones de catálogo nuevas', '3 cargas académicas nuevas'])
+            ->and(AcademicLoad::query()->where('campus_id', $c1->id)->count())->toBe(3)
+            ->and(CatalogReview::query()->where('campus_id', $c1->id)->where('catalog', Catalog::Rooms)->count())->toBe(3)
+            ->and(CatalogReview::query()->whereNull('campus_id')->count())->toBe(12);
+    });
+
+    it('en un campus cuyo perfil no usa salones no crea revisiones de salones', function () {
+        $online = Campus::factory()->create(['code' => 'ENL', 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+
+        expect(openTerm($this->term, $online))->toBe(['12 revisiones de catálogo nuevas', '3 cargas académicas nuevas'])
+            ->and(CatalogReview::query()->where('catalog', Catalog::Rooms)->exists())->toBeFalse();
+    });
+
+    it('es todo o nada: si un listener falla después, no quedan apertura, cargas ni revisiones', function () {
+        $createdBeforeFailing = [];
+        Event::listen(TermOpened::class, function () use (&$createdBeforeFailing): void {
+            $createdBeforeFailing = [AcademicLoad::count(), CatalogReview::count()];
+
+            throw new RuntimeException('Falla un módulo.');
+        });
+
+        expect(fn () => openTerm($this->term, $this->c2))->toThrow(RuntimeException::class);
+
+        expect($createdBeforeFailing)->toBe([3, 15])
+            ->and(TermOpening::count())->toBe(0)
+            ->and(AcademicLoad::count())->toBe(0)
+            ->and(CatalogReview::count())->toBe(0)
+            ->and(Activity::count())->toBe(0);
+    });
+
+    it('un campus inactivo no crea cargas ni revisiones', function () {
+        $closed = Campus::factory()->inactive()->create();
+
+        expect(fn () => openTerm($this->term, $closed))->toThrow(ValidationException::class);
+
+        expect(AcademicLoad::count())->toBe(0)
+            ->and(CatalogReview::count())->toBe(0);
+    });
 });
