@@ -4,6 +4,8 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Transitions\ProposeLoad;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
@@ -108,6 +110,11 @@ describe('en secuencia con ProposeLoad', function () {
         $this->load = reopeningLoad($this->c1, LoadStatus::Draft);
         $this->reviews = collect(Catalog::general())->map(fn (Catalog $catalog) => reopeningReview($catalog))
             ->push(reopeningReview(Catalog::Rooms, $this->c1));
+        // HC-20: la carga sale de borrador con al menos una parte de propuesta aceptada del departamento.
+        ProposalReview::factory()->accepted()->create([
+            'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->load->campus_id])->id,
+            'department_id' => $this->load->department_id,
+        ]);
     });
 
     it('si la carga se propuso primero, la revisión ya no se reabre', function () {

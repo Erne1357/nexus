@@ -51,7 +51,7 @@ final class ProposalSubmitted extends NexusNotification
         $proposal = $message->termId === null || $message->campusId === null || ! is_string($career) ? null : CareerProposal::query()
             ->where('term_id', $message->termId)
             ->where('campus_id', $message->campusId)
-            ->where('career_id', KeyLookup::find(Career::query(), $career)?->getKey())
+            ->where('career_id', KeyLookup::find(Career::query()->withTrashed(), $career)?->getKey())
             ->first();
         $department = Department::query()->where('code', $message->parameters['depto'] ?? null)->first();
 

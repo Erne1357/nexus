@@ -59,9 +59,18 @@ final readonly class SuggestedGroups
             return 0;
         }
 
-        $size = $needsLab ? $this->labSize : $this->defaultSize;
+        $size = $this->sizeFor($needsLab);
 
         return intdiv($expectedStudents + $size - 1, $size);
+    }
+
+    /**
+     * El tamaño objetivo de una materia: el de laboratorio si lo lleva (`needs_lab`), si no el general. Lo usan
+     * también los paralelos de la bandeja del departamento (ParallelGroups).
+     */
+    public function sizeFor(bool $needsLab): int
+    {
+        return $needsLab ? $this->labSize : $this->defaultSize;
     }
 
     private static function sizeOr(mixed $size, int $fallback): int
