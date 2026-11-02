@@ -116,11 +116,11 @@ Etapa 3 de `docs/proceso/proceso-propuesto.md`: el coordinador pide, por cada ma
 - Una propuesta enviada queda de solo lectura. Si un departamento la regresa, el coordinador la corrige y la reenvía, y lo que ya le aceptaron no cambia: las materias de un departamento que aceptó su parte quedan bloqueadas (confirmado el 2 de noviembre de 2026).
 - Enviarla con catálogos sin validar de algún departamento involucrado da un aviso, no la bloquea ("Aprobaciones y permisos").
 - La propuesta solo se arma en un periodo abierto en el campus (`term_openings`) y para una carrera que se ofrece en él (`career_campus` activa) (supuesto por confirmar).
-- Sus materias son las de la retícula de los planes activos de la carrera, solo las materias activas (HC-13). Una materia que está en dos planes activos es una sola fila, con el plan y el semestre del primer plan activo por clave (supuesto por confirmar).
+- Sus materias son las de la retícula de los planes activos de la carrera, solo las materias activas, como pide HC-13 (supuesto por confirmar). Una materia que está en dos planes activos es una sola fila, con el plan y el semestre del primer plan activo por clave (supuesto por confirmar).
 - Los elegibles de cada fila son los del momento en que se arma la propuesta; volver a abrirla no la arma de nuevo ni cambia sus filas (supuesto por confirmar).
 - El tamaño objetivo se lee del parámetro global `demand.target_group_size` (`{"default": 35, "lab": 25}`). Si no existe, o uno de sus dos valores no es un entero mayor que cero, ese valor es 35 o 25 (supuesto por confirmar).
 - Por materia, los alumnos esperados van de 0 a 1000, los grupos de 0 a 30 y las notas llevan hasta 500 caracteres (supuesto por confirmar).
-- Enviar exige al menos una materia con grupos. Las partes son las de los departamentos de las materias con grupos (supuesto por confirmar).
+- Enviar exige al menos una materia con grupos (supuesto por confirmar). Las partes son las de los departamentos de las materias con grupos: a un departamento cuyas materias van todas con cero grupos no se le pide nada (supuesto por confirmar).
 - Al reenviar, la parte aceptada se queda como está, las demás vuelven a pendiente y se limpia su comentario, que queda en la bitácora, y la parte de un departamento al que ya no se le piden grupos desaparece. Si todas las partes que quedan ya estaban aceptadas, la propuesta queda aceptada al reenviarla (supuestos por confirmar).
 - El aviso a los jefes de que tienen una propuesta por revisar llega con la campana de notificaciones (tarea 2.9).
 
