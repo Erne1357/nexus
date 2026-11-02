@@ -6,7 +6,7 @@
     la credencial con avatar y nombre) y max-md: es el celular (liebre, «Nexus», lupa, campana y avatar).
 --}}
 <div class="sticky top-0 z-[7] text-sm/[1.45]">
-    <header class="flex h-16 items-center gap-[18px] bg-band pe-5 text-band-content max-md:h-14 max-md:gap-3 max-md:pe-2.5">
+    <header class="flex h-16 items-center gap-[18px] max-desktop:gap-3.5 bg-band pe-5 text-band-content max-md:h-14 max-md:gap-3 max-md:pe-2.5">
         <button
             type="button"
             id="nexus-hare"
@@ -45,7 +45,7 @@
             data-testid="menu-search-trigger"
             aria-controls="nexus-menu"
             x-on:click="openMenu()"
-            class="flex h-10 w-[clamp(260px,26vw,520px)] cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-band-content/18 bg-band-content/8 px-3 whitespace-nowrap text-band-muted transition-[opacity,visibility] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-desktop:w-[220px] max-md:hidden in-data-[menu=open]:pointer-events-none in-data-[menu=open]:invisible in-data-[menu=open]:opacity-0"
+            class="flex h-10 w-[clamp(260px,26vw,520px)] flex-none cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-band-content/18 bg-band-content/8 px-3 whitespace-nowrap text-band-muted transition-[opacity,visibility] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-desktop:w-[226px] max-desktop:flex-none max-md:hidden in-data-[menu=open]:pointer-events-none in-data-[menu=open]:invisible in-data-[menu=open]:opacity-0"
         >
             <x-icon name="o-magnifying-glass" class="w-[18px] h-[18px] flex-none" />
             Buscar o ir a…

@@ -11,7 +11,7 @@ use Mary\Traits\Toast;
 /**
  * La campana de la banda (tarea 2.9; opción A de la maqueta, elegida el 2 de noviembre de 2026): el botón
  * con las no leídas y, al abrirlo, una tarjeta flotante con la misma forma que la de la credencial con las
- * notificaciones recientes del usuario (NotificationQuery) y «Marcar todas como leídas». Abrir una la marca
+ * notificaciones recientes del usuario (NotificationQuery), «Marcar todas como leídas» y, al pie, «Ver todas (N)», que lleva a core.notifications. Abrir una la marca
  * leída y lleva a su pantalla (OpenNotification); si ya no está disponible, lo avisa con un toast y se queda.
  * La banda la carga en diferido (lazy). Se refresca cada minuto mientras está a la vista: un conteo y las 15
  * recientes, para que la tarjeta abra sin esperar al servidor. Abrir y cerrar es de Alpine; cerrar la credencial al
@@ -47,6 +47,7 @@ new class extends Component
         return [
             'unread' => $unread,
             'badge' => $unread > 99 ? '99+' : (string) $unread,
+            'total' => $user === null ? 0 : $notifications->total($user),
             'items' => $user === null ? collect() : $notifications->recent($user),
             'label' => match (true) {
                 $unread === 0 => 'Notificaciones: sin notificaciones nuevas',
