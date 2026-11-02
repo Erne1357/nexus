@@ -45,6 +45,29 @@ final class TermQuery
     }
 
     /**
+     * Los renglones de la sección «Campus» de la ficha, por código: cada campus activo (`opening` es null si el
+     * periodo no se ha abierto en él) y, solo lectura (`actionable` falso), los campus donde se abrió y que ya
+     * están inactivos o borrados.
+     *
+     * @param  Collection<int, Campus>  $active
+     * @return Collection<int, array{campus: Campus, opening: ?TermOpening, actionable: bool}>
+     */
+    public function campusRows(Term $term, Collection $active): Collection
+    {
+        $openings = $this->openings($term)->keyBy('campus_id');
+
+        return $active
+            ->map(fn (Campus $campus): array => ['campus' => $campus, 'opening' => $openings->get($campus->id), 'actionable' => true])
+            ->concat(
+                $openings
+                    ->reject(fn (TermOpening $opening): bool => $active->contains('id', $opening->campus_id))
+                    ->map(fn (TermOpening $opening): array => ['campus' => $opening->campus, 'opening' => $opening, 'actionable' => false])
+            )
+            ->sortBy(fn (array $row): string => $row['campus']->code)
+            ->values();
+    }
+
+    /**
      * Los periodos que se abrieron en un campus, del más reciente al más antiguo.
      *
      * @return Collection<int, Term>
@@ -67,6 +90,7 @@ final class TermQuery
     public function forTable(ScopedContext $context, string $search = '', int $perPage = 15): LengthAwarePaginator
     {
         return Term::query()
+            ->with(['openings.campus' => fn (BelongsTo $query) => $query->withTrashed()])
             ->unless(Gate::forUser($context->user())->allows('viewAny', Term::class), fn (Builder $query) => $query->whereRaw('false'))
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->orderByDesc('starts_on')

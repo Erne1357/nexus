@@ -53,6 +53,76 @@
         </div>
     </div>
 
+    <section aria-labelledby="term-campuses-title" class="space-y-3">
+        <h2 id="term-campuses-title" class="text-xl font-bold leading-tight">Campus</h2>
+
+        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100 divide-y divide-base-300" data-testid="term-campuses">
+            @foreach ($campusRows as $row)
+                @php($campus = $row['campus'])
+                @php($opening = $row['opening'])
+                <div
+                    wire:key="campus-row-{{ $campus->id }}"
+                    data-testid="campus-{{ $campus->code }}"
+                    class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3.5 md:grid-cols-[48px_minmax(0,1fr)_auto_auto]"
+                >
+                    <span @class(['font-mono text-[15px] font-semibold', 'text-neutral' => $opening === null])>{{ $campus->code }}</span>
+
+                    <div class="col-span-full row-start-2 min-w-0 md:col-span-1 md:row-start-auto">
+                        <b @class(['block text-[15px] font-bold', 'text-neutral' => $opening === null])>{{ $campus->name }}</b>
+                        <small class="block text-[13.5px] text-neutral">
+                            @if ($opening === null)
+                                No abierto en este periodo
+                            @else
+                                @php($openedOn = $opening->opened_at->timezone('America/Ciudad_Juarez'))
+                                {{ 'Abierto el '.\App\Modules\Core\Support\StageTimeline::dateLabel($openedOn).' '.$openedOn->year.($opening->opener ? ' por '.$opening->opener->name : '').($campus->trashed() ? ' · Campus borrado' : (! $campus->is_active ? ' · Campus inactivo' : '')) }}
+                            @endif
+                        </small>
+                    </div>
+
+                    @if ($opening === null)
+                        <x-core::status-badge tone="neutral" label="No abierto" class="md:col-start-3" />
+                    @else
+                        <x-core::status-badge tone="success" label="Abierto" class="md:col-start-3" />
+                    @endif
+
+                    <div class="col-span-full row-start-3 flex justify-end md:col-span-1 md:col-start-4 md:row-start-auto md:min-w-[156px]">
+                        @if (! $row['actionable'])
+                            {{-- Campus inactivo o borrado: solo lectura, sin acciones. --}}
+                        @elseif ($opening === null)
+                            @if ($canOpen)
+                                <x-button
+                                    label="Abrir en {{ $campus->name }}"
+                                    class="btn-outline btn-sm max-md:flex-1"
+                                    wire:click="openIn('{{ $campus->id }}')"
+                                    wire:confirm="¿Abrir el periodo {{ $term->code }} en {{ $campus->name }}? Se crean la carga académica y las revisiones de catálogo de cada departamento activo."
+                                    spinner="openIn('{{ $campus->id }}')"
+                                    data-testid="open-{{ $campus->code }}"
+                                />
+                            @else
+                                <span class="tooltip tooltip-left max-md:flex-1" data-tip="Solo el administrador o la subdirección abren periodos.">
+                                    <x-button label="Abrir en {{ $campus->name }}" class="btn-outline btn-sm w-full" disabled data-testid="open-{{ $campus->code }}" />
+                                </span>
+                            @endif
+                        @else
+                            <x-core::row-menu :name="$campus->code">
+                                @if ($canOpen)
+                                    <x-core::row-menu-item
+                                        label="Completar apertura"
+                                        wire:click="completeIn('{{ $campus->id }}')"
+                                        :spinner="'completeIn(\''.$campus->id.'\')'"
+                                        :data-testid="'complete-'.$campus->code"
+                                    />
+                                @else
+                                    <x-core::row-menu-item label="Completar apertura" reason="Solo el administrador o la subdirección abren periodos." disabled />
+                                @endif
+                            </x-core::row-menu>
+                        @endif
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </section>
+
     <section aria-labelledby="term-calendar-title" class="space-y-3">
         <h2 id="term-calendar-title" class="text-xl font-bold leading-tight">Calendario</h2>
 
