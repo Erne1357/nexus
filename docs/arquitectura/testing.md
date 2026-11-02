@@ -141,7 +141,9 @@ CI usa lo mismo que el desarrollo local: la etapa `dev` del `Dockerfile` y los s
 1. Construye la imagen `dev` con Buildx y la caché de GitHub Actions (`type=gha`) y la etiqueta `nexus-app:dev`, que es la que espera `compose.override.yaml`; así `docker compose run` no reconstruye nada. Los build args `UID`/`GID` son los del usuario del runner, para que el usuario `app` de la imagen pueda escribir en el código montado en `/app`.
 2. Crea `.env` desde `.env.example` con un `APP_KEY` generado (igual que el README).
 3. Instala Composer dentro del contenedor (`browser` también hace `npm ci`: `pest-plugin-browser` busca `node_modules/.bin/playwright`; Chromium ya viene en la imagen).
-4. Levanta PostgreSQL y Valkey (`lint` no los necesita) y corre su comando con `docker compose run --rm -T app ...`.
+4. Levanta PostgreSQL y Valkey (`lint` no los necesita) y corre su comando con `docker compose run --rm -T app ...`. `tests` corre en paralelo, un proceso por núcleo del runner (`--parallel --processes=$(nproc)`), cada uno con su base `nexus_test_test_<n>`.
+
+La suite corre solo en los PR. Al mezclar a `develop` o `main` el push corre `lint` y el job `tests` solo construye la imagen para calentar la caché: la protección exige la rama al día con su base, así que lo mezclado es lo mismo que el PR ya probó (desde el 2 de noviembre de 2026; antes la suite se repetía en cada push y en la fase 2 pasó de los 20 minutos del job). En local se corren las pruebas que el cambio toca y `tests/Arch`; la regresión completa es la del PR.
 
 Los pasos 1 a 3 viven en la acción local `.github/actions/setup-ci`. Solo el job `tests` guarda las capas de la imagen en la caché (un solo escritor evita carreras); los tres la leen.
 
