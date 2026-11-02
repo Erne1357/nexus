@@ -313,6 +313,18 @@ Hay operaciones de un módulo que solo tienen sentido completas junto con lo que
 - Los listeners se registran en el provider del módulo que los escucha, como los de veto.
 - Ejemplo: `TermOpened`, que escuchan `CreateReviewsOnTermOpened` (CatalogValidation) y `CreateLoadsOnTermOpened` (AcademicLoad).
 
+### Transiciones de la carga
+
+El estado de una carga (`academic_loads.status`) cambia en un solo lugar: `AcademicLoad\Actions\Transitions\TransitionLoad`. Cada transición es una Action propia y delgada (hoy `ProposeLoad`; las demás llegan en las fases 3 y 4) que la llama con el estado destino y una guarda:
+
+- **El diagrama son datos**: `LoadStatus::transitions(CampusProfile)` y `canTransitionTo($to, CampusProfile)` listan los destinos permitidos desde cada estado (el diagrama de `docs/proceso/proceso-propuesto.md`). Dependen del perfil del campus: desde Cerrada, un campus con `requires_subdireccion_approval` pasa a Aprobada y uno sin él publica directo. `TransitionLoad` (que recibe al actor como parámetro, para que también la llame un job o un comando) relee la carga con bloqueo dentro de la transacción y rechaza con una `ValidationException` sobre `status` si el estado de la base no permite el destino.
+- **Guarda para las reglas de la izquierda**: la Action de la transición pasa un `Closure(AcademicLoad): list<string>` con los motivos que bloquean, que sale de una clase de `Rules/Constraints` (por ejemplo `CatalogsValidated`, HC-14). Lo que depende de un módulo a la derecha del mapa (Scheduling, Staffing) no se importa: lo veta un listener de `LoadTransitioning`.
+- **Veto para los módulos de la derecha**: `TransitionLoad` despacha `LoadTransitioning` (evento con veto, ver arriba) dentro de la transacción y antes de escribir. Los motivos de la guarda y los del veto se juntan; con cualquiera no se escribe nada y la excepción los lleva todos.
+- **Lo que deja una transición**: el nuevo estado, una fila inmutable en `load_transitions` (de, a, actor, comentario; HC-18), una entrada de bitácora de la carga (evento `transitioned`) y, después del commit, `LoadTransitioned`.
+- **Quién puede**: lo decide `AcademicLoadPolicy` (una ability por transición) antes de llamar a la Action.
+
+Para agregar una transición: una Action `Transitions/<Verbo>Load` que llame a `TransitionLoad` con su estado destino y su guarda, la ability en la policy, y las pruebas con la regla que la bloquea. El diagrama ya la permite o se agrega a `LoadStatus::transitions()`.
+
 ### Cambios en la retícula
 
 Lo que entra en el avance de los alumnos (la retícula de un plan, su especialidad y su seriación, los créditos totales del plan, los créditos o el tipo de una materia) es de Academic, pero `student_progress` es de Students. Cada Action de Academic que lo cambia despacha `Academic\Events\CurriculumChanged` con el plan afectado, la materia o los dos (al menos uno). Es `ShouldDispatchAfterCommit`, así que un cambio que se revierte no avisa. Students lo escucha (`RecomputeProgressOnCurriculumChange`, registrado en `StudentsServiceProvider`) y encola `RecomputeStudentProgress`, que es único en la cola y siempre recalcula completo: varios cambios seguidos esperan un solo recálculo. Hoy lo despacha `UpdateSubject` cuando cambian los créditos o el tipo; las Actions de planes y retícula de la tarea 1.8 lo usarán igual.
