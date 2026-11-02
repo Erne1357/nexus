@@ -1,50 +1,44 @@
 {{--
-    La lista de un catálogo (`?catalogo=`), con la anatomía de las pantallas de catálogo (DESIGN.md, "Anatomía de una
-    pantalla de catálogo"): enlace de regreso al tablero, el bloque de la revisión (estado, quién validó, Validar o
-    Reabrir y los contadores), la barra de herramientas común (búsqueda y filtros; sin acción principal: Validar vive
-    en el bloque), la tabla en una superficie con filete y, debajo de 768 px, renglones apilados que no repiten los
-    data-testid. «Editar» abre el drawer (catalog-validation::review.drawer); lo demás va en «Acciones».
+    La lista de un catálogo (`?catalogo=`), bajo la fila de pestañas de la página, con la anatomía de las pantallas de
+    catálogo (DESIGN.md, "Anatomía de una pantalla de catálogo"): un solo renglón con el nombre, el estado, las cifras
+    (activos, inactivos, observaciones, altas y bajas) y Validar o Reabrir; la barra de herramientas común a la misma
+    altura que en los demás catálogos (búsqueda y filtros, con «Cambio» si hay foto anterior; sin acción principal:
+    Validar vive en el renglón); la tabla en una superficie con filete y, debajo de 768 px, renglones apilados que no
+    repiten los data-testid. «Editar» abre el drawer (catalog-validation::review.drawer); las bajas, el suyo.
 --}}
 @php($review = $current['review'])
 @php($catalogValue = $review->catalog->value)
-<div class="space-y-4">
-    <a href="{{ route('catalog-validation.review', ['department' => $department->id]) }}" wire:navigate class="inline-flex items-center gap-1.5 font-medium text-primary" data-testid="back-to-board">
-        <x-icon name="o-chevron-left" class="h-4 w-4" aria-hidden="true" />Validación de catálogos
-    </a>
+@php($hasPrevious = $current['summary']['added'] !== null)
+@php($isTeachers = $review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers)
+<div>
+    <section class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2.5 rounded-box border border-base-300 bg-base-100 px-4 py-2.5" data-testid="review-block">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 class="text-lg font-bold leading-tight">{{ $review->catalog->label() }}</h2>
+            <x-core::status-badge :tone="$review->status->tone()" :label="$review->status->label()" />
+            @include('catalog-validation::review.who', ['review' => $review])
+        </div>
 
-    <section class="space-y-3.5 rounded-box border border-base-300 bg-base-100 p-4" data-testid="review-block">
-        <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-            <div>
-                <h2 class="text-2xl font-bold leading-tight">{{ $review->catalog->label() }}</h2>
-                <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                    <x-core::status-badge :tone="$review->status->tone()" :label="$review->status->label()" />
-                    <span class="flex items-center gap-1.5 text-sm text-neutral"><x-icon :name="$review->catalog->isGeneral() ? 'o-building-library' : 'o-map-pin'" class="h-4 w-4" aria-hidden="true" />{{ $review->catalog->isGeneral() ? 'General · todo el Tec' : $review->campus?->name }}</span>
-                    @include('catalog-validation::review.who', ['review' => $review])
-                </div>
-            </div>
-            <div class="flex w-full gap-2 md:w-auto">
-                @include('catalog-validation::review.actions', ['card' => $current])
-            </div>
+        @include('catalog-validation::review.counters', ['summary' => $current['summary'], 'inline' => true])
+
+        <div class="flex w-full gap-2 md:ms-auto md:w-auto">
+            @include('catalog-validation::review.actions', ['card' => $current, 'grow' => false, 'small' => true])
         </div>
 
         @foreach ($current['reopenVetoes'] as $veto)
-            <p class="text-xs text-neutral">{{ $veto }}</p>
+            <p class="w-full text-xs text-neutral">{{ $veto }}</p>
         @endforeach
-
-        @unless ($current['canValidate'] || $current['canReopen'])
-            <p class="text-sm text-neutral">Solo lectura: validar, corregir y observar es del jefe del departamento. Tú puedes marcar observaciones como resueltas.</p>
-        @endunless
-
-        @include('catalog-validation::review.counters', ['summary' => $current['summary'], 'inline' => true])
     </section>
 
-    <x-core::catalog-toolbar>
+    <x-core::catalog-toolbar :narrow="$isTeachers && $hasPrevious">
         <x-slot:search>
-            <x-input wire:model.live.debounce.300ms="search" :placeholder="$review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers ? 'Número o nombre' : 'Clave o nombre'" aria-label="Buscar registros" icon="o-magnifying-glass" clearable />
+            <x-input wire:model.live.debounce.300ms="search" :placeholder="$isTeachers ? 'Número o nombre' : 'Clave o nombre'" aria-label="Buscar registros" icon="o-magnifying-glass" clearable />
         </x-slot:search>
 
-        @if ($review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers)
+        @if ($isTeachers)
             <x-select wire:model.live="missing" aria-label="Falta" :options="$missingFilters" placeholder="Falta" />
+        @endif
+        @if ($hasPrevious)
+            <x-select wire:model.live="change" aria-label="Cambio" :options="$changeFilters" placeholder="Cambio" data-testid="filter-change" />
         @endif
         <x-select wire:model.live="flagFilter" aria-label="Observación" :options="$flagFilters" placeholder="Observación" />
         <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
@@ -57,6 +51,13 @@
             :row-decoration="$rowDecoration"
             class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
         >
+            @scope('cell_name', $record, $flagMap)
+                <span @class(['block', 'font-semibold' => $record->is_active])>{{ $record->name }}</span>
+                @if (! empty($flagMap[$record->id]))
+                    <span class="mt-1 block min-[1024px]:hidden">@include('catalog-validation::review.flag-badge', ['flags' => $flagMap[$record->id]])</span>
+                @endif
+            @endscope
+
             @scope('cell_code', $record)
                 <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->code }}</span>
             @endscope
@@ -129,18 +130,18 @@
             @endscope
 
             <x-slot:empty>
-                <x-icon name="o-clipboard-document-check" label="Ningún registro coincide con la búsqueda." />
+                @include('catalog-validation::review.empty-list')
             </x-slot:empty>
         </x-table>
 
         <ul class="divide-y divide-base-300 md:hidden" data-testid="record-cards">
             @foreach ($page as $record)
                 <li wire:key="record-card-{{ $record->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $record->is_active])>
-                    <div class="flex items-center gap-2.5">
+                    <div class="flex items-center justify-between gap-2.5">
                         <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->code ?? $record->employee_number }}</span>
-                        <span @class(['min-w-0 flex-1', 'font-semibold' => $record->is_active])>{{ $record->name }}</span>
                         <x-core::status-badge :tone="$record->is_active ? 'success' : 'neutral'" :label="$record->is_active ? 'Activo' : 'Inactivo'" />
                     </div>
+                    <p @class(['font-semibold' => $record->is_active])>{{ $record->name ?? '—' }}</p>
 
                     <div class="text-neutral">
                         @switch ($review->catalog)
@@ -172,22 +173,33 @@
                     @include('catalog-validation::review.row-actions', ['record' => $record, 'card' => $current, 'inTable' => false])
                 </li>
             @endforeach
+
+            @if ($page->isEmpty())
+                <li class="px-4 py-6">@include('catalog-validation::review.empty-list')</li>
+            @endif
         </ul>
 
         @if ($page->isNotEmpty() || $page->hasPages())
             <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
                 @if ($page->isNotEmpty())
-                    <p>{{ $review->catalog->label() }} · <span class="font-mono">{{ $page->firstItem() }}–{{ $page->lastItem() }}</span> de <span class="font-mono">{{ $page->total() }}</span></p>
+                    @php($keyOf = fn ($record): string => $record->code ?? $record->employee_number)
+                    <p>{{ $review->catalog->label() }} <span class="font-mono">{{ $keyOf($page->getCollection()->first()) }}</span>@if ($page->count() > 1) a <span class="font-mono">{{ $keyOf($page->getCollection()->last()) }}</span> · <span class="font-mono">{{ $page->firstItem() }}–{{ $page->lastItem() }}</span>@else · <span class="font-mono">{{ $page->firstItem() }}</span>@endif de <span class="font-mono">{{ $page->total() }}</span></p>
                 @endif
 
-                {{ $page->onEachSide(1)->links(data: ['scrollTo' => false]) }}
+                {{ $page->onEachSide(1)->links(data: ['scrollTo' => false, 'summary' => false]) }}
             </div>
         @endif
     </div>
 
-    <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="review-drawer-title" data-testid="review-drawer">
+    <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="review-drawer-title" data-testid="review-drawer">
         @if ($editing !== null)
             @include('catalog-validation::review.drawer', ['card' => $current, 'editing' => $editing])
+        @endif
+    </x-drawer>
+
+    <x-drawer wire:model.live="showRemoved" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="removed-drawer-title" data-testid="removed-drawer">
+        @if ($showRemoved)
+            @include('catalog-validation::review.removed', ['review' => $review, 'removed' => $removed])
         @endif
     </x-drawer>
 </div>

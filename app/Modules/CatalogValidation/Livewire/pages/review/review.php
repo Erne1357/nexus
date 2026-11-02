@@ -67,6 +67,11 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public string $search = '';
 
+    /** Solo con foto anterior: '' (todos) o 'added' (las altas); 'removed' no se queda, abre el drawer de bajas. */
+    public string $change = '';
+
+    public bool $showRemoved = false;
+
     /** '' (todos), 'active' o 'inactive'. */
     public string $status = '';
 
@@ -154,7 +159,7 @@ new #[Title('Validación de catálogos')] class extends Component
         };
 
         if ($empty !== null) {
-            return [...$data, 'empty' => $empty, 'cards' => collect(), 'progress' => null, 'current' => null, 'confirming' => null];
+            return [...$data, 'empty' => $empty, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null];
         }
 
         $open = $this->openCatalog();
@@ -165,8 +170,8 @@ new #[Title('Validación de catálogos')] class extends Component
         | por el veto de Reabrir (confirm() lo vuelve a preguntar al pedirlo).
         */
         $current = $openReview === null ? null : $this->card($openReview, $reviews, false);
-        $cards = $current === null ? $state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews, true)) : collect([$current]);
-        $data += ['empty' => null, 'cards' => $cards, 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
+        $cards = $current === null ? $this->byWork($state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews, true))) : collect([$current]);
+        $data += ['empty' => null, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status])->all(), 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
 
         $data += $this->confirmation($cards);
 
@@ -175,8 +180,20 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'status', 'flagFilter', 'missing', 'department', 'catalog'], true)) {
+        if (in_array($property, ['search', 'status', 'flagFilter', 'missing', 'change', 'department', 'catalog'], true)) {
             $this->resetPage();
+        }
+
+        /*
+        | Las bajas ya no están en el catálogo: «Bajas» no filtra la tabla, abre el drawer con la lista de la foto.
+        */
+        if ($property === 'change' && $this->change === 'removed') {
+            $this->change = '';
+            $this->showRemoved = true;
+        }
+
+        if ($property === 'change' && ! in_array($this->change, ['', 'added'], true)) {
+            $this->change = '';
         }
 
         /*
@@ -191,8 +208,17 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         if (in_array($property, ['department', 'catalog'], true)) {
-            $this->reset('search', 'status', 'flagFilter', 'missing', 'showDrawer', 'editingId');
+            $this->reset('search', 'status', 'flagFilter', 'missing', 'change', 'showDrawer', 'showRemoved', 'editingId');
         }
+    }
+
+    /**
+     * «Quitar filtros» de una lista sin resultados.
+     */
+    public function clearFilters(): void
+    {
+        $this->reset('search', 'status', 'flagFilter', 'missing', 'change');
+        $this->resetPage();
     }
 
     /**
@@ -503,7 +529,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'active' => true,
             'inactive' => false,
             default => null,
-        }, $this->flagFilter, onlyIds: $this->missingIds($review));
+        }, $this->flagFilter, onlyIds: $this->onlyIds($review, $current['summary']));
 
         $readiness = $review->catalog === Catalog::Teachers
             ? app(TeacherTermReadinessQuery::class)->forTeachers($review->department, $review->term, $page->getCollection()->map->getKey()->all())
@@ -513,7 +539,7 @@ new #[Title('Validación de catálogos')] class extends Component
         if ($this->showDrawer && $this->editingId !== null) {
             try {
                 $record = $contents->findOrFail($review, $this->editingId);
-                $editing = ['record' => $record, 'flags' => $records->flagsOf($review, $record), 'locked' => $this->lockedOf($review, $record)];
+                $editing = ['record' => $record, 'flags' => $records->flagsOf($review, $record), 'locked' => $this->lockedOf($review, $record), 'facts' => $this->factsOf($review->catalog, $record)];
             } catch (ModelNotFoundException) {
                 $this->closeDrawer();
             }
@@ -527,12 +553,45 @@ new #[Title('Validación de catálogos')] class extends Component
             'headers' => $this->headersOf($review->catalog),
             'rowDecoration' => ['text-neutral' => fn (Model $record): bool => ! $record->is_active],
             'editing' => $editing,
+            'removed' => $current['summary']['removed'] ?? [],
+            'changeFilters' => [['id' => 'added', 'name' => 'Altas'], ['id' => 'removed', 'name' => 'Bajas']],
+            'hasFilters' => $this->search !== '' || $this->status !== '' || $this->flagFilter !== '' || $this->missing !== '' || $this->change !== '',
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
             'flagFilters' => [['id' => 'with', 'name' => 'Con observación abierta'], ['id' => 'without', 'name' => 'Sin observación abierta']],
             'flagOptions' => collect(ReviewFlag::cases())->filter(fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog))->map(fn (ReviewFlag $flag): array => ['id' => $flag->value, 'name' => $flag->label()])->values()->all(),
             'kinds' => array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases()),
             'roomTypes' => array_map(fn (RoomType $type): array => ['id' => $type->value, 'name' => $type->label()], RoomType::cases()),
         ];
+    }
+
+    /**
+     * Los registros que deja el filtro «Falta» de docentes y el de «Cambio: Altas», juntos; null si no hay ninguno.
+     *
+     * @param  array<string, mixed>  $summary
+     * @return ?list<string>
+     */
+    private function onlyIds(CatalogReview $review, array $summary): ?array
+    {
+        $missing = $this->missingIds($review);
+        $added = $this->change === 'added' && $summary['added'] !== null ? array_column($summary['added'], 'id') : null;
+
+        return match (true) {
+            $missing !== null && $added !== null => array_values(array_intersect($missing, $added)),
+            default => $missing ?? $added,
+        };
+    }
+
+    /**
+     * Las tarjetas con trabajo primero: pendientes, en revisión y validadas, cada grupo en el orden del enum.
+     *
+     * @param  Collection<int, array<string, mixed>>  $cards
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function byWork(Collection $cards): Collection
+    {
+        $rank = [ReviewStatus::Pending->value => 0, ReviewStatus::InReview->value => 1, ReviewStatus::Validated->value => 2];
+
+        return $cards->sortBy(fn (array $card): int => $rank[$card['review']->status->value])->values();
     }
 
     /**
@@ -557,7 +616,7 @@ new #[Title('Validación de catálogos')] class extends Component
     private function headersOf(Catalog $catalog): array
     {
         $name = ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'];
-        $closing = [['key' => 'flags', 'label' => 'Observación'], ['key' => 'is_active', 'label' => 'Estado']];
+        $closing = [['key' => 'flags', 'label' => 'Observación', 'class' => 'max-[1023px]:hidden'], ['key' => 'is_active', 'label' => 'Estado']];
 
         return [...match ($catalog) {
             Catalog::Subjects => [
@@ -569,6 +628,7 @@ new #[Title('Validación de catálogos')] class extends Component
             ],
             Catalog::Rooms => [
                 ['key' => 'code', 'label' => 'Clave'],
+                [...$name, 'label' => 'Nombre', 'class' => 'min-w-36 max-[1199px]:hidden min-[1200px]:min-w-52'],
                 ['key' => 'building', 'label' => 'Edificio', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'capacity', 'label' => 'Capacidad', 'class' => 'text-end'],
                 ['key' => 'type', 'label' => 'Tipo', 'class' => 'max-[1023px]:hidden'],
@@ -576,18 +636,45 @@ new #[Title('Validación de catálogos')] class extends Component
             Catalog::StudyPlans => [
                 ['key' => 'code', 'label' => 'Clave'],
                 ['key' => 'career', 'label' => 'Carrera'],
-                [...$name, 'label' => 'Plan', 'class' => 'max-[1200px]:hidden'],
+                [...$name, 'label' => 'Plan'],
             ],
             Catalog::Careers => [['key' => 'code', 'label' => 'Clave'], [...$name, 'label' => 'Carrera']],
             Catalog::Teachers => [
                 ['key' => 'employee_number', 'label' => 'Número'],
                 [...$name, 'label' => 'Docente'],
                 ['key' => 'availability', 'label' => 'Disponibilidad'],
-                ['key' => 'profile', 'label' => 'Perfil', 'class' => 'text-end max-[1535px]:hidden'],
+                ['key' => 'profile', 'label' => 'Perfil', 'class' => $this->missing === 'perfil' ? 'text-end' : 'text-end max-[1199px]:hidden'],
                 ['key' => 'external', 'label' => 'Fuera', 'class' => 'text-end max-[1023px]:hidden'],
                 ['key' => 'base', 'label' => 'Plaza', 'class' => 'text-end max-[1535px]:hidden'],
             ],
         }, ...$closing];
+    }
+
+    /**
+     * Los datos que el jefe no corrige, como texto (sin permiso de corregir el drawer los muestra así, no como campos
+     * deshabilitados): el nombre ya va en el encabezado del drawer.
+     *
+     * @return list<array{label: string, value: ?string, mono: bool}>
+     */
+    private function factsOf(Catalog $catalog, Model $record): array
+    {
+        $fact = fn (string $label, mixed $value, bool $mono = false): array => ['label' => $label, 'value' => $value === null || $value === '' ? null : (string) $value, 'mono' => $mono];
+
+        return match ($catalog) {
+            Catalog::Subjects => [
+                $fact('Teoría', $record->theory_hours, true), $fact('Práctica', $record->practice_hours, true), $fact('Créditos', $record->credits, true),
+                $fact('Tipo', $record->kind?->label()), $fact('Requiere laboratorio', $record->needs_lab ? 'Sí' : 'No'),
+            ],
+            Catalog::StudyPlans => [
+                $fact('Versión', $record->version), $fact('Vigente desde', $record->valid_from?->translatedFormat('j M Y')),
+                $fact('Semestres', $record->semesters_count, true), $fact('Créditos', $record->total_credits, true),
+            ],
+            Catalog::Rooms => [
+                $fact('Tipo', $record->type->label()), $fact('Capacidad', $record->capacity, true),
+                $fact('Características', implode(', ', $record->features ?? [])),
+            ],
+            default => [],
+        };
     }
 
     /**
