@@ -22,12 +22,14 @@ use Throwable;
  * (reglas-de-negocio.md, "Propuesta de carrera"; confirmado el 2 de noviembre de 2026). Lo aceptado ya no cambia.
  *
  * En una transacción bloquea la propuesta y luego la parte (el estado que vale es el de la base, como en
- * SubmitCareerProposal) y exige la propuesta enviada y la parte pendiente (ProposalReviewRules, supuesto por
- * confirmar). Exige HC-14, los catálogos del departamento validados en el periodo y el campus de la propuesta
- * (CatalogsValidated, con bloqueo compartido), como ValidationException sobre `catalogs`; y la carga del
- * departamento en ese periodo y campus, que bloquea, sobre `load` (supuesto por confirmar: volver a abrir el
- * periodo en el campus la crea). Marca la parte aceptada con quién y cuándo; si ya no queda ninguna sin aceptar,
- * la propuesta queda aceptada. Si la carga sigue en borrador, la propone con ProposeLoad en la misma transacción
+ * SubmitCareerProposal y UpdateProposalItem) y exige la parte pendiente con la propuesta enviada o regresada por
+ * otro departamento (ProposalReviewRules; confirmado el 2 de noviembre de 2026). Exige HC-14, los catálogos del
+ * departamento validados en el periodo y el campus de la propuesta (CatalogsValidated, con bloqueo compartido),
+ * como ValidationException sobre `catalogs`; y la carga del departamento en ese periodo y campus, que bloquea,
+ * sobre `load` (supuesto por confirmar: volver a abrir el periodo en el campus la crea). Marca la parte aceptada
+ * con quién y cuándo: desde ahí el coordinador ya no cambia sus materias, aunque la propuesta siga regresada. Si la
+ * propuesta está enviada y ya no queda ninguna parte sin aceptar, queda aceptada; regresada, sigue regresada,
+ * porque tiene una parte regresada. Si la carga sigue en borrador, la propone con ProposeLoad en la misma transacción
  * (load_transitions y bitácora de la carga); si ProposeLoad la bloquea, no se acepta nada. Deja bitácora de la
  * parte y, después del commit, avisa con ProposalReviewAccepted. Quién puede lo decide ProposalReviewPolicy::decide
  * antes de llamarla; quien acepta se recibe como parámetro.
@@ -88,7 +90,8 @@ final class AcceptProposalReview
             $review->update(['status' => ProposalReviewStatus::Accepted, 'decided_by' => $actor->getKey(), 'decided_at' => now()]);
 
             $from = $proposal->status;
-            $proposalAccepted = ! $proposal->reviews()->where('status', '<>', ProposalReviewStatus::Accepted)->exists();
+            $proposalAccepted = $proposal->status === ProposalStatus::Submitted
+                && ! $proposal->reviews()->where('status', '<>', ProposalReviewStatus::Accepted)->exists();
 
             if ($proposalAccepted) {
                 $proposal->update(['status' => ProposalStatus::Accepted]);

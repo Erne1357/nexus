@@ -1,7 +1,7 @@
 {{--
-    El detalle de la carrera elegida (academic-load::pages.inbox): su estado y sus botones, el comentario si la
-    regresaron, y las materias que pide al departamento con los grupos contra el total de la materia y la
-    sugerencia de paralelos.
+    El detalle de la carrera elegida (academic-load::pages.inbox): su estado y sus botones, un aviso si otro
+    departamento regresó la propuesta mientras esta parte sigue pendiente, el comentario si la regresaron, y las
+    materias que pide al departamento con los grupos contra el total de la materia y la sugerencia de paralelos.
 --}}
 @php($career = $selected['career'])
 @php($review = $selected['review'])
@@ -40,8 +40,8 @@
         <p class="text-sm text-neutral" data-testid="accept-block">{{ $acceptBlock }}</p>
     @endif
 
-    @if ($review !== null && ! $selected['decidable'] && $selected['status'] === \App\Modules\AcademicLoad\Enums\InboxStatus::Pending)
-        <p class="text-sm text-neutral" data-testid="part-waiting">La propuesta está regresada: espera a que el coordinador la corrija y la reenvíe.</p>
+    @if ($selected['decidable'] && $selected['proposal']->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Returned)
+        <p class="text-sm text-neutral" data-testid="proposal-in-correction">Otro departamento regresó esta propuesta y el coordinador la está corrigiendo. Puedes decidir tu parte ya: si la aceptas, sus materias ya no cambian.</p>
     @endif
 
     @if ($review?->comment)

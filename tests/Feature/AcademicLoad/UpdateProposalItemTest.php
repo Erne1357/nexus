@@ -3,13 +3,20 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Actions\Proposals\AcceptProposalReview;
+use App\Modules\AcademicLoad\Actions\Proposals\ReturnProposalReview;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
+use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\ProposalItemUpdated;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -19,8 +26,10 @@ use Spatie\Activitylog\Models\Activity;
 /*
 | UpdateProposalItem corrige una fila de la propuesta de carrera: alumnos esperados, grupos y notas
 | (reglas-de-negocio.md, "Propuesta de carrera"). Solo en borrador o regresada, y nunca las materias de un
-| departamento que ya aceptó su parte (confirmado el 2 de noviembre de 2026). Esperados de 0 a 1000, grupos de 0
-| a 30 y notas de hasta 500 caracteres (supuesto por confirmar).
+| departamento que ya aceptó su parte, también si la aceptó con la propuesta regresada (confirmado el 2 de
+| noviembre de 2026). Bloquea la propuesta y luego la parte, como las Actions que la deciden, para no cruzarse con
+| una aceptación (supuesto por confirmar). Esperados de 0 a 1000, grupos de 0 a 30 y notas de hasta 500
+| caracteres (supuesto por confirmar).
 */
 
 beforeEach(function () {
@@ -140,6 +149,56 @@ it('no cambia las materias de un departamento que ya aceptó su parte', function
     expect(proposalItemErrors(fn () => updateProposalItem(40, 3)))->toBe(['item' => ['CB ya aceptó su parte: sus materias ya no cambian.']])
         ->and($this->item->fresh()->requested_groups)->toBe(2)
         ->and(Activity::query()->count())->toBe(0);
+});
+
+it('con la propuesta regresada, la parte que un departamento acepta mientras tanto congela sus materias', function () {
+    $this->proposal->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+    $sc = Department::factory()->create(['code' => 'SC']);
+    $networks = ProposalItem::factory()->create([
+        'career_proposal_id' => $this->proposal->id,
+        'subject_id' => Subject::factory()->create(['department_id' => $sc->id])->id,
+        'requested_groups' => 1,
+    ]);
+    $this->proposal->update(['status' => ProposalStatus::Submitted]);
+    $cbPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->department->id]);
+    $scPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $sc->id]);
+    AcademicLoad::factory()->create(['term_id' => $this->proposal->term_id, 'campus_id' => $this->proposal->campus_id, 'department_id' => $this->department->id]);
+    foreach (Catalog::general() as $catalog) {
+        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->proposal->term_id, 'department_id' => $this->department->id]);
+    }
+
+    app(ReturnProposalReview::class)->handle($scPart, 'Pide dos grupos de Redes.', $this->actor);
+    updateProposalItem(40, 3);
+    app(AcceptProposalReview::class)->handle($cbPart, $this->actor);
+
+    expect($this->proposal->fresh()->status)->toBe(ProposalStatus::Returned)
+        ->and($cbPart->fresh()->status)->toBe(ProposalReviewStatus::Accepted)
+        ->and(proposalItemErrors(fn () => updateProposalItem(40, 4)))->toBe(['item' => ['CB ya aceptó su parte: sus materias ya no cambian.']])
+        ->and($this->item->fresh()->requested_groups)->toBe(3);
+
+    updateProposalItem(30, 2, item: $networks);
+
+    expect($networks->fresh()->requested_groups)->toBe(2);
+});
+
+it('bloquea la propuesta, luego la parte del departamento de la materia y luego la fila', function () {
+    $this->proposal->update(['status' => ProposalStatus::Returned]);
+    ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->department->id]);
+    ProposalReview::factory()->returned()->create(['career_proposal_id' => $this->proposal->id]);
+    $sql = [];
+    DB::listen(function ($query) use (&$sql) {
+        $sql[] = $query->sql;
+    });
+
+    updateProposalItem(40, 3);
+
+    $locked = collect($sql)
+        ->filter(fn (string $s): bool => str_ends_with($s, 'for update'))
+        ->map(fn (string $s): string => preg_match('/from "(\w+)"/', $s, $match) ? $match[1] : $s)
+        ->values()
+        ->all();
+    expect($locked)->toBe(['career_proposals', 'proposal_reviews', 'proposal_items'])
+        ->and(collect($sql)->filter(fn (string $s): bool => str_contains($s, 'for share')))->toBeEmpty();
 });
 
 it('no cambia una propuesta enviada ni una aceptada', function (ProposalStatus $status, string $message) {
