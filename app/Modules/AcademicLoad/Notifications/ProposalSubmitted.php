@@ -14,7 +14,7 @@ use App\Modules\Core\Queries\ScopedContext;
 
 /**
  * «Ingeniería en Sistemas Computacionales envió su propuesta» (tareas 2.7 y 2.9): al jefe de un departamento
- * cuya parte de la propuesta quedó pendiente, con cuántas materias y grupos le pide la carrera. Lleva a la
+ * cuya parte de la propuesta quedó pendiente, con cuántas materias y grupos le pide la carrera (sin repetir su departamento: el jefe ya sabe cuál es). Lleva a la
  * bandeja de su departamento con esa carrera elegida (tarea 2.8), en el periodo y el campus de la propuesta.
  * Deja de poder abrirse si la propuesta o el departamento ya no existen, o el usuario ya no es su jefe.
  */
@@ -36,7 +36,7 @@ final class ProposalSubmitted extends NexusNotification
 
         return new NotificationMessage(
             title: $this->resubmitted ? "{$career} reenvió su propuesta" : "{$career} envió su propuesta",
-            body: "{$this->proposal->campus->name} · {$subjects} de {$this->department->name}, {$groups}",
+            body: "{$this->proposal->campus->name} · {$subjects}, {$groups}",
             icon: 'o-paper-airplane',
             route: 'academic-load.inbox',
             parameters: ['depto' => $this->department->code, 'carrera' => $this->proposal->career_id],

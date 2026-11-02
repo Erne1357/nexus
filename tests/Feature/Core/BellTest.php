@@ -114,3 +114,21 @@ it('marca todas como leídas', function () {
 
     expect($ana->unreadNotifications()->count())->toBe(0);
 });
+
+it('al pie de la tarjeta, «Ver todas» dice cuántas notificaciones tiene en total aunque la tarjeta muestre solo las recientes', function () {
+    $ana = User::factory()->create();
+
+    foreach (range(1, 20) as $number) {
+        $ana->notify(new BellNotice("Aviso {$number}"));
+    }
+
+    Livewire::actingAs($ana)->test('core::components.bell')
+        ->assertSeeHtml('data-testid="notification"')
+        ->assertSeeHtml('href="'.route('core.notifications').'"')
+        ->assertSee('Ver todas (20)');
+});
+
+it('sin notificaciones no ofrece «Ver todas»', function () {
+    Livewire::actingAs(User::factory()->create())->test('core::components.bell')
+        ->assertDontSee('Ver todas');
+});
