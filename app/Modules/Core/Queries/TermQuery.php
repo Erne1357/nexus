@@ -3,7 +3,9 @@
 namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
 
 /**
@@ -20,6 +22,22 @@ final class TermQuery
     public function selectable(): Collection
     {
         return Term::query()->orderByDesc('starts_on')->get();
+    }
+
+    /**
+     * En qué campus se abrió el periodo, por código de campus, con el campus (también uno desactivado
+     * o borrado después) y quién lo abrió, para la ficha del periodo.
+     *
+     * @return Collection<int, TermOpening>
+     */
+    public function openings(Term $term): Collection
+    {
+        return $term->openings()
+            ->with(['campus' => fn (BelongsTo $query) => $query->withTrashed(), 'opener'])
+            ->join('campuses', 'campuses.id', '=', 'term_openings.campus_id')
+            ->orderBy('campuses.code')
+            ->select('term_openings.*')
+            ->get();
     }
 
     /**

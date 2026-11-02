@@ -44,6 +44,16 @@ class Term extends Model
     }
 
     /**
+     * En qué campus se abrió (D1).
+     *
+     * @return HasMany<TermOpening, $this>
+     */
+    public function openings(): HasMany
+    {
+        return $this->hasMany(TermOpening::class);
+    }
+
+    /**
      * @param  Builder<self>  $query
      */
     #[Scope]
