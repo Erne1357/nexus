@@ -95,6 +95,32 @@ docker compose exec -T -e LOGIN=admin -w /app app node .github/scripts/review-sc
 - El admin, `subdir` y los `jefe.<depto>` trabajan en todos los campus activos (Campus I y Campus II lo están con `DemoSeeder` y con el masivo), así que no tienen un campus activo por omisión. Las pantallas de un campus (alumnos) se revisan con un usuario de un solo campus, como `coord.isc.c2`; las de admin (materias), con `LOGIN=admin`.
 - Las capturas se miran: el script encuentra desbordes, no textos cortados ni columnas que se parten en tres renglones.
 - Al terminar, detén el servidor (`docker compose restart app` o mata el proceso de `artisan serve`) y borra la base con `dropdb`.
+- En un worktree, `.github/scripts/worktree-preview.sh` levanta el mismo servidor con su propia base y su propio puerto, sin tocar la app principal (ver CONTRIBUTING.md, «Worktrees con Docker»).
+
+### Qué trae el masivo de la fase 2
+
+El `MassiveSeeder` siembra unos 12 000 alumnos y 600 docentes, más los datos de la fase 2. Tarda alrededor de 80 s. El `DemoSeeder` trae lo mismo en pequeño: solo C2 y 20271, sin foto anterior.
+
+- **Periodos:** desde 2014, con el calendario de 20263 y ventanas propias de C1 en 20271. 20263 y 20271 están abiertos en C1 y C2.
+- **Validación de catálogos:** en 20263 todo validado, así que hay foto y 20271 muestra altas y bajas contra ella. En 20271, por departamento:
+  - CB, SC e II: todo validado;
+  - EE: salones de C2 en revisión, o sea que HC-14 bloquea en C2;
+  - CEA: la mitad;
+  - MM: validado y reabierto.
+
+  Hay observaciones de todos los tipos y recordatorios a CEA, EE y MM.
+- **Captura docente en 20271:** alrededor de 25 % sin disponibilidad, 15 % sin perfil y 30 % con horas fuera del ITCJ.
+- **Propuestas, bandejas y avisos** de las carreras de C1 y C2, en distintos estados.
+
+Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes trabajan en todo el Tec y eligen el campus en la credencial:
+
+| Pantalla | Usuario y caso |
+|---|---|
+| Validación de catálogos (`/catalog-validation`) | `jefe.ee` (HC-14 bloqueado en C2), `jefe.mm` (reabierto), `jefe.cea` (a medias), `jefe.sc` (todo validado). `admin` o `subdir` con `?department=` la ven en lectura |
+| Avance de validación (`/catalog-validation/progress`) | `admin` o `subdir` |
+| Propuesta de carrera | `coord.isc.c2` (enviada, unas 53 materias), `coord.ige.c2` (regresada), `coord.cp.c2` (borrador), `coord.isc.c1` |
+| Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (HC-14 a medias, LADM con 45 materias), `jefe.ee` (HC-14 bloqueado en C2) |
+| Campana y `/notifications` | `jefe.cea` (unos 24 avisos) o `jefe.sc` |
 
 ## Pruebas de rendimiento
 
