@@ -4,7 +4,8 @@
     ventana propia», un bloque por campus activo: con ventana propia muestra sus fechas y «Quitar ventana propia»;
     sin ella, «Agregar ventana propia» y las fechas generales que usa. Los campos se llaman como las claves de las
     Actions (general.starts_on, own.{campus}.ends_on), así sus errores caen en su campo. Nada se guarda hasta
-    «Guardar». `$editing` trae la etapa, su número y su ventana general efectiva; `close()` es del x-drawer.
+    «Guardar». `$editing` trae la etapa, su número, su ventana general efectiva y `generalPreview`, las fechas generales que se editan
+    en el panel (lo que usan los campus sin ventana propia); `close()` es del x-drawer.
 --}}
 @php($window = $editing['window'])
 
@@ -59,10 +60,10 @@
                             <x-input label="Hasta" name="own.{{ $campus->id }}.ends_on" type="date" wire:model="own.{{ $campus->id }}.ends_on" data-testid="own-{{ $campus->code }}-ends" />
                         </div>
                     @else
-                        <p class="flex flex-wrap items-center justify-between gap-x-3 text-neutral">
-                            {{ $window->startsOn === null ? 'Sin fechas generales.' : 'Usa las fechas generales' }}
-                            @if ($window->startsOn !== null)
-                                <span class="font-mono text-base-content">{{ \App\Modules\Core\Support\StageTimeline::rangeLabel($window) }}</span>
+                        <p class="flex flex-wrap items-center justify-between gap-x-3 text-neutral" data-testid="general-preview-{{ $campus->code }}">
+                            {{ $editing['generalPreview'] === null ? 'Sin fechas generales.' : 'Usa las fechas generales' }}
+                            @if ($editing['generalPreview'] !== null)
+                                <span class="font-mono text-base-content">{{ $editing['generalPreview'] }}</span>
                             @endif
                         </p>
                     @endif

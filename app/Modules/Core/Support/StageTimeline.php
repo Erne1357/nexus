@@ -94,8 +94,14 @@ final readonly class StageTimeline
             return 'Sin fecha';
         }
 
-        [$start, $end] = [$window->startsOn, $window->endsOn];
+        return self::rangeBetween($window->startsOn, $window->endsOn);
+    }
 
+    /**
+     * Dos fechas como «10–19 nov» o «20 nov – 4 dic»; el año solo si cruzan de año.
+     */
+    public static function rangeBetween(CarbonImmutable $start, CarbonImmutable $end): string
+    {
         return match (true) {
             $start->isSameDay($end) => self::dateLabel($start),
             $start->year !== $end->year => self::dateLabel($start)." {$start->year} – ".self::dateLabel($end)." {$end->year}",

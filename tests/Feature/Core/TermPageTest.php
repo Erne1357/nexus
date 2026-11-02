@@ -163,6 +163,24 @@ describe('panel de una etapa', function () {
             ->assertSee('Sin fechas generales.');
     });
 
+    it('muestra en los campus sin ventana propia las fechas generales que se editan, no las guardadas', function () {
+        termPageStage($this->term, Stage::Scheduling, null, '2026-11-20', '2026-12-04');
+        $previewOf = fn ($page): string => preg_match('/data-testid="general-preview-C2".*?<\/p>/s', $page->html(), $match) === 1 ? preg_replace('/\s+/', ' ', $match[0]) : '';
+
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('editStage', 'scheduling')
+            ->assertSee('20 nov – 4 dic');
+
+        $page->set('general.starts_on', '2026-11-23')
+            ->set('general.ends_on', '2026-12-11')
+            ->assertSee('Usa las fechas generales');
+        expect($previewOf($page))->toContain('23 nov – 11 dic')->not->toContain('20 nov – 4 dic');
+
+        $page->call('clearGeneral');
+        expect($previewOf($page))->toContain('Sin fechas generales.')->not->toContain('Usa las fechas generales');
+    });
+
     it('no ofrece un campus inactivo', function () {
         termPageStage($this->term, Stage::Scheduling, $this->c3, '2026-11-24', '2026-12-09');
         $this->c3->update(['is_active' => false]);
@@ -283,13 +301,66 @@ describe('panel de una etapa', function () {
 
         $page->set('general.starts_on', 'mañana')
             ->call('saveStage')
-            ->assertHasErrors(['general.starts_on' => 'date'])
+            ->assertHasErrors(['general.starts_on' => 'date_format'])
             ->assertSee('El campo inicio debe ser una fecha válida.');
 
         $page->set('general.starts_on', '')
             ->call('saveStage')
             ->assertHasErrors('general.starts_on')
             ->assertSee('Escribe la fecha.');
+
+        expect(TermStage::count())->toBe(0);
+    });
+
+    it('no guarda nada si la ventana de un campus falla, ni la general ni otros campus', function () {
+        termPageStage($this->term, Stage::Staffing, null, '2026-11-24', '2026-12-04');
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('editStage', 'staffing')
+            ->set('general.ends_on', '2026-12-11')
+            ->call('addCampusWindow', $this->c1->id)
+            ->call('addCampusWindow', $this->c2->id)
+            ->set("own.{$this->c2->id}.ends_on", '2026-11-01')
+            ->call('saveStage')
+            ->assertHasErrors("own.{$this->c2->id}.ends_on")
+            ->assertSet('showDrawer', true);
+
+        expect(termPageWindows($this->term, Stage::Staffing))->toBe(['general' => '2026-11-24/2026-12-04']);
+    });
+
+    it('rechaza con error de validación, no con 500, lo que el navegador manipuló', function (array $own, string $field) {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('editStage', 'staffing')
+            ->set('general.starts_on', '2026-11-24')
+            ->set('general.ends_on', '2026-12-04')
+            ->call('addCampusWindow', $this->c2->id)
+            ->set("own.{$this->c2->id}", $own)
+            ->call('saveStage')
+            ->assertHasErrors("own.{$this->c2->id}.{$field}")
+            ->assertSet('showDrawer', true);
+
+        expect(TermStage::count())->toBe(0);
+    })->with([
+        'inicio nulo' => [['starts_on' => null], 'starts_on'],
+        'sin fin' => [['starts_on' => '2026-11-24'], 'ends_on'],
+        'sin nada' => [[], 'starts_on'],
+        'fecha de otro formato' => [['starts_on' => '24/11/2026', 'ends_on' => '2026-12-04'], 'starts_on'],
+    ]);
+
+    it('rechaza una ventana general a medias o una propia que no es una lista', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('editStage', 'staffing')
+            ->set('general', ['starts_on' => '2026-11-24'])
+            ->call('saveStage')
+            ->assertHasErrors('general.ends_on');
+
+        $page->set('general', ['starts_on' => '', 'ends_on' => ''])
+            ->set("own.{$this->c2->id}", 'texto')
+            ->call('saveStage')
+            ->assertHasErrors("own.{$this->c2->id}");
 
         expect(TermStage::count())->toBe(0);
     });
