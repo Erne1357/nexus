@@ -43,7 +43,7 @@ final class SetTeacherActive
 
             $this->syncTeacherAccess->handle($teacher);
 
-            TeacherUpdated::dispatch($teacher, ['is_active']);
+            TeacherUpdated::dispatch($teacher, ['is_active'], auth()->user());
 
             return $teacher;
         });

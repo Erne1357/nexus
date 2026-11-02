@@ -58,7 +58,7 @@ final class UpdatePosition
                 ->withProperties(['teacher_id' => $locked->teacher_id])
                 ->log('Cambió una plaza del docente');
 
-            PositionChanged::dispatch($locked);
+            PositionChanged::dispatch($locked, auth()->user());
 
             return $position;
         });

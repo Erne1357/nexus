@@ -49,7 +49,7 @@ final class SetPrimaryAdscription
 
             $this->syncTeacherAccess->handle($teacher);
 
-            AdscriptionChanged::dispatch($new);
+            AdscriptionChanged::dispatch($new, auth()->user());
         });
     }
 

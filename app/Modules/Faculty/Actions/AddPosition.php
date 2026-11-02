@@ -43,7 +43,7 @@ final class AddPosition
                 ->withProperties(['teacher_id' => $locked->getKey()])
                 ->log("Agregó una plaza de {$data['kind']->label()} al docente {$locked->employee_number}");
 
-            PositionChanged::dispatch($position);
+            PositionChanged::dispatch($position, auth()->user());
 
             return $position;
         });

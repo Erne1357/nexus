@@ -2,6 +2,7 @@
 
 namespace App\Modules\Faculty\Events;
 
+use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -17,9 +18,11 @@ final class TeacherUpdated implements ShouldDispatchAfterCommit
 
     /**
      * @param  list<string>  $changed  columnas que cambiaron (p. ej. `['name', 'is_active']`)
+     * @param  ?User  $actor  quien lo hizo; null si no hay sesión (un seeder, un comando)
      */
     public function __construct(
         public Teacher $teacher,
         public array $changed,
+        public ?User $actor = null,
     ) {}
 }

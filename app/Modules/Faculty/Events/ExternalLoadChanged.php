@@ -2,6 +2,7 @@
 
 namespace App\Modules\Faculty\Events;
 
+use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -16,5 +17,5 @@ final class ExternalLoadChanged implements ShouldDispatchAfterCommit
 {
     use Dispatchable, SerializesModels;
 
-    public function __construct(public TeacherExternalLoad $load) {}
+    public function __construct(public TeacherExternalLoad $load, public ?User $actor = null) {}
 }

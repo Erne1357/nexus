@@ -36,7 +36,7 @@ final class RemoveExternalLoad
                 ->withProperties(['teacher_id' => $locked->teacher_id, 'term_id' => $locked->term_id])
                 ->log('Quitó unas horas fuera del ITCJ del docente');
 
-            ExternalLoadChanged::dispatch($locked);
+            ExternalLoadChanged::dispatch($locked, auth()->user());
         });
     }
 }
