@@ -115,8 +115,8 @@ final class TermCalendarQuery
     }
 
     /**
-     * Los periodos de los que se puede copiar el calendario a `$target`: los demás que tienen al menos una
-     * ventana, del más reciente al más antiguo.
+     * Los periodos de los que se puede copiar el calendario a `$target`: los demás que tienen algo que copiar (una
+     * ventana general o la de un campus activo y no borrado, lo mismo que filtra copyPreview), del más reciente al más antiguo.
      *
      * @return Collection<int, Term>
      */
@@ -124,7 +124,9 @@ final class TermCalendarQuery
     {
         return Term::query()
             ->whereKeyNot($target->getKey())
-            ->whereIn('id', TermStage::query()->select('term_id'))
+            ->whereIn('id', TermStage::query()
+                ->where(fn ($query) => $query->whereNull('campus_id')->orWhereIn('campus_id', Campus::query()->where('is_active', true)->select('id')))
+                ->select('term_id'))
             ->orderByDesc('starts_on')
             ->get();
     }

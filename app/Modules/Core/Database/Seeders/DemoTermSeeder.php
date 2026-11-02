@@ -6,7 +6,9 @@ use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
+use App\Modules\Core\Queries\TermCalendarQuery;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Periodos del demo: Ene-Jun y Ago-Dic 2026, ya cursados o en curso, y Ene-Jun 2027, el que se planea y es el
@@ -80,5 +82,7 @@ class DemoTermSeeder extends Seeder
                 'ends_on' => $endsOn,
             ]);
         }
+
+        Cache::forget(TermCalendarQuery::key($term->getKey()));
     }
 }

@@ -99,7 +99,7 @@
                     <p>Periodos <span class="font-mono">{{ $terms->first()->code }}</span>@if ($terms->count() > 1) a <span class="font-mono">{{ $terms->last()->code }}</span> · <span class="font-mono">{{ $terms->firstItem() }}–{{ $terms->lastItem() }}</span>@else · <span class="font-mono">{{ $terms->firstItem() }}</span>@endif de <span class="font-mono">{{ $terms->total() }}</span></p>
                 @endif
 
-                {{ $terms->onEachSide(1)->links(data: ['scrollTo' => false]) }}
+                {{ $terms->onEachSide(1)->links(data: ['scrollTo' => false, 'summary' => false]) }}
             </div>
         @endif
     </div>

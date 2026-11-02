@@ -185,3 +185,17 @@ it('copyPreview corre las ventanas por semanas completas, conserva el día y sep
         ->and($preview['skipped'])->toHaveCount(1)
         ->and($preview['skipped'][0]['campus']->is($inactive))->toBeTrue();
 });
+
+it('copySources no ofrece un periodo cuyas únicas ventanas son de un campus inactivo o borrado', function () {
+    $inactive = Campus::factory()->create(['is_active' => false]);
+    $deleted = Campus::factory()->create();
+    $deleted->delete();
+    $onlyInactive = Term::factory()->create(['starts_on' => '2026-01-26', 'ends_on' => '2026-06-12']);
+    $onlyDeleted = Term::factory()->create(['starts_on' => '2026-06-15', 'ends_on' => '2026-07-31']);
+    $withActive = Term::factory()->create(['starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    TermStage::factory()->for($onlyInactive)->create(['stage' => Stage::Rooms, 'campus_id' => $inactive->id]);
+    TermStage::factory()->for($onlyDeleted)->create(['stage' => Stage::Rooms, 'campus_id' => $deleted->id]);
+    TermStage::factory()->for($withActive)->create(['stage' => Stage::Rooms, 'campus_id' => $this->campus->id]);
+
+    expect(app(TermCalendarQuery::class)->copySources($this->term)->pluck('id')->all())->toBe([$withActive->id]);
+});

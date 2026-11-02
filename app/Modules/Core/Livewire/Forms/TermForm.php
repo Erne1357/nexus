@@ -29,6 +29,10 @@ class TermForm extends Form
     #[Locked]
     public string $suggestedName = '';
 
+    /** Si el formulario edita un periodo guardado (fillFrom): al editar, un código inválido no borra el nombre. */
+    #[Locked]
+    public bool $editing = false;
+
     /** Por qué el código no se puede cambiar (el periodo ya se abrió); null si se puede. Lo fija fillFrom(). */
     #[Locked]
     public ?string $codeLock = null;
@@ -38,11 +42,32 @@ class TermForm extends Form
      */
     protected function rules(): array
     {
+        $rules = new TermRules;
+
         return [
-            'code' => ['required', 'string', 'max:255'],
+            'code' => ['required', 'string', 'max:255', function (string $attribute, mixed $value, Closure $fail) use ($rules): void {
+                try {
+                    $rules->normalizeCode((string) $value);
+                } catch (ValidationException $e) {
+                    $fail($e->errors()['code'][0]);
+                }
+            }],
             'name' => ['required', 'string', 'max:255'],
             'starts_on' => ['required', 'date_format:Y-m-d'],
-            'ends_on' => ['required', 'date_format:Y-m-d'],
+            'ends_on' => ['required', 'date_format:Y-m-d', function (string $attribute, mixed $value, Closure $fail) use ($rules): void {
+                try {
+                    $starts = $rules->date('starts_on', $this->starts_on);
+                    $ends = $rules->date('ends_on', $value);
+                } catch (ValidationException) {
+                    return;
+                }
+
+                try {
+                    $rules->dates($starts, $ends);
+                } catch (ValidationException $e) {
+                    $fail($e->errors()['ends_on'][0]);
+                }
+            }],
         ];
     }
 
@@ -78,7 +103,9 @@ class TermForm extends Form
         $suggestion = $rules->suggestedName($code);
 
         if ($this->name === '' || $this->name === $this->suggestedName) {
-            $this->name = $suggestion ?? '';
+            if ($suggestion !== null || ! $this->editing) {
+                $this->name = $suggestion ?? '';
+            }
         }
 
         $this->suggestedName = $suggestion ?? $this->suggestedName;
@@ -99,6 +126,7 @@ class TermForm extends Form
      */
     public function fillFrom(Term $term, TermRules $rules): void
     {
+        $this->editing = true;
         $this->code = $term->code;
         $this->name = $term->name;
         $this->starts_on = $term->starts_on->toDateString();
@@ -120,18 +148,8 @@ class TermForm extends Form
      */
     public function submit(Closure $action): mixed
     {
-        try {
-            /** @var array{code: string, name: string, starts_on: string, ends_on: string} $data */
-            $data = $this->validate();
-        } catch (ValidationException $e) {
-            foreach ($this->formatErrors($e) as $field => $messages) {
-                foreach ($messages as $message) {
-                    $e->validator->errors()->add($field, $message);
-                }
-            }
-
-            throw $e;
-        }
+        /** @var array{code: string, name: string, starts_on: string, ends_on: string} $data */
+        $data = $this->validate();
 
         try {
             return $action($data);
@@ -140,36 +158,5 @@ class TermForm extends Form
                 collect($e->errors())->mapWithKeys(fn (array $messages, string $field): array => ["form.{$field}" => $messages])->all(),
             );
         }
-    }
-
-    /**
-     * Los errores de formato que decide TermRules (código y orden de las fechas), para mostrarlos en el mismo envío
-     * que los de campos vacíos y no en el siguiente. No pisa un error que ya trae el campo.
-     *
-     * @return array<string, list<string>>
-     */
-    private function formatErrors(ValidationException $e): array
-    {
-        $rules = app(TermRules::class);
-        $errors = [];
-        $existing = $e->errors();
-
-        if (! isset($existing['form.code'])) {
-            try {
-                $rules->normalizeCode($this->code);
-            } catch (ValidationException $format) {
-                $errors['form.code'] = $format->errors()['code'];
-            }
-        }
-
-        if (! isset($existing['form.starts_on']) && ! isset($existing['form.ends_on'])) {
-            try {
-                $rules->dates($this->starts_on, $this->ends_on);
-            } catch (ValidationException $order) {
-                $errors['form.ends_on'] = $order->errors()['ends_on'];
-            }
-        }
-
-        return $errors;
     }
 }

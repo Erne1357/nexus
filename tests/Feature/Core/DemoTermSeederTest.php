@@ -4,6 +4,8 @@ use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
+use App\Modules\Core\Queries\TermCalendarQuery;
+use Illuminate\Support\Facades\Cache;
 
 /*
 | DemoTermSeeder: Ene-Jun 2027 trae un calendario general de 8 etapas, sin pisar uno que ya exista.
@@ -38,4 +40,16 @@ it('no siembra nada si 20271 ya tiene alguna ventana', function () {
     (new DemoTermSeeder)->run();
 
     expect(TermStage::count())->toBe(1);
+});
+
+it('olvida la caché del calendario al sembrarlo', function () {
+    (new DemoTermSeeder)->run();
+    $term = Term::where('code', '20271')->sole();
+    TermStage::query()->delete();
+    Cache::flush();
+    expect(collect(app(TermCalendarQuery::class)->for($term, null))->whereNotNull('startsOn'))->toHaveCount(0);
+
+    (new DemoTermSeeder)->run();
+
+    expect(collect(app(TermCalendarQuery::class)->for($term, null))->whereNotNull('startsOn'))->toHaveCount(8);
 });

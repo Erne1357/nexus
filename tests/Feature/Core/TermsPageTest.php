@@ -161,6 +161,15 @@ describe('admin y subdirección', function () {
             ->assertSee('title="C2, C3, C4, C5"', false);
     });
 
+    it('al editar, escribir encima del código no borra el nombre guardado', function () {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.terms')
+            ->call('edit', $this->t2->id)
+            ->assertSet('form.name', 'Ago-Dic 2026')
+            ->set('form.code', '2026')
+            ->assertSet('form.name', 'Ago-Dic 2026');
+    });
+
     it('sugiere el nombre con el código mientras el nombre esté vacío o sea la sugerencia anterior', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.terms')
