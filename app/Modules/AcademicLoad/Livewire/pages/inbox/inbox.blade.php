@@ -16,7 +16,7 @@
                 this.$wire.$watch(key, (open) => {
                     if (open || this.opener === null) { return }
                     setTimeout(() => {
-                        const target = this.$root.querySelector(`[data-opens='${this.opener}']`) ?? this.$root.querySelector('[data-testid=inbox-detail-title]')
+                        const target = this.$root.querySelector(`[data-opens='${this.opener}']:not([disabled])`) ?? this.$root.querySelector('[data-testid=inbox-detail-title]')
                         target?.focus({ preventScroll: true })
                     }, 80)
                 })

@@ -4,7 +4,18 @@
     (hasta 1000 caracteres, con su contador), que le llega al coordinador. Confirmar llama a `returnPart`;
     `close()` es del x-drawer.
 --}}
-<div class="flex min-h-dvh flex-col" data-testid="return-panel">
+@php($max = \App\Modules\AcademicLoad\Rules\ProposalReviewRules::MAX_COMMENT_LENGTH)
+<div class="flex min-h-dvh flex-col" data-testid="return-panel"
+    x-data="{
+        max: {{ $max }},
+        full: false,
+        cite(text) {
+            const current = $wire.comment ?? ''
+            const next = current === '' ? text : current + '\n' + text
+            this.full = next.length > this.max
+            if (! this.full) { $wire.comment = next }
+        },
+    }">
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
         <h2 id="return-title" class="min-w-0 flex-1 text-xl font-bold leading-tight">Regresar la parte de {{ $target['career']->code }}</h2>
         <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle max-md:h-11 max-md:w-11" @click="close()" aria-label="Cerrar el panel" />
@@ -22,7 +33,7 @@
                                 <x-icon name="o-exclamation-triangle" class="h-4 w-4 shrink-0 text-warning" />
                                 <span class="min-w-0 flex-1"><span class="font-mono text-[15px] font-semibold">{{ $entry['item']->subject->code }}</span> · {{ $anomaly }}</span>
                                 <button type="button" class="btn btn-sm btn-ghost max-md:h-11 max-md:min-h-11"
-                                    x-on:click="$wire.comment = ($wire.comment ? $wire.comment + '\n' : '') + @js($citation)">Citar</button>
+                                    data-testid="return-cite" x-on:click="cite(@js($citation))">Citar</button>
                             </li>
                         @endforeach
                     @endforeach
@@ -31,8 +42,11 @@
         @endif
 
         <div>
-            <x-textarea label="Comentario para el coordinador" wire:model.live.debounce.300ms="comment" rows="6" maxlength="1000" data-testid="return-comment" />
-            <p class="mt-1 text-right font-mono text-sm tabular-nums text-neutral" data-testid="return-counter" aria-live="polite">{{ mb_strlen($comment) }} / 1000</p>
+            <x-textarea label="Comentario para el coordinador" wire:model="comment" rows="6" maxlength="{{ $max }}" data-testid="return-comment" />
+            <p class="mt-1 flex justify-between gap-3 text-sm text-neutral">
+                <span x-show="full" x-cloak class="text-left" role="status">No cabe la cita en el comentario.</span>
+                <span class="ms-auto font-mono tabular-nums" data-testid="return-counter"><span x-text="($wire.comment ?? '').length">0</span> / {{ $max }}</span>
+            </p>
         </div>
     </div>
 

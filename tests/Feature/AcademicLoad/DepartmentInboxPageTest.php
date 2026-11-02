@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Enums\Role;
@@ -241,9 +242,52 @@ describe('jefe de departamento', function () {
             ->assertSeeHtml('data-testid="return-drawer"')
             ->assertSeeHtml('data-testid="return-anomalies"')
             ->assertSee('105 esperados con 98 elegibles')
-            ->assertSee('0 / 1000')
-            ->set('comment', 'abcd')
-            ->assertSee('4 / 1000');
+            ->assertSeeHtml('data-testid="return-counter"')
+            ->assertSeeHtml('maxlength="'.ProposalReviewRules::MAX_COMMENT_LENGTH.'"')
+            ->assertSeeHtml('/ '.ProposalReviewRules::MAX_COMMENT_LENGTH)
+            ->assertDontSeeHtml('wire:model.live.debounce')
+            ->assertSeeHtml('data-testid="return-cite"');
+    });
+
+    it('el chip de paralelos con cero esperados no presume un ahorro', function () {
+        ProposalItem::query()->update(['expected_students' => 0]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertSeeHtml('data-testid="parallels-chip"')
+            ->assertSee('Sin alumnos esperados')
+            ->assertDontSee('−4 grupos');
+    });
+
+    it('el chip de paralelos con un resto de una sola carrera no dice mixtos', function () {
+        ProposalItem::query()->where('career_proposal_id', $this->iindProposal->id)->update(['expected_students' => 70]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertSeeHtml('data-testid="parallels-chip"')
+            ->assertSee('1 grupo más de ISC')
+            ->assertDontSee('Con grupos mixtos');
+    });
+
+    it('al decidir, el aviso nombra la carrera y lo que se hizo, y el panel se limpia', function () {
+        $accepted = inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->call('confirmAccept', $this->iscPart->id)
+            ->call('accept')
+            ->assertSet('reviewId', null);
+        $returned = inboxPageAs($this->jefe, ['carrera' => $this->iind->id])
+            ->call('confirmReturn', $this->iindPart->id)
+            ->set('comment', 'Corrige.')
+            ->call('returnPart')
+            ->assertSet('reviewId', null);
+
+        expect(json_encode($accepted->effects['xjs'] ?? []))->toContain('Aceptaste la parte de ISC')
+            ->and(json_encode($returned->effects['xjs'] ?? []))->toContain('Regresaste la parte de IIND');
+    });
+
+    it('cerrar el drawer de regresar suelta la parte', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->call('confirmReturn', $this->iscPart->id)
+            ->assertSet('reviewId', $this->iscPart->id)
+            ->set('showReturn', false)
+            ->assertSet('reviewId', null);
     });
 
     it('acepta una parte, lo dice en un aviso y lleva la carga a Propuesta', function () {

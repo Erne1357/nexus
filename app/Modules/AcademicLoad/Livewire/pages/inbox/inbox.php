@@ -110,6 +110,23 @@ new #[Title('Bandeja del departamento')] class extends Component
         $this->resolve($context, $inbox, $proposals);
     }
 
+    /**
+     * Cerrar la confirmación o el drawer (Esc, el velo, Cancelar) suelta la parte que se decidía.
+     */
+    public function updatedShowAccept(bool $open): void
+    {
+        if (! $open && ! $this->showReturn) {
+            $this->reviewId = null;
+        }
+    }
+
+    public function updatedShowReturn(bool $open): void
+    {
+        if (! $open && ! $this->showAccept) {
+            $this->reviewId = null;
+        }
+    }
+
     public function updatedFilter(): void
     {
         $this->filter = in_array($this->filter, self::FILTERS, true) ? $this->filter : 'todas';
@@ -163,20 +180,21 @@ new #[Title('Bandeja del departamento')] class extends Component
     public function accept(DepartmentInboxQuery $query, AcceptProposalReview $accept): void
     {
         $review = $this->decidable((string) $this->reviewId, $query);
-        $next = $this->nextToDecide($query, $review);
 
         try {
             $accept->handle($review, auth()->user());
         } catch (ValidationException $e) {
             $this->showAccept = false;
+            $this->reviewId = null;
             $this->report($e, 'No se aceptó');
 
             return;
         }
 
         $this->showAccept = false;
-        $this->goTo($next);
-        $this->success('Parte aceptada', e($this->label($review)));
+        $this->reviewId = null;
+        $this->goToNext($query, $review);
+        $this->success("Aceptaste la parte de {$review->proposal->career->code}", e($review->department->name));
     }
 
     /**
@@ -196,7 +214,6 @@ new #[Title('Bandeja del departamento')] class extends Component
     public function returnPart(DepartmentInboxQuery $query, ReturnProposalReview $return): void
     {
         $review = $this->decidable((string) $this->reviewId, $query);
-        $next = $this->nextToDecide($query, $review);
 
         $this->validate(
             ['comment' => ['required', 'string', 'max:'.ProposalReviewRules::MAX_COMMENT_LENGTH]],
@@ -212,9 +229,10 @@ new #[Title('Bandeja del departamento')] class extends Component
         }
 
         $this->showReturn = false;
+        $this->reviewId = null;
         $this->comment = '';
-        $this->goTo($next);
-        $this->warning('Parte regresada', e($this->label($review)));
+        $this->goToNext($query, $review);
+        $this->warning("Regresaste la parte de {$review->proposal->career->code}", e($review->department->name));
     }
 
     /**
@@ -249,7 +267,7 @@ new #[Title('Bandeja del departamento')] class extends Component
             'acceptBlock' => $inbox->canAccept() ? null : $this->acceptBlock($inbox),
             'catalogsUrl' => $catalogsUrl,
             'chips' => $this->chips($inbox),
-            'anomalyCounts' => $this->anomalyCounts($inbox, $rows),
+            'anomalyCounts' => array_combine(array_map(fn (array $row): string => $row['career']->getKey(), $rows), array_column($rows, 'anomalies')),
             'target' => $target,
             'targetAnomalies' => $target === null ? [] : $this->anomalousRows($inbox, $target['career']->getKey()),
             'parallelsTarget' => $this->parallelsTarget($inbox),
@@ -383,11 +401,6 @@ new #[Title('Bandeja del departamento')] class extends Component
         return null;
     }
 
-    private function label(ProposalReview $review): string
-    {
-        return "{$review->proposal->career->code} · {$review->department->code}";
-    }
-
     private function acceptBlock(DepartmentInbox $inbox): string
     {
         if ($inbox->pendingCatalogs !== []) {
@@ -416,13 +429,15 @@ new #[Title('Bandeja del departamento')] class extends Component
 
             $saved = $parallels->saved();
             $groups = fn (int $n): string => $n === 1 ? '1 grupo' : "{$n} grupos";
+            $rest = $parallels->isMixed() ? 'Con grupos mixtos' : '1 grupo más de '.array_key_first($parallels->mixedShares);
 
             $chips[$row['subject']->getKey()] = [
                 'saved' => $saved,
                 'label' => match (true) {
+                    $parallels->suggested === 0 => 'Sin alumnos esperados',
                     $saved > 0 => '−'.$groups($saved).' juntando carreras',
                     $saved < 0 => '+'.$groups(-$saved).' juntando carreras',
-                    default => 'Con grupos mixtos',
+                    default => $rest,
                 },
             ];
         }
@@ -451,24 +466,6 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * Cuántas filas con anomalías (ProposalAnomalies) tiene cada carrera, por id de carrera.
-     *
-     * @param  list<array<string, mixed>>  $rows
-     * @return array<string, int>
-     */
-    private function anomalyCounts(DepartmentInbox $inbox, array $rows): array
-    {
-        $counts = [];
-
-        foreach ($rows as $row) {
-            $careerId = $row['career']->getKey();
-            $counts[$careerId] = count($this->anomalousRows($inbox, $careerId));
-        }
-
-        return $counts;
-    }
-
-    /**
      * Las filas de la carrera con alguna anomalía.
      *
      * @return list<array{item: ProposalItem, total: array{careers: int, groups: int, expected: int}, anomalies: list<string>}>
@@ -479,26 +476,18 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * El id de la carrera que sigue por decidir después de la de la parte: la siguiente en la lista que se puede
-     * decidir, o la primera si la de la parte era la última; null si no queda otra.
+     * Pasa a la carrera que sigue por decidir después de decidir la de la parte: la siguiente por clave entre las que
+     * se pueden decidir, o la primera si era la última; si no queda otra, se queda donde estaba. Una consulta
+     * (DepartmentInboxQuery::decidableCareers), sin armar la bandeja.
      */
-    private function nextToDecide(DepartmentInboxQuery $query, ProposalReview $review): ?string
+    private function goToNext(DepartmentInboxQuery $query, ProposalReview $review): void
     {
-        $current = $review->proposal->career_id;
-        $ids = array_values(array_map(
-            fn (array $row): string => $row['career']->getKey(),
-            array_filter($this->inbox($query)->careers, fn (array $row): bool => $row['decidable']),
-        ));
-        $index = array_search($current, $ids, true);
-        $others = $index === false ? $ids : [...array_slice($ids, $index + 1), ...array_slice($ids, 0, $index)];
+        $left = $query->decidableCareers((string) $this->termId, (string) $this->campusId, $review->department);
+        $code = $review->proposal->career->code;
+        $next = collect($left)->first(fn (string $other): bool => $other > $code) ?? collect($left)->first();
 
-        return $others[0] ?? null;
-    }
-
-    private function goTo(?string $careerId): void
-    {
-        if ($careerId !== null) {
-            $this->careerId = $careerId;
+        if ($next !== null) {
+            $this->careerId = (string) array_search($next, $left, true);
         }
     }
 
