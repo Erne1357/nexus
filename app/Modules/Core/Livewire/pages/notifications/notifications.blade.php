@@ -4,11 +4,7 @@
     (core::notifications.item). Paginada de 25 en 25.
 --}}
 <div>
-    <x-header title="Todas las notificaciones" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator>
-        <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            Los avisos que Nexus te ha mandado, de los más nuevos a los más viejos. Al abrir uno se marca como leído.
-        </x-slot:subtitle>
-    </x-header>
+    <x-header title="Todas las notificaciones" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator />
 
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div role="group" aria-label="Filtrar notificaciones" class="join">
@@ -17,7 +13,7 @@
                 wire:click="$set('filter', 'todas')"
                 data-testid="filter-all"
                 aria-pressed="{{ $onlyUnread ? 'false' : 'true' }}"
-                @class(['btn join-item h-11 text-sm font-normal md:h-10', 'border-primary bg-primary text-primary-content hover:bg-primary' => ! $onlyUnread, 'border-base-300 bg-base-100 text-base-content' => $onlyUnread])
+                @class(['btn join-item h-11 md:btn-sm md:h-10', 'btn-primary' => ! $onlyUnread])
             >
                 Todas <span class="font-mono tabular-nums">({{ $total }})</span>
             </button>
@@ -26,7 +22,7 @@
                 wire:click="$set('filter', 'sin-leer')"
                 data-testid="filter-unread"
                 aria-pressed="{{ $onlyUnread ? 'true' : 'false' }}"
-                @class(['btn join-item h-11 text-sm font-normal md:h-10', 'border-primary bg-primary text-primary-content hover:bg-primary' => $onlyUnread, 'border-base-300 bg-base-100 text-base-content' => ! $onlyUnread])
+                @class(['btn join-item h-11 md:btn-sm md:h-10', 'btn-primary' => $onlyUnread])
             >
                 Sin leer <span class="font-mono tabular-nums">({{ $unread }})</span>
             </button>
