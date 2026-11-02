@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Carga académica (docs/dominio/modelo-de-datos.md, "AcademicLoad"): la unidad de cierre es el departamento
  * en un campus (ADR-0008), así que hay una por periodo, campus y departamento. Nace en `draft` al abrir el
- * periodo en el campus (S-A6, supuesto por confirmar); el CHECK acepta solo los ocho estados del proceso.
+ * periodo en el campus (supuesto por confirmar); el CHECK acepta solo los ocho estados del proceso.
  * Quién y cuándo cerró, aprobó y publicó quedan nulos hasta que pase; `current_version` es la del último
  * snapshot publicado (0: ninguno). No es catálogo: no lleva `is_active` ni borrado lógico.
  */

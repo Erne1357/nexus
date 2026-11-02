@@ -9,7 +9,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 
 /**
- * Crea las revisiones de catálogo que falten al abrir un periodo en un campus (S-A6, supuesto por
+ * Crea las revisiones de catálogo que falten al abrir un periodo en un campus (supuesto por
  * confirmar): por cada departamento activo y sin borrar, las cuatro generales del periodo, sin campus, y la
  * de salones de ese campus si su perfil usa salones (D2, confirmado el 1 de noviembre de 2026). Nacen
  * pendientes. Devuelve cuántas creó: 0 si no faltaba ninguna.

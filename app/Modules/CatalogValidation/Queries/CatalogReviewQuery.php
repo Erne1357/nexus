@@ -32,23 +32,23 @@ final class CatalogReviewQuery
         $termId = $term instanceof Term ? $term->getKey() : $term;
         $departmentId = $department instanceof Department ? $department->getKey() : $department;
 
-        $required = [...Catalog::general(), ...($campus->profile->usesRooms ? [Catalog::Rooms] : [])];
+        $required = array_values(array_filter(
+            Catalog::cases(),
+            fn (Catalog $catalog): bool => $catalog->isGeneral() || $campus->profile->usesRooms,
+        ));
 
         $validated = CatalogReview::query()
             ->where('term_id', $termId)
             ->where('department_id', $departmentId)
             ->where('status', ReviewStatus::Validated)
+            ->whereIn('catalog', $required)
+            ->where(fn ($query) => $query
+                ->where(fn ($general) => $general->whereNull('campus_id')->whereIn('catalog', Catalog::general()))
+                ->orWhere(fn ($rooms) => $rooms->where('campus_id', $campus->getKey())->where('catalog', Catalog::Rooms)))
             ->when($lock, fn ($query) => $query->sharedLock())
-            ->where(fn ($query) => $query->whereNull('campus_id')->orWhere('campus_id', $campus->getKey()))
-            ->get()
-            ->filter(fn (CatalogReview $review): bool => $review->catalog->isGeneral() === ($review->campus_id === null))
             ->pluck('catalog')
             ->all();
 
-        $pending = array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true));
-
-        usort($pending, fn (Catalog $a, Catalog $b): int => array_search($a, Catalog::cases(), true) <=> array_search($b, Catalog::cases(), true));
-
-        return array_values($pending);
+        return array_values(array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true)));
     }
 }

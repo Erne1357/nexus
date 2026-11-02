@@ -8,7 +8,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 
 /**
- * Crea en borrador las cargas que falten al abrir un periodo en un campus (S-A6, supuesto por confirmar):
+ * Crea en borrador las cargas que falten al abrir un periodo en un campus (supuesto por confirmar):
  * una por cada departamento activo y sin borrar que todavía no la tenga en ese periodo y campus. Devuelve
  * cuántas creó: 0 si no faltaba ninguna. No toca las que ya existen, estén en el estado que estén.
  *
