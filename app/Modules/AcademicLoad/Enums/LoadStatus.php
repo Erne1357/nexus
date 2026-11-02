@@ -6,7 +6,7 @@ use App\Modules\Core\Enums\StatusTone;
 
 /**
  * Estado de una carga académica (docs/dominio/modelo-de-datos.md, `academic_loads`; el diagrama de
- * transiciones está en docs/proceso/proceso-propuesto.md y llega como datos con la tarea 2.3).
+ * transiciones está en docs/proceso/proceso-propuesto.md y son `transitions()`).
  */
 enum LoadStatus: string
 {
@@ -47,5 +47,30 @@ enum LoadStatus: string
             self::Published => StatusTone::SuccessSolid,
             self::Reanalysis => StatusTone::Warning,
         };
+    }
+
+    /**
+     * Los estados a los que puede pasar la carga desde este, según el diagrama de "Máquina de estados de la
+     * carga académica" de docs/proceso/proceso-propuesto.md. Es la única fuente: TransitionLoad la consulta.
+     *
+     * @return list<self>
+     */
+    public function transitions(): array
+    {
+        return match ($this) {
+            self::Draft => [self::Proposed],
+            self::Proposed => [self::Staffing],
+            self::Staffing => [self::Adjusting, self::Closed],
+            self::Adjusting => [self::Staffing],
+            self::Closed => [self::Approved, self::Published],
+            self::Approved => [self::Published, self::Adjusting],
+            self::Published => [self::Reanalysis],
+            self::Reanalysis => [self::Published],
+        };
+    }
+
+    public function canTransitionTo(self $to): bool
+    {
+        return in_array($to, $this->transitions(), true);
     }
 }

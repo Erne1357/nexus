@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Carga académica de un departamento en un campus y un periodo: la unidad de cierre (ADR-0008). Su estado
@@ -61,5 +62,15 @@ class AcademicLoad extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Su historial de transiciones.
+     *
+     * @return HasMany<LoadTransition, $this>
+     */
+    public function transitions(): HasMany
+    {
+        return $this->hasMany(LoadTransition::class);
     }
 }
