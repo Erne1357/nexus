@@ -13,10 +13,11 @@ it('las pruebas corren contra PostgreSQL nexus_test', function () {
 
 it('cada base de pruebas tiene sus propios discos falsos, también el de las copias temporales de Livewire', function () {
     // Dos corridas a la vez en el mismo worktree, cada una con su base, no se borran ni se cruzan los archivos.
-    $database = DB::connection()->getDatabaseName();
+    // Con --parallel cada proceso usa su token (TestCase), que también es único.
+    $token = $_SERVER['TEST_TOKEN'] ?? DB::connection()->getDatabaseName();
 
-    expect(Storage::fake('imports')->path(''))->toContain("framework/testing/disks/imports_test_{$database}")
-        ->and(FileUploadConfiguration::storage()->path(''))->toContain("framework/testing/disks/tmp-for-tests_test_{$database}");
+    expect(Storage::fake('imports')->path(''))->toContain("framework/testing/disks/imports_test_{$token}")
+        ->and(FileUploadConfiguration::storage()->path(''))->toContain("framework/testing/disks/tmp-for-tests_test_{$token}");
 });
 
 it('guarda y lee un timestamptz sin desfase', function () {
