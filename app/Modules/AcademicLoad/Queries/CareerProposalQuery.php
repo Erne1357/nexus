@@ -3,15 +3,20 @@
 namespace App\Modules\AcademicLoad\Queries;
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 
 /**
  * Lecturas de la propuesta de carrera para su página. Quién la ve lo decide CareerProposalPolicy en el
@@ -31,6 +36,30 @@ final class CareerProposalQuery
             ->where('campus_id', $campus->getKey())
             ->where('career_id', $career->getKey())
             ->first();
+    }
+
+    /**
+     * Si el periodo está abierto en el campus: sin eso no hay propuestas (StartCareerProposal).
+     */
+    public function termIsOpen(Term $term, Campus $campus): bool
+    {
+        return TermOpening::query()->where('term_id', $term->getKey())->where('campus_id', $campus->getKey())->exists();
+    }
+
+    /**
+     * Las carreras ofrecidas en el campus (activas y sin borrar), por clave, de las que el usuario puede ver la
+     * propuesta: el coordinador, las de sus alcances; la subdirección y el admin, todas (CareerProposalPolicy).
+     *
+     * @return Collection<int, Career>
+     */
+    public function careersFor(ScopedContext $context, Campus $campus): Collection
+    {
+        return Career::query()
+            ->whereIn('id', CareerCampus::query()->where('campus_id', $campus->getKey())->where('is_active', true)->select('career_id'))
+            ->orderBy('code')
+            ->get()
+            ->filter(fn (Career $career): bool => $context->covers([Role::Coordinador, Role::Subdireccion], $campus, career: $career->getKey()))
+            ->values();
     }
 
     /**
