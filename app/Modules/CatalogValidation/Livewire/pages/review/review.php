@@ -293,7 +293,7 @@ new #[Title('Validación de catálogos')] class extends Component
         $review = $this->currentReview();
         $this->authorize('resolveFlag', $review);
 
-        $resolveFlag->handle($records->findFlag($review, $id), $this->user());
+        $resolveFlag->handle($review, $records->findFlag($review, $id), $this->user());
 
         $this->success('Observación resuelta', e($review->title));
     }
