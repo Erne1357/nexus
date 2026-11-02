@@ -36,7 +36,7 @@ enum ProposalStatus: string
         return match ($this) {
             self::Draft => StatusTone::Draft,
             self::Submitted => StatusTone::Info,
-            self::Returned => StatusTone::Warning,
+            self::Returned => StatusTone::Error,
             self::Accepted => StatusTone::Success,
         };
     }
