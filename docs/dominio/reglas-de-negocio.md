@@ -93,11 +93,19 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 - Una vez elegida la especialidad, la retícula ya no muestra las materias de las otras.
 - La ficha calcula el avance al leerla, desde el kardex del alumno, para no esperar al siguiente recálculo de `student_progress`.
 
+## Periodo y calendario
+
+- Un periodo se identifica con el código del SII (`20271`) y tiene nombre y fechas de inicio y fin; la fecha de fin no es anterior a la de inicio. El nombre se sugiere del código (`1` Ene-Jun, `2` Verano, `3` Ago-Dic, más el año) y se puede cambiar (supuesto por confirmar).
+- Un periodo no se borra: se corrige editándolo. Nombre y fechas se cambian siempre (supuesto por confirmar).
+- Hay un solo periodo actual: el que se planea y el que la credencial elige por omisión. Marcar uno como actual le quita la marca al anterior. Es una acción aparte de abrirlo, y cualquier periodo puede marcarse, también uno anterior para corregir un error (supuesto por confirmar).
+- Calendario: cada etapa del proceso (validación de catálogos, propuesta por carrera, horarios y cupos, asignación docente, salones y acuerdos, cierre y aprobación, publicación y re-análisis) tiene una ventana general para todos los campus y, si hace falta, una propia de un campus, que reemplaza a la general en ese campus (supuesto por confirmar). Las ventanas no se limitan a las fechas del periodo, porque la planeación ocurre antes de que empiece.
+- El calendario solo informa: muestra la etapa en curso, los días que le quedan, las próximas y las terminadas, pero nada se rechaza por fecha, y abrir un periodo no exige tenerlo (confirmado el 1 de noviembre de 2026).
+
 ## Aprobaciones y permisos
 
 | Acción | Quién | Condición |
 |---|---|---|
-| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin` |
+| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin`. Dar de alta y editar periodos, marcar el actual y armar su calendario es de los dos, en todo el Tec (supuesto por confirmar) |
 | Administrar edificios y salones | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo |
 | Importar catálogos | `admin` | |
 | Administrar catálogos de Academic (departamentos, carreras, materias, planes y su retícula) | `admin` | En la fase 2 se abren a los jefes para validar (confirmado el 29 de octubre de 2026) |

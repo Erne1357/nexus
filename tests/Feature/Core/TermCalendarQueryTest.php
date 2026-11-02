@@ -1,0 +1,155 @@
+<?php
+
+use App\Modules\Core\Actions\RemoveTermStage;
+use App\Modules\Core\Actions\SetTermStage;
+use App\Modules\Core\Enums\Stage;
+use App\Modules\Core\Enums\StageSource;
+use App\Modules\Core\Enums\StageStatus;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermStage;
+use App\Modules\Core\Queries\StageWindow;
+use App\Modules\Core\Queries\TermCalendarQuery;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
+
+/*
+| TermCalendarQuery: las 8 etapas con su ventana efectiva (la del campus reemplaza a la general), su
+| estado respecto a hoy en Ciudad Juárez y su caché, invalidada al cambiar el calendario.
+*/
+
+beforeEach(function () {
+    $this->term = Term::factory()->create();
+    $this->campus = Campus::factory()->create();
+    Cache::flush();
+});
+
+function termCalendarFor(Term $term, ?Campus $campus, Stage $stage): StageWindow
+{
+    return collect(app(TermCalendarQuery::class)->for($term, $campus))->firstWhere('stage', $stage);
+}
+
+it('devuelve las 8 etapas en el orden del enum, sin fecha si no hay ventana', function () {
+    $windows = app(TermCalendarQuery::class)->for($this->term, $this->campus);
+
+    expect(array_map(fn (StageWindow $window) => $window->stage, $windows))->toBe(Stage::cases())
+        ->and(collect($windows)->every(fn (StageWindow $window) => $window->status === StageStatus::Unscheduled && $window->source === StageSource::None && $window->daysLeft === null))->toBeTrue();
+});
+
+it('usa la general y deja que la del campus la reemplace solo en ese campus', function () {
+    $other = Campus::factory()->create();
+    TermStage::factory()->for($this->term)->create(['stage' => Stage::Proposal, 'starts_on' => '2026-11-02', 'ends_on' => '2026-11-13']);
+    TermStage::factory()->for($this->term)->create(['stage' => Stage::Proposal, 'campus_id' => $this->campus->id, 'starts_on' => '2026-11-05', 'ends_on' => '2026-11-20']);
+
+    $own = termCalendarFor($this->term, $this->campus, Stage::Proposal);
+    $fallback = termCalendarFor($this->term, $other, Stage::Proposal);
+    $none = termCalendarFor($this->term, null, Stage::Proposal);
+
+    expect($own->source)->toBe(StageSource::Campus)->and($own->startsOn->toDateString())->toBe('2026-11-05')
+        ->and($fallback->source)->toBe(StageSource::General)->and($fallback->endsOn->toDateString())->toBe('2026-11-13')
+        ->and($none->source)->toBe(StageSource::General)->and($none->startsOn->toDateString())->toBe('2026-11-02');
+});
+
+it('sin campus ignora las ventanas de campus', function () {
+    TermStage::factory()->for($this->term)->create(['stage' => Stage::Rooms, 'campus_id' => $this->campus->id]);
+
+    expect(termCalendarFor($this->term, null, Stage::Rooms)->source)->toBe(StageSource::None);
+});
+
+it('calcula el estado y los días restantes respecto a hoy en Ciudad Juárez', function () {
+    TermStage::factory()->for($this->term)->create(['stage' => Stage::Proposal, 'starts_on' => '2026-11-02', 'ends_on' => '2026-11-13']);
+
+    $at = function (string $now): StageWindow {
+        $this->travelTo(CarbonImmutable::parse($now, 'America/Ciudad_Juarez'));
+
+        return termCalendarFor($this->term, null, Stage::Proposal);
+    };
+
+    $before = $at('2026-10-30 12:00');
+    $first = $at('2026-11-02 08:00');
+    $last = $at('2026-11-13 23:30');
+    $after = $at('2026-11-14 00:10');
+
+    expect($before->status)->toBe(StageStatus::Upcoming)->and($before->daysLeft)->toBe(3)
+        ->and($first->status)->toBe(StageStatus::InProgress)->and($first->daysLeft)->toBe(11)
+        ->and($last->status)->toBe(StageStatus::InProgress)->and($last->daysLeft)->toBe(0)
+        ->and($after->status)->toBe(StageStatus::Finished)->and($after->daysLeft)->toBeNull();
+});
+
+it('guarda en la caché solo las ventanas, no el estado', function () {
+    TermStage::factory()->for($this->term)->create(['stage' => Stage::Proposal, 'starts_on' => '2026-11-02', 'ends_on' => '2026-11-13']);
+
+    $this->travelTo(CarbonImmutable::parse('2026-11-05', 'America/Ciudad_Juarez'));
+    expect(termCalendarFor($this->term, $this->campus, Stage::Proposal)->status)->toBe(StageStatus::InProgress);
+
+    expect(Cache::has(TermCalendarQuery::key($this->term->id)))->toBeTrue();
+
+    $this->travelTo(CarbonImmutable::parse('2026-11-20', 'America/Ciudad_Juarez'));
+    expect(termCalendarFor($this->term, $this->campus, Stage::Proposal)->status)->toBe(StageStatus::Finished);
+});
+
+it('invalida la caché de todos los campus al fijar o quitar una ventana', function () {
+    $other = Campus::factory()->create();
+    $set = fn (?Campus $campus, string $end) => app(SetTermStage::class)->handle($this->term, Stage::Staffing, $campus, '2026-11-02', $end);
+
+    $set(null, '2026-11-13');
+    expect(termCalendarFor($this->term, $this->campus, Stage::Staffing)->endsOn->toDateString())->toBe('2026-11-13')
+        ->and(termCalendarFor($this->term, $other, Stage::Staffing)->endsOn->toDateString())->toBe('2026-11-13')
+        ->and(termCalendarFor($this->term, null, Stage::Staffing)->endsOn->toDateString())->toBe('2026-11-13');
+
+    $set(null, '2026-11-20');
+    expect(termCalendarFor($this->term, $this->campus, Stage::Staffing)->endsOn->toDateString())->toBe('2026-11-20')
+        ->and(termCalendarFor($this->term, $other, Stage::Staffing)->endsOn->toDateString())->toBe('2026-11-20')
+        ->and(termCalendarFor($this->term, null, Stage::Staffing)->endsOn->toDateString())->toBe('2026-11-20');
+
+    $set($this->campus, '2026-11-30');
+    expect(termCalendarFor($this->term, $this->campus, Stage::Staffing)->endsOn->toDateString())->toBe('2026-11-30');
+
+    app(RemoveTermStage::class)->handle(TermStage::where('campus_id', $this->campus->id)->sole());
+    expect(termCalendarFor($this->term, $this->campus, Stage::Staffing)->endsOn->toDateString())->toBe('2026-11-20');
+
+    app(RemoveTermStage::class)->handle(TermStage::whereNull('campus_id')->sole());
+    expect(termCalendarFor($this->term, $this->campus, Stage::Staffing)->source)->toBe(StageSource::None)
+        ->and(termCalendarFor($this->term, $other, Stage::Staffing)->source)->toBe(StageSource::None);
+});
+
+it('ownWindows da por campus solo las ventanas propias, y vacío si no tiene', function () {
+    $other = Campus::factory()->create();
+    app(SetTermStage::class)->handle($this->term, Stage::Proposal, null, '2027-01-04', '2027-01-15');
+    app(SetTermStage::class)->handle($this->term, Stage::Scheduling, $this->campus, '2027-01-18', '2027-01-29');
+
+    $own = app(TermCalendarQuery::class)->ownWindows($this->term, [$this->campus, $other]);
+
+    expect(array_keys($own))->toBe([$this->campus->code, $other->code])
+        ->and($own[$this->campus->code])->toHaveCount(1)
+        ->and($own[$this->campus->code][0])->stage->toBe(Stage::Scheduling)->source->toBe(StageSource::Campus)
+        ->and($own[$other->code])->toBe([]);
+});
+
+it('storedWindows da la general y las de campus de una etapa tal como están guardadas', function () {
+    app(SetTermStage::class)->handle($this->term, Stage::Proposal, null, '2027-01-04', '2027-01-15');
+    app(SetTermStage::class)->handle($this->term, Stage::Proposal, $this->campus, '2027-01-05', '2027-01-16');
+    app(SetTermStage::class)->handle($this->term, Stage::Rooms, null, '2027-02-01', '2027-02-05');
+
+    expect(app(TermCalendarQuery::class)->storedWindows($this->term, Stage::Proposal)->pluck('campus_id')->sort()->values()->all())
+        ->toEqual(collect([null, $this->campus->id])->sort()->values()->all());
+});
+
+it('lee todos los campus de una sola entrada de caché por periodo', function () {
+    $other = Campus::factory()->create();
+    app(SetTermStage::class)->handle($this->term, Stage::Proposal, null, '2027-01-04', '2027-01-15');
+    app(SetTermStage::class)->handle($this->term, Stage::Scheduling, $other, '2027-01-18', '2027-01-29');
+    Cache::flush();
+
+    $reads = [];
+    Cache::spy();
+    Cache::shouldReceive('remember')->andReturnUsing(function (string $key, $ttl, Closure $callback) use (&$reads) {
+        $reads[] = $key;
+
+        return $callback();
+    });
+
+    app(TermCalendarQuery::class)->ownWindows($this->term, [$this->campus, $other]);
+
+    expect(array_unique($reads))->toBe([TermCalendarQuery::key($this->term->id)]);
+});

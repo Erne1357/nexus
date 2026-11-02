@@ -2,12 +2,14 @@
     Elemento de <x-core::row-menu>. Lo deshabilitado se queda en el menú con su motivo escrito en un
     segundo renglón (`reason`): nada se oculta por permiso y un tooltip no lo ve quien usa teclado o
     pantalla táctil. Solo el elemento habilitado lleva los atributos de acción (wire:click,
-    wire:confirm, data-testid); `spinner` es el objetivo de wire:target; `danger` lo pinta en text-error.
+    wire:confirm, data-testid); con `href` es un enlace (wire:navigate) en lugar de un botón; `spinner` es el objetivo de wire:target; `danger` lo pinta en text-error.
 --}}
-@props(['label', 'reason' => null, 'disabled' => false, 'danger' => false, 'spinner' => null])
+@props(['label', 'reason' => null, 'disabled' => false, 'danger' => false, 'spinner' => null, 'href' => null])
 
-<button
-    type="button"
+@php($tag = $href !== null && ! $disabled ? 'a' : 'button')
+
+<{{ $tag }}
+    @if ($tag === 'a') href="{{ $href }}" wire:navigate @else type="button" @endif
     role="menuitem"
     @if ($disabled) aria-disabled="true" @else x-on:click="close()" @endif
     {{ $attributes->class([
@@ -27,4 +29,4 @@
     @if ($reason !== null)
         <span class="text-xs font-normal text-neutral">{{ $reason }}</span>
     @endif
-</button>
+</{{ $tag }}>
