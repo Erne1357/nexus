@@ -34,8 +34,9 @@ final class DepartmentInboxQuery
     /**
      * Todo lo que muestra la bandeja (DepartmentInbox). Un número fijo de consultas, sin importar cuántas carreras,
      * partes o filas haya: la carga; los catálogos sin validar (CatalogReviewQuery::pendingFor, HC-14); las
-     * propuestas del periodo y campus; las partes del departamento; las filas con grupos de sus materias en esas
-     * partes, con sus materias; las carreras, y el tamaño objetivo de los grupos (SuggestedGroups).
+     * propuestas del periodo y campus; las partes del departamento, cada una con su propuesta ya puesta (para
+     * ProposalReviewPolicy::decide sin otra consulta); las filas con grupos de sus materias en esas partes, con sus
+     * materias; las carreras, y el tamaño objetivo de los grupos (SuggestedGroups).
      */
     public function inbox(Term $term, Campus $campus, Department $department): DepartmentInbox
     {
@@ -65,6 +66,7 @@ final class DepartmentInboxQuery
             ->map(function (Career $career) use ($proposalsByCareer, $reviews, $items): array {
                 $proposal = $proposalsByCareer->get($career->getKey());
                 $review = $proposal === null || $proposal->status === ProposalStatus::Draft ? null : $reviews->get($proposal->getKey());
+                $review?->setRelation('proposal', $proposal);
                 $requested = $review === null ? collect() : $items->get($proposal->getKey(), collect());
 
                 return [

@@ -162,11 +162,13 @@ describe('con lo que piden varias carreras', function () {
         ]);
     });
 
-    it('da la propuesta y la parte de cada carrera, para decidirla', function () {
+    it('da la propuesta y la parte de cada carrera, para decidirla, con la propuesta ya cargada en la parte', function () {
         $isc = inboxOf()->career($this->isc->id);
 
         expect($isc['proposal']->id)->toBe($this->iscProposal->id)
             ->and($isc['review']->department_id)->toBe($this->cb->id)
+            ->and($isc['review']->relationLoaded('proposal'))->toBeTrue()
+            ->and($isc['review']->proposal)->toBe($isc['proposal'])
             ->and(inboxOf()->career($this->arq->id)['review'])->toBeNull()
             ->and(inboxOf()->career('no-es-uuid'))->toBeNull();
     });
