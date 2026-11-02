@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Route;
 /*
 | Rutas de Core. El login, el logout y `PUT /user/password` los registra Fortify
 | (config/fortify.php); aquí, la página de inicio, la pantalla de cambio de contraseña y el CRUD de
-| Campus y el de Periodos. Quién entra a cada página lo decide la página con su policy, no la ruta.
+| Campus, el de Periodos y la ficha de un periodo. Quién entra a cada página lo decide la página con su policy, no la ruta.
 */
 
 Route::middleware('auth')->group(function () {
@@ -14,6 +14,7 @@ Route::middleware('auth')->group(function () {
     Route::view('/user/password', 'core::auth.change-password')->name('user-password.edit');
     Route::livewire('/campus', 'core::pages.campuses')->name('core.campuses');
     Route::livewire('/terms', 'core::pages.terms')->name('core.terms');
+    Route::livewire('/terms/{term}', 'core::pages.term')->name('core.terms.show');
 });
 
 /*

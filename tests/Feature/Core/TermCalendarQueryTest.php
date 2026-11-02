@@ -112,3 +112,25 @@ it('invalida la caché de todos los campus al fijar o quitar una ventana', funct
     expect(termCalendarFor($this->term, $this->campus, Stage::Staffing)->source)->toBe(StageSource::None)
         ->and(termCalendarFor($this->term, $other, Stage::Staffing)->source)->toBe(StageSource::None);
 });
+
+it('ownWindows da por campus solo las ventanas propias, y vacío si no tiene', function () {
+    $other = Campus::factory()->create();
+    app(SetTermStage::class)->handle($this->term, Stage::Proposal, null, '2027-01-04', '2027-01-15');
+    app(SetTermStage::class)->handle($this->term, Stage::Scheduling, $this->campus, '2027-01-18', '2027-01-29');
+
+    $own = app(TermCalendarQuery::class)->ownWindows($this->term, [$this->campus, $other]);
+
+    expect(array_keys($own))->toBe([$this->campus->code, $other->code])
+        ->and($own[$this->campus->code])->toHaveCount(1)
+        ->and($own[$this->campus->code][0])->stage->toBe(Stage::Scheduling)->source->toBe(StageSource::Campus)
+        ->and($own[$other->code])->toBe([]);
+});
+
+it('storedWindows da la general y las de campus de una etapa tal como están guardadas', function () {
+    app(SetTermStage::class)->handle($this->term, Stage::Proposal, null, '2027-01-04', '2027-01-15');
+    app(SetTermStage::class)->handle($this->term, Stage::Proposal, $this->campus, '2027-01-05', '2027-01-16');
+    app(SetTermStage::class)->handle($this->term, Stage::Rooms, null, '2027-02-01', '2027-02-05');
+
+    expect(app(TermCalendarQuery::class)->storedWindows($this->term, Stage::Proposal)->pluck('campus_id')->sort()->values()->all())
+        ->toEqual(collect([null, $this->campus->id])->sort()->values()->all());
+});

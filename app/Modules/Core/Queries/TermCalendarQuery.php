@@ -9,6 +9,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -52,6 +53,56 @@ final class TermCalendarQuery
                 default => new StageWindow($stage, $startsOn, $endsOn, $source, StageStatus::InProgress, (int) $today->diffInDays($endsOn)),
             };
         }, Stage::cases());
+    }
+
+    /**
+     * Lo que hay que ver del calendario efectivo en Inicio: las etapas en curso y las `$next` próximas que
+     * siguen, por fecha de inicio (a igual fecha, en el orden de Stage). Vacío si no hay ninguna.
+     *
+     * @return list<StageWindow>
+     */
+    public function upcoming(Term $term, ?Campus $campus, int $next = 2): array
+    {
+        $windows = $this->for($term, $campus);
+
+        $inProgress = array_values(array_filter($windows, fn (StageWindow $window): bool => $window->status === StageStatus::InProgress));
+        $upcoming = array_values(array_filter($windows, fn (StageWindow $window): bool => $window->status === StageStatus::Upcoming));
+
+        usort($upcoming, fn (StageWindow $a, StageWindow $b): int => $a->startsOn <=> $b->startsOn);
+
+        return [...$inProgress, ...array_slice($upcoming, 0, $next)];
+    }
+
+    /**
+     * Las ventanas propias de cada campus (las que reemplazan a la general), por código de campus, en el
+     * orden de `$campuses`; un campus sin ventanas propias trae una lista vacía.
+     *
+     * @param  iterable<Campus>  $campuses
+     * @return array<string, list<StageWindow>>
+     */
+    public function ownWindows(Term $term, iterable $campuses): array
+    {
+        $own = [];
+
+        foreach ($campuses as $campus) {
+            $own[$campus->code] = array_values(array_filter(
+                $this->for($term, $campus),
+                fn (StageWindow $window): bool => $window->source === StageSource::Campus,
+            ));
+        }
+
+        return $own;
+    }
+
+    /**
+     * Las ventanas guardadas de una etapa, la general y las de cada campus, tal como están en la base (sin la
+     * caché), para editarlas: `campus_id` nulo es la general.
+     *
+     * @return Collection<int, TermStage>
+     */
+    public function storedWindows(Term $term, Stage $stage): Collection
+    {
+        return TermStage::query()->where('term_id', $term->getKey())->where('stage', $stage->value)->get();
     }
 
     public static function key(string $termId, ?string $campusId): string

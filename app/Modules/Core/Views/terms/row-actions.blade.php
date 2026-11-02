@@ -3,7 +3,7 @@
     (core::pages.terms): «Editar» visible y lo demás plegado en «Acciones» (DESIGN.md, "Acciones de
     fila"). En la tabla (`$inTable`), «Editar» y «Acciones» quedan solo con su icono entre 768 y 1199 px
     y «Editar» lleva el data-testid del browser test. Lo que no aplica se muestra deshabilitado, en el
-    menú, con su motivo escrito. Aquí irá «Ver ficha» cuando exista la ficha del periodo.
+    menú, con su motivo escrito. «Ver ficha» abre core::pages.term.
 --}}
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
     <x-button
@@ -18,6 +18,8 @@
     </x-button>
 
     <x-core::row-menu :name="$term->code" :compact="$inTable">
+        <x-core::row-menu-item label="Ver ficha" :href="route('core.terms.show', $term->id)" :data-testid="$inTable ? 'show-'.$term->code : null" />
+
         @if ($term->is_current)
             <x-core::row-menu-item label="Marcar como actual" reason="Ya es el periodo actual." disabled />
         @else

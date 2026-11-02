@@ -3,6 +3,7 @@
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 
 /*
@@ -66,6 +67,30 @@ it('el admin da de alta un periodo, lo edita y lo marca como actual desde la UI'
         ->assertNoJavaScriptErrors();
 
     expect(Term::where('code', '20271')->sole()->is_current)->toBeTrue();
+});
+
+it('el admin abre la ficha de un periodo, fija las fechas de una etapa y la ventana propia de Campus II y ve las barras', function () {
+    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+
+    signInToTerms('admin')
+        ->navigate('/terms/'.$term->id)
+        ->assertSee('Ene-Jun 2027')
+        ->assertSee('Calendario')
+        ->click('@stage-scheduling')
+        ->waitForText('Etapa 3 de 8')
+        ->fill('@general-starts', '2027-01-04')
+        ->fill('@general-ends', '2027-01-22')
+        ->click('@add-C2')
+        ->wait(1)
+        ->fill('@own-C2-starts', '2027-01-11')
+        ->fill('@own-C2-ends', '2027-01-29')
+        ->click('@save-stage')
+        ->waitForText('Etapa actualizada')
+        ->assertSee('4–22 ene')
+        ->assertPresent('[data-testid="stage-scheduling"] i.bg-primary')
+        ->assertNoJavaScriptErrors();
+
+    expect(TermStage::where('term_id', $term->id)->count())->toBe(2);
 });
 
 it('un coordinador no ve la opción Periodos en el menú', function () {

@@ -48,7 +48,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
             new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Campus::class]),
             new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Academico,
-                ability: 'viewAny', arguments: [Term::class]),
+                ability: 'viewAny', arguments: [Term::class], childRoutes: ['core.terms.show']),
         ];
     }
 }

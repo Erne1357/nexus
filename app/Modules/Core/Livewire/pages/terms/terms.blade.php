@@ -40,7 +40,11 @@
             class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
         >
             @scope('cell_code', $term)
-                <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $term->is_current])>{{ $term->code }}</span>
+                <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['font-mono text-[15px] tabular-nums text-primary hover:underline', 'font-semibold' => $term->is_current])>{{ $term->code }}</a>
+            @endscope
+
+            @scope('cell_name', $term)
+                <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['hover:underline', 'font-semibold' => $term->is_current])>{{ $term->name }}</a>
             @endscope
 
             @scope('cell_starts_on', $term)
@@ -71,7 +75,7 @@
                 <li wire:key="term-card-{{ $term->id }}" class="space-y-1 px-4 py-3">
                     <div class="flex items-center gap-2.5">
                         <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $term->is_current])>{{ $term->code }}</span>
-                        <span @class(['min-w-0 flex-1', 'font-semibold' => $term->is_current])>{{ $term->name }}</span>
+                        <a href="{{ route('core.terms.show', $term->id) }}" wire:navigate @class(['min-w-0 flex-1', 'font-semibold' => $term->is_current])>{{ $term->name }}</a>
 
                         @if ($term->is_current)
                             <x-core::status-badge tone="success" label="Actual" />
@@ -98,12 +102,7 @@
 
     <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo periodo' : 'Editar periodo'" box-class="max-w-xl" separator>
         <x-form wire:submit="save" no-separator>
-            <div class="grid gap-4 md:grid-cols-2">
-                <x-input label="Código" name="code" wire:model.live.debounce.300ms="code" placeholder="20271" hint="Año y periodo: 1 Ene-Jun, 2 Verano, 3 Ago-Dic." />
-                <x-input label="Nombre" name="name" wire:model="name" />
-                <x-input label="Inicio" name="starts_on" type="date" wire:model="starts_on" />
-                <x-input label="Fin" name="ends_on" type="date" wire:model="ends_on" />
-            </div>
+            @include('core::terms.form-fields')
 
             <x-slot:actions>
                 <x-button label="Cancelar" @click="$wire.showModal = false" />
