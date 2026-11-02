@@ -52,3 +52,11 @@ it('sin el parámetro, o con uno que no sirve, usa 35 y 25', function (mixed $va
     'decimal' => [['default' => 30.5, 'lab' => 20], 35, 20],
     'texto' => [['default' => '30', 'lab' => 'veinte'], 35, 25],
 ]);
+
+it('da el tamaño objetivo de una materia con o sin laboratorio', function () {
+    $sizes = SuggestedGroups::fromValue(['default' => 40, 'lab' => 20]);
+
+    expect($sizes->sizeFor(needsLab: false))->toBe(40)
+        ->and($sizes->sizeFor(needsLab: true))->toBe(20)
+        ->and((new SuggestedGroups)->sizeFor(needsLab: true))->toBe(25);
+});
