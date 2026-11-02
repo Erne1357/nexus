@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Enums\Role;
@@ -32,7 +33,7 @@ use Livewire\Livewire;
 
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2', 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
-    $this->term = Term::factory()->current()->create(['code' => '20271']);
+    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
     TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
@@ -90,12 +91,12 @@ function inboxPageAs(User $user, array $query = []): Testable
 }
 
 describe('jefe de departamento', function () {
-    it('ve su departamento, el campus, el periodo y el estado de su carga', function () {
+    it('ve su departamento, el campus, el periodo por su nombre y el estado de su carga', function () {
         inboxPageAs($this->jefe)
             ->assertOk()
             ->assertSee('Ciencias Básicas')
-            ->assertSee('Campus')
-            ->assertSee('20271')
+            ->assertSee('Ene-Jun 2027')
+            ->assertDontSee('20271')
             ->assertSee('Borrador')
             ->assertSee('ISC')
             ->assertSee('IIND');
@@ -127,15 +128,166 @@ describe('jefe de departamento', function () {
             ->assertViewHas('visible', fn (array $rows): bool => count($rows) === 1 && $rows[0]['career']->code === 'IIND');
     });
 
-    it('muestra la barra contra el total de la materia y la sugerencia de paralelos', function () {
+    it('muestra el frente al total de la materia en una tabla compacta, sin barras', function () {
         inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
             ->assertSee('Cálculo Diferencial')
-            ->assertSee('de 4 grupos')
+            ->assertSee('ACF-0901')
+            ->assertSeeText('2 de 4 grupos · 2 carreras')
+            ->assertSee('Nota de ISC')
+            ->assertSeeHtml('data-testid="inbox-items"')
+            ->assertDontSeeHtml('<progress')
+            ->assertSeeHtml('data-testid="inbox-detail-header"')
+            ->assertSeeHtml('data-testid="inbox-detail-total"');
+    });
+
+    it('ofrece los paralelos como un chip con el ahorro, y su detalle por carrera y los grupos mixtos', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertSeeHtml('data-testid="parallels-chip"')
+            ->assertSee('−1 grupo juntando carreras')
+            ->assertDontSee('Piden 4')
+            ->assertSet('showParallels', false)
+            ->call('openParallels', $this->calculus->id)
+            ->assertSet('showParallels', true)
+            ->assertSeeHtml('data-testid="parallels-drawer"')
+            ->assertSee('Cálculo Diferencial')
             ->assertSee('Piden 4')
             ->assertSee('bastan 3')
-            ->assertSee('1 ISC')
-            ->assertSee('1 IIND')
-            ->assertSee('1 mixto (5 de IIND + 25 de ISC)');
+            ->assertSeeHtml('data-testid="parallels-table"')
+            ->assertSee('1 mixto')
+            ->assertSee('25 de ISC')
+            ->assertSee('5 de IIND');
+    });
+
+    it('no ofrece el chip de paralelos en una materia que pide una sola carrera', function () {
+        $this->iindPart->update(['status' => ProposalReviewStatus::Returned, 'comment' => 'Revisa.']);
+        $this->iindProposal->update(['status' => ProposalStatus::Returned]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])->assertDontSeeHtml('data-testid="parallels-chip"');
+    });
+
+    it('no abre los paralelos de una materia que no está en la bandeja', function () {
+        $other = Subject::factory()->create(['department_id' => $this->sc->id]);
+
+        inboxPageAs($this->jefe)->call('openParallels', $other->id)->assertNotFound();
+    });
+
+    it('al aceptar pasa a la siguiente carrera por decidir', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->call('confirmAccept', $this->iscPart->id)
+            ->call('accept')
+            ->assertSet('careerId', $this->iind->id)
+            ->assertViewHas('selected', fn (array $row): bool => $row['career']->code === 'IIND');
+    });
+
+    it('al regresar pasa a la siguiente carrera por decidir', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->iind->id])
+            ->call('confirmReturn', $this->iindPart->id)
+            ->set('comment', 'Corrige.')
+            ->call('returnPart')
+            ->assertSet('careerId', $this->isc->id);
+    });
+
+    it('al decidir la última por decidir se queda en esa carrera', function () {
+        $this->iscPart->update(['status' => ProposalReviewStatus::Accepted]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->iind->id])
+            ->call('confirmAccept', $this->iindPart->id)
+            ->call('accept')
+            ->assertViewHas('selected', fn (array $row): bool => $row['career']->code === 'IIND');
+    });
+
+    it('la lista de carreras y el comentario de regresada no llevan borde lateral de color', function () {
+        $this->iscPart->update(['status' => ProposalReviewStatus::Returned, 'comment' => 'Revisa los esperados.']);
+        $this->iscProposal->update(['status' => ProposalStatus::Returned]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertDontSeeHtml('border-l-4')
+            ->assertSeeHtml('data-testid="part-comment"')
+            ->assertSee('Comentario de Ciencias Básicas')
+            ->assertSee('Revisa los esperados.');
+    });
+
+    it('marca las anomalías de la fila y cuenta las de cada carrera, sin bloquear', function () {
+        ProposalItem::query()->where('career_proposal_id', $this->iscProposal->id)->update(['eligible_students' => 98, 'expected_students' => 105]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertSee('105 esperados con 98 elegibles')
+            ->assertSeeHtml('data-testid="row-anomalies"')
+            ->assertViewHas('anomalyCounts', fn (array $counts): bool => ($counts[$this->isc->id] ?? 0) === 1 && ($counts[$this->iind->id] ?? 0) === 0)
+            ->assertSeeHtml('data-testid="career-anomalies"')
+            ->assertSeeHtml('data-testid="accept-part"')
+            ->call('confirmAccept', $this->iscPart->id)
+            ->call('accept')
+            ->assertHasNoErrors();
+    });
+
+    it('no marca anomalías cuando no las hay', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertDontSeeHtml('data-testid="row-anomalies"')
+            ->assertDontSeeHtml('data-testid="career-anomalies"');
+    });
+
+    it('la confirmación de aceptar destaca que lo aceptado ya no cambia', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->call('confirmAccept', $this->iscPart->id)
+            ->assertSeeHtml('data-testid="accept-warning"')
+            ->assertSee('Lo aceptado ya no cambia.');
+    });
+
+    it('regresa desde un drawer con el contador de caracteres y las anomalías de la carrera', function () {
+        ProposalItem::query()->where('career_proposal_id', $this->iscProposal->id)->update(['eligible_students' => 98, 'expected_students' => 105]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->call('confirmReturn', $this->iscPart->id)
+            ->assertSeeHtml('data-testid="return-drawer"')
+            ->assertSeeHtml('data-testid="return-anomalies"')
+            ->assertSee('105 esperados con 98 elegibles')
+            ->assertSeeHtml('data-testid="return-counter"')
+            ->assertSeeHtml('maxlength="'.ProposalReviewRules::MAX_COMMENT_LENGTH.'"')
+            ->assertSeeHtml('/ '.ProposalReviewRules::MAX_COMMENT_LENGTH)
+            ->assertDontSeeHtml('wire:model.live.debounce')
+            ->assertSeeHtml('data-testid="return-cite"');
+    });
+
+    it('el chip de paralelos con cero esperados no presume un ahorro', function () {
+        ProposalItem::query()->update(['expected_students' => 0]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertSeeHtml('data-testid="parallels-chip"')
+            ->assertSee('Sin alumnos esperados')
+            ->assertDontSee('−4 grupos');
+    });
+
+    it('el chip de paralelos con un resto de una sola carrera no dice mixtos', function () {
+        ProposalItem::query()->where('career_proposal_id', $this->iindProposal->id)->update(['expected_students' => 70]);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertSeeHtml('data-testid="parallels-chip"')
+            ->assertSee('1 grupo más de ISC')
+            ->assertDontSee('Con grupos mixtos');
+    });
+
+    it('al decidir, el aviso nombra la carrera y lo que se hizo, y el panel se limpia', function () {
+        $accepted = inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->call('confirmAccept', $this->iscPart->id)
+            ->call('accept')
+            ->assertSet('reviewId', null);
+        $returned = inboxPageAs($this->jefe, ['carrera' => $this->iind->id])
+            ->call('confirmReturn', $this->iindPart->id)
+            ->set('comment', 'Corrige.')
+            ->call('returnPart')
+            ->assertSet('reviewId', null);
+
+        expect(json_encode($accepted->effects['xjs'] ?? []))->toContain('Aceptaste la parte de ISC')
+            ->and(json_encode($returned->effects['xjs'] ?? []))->toContain('Regresaste la parte de IIND');
+    });
+
+    it('cerrar el drawer de regresar suelta la parte', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->call('confirmReturn', $this->iscPart->id)
+            ->assertSet('reviewId', $this->iscPart->id)
+            ->set('showReturn', false)
+            ->assertSet('reviewId', null);
     });
 
     it('acepta una parte, lo dice en un aviso y lleva la carga a Propuesta', function () {
@@ -159,6 +311,7 @@ describe('jefe de departamento', function () {
             ->call('returnPart')
             ->assertSet('showReturn', false)
             ->assertSee('Regresada')
+            ->call('pick', $this->isc->id)
             ->assertSee('Faltan grupos de laboratorio.');
 
         expect($this->iscPart->fresh())->status->toBe(ProposalReviewStatus::Returned)->comment->toBe('Faltan grupos de laboratorio.')
@@ -298,13 +451,13 @@ describe('textos de la sugerencia de paralelos y del detalle', function () {
     it('dice de qué carrera es cada resto cuando un grupo es de una sola carrera', function () {
         ProposalItem::query()->where('career_proposal_id', $this->iindProposal->id)->update(['expected_students' => 70]);
 
-        inboxPageAs($this->jefe)->assertSee('1 más de ISC (25)')->assertDontSee('mixto');
+        inboxPageAs($this->jefe)->call('openParallels', $this->calculus->id)->assertSee('1 más de ISC (25)')->assertDontSee('1 mixto');
     });
 
     it('sin alumnos esperados no deja el texto cortado', function () {
         ProposalItem::query()->update(['expected_students' => 0]);
 
-        inboxPageAs($this->jefe)->assertSee('Piden 4 · sin alumnos esperados')->assertDontSee('bastan 0');
+        inboxPageAs($this->jefe)->call('openParallels', $this->calculus->id)->assertSee('Piden 4 · sin alumnos esperados')->assertDontSee('bastan 0');
     });
 
     it('distingue la carrera sin propuesta de la que no le pide materias al departamento', function () {

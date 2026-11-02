@@ -203,7 +203,8 @@ describe('con lo que piden varias carreras', function () {
 
         Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => ProposalAnomalies::SETTING, 'value' => 40]);
 
-        expect(array_column(inboxOf()->rowsFor($this->isc->id), 'anomalies'))->toBe([['2 grupos para 60 alumnos'], ['1 grupo para 30 alumnos']]);
+        expect(array_column(inboxOf()->rowsFor($this->isc->id), 'anomalies'))->toBe([['2 grupos para 60 alumnos'], ['1 grupo para 30 alumnos']])
+            ->and(inboxOf()->career($this->isc->id)['anomalies'])->toBe(2);
     });
 
     it('las filas de una parte regresada se ven, y su total no la cuenta; sin parte no hay filas', function () {
