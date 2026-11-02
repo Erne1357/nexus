@@ -2,6 +2,7 @@
 
 namespace App\Modules\AcademicLoad\Actions\Proposals;
 
+use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\StudyPlanSubject;
@@ -39,6 +40,13 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  */
 final class StartCareerProposal
 {
+    /**
+     * Los tipos de materia que no entran a la propuesta (confirmado el 2 de noviembre de 2026).
+     *
+     * @var list<string>
+     */
+    private const array OUTSIDE_PROPOSAL = [SubjectKind::Residencia->value, SubjectKind::ServicioSocial->value, SubjectKind::Complementaria->value];
+
     public function __construct(private readonly EligibleStudentsQuery $eligibleStudents) {}
 
     /**
@@ -166,7 +174,9 @@ final class StartCareerProposal
 
     /**
      * Las materias activas de la retícula de los planes activos de la carrera, sin lo borrado ni lo quitado de la
-     * retícula, una vez cada una: la del primer plan por clave.
+     * retícula, una vez cada una: la del primer plan por clave. Sin residencia, servicio social ni actividades
+     * complementarias, que no abren grupos de clase, y sin las materias sin horas de clase, que es como se
+     * reconocen cuando el SII no trae su tipo.
      *
      * @return Collection<int, object{subject_id: string, study_plan_id: string, semester: int, needs_lab: bool}>
      */
@@ -180,6 +190,8 @@ final class StartCareerProposal
             ->whereNull('study_plans.deleted_at')
             ->where('subjects.is_active', true)
             ->whereNull('subjects.deleted_at')
+            ->where(fn ($query) => $query->whereNull('subjects.kind')->orWhereNotIn('subjects.kind', self::OUTSIDE_PROPOSAL))
+            ->whereRaw('subjects.theory_hours + subjects.practice_hours > 0')
             ->orderBy('study_plans.code')
             ->orderBy('study_plan_subjects.semester')
             ->orderBy('subjects.code')

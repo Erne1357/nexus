@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\StudyPlan;
@@ -116,6 +117,18 @@ it('HC-13: deja fuera las materias inactivas o borradas, las quitadas de la retÃ
     placeInPlan(StudyPlan::factory()->create(), Subject::factory()->create(['code' => 'G-OTRA-CARRERA']));
 
     expect(array_keys(proposalRowsOf(startProposal())))->toBe(['A-ACTIVA']);
+});
+
+it('deja fuera residencia, servicio social y actividades complementarias, y las materias sin horas de clase', function () {
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'A-CLASE', 'kind' => SubjectKind::Basica, 'theory_hours' => 3, 'practice_hours' => 2]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'B-SIN-TIPO', 'kind' => null, 'theory_hours' => 2, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'RP', 'kind' => SubjectKind::Residencia, 'theory_hours' => 0, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'SS', 'kind' => SubjectKind::ServicioSocial, 'theory_hours' => 0, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'AC', 'kind' => SubjectKind::Complementaria, 'theory_hours' => 0, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'X-CON-TIPO-Y-HORAS', 'kind' => SubjectKind::Residencia, 'theory_hours' => 0, 'practice_hours' => 4]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'Z-SIN-HORAS', 'kind' => null, 'theory_hours' => 0, 'practice_hours' => 0]));
+
+    expect(array_keys(proposalRowsOf(startProposal())))->toBe(['A-CLASE', 'B-SIN-TIPO']);
 });
 
 it('una materia en dos planes activos es una sola fila, con el plan y el semestre del primer plan por clave', function () {
