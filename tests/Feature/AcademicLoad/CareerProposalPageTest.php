@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
@@ -169,6 +170,32 @@ describe('coordinador', function () {
 
         expect(lastToastOf($page)['type'])->toBe('error')
             ->and($this->calculus->fresh()->requested_groups)->toBe(2);
+    });
+
+    it('con la propuesta regresada, la parte que un departamento acepta mientras tanto se ve aceptada y bloquea sus materias', function () {
+        $this->proposal->update(['status' => ProposalStatus::Returned]);
+        ProposalReview::factory()->returned('Falta un grupo.')->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->sc->id]);
+        $cbPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
+
+        $page = proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+            ->assertSee('Pendiente')
+            ->assertDontSee('CB ya aceptó su parte')
+            ->assertViewHas('locks', []);
+
+        $cbPart->update(['status' => ProposalReviewStatus::Accepted, 'decided_by' => User::factory()->create()->id, 'decided_at' => now()]);
+
+        $page->call('$refresh')
+            ->assertSee('Aceptada')
+            ->assertSee('CB ya aceptó su parte')
+            ->assertViewHas('locks', fn (array $locks): bool => array_keys($locks) === [$this->calculus->id])
+            ->call('saveCell', $this->calculus->id, 'requested_groups', '4');
+
+        expect(lastToastOf($page)['type'])->toBe('error')
+            ->and($this->calculus->fresh()->requested_groups)->toBe(2);
+
+        $page->call('saveCell', $this->networks->id, 'requested_groups', '2');
+
+        expect($this->networks->fresh()->requested_groups)->toBe(2);
     });
 
     it('no edita una propuesta enviada', function () {

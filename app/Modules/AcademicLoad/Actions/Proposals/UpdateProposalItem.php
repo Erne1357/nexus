@@ -21,12 +21,14 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * En una transacción bloquea la propuesta (el estado que vale es el de la base) y exige que esté en borrador o
  * regresada: enviada queda de solo lectura y aceptada ya no cambia; si no, una ValidationException sobre
- * `status`. Lee con bloqueo compartido la parte del departamento de la materia: si ya la aceptó, sus materias
- * quedan bloqueadas (confirmado el 2 de noviembre de 2026) y es una ValidationException sobre `item`. Relee la
- * fila con bloqueo para que el valor anterior de la bitácora sea el de la base. Sin cambios no escribe, no
- * registra ni avisa; con cambios guarda, deja en la bitácora de la fila el valor anterior y el nuevo de lo que
- * cambió y, después del commit, avisa con ProposalItemUpdated. Quién puede lo decide
- * CareerProposalPolicy::update antes de llamarla; quien corrige se recibe como parámetro.
+ * `status`. Luego bloquea la parte del departamento de la materia, en el mismo orden que AcceptProposalReview y
+ * ReturnProposalReview (propuesta y luego parte), para que una corrección y la aceptación de esa parte no se
+ * crucen (supuesto por confirmar): si el departamento ya la aceptó, también con la propuesta regresada por otro
+ * departamento, sus materias quedan bloqueadas (confirmado el 2 de noviembre de 2026) y es una
+ * ValidationException sobre `item`. Al final relee la fila con bloqueo para que el valor anterior de la bitácora
+ * sea el de la base. Sin cambios no escribe, no registra ni avisa; con cambios guarda, deja en la bitácora de la
+ * fila el valor anterior y el nuevo de lo que cambió y, después del commit, avisa con ProposalItemUpdated. Quién
+ * puede lo decide CareerProposalPolicy::update antes de llamarla; quien corrige se recibe como parámetro.
  */
 final class UpdateProposalItem
 {
@@ -51,20 +53,20 @@ final class UpdateProposalItem
                     : 'La propuesta ya se envió: solo se cambia si un departamento la regresa.']);
             }
 
-            $item->setRawAttributes($item->newQuery()->lockForUpdate()->findOrFail($item->getKey())->getAttributes(), sync: true);
             $item->load(['subject' => fn ($query) => $query->withTrashed()->with(['department' => fn ($department) => $department->withTrashed()])]);
             $subject = $item->subject;
 
-            $accepted = ProposalReview::query()
+            $part = ProposalReview::query()
                 ->where('career_proposal_id', $proposal->getKey())
                 ->where('department_id', $subject->department_id)
-                ->where('status', ProposalReviewStatus::Accepted)
-                ->sharedLock()
-                ->exists();
+                ->lockForUpdate()
+                ->first();
 
-            if ($accepted) {
+            if ($part?->status === ProposalReviewStatus::Accepted) {
                 throw ValidationException::withMessages(['item' => "{$subject->department->code} ya aceptó su parte: sus materias ya no cambian."]);
             }
+
+            $item->setRawAttributes($item->newQuery()->lockForUpdate()->findOrFail($item->getKey())->getAttributes(), sync: true);
 
             $old = $item->only(array_keys($data));
             $item->fill($data);

@@ -119,7 +119,7 @@ it('HC-13: deja fuera las materias inactivas o borradas, las quitadas de la retÃ
     expect(array_keys(proposalRowsOf(startProposal())))->toBe(['A-ACTIVA']);
 });
 
-it('deja fuera residencia, servicio social y actividades complementarias, y las materias sin horas de clase', function () {
+it('deja fuera residencia, servicio social y actividades complementarias, y las materias sin horas de clase, tengan o no tipo', function () {
     placeInPlan($this->plan, Subject::factory()->create(['code' => 'A-CLASE', 'kind' => SubjectKind::Basica, 'theory_hours' => 3, 'practice_hours' => 2]));
     placeInPlan($this->plan, Subject::factory()->create(['code' => 'B-SIN-TIPO', 'kind' => null, 'theory_hours' => 2, 'practice_hours' => 0]));
     placeInPlan($this->plan, Subject::factory()->create(['code' => 'RP', 'kind' => SubjectKind::Residencia, 'theory_hours' => 0, 'practice_hours' => 0]));
@@ -127,6 +127,7 @@ it('deja fuera residencia, servicio social y actividades complementarias, y las 
     placeInPlan($this->plan, Subject::factory()->create(['code' => 'AC', 'kind' => SubjectKind::Complementaria, 'theory_hours' => 0, 'practice_hours' => 0]));
     placeInPlan($this->plan, Subject::factory()->create(['code' => 'X-CON-TIPO-Y-HORAS', 'kind' => SubjectKind::Residencia, 'theory_hours' => 0, 'practice_hours' => 4]));
     placeInPlan($this->plan, Subject::factory()->create(['code' => 'Z-SIN-HORAS', 'kind' => null, 'theory_hours' => 0, 'practice_hours' => 0]));
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'Z-CON-TIPO-SIN-HORAS', 'kind' => SubjectKind::Basica, 'theory_hours' => 0, 'practice_hours' => 0]));
 
     expect(array_keys(proposalRowsOf(startProposal())))->toBe(['A-CLASE', 'B-SIN-TIPO']);
 });
