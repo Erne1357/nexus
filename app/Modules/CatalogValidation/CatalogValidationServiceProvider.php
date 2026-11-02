@@ -46,14 +46,17 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Una entrada, en Académico, para quien revisa catálogos: el jefe de departamento y Subdirección (que, igual
+     * «Validar catálogos», en Académico, para quien revisa catálogos: el jefe de departamento y Subdirección (que, igual
      * que el admin, la abre en lectura). Que el departamento sea el suyo lo decide la pantalla.
+     * «Avance de validación», para Subdirección y el admin (tarea 2.5; `has()` incluye al admin).
      */
     public function navigation(): array
     {
         return [
             new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico,
                 visible: static fn (ScopedContext $context): bool => $context->has(Role::JefeDepartamento) || $context->has(Role::Subdireccion)),
+            new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico,
+                visible: static fn (ScopedContext $context): bool => $context->has(Role::Subdireccion)),
         ];
     }
 }

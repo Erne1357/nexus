@@ -9,4 +9,5 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->prefix('catalog-validation')->name('catalog-validation.')->group(function () {
     Route::livewire('/', 'catalog-validation::pages.review')->name('review');
+    Route::livewire('/progress', 'catalog-validation::pages.progress')->name('progress');
 });

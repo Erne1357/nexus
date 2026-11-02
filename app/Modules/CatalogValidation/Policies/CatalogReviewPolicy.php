@@ -19,6 +19,8 @@ use App\Modules\Core\Queries\ScopedContext;
  *   (`uses_rooms` y `heads_edit_rooms`), sus salones (CV2); confirmado el 2 de noviembre de 2026.
  * - Corregir, validar, reabrir y poner observaciones: solo ese jefe; ni el admin ni Subdirección (CV-S1,
  *   supuesto por confirmar).
+ * - Ver el tablero de avance de validación y recordar a los jefes sus pendientes (tarea 2.5): solo Subdirección y
+ *   el admin; los jefes, coordinadores y demás roles no (supuesto por confirmar).
  * - Ver la revisión y sus observaciones, y marcar una observación como resuelta: ese jefe, el admin y
  *   Subdirección (CV-S1, supuesto por confirmar).
  *
@@ -29,6 +31,22 @@ use App\Modules\Core\Queries\ScopedContext;
 final class CatalogReviewPolicy
 {
     use UsesScopedContext;
+
+    /**
+     * El tablero de avance de validación por departamento y campus (tarea 2.5).
+     */
+    public function viewProgress(User $user): bool
+    {
+        return $this->scope($user)->has(Role::Subdireccion);
+    }
+
+    /**
+     * Recordar a los jefes de departamento que tienen catálogos por validar (RemindPendingReviews).
+     */
+    public function remind(User $user): bool
+    {
+        return $this->scope($user)->has(Role::Subdireccion);
+    }
 
     public function view(User $user, CatalogReview $review): bool
     {
