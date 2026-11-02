@@ -1,12 +1,15 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
+use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
+use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
 use App\Modules\AcademicLoad\Queries\ProposalOverview;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
@@ -41,6 +44,10 @@ new #[Title('Propuesta de carrera')] class extends Component
     use Toast;
 
     private const array VIEWS = ['reticula', 'tabla'];
+
+    private const string LOCK_ACCEPTED = 'La propuesta ya se aceptó: ya no cambia.';
+
+    private const string LOCK_SUBMITTED = 'La propuesta ya se envió: solo se corrige si un departamento la regresa.';
 
     /** 'reticula' o 'tabla'; otro valor muestra la retícula. */
     #[Url(as: 'vista')]
@@ -123,6 +130,14 @@ new #[Title('Propuesta de carrera')] class extends Component
         if ($this->department === '') {
             $this->onlyDepartment = false;
         }
+    }
+
+    /**
+     * «Ver» en la alerta de un departamento que regresó su parte: lo resalta, sin quitarlo si ya lo estaba.
+     */
+    public function showDepartment(string $code): void
+    {
+        $this->department = $code;
     }
 
     /**
@@ -239,6 +254,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $proposal = $this->authorizedProposal('view', $proposals);
         $overview = $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit);
         $departments = $overview->departments();
+        $gridSemesters = $overview->gridSemesters();
 
         $known = $this->department === '' || in_array($this->department, array_map(fn (array $row): string => $row['department']->code, $departments), true);
 
@@ -253,12 +269,19 @@ new #[Title('Propuesta de carrera')] class extends Component
             'department' => $this->department,
             'onlyDepartment' => $this->onlyDepartment,
             'locks' => $this->locks($overview),
+            'generalLock' => $this->generalLock($overview),
+            'returnedParts' => $this->returnedParts($overview, $departments),
+            'parts' => $this->parts($overview),
+            'submitReason' => $this->submitReason($overview),
+            'suggested' => $this->suggested($overview),
             'canEdit' => Gate::allows('update', $proposal),
             'canSubmit' => Gate::allows('submit', $proposal),
-            'layout' => SemesterGrid::place(array_map(
-                fn (array $items): array => array_fill_keys(array_map(fn (ProposalItem $item): string => $item->subject->code, $items), null),
-                $overview->semesters,
-            )),
+            'gridSemesters' => $gridSemesters,
+            'layout' => SemesterGrid::place(
+                array_map(fn (array $items): array => collect($items)->mapWithKeys(fn (ProposalItem $item): array => [$item->subject->code => $overview->specialtyFor($item)])->all(), $gridSemesters),
+                array_column($overview->specialties, 'id'),
+            ),
+            'specialtyNames' => array_column($overview->specialties, 'name', 'id'),
             'tableSemesters' => $this->tableSemesters($overview),
             'selected' => $this->itemId === null ? null : $this->findItem($overview, $this->itemId),
             'maxExpected' => ProposalItemRules::MAX_EXPECTED_STUDENTS,
@@ -383,14 +406,87 @@ new #[Title('Propuesta de carrera')] class extends Component
                 }
 
                 $locks[$item->id] = match (true) {
-                    $overview->proposal->status === ProposalStatus::Accepted => 'La propuesta ya se aceptó: ya no cambia.',
-                    ! $overview->proposal->status->isEditable() => 'La propuesta ya se envió: solo se corrige si un departamento la regresa.',
+                    $overview->proposal->status === ProposalStatus::Accepted => self::LOCK_ACCEPTED,
+                    ! $overview->proposal->status->isEditable() => self::LOCK_SUBMITTED,
                     default => "{$item->subject->department->code} ya aceptó su parte: sus materias ya no cambian.",
                 };
             }
         }
 
         return $locks;
+    }
+
+    /**
+     * El motivo que vale para toda la propuesta y no para una fila: ya se aceptó o ya se envió. Null mientras se
+     * pueda corregir (borrador o regresada): ahí solo se bloquean las partes aceptadas, cada una con su motivo.
+     */
+    private function generalLock(ProposalOverview $overview): ?string
+    {
+        return match (true) {
+            $overview->proposal->status === ProposalStatus::Accepted => self::LOCK_ACCEPTED,
+            ! $overview->proposal->status->isEditable() => self::LOCK_SUBMITTED,
+            default => null,
+        };
+    }
+
+    /**
+     * Las partes que un departamento regresó, por departamento, con cuántas materias con grupos se le piden: lo
+     * que dicen las alertas de arriba.
+     *
+     * @param  list<array{department: Department, subjects: int, groups: int, review: ?ProposalReview}>  $departments
+     * @return list<array{department: Department, subjects: int, comment: ?string}>
+     */
+    private function returnedParts(ProposalOverview $overview, array $departments): array
+    {
+        return array_values(array_map(
+            fn (array $row): array => ['department' => $row['department'], 'subjects' => $row['subjects'], 'comment' => $row['review']->comment],
+            array_filter($departments, fn (array $row): bool => $row['review']?->status === ProposalReviewStatus::Returned),
+        ));
+    }
+
+    /**
+     * El estado de la parte de cada departamento, por id: `returned`, `accepted` o `pending` (también antes del
+     * envío, cuando todavía no hay parte). Con él se pinta cada mosaico y cada fila.
+     *
+     * @return array<string, string>
+     */
+    private function parts(ProposalOverview $overview): array
+    {
+        $parts = [];
+
+        foreach ($overview->semesters as $items) {
+            foreach ($items as $item) {
+                $parts[$item->subject->department_id] ??= match ($overview->reviewFor($item->subject->department_id)?->status) {
+                    ProposalReviewStatus::Returned => 'returned',
+                    ProposalReviewStatus::Accepted => 'accepted',
+                    default => 'pending',
+                };
+            }
+        }
+
+        return $parts;
+    }
+
+    /**
+     * Por qué no se puede enviar, a la vista junto al botón; null si se puede.
+     */
+    private function submitReason(ProposalOverview $overview): ?string
+    {
+        return match ($overview->proposal->status) {
+            ProposalStatus::Submitted => 'Ya se envió',
+            ProposalStatus::Accepted => 'Ya se aceptó',
+            default => null,
+        };
+    }
+
+    /**
+     * Los grupos que sugiere la regla para los esperados que se teclean en el panel, para «Usar sugerido: N».
+     */
+    private function suggested(ProposalOverview $overview): ?int
+    {
+        $item = $this->itemId === null ? null : $this->findItem($overview, $this->itemId);
+
+        return $item === null ? null : SuggestedGroups::fromSettings()->for(max(0, (int) $this->expected_students), (bool) $item->subject->needs_lab);
     }
 
     /**

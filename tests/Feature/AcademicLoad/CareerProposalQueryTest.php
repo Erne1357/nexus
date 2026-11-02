@@ -1,6 +1,8 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Specialty;
+use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -209,4 +211,24 @@ it('busca la propuesta y sus filas por id del cliente, sin fallar con un id que 
         ->and(fn () => $query->findOrFail('no-es-uuid'))->toThrow(ModelNotFoundException::class)
         ->and(fn () => $query->itemOrFail($this->proposal, 'no-es-uuid'))->toThrow(ModelNotFoundException::class)
         ->and(fn () => $query->itemOrFail($this->proposal, $other->id))->toThrow(ModelNotFoundException::class);
+});
+
+it('dice la especialidad de cada materia en su plan y acomoda el tronco común antes que cada banda', function () {
+    $plan = StudyPlan::factory()->create();
+    $redes = Specialty::factory()->for($plan)->create(['code' => 'REDES', 'name' => 'Redes']);
+    $web = Specialty::factory()->for($plan)->create(['code' => 'WEB', 'name' => 'Web']);
+    $common = overviewRow($this->cb, 'AAA-0001', 5, 1);
+    $inWeb = overviewRow($this->sc, 'AAA-0002', 5, 1);
+    $inRedes = overviewRow($this->sc, 'AAA-0003', 5, 1);
+    foreach ([[$common, null], [$inWeb, $web], [$inRedes, $redes]] as [$item, $specialty]) {
+        placeInPlan($plan, $item->subject, 5, $specialty);
+        $item->update(['study_plan_id' => $plan->id]);
+    }
+
+    $overview = proposalOverview();
+
+    expect($overview->specialties)->toBe([['id' => $redes->id, 'name' => 'Redes', 'subjects' => 1], ['id' => $web->id, 'name' => 'Web', 'subjects' => 1]])
+        ->and($overview->specialtyFor($common->fresh()))->toBeNull()
+        ->and($overview->specialtyFor($inWeb->fresh()))->toBe($web->id)
+        ->and(array_map(fn (ProposalItem $item): string => $item->subject->code, $overview->gridSemesters()[5]))->toBe(['AAA-0001', 'AAA-0003', 'AAA-0002']);
 });

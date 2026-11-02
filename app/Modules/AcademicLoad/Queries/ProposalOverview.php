@@ -24,6 +24,8 @@ final readonly class ProposalOverview
      * @param  list<ProposalReview>  $reviews  la parte de cada departamento, por clave del departamento, con `department`
      * @param  array{subjects: int, groups: int, expected: int}  $totals  materias con grupos, grupos pedidos y alumnos esperados en ellas
      * @param  list<array{department: Department, catalogs: list<Catalog>}>  $pendingCatalogs  departamentos con grupos pedidos y catálogos sin validar, por clave
+     * @param  array<string, string>  $specialtyOf  materia → la especialidad de su plan; las del tronco común no aparecen
+     * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la propuesta, por clave, con cuántas
      */
     public function __construct(
         public CareerProposal $proposal,
@@ -32,7 +34,36 @@ final readonly class ProposalOverview
         public array $totals,
         public array $pendingCatalogs,
         public ProposalAnomalies $anomalies = new ProposalAnomalies,
+        public array $specialtyOf = [],
+        public array $specialties = [],
     ) {}
+
+    /**
+     * La retícula por semestre lista para acomodarse (SemesterGrid): en cada semestre primero el tronco común y
+     * luego, por banda, las materias de cada especialidad, cada bloque por clave.
+     *
+     * @return array<int, list<ProposalItem>>
+     */
+    public function gridSemesters(): array
+    {
+        $band = array_flip(array_column($this->specialties, 'id'));
+        $position = fn (ProposalItem $item): int => isset($this->specialtyOf[$item->subject_id]) ? ($band[$this->specialtyOf[$item->subject_id]] ?? count($band)) + 1 : 0;
+
+        return array_map(function (array $items) use ($position): array {
+            $indexed = array_map(null, $items, array_keys($items));
+            usort($indexed, fn (array $a, array $b): int => [$position($a[0]), $a[1]] <=> [$position($b[0]), $b[1]]);
+
+            return array_column($indexed, 0);
+        }, $this->semesters);
+    }
+
+    /**
+     * La especialidad del plan en que está la materia de la fila, o null si es del tronco común.
+     */
+    public function specialtyFor(ProposalItem $item): ?string
+    {
+        return $this->specialtyOf[$item->subject_id] ?? null;
+    }
 
     /**
      * Lo raro de la fila para marcarlo sin bloquear el envío (ProposalAnomalies): más esperados que elegibles y
