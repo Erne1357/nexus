@@ -41,7 +41,7 @@
     @endif
 
     @if ($selected['decidable'] && $selected['proposal']->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Returned)
-        <p class="text-sm text-neutral" data-testid="proposal-in-correction">Otro departamento regresó esta propuesta y el coordinador la está corrigiendo. Puedes decidir tu parte ya: si la aceptas, sus materias ya no cambian.</p>
+        <p class="text-sm text-neutral" data-testid="proposal-in-correction">Otro departamento la regresó; el coordinador la está corrigiendo.</p>
     @endif
 
     @if ($review?->comment)
