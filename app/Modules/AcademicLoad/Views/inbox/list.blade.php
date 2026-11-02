@@ -23,6 +23,9 @@
                         {{ $row['groups'] }} grupos · {{ $row['expected'] }} esperados · {{ $row['subjects'] }} {{ $row['subjects'] === 1 ? 'materia' : 'materias' }}
                     @endif
                 </span>
+                @if ($row['correctionBy'] !== [])
+                    <span class="flex items-center gap-1.5 text-sm" data-testid="career-correction"><x-icon name="o-arrow-path" class="h-4 w-4 shrink-0 text-neutral" />En corrección por {{ implode(', ', $row['correctionBy']) }}</span>
+                @endif
                 @if ($anomalies > 0)
                     <span class="flex items-center gap-1.5 text-sm" data-testid="career-anomalies"><x-icon name="o-exclamation-triangle" class="h-4 w-4 shrink-0 text-warning" />{{ $anomalies }} {{ $anomalies === 1 ? 'materia con anomalías' : 'materias con anomalías' }}</span>
                 @endif

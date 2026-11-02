@@ -8,9 +8,15 @@
     Al cerrar la confirmación o un drawer (Esc, el velo, Cancelar o al decidir), el foco vuelve al botón que lo abrió
     (`data-opens`); si la lista se repintó lo busca de nuevo, y si ya no está, lo deja en el título del detalle.
 --}}
-<div class="space-y-5" x-on:click.capture="const trigger = $event.target.closest('[data-opens]'); if (trigger) { opener = trigger.dataset.opens }"
+<div class="space-y-5" x-on:inbox-detail-opened.window="$nextTick(() => setTimeout(() => revealDetail(), 60))"
+    x-on:click.capture="const trigger = $event.target.closest('[data-opens]'); if (trigger) { opener = trigger.dataset.opens }"
     x-data="{
         opener: null,
+        revealDetail() {
+            const detail = this.$root.querySelector('[data-testid=inbox-detail]')
+            if (detail.getBoundingClientRect().top < 80 || window.innerWidth < 1024) { detail.scrollIntoView({ block: 'start' }) }
+            this.$root.querySelector('[data-testid=inbox-detail-title]')?.focus({ preventScroll: true })
+        },
         init() {
             for (const key of ['showAccept', 'showReturn', 'showParallels']) {
                 this.$wire.$watch(key, (open) => {
@@ -25,13 +31,13 @@
     }">
     @if ($inbox === null)
         <div>
-            <h1 class="text-[26px] font-bold leading-[1.15] md:text-[30px]">Bandeja del departamento</h1>
+            <h1 class="text-[1.625rem] font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="inbox-empty">{{ $message }}</div>
     @else
         <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
             <div class="min-w-0">
-                <h1 class="text-[26px] font-bold leading-[1.15] md:text-[30px]">Bandeja del departamento</h1>
+                <h1 class="text-[1.625rem] font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
                 <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                     <span class="font-medium text-base-content" data-testid="inbox-department-name">{{ $inbox->department->name }}</span>
                     <span>{{ $inbox->campus->name }}</span>
@@ -61,12 +67,14 @@
             <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft text-sm" data-testid="pending-catalogs"
                 :title="'Faltan por validar '.collect($inbox->pendingCatalogs)->map(fn ($catalog) => mb_strtolower($catalog->label()))->join(', ', ' y ').'. No se puede aceptar hasta validarlos; regresar sí.'">
                 @if ($catalogsUrl !== null)
-                    <x-button label="Validar catálogos" icon="o-check-badge" class="btn-sm btn-ghost" link="{{ $catalogsUrl }}" data-testid="validate-catalogs" />
+                    <x-slot:actions>
+                        <x-button label="Validar catálogos" icon="o-check-badge" class="btn-sm btn-ghost" link="{{ $catalogsUrl }}" data-testid="validate-catalogs" />
+                    </x-slot:actions>
                 @endif
             </x-alert>
         @endif
 
-        <div class="lg:grid lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] lg:items-start lg:gap-5">
+        <div class="lg:grid lg:grid-cols-[minmax(14rem,17rem)_minmax(0,1fr)] min-[1440px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] lg:items-start lg:gap-5">
             <section @class(['min-w-0 overflow-hidden rounded-box border border-base-300 bg-base-100', 'max-lg:hidden' => $mobileDetail]) data-testid="inbox-list" aria-label="Carreras">
                 <div role="group" aria-label="Filtro" class="flex gap-2 border-b border-base-300 px-3 py-3">
                     <button type="button" wire:click="$set('filter', 'todas')" aria-pressed="{{ $filter === 'todas' ? 'true' : 'false' }}" data-testid="filter-all"
@@ -77,7 +85,7 @@
                 @include('academic-load::inbox.list')
             </section>
 
-            <section @class(['min-w-0 rounded-box border border-base-300 bg-base-100', 'max-lg:hidden' => ! $mobileDetail]) data-testid="inbox-detail" aria-label="Detalle de la carrera">
+            <section @class(['min-w-0 scroll-mt-(--shell-top) rounded-box border border-base-300 bg-base-100', 'max-lg:hidden' => ! $mobileDetail]) data-testid="inbox-detail" aria-label="Detalle de la carrera">
                 @if ($selected === null || $submittedCount === 0)
                     <p class="px-5 py-8 text-center text-neutral" data-testid="inbox-empty-careers">Ninguna carrera ha enviado su propuesta con materias de este departamento.</p>
                 @else

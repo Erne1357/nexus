@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\InboxStatus;
+use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -66,6 +67,7 @@ final class DepartmentInboxQuery
             ->get()
             ->keyBy('career_proposal_id');
 
+        $correctionBy = $this->returnedByOthers($department, $proposals->keys()->all());
         $items = $this->requestedItems($department, $reviews->keys()->all());
         $careers = $this->careers($campus, $reviews->keys()->map(fn (string $id): string => $proposals->get($id)->career_id)->all());
         $proposalsByCareer = $proposals->keyBy('career_id');
@@ -73,7 +75,7 @@ final class DepartmentInboxQuery
         $anomalies = ProposalAnomalies::fromSettings();
 
         $rows = $careers
-            ->map(function (Career $career) use ($proposalsByCareer, $reviews, $items, $anomalies): array {
+            ->map(function (Career $career) use ($proposalsByCareer, $reviews, $items, $anomalies, $correctionBy): array {
                 $proposal = $proposalsByCareer->get($career->getKey());
                 $review = $proposal === null || $proposal->status === ProposalStatus::Draft ? null : $reviews->get($proposal->getKey());
                 $review?->setRelation('proposal', $proposal);
@@ -83,6 +85,9 @@ final class DepartmentInboxQuery
                     'career' => $career,
                     'status' => InboxStatus::ofPart($review?->status),
                     'decidable' => $review !== null && $this->reviewRules->isDecidable($proposal->status, $review->status),
+                    'correctionBy' => $review !== null && $proposal->status === ProposalStatus::Returned && $review->status === ProposalReviewStatus::Pending
+                        ? $correctionBy->get($proposal->getKey(), [])
+                        : [],
                     'proposal' => $proposal,
                     'review' => $review,
                     'subjects' => $requested->count(),
@@ -196,6 +201,26 @@ final class DepartmentInboxQuery
             ->when($campusId !== null, fn ($query) => $query->whereHas('proposal', fn ($proposal) => $proposal->where('campus_id', $campusId)));
 
         return KeyLookup::findOrFail($query, $id);
+    }
+
+    /**
+     * Las claves de los otros departamentos que regresaron cada propuesta, por id de propuesta y por clave; una
+     * sola consulta. Es lo que la bandeja muestra como «en corrección por».
+     *
+     * @param  list<string>  $proposalIds
+     * @return Collection<string, list<string>>
+     */
+    private function returnedByOthers(Department $department, array $proposalIds): Collection
+    {
+        return ProposalReview::query()
+            ->join('departments', 'departments.id', '=', 'proposal_reviews.department_id')
+            ->whereIn('proposal_reviews.career_proposal_id', $proposalIds)
+            ->where('proposal_reviews.department_id', '!=', $department->getKey())
+            ->where('proposal_reviews.status', ProposalReviewStatus::Returned)
+            ->orderBy('departments.code')
+            ->get(['proposal_reviews.career_proposal_id', 'departments.code'])
+            ->groupBy('career_proposal_id')
+            ->map(fn (Collection $rows): array => $rows->pluck('code')->unique()->values()->all());
     }
 
     /**
