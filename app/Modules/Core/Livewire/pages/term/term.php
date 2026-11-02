@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Actions\MakeTermCurrent;
+use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Actions\SaveStageWindows;
 use App\Modules\Core\Actions\UpdateTerm;
 use App\Modules\Core\Enums\Stage;
@@ -25,7 +26,8 @@ use Mary\Traits\Toast;
  * calendario de sus 8 etapas como una línea de tiempo (core::terms.timeline) con la barra general de cada etapa y una
  * barra delgada por cada campus con ventana propia. Tocar una etapa abre su panel lateral (x-drawer): las fechas
  * generales y, por cada campus activo, una ventana propia opcional que se agrega y se quita. La sección «Campus»
- * (abrir el periodo por campus) es de la tarea 2.2.
+ * (tarea 2.2, maqueta B) lista los campus activos, y los que se abrieron y ya no están activos, solo lectura: abre el
+ * periodo en un campus o completa una apertura con OpenTerm (`openIn`, `completeIn`) y dice en un toast lo que creó.
  *
  * Lo ven y cambian el admin y la subdirección (TermPolicy). El componente lee con TermQuery, TermCalendarQuery y
  * CampusQuery, autoriza en mount() y en cada método público (una petición puede llegar con una página que abrió otra
@@ -85,6 +87,8 @@ new #[Title('Ficha del periodo')] class extends Component
             'term' => $term,
             'timeline' => StageTimeline::build($general, $calendar->ownWindows($term, $active), today()->toImmutable()),
             'campuses' => $active,
+            'campusRows' => $terms->campusRows($term, $active),
+            'canOpen' => Gate::allows('open', $term),
             'editing' => $stage === null ? null : [
                 'stage' => $stage,
                 'number' => array_search($stage, Stage::cases(), true) + 1,
@@ -136,6 +140,22 @@ new #[Title('Ficha del periodo')] class extends Component
         $term = $makeTermCurrent->handle($term);
 
         $this->success('Periodo actual', $this->describe($term));
+    }
+
+    /**
+     * Abre el periodo en un campus (la primera vez) y dice en un toast lo que se creó.
+     */
+    public function openIn(string $campusId, TermQuery $terms, CampusQuery $campuses, OpenTerm $openTerm): void
+    {
+        $this->openTerm($campusId, 'Periodo abierto en', $terms, $campuses, $openTerm);
+    }
+
+    /**
+     * Completa la apertura de un campus ya abierto: crea solo lo que falte.
+     */
+    public function completeIn(string $campusId, TermQuery $terms, CampusQuery $campuses, OpenTerm $openTerm): void
+    {
+        $this->openTerm($campusId, 'Apertura completada en', $terms, $campuses, $openTerm);
     }
 
     /**
@@ -311,6 +331,24 @@ new #[Title('Ficha del periodo')] class extends Component
             'starts_on' => (string) ($window['starts_on'] ?? ''),
             'ends_on' => (string) ($window['ends_on'] ?? ''),
         ];
+    }
+
+    private function openTerm(string $campusId, string $title, TermQuery $terms, CampusQuery $campuses, OpenTerm $openTerm): void
+    {
+        $term = $terms->findOrFail($this->termId);
+        $this->authorize('open', $term);
+
+        $campus = $campuses->findOrFail($campusId);
+
+        try {
+            $lines = $openTerm->handle($term, $campus);
+        } catch (ValidationException $e) {
+            $this->error('No se abrió el periodo', e(collect($e->errors())->flatten()->implode(' ')));
+
+            return;
+        }
+
+        $this->success("{$title} {$campus->code}", e($lines === [] ? 'No faltaba nada.' : implode(', ', $lines)));
     }
 
     private function activeCampus(CampusQuery $campuses, string $id): Campus

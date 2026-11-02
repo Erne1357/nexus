@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -41,6 +42,32 @@ class Term extends Model
     public function stages(): HasMany
     {
         return $this->hasMany(TermStage::class);
+    }
+
+    /**
+     * En qué campus se abrió (D1).
+     *
+     * @return HasMany<TermOpening, $this>
+     */
+    public function openings(): HasMany
+    {
+        return $this->hasMany(TermOpening::class);
+    }
+
+    /**
+     * Los códigos de los campus donde se abrió, ordenados; pide `openings.campus` cargado (también con el campus
+     * desactivado o borrado después) para no consultar por periodo.
+     *
+     * @return Attribute<list<string>, never>
+     */
+    protected function openedCampusCodes(): Attribute
+    {
+        return Attribute::get(fn (): array => $this->openings
+            ->map(fn (TermOpening $opening): ?string => $opening->campus?->code)
+            ->filter()
+            ->sort()
+            ->values()
+            ->all());
     }
 
     /**

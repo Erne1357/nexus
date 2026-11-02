@@ -18,3 +18,12 @@ it('da los departamentos sin borrar por clave como opciones de x-select, y marca
         ['id' => $sis->id, 'name' => 'SIS · Sistemas y Computación'],
     ]);
 });
+
+it('da los ids de los departamentos activos y sin borrar, por clave', function () {
+    $sis = Department::factory()->create(['code' => 'SIS']);
+    $ele = Department::factory()->create(['code' => 'ELE']);
+    Department::factory()->inactive()->create(['code' => 'INA']);
+    Department::factory()->create(['code' => 'OLD'])->delete();
+
+    expect(app(DepartmentQuery::class)->activeIds())->toBe([$ele->id, $sis->id]);
+});

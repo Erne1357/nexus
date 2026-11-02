@@ -8,8 +8,8 @@ use Illuminate\Foundation\Events\Dispatchable;
 
 /**
  * Se va a borrar un departamento (DeleteDepartment). Evento con veto: se despacha dentro de la
- * transacción, antes de borrar, y un listener de un módulo de la derecha (Faculty, que lo veta si tiene docentes adscritos,
- * y Facilities, si es dueño de salones) lo bloquea con block() si el departamento le sirve de algo, por ejemplo
+ * transacción, antes de borrar, y un listener de un módulo de la derecha (Faculty, que lo veta si tiene docentes adscritos;
+ * Facilities, si es dueño de salones, y AcademicLoad con BlockDepartmentDeletionWithLoads, si tiene cargas académicas) lo bloquea con block() si el departamento le sirve de algo, por ejemplo
  * porque tiene docentes o edificios. Si alguien bloquea, DeleteDepartment rechaza con sus motivos.
  */
 final class DepartmentDeleting

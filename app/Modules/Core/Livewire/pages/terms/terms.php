@@ -58,6 +58,7 @@ new #[Title('Periodos')] class extends Component
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'starts_on', 'label' => 'Inicio'],
                 ['key' => 'ends_on', 'label' => 'Fin'],
+                ['key' => 'opened_in', 'label' => 'Abierto en', 'sortable' => false],
                 ['key' => 'is_current', 'label' => 'Estado'],
             ],
         ];

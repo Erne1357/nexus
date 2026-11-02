@@ -301,7 +301,17 @@ Un evento normal avisa a los módulos de la derecha de lo que ya pasó. Cuando u
 - El evento usa el trait `Core\Events\Concerns\CanBeVetoed`: el listener llama `$event->block('motivo')` (varios bloqueos juntan sus motivos en orden) y la Action lee `blocked()` y `reasons()`. Si hubo veto lanza `ValidationException::withMessages([...])` con los motivos, y la transacción no escribe nada.
 - El evento lleva el registro y, por convención, el nombre en gerundio (`DepartmentDeleting`); el aviso posterior al commit sigue siendo el evento normal (`DepartmentDeleted`).
 - Los listeners se registran en el provider del módulo que los escucha.
-- Ejemplos: `DepartmentDeleting` (todavía sin listeners; Faculty y Facilities lo usarán) y `SubjectDeactivating`, que Students veta con `BlockSubjectDeactivationWhileNeeded` cuando hay alumnos que todavía necesitan la materia (`SubjectDemandQuery`, desde el kárdex del momento).
+- Ejemplos: `DepartmentDeleting`, que vetan Faculty (docentes adscritos), Facilities (salones de los que es dueño) y AcademicLoad (cargas académicas), y `SubjectDeactivating`, que Students veta con `BlockSubjectDeactivationWhileNeeded` cuando hay alumnos que todavía necesitan la materia (`SubjectDemandQuery`, desde el kárdex del momento).
+
+### Eventos con reporte
+
+Hay operaciones de un módulo que solo tienen sentido completas junto con lo que hacen los de la derecha. Abrir un periodo en un campus (`OpenTerm`, de Core) también crea las cargas en borrador (AcademicLoad) y las revisiones de catálogo (CatalogValidation), pero Core no los conoce. Usa un evento con reporte:
+
+- La Action despacha el evento **dentro de su transacción**, con `event(new TermOpened($term, $campus))` (no `::dispatch()`, que no devuelve la instancia que vieron los listeners). No es `ShouldDispatchAfterCommit` ni se encola: los listeners corren síncronos en la misma transacción, así que la operación es **todo o nada**. Si un listener falla, se revierte también lo de Core.
+- El evento usa el trait `Core\Events\Concerns\CollectsReport`: cada listener hace su parte y la dice con `$event->report('12 cargas académicas nuevas')`. Las líneas se juntan en el orden de los listeners, que es el de `bootstrap/providers.php`. La Action lee `lines()` para su bitácora y lo devuelve a la pantalla, que lo muestra en el toast (o «No faltaba nada» si viene vacío).
+- Los listeners crean solo lo que falta (insert que ignora lo existente), así que repetir la operación es seguro, y reportan solo si crearon algo. No dejan bitácora propia por fila: la Action deja una sola entrada con el reporte.
+- Los listeners se registran en el provider del módulo que los escucha, como los de veto.
+- Ejemplo: `TermOpened`, que escuchan `CreateReviewsOnTermOpened` (CatalogValidation) y `CreateLoadsOnTermOpened` (AcademicLoad).
 
 ### Cambios en la retícula
 

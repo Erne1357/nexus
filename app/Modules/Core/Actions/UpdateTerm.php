@@ -14,7 +14,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Cambia código, nombre y fechas de un periodo: solo las claves que recibe. Nunca toca `is_current`
  * (es de MakeTermCurrent). Quién puede lo decide TermPolicy antes de llamarla; las reglas son las de
- * CreateTerm (TermRules), y conservar el código propio vale.
+ * CreateTerm (TermRules), y conservar el código propio vale. Una vez abierto el periodo en algún campus su código
+ * ya no cambia (TermRules::ensureCodeIsUnlocked).
  *
  * En una transacción vuelve a leer el periodo con bloqueo, así el valor anterior de la bitácora es el
  * confirmado aunque `$term` llegue viejo. Si nada cambió, no escribe, no registra ni avisa; si algo
@@ -52,6 +53,7 @@ final class UpdateTerm
             $old = [...$term->only(['code', 'name']), 'starts_on' => $term->starts_on->toDateString(), 'ends_on' => $term->ends_on->toDateString()];
 
             if (array_key_exists('code', $data)) {
+                $this->rules->ensureCodeIsUnlocked($term, $data['code']);
                 $this->rules->ensureCodeIsFree($data['code'], $term);
             }
 

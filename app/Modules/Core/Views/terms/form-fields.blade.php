@@ -4,7 +4,13 @@
     en `$form`, con code, name, starts_on y ends_on.
 --}}
 <div class="grid gap-4 md:grid-cols-2">
-    <x-input label="Código" name="code" wire:model.live.debounce.300ms="form.code" placeholder="20271" hint="Año y periodo: 1 Ene-Jun, 2 Verano, 3 Ago-Dic." />
+    @if ($form->codeLock !== null)
+        <div class="tooltip" data-tip="{{ $form->codeLock }}">
+            <x-input label="Código" name="code" wire:model="form.code" class="w-full" disabled hint="{{ $form->codeLock }}" data-testid="term-code-locked" />
+        </div>
+    @else
+        <x-input label="Código" name="code" wire:model.live.debounce.300ms="form.code" placeholder="20271" hint="Año y periodo: 1 Ene-Jun, 2 Verano, 3 Ago-Dic." />
+    @endif
     <x-input label="Nombre" name="name" wire:model="form.name" />
     <x-input label="Inicio" name="starts_on" type="date" wire:model="form.starts_on" />
     <x-input label="Fin" name="ends_on" type="date" wire:model="form.ends_on" />

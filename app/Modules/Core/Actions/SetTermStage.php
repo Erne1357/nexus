@@ -14,7 +14,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Crea o cambia la ventana de fechas de una etapa del periodo: la general (`$campus` nulo) o la de un
- * campus, que reemplaza a la general en él (S-A5, supuesto por confirmar). Es un upsert por periodo,
+ * campus, que reemplaza a la general en él (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por confirmar). Es un upsert por periodo,
  * campus y etapa. Las fechas solo informan (D4): no se comparan con las del periodo.
  *
  * El campus debe estar activo y no borrado. En una transacción, con el periodo bloqueado para

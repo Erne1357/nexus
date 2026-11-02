@@ -3,6 +3,7 @@
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 
@@ -101,4 +102,23 @@ it('un coordinador no ve la opción Periodos en el menú', function () {
         ->click('@hare')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Periodos')
         ->assertNoJavaScriptErrors();
+});
+
+it('el admin abre el periodo en Campus II desde la ficha y ve quién y cuándo', function () {
+    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+
+    $page = signInToTerms('admin')
+        ->navigate('/terms/'.$term->id)
+        ->assertSee('No abierto en este periodo');
+
+    // Playwright descarta los diálogos: se acepta el wire:confirm a mano.
+    $page->script('window.confirm = () => true');
+
+    $page->click('@open-C2')
+        ->waitForText('Periodo abierto en C2')
+        ->waitForText('Abierto el')
+        ->assertSee('por Ana Admin')
+        ->assertNoJavaScriptErrors();
+
+    expect(TermOpening::where('term_id', $term->id)->count())->toBe(1);
 });

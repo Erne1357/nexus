@@ -1,10 +1,14 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\SetTermStage;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
@@ -51,8 +55,7 @@ describe('admin y subdirección', function () {
             ->get(route('core.terms.show', $this->term->id))
             ->assertOk()
             ->assertSee('<title>Ficha del periodo · Nexus</title>', false)
-            ->assertSeeInOrder(['Periodos', 'Ene-Jun 2027', '20271', 'Actual', '25/01/2027 al 11/06/2027', 'Editar', 'Marcar como actual', 'Calendario'])
-            ->assertDontSee('Abrir en Campus');
+            ->assertSeeInOrder(['Periodos', 'Ene-Jun 2027', '20271', 'Actual', '25/01/2027 al 11/06/2027', 'Editar', 'Marcar como actual', 'Calendario']);
     })->with(['admin', 'subdireccion']);
 
     it('muestra las 8 etapas en orden, con su estado y los días que faltan', function () {
@@ -104,6 +107,29 @@ describe('admin y subdirección', function () {
             ->and(lastToastOf($page))->title->toBe('Periodo actualizado')->description->toBe('20271 · Primavera 2027');
     });
 
+    it('deshabilita el código con su motivo cuando el periodo ya se abrió y no deja cambiarlo', function () {
+        TermOpening::factory()->for($this->term)->for($this->c2)->create();
+
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('edit')
+            ->assertSee('data-testid="term-code-locked"', false)
+            ->assertSee('El código ya no se puede cambiar: el periodo se abrió en C2.')
+            ->set('form.code', '20272')
+            ->call('save')
+            ->assertHasErrors('form.code')
+            ->assertSee('El código ya no se puede cambiar');
+
+        expect($this->term->fresh()->code)->toBe('20271');
+    });
+
+    it('deja el código libre mientras el periodo no se ha abierto', function () {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('edit')
+            ->assertDontSee('data-testid="term-code-locked"', false);
+    });
+
     it('muestra en español los errores del formulario y de las reglas del periodo', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
@@ -138,6 +164,103 @@ describe('admin y subdirección', function () {
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertSee('Ya es el periodo actual.')
             ->assertDontSee('wire:click="makeCurrent"', escape: false);
+    });
+});
+
+describe('sección «Campus»', function () {
+    it('lista los campus activos por código con su estado y no ofrece uno inactivo', function () {
+        $this->c3->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeInOrder(['Campus', 'C1', 'Campus I', 'No abierto en este periodo', 'C2', 'Campus II', 'Abrir en Campus II', 'Calendario'])
+            ->assertSee('Abrir en Campus I')
+            ->assertDontSee('Abrir en Campus III')
+            ->assertSee('¿Abrir el periodo 20271 en Campus II?');
+    });
+
+    it('abre el periodo en Campus II, crea cargas y revisiones y lo dice en un toast', function (string $who) {
+        Department::factory()->create(['code' => 'D1']);
+        Department::factory()->create(['code' => 'D2']);
+
+        $page = Livewire::actingAs($this->{$who})
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openIn', $this->c2->id)
+            ->assertSee('Abierto el 12 nov 2026 por '.$this->{$who}->name)
+            ->assertSee('Completar apertura')
+            ->assertDontSee('data-testid="open-C2"', false);
+
+        $toast = lastToastOf($page);
+
+        expect($toast['title'])->toBe('Periodo abierto en C2')
+            ->and($toast['description'])->toBe('10 revisiones de catálogo nuevas, 2 cargas académicas nuevas')
+            ->and(TermOpening::where('term_id', $this->term->id)->pluck('campus_id')->all())->toBe([$this->c2->id])
+            ->and(AcademicLoad::count())->toBe(2)
+            ->and(CatalogReview::count())->toBe(10);
+    })->with(['admin', 'subdireccion']);
+
+    it('«Completar apertura» crea lo que falte y la segunda vez dice que no faltaba nada', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openIn', $this->c2->id);
+
+        Department::factory()->create(['code' => 'D3']);
+
+        $page->call('completeIn', $this->c2->id);
+        expect(lastToastOf($page))->title->toBe('Apertura completada en C2')->description->toContain('1 carga');
+
+        $page->call('completeIn', $this->c2->id);
+        expect(lastToastOf($page))->title->toBe('Apertura completada en C2')->description->toBe('No faltaba nada.')
+            ->and(TermOpening::count())->toBe(1);
+    });
+
+    it('un campus abierto y desactivado después se lista solo lectura, sin acciones', function () {
+        TermOpening::factory()->for($this->term)->for($this->c3)->create(['opened_by' => $this->admin->id]);
+        $this->c3->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSee('C3')
+            ->assertSee('Campus inactivo')
+            ->assertDontSee('data-testid="complete-C3"', escape: false)
+            ->assertDontSee('data-testid="open-C3"', escape: false);
+    });
+
+    it('un campus abierto y borrado después también se lista', function () {
+        TermOpening::factory()->for($this->term)->for($this->c3)->create(['opened_by' => $this->admin->id]);
+        $this->c3->delete();
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSee('Campus III')
+            ->assertSee('Campus borrado');
+    });
+
+    it('rechaza abrir en un campus inactivo con un toast de error y sin crear nada', function () {
+        $this->c3->update(['is_active' => false]);
+
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openIn', $this->c3->id);
+
+        expect(lastToastOf($page))->title->toBe('No se abrió el periodo')->description->toContain('C3')
+            ->and(TermOpening::count())->toBe(0);
+    });
+
+    it('un campus inexistente o manipulado da 404, no 500', function (string $id) {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openIn', $id)
+            ->assertNotFound();
+    })->with(['uuid sin campus' => fakeKey(999), 'no es uuid' => 'no-es-un-uuid', 'número' => '999999']);
+
+    it('un campus borrado no se abre', function () {
+        $this->c3->delete();
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openIn', $this->c3->id)
+            ->assertNotFound();
     });
 });
 
@@ -410,16 +533,17 @@ describe('otros roles e invitados', function () {
 
         $arguments = match ($method) {
             'editStage' => ['staffing'],
-            'addCampusWindow', 'removeCampusWindow' => [$this->c2->id],
+            'addCampusWindow', 'removeCampusWindow', 'openIn', 'completeIn' => [$this->c2->id],
             default => [],
         };
 
         $page->call($method, ...$arguments)->assertForbidden();
 
         expect(TermStage::count())->toBe(0)
+            ->and(TermOpening::count())->toBe(0)
             ->and($this->term->fresh())->name->toBe('Ene-Jun 2027')->is_current->toBeTrue()
             ->and(Activity::count())->toBe(0);
-    })->with($roles)->with(['edit', 'save', 'makeCurrent', 'editStage', 'clearGeneral', 'addCampusWindow', 'removeCampusWindow', 'saveStage']);
+    })->with($roles)->with(['edit', 'save', 'makeCurrent', 'editStage', 'clearGeneral', 'addCampusWindow', 'removeCampusWindow', 'saveStage', 'openIn', 'completeIn']);
 
     it('no pueden cambiar el código aunque la página la abriera el admin', function () {
         $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();

@@ -29,6 +29,10 @@ class TermForm extends Form
     #[Locked]
     public string $suggestedName = '';
 
+    /** Por qué el código no se puede cambiar (el periodo ya se abrió); null si se puede. Lo fija fillFrom(). */
+    #[Locked]
+    public ?string $codeLock = null;
+
     /**
      * @return array<string, list<string>>
      */
@@ -90,6 +94,7 @@ class TermForm extends Form
         $this->starts_on = $term->starts_on->toDateString();
         $this->ends_on = $term->ends_on->toDateString();
         $this->suggestedName = $rules->suggestedName($term->code) ?? '';
+        $this->codeLock = $rules->codeLockReason($term);
     }
 
     /**

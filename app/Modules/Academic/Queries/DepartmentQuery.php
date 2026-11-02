@@ -52,6 +52,17 @@ final class DepartmentQuery
     }
 
     /**
+     * Los ids de los departamentos activos y sin borrar, por clave: sobre los que se crean las cargas y las
+     * revisiones al abrir un periodo.
+     *
+     * @return list<string>
+     */
+    public function activeIds(): array
+    {
+        return Department::query()->where('is_active', true)->orderBy('code')->pluck('id')->all();
+    }
+
+    /**
      * El departamento que se va a editar o borrar, sin los borrados.
      *
      * @throws ModelNotFoundException<Department>
