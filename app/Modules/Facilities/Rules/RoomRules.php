@@ -138,6 +138,37 @@ final class RoomRules
         }
     }
 
+    /** Lo más que mide una característica de un salón. */
+    public const int FEATURE_MAX_LENGTH = 40;
+
+    /**
+     * Las características que el jefe o el admin escriben en un campo de texto: una por coma o por renglón, recortadas.
+     * normalizeFeatures() las limpia al guardar.
+     *
+     * @return list<string>
+     */
+    public function featureList(string $text): array
+    {
+        return array_map(trim(...), preg_split('/[,\n]/', $text) ?: []);
+    }
+
+    /**
+     * Regla de validación de forma del campo de características (`$this->validate()` de las pantallas de salones):
+     * cada una admite hasta FEATURE_MAX_LENGTH caracteres.
+     *
+     * @param  callable(string): mixed  $fail
+     */
+    public function validateFeatureLength(string $attribute, mixed $value, callable $fail): void
+    {
+        foreach ($this->featureList((string) $value) as $feature) {
+            if (mb_strlen($feature) > self::FEATURE_MAX_LENGTH) {
+                $fail('Cada característica admite hasta '.self::FEATURE_MAX_LENGTH.' caracteres.');
+
+                return;
+            }
+        }
+    }
+
     /**
      * Lista limpia de características: recortadas, con espacios internos colapsados, sin vacías ni repetidas
      * (sin distinguir mayúsculas) y en el orden en que llegaron.
