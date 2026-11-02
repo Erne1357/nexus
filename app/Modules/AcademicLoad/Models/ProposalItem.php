@@ -1,0 +1,76 @@
+<?php
+
+namespace App\Modules\AcademicLoad\Models;
+
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Database\Factories\ProposalItemFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+/**
+ * Una materia de la propuesta de carrera: el plan y el semestre de la retícula de donde se tomó, los elegibles
+ * al armarla y lo que corrige el coordinador (alumnos esperados, grupos solicitados y notas). Su departamento
+ * es el de la materia.
+ */
+#[Fillable(['career_proposal_id', 'subject_id', 'study_plan_id', 'semester', 'eligible_students', 'expected_students', 'requested_groups', 'notes'])]
+#[UseFactory(ProposalItemFactory::class)]
+class ProposalItem extends Model
+{
+    /** @use HasFactory<ProposalItemFactory> */
+    use HasFactory, HasUuids;
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'semester' => 'integer',
+            'eligible_students' => 'integer',
+            'expected_students' => 'integer',
+            'requested_groups' => 'integer',
+        ];
+    }
+
+    /**
+     * @return BelongsTo<CareerProposal, $this>
+     */
+    public function proposal(): BelongsTo
+    {
+        return $this->belongsTo(CareerProposal::class, 'career_proposal_id');
+    }
+
+    /**
+     * @return BelongsTo<Subject, $this>
+     */
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class);
+    }
+
+    /**
+     * @return BelongsTo<StudyPlan, $this>
+     */
+    public function studyPlan(): BelongsTo
+    {
+        return $this->belongsTo(StudyPlan::class);
+    }
+
+    /**
+     * Las filas que piden al menos un grupo.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function requested(Builder $query): void
+    {
+        $query->where('proposal_items.requested_groups', '>', 0);
+    }
+}

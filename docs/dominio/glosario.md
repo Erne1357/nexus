@@ -37,6 +37,7 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Cupo por carrera** | `GroupQuota` | Número máximo de lugares de un grupo reservados para una carrera. La suma de cupos no puede exceder la capacidad del grupo. |
 | **Carga académica** | `AcademicLoad` | Conjunto de grupos de un departamento en un campus y periodo, con su estado en el flujo (borrador → propuesta → asignación → ajustes → cerrada → aprobada → publicada → re-análisis). |
 | **Propuesta de carrera** | `CareerProposal` | Lista de materias y número de grupos que el coordinador pide abrir para su carrera en un campus y periodo, con los horarios tentativos. |
+| **Parte de un departamento** | `ProposalReview` | Lo que una propuesta de carrera le pide a un departamento: las materias de ese departamento con grupos solicitados. El departamento la acepta o la regresa con comentario; la propuesta queda aceptada cuando todos aceptaron su parte (confirmado el 2 de noviembre de 2026). |
 | **Junta interdepartamental** | — | Reunión por periodo donde los departamentos acuerdan grupos compartidos, cupos por carrera y préstamos de salones. En Nexus queda registrada como acuerdos. |
 | **Solicitud de cambio** | `ChangeRequest` | Petición de un docente (o coordinador) para cambiar horario, salón o docente de un grupo ya asignado. Pasa por aprobación. |
 | **Re-análisis** | etapa `reanalysis` | Revisión de la carga ya publicada cuando llegan las calificaciones finales: la demanda real cambia por reprobación y hay que abrir, cerrar o ampliar grupos. |
