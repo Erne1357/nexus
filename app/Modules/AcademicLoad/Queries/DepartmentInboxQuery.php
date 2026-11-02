@@ -14,6 +14,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\AcademicLoadPolicy;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
+use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
@@ -102,6 +103,7 @@ final class DepartmentInboxQuery
             pendingCatalogs: $this->catalogReviews->pendingFor($term, $campus, $department),
             careers: $rows->all(),
             subjects: $this->parallels($rows),
+            anomalies: ProposalAnomalies::fromSettings(),
         );
     }
 
