@@ -4,8 +4,9 @@ namespace App\Modules\Core\Rules;
 
 use App\Modules\Core\Models\Term;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
+use DateTimeInterface;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 /**
  * Reglas de un periodo y de las ventanas de su calendario, que comparten sus Actions (docs/dominio/
@@ -98,14 +99,31 @@ final class TermRules
     }
 
     /**
+     * Una fecha estricta: un DateTimeInterface o un texto `Y-m-d` que existe en el calendario (el 30 de febrero
+     * no pasa a marzo). Vacío, nulo o «now» no son «hoy»: son error.
+     *
      * @throws ValidationException
      */
     public function date(string $field, mixed $value): string
     {
+        if ($value instanceof DateTimeInterface) {
+            return CarbonImmutable::instance($value)->toDateString();
+        }
+
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            throw ValidationException::withMessages([$field => 'Escribe la fecha.']);
+        }
+
         try {
-            return CarbonImmutable::parse($value)->toDateString();
-        } catch (Throwable) {
+            $date = is_string($value) ? CarbonImmutable::createFromFormat('!Y-m-d', $value) : null;
+        } catch (InvalidFormatException) {
+            $date = null;
+        }
+
+        if ($date === null || $date === false || $date->format('Y-m-d') !== $value) {
             throw ValidationException::withMessages([$field => 'La fecha no es válida.']);
         }
+
+        return $date->toDateString();
     }
 }

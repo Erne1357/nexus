@@ -47,3 +47,24 @@ it('rechaza que el fin sea anterior al inicio, sobre ends_on, y deja pasar el mi
 it('rechaza una fecha que no es fecha, sobre su campo', function () {
     expect(fn () => app(TermRules::class)->dates('no-es-fecha', '2027-01-18'))->toThrow(ValidationException::class, 'La fecha no es válida.');
 });
+
+it('rechaza fechas vacías, relativas, inexistentes o con otro formato, sobre su campo', function (mixed $value, string $message) {
+    try {
+        app(TermRules::class)->date('starts_on', $value);
+        $this->fail('Debía rechazar la fecha.');
+    } catch (ValidationException $exception) {
+        expect($exception->errors())->toBe(['starts_on' => [$message]]);
+    }
+})->with([
+    'nulo' => [null, 'Escribe la fecha.'],
+    'vacío' => ['', 'Escribe la fecha.'],
+    'now' => ['now', 'La fecha no es válida.'],
+    '30 de febrero' => ['2027-02-30', 'La fecha no es válida.'],
+    'día/mes/año' => ['30/01/2027', 'La fecha no es válida.'],
+    'número' => [20270130, 'La fecha no es válida.'],
+]);
+
+it('acepta una fecha Y-m-d o un DateTimeInterface', function () {
+    expect(app(TermRules::class)->date('starts_on', '2027-02-28'))->toBe('2027-02-28')
+        ->and(app(TermRules::class)->date('starts_on', new DateTimeImmutable('2027-03-01 10:00')))->toBe('2027-03-01');
+});
