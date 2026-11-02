@@ -18,7 +18,7 @@
             @include('catalog-validation::review.who', ['review' => $review])
         </div>
 
-        @include('catalog-validation::review.counters', ['summary' => $current['summary'], 'inline' => true])
+        @include('catalog-validation::review.counters', ['summary' => $current['summary'], 'inline' => true, 'firstTerm' => $firstTerm])
 
         <div class="flex w-full gap-2 md:ms-auto md:w-auto">
             @include('catalog-validation::review.actions', ['card' => $current, 'grow' => false, 'small' => true])
@@ -51,15 +51,18 @@
             :row-decoration="$rowDecoration"
             class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
         >
-            @scope('cell_name', $record, $flagMap)
+            @scope('cell_name', $record, $flagMap, $review)
                 <span @class(['block', 'font-semibold' => $record->is_active])>{{ $record->name }}</span>
-                @if (! empty($flagMap[$record->id]))
+                @if ($review->catalog !== \App\Modules\CatalogValidation\Enums\Catalog::Rooms && ! empty($flagMap[$record->id]))
                     <span class="mt-1 block min-[1024px]:hidden">@include('catalog-validation::review.flag-badge', ['flags' => $flagMap[$record->id]])</span>
                 @endif
             @endscope
 
-            @scope('cell_code', $record)
+            @scope('cell_code', $record, $flagMap, $review)
                 <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->code }}</span>
+                @if ($review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Rooms && ! empty($flagMap[$record->id]))
+                    <span class="mt-1 block min-[1024px]:hidden">@include('catalog-validation::review.flag-badge', ['flags' => $flagMap[$record->id]])</span>
+                @endif
             @endscope
 
             @scope('cell_employee_number', $record)

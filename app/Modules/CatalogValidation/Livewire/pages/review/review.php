@@ -58,7 +58,7 @@ new #[Title('Validación de catálogos')] class extends Component
     public string $department = '';
 
     /** El catálogo de la lista abierta (`teachers`, `rooms`, `subjects`, `study_plans`, `careers`); vacío es el tablero. */
-    #[Url(as: 'catalogo')]
+    #[Url(as: 'catalogo', history: true)]
     public string $catalog = '';
 
     /** Solo docentes: '' (todos), 'disponibilidad' o 'perfil' (los activos a los que les falta, CV6). */
@@ -159,7 +159,7 @@ new #[Title('Validación de catálogos')] class extends Component
         };
 
         if ($empty !== null) {
-            return [...$data, 'empty' => $empty, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null];
+            return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null];
         }
 
         $open = $this->openCatalog();
@@ -171,7 +171,10 @@ new #[Title('Validación de catálogos')] class extends Component
         */
         $current = $openReview === null ? null : $this->card($openReview, $reviews, false);
         $cards = $current === null ? $this->byWork($state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews, true))) : collect([$current]);
-        $data += ['empty' => null, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status])->all(), 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
+        $firstTerm = $current === null
+            ? $cards->every(fn (array $card): bool => $card['summary']['added'] === null)
+            : $state['reviews']->every(fn (CatalogReview $review): bool => $reviews->previousValidation($review) === null);
+        $data += ['empty' => null, 'firstTerm' => $firstTerm, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status])->all(), 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
 
         $data += $this->confirmation($cards);
 
@@ -187,13 +190,9 @@ new #[Title('Validación de catálogos')] class extends Component
         /*
         | Las bajas ya no están en el catálogo: «Bajas» no filtra la tabla, abre el drawer con la lista de la foto.
         */
-        if ($property === 'change' && $this->change === 'removed') {
-            $this->change = '';
-            $this->showRemoved = true;
-        }
-
-        if ($property === 'change' && ! in_array($this->change, ['', 'added'], true)) {
-            $this->change = '';
+        if ($property === 'change') {
+            $this->showRemoved = $this->change === 'removed';
+            $this->change = $this->change === 'added' ? 'added' : '';
         }
 
         /*
@@ -628,7 +627,7 @@ new #[Title('Validación de catálogos')] class extends Component
             ],
             Catalog::Rooms => [
                 ['key' => 'code', 'label' => 'Clave'],
-                [...$name, 'label' => 'Nombre', 'class' => 'min-w-36 max-[1199px]:hidden min-[1200px]:min-w-52'],
+                [...$name, 'class' => $name['class'].' max-[1199px]:hidden'],
                 ['key' => 'building', 'label' => 'Edificio', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'capacity', 'label' => 'Capacidad', 'class' => 'text-end'],
                 ['key' => 'type', 'label' => 'Tipo', 'class' => 'max-[1023px]:hidden'],
@@ -680,25 +679,25 @@ new #[Title('Validación de catálogos')] class extends Component
     /**
      * Lo que ata el registro al SII o a su departamento y el drawer muestra deshabilitado (CV-S3).
      *
-     * @return list<array{label: string, value: ?string}>
+     * @return list<array{label: string, value: ?string, mono?: bool}>
      */
     private function lockedOf(CatalogReview $review, Model $record): array
     {
         return match ($review->catalog) {
             Catalog::Subjects, Catalog::Careers => [
-                ['label' => 'Clave', 'value' => $record->code],
+                ['label' => 'Clave', 'value' => $record->code, 'mono' => true],
                 ['label' => 'Departamento', 'value' => $review->department?->name],
             ],
             Catalog::StudyPlans => [
-                ['label' => 'Clave', 'value' => $record->code],
+                ['label' => 'Clave', 'value' => $record->code, 'mono' => true],
                 ['label' => 'Carrera', 'value' => $record->career?->name],
             ],
             Catalog::Rooms => [
-                ['label' => 'Clave', 'value' => $record->code],
+                ['label' => 'Clave', 'value' => $record->code, 'mono' => true],
                 ['label' => 'Edificio', 'value' => $record->building?->name ?? $record->building?->code],
                 ['label' => 'Departamento', 'value' => $review->department?->name],
             ],
-            Catalog::Teachers => [['label' => 'Número de empleado', 'value' => $record->employee_number]],
+            Catalog::Teachers => [['label' => 'Número de empleado', 'value' => $record->employee_number, 'mono' => true]],
         };
     }
 

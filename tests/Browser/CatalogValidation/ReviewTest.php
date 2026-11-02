@@ -29,7 +29,7 @@ it('el jefe abre Materias, corrige una materia, la observa, regresa y valida', f
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->click('#nexus-menu a[data-label="Validación de catálogos"]')
+        ->click('#nexus-menu a[data-label="Validar catálogos"]')
         ->assertPathIs('/catalog-validation')
         ->assertSee('0 de 5')
         ->click('@open-subjects')

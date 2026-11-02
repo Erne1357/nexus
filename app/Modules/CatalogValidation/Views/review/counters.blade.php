@@ -1,69 +1,57 @@
 {{--
     Los contadores de una revisión (CatalogReviewQuery::summary): activos e inactivos, observaciones abiertas y las
     altas y las bajas contra la foto de la validación anterior (CV3), solo como cifras: «+7 altas · −6 bajas», en texto
-    neutro lo que es cero (decidido por el usuario el 2 de noviembre de 2026). Sin foto no se dice nada aquí: «Primer
-    periodo en Nexus» va una sola vez, en la tarjeta de avance o en la lista.
+    neutro lo que es cero (decidido por el usuario el 2 de noviembre de 2026). Una revisión sin foto anterior lo dice en
+    texto neutro: «Primer periodo en Nexus» si ningún catálogo la tiene (`$firstTerm`; en el tablero lo dice la tarjeta
+    de avance, una sola vez) o «Sin periodo anterior» si solo le falta a ella.
 
     Con `$inline` (la lista) todo va en un renglón y las altas filtran la tabla (`change`) y las bajas abren su drawer,
     porque ya no están en el catálogo. `$summary` es el arreglo de summary().
 --}}
 @php($inline ??= false)
-@php($added = $summary['added'] === null ? null : count($summary['added']))
-@php($removed = $summary['removed'] === null ? null : count($summary['removed']))
-@if ($inline)
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm" data-testid="review-counters">
+@php($firstTerm ??= false)
+@php($figures = ['added' => ['sign' => '+', 'one' => 'alta', 'many' => 'altas', 'none' => 'Sin altas', 'call' => "\$set('change', '".($change === 'added' ? '' : 'added')."')", 'title' => 'Mostrar solo las altas', 'testid' => 'filter-added'], 'removed' => ['sign' => '−', 'one' => 'baja', 'many' => 'bajas', 'none' => 'Sin bajas', 'call' => "\$set('showRemoved', true)", 'title' => 'Ver bajas', 'testid' => 'view-removed']])
+@php($counts = $summary['added'] === null ? null : ['added' => count($summary['added']), 'removed' => count($summary['removed'])])
+
+<div @class(['flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm' => $inline, 'space-y-3' => ! $inline]) @if ($inline) data-testid="review-counters" @endif>
+    @if ($inline)
         <span><b class="font-mono font-semibold tabular-nums">{{ $summary['active'] }}</b> activos</span>
         <span class="text-neutral"><b class="font-mono font-semibold tabular-nums">{{ $summary['inactive'] }}</b> inactivos</span>
+    @else
+        <dl class="grid grid-cols-2 gap-3 border-y border-base-300 py-3">
+            <div class="flex flex-col-reverse"><dt class="text-sm text-neutral">Activos</dt><dd class="font-mono text-2xl font-semibold leading-tight">{{ $summary['active'] }}</dd></div>
+            <div class="flex flex-col-reverse"><dt class="text-sm text-neutral">Inactivos</dt><dd class="font-mono text-2xl font-semibold leading-tight">{{ $summary['inactive'] }}</dd></div>
+        </dl>
+    @endif
+
+    @if ($counts === null)
+        @if ($inline || ! $firstTerm)
+            <p class="text-sm text-neutral" data-testid="first-term">{{ $firstTerm ? 'Primer periodo en Nexus' : 'Sin periodo anterior' }}</p>
+        @endif
+    @elseif ($counts['added'] === 0 && $counts['removed'] === 0)
+        <p class="text-sm text-neutral" data-testid="changes">Sin altas ni bajas</p>
+    @else
+        <p class="flex flex-wrap items-center gap-x-2 text-sm" data-testid="changes">
+            @foreach ($figures as $key => $figure)
+                @if ($loop->last && ! $inline)
+                    <span class="text-neutral" aria-hidden="true">·</span>
+                @endif
+                @if ($counts[$key] === 0)
+                    <span class="text-neutral">{{ $figure['none'] }}</span>
+                @elseif ($inline)
+                    <button type="button" class="font-medium underline decoration-base-300 underline-offset-4 hover:decoration-current" wire:click="{{ $figure['call'] }}" @if ($key === 'added') aria-pressed="{{ $change === 'added' ? 'true' : 'false' }}" @endif title="{{ $figure['title'] }}" data-testid="{{ $figure['testid'] }}"><b class="font-mono font-semibold tabular-nums">{{ $figure['sign'] }}{{ $counts[$key] }}</b> {{ $counts[$key] === 1 ? $figure['one'] : $figure['many'] }}</button>
+                @else
+                    <span><b class="font-mono font-semibold tabular-nums">{{ $figure['sign'] }}{{ $counts[$key] }}</b> {{ $counts[$key] === 1 ? $figure['one'] : $figure['many'] }}</span>
+                @endif
+            @endforeach
+        </p>
+    @endif
+
+    <p class="flex min-h-6.5 items-center text-sm">
         @if ($summary['open_flags'] > 0)
             <x-core::status-badge tone="warning" icon="o-chat-bubble-left-ellipsis" :label="trans_choice('{1} 1 observación abierta|[2,*] :count observaciones abiertas', $summary['open_flags'])" />
         @else
             <span class="text-neutral">Sin observaciones abiertas</span>
         @endif
-
-        @if ($added === null)
-            <span class="text-neutral" data-testid="first-term">Primer periodo en Nexus</span>
-        @elseif ($added === 0 && $removed === 0)
-            <span class="text-neutral" data-testid="changes">Sin altas ni bajas</span>
-        @else
-            <span class="flex items-center gap-x-3" data-testid="changes">
-                @if ($added === 0)
-                    <span class="text-neutral">Sin altas</span>
-                @else
-                    <button type="button" class="font-medium underline decoration-base-300 underline-offset-4 hover:decoration-current" wire:click="$set('change', '{{ $change === 'added' ? '' : 'added' }}')" aria-pressed="{{ $change === 'added' ? 'true' : 'false' }}" title="Mostrar solo las altas" data-testid="filter-added"><b class="font-mono font-semibold tabular-nums">+{{ $added }}</b> {{ $added === 1 ? 'alta' : 'altas' }}</button>
-                @endif
-                @if ($removed === 0)
-                    <span class="text-neutral">Sin bajas</span>
-                @else
-                    <button type="button" class="font-medium underline decoration-base-300 underline-offset-4 hover:decoration-current" wire:click="$set('showRemoved', true)" title="Ver bajas" data-testid="view-removed"><b class="font-mono font-semibold tabular-nums">−{{ $removed }}</b> {{ $removed === 1 ? 'baja' : 'bajas' }}</button>
-                @endif
-            </span>
-        @endif
-    </div>
-@else
-    <div class="space-y-3">
-        <dl class="grid grid-cols-2 gap-3 border-y border-base-300 py-3">
-            <div class="flex flex-col-reverse"><dt class="text-sm text-neutral">Activos</dt><dd class="font-mono text-2xl font-semibold leading-tight">{{ $summary['active'] }}</dd></div>
-            <div class="flex flex-col-reverse"><dt class="text-sm text-neutral">Inactivos</dt><dd class="font-mono text-2xl font-semibold leading-tight">{{ $summary['inactive'] }}</dd></div>
-        </dl>
-
-        @if ($added !== null)
-            <p class="text-sm" data-testid="changes">
-                @if ($added === 0 && $removed === 0)
-                    <span class="text-neutral">Sin altas ni bajas</span>
-                @else
-                    <span @class(['text-neutral' => $added === 0])>@if ($added === 0) Sin altas @else <b class="font-mono font-semibold tabular-nums">+{{ $added }}</b> {{ $added === 1 ? 'alta' : 'altas' }} @endif</span>
-                    <span class="text-neutral" aria-hidden="true">·</span>
-                    <span @class(['text-neutral' => $removed === 0])>@if ($removed === 0) Sin bajas @else <b class="font-mono font-semibold tabular-nums">−{{ $removed }}</b> {{ $removed === 1 ? 'baja' : 'bajas' }} @endif</span>
-                @endif
-            </p>
-        @endif
-
-        <p class="flex min-h-6.5 items-center text-sm">
-            @if ($summary['open_flags'] > 0)
-                <x-core::status-badge tone="warning" icon="o-chat-bubble-left-ellipsis" :label="trans_choice('{1} 1 observación abierta|[2,*] :count observaciones abiertas', $summary['open_flags'])" />
-            @else
-                <span class="text-neutral">Sin observaciones abiertas</span>
-            @endif
-        </p>
-    </div>
-@endif
+    </p>
+</div>

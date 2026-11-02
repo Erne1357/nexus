@@ -45,7 +45,7 @@
         <section class="space-y-3" aria-labelledby="drawer-data">
             <h3 id="drawer-data" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Datos</h3>
 
-            @php($facts = [...array_map(fn (array $field): array => [...$field, 'mono' => $field['label'] === 'Clave'], $editing['locked']), ...($locked ? $editing['facts'] : [])])
+            @php($facts = [...array_map(fn (array $field): array => ['mono' => false, ...$field], $editing['locked']), ...($locked ? $editing['facts'] : [])])
             <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-sm" data-testid="record-facts">
                 @foreach ($facts as $fact)
                     <dt class="text-neutral">{{ $fact['label'] }}</dt>
@@ -79,7 +79,7 @@
                             <x-select label="Tipo" name="type" wire:model="type" :options="$roomTypes" />
                             <x-input label="Capacidad" name="capacity" wire:model="capacity" type="number" min="1" inputmode="numeric" class="font-mono" />
                         </div>
-                        <x-input label="Características" name="features" wire:model="features" />
+                        <x-input label="Características" name="features" wire:model="features" hint="Separadas por comas" />
                     @endif
                 </form>
             @endif

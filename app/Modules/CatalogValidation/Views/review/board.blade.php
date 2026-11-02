@@ -39,7 +39,7 @@
             <p class="flex items-center gap-2 text-sm font-medium text-success" data-testid="review-lock"><x-icon name="o-lock-open" class="h-4 w-4" aria-hidden="true" />Todo validado: la carga puede salir de borrador</p>
         @endif
 
-        @if ($cards->every(fn (array $card): bool => $card['summary']['added'] === null))
+        @if ($firstTerm)
             <p class="text-sm text-neutral" data-testid="first-term">Primer periodo en Nexus</p>
         @endif
     </section>
@@ -61,7 +61,7 @@
             </header>
 
             @include('catalog-validation::review.who', ['review' => $review])
-            @include('catalog-validation::review.counters', ['summary' => $card['summary']])
+            @include('catalog-validation::review.counters', ['summary' => $card['summary'], 'firstTerm' => $firstTerm])
 
             @if ($card['readiness'] !== null)
                 @include('catalog-validation::review.readiness', ['counts' => $card['readiness'], 'term' => $term, 'department' => $department])

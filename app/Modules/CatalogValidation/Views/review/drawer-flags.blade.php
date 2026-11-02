@@ -27,7 +27,7 @@
     @if ($card['canFlag'])
         <form wire:submit="addFlag" class="space-y-3 border-t border-dashed border-base-300 pt-4" data-testid="flag-form">
             <x-select label="Tipo" name="flag" wire:model="flag" :options="$flagOptions" placeholder="Elige el tipo" placeholder-value="" />
-            <x-textarea label="Comentario" name="comment" wire:model="comment" rows="3" />
+            <x-textarea label="Comentario" name="comment" wire:model="comment" rows="3" hint="Obligatorio en «Otra»" />
             <x-button label="Agregar observación" type="submit" icon="o-chat-bubble-left-ellipsis" class="btn-outline btn-sm" spinner="addFlag" data-testid="add-flag" />
         </form>
     @elseif ($card['flagReason'] !== null)

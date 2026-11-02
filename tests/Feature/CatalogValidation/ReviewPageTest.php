@@ -628,8 +628,6 @@ describe('pestañas de catálogo y lista compacta', function () {
 
     it('altas y bajas son cifras sin cajas de color; con cero dicen «Sin altas ni bajas»', function () {
         reviewPage($this->jefe)->assertSee('+1')->assertSee('−1')->assertDontSeeHtml('bg-error/10')->assertDontSeeHtml('bg-success/10');
-        reviewPage($this->jefe, ['catalogo' => 'careers'])->assertSee('Primer periodo en Nexus');
-
         CatalogReview::factory()->general(Catalog::Careers)->validated()->create(['term_id' => $this->previous->id, 'department_id' => $this->sis->id, 'snapshot' => []]);
 
         reviewPage($this->jefe, ['catalogo' => 'careers'])->assertSee('Sin altas ni bajas')->assertDontSee('−0')->assertDontSee('+0');
@@ -708,18 +706,51 @@ describe('pestañas de catálogo y lista compacta', function () {
             ->assertSeeHtml('data-testid="record-facts"');
     });
 
-    it('el drawer no lleva textos de ayuda y cuenta las observaciones con plural', function () {
+    it('el drawer no lleva pistas de uso, conserva el formato de los campos y cuenta las observaciones con plural', function () {
         CatalogReviewFlag::factory()->on($this->subject)->create(['review_id' => reviewOf(Catalog::Subjects)->id, 'flag' => ReviewFlag::MissingData]);
 
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
             ->call('edit', $this->subject->id)
             ->assertSeeHtml('</span> abierta<')->assertDontSeeHtml('</span> abiertas')
-            ->assertDontSee('Cada cambio queda en la bitácora.')->assertDontSee('Obligatorio en «Otra»');
+            ->assertDontSee('Cada cambio queda en la bitácora.')->assertSee('Obligatorio en «Otra»');
     });
 
     it('un filtro sin resultados ofrece «Quitar filtros»', function () {
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
             ->set('search', 'zzzz')->assertSeeHtml('data-testid="clear-filters"')
             ->call('clearFilters')->assertSet('search', '')->assertSee('SCD-1027');
+    });
+});
+
+describe('periodo anterior por revisión', function () {
+    it('en el caso mixto la tarjeta y el renglón sin foto dicen «Sin periodo anterior» y no «Primer periodo»', function () {
+        $previous = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-01', 'ends_on' => '2026-12-15']);
+        CatalogReview::factory()->general(Catalog::Subjects)->validated()->create(['term_id' => $previous->id, 'department_id' => $this->sis->id, 'snapshot' => []]);
+        $this->term->update(['starts_on' => '2027-01-15', 'ends_on' => '2027-06-10']);
+
+        $board = reviewPage()->assertSee('Sin periodo anterior')->assertDontSee('Primer periodo en Nexus')->html();
+        expect(substr_count($board, 'Sin periodo anterior'))->toBe(4);
+
+        reviewPage($this->jefe, ['catalogo' => 'careers'])->assertSee('Sin periodo anterior')->assertDontSee('Primer periodo en Nexus');
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->assertDontSee('Sin periodo anterior')->assertSeeHtml('data-testid="changes"');
+    });
+
+    it('si ningún catálogo tiene foto, el renglón de la lista dice «Primer periodo en Nexus»', function () {
+        reviewPage($this->jefe, ['catalogo' => 'careers'])->assertSee('Primer periodo en Nexus')->assertDontSee('Sin periodo anterior');
+    });
+
+    it('la insignia de observación de un salón se ve junto a la clave cuando la columna Observación se oculta', function () {
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['code' => 'K-301', 'department_id' => $this->sis->id]);
+        CatalogReviewFlag::factory()->on($room)->create(['review_id' => reviewOf(Catalog::Rooms)->id, 'flag' => ReviewFlag::MissingData]);
+
+        $html = reviewPage($this->jefe, ['catalogo' => 'rooms'])->html();
+
+        expect(substr_count($html, 'Faltan datos'))->toBeGreaterThanOrEqual(2);
+    });
+
+    it('el catálogo abierto va en el historial del navegador para que Atrás regrese al tablero', function () {
+        $url = collect(reviewPage()->effects['url'] ?? [])->get('catalog');
+
+        expect($url['use'] ?? null)->toBe('push');
     });
 });
