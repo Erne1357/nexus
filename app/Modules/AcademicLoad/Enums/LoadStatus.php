@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad\Enums;
 
 use App\Modules\Core\Enums\StatusTone;
+use App\Modules\Core\Models\CampusProfile;
 
 /**
  * Estado de una carga académica (docs/dominio/modelo-de-datos.md, `academic_loads`; el diagrama de
@@ -51,26 +52,29 @@ enum LoadStatus: string
 
     /**
      * Los estados a los que puede pasar la carga desde este, según el diagrama de "Máquina de estados de la
-     * carga académica" de docs/proceso/proceso-propuesto.md. Es la única fuente: TransitionLoad la consulta.
+     * carga académica" de docs/proceso/proceso-propuesto.md y el perfil del campus. Es la única fuente:
+     * TransitionLoad la consulta. Desde Cerrada, un campus que exige el visto bueno de Subdirección
+     * (`requires_subdireccion_approval`) pasa a Aprobada y de ahí a Publicada; uno que no lo exige publica
+     * directo. Aprobada solo existe en los campus que lo exigen.
      *
      * @return list<self>
      */
-    public function transitions(): array
+    public function transitions(CampusProfile $profile): array
     {
         return match ($this) {
             self::Draft => [self::Proposed],
             self::Proposed => [self::Staffing],
             self::Staffing => [self::Adjusting, self::Closed],
             self::Adjusting => [self::Staffing],
-            self::Closed => [self::Approved, self::Published],
+            self::Closed => $profile->requiresSubdireccionApproval ? [self::Approved] : [self::Published],
             self::Approved => [self::Published, self::Adjusting],
             self::Published => [self::Reanalysis],
             self::Reanalysis => [self::Published],
         };
     }
 
-    public function canTransitionTo(self $to): bool
+    public function canTransitionTo(self $to, CampusProfile $profile): bool
     {
-        return in_array($to, $this->transitions(), true);
+        return in_array($to, $this->transitions($profile), true);
     }
 }

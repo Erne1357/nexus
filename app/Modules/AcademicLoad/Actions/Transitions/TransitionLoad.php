@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
  * llama con su estado destino y su guarda.
  *
  * En una transacción relee la carga con bloqueo (el estado que vale es el de la base, no el del modelo que
- * llegó), exige que el diagrama permita pasar de ahí al destino (LoadStatus::canTransitionTo) y junta los
+ * llegó), exige que el diagrama permita pasar de ahí al destino (LoadStatus::canTransitionTo, según el perfil del campus) y junta los
  * motivos de bloqueo: los de la guarda que da quien llama (reglas de los módulos de la izquierda) y los del
  * veto de LoadTransitioning (módulos de la derecha). Con cualquier motivo, una ValidationException sobre
  * `status` con todos y no se escribe nada. Si no, cambia el estado, agrega la fila de `load_transitions`
@@ -40,7 +40,7 @@ final class TransitionLoad
             $load->setRawAttributes($load->newQuery()->lockForUpdate()->findOrFail($load->getKey())->getAttributes(), sync: true);
             $from = $load->status;
 
-            if (! $from->canTransitionTo($to)) {
+            if (! $from->canTransitionTo($to, $load->campus->profile)) {
                 throw ValidationException::withMessages([
                     'status' => "La carga está en {$from->label()}: no puede pasar a {$to->label()}.",
                 ]);
