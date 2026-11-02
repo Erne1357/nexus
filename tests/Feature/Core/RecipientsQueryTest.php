@@ -54,6 +54,13 @@ it('deja fuera al admin, a los usuarios inactivos, a los alcances vencidos y a o
     expect(recipientNames(Role::JefeDepartamento, $this->c2, departmentKey(10)))->toBe([]);
 });
 
+it('un admin que además es jefe recibe los de su departamento, y no los de otros', function () {
+    User::factory()->admin()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(['name' => 'Admin y jefe 10']);
+
+    expect(recipientNames(Role::JefeDepartamento, $this->c2, departmentKey(10)))->toBe(['Admin y jefe 10'])
+        ->and(recipientNames(Role::JefeDepartamento, $this->c2, departmentKey(11)))->toBe([]);
+});
+
 it('no avisa en un campus inactivo', function () {
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(['name' => 'Jefe 10']);
     $this->c1->update(['is_active' => false]);

@@ -94,6 +94,15 @@ it('con un departamento, solo avisa a su jefe (el recordatorio del tablero)', fu
     Notification::assertNotSentTo($this->jefeSistemas, CatalogReviewsPending::class);
 });
 
+it('con un id que no es de un departamento activo, no avisa a nadie', function (string $id) {
+    Notification::fake();
+    reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Pending);
+
+    expect(app(NotifyPendingReviews::class)->handle($this->term, $this->c2, $id))->toBe(0);
+
+    Notification::assertNothingSent();
+})->with(['no es uuid' => 'abc', 'no existe' => fn () => fakeKey(99)]);
+
 it('no avisa a los departamentos inactivos ni a quien no es jefe de ese departamento', function () {
     Notification::fake();
     $this->sistemas->update(['is_active' => false]);

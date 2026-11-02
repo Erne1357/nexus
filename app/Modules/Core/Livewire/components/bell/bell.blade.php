@@ -28,7 +28,7 @@
         <x-icon name="o-bell" class="w-[22px] h-[22px]" />
 
         @if ($unread > 0)
-            <span aria-hidden="true" data-testid="bell-count" class="absolute -end-2 -top-2 h-[21px] min-w-[21px] rounded-full bg-band-content px-[5px] text-center font-mono text-xs/[21px] font-bold text-band shadow-[0_0_0_2px_var(--color-band)]">{{ $unread > 99 ? '99+' : $unread }}</span>
+            <span aria-hidden="true" data-testid="bell-count" class="absolute -end-2 -top-2 h-[21px] min-w-[21px] rounded-full bg-band-content px-[5px] text-center font-mono text-xs/[21px] font-bold text-band shadow-[0_0_0_2px_var(--color-band)]">{{ $badge }}</span>
         @endif
     </button>
 
@@ -46,7 +46,7 @@
             <h2 id="nexus-notifications-title" class="text-[17px] font-bold">Notificaciones</h2>
 
             @if ($unread > 0)
-                <span class="rounded-full border border-band-content/30 px-[9px] py-0.5 font-mono text-[13px] whitespace-nowrap">{{ $unread > 99 ? '99+' : $unread }} sin leer</span>
+                <span class="rounded-full border border-band-content/30 px-[9px] py-0.5 font-mono text-[13px] whitespace-nowrap">{{ $badge }} sin leer</span>
             @endif
         </div>
 

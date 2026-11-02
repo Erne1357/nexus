@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * A quién le llega un aviso del proceso (tarea 2.9): los usuarios activos que, con `$role`, cubren el campus
  * y, si se piden, el departamento o la carrera. La regla es la misma de las policies (ScopedContext::covers):
- * un alcance sin campus vale en cualquier campus activo. El admin lo cubre todo, pero no es destinatario: los
- * avisos van a quien hace el trabajo.
+ * un alcance sin campus vale en cualquier campus activo. Cuenta solo el alcance: el admin lo cubre todo sin
+ * tenerlo, y los avisos van a quien hace el trabajo; un admin que además tiene el alcance sí los recibe.
  */
 final class RecipientsQuery
 {
@@ -34,11 +34,7 @@ final class RecipientsQuery
             ->get();
 
         return $candidates
-            ->filter(function (User $user) use ($role, $campus, $department, $career): bool {
-                $context = $this->context->forUser($user);
-
-                return ! $context->isAdmin() && $context->covers($role, $campus, $department, $career);
-            })
+            ->filter(fn (User $user): bool => $this->context->forUser($user)->coversWithScope($role, $campus, $department, $career))
             ->values();
     }
 }

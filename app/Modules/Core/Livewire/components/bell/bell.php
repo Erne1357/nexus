@@ -13,7 +13,8 @@ use Mary\Traits\Toast;
  * con las no leídas y, al abrirlo, una tarjeta flotante con la misma forma que la de la credencial con las
  * notificaciones recientes del usuario (NotificationQuery) y «Marcar todas como leídas». Abrir una la marca
  * leída y lleva a su pantalla (OpenNotification); si ya no está disponible, lo avisa con un toast y se queda.
- * Se refresca cada minuto mientras está a la vista. Abrir y cerrar es de Alpine; cerrar la credencial al
+ * Se refresca cada minuto mientras está a la vista: un conteo y las 15 recientes, para que la tarjeta abra sin
+ * esperar al servidor. Abrir y cerrar es de Alpine; cerrar la credencial al
  * abrirla usa el componente nexusShell de <body>.
  */
 new class extends Component
@@ -30,6 +31,7 @@ new class extends Component
 
         return [
             'unread' => $unread,
+            'badge' => $unread > 99 ? '99+' : (string) $unread,
             'items' => $user === null ? collect() : $notifications->recent($user),
             'label' => match (true) {
                 $unread === 0 => 'Notificaciones: sin notificaciones nuevas',
@@ -57,7 +59,7 @@ new class extends Component
         }
 
         if ($target->url === null) {
-            $this->warning($target->problem ?? 'Esa pantalla ya no está disponible.');
+            $this->warning($target->problem ?? 'Esa pantalla no está disponible.');
 
             return null;
         }

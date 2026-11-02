@@ -333,9 +333,9 @@ Lo que entra en el avance de los alumnos (la retícula de un plan, su especialid
 
 Los avisos del proceso van por el canal `database` de Laravel (tarea 2.9; el correo queda para después). Cada módulo define los suyos en `<Modulo>/Notifications` sobre `Core\Notifications\NexusNotification`, que guarda un `NotificationMessage`: título, detalle, icono y tono, el destino como nombre de ruta con parámetros, y el periodo y el campus del aviso. Así la campana de la banda (`core::components.bell`) los muestra sin conocer cada clase, y un aviso puede apuntar a una pantalla que todavía no existe.
 
-- A quién: `Core\Queries\RecipientsQuery::for($role, $campus, $department, $career)`, con la misma regla de alcance que las policies (`ScopedContext::covers`) y sin el admin.
-- Cuándo: una Action del módulo que avisa (por ejemplo `NotifyPendingReviews`), llamada desde un listener `ShouldHandleEventsAfterCommit`, para que un cambio revertido no avise.
-- Al abrirlo (`OpenNotification`): se marca leído, la credencial pasa al periodo y el campus del aviso, y la clase decide si el destino sigue disponible (`NexusNotification::unavailableReason`: la ruta existe y, según la clase, el registro y el alcance). Si no, la campana lo dice en un toast en lugar de llevarlo.
+- A quién: `Core\Queries\RecipientsQuery::for($role, $campus, $department, $career)`, con la misma regla de alcance que las policies, solo por alcance (`ScopedContext::coversWithScope`): el admin que no tiene ese alcance no los recibe.
+- Cuándo: una Action del módulo que avisa (por ejemplo `NotifyPendingReviews`), llamada desde un listener en cola que se encola después del commit (`ShouldQueue` con `$afterCommit`), para que un cambio revertido no avise y avisar a muchos no haga esperar a quien hizo el cambio.
+- Al abrirlo (`OpenNotification`): se marca leído, la credencial pasa al periodo y el campus del aviso, y la clase decide si el destino sigue disponible (`NexusNotification::unavailableReason`: la ruta existe y, según la clase, el registro y el alcance), y la ruta tiene que aceptar los parámetros guardados. Si no, la campana lo dice en un toast en lugar de llevarlo.
 - Las llaves son UUIDv7: Laravel clona la notificación por destinatario y `__clone` le da a cada copia la suya.
 
 ## Colas y trabajos en segundo plano

@@ -85,7 +85,7 @@ it('si su pantalla ya no está disponible, lo avisa y se queda', function () {
         ->call('open', $ana->notifications()->value('id'))
         ->assertNoRedirect();
 
-    expect(lastToastOf($component))->toMatchArray(['type' => 'warning', 'title' => 'Esa pantalla ya no está disponible.']);
+    expect(lastToastOf($component))->toMatchArray(['type' => 'warning', 'title' => 'Esa pantalla no está disponible.']);
 });
 
 it('no abre la notificación de otro usuario', function () {

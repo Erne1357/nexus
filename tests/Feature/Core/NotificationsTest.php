@@ -15,6 +15,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 
 /*
@@ -110,8 +111,30 @@ it('si la pantalla ya no existe, avisa en lugar de llevarlo y la marca leída', 
     $target = app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id'));
 
     expect($target->url)->toBeNull()
-        ->and($target->problem)->toBe('Esa pantalla ya no está disponible.')
+        ->and($target->problem)->toBe('Esa pantalla no está disponible.')
         ->and($ana->unreadNotifications()->count())->toBe(0);
+});
+
+it('si la ruta ya no acepta los parámetros guardados, avisa en lugar de fallar', function () {
+    Route::get('/prueba/{term}/{department}', fn () => 'ok')->name('prueba.con-parametros');
+    $ana = User::factory()->create();
+    $ana->notify(notice(route: 'prueba.con-parametros', parameters: ['department' => 'x']));
+    $this->actingAs($ana);
+
+    $target = app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id'));
+
+    expect($target->url)->toBeNull()
+        ->and($target->problem)->toBe('Esa pantalla no está disponible.');
+});
+
+it('solo abre notificaciones del usuario de la sesión', function () {
+    $ana = User::factory()->create();
+    $beto = User::factory()->create();
+    $ana->notify(notice());
+    $this->actingAs($beto);
+
+    expect(fn () => app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id')))
+        ->toThrow(AuthorizationException::class, 'Solo puedes abrir tus notificaciones.');
 });
 
 it('si ya no trabaja en el campus del aviso, avisa en lugar de llevarlo', function () {

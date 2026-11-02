@@ -5,7 +5,7 @@ namespace App\Modules\Core\Notifications;
 /**
  * Lo que la campana muestra de una notificación: título, una línea de detalle, el icono (heroicon de
  * MaryUI) con su tono (`info`, `warning`, `success` o `neutral`) y a dónde lleva, como nombre de ruta y parámetros para que el destino pueda llegar después que el
- * aviso (si la ruta no existe, la campana lleva al inicio). `termId` y `campusId` son el periodo y el campus
+ * aviso (si la ruta no existe, la campana avisa que no está disponible y no lleva). `termId` y `campusId` son el periodo y el campus
  * del aviso: al abrirlo, la credencial cambia a ellos si el usuario trabaja ahí.
  */
 final readonly class NotificationMessage

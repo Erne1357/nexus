@@ -46,7 +46,7 @@ abstract class NexusNotification extends Notification
     public static function unavailableReason(User $user, NotificationMessage $message): ?string
     {
         if ($message->route === null || ! Route::has($message->route)) {
-            return 'Esa pantalla ya no está disponible.';
+            return 'Esa pantalla no está disponible.';
         }
 
         return null;
