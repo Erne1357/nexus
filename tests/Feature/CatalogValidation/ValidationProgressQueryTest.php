@@ -68,7 +68,9 @@ it('cuenta el total con HC-14: cuatro generales más salones por cada campus abi
     expect($board['global']['total'])->toBe(2 * (4 + 2))
         ->and($board['rows'])->toHaveCount(2)
         ->and($board['rows'][0]['total'])->toBe(6)
-        ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans', 'careers', 'rooms:'.$this->c1->id, 'rooms:'.$this->c2->id]);
+        ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans', 'careers', 'rooms:'.$this->c1->id, 'rooms:'.$this->c2->id])
+        ->and(array_column($board['general_columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans', 'careers'])
+        ->and(array_column($board['room_columns'], 'key'))->toBe(['rooms:'.$this->c1->id, 'rooms:'.$this->c2->id]);
 });
 
 it('una revisión que falta cuenta como pendiente y cuadra con pendingFor', function () {
@@ -114,8 +116,8 @@ it('suma validadas, en revisión y pendientes por fila, por columna y en lo glob
     $board = ($this->progress)();
 
     expect($board['global'])->toMatchArray(['validated' => 2, 'in_review' => 1, 'pending' => 9, 'total' => 12, 'percent' => 17])
-        ->and($board['totals']['teachers'])->toMatchArray(['validated' => 2, 'total' => 2, 'unvalidated' => 0])
-        ->and($board['totals']['subjects'])->toMatchArray(['validated' => 0, 'in_review' => 1, 'total' => 2, 'unvalidated' => 2]);
+        ->and($board['totals']['teachers'])->toMatchArray(['validated' => 2, 'total' => 2])
+        ->and($board['totals']['subjects'])->toMatchArray(['validated' => 0, 'in_review' => 1, 'total' => 2]);
 });
 
 it('cuenta las observaciones abiertas y en cuántos departamentos, y las resueltas', function () {
@@ -217,4 +219,13 @@ it('reporta el estado de la carga de cada departamento y campus mediante el even
 
     expect($row['loads'][$this->c2->id]['label'])->toBe('Propuesta')
         ->and($row['loads'][$this->c1->id]['label'])->toBe('Borrador');
+});
+
+it('entrega por renglón las columnas que aún no están validadas, para el celular', function () {
+    progressValidate($this->sis, Catalog::Teachers);
+
+    $board = ($this->progress)();
+    $sis = collect($board['rows'])->first(fn (array $row) => $row['department']->is($this->sis));
+
+    expect(array_column($sis['pending_columns'], 'key'))->toBe(['subjects', 'study_plans', 'careers', 'rooms:'.$this->c1->id, 'rooms:'.$this->c2->id]);
 });

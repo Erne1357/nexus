@@ -4,20 +4,38 @@
     la derecha, lo que pide la elegida con la sugerencia de paralelos y sus botones. Desde lg los dos paneles van
     juntos; debajo, la lista y el detalle van por separado. Todo lo que se pinta viene de DepartmentInboxQuery.
 --}}
-<div class="space-y-5">
+{{--
+    Al cerrar la confirmación o un drawer (Esc, el velo, Cancelar o al decidir), el foco vuelve al botón que lo abrió
+    (`data-opens`); si la lista se repintó lo busca de nuevo, y si ya no está, lo deja en el título del detalle.
+--}}
+<div class="space-y-5" x-on:click.capture="const trigger = $event.target.closest('[data-opens]'); if (trigger) { opener = trigger.dataset.opens }"
+    x-data="{
+        opener: null,
+        init() {
+            for (const key of ['showAccept', 'showReturn', 'showParallels']) {
+                this.$wire.$watch(key, (open) => {
+                    if (open || this.opener === null) { return }
+                    setTimeout(() => {
+                        const target = this.$root.querySelector(`[data-opens='${this.opener}']:not([disabled])`) ?? this.$root.querySelector('[data-testid=inbox-detail-title]')
+                        target?.focus({ preventScroll: true })
+                    }, 80)
+                })
+            }
+        },
+    }">
     @if ($inbox === null)
         <div>
-            <h1 class="text-[1.625rem] font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
+            <h1 class="text-[26px] font-bold leading-[1.15] md:text-[30px]">Bandeja del departamento</h1>
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="inbox-empty">{{ $message }}</div>
     @else
         <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
             <div class="min-w-0">
-                <h1 class="text-[1.625rem] font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
+                <h1 class="text-[26px] font-bold leading-[1.15] md:text-[30px]">Bandeja del departamento</h1>
                 <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                     <span class="font-medium text-base-content" data-testid="inbox-department-name">{{ $inbox->department->name }}</span>
                     <span>{{ $inbox->campus->name }}</span>
-                    <span class="font-mono">{{ $inbox->term->code }}</span>
+                    <span data-testid="inbox-term">{{ $inbox->term->name }}</span>
                 </p>
             </div>
 
@@ -48,18 +66,18 @@
             </x-alert>
         @endif
 
-        <div class="lg:grid lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] lg:items-start lg:gap-5">
+        <div class="lg:grid lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] lg:items-start lg:gap-5">
             <section @class(['min-w-0 overflow-hidden rounded-box border border-base-300 bg-base-100', 'max-lg:hidden' => $mobileDetail]) data-testid="inbox-list" aria-label="Carreras">
                 <div role="group" aria-label="Filtro" class="flex gap-2 border-b border-base-300 px-3 py-3">
                     <button type="button" wire:click="$set('filter', 'todas')" aria-pressed="{{ $filter === 'todas' ? 'true' : 'false' }}" data-testid="filter-all"
-                        @class(['btn btn-sm', 'btn-primary' => $filter === 'todas'])>Todas <span class="font-mono">{{ count($rows) }}</span></button>
+                        @class(['btn btn-sm max-md:h-11 max-md:min-h-11', 'btn-primary' => $filter === 'todas'])>Todas <span class="font-mono">{{ count($rows) }}</span></button>
                     <button type="button" wire:click="$set('filter', 'pendientes')" aria-pressed="{{ $filter === 'pendientes' ? 'true' : 'false' }}" data-testid="filter-pending"
-                        @class(['btn btn-sm', 'btn-primary' => $filter === 'pendientes'])>Pendientes <span class="font-mono">{{ $pendingCount }}</span></button>
+                        @class(['btn btn-sm max-md:h-11 max-md:min-h-11', 'btn-primary' => $filter === 'pendientes'])>Pendientes <span class="font-mono">{{ $pendingCount }}</span></button>
                 </div>
                 @include('academic-load::inbox.list')
             </section>
 
-            <section @class(['min-w-0 overflow-hidden rounded-box border border-base-300 bg-base-100', 'max-lg:hidden' => ! $mobileDetail]) data-testid="inbox-detail" aria-label="Detalle de la carrera">
+            <section @class(['min-w-0 rounded-box border border-base-300 bg-base-100', 'max-lg:hidden' => ! $mobileDetail]) data-testid="inbox-detail" aria-label="Detalle de la carrera">
                 @if ($selected === null || $submittedCount === 0)
                     <p class="px-5 py-8 text-center text-neutral" data-testid="inbox-empty-careers">Ninguna carrera ha enviado su propuesta con materias de este departamento.</p>
                 @else
@@ -74,10 +92,17 @@
             @endif
         </x-modal>
 
-        <x-modal wire:model="showReturn" box-class="max-w-lg" aria-labelledby="return-title" data-testid="return-modal">
+        <x-drawer wire:model.live="showReturn" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="return-title" data-testid="return-drawer">
             @if ($showReturn && $target !== null)
                 @include('academic-load::inbox.return')
             @endif
-        </x-modal>
+        </x-drawer>
+
+        <x-drawer wire:model.live="showParallels" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="parallels-title" data-testid="parallels-drawer">
+            @if ($showParallels && $parallelsTarget !== null)
+                @include('academic-load::inbox.parallels')
+            @endif
+        </x-drawer>
     @endif
 </div>
+

@@ -31,7 +31,7 @@
                                 @elseif ($status === \App\Modules\CatalogValidation\Enums\ReviewStatus::InReview)
                                     En revisión desde <span class="tabular-nums">{{ $review->updated_at->timezone(config('app.timezone'))->translatedFormat('j M, H:i') }}</span>
                                 @else
-                                    Sin abrir
+                                    Pendiente
                                 @endif
                             </p>
                         </div>
@@ -44,25 +44,33 @@
         <section class="space-y-3" aria-labelledby="drawer-flags">
             <h3 id="drawer-flags" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Observaciones abiertas · {{ $flags->count() }}</h3>
 
-            @forelse ($flags as $flag)
-                @php($record = $flag->flaggable)
-                @php($review = $flag->review)
-                <article wire:key="flag-{{ $flag->id }}" class="space-y-2 rounded-box border border-base-300 bg-base-100 p-3.5" data-testid="drawer-flag-{{ $flag->id }}">
-                    <p class="flex flex-wrap items-center gap-2 text-sm">
-                        <x-core::status-badge tone="warning" icon="o-chat-bubble-left-ellipsis" :label="$flag->flag->label()" />
-                        <span class="text-neutral">{{ $review->catalog->label() }}@if ($review->campus) · {{ $review->campus->code }}@endif</span>
-                    </p>
-                    <p class="font-semibold"><span class="font-mono">{{ $record?->code ?? $record?->employee_number }}</span> · {{ $record?->name ?? 'Registro ya no disponible' }}</p>
-                    @if ($flag->comment)
-                        <p class="text-sm">{{ $flag->comment }}</p>
-                    @endif
-                    <p class="text-xs text-neutral">{{ $flag->flagger?->name ?? 'Un usuario ya dado de baja' }} · <span class="tabular-nums">{{ $flag->created_at->timezone(config('app.timezone'))->translatedFormat('j M Y, H:i') }}</span></p>
-                    @can('resolveFlag', $review)
-                        <div class="flex justify-end">
-                            <x-button label="Marcar como resuelta" icon="o-check" class="btn-sm" wire:click="resolveFlag('{{ $flag->id }}')" spinner="resolveFlag('{{ $flag->id }}')" data-testid="resolve-flag-{{ $flag->id }}" />
-                        </div>
-                    @endcan
-                </article>
+            @forelse ($flags->groupBy('review_id') as $catalogFlags)
+                @php($review = $catalogFlags->first()->review)
+                <div class="space-y-2" wire:key="flag-group-{{ $review->id }}" data-testid="drawer-review-flags-{{ $review->id }}">
+                    <p class="text-sm font-semibold">{{ $review->catalog->label() }}@if ($review->campus) <span class="font-normal text-neutral">· {{ $review->campus->name }}</span>@endif <span class="font-mono font-normal text-neutral tabular-nums">{{ $catalogFlags->count() }}</span></p>
+                    @foreach ($catalogFlags->groupBy(fn ($flag) => $flag->flaggable_type.'|'.$flag->flaggable_id) as $recordFlags)
+                        @php($record = $recordFlags->first()->flaggable)
+                        <article wire:key="record-{{ $recordFlags->first()->flaggable_type }}-{{ $recordFlags->first()->flaggable_id }}" class="space-y-2 rounded-box border border-base-300 bg-base-100 p-3.5" data-testid="drawer-record-{{ \Illuminate\Support\Str::kebab(class_basename($recordFlags->first()->flaggable_type)) }}-{{ $recordFlags->first()->flaggable_id }}">
+                            <p class="font-semibold"><span class="font-mono">{{ $record?->code ?? $record?->employee_number }}</span>@if ($record === null) · Registro ya no disponible @elseif (filled($record->name)) · {{ $record->name }}@endif</p>
+                            <ul class="divide-y divide-base-300">
+                                @foreach ($recordFlags as $flag)
+                                    <li wire:key="flag-{{ $flag->id }}" class="space-y-1.5 py-2 first:pt-0 last:pb-0" data-testid="drawer-flag-{{ $flag->id }}">
+                                        <x-core::status-badge tone="warning" icon="o-chat-bubble-left-ellipsis" :label="$flag->flag->label()" />
+                                        @if ($flag->comment)
+                                            <p class="text-sm">{{ $flag->comment }}</p>
+                                        @endif
+                                        <p class="text-xs text-neutral">{{ $flag->flagger?->name ?? 'Un usuario ya dado de baja' }} · <span class="tabular-nums">{{ $flag->created_at->timezone(config('app.timezone'))->translatedFormat('j M Y, H:i') }}</span></p>
+                                        @can('resolveFlag', $flag->review)
+                                            <div class="flex justify-end">
+                                                <x-button label="Marcar como resuelta" icon="o-check" class="btn-sm" wire:click="resolveFlag('{{ $flag->id }}')" spinner="resolveFlag('{{ $flag->id }}')" data-testid="resolve-flag-{{ $flag->id }}" />
+                                            </div>
+                                        @endcan
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </article>
+                    @endforeach
+                </div>
             @empty
                 <p class="text-sm text-neutral" data-testid="drawer-no-flags">Sin observaciones abiertas.</p>
             @endforelse
@@ -81,9 +89,8 @@
         </section>
     </div>
 
-    <footer class="sticky bottom-0 flex items-center justify-end gap-2 border-t border-base-300 bg-base-100 px-5 py-3">
+    <footer class="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t border-base-300 bg-base-100 px-5 py-3">
         @php($reason = $row['remind_blocked_reason'])
-        <x-button label="Cerrar" @click="close()" class="btn-ghost" />
         <x-button label="Recordar" icon="o-bell" wire:click="remind('{{ $department->id }}')" spinner="remind('{{ $department->id }}')" :disabled="$reason !== null" :title="$reason" data-testid="drawer-remind" />
         <x-button label="Ver validación" icon="o-eye" :link="route('catalog-validation.review', ['department' => $department->id])" class="btn-primary" data-testid="drawer-review" />
     </footer>

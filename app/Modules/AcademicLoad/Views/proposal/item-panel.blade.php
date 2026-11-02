@@ -3,8 +3,15 @@
     departamento y horas; los elegibles; los alumnos esperados, los grupos (con «Usar sugerido») y una nota. Si la
     fila está bloqueada o el usuario no puede editar, los campos van deshabilitados y se dice por qué.
     `$item` es la fila de ProposalOverview y `$lock`, su motivo de bloqueo o null; `close()` es del x-drawer.
+    Si el departamento de la materia regresó su parte, repite su comentario; si la fila es rara (ProposalAnomalies),
+    la advierte con icono y texto, sin impedir guardar ni enviar. «Usar sugerido» dice el número (`$suggested`; mientras se teclea lo recalcula Alpine con `$suggestedSize`).
 --}}
-@php($readonly = $lock !== null || ! $canEdit)
+@php
+    $readonly = $lock !== null || ! $canEdit;
+    $returned = $overview->reviewFor($item->subject->department_id);
+    $returned = $returned?->status === \App\Modules\AcademicLoad\Enums\ProposalReviewStatus::Returned ? $returned : null;
+    $anomalies = $overview->anomaliesFor($item);
+@endphp
 <div class="flex min-h-dvh flex-col" data-testid="item-panel">
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
         <div class="min-w-0 flex-1">
@@ -20,19 +27,31 @@
             <x-alert icon="o-lock-closed" class="alert-warning alert-soft text-sm" :title="$lock" />
         @endif
 
+        @if ($returned)
+            <x-alert icon="o-arrow-uturn-left" class="alert-error alert-soft items-start text-sm" data-testid="panel-returned">
+                <span><span class="font-semibold">{{ $item->subject->department->name }} regresó su parte</span>@if ($returned->comment): “{{ $returned->comment }}”@endif</span>
+            </x-alert>
+        @endif
+
+        @if ($anomalies !== [])
+            <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft items-start text-sm" data-testid="panel-anomalies">
+                <span><span class="font-semibold">Revisa esta materia:</span> {{ implode('; ', $anomalies) }}. Se puede enviar así.</span>
+            </x-alert>
+        @endif
+
         <div class="flex items-baseline justify-between rounded-box border border-base-300 px-4 py-3">
             <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Elegibles</span>
             <span class="font-mono text-2xl font-semibold tabular-nums">{{ $item->eligible_students }}</span>
         </div>
 
         <x-form wire:submit="save" class="gap-3!">
-            <x-input label="Alumnos esperados" type="number" wire:model="expected_students" min="0" max="{{ $maxExpected }}" class="font-mono" :disabled="$readonly" data-testid="field-expected" />
+            <x-input label="Alumnos esperados" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $maxExpected) }}" oninput="this.value = this.value.replace(/\D/g, '')" wire:model="expected_students" class="font-mono" :disabled="$readonly" data-testid="field-expected" />
             <div class="flex items-end gap-3">
                 <div class="flex-1">
-                    <x-input label="Grupos solicitados" type="number" wire:model="requested_groups" min="0" max="{{ $maxGroups }}" class="font-mono" :disabled="$readonly" data-testid="field-groups" />
+                    <x-input label="Grupos solicitados" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $maxGroups) }}" oninput="this.value = this.value.replace(/\D/g, '')" wire:model="requested_groups" class="font-mono" :disabled="$readonly" data-testid="field-groups" />
                 </div>
                 @unless ($readonly)
-                    <x-button label="Usar sugerido" icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested" spinner="useSuggested" data-testid="use-suggested" />
+                    <x-button icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested" spinner="useSuggested" data-testid="use-suggested"><span x-text="'Usar sugerido: ' + Math.ceil(Math.max(0, parseInt($wire.expected_students) || 0) / {{ $suggestedSize }})">Usar sugerido: {{ $suggested }}</span></x-button>
                 @endunless
             </div>
             <x-textarea label="Nota" wire:model="notes" rows="3" maxlength="{{ \App\Modules\AcademicLoad\Rules\ProposalItemRules::MAX_NOTES_LENGTH }}" :disabled="$readonly" data-testid="field-notes" />

@@ -72,12 +72,39 @@ class CatalogValidationDemoSeeder extends Seeder
     /** Departamentos que reciben recordatorio, donde algo falta. */
     private const array REMINDED = ['CEA', 'EE', 'MM'];
 
+    /** Los comentarios sembrados, por observación y catálogo: cada uno dice algo que cabe en su catálogo. */
     private const array COMMENTS = [
-        'inactive' => ['Ya no imparte en el departamento desde el semestre pasado.', 'Está dado de baja en el SII; debe desactivarse.', 'Dejó de usarse tras la remodelación del edificio.', 'La materia salió del plan vigente.'],
-        'wrong_capacity' => ['Caben 40 con las bancas actuales, no 30.', 'La capacidad real es de 25 por el equipo instalado.', 'Se retiraron mesas; la capacidad bajó a 20.'],
-        'duplicate' => ['Aparece dos veces con otra clave.', 'Es el mismo registro que otro del catálogo.', 'Duplicado por la importación del SII.'],
-        'missing_data' => ['Falta el correo institucional.', 'No tiene horas de práctica capturadas.', 'Falta el grado académico.', 'Sin tipo ni descripción.'],
-        'other' => ['Confirmar el nombre con Servicios Escolares.', 'Revisar con la coordinación de la carrera.', 'La clave no sigue el formato del plan.', 'Pendiente de acuerdo con el jefe de proyecto docente.'],
+        'inactive' => [
+            'teachers' => ['Ya no imparte en el departamento desde el semestre pasado.', 'Está dado de baja en el SII; debe desactivarse.'],
+            'rooms' => ['Dejó de usarse tras la remodelación del edificio.', 'El salón se convirtió en bodega.'],
+            'subjects' => ['La materia salió del plan vigente.', 'Ya no se ofrece en ninguna carrera.'],
+            'study_plans' => ['El plan ya no admite ingreso.', 'La retícula vigente lo sustituyó.'],
+            'careers' => ['La carrera cerró su inscripción.', 'Ya no tiene generaciones activas.'],
+        ],
+        'wrong_capacity' => [
+            'rooms' => ['Caben 40 con las bancas actuales, no 30.', 'La capacidad real es de 25 por el equipo instalado.', 'Se retiraron mesas; la capacidad bajó a 20.'],
+        ],
+        'duplicate' => [
+            'teachers' => ['Aparece dos veces con otro número de empleado.', 'Duplicado por la importación del SII.'],
+            'rooms' => ['Es el mismo salón que otro con distinta clave.', 'Duplicado por la importación del SII.'],
+            'subjects' => ['Es la misma materia con otra clave.', 'Duplicada por la importación del SII.'],
+            'study_plans' => ['Es el mismo plan capturado con otra clave.', 'Duplicado por la importación del SII.'],
+            'careers' => ['Es la misma carrera con otra clave.', 'Duplicada por la importación del SII.'],
+        ],
+        'missing_data' => [
+            'teachers' => ['Falta el correo institucional.', 'Falta el grado académico.'],
+            'rooms' => ['Sin tipo ni equipo capturados.', 'Falta el edificio.'],
+            'subjects' => ['No tiene horas de práctica capturadas.', 'Sin créditos capturados.'],
+            'study_plans' => ['Falta el año de vigencia del plan.', 'Sin total de créditos.'],
+            'careers' => ['Falta el nombre oficial de la carrera.', 'Sin coordinador asignado.'],
+        ],
+        'other' => [
+            'teachers' => ['Confirmar el nombre con Servicios Escolares.', 'Pendiente de acuerdo con el jefe de proyecto docente.'],
+            'rooms' => ['Confirmar la clave con Servicios Generales.', 'Revisar si pertenece a este departamento.'],
+            'subjects' => ['La clave no sigue el formato del plan.', 'Revisar con la coordinación de la carrera.'],
+            'study_plans' => ['Revisar con la coordinación de la carrera.', 'Confirmar la clave con Servicios Escolares.'],
+            'careers' => ['Confirmar el nombre con Servicios Escolares.', 'Revisar con la subdirección académica.'],
+        ],
     ];
 
     /** @var array<string, User> */
@@ -355,7 +382,7 @@ class CatalogValidationDemoSeeder extends Seeder
 
         for ($i = 0; $i < min($count, $records->count()); $i++) {
             $flag = $types[$i % count($types)];
-            $comments = self::COMMENTS[$flag->value];
+            $comments = self::COMMENTS[$flag->value][$review->catalog->value];
             $comment = $i % 3 === 2 && $flag !== ReviewFlag::Other ? null : $comments[$i % count($comments)];
 
             $created[] = $this->flag->handle($review, $records[$i], $flag, $comment, $actor);

@@ -2,7 +2,7 @@
     Insignia de estado de DESIGN.md ("Insignias de estado"), la misma en toda la aplicación:
     <x-core::status-badge tone="success" label="Activo" />. `tone` es un StatusTone o su valor; `icon`
     cambia el icono del tono (en cola: o-clock; con advertencia: o-exclamation-triangle). El color nunca
-    va solo: el texto es obligatorio y el icono queda oculto a los lectores de pantalla. El icono va en
+    va solo: el texto es obligatorio y el icono queda oculto a los lectores de pantalla. El slot, si lo hay, va después del texto (por ejemplo un `sr-only` con el estado). El icono va en
     el slot de x-badge y no en su prop `icon`, porque esa prop no deja ponerle aria-hidden.
 --}}
 @props(['tone', 'label', 'icon' => null])
@@ -17,4 +17,5 @@
         <x-icon :name="$icon" class="w-3.5 h-3.5" aria-hidden="true" />
     @endif
     {{ $label }}
+    {{ $slot }}
 </x-badge>
