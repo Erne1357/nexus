@@ -29,7 +29,7 @@ final class CatalogRecordsQuery
      */
     public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15): LengthAwarePaginator
     {
-        $query = $this->contents->builder($review);
+        $query = $this->contents->query($review);
         $model = $query->getModel();
 
         match ($review->catalog) {

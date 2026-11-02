@@ -12,6 +12,16 @@
             <x-icon name="o-identification" class="h-4 w-4" aria-hidden="true" />
             <span @class(['max-[1200px]:hidden' => $inTable])>Ficha</span>
         </a>
+        <x-button
+            icon="o-chat-bubble-left-ellipsis"
+            wire:click="edit('{{ $record->id }}')"
+            aria-label="Observaciones de {{ $code }}"
+            :data-testid="$inTable ? 'observations-'.$code : null"
+            class="btn-ghost btn-sm"
+            spinner="edit('{{ $record->id }}')"
+        >
+            <span @class(['max-[1200px]:hidden' => $inTable])>Observaciones</span>
+        </x-button>
     @else
         <x-button
             :icon="$card['canEdit'] ? 'o-pencil-square' : 'o-eye'"
@@ -26,21 +36,26 @@
     @endif
 
     <x-core::row-menu :name="$code" :compact="$inTable">
-        <x-core::row-menu-item
-            label="Agregar observación"
-            :disabled="! $card['canFlag']"
-            :reason="$card['flagReason']"
-            wire:click="edit('{{ $record->id }}')"
-            :spinner="'edit(\''.$record->id.'\')'"
-            :data-testid="$inTable ? 'flag-'.$code : null"
-        />
-        <x-core::row-menu-item
-            :label="$record->is_active ? 'Desactivar' : 'Activar'"
-            :disabled="! $card['canToggle']"
-            :reason="$card['toggleReason']"
-            wire:click="toggleActive('{{ $record->id }}')"
-            wire:confirm="{{ $record->is_active ? '¿Desactivar '.$code.'? Deja de ofrecerse en el catálogo.' : '¿Activar '.$code.'?' }}"
-            :spinner="'toggleActive(\''.$record->id.'\')'"
-        />
+        @if ($card['canFlag'])
+            <x-core::row-menu-item
+                label="Agregar observación"
+                wire:click="edit('{{ $record->id }}')"
+                :spinner="'edit(\''.$record->id.'\')'"
+                :data-testid="$inTable ? 'flag-'.$code : null"
+            />
+        @else
+            <x-core::row-menu-item label="Agregar observación" disabled :reason="$card['flagReason']" />
+        @endif
+
+        @if ($card['canToggle'])
+            <x-core::row-menu-item
+                :label="$record->is_active ? 'Desactivar' : 'Activar'"
+                wire:click="toggleActive('{{ $record->id }}')"
+                wire:confirm="{{ $record->is_active ? '¿Desactivar '.$code.'? Deja de ofrecerse en el catálogo.' : '¿Activar '.$code.'?' }}"
+                :spinner="'toggleActive(\''.$record->id.'\')'"
+            />
+        @else
+            <x-core::row-menu-item :label="$record->is_active ? 'Desactivar' : 'Activar'" disabled :reason="$card['toggleReason']" />
+        @endif
     </x-core::row-menu>
 </div>

@@ -11,17 +11,22 @@
             <p class="text-neutral">validados</p>
         </div>
 
-        <div class="grid gap-1" style="grid-template-columns: repeat({{ $cards->count() }}, minmax(0, 1fr))" aria-hidden="true">
-            @foreach ($cards as $card)
-                <i @class(['h-2.5 rounded-sm', 'bg-success' => $card['review']->status === \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated, 'bg-info' => $card['review']->status === \App\Modules\CatalogValidation\Enums\ReviewStatus::InReview, 'bg-warning/50' => $card['review']->status === \App\Modules\CatalogValidation\Enums\ReviewStatus::Pending])></i>
+        <div class="flex gap-1" aria-hidden="true">
+            @foreach ($progress['items'] as $item)
+                <i @class(['h-2.5 flex-1 rounded-sm', 'bg-success' => $item['review']?->status === \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated, 'bg-info' => $item['review']?->status === \App\Modules\CatalogValidation\Enums\ReviewStatus::InReview, 'bg-warning/50' => ! in_array($item['review']?->status, [\App\Modules\CatalogValidation\Enums\ReviewStatus::Validated, \App\Modules\CatalogValidation\Enums\ReviewStatus::InReview], true)])></i>
             @endforeach
         </div>
 
         <ul class="space-y-2 text-sm">
-            @foreach ($cards as $card)
+            @foreach ($progress['items'] as $item)
                 <li class="flex items-center justify-between gap-3">
-                    <a href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $card['review']->catalog->value]) }}" wire:navigate class="underline decoration-base-300 underline-offset-4 hover:decoration-current">{{ $card['review']->catalog->label() }}</a>
-                    <span class="text-neutral">{{ $card['review']->status->label() }}</span>
+                    @if ($item['review'])
+                        <a href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $item['catalog']->value]) }}" wire:navigate class="underline decoration-base-300 underline-offset-4 hover:decoration-current">{{ $item['catalog']->label() }}</a>
+                        <span class="text-neutral">{{ $item['review']->status->label() }}</span>
+                    @else
+                        <span>{{ $item['catalog']->label() }}</span>
+                        <span class="text-neutral">Sin revisión</span>
+                    @endif
                 </li>
             @endforeach
         </ul>

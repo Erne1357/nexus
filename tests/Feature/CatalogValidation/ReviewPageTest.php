@@ -18,11 +18,13 @@ use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
+use Spatie\Permission\Models\Role as SpatieRole;
 
 /*
 | Validación de catálogos (`/catalog-validation`, catalog-validation::pages.review), variante C «tablero de
@@ -138,6 +140,40 @@ describe('tablero', function () {
         reviewPage()->assertSee('1 de 4')->assertSee('Faltan 3 para sacar la carga de borrador');
     });
 
+    it('HC-14: si el campus usa salones y falta su revisión, la carga no puede salir de borrador aunque lo demás esté validado', function () {
+        CatalogReview::query()->where('catalog', Catalog::Rooms)->delete();
+        CatalogReview::query()->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage()
+            ->assertSee('4 de 5')
+            ->assertSee('Faltan 1 para sacar la carga de borrador')
+            ->assertDontSee('Todo validado');
+    });
+
+    it('con los cinco validados dice que la carga puede salir de borrador', function () {
+        CatalogReview::query()->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage()->assertSee('5 de 5')->assertSee('Todo validado');
+    });
+
+    it('la revisión de salones de un campus donde el alcance del jefe no vale no se muestra (CatalogReviewPolicy::view)', function () {
+        /*
+        | El jefe es de SIS solo en C1 y además coordina en C2 (otro rol, con su rol de spatie), así que C2 está en su
+        | credencial y puede ser su campus activo. En C2 su alcance de jefe no vale: las revisiones generales siguen
+        | visibles (son de todo el Tec) y la de salones de C2, no.
+        */
+        $c1 = Campus::factory()->create(['code' => 'C1']);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'campus_id' => $c1->id])->create();
+        $jefe->assignRole(SpatieRole::findOrCreate(Role::Coordinador->value));
+        RoleScope::factory()->for($jefe)->create(['role' => Role::Coordinador, 'campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id]);
+        session([ScopedContext::ACTIVE_CAMPUS => $this->campus->id]);
+
+        reviewPage($jefe)
+            ->assertSee($this->campus->name)
+            ->assertSeeHtml('data-testid="card-subjects"')
+            ->assertDontSeeHtml('data-testid="card-rooms"');
+    });
+
     it('en el primer periodo en Nexus lo dice y no muestra altas ni bajas', function () {
         reviewPage()->assertSee('Primer periodo en Nexus')->assertDontSee('altas');
     });
@@ -192,7 +228,9 @@ describe('tablero', function () {
         reviewPage()
             ->assertSee('La carga académica de SIS ya salió de borrador en C2.')
             ->call('confirm', 'reopen', 'subjects')
-            ->assertForbidden();
+            ->assertHasErrors('status')
+            ->assertSee('La carga académica de SIS ya salió de borrador en C2.')
+            ->assertSet('showConfirm', false);
 
         expect(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::Validated);
     });
@@ -408,5 +446,54 @@ describe('observaciones', function () {
         reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('resolveFlag', $flag->id)->assertNotFound();
 
         expect($flag->fresh()->resolved_at)->toBeNull();
+    });
+});
+
+describe('acciones de fila', function () {
+    it('una acción deshabilitada no lleva wire:click, wire:confirm ni data-testid', function () {
+        $admin = User::factory()->admin()->create();
+
+        reviewPage($admin, ['department' => $this->sis->id, 'catalogo' => 'subjects'])
+            ->assertDontSeeHtml("wire:click=\"toggleActive('{$this->subject->id}')\"")
+            ->assertDontSeeHtml('data-testid="flag-SCD-1027"')
+            ->assertSee('Solo el jefe del departamento pone observaciones.');
+    });
+
+    it('las filas de docentes tienen un control habilitado que abre el drawer de observaciones, también en lectura y con la revisión validada', function (string $who) {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '04230']);
+        $user = match ($who) {
+            'jefe validada' => $this->jefe,
+            'admin' => User::factory()->admin()->create(),
+            'subdirección' => User::factory()->withRole(Role::Subdireccion, [])->create(),
+        };
+        $who === 'jefe validada' && reviewOf(Catalog::Teachers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage($user, ['department' => $this->sis->id, 'catalogo' => 'teachers'])
+            ->assertSeeHtml("wire:click=\"edit('{$teacher->id}')\"")
+            ->assertSeeHtml('data-testid="observations-04230"');
+    })->with(['jefe validada', 'admin', 'subdirección']);
+
+    it('Subdirección resuelve la observación de un docente desde la pantalla', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+        $flag = CatalogReviewFlag::factory()->on($teacher)->create(['review_id' => reviewOf(Catalog::Teachers)->id]);
+        $subdireccion = User::factory()->withRole(Role::Subdireccion, [])->create();
+
+        reviewPage($subdireccion, ['department' => $this->sis->id, 'catalogo' => 'teachers'])
+            ->call('edit', $teacher->id)
+            ->assertSee('Marcar como resuelta')
+            ->call('resolveFlag', $flag->id)
+            ->assertHasNoErrors();
+
+        expect($flag->fresh()->resolved_by)->toBe($subdireccion->id);
+    });
+
+    it('una característica de salón de más de 40 caracteres se rechaza como en la pantalla de salones', function () {
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['department_id' => $this->sis->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'rooms'])
+            ->call('edit', $room->id)
+            ->set('features', 'Proyector, '.str_repeat('x', 41))
+            ->call('save')
+            ->assertHasErrors('features');
     });
 });

@@ -20,6 +20,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Enums\RoomType;
+use App\Modules\Facilities\Rules\RoomRules;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Arr;
@@ -147,9 +148,16 @@ new #[Title('Validación de catálogos')] class extends Component
             return [...$data, 'empty' => $empty, 'cards' => collect(), 'progress' => null, 'current' => null, 'confirming' => null];
         }
 
-        $cards = $state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews));
-        $current = $this->openCatalog() === null ? null : $cards->first(fn (array $card): bool => $card['review']->catalog === $this->openCatalog());
-        $data += ['empty' => null, 'cards' => $cards, 'progress' => $this->progress($state['reviews'], $state['campus']), 'current' => $current];
+        $open = $this->openCatalog();
+        $openReview = $open === null ? null : $state['reviews']->first(fn (CatalogReview $review): bool => $review->catalog === $open);
+
+        /*
+        | El tablero arma las cinco tarjetas y el avance (HC-14); la lista, solo la revisión abierta y sin preguntar
+        | por el veto de Reabrir (confirm() lo vuelve a preguntar al pedirlo).
+        */
+        $current = $openReview === null ? null : $this->card($openReview, $reviews, false);
+        $cards = $current === null ? $state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews, true)) : collect([$current]);
+        $data += ['empty' => null, 'cards' => $cards, 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
 
         $data += $this->confirmation($cards);
 
@@ -178,7 +186,10 @@ new #[Title('Validación de catálogos')] class extends Component
         if ($action === 'reopen') {
             $this->authorize('reopen', $review);
             $vetoes = app(CatalogReviewQuery::class)->reopeningVetoes($review);
-            abort_if($vetoes !== [], 403, implode(' ', $vetoes));
+
+            if ($vetoes !== []) {
+                throw ValidationException::withMessages(['status' => $vetoes]);
+            }
         } else {
             abort_unless($action === 'validate', 404);
             $this->authorize('validate', $review);
@@ -348,7 +359,10 @@ new #[Title('Validación de catálogos')] class extends Component
         $campus = $context->activeCampus();
         $reviews = $department === null || $term === null || $campus === null
             ? new Collection
-            : app(CatalogReviewQuery::class)->forDepartment($term, $campus, $department)->load(['campus', 'department', 'validator']);
+            : app(CatalogReviewQuery::class)->forDepartment($term, $campus, $department)->load(['campus', 'department', 'validator'])
+                ->filter(fn (CatalogReview $review): bool => Gate::allows('view', $review))
+                ->values()
+                ->each(fn (CatalogReview $review) => $review->setRelation('term', $term));
 
         return $this->resolved = compact('departments', 'department', 'term', 'campus', 'reviews');
     }
@@ -381,12 +395,12 @@ new #[Title('Validación de catálogos')] class extends Component
      *
      * @return array<string, mixed>
      */
-    private function card(CatalogReview $review, CatalogReviewQuery $reviews): array
+    private function card(CatalogReview $review, CatalogReviewQuery $reviews, bool $withVetoes): array
     {
         $validated = $review->status === ReviewStatus::Validated;
         $isHead = Gate::allows('flag', $review);
         $canReopen = Gate::allows('reopen', $review);
-        $vetoes = $validated && $canReopen ? $reviews->reopeningVetoes($review) : [];
+        $vetoes = $withVetoes && $validated && $canReopen ? $reviews->reopeningVetoes($review) : [];
         $isTeachers = $review->catalog === Catalog::Teachers;
 
         $editReason = match (true) {
@@ -420,17 +434,25 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * «N de 5 validados» (HC-14): 4 si el campus no usa salones.
+     * «N de 5 validados» (HC-14): los catálogos que exige el campus (los generales y, si usa salones, los salones) y
+     * los que todavía bloquean la salida de borrador de la carga (CatalogReviewQuery::pendingFor); una revisión que
+     * falta cuenta como pendiente. `items` trae cada catálogo exigido con su revisión, si existe y el usuario la ve.
      *
-     * @param  Collection<int, CatalogReview>  $reviews
-     * @return array{validated: int, total: int, left: int}
+     * @param  array{term: ?Term, campus: ?Campus, department: ?Department, reviews: Collection<int, CatalogReview>}  $state
+     * @return array{validated: int, total: int, left: int, items: list<array{catalog: Catalog, review: ?CatalogReview}>}
      */
-    private function progress(Collection $reviews, Campus $campus): array
+    private function progress(array $state, CatalogReviewQuery $reviews): array
     {
-        $required = $reviews->filter(fn (CatalogReview $review): bool => $review->catalog->isGeneral() || $campus->profile->usesRooms);
-        $validated = $required->filter(fn (CatalogReview $review): bool => $review->status === ReviewStatus::Validated)->count();
+        $required = array_values(array_filter(Catalog::cases(), fn (Catalog $catalog): bool => $catalog->isGeneral() || $state['campus']->profile->usesRooms));
+        $pending = $reviews->pendingFor($state['term'], $state['campus'], $state['department']);
+        $existing = $state['reviews']->keyBy(fn (CatalogReview $review): string => $review->catalog->value);
 
-        return ['validated' => $validated, 'total' => $required->count(), 'left' => $required->count() - $validated];
+        return [
+            'validated' => count($required) - count($pending),
+            'total' => count($required),
+            'left' => count($pending),
+            'items' => array_map(fn (Catalog $catalog): array => ['catalog' => $catalog, 'review' => $existing->get($catalog->value)], $required),
+        ];
     }
 
     /**
@@ -652,14 +674,14 @@ new #[Title('Validación de catálogos')] class extends Component
             'name' => ['nullable', 'string', 'max:255'],
             'type' => ['required', Rule::enum(RoomType::class)],
             'capacity' => ['required', 'integer', 'min:1', 'max:100000'],
-            'features' => ['nullable', 'string', 'max:1000'],
+            'features' => ['nullable', 'string', 'max:1000', app(RoomRules::class)->validateFeatureLength(...)],
         ] + $common);
 
         return [
             ...$data,
             'name' => $data['name'] ?? null,
             'capacity' => (int) $data['capacity'],
-            'features' => array_map(trim(...), preg_split('/[,\n]/', (string) $data['features']) ?: []),
+            'features' => app(RoomRules::class)->featureList((string) $data['features']),
         ];
     }
 

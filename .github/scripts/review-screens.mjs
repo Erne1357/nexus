@@ -41,12 +41,31 @@ await Promise.all([page.waitForURL(`${base}/`), page.click('button[type="submit"
 
 // CAMPUS=<texto de la opción> elige ese campus en la credencial (jefes con varios campus no tienen uno activo).
 if (process.env.CAMPUS) {
-  await page.evaluate((text) => {
+  const chosen = await page.evaluate((text) => {
     const select = document.querySelector('select[name="campus"]');
+
+    if (select === null) {
+      return { error: 'No hay select[name="campus"] en la credencial: el usuario no puede elegir campus.' };
+    }
+
     const option = [...select.options].find((candidate) => candidate.text.includes(text));
+
+    if (option === undefined) {
+      return { error: `Ningún campus de la credencial incluye «${text}». Opciones: ${[...select.options].map((candidate) => candidate.text.trim()).join(', ')}.` };
+    }
+
     select.value = option.value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    return { error: null };
   }, process.env.CAMPUS);
+
+  if (chosen.error !== null) {
+    console.error(`CAMPUS=${process.env.CAMPUS}: ${chosen.error}`);
+    await browser.close();
+    process.exit(2);
+  }
+
   await page.waitForTimeout(1500);
 }
 

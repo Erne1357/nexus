@@ -93,19 +93,12 @@ final class CatalogContentsQuery
     }
 
     /**
-     * Los registros de la revisión como consulta, por clave, para listarlos paginados (CatalogRecordsQuery).
+     * Los registros de la revisión como consulta, por clave, sin los borrados: la base de records(), contains() y
+     * de la lista paginada de la pantalla (CatalogRecordsQuery).
      *
      * @return Builder<Model>
      */
-    public function builder(CatalogReview $review): Builder
-    {
-        return $this->query($review);
-    }
-
-    /**
-     * @return Builder<Model>
-     */
-    private function query(CatalogReview $review): Builder
+    public function query(CatalogReview $review): Builder
     {
         $department = $review->department_id;
 
