@@ -16,9 +16,11 @@ use Illuminate\Database\Seeder;
  * - EAD: virtual de lunes a jueves y presencial viernes y sábado (glosario, PROJECT.md).
  * - TNMV: docentes del TecNM, es decir, externos al ITCJ (glosario, PROJECT.md).
  * - ENL: nada documentado más allá de su modalidad.
+ * - C1: los jefes corrigen sus salones al validar los catálogos (CV2, confirmado el 2 de noviembre de 2026).
+ *   En los demás campus no, mientras se confirma (CV-S5, supuesto por confirmar).
  *
- * Solo crea los campus que faltan (también entre los borrados): volver a sembrar no pisa un
- * perfil ya editado.
+ * Crea los campus que faltan (también entre los borrados). A uno existente solo le agrega las claves del
+ * perfil que no tiene en `settings`: volver a sembrar no pisa un perfil ya editado.
  */
 class CampusSeeder extends Seeder
 {
@@ -26,7 +28,7 @@ class CampusSeeder extends Seeder
      * @var list<array{code: string, name: string, modality: Modality, is_active: bool, profile: array<string, mixed>}>
      */
     private const array CAMPUSES = [
-        ['code' => 'C1', 'name' => 'Campus I', 'modality' => Modality::Presencial, 'is_active' => true, 'profile' => []],
+        ['code' => 'C1', 'name' => 'Campus I', 'modality' => Modality::Presencial, 'is_active' => true, 'profile' => ['heads_edit_rooms' => true]],
         ['code' => 'C2', 'name' => 'Campus II', 'modality' => Modality::Presencial, 'is_active' => true, 'profile' => []],
         ['code' => 'EAD', 'name' => 'EAD', 'modality' => Modality::Mixta, 'is_active' => false, 'profile' => ['days' => [1, 2, 3, 4, 5, 6]]],
         ['code' => 'ENL', 'name' => 'EnLínea', 'modality' => Modality::EnLinea, 'is_active' => false, 'profile' => []],
@@ -36,12 +38,22 @@ class CampusSeeder extends Seeder
     public function run(): void
     {
         foreach (self::CAMPUSES as $campus) {
-            Campus::withTrashed()->firstOrCreate(['code' => $campus['code']], [
+            $profile = CampusProfile::fromArray($campus['profile'])->toArray();
+
+            $record = Campus::withTrashed()->firstOrCreate(['code' => $campus['code']], [
                 'name' => $campus['name'],
                 'modality' => $campus['modality'],
-                'settings' => CampusProfile::fromArray($campus['profile'])->toArray(),
+                'settings' => $profile,
                 'is_active' => $campus['is_active'],
             ]);
+
+            if (! $record->wasRecentlyCreated) {
+                $missing = array_diff_key($profile, $record->settings ?? []);
+
+                if ($missing !== []) {
+                    $record->forceFill(['settings' => [...($record->settings ?? []), ...$missing]])->save();
+                }
+            }
         }
     }
 }
