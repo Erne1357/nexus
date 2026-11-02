@@ -113,7 +113,7 @@ describe('quién entra', function () {
         reviewPage($user, ['department' => $this->ele->id])
             ->assertOk()
             ->assertSee('Eléctrica-Electrónica')
-            ->assertDontSee('data-testid="validate-subjects"', escape: false);
+            ->assertDontSeeHtml("wire:click=\"confirm('validate', 'subjects')\"");
     })->with(['admin', 'subdirección']);
 
     it('sin ?department=, admin y Subdirección eligen un departamento', function () {
@@ -150,7 +150,7 @@ describe('tablero', function () {
 
         reviewPage()
             ->assertSee('4 de 5')
-            ->assertSee('Faltan 1 para sacar la carga de borrador')
+            ->assertSee('Falta 1 para sacar la carga de borrador')
             ->assertDontSee('Todo validado');
     });
 
@@ -179,7 +179,9 @@ describe('tablero', function () {
     });
 
     it('en el primer periodo en Nexus lo dice y no muestra altas ni bajas', function () {
-        reviewPage()->assertSee('Primer periodo en Nexus')->assertDontSee('altas');
+        $html = reviewPage()->assertSee('Primer periodo en Nexus')->assertDontSee('altas')->html();
+
+        expect(substr_count($html, 'Primer periodo en Nexus'))->toBe(1);
     });
 
     it('con la foto de un periodo anterior cuenta las altas y las bajas con su lista', function () {
@@ -193,7 +195,8 @@ describe('tablero', function () {
         Subject::factory()->create(['code' => 'NEW-1', 'name' => 'Materia nueva', 'department_id' => $this->sis->id]);
         $this->term->update(['starts_on' => '2027-01-15', 'ends_on' => '2027-06-10']);
 
-        reviewPage()->assertSee('Materia que se fue')->assertSeeInOrder(['+1', 'alta', '−1', 'baja']);
+        reviewPage()->assertSeeInOrder(['+1', 'alta', '−1', 'baja'])->assertDontSee('Materia que se fue');
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->set('showRemoved', true)->assertSee('Materia que se fue');
     });
 
     it('muestra quién y cuándo validó, y los contadores', function () {
@@ -574,5 +577,180 @@ describe('captura de docentes (2.6, CV6)', function () {
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
 
         reviewPage($subdireccion, ['department' => $this->sis->id])->assertOk()->assertSee('sin disponibilidad en 20271');
+    });
+});
+
+describe('pestañas de catálogo y lista compacta', function () {
+    beforeEach(function () {
+        $this->previous = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-01', 'ends_on' => '2026-12-15']);
+        $this->gone = Subject::factory()->create(['code' => 'OLD-1', 'name' => 'Materia que se fue', 'department_id' => $this->sis->id]);
+        CatalogReview::factory()->general(Catalog::Subjects)->validated()->create([
+            'term_id' => $this->previous->id, 'department_id' => $this->sis->id,
+            'snapshot' => [['id' => $this->subject->id, 'code' => 'SCD-1027', 'name' => 'x'], ['id' => $this->gone->id, 'code' => 'OLD-1', 'name' => 'Materia que se fue']],
+        ]);
+        $this->gone->update(['is_active' => false]);
+        Subject::factory()->create(['code' => 'NEW-1', 'name' => 'Materia nueva', 'department_id' => $this->sis->id]);
+        $this->term->update(['starts_on' => '2027-01-15', 'ends_on' => '2027-06-10']);
+    });
+
+    it('el tablero y la lista llevan una fila de pestañas: Tablero y una por catálogo con su estado', function () {
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        foreach ([[], ['catalogo' => 'subjects']] as $query) {
+            reviewPage($this->jefe, $query)
+                ->assertSeeHtml('data-testid="tab-board"')
+                ->assertSeeHtml('data-testid="tab-teachers"')
+                ->assertSeeHtml('data-testid="tab-subjects"')
+                ->assertSeeInOrder(['Tablero', 'Docentes', 'Salones', 'Materias', 'Planes de estudio', 'Carreras'])
+                ->assertSee('Validado')
+                ->assertDontSeeHtml('data-testid="back-to-board"');
+        }
+    });
+
+    it('cambiar de pestaña cambia el catálogo (la URL) sin recargar y reinicia filtros y drawers', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->set('search', 'Redes')->call('edit', $this->subject->id)->assertSet('showDrawer', true)
+            ->set('catalog', 'careers')
+            ->assertSet('search', '')->assertSet('showDrawer', false)
+            ->assertSeeHtml('data-testid="review-block"')
+            ->set('catalog', '')
+            ->assertSeeHtml('data-testid="review-board"')
+            ->assertDontSeeHtml('data-testid="review-block"');
+    });
+
+    it('la lista abre con un solo renglón: nombre, estado, cifras y Validar', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSeeHtml('data-testid="review-block"')
+            ->assertSeeHtml('data-testid="validate-subjects"')
+            ->assertSeeInOrder(['Materias', 'Pendiente', 'activos', 'inactivos', '+1', 'alta'])
+            ->assertDontSee('Periodo');
+    });
+
+    it('altas y bajas son cifras sin cajas de color; con cero dicen «Sin altas ni bajas»', function () {
+        reviewPage($this->jefe)->assertSee('+1')->assertSee('−1')->assertDontSeeHtml('bg-error/10')->assertDontSeeHtml('bg-success/10');
+        CatalogReview::factory()->general(Catalog::Careers)->validated()->create(['term_id' => $this->previous->id, 'department_id' => $this->sis->id, 'snapshot' => []]);
+
+        reviewPage($this->jefe, ['catalogo' => 'careers'])->assertSee('Sin altas ni bajas')->assertDontSee('−0')->assertDontSee('+0');
+    });
+
+    it('el filtro «Cambio: Altas» deja solo los registros nuevos contra la foto anterior', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSee('SCD-1027')->assertSee('NEW-1')
+            ->set('change', 'added')->assertSee('NEW-1')->assertDontSee('SCD-1027')
+            ->set('change', '')->assertSee('SCD-1027');
+    });
+
+    it('«Ver bajas» abre un drawer con la clave y el nombre de la foto anterior', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSeeHtml('data-testid="view-removed"')
+            ->assertDontSeeHtml('data-testid="removed-panel"')
+            ->set('showRemoved', true)
+            ->assertSeeHtml('data-testid="removed-panel"')->assertSee('OLD-1')->assertSee('Materia que se fue');
+    });
+
+    it('elegir «Bajas» en el filtro abre el drawer de bajas y no filtra la tabla', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->set('change', 'removed')
+            ->assertSet('showRemoved', true)->assertSet('change', '')->assertSee('SCD-1027');
+    });
+
+    it('sin foto anterior no hay filtro «Cambio» ni «Ver bajas»', function () {
+        reviewPage($this->jefe, ['catalogo' => 'careers'])->assertDontSeeHtml('data-testid="view-removed"')->assertDontSee('Cambio');
+    });
+
+    it('las tarjetas con trabajo van primero: pendientes, en revisión y al final las validadas', function () {
+        reviewOf(Catalog::Teachers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+        reviewOf(Catalog::Rooms)->update(['status' => ReviewStatus::InReview]);
+
+        reviewPage()->assertSeeInOrder(['card-subjects', 'card-study_plans', 'card-careers', 'card-rooms', 'card-teachers'], escape: false);
+    });
+
+    it('la tarjeta ya no repite «Abrir lista» y una validada solo ofrece Reabrir', function () {
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage()->assertDontSee('Abrir lista')->assertSeeHtml('data-testid="reopen-subjects"')->assertSeeHtml('data-testid="open-subjects"');
+    });
+
+    it('en solo lectura Validar y Reabrir se ven deshabilitados con su motivo', function () {
+        $admin = User::factory()->admin()->create();
+
+        reviewPage($admin, ['department' => $this->sis->id, 'catalogo' => 'subjects'])
+            ->assertSeeHtml('data-testid="validate-subjects"')
+            ->assertSee('Solo el jefe del departamento valida.');
+    });
+
+    it('la lista de salones trae la columna Nombre', function () {
+        $building = Building::factory()->create(['campus_id' => $this->campus->id]);
+        Room::factory()->for($building)->create(['code' => 'K-201', 'name' => 'Laboratorio de Redes', 'department_id' => $this->sis->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'rooms'])->assertSee('Nombre')->assertSee('Laboratorio de Redes');
+    });
+
+    it('sin permiso de corregir el drawer muestra los datos como texto legible, con las observaciones primero', function () {
+        $admin = User::factory()->admin()->create();
+
+        $html = reviewPage($admin, ['department' => $this->sis->id, 'catalogo' => 'subjects'])
+            ->call('edit', $this->subject->id)
+            ->assertSeeHtml('data-testid="record-facts"')
+            ->assertSee('Programación Orientada a Objetos')
+            ->assertDontSeeHtml('wire:model="name"')->html();
+
+        expect(substr_count(str($html)->after('data-testid="record-panel"')->toString(), 'Solo el jefe del departamento corrige.'))->toBe(1);
+        expect(strpos($html, 'aria-labelledby="drawer-flags"'))->toBeLessThan(strpos($html, 'aria-labelledby="drawer-data"'));
+    });
+
+    it('el jefe que corrige sigue viendo campos, y la clave bloqueada va como texto', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->call('edit', $this->subject->id)
+            ->assertSeeHtml('wire:model="name"')
+            ->assertSeeHtml('data-testid="record-facts"');
+    });
+
+    it('el drawer no lleva pistas de uso, conserva el formato de los campos y cuenta las observaciones con plural', function () {
+        CatalogReviewFlag::factory()->on($this->subject)->create(['review_id' => reviewOf(Catalog::Subjects)->id, 'flag' => ReviewFlag::MissingData]);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->call('edit', $this->subject->id)
+            ->assertSeeHtml('</span> abierta<')->assertDontSeeHtml('</span> abiertas')
+            ->assertDontSee('Cada cambio queda en la bitácora.')->assertSee('Obligatorio en «Otra»');
+    });
+
+    it('un filtro sin resultados ofrece «Quitar filtros»', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->set('search', 'zzzz')->assertSeeHtml('data-testid="clear-filters"')
+            ->call('clearFilters')->assertSet('search', '')->assertSee('SCD-1027');
+    });
+});
+
+describe('periodo anterior por revisión', function () {
+    it('en el caso mixto la tarjeta y el renglón sin foto dicen «Sin periodo anterior» y no «Primer periodo»', function () {
+        $previous = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-01', 'ends_on' => '2026-12-15']);
+        CatalogReview::factory()->general(Catalog::Subjects)->validated()->create(['term_id' => $previous->id, 'department_id' => $this->sis->id, 'snapshot' => []]);
+        $this->term->update(['starts_on' => '2027-01-15', 'ends_on' => '2027-06-10']);
+
+        $board = reviewPage()->assertSee('Sin periodo anterior')->assertDontSee('Primer periodo en Nexus')->html();
+        expect(substr_count($board, 'Sin periodo anterior'))->toBe(4);
+
+        reviewPage($this->jefe, ['catalogo' => 'careers'])->assertSee('Sin periodo anterior')->assertDontSee('Primer periodo en Nexus');
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->assertDontSee('Sin periodo anterior')->assertSeeHtml('data-testid="changes"');
+    });
+
+    it('si ningún catálogo tiene foto, el renglón de la lista dice «Primer periodo en Nexus»', function () {
+        reviewPage($this->jefe, ['catalogo' => 'careers'])->assertSee('Primer periodo en Nexus')->assertDontSee('Sin periodo anterior');
+    });
+
+    it('la insignia de observación de un salón se ve junto a la clave cuando la columna Observación se oculta', function () {
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['code' => 'K-301', 'department_id' => $this->sis->id]);
+        CatalogReviewFlag::factory()->on($room)->create(['review_id' => reviewOf(Catalog::Rooms)->id, 'flag' => ReviewFlag::MissingData]);
+
+        $html = reviewPage($this->jefe, ['catalogo' => 'rooms'])->html();
+
+        expect(substr_count($html, 'Faltan datos'))->toBeGreaterThanOrEqual(2);
+    });
+
+    it('el catálogo abierto va en el historial del navegador para que Atrás regrese al tablero', function () {
+        $url = collect(reviewPage()->effects['url'] ?? [])->get('catalog');
+
+        expect($url['use'] ?? null)->toBe('push');
     });
 });

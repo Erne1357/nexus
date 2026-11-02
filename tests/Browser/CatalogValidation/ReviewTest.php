@@ -13,7 +13,7 @@ use App\Modules\Core\Models\User;
 
 /*
 | Validación de catálogos en el navegador: el jefe de departamento entra por el menú, abre Materias, corrige una
-| materia en el drawer, le agrega una observación, regresa al tablero y valida.
+| materia en el drawer, le agrega una observación, vuelve al tablero por su pestaña y valida.
 */
 
 it('el jefe abre Materias, corrige una materia, la observa, regresa y valida', function () {
@@ -45,7 +45,7 @@ it('el jefe abre Materias, corrige una materia, la observa, regresa y valida', f
         ->waitForText('Observación agregada')
         ->assertSee('Faltan las horas de práctica.')
         ->click('[aria-label="Cerrar el panel"]')
-        ->click('@back-to-board')
+        ->click('@tab-board')
         ->assertSee('1 observación abierta')
         ->click('@validate-subjects')
         ->click('@confirm-accept')

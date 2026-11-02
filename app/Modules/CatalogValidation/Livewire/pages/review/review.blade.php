@@ -2,7 +2,8 @@
     Validación de catálogos (DESIGN.md, "Patrones de pantalla previstos": variante C, tablero de tarjetas, decidida
     por el usuario el 2 de noviembre de 2026). Encabezado y, en su renglón, periodo, campus y departamento; los errores
     de las Actions (vetos, revisión validada); y el tablero (catalog-validation::review.board) o, con `?catalogo=`,
-    la lista de un catálogo (catalog-validation::review.list) con su drawer. El modal de confirmación de Validar y
+    la lista de un catálogo (catalog-validation::review.list) con su drawer, ambos bajo una fila de pestañas (Tablero y un
+    catálogo por pestaña, con su estado; decidido por el usuario el 2 de noviembre de 2026 con datos masivos). El modal de confirmación de Validar y
     Reabrir es de la página: un modal dentro de una tarjeta quedaría encerrado en ella.
 --}}
 <div>
@@ -12,11 +13,12 @@
         </x-slot:subtitle>
     </x-header>
 
-    <div class="mb-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm" data-testid="review-context">
-        @if ($term)
+    @if ($current === null || $departments->count() > 1)
+    <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm" data-testid="review-context">
+        @if ($term && $current === null)
             <p><span class="text-neutral">Periodo</span> <span class="font-semibold">{{ $term->name }}</span> <span class="font-mono">{{ $term->code }}</span></p>
         @endif
-        @if ($campus)
+        @if ($campus && $current === null)
             <p class="font-semibold">{{ $campus->name }}</p>
         @endif
         @if ($departments->count() > 1)
@@ -33,6 +35,7 @@
             <p><span class="text-neutral">Depto.</span> <span class="font-semibold">{{ $department->name }}</span></p>
         @endif
     </div>
+    @endif
 
     @foreach (['status', 'record'] as $key)
         @error($key)
@@ -51,19 +54,32 @@
                     @default Este periodo no tiene revisiones de catálogo en este campus. @break
                 @endswitch
             </p>
-            <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">
-                @switch ($empty)
-                    @case ('department') Como Subdirección o administración abres cualquier departamento, solo para leer. @break
-                    @case ('term') Las revisiones nacen al abrir un periodo en el campus; mientras no haya uno actual no hay nada que validar. @break
-                    @case ('campus') Las revisiones de salones son de cada campus; cambia de campus en la credencial de la banda. @break
-                    @default Se crean al abrir el periodo en el campus (Periodos); si ya está abierto, el departamento aún no tiene revisiones. @break
-                @endswitch
-            </p>
         </div>
-    @elseif ($current === null)
-        @include('catalog-validation::review.board')
     @else
-        @include('catalog-validation::review.list')
+        <div role="tablist" aria-label="Catálogos" class="tabs tabs-border mb-4 flex-nowrap overflow-x-auto" data-testid="review-tabs">
+            <a role="tab" href="{{ route('catalog-validation.review', ['department' => $department->id]) }}" wire:click.prevent="$set('catalog', '')" aria-selected="{{ $current === null ? 'true' : 'false' }}" data-testid="tab-board" @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $current === null])>
+                <x-icon name="o-squares-2x2" class="h-4 w-4" aria-hidden="true" />Tablero
+            </a>
+            @foreach ($tabs as $tab)
+                @php($tabCatalog = $tab['catalog'])
+                @php([$tabIcon, $tabTone] = match ($tab['status']) {
+                    \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated => ['o-check-circle', 'text-success'],
+                    \App\Modules\CatalogValidation\Enums\ReviewStatus::InReview => ['o-clock', 'text-info'],
+                    default => ['o-minus-circle', 'text-warning'],
+                })
+                <a wire:key="tab-{{ $tabCatalog->value }}" role="tab" href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $tabCatalog->value]) }}" wire:click.prevent="$set('catalog', '{{ $tabCatalog->value }}')" aria-selected="{{ $current !== null && $current['review']->catalog === $tabCatalog ? 'true' : 'false' }}" data-testid="tab-{{ $tabCatalog->value }}" @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $current !== null && $current['review']->catalog === $tabCatalog])>
+                    {{ $tabCatalog->label() }}
+                    <x-icon :name="$tabIcon" :class="'h-4 w-4 '.$tabTone" aria-hidden="true" />
+                    <span class="sr-only">{{ $tab['status']->label() }}</span>
+                </a>
+            @endforeach
+        </div>
+
+        @if ($current === null)
+            @include('catalog-validation::review.board')
+        @else
+            @include('catalog-validation::review.list')
+        @endif
     @endif
 
     <x-modal wire:model="showConfirm" :title="$confirming && $confirmAction === 'reopen' ? 'Reabrir la revisión' : 'Validar la revisión'" box-class="max-w-lg" separator>
