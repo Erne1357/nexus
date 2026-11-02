@@ -2,7 +2,7 @@
 
 > Archivo de estado. Se actualiza en cada PR que cierre o abra tareas de una fase. Contexto en [PROJECT.md](PROJECT.md); reglas de trabajo en [CLAUDE.md](CLAUDE.md).
 
-**Última actualización:** 2026-11-01 · **Fase activa:** 1 y 2 (A arrancó la 2 el 1 de noviembre; B y C arrancan el 3 de noviembre) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
+**Última actualización:** 2026-11-02 · **Fase activa:** 1 y 2 (A terminó su parte de la 2 el 2 de noviembre: 2.1 a 2.3; B y C arrancan el 3 de noviembre) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
 
 ## Estados
 
@@ -53,7 +53,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
 | Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120) |
 | CatalogValidation | 2 | 🟨 (base y revisiones al abrir el periodo #179) |
-| AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179) |
+| AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179; máquina de estados con HC-14 #180; faltan propuestas y bandeja, 2.7 y 2.8) |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
 | Staffing | 3 | ⬜ |
 | Demand | 5 | ⬜ |
