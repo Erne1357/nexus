@@ -19,7 +19,7 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 | HC-11 | Un salón no puede usarse en bloques con `room_blocks` vigentes. | Scheduling | R1 |
 | HC-12 | Las horas semanales de sesiones de un grupo deben ser iguales a `theory_hours + practice_hours` de la materia (tolerancia configurable por campus para modalidades mixtas). | Scheduling | R1 |
 | HC-13 | Solo se pueden crear grupos de materias activas de planes activos, en carreras ofrecidas en el campus. | AcademicLoad | R1 |
-| HC-14 | La carga de un departamento no sale de `draft` hasta que sus `catalog_reviews` del periodo y campus estén `validated`. | CatalogValidation, AcademicLoad | R1 |
+| HC-14 | La carga de un departamento en un campus no sale de `draft` hasta que estén `validated` sus revisiones generales del periodo (docentes, materias, planes y carreras, una vez para todo el Tec) y, si el campus usa salones, la de sus salones en ese campus (confirmado el 1 de noviembre de 2026). Una revisión que no existe cuenta como no validada. | CatalogValidation, AcademicLoad | R1 |
 | HC-15 | Para cerrar (`closed`): cero choques duros, todos los grupos `confirmed` con docente y, si el campus usa salones, con salón en todas sus sesiones. Un grupo sin docente o salón solo pasa si se marca `cancelled` o con justificación registrada. | AcademicLoad | R1 |
 | HC-16 | Asignar un docente que no ocupa el primer lugar del ranking del grupo exige un motivo escrito; se guarda con la posición que tenía. | Staffing | R1 |
 | HC-17 | Toda la oferta (grupos) de un departamento es visible para todos los docentes activos del departamento desde que la carga entra a `staffing`. No existe forma de ocultar un grupo. | Staffing | R1 |
@@ -93,11 +93,24 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 - Una vez elegida la especialidad, la retícula ya no muestra las materias de las otras.
 - La ficha calcula el avance al leerla, desde el kardex del alumno, para no esperar al siguiente recálculo de `student_progress`.
 
+## Periodo y calendario
+
+- Un periodo se identifica con el código del SII (`20271`) y tiene nombre y fechas de inicio y fin; la fecha de fin no es anterior a la de inicio. El nombre se sugiere del código (`1` Ene-Jun, `2` Verano, `3` Ago-Dic, más el año) y se puede cambiar (supuesto por confirmar).
+- Un periodo no se borra: se corrige editándolo. Nombre y fechas se cambian siempre (supuesto por confirmar).
+- Hay un solo periodo actual: el que se planea y el que la credencial elige por omisión. Marcar uno como actual le quita la marca al anterior. Es una acción aparte de abrirlo, y cualquier periodo puede marcarse, también uno anterior para corregir un error (supuesto por confirmar).
+- Calendario: cada etapa del proceso (validación de catálogos, propuesta por carrera, horarios y cupos, asignación docente, salones y acuerdos, cierre y aprobación, publicación y re-análisis) tiene una ventana general para todos los campus y, si hace falta, una propia de un campus, que reemplaza a la general en ese campus (supuesto por confirmar). Las ventanas no se limitan a las fechas del periodo, porque la planeación ocurre antes de que empiece.
+- El calendario solo informa: muestra la etapa en curso, los días que le quedan, las próximas y las terminadas, pero nada se rechaza por fecha, y abrir un periodo no exige tenerlo (confirmado el 1 de noviembre de 2026).
+- Un periodo se abre por campus: se abre en cada campus que va a capturar su carga (en R1, solo Campus II) y se puede abrir después en otro (confirmado el 1 de noviembre de 2026). Solo se abre en un campus activo. Abrir no cambia cuál es el periodo actual, y se puede abrir cualquier periodo, también uno que ya terminó (supuestos por confirmar).
+- Abrir un periodo no cierra el anterior: sus cargas siguen en el estado en que estaban y se siguen trabajando eligiéndolo en la credencial, porque hay procesos atados al periodo y no a sus fechas, como la carga del siguiente semestre o el cierre de residencias. Varios periodos pueden estar abiertos a la vez (confirmado el 1 de noviembre de 2026).
+- Al abrir un periodo en un campus se crean una carga académica en borrador por cada departamento activo, las revisiones de catálogo generales de cada departamento activo si el periodo todavía no las tenía, y la de salones de cada departamento activo en ese campus si su perfil usa salones (supuesto por confirmar). Docentes, materias, planes y carreras se validan una vez por periodo y departamento, para todo el Tec; los salones, por departamento en cada campus (confirmado el 1 de noviembre de 2026). Volver a abrir un campus ya abierto solo crea lo que falte, como lo de un departamento nuevo; si el campus empieza a usar salones, se crean solas las revisiones de salones que falten en los periodos abiertos en él (supuestos por confirmar).
+- El código de un periodo ya no se cambia una vez abierto en algún campus (supuesto por confirmar).
+- El aviso a los jefes de que tienen catálogos por validar llega con la campana de notificaciones (tarea 2.9).
+
 ## Aprobaciones y permisos
 
 | Acción | Quién | Condición |
 |---|---|---|
-| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin` |
+| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin`. Dar de alta y editar periodos, marcar el actual y armar su calendario es de los dos, en todo el Tec (supuesto por confirmar) |
 | Administrar edificios y salones | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo |
 | Importar catálogos | `admin` | |
 | Administrar catálogos de Academic (departamentos, carreras, materias, planes y su retícula) | `admin` | En la fase 2 se abren a los jefes para validar (confirmado el 29 de octubre de 2026) |
@@ -172,6 +185,7 @@ Seriación del plan: en el panel de una materia de la retícula se le agrega un 
 ## Reglas de datos
 
 - Claves naturales únicas: `subjects.code`, `careers.code`, `study_plans.code`, `teachers.employee_number`, `students.control_number`, `rooms.code` por campus, `groups.code` por periodo y campus. El kardex, por alumno, materia y periodo. También `departments.code`, una carrera por campus en `career_campus`, `specialties.code` dentro de su plan, una materia por plan en `study_plan_subjects` y una seriación por plan, materia y requisito en `subject_prerequisites` (confirmado el 29 de octubre de 2026).
+- Un departamento que tiene cargas académicas, aunque estén en borrador, no se borra; se desactiva (supuesto por confirmar).
 - En Academic nada se borra físicamente: departamentos, jefes, carreras, carrera-campus, planes, materias, especialidades, retícula y seriación llevan borrado lógico (confirmado el 29 de octubre de 2026).
 - Un departamento tiene un solo jefe vigente para todo el Tec, sin campus (confirmado el 30 de octubre de 2026). De jefe de proyecto docente puede haber varios a la vez, y la misma persona no repite el cargo con fechas que se traslapan (confirmado el 29 de octubre de 2026). Cada jefe de proyecto docente lo es de un departamento en un campus (supuesto por confirmar).
 - Plazas y adscripciones de Faculty: un docente puede tener varias plazas vigentes a la vez, y estar adscrito a varios departamentos, con una principal (confirmado el 30 de octubre de 2026). La adscripción es solo a un departamento, sin campus, porque un docente da clase en cualquier campus o modalidad (confirmado el 30 de octubre de 2026). Las plazas, y con ellas las horas base, son del docente y no de un departamento (confirmado el 30 de octubre de 2026). Soft deletes y claves naturales únicas también contra borrados: `teachers.employee_number`, una adscripción por docente y departamento.

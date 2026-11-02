@@ -13,7 +13,7 @@ use Illuminate\Queue\SerializesModels;
  *
  * Es la forma en que Core avisa a quien dependa del campus sin conocerlo: la caché del perfil de
  * flujo (docs/arquitectura/arquitectura.md, "Caché") y los módulos de la derecha del mapa que
- * revaliden con el perfil nuevo. Todavía no lo escucha nadie.
+ * revaliden con el perfil nuevo. Lo escucha CatalogValidation (salones).
  */
 final class CampusUpdated implements ShouldDispatchAfterCommit
 {

@@ -9,6 +9,12 @@
             class="alert-info"
         />
     @else
+        @if ($calendar !== null)
+            <div class="mb-6">
+                @include('core::terms.mini-timeline', ['timeline' => $calendar['timeline'], 'caption' => $calendar['caption']])
+            </div>
+        @endif
+
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             @foreach ($blocks as $block)
                 <x-card :title="$block['title']" shadow>

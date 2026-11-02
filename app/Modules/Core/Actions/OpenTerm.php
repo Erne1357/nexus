@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Abre un periodo en un campus (D1, confirmado el 1 de noviembre de 2026), o completa una apertura ya
  * hecha. Core no conoce cargas ni revisiones: guarda la apertura y despacha TermOpened, y los módulos de
- * la derecha crean lo suyo para el periodo y el campus (S-A6, supuesto por confirmar). Devuelve las
+ * la derecha crean lo suyo para el periodo y el campus (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por confirmar). Devuelve las
  * líneas que reportaron, vacías si no faltaba nada.
  *
  * El campus debe estar activo y sin borrar (se relee en la transacción, con bloqueo compartido, para que
@@ -22,7 +22,7 @@ use Illuminate\Validation\ValidationException;
  * transacción bloquea el periodo, crea la apertura la primera vez (quién, el usuario autenticado, y
  * cuándo; volver a abrir no los cambia), despacha TermOpened dentro (sus listeners corren en la misma
  * transacción: si uno falla, no queda nada) y deja una entrada en la bitácora del periodo con el campus y
- * el reporte. Nunca cambia `is_current` (S-A4) ni cierra nada de otro periodo (D3). Quién puede abrir lo
+ * el reporte. Nunca cambia `is_current` (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario) ni cierra nada de otro periodo (D3). Quién puede abrir lo
  * decide TermPolicy antes de llamarla.
  */
 final class OpenTerm

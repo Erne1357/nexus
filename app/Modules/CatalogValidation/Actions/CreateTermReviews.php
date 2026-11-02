@@ -2,14 +2,14 @@
 
 namespace App\Modules\CatalogValidation\Actions;
 
-use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 
 /**
- * Crea las revisiones de catálogo que falten al abrir un periodo en un campus (supuesto por
+ * Crea las revisiones de catálogo que falten al abrir un periodo en un campus (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por
  * confirmar): por cada departamento activo y sin borrar, las cuatro generales del periodo, sin campus, y la
  * de salones de ese campus si su perfil usa salones (D2, confirmado el 1 de noviembre de 2026). Nacen
  * pendientes. Devuelve cuántas creó: 0 si no faltaba ninguna.
@@ -21,6 +21,8 @@ use App\Modules\Core\Models\Term;
  */
 final class CreateTermReviews
 {
+    public function __construct(private readonly DepartmentQuery $departments) {}
+
     public function handle(Term $term, Campus $campus): int
     {
         $catalogs = Catalog::general();
@@ -32,7 +34,7 @@ final class CreateTermReviews
         $now = now();
         $rows = [];
 
-        foreach (Department::query()->where('is_active', true)->orderBy('code')->pluck('id') as $departmentId) {
+        foreach ($this->departments->activeIds() as $departmentId) {
             foreach ($catalogs as $catalog) {
                 $rows[] = [
                     'term_id' => $term->getKey(),
