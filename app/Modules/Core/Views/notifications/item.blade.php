@@ -1,6 +1,6 @@
 {{--
     Un renglón de notificación, el mismo en la tarjeta de la campana y en «Todas las notificaciones»: icono con su
-    tono, título (en negrita mientras no se lee), detalle, hace cuánto y el punto de «sin leer». Abrirlo es
+    tono, título (en negrita mientras no se lee), detalle, hace cuánto, la clave del campus al frente si el usuario trabaja en varios (`$showCampus`) y el punto de «sin leer». Abrirlo es
     `open(id)` del componente que lo incluye. Tamaños de la rampa de DESIGN.md: 14 px.
 --}}
 <button
@@ -25,7 +25,12 @@
         @unless ($item['read'])
             <span class="sr-only">Sin leer.</span>
         @endunless
-        <span @class(['block leading-[1.3] [overflow-wrap:anywhere]', 'font-bold' => ! $item['read'], 'font-medium' => $item['read']])>{{ $item['title'] }}</span>
+        <span @class(['block leading-[1.3] [overflow-wrap:anywhere]', 'font-bold' => ! $item['read'], 'font-medium' => $item['read']])>
+            @if (($showCampus ?? false) && $item['campus'] !== null)
+                <span data-testid="notification-campus" class="me-1.5 font-mono text-sm font-semibold text-neutral">{{ $item['campus'] }}</span>
+            @endif
+            {{ $item['title'] }}
+        </span>
         <span class="mt-0.5 block text-neutral [overflow-wrap:anywhere]">{{ $item['body'] }}</span>
         <span class="mt-1 block text-neutral">{{ $item['at']->locale('es')->diffForHumans() }}</span>
     </span>

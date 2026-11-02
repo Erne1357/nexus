@@ -13,25 +13,25 @@
     <div
         aria-hidden="true"
         x-on:click="closeMenu()"
-        class="pointer-events-none fixed inset-x-0 top-(--shell-top) bottom-0 z-[3] bg-band/35 opacity-0 transition-opacity duration-[350ms] ease-settle motion-reduce:transition-none in-data-[menu=open]:pointer-events-auto in-data-[menu=open]:opacity-100"
+        class="pointer-events-none fixed inset-x-0 top-(--shell-top) bottom-0 z-[22] bg-band/35 opacity-0 transition-opacity duration-[350ms] ease-settle motion-reduce:transition-none in-data-[menu=open]:pointer-events-auto in-data-[menu=open]:opacity-100"
     ></div>
 
     {{-- Fondo del panel: se despliega y se recoge como cortina. --}}
     <div
         aria-hidden="true"
-        class="fixed top-(--shell-top) bottom-0 left-0 z-[4] w-(--panel-w) border-e border-base-300 bg-base-100 max-md:border-e-0 [clip-path:var(--panel-clip)] transition-[clip-path] duration-[420ms] ease-settle motion-reduce:transition-none in-data-[menu=open]:[clip-path:inset(0)] in-data-[menu=open]:duration-[550ms] in-data-[menu=open]:ease-open"
+        class="fixed top-(--shell-top) bottom-0 left-0 z-[23] w-(--panel-w) border-e border-base-300 bg-base-100 max-md:border-e-0 [clip-path:var(--panel-clip)] transition-[clip-path] duration-[420ms] ease-settle motion-reduce:transition-none in-data-[menu=open]:[clip-path:inset(0)] in-data-[menu=open]:duration-[550ms] in-data-[menu=open]:ease-open"
     ></div>
 
     {{-- Fondo de la franja de iconos de área. --}}
     <div
         aria-hidden="true"
-        class="fixed top-(--shell-top) bottom-0 left-0 z-[4] w-16 bg-secondary transition-opacity delay-[120ms] duration-[250ms] motion-reduce:transition-none max-md:hidden in-data-[menu=open]:opacity-0 in-data-[menu=open]:delay-0 in-data-[menu=open]:duration-200"
+        class="fixed top-(--shell-top) bottom-0 left-0 z-[23] w-16 bg-secondary transition-opacity delay-[120ms] duration-[250ms] motion-reduce:transition-none max-md:hidden in-data-[menu=open]:opacity-0 in-data-[menu=open]:delay-0 in-data-[menu=open]:duration-200"
     ></div>
 
     <nav
         id="nexus-menu"
         aria-label="Navegación principal"
-        class="fixed top-(--shell-top) left-0 z-[5] w-(--menu-w) [display:var(--menu-display)] auto-rows-[40px] grid-cols-(--menu-cols) content-start py-3.5 [--current-icon:var(--color-base-100)] [--menu-cols-open:repeat(5,minmax(0,1fr))] [--menu-cols:64px_224px] [--menu-display:grid] max-desktop:[--menu-cols-open:repeat(3,minmax(0,1fr))] max-desktop:[--menu-cols:64px] max-md:[--menu-display:none] in-data-[menu=open]:bottom-0 in-data-[menu=open]:grid in-data-[menu=open]:w-(--panel-w) in-data-[menu=open]:overflow-y-auto in-data-[menu=open]:overscroll-contain in-data-[menu=open]:auto-rows-[38px] in-data-[menu=open]:grid-cols-(--menu-cols-open) in-data-[menu=open]:gap-x-[18px] in-data-[menu=open]:px-5 in-data-[menu=open]:py-[18px] in-data-[menu=open]:[--current-icon:var(--color-secondary)] max-md:bottom-0 max-md:auto-rows-auto max-md:grid-cols-[40px_minmax(0,1fr)] max-md:gap-x-2 max-md:gap-y-0.5 max-md:px-3.5 max-md:pt-3.5 max-md:pb-8"
+        class="fixed top-(--shell-top) left-0 z-[24] w-(--menu-w) [display:var(--menu-display)] auto-rows-[40px] grid-cols-(--menu-cols) content-start py-3.5 [--current-icon:var(--color-base-100)] [--menu-cols-open:repeat(5,minmax(0,1fr))] [--menu-cols:64px_224px] [--menu-display:grid] max-desktop:[--menu-cols-open:repeat(3,minmax(0,1fr))] max-desktop:[--menu-cols:64px] max-md:[--menu-display:none] in-data-[menu=open]:bottom-0 in-data-[menu=open]:grid in-data-[menu=open]:w-(--panel-w) in-data-[menu=open]:overflow-y-auto in-data-[menu=open]:overscroll-contain in-data-[menu=open]:auto-rows-[38px] in-data-[menu=open]:grid-cols-(--menu-cols-open) in-data-[menu=open]:gap-x-[18px] in-data-[menu=open]:px-5 in-data-[menu=open]:py-[18px] in-data-[menu=open]:[--current-icon:var(--color-secondary)] max-md:bottom-0 max-md:auto-rows-auto max-md:grid-cols-[40px_minmax(0,1fr)] max-md:gap-x-2 max-md:gap-y-0.5 max-md:px-3.5 max-md:pt-3.5 max-md:pb-8"
     >
         <label
             data-menu-flip="search"

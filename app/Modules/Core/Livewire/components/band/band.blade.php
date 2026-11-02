@@ -5,7 +5,7 @@
     (core::components.bell), en diferido: la pantalla se pinta sin sus consultas y la campana llega después. Sin prefijo es escritorio; max-desktop: es tableta (sin el área en la ruta y
     la credencial con avatar y nombre) y max-md: es el celular (liebre, «Nexus», lupa, campana y avatar).
 --}}
-<div class="sticky top-0 z-[7] text-sm/[1.45]">
+<div class="sticky top-0 z-30 text-sm/[1.45]">
     <header class="flex h-16 items-center gap-[18px] max-desktop:gap-3.5 bg-band pe-5 text-band-content max-md:h-14 max-md:gap-3 max-md:pe-2.5">
         <button
             type="button"

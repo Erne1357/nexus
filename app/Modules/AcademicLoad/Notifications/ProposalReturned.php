@@ -21,6 +21,16 @@ use Illuminate\Support\Str;
  */
 final class ProposalReturned extends NexusNotification
 {
+    public static function typeKey(): string
+    {
+        return 'proposal-returned';
+    }
+
+    public static function typeLabel(): string
+    {
+        return 'Propuesta regresada';
+    }
+
     public function __construct(
         private readonly CareerProposal $proposal,
         private readonly Department $department,

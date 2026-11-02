@@ -9,8 +9,17 @@ use App\Modules\Core\Models\User;
  */
 final class MarkAllNotificationsRead
 {
-    public function handle(User $user): int
+    /**
+     * @param  list<string>  $classes  Solo estos tipos de aviso; vacío, todos.
+     */
+    public function handle(User $user, array $classes = []): int
     {
-        return $user->unreadNotifications()->update(['read_at' => now()]);
+        $query = $user->unreadNotifications();
+
+        if ($classes !== []) {
+            $query->whereIn('type', $classes);
+        }
+
+        return $query->update(['read_at' => now()]);
     }
 }

@@ -200,6 +200,18 @@ Fondo `#0a1826`, superficies `#0f2133`, banda `#071a2b`, selección `#26384a`, f
 
 La captura pesada (editor de horarios, asignación) se diseña para escritorio, pero ninguna pantalla se rompe en celular. Se revisa sin desbordes a 390, 768, 1024, 1440, 1920 y 2560 px. El corte de 1200 px es el breakpoint `desktop` de `resources/css/app.css`; el de 768 px es `md` de Tailwind.
 
+### Capas
+De abajo hacia arriba. Cada capa gana a las de abajo sin importar cuánto se desplace la pantalla; ninguna pantalla inventa un `z-index` fuera de su rango.
+
+| Capa | `z-index` | Qué |
+|---|---|---|
+| Contenido | 0–20 | Lo fijo del contenido (`sticky`): encabezado del detalle de la bandeja (`z-20`), encabezado de columnas y barra de totales de la tabla, columna fija de la matriz, barras de selección. Máximo `z-20`. |
+| Menú y velo | 22–24 | El velo (`z-[22]`), el panel y la franja de iconos (`z-[23]`) y las entradas (`z-[24]`). Arrancan bajo la banda (`top: var(--shell-top)`). |
+| Banda y sus tarjetas | 30 | La banda (`sticky top-0 z-30`) es un contexto de apilado propio: la campana y la credencial flotan dentro de él, así que nada del contenido ni el menú las tapa. |
+| Drawers y modales | 50 | `x-drawer` y modales de MaryUI, con su velo: cubren también la banda mientras están abiertos. |
+
+Un contenido nuevo que se quede fijo usa `z-10` (`z-20` si debe pasar sobre otro fijo); nunca sube de 20. `row-menu` sale a la capa superior del navegador con `popover` y no entra en esta tabla.
+
 ### Anatomía de una pantalla de catálogo
 La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php), que copian todos los catálogos:
 1. **Encabezado** (`x-header`): el título y una línea que explica la pantalla. Nada más: la barra de herramientas no va en su slot `actions`, porque según el ancho subiría junto al título o caería debajo.

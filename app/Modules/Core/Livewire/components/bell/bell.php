@@ -40,13 +40,15 @@ new class extends Component
     public function with(ScopedContext $context, NotificationQuery $notifications): array
     {
         $user = $context->user();
+        $showCampus = $context->campuses()->count() > 1;
         ['total' => $total, 'unread' => $unread] = $user === null ? ['total' => 0, 'unread' => 0] : $notifications->counts($user);
 
         return [
             'unread' => $unread,
             'badge' => $unread > 99 ? '99+' : (string) $unread,
             'total' => $total,
-            'items' => $user === null ? collect() : $notifications->recent($user),
+            'showCampus' => $showCampus,
+            'items' => $user === null ? collect() : $notifications->recent($user, withCampus: $showCampus),
             'label' => match (true) {
                 $unread === 0 => 'Notificaciones: sin notificaciones nuevas',
                 $unread === 1 => 'Notificaciones: 1 sin leer',
