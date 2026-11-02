@@ -94,7 +94,9 @@
             @endscope
 
             @scope('cell_availability', $record, $readiness)
-                @if ($readiness[$record->id]['has_availability'] ?? false)
+                @if (! $record->is_active)
+                    <span class="text-neutral" aria-label="Sin dato: docente inactivo">—</span>
+                @elseif ($readiness[$record->id]['has_availability'] ?? false)
                     <x-core::status-badge tone="success" label="Capturada" />
                 @else
                     <x-core::status-badge tone="warning" label="Falta" />
@@ -102,7 +104,8 @@
             @endscope
 
             @scope('cell_profile', $record, $readiness)
-                <span @class(['block text-end font-mono tabular-nums', 'text-warning' => ($readiness[$record->id]['subjects'] ?? 0) === 0])>{{ $readiness[$record->id]['subjects'] ?? 0 }}</span>
+                @php($subjects = $readiness[$record->id]['subjects'] ?? 0)
+                <span @class(['block text-end font-mono tabular-nums', 'text-warning' => $subjects === 0 && $record->is_active])>{{ $subjects === 0 && ! $record->is_active ? '—' : $subjects }}</span>
             @endscope
 
             @scope('cell_external', $record, $readiness)
@@ -149,7 +152,11 @@
                                 @break
                             @case (\App\Modules\CatalogValidation\Enums\Catalog::Teachers)
                                 @php($ready = $readiness[$record->id] ?? null)
-                                <x-core::status-badge :tone="($ready['has_availability'] ?? false) ? 'success' : 'warning'" :label="($ready['has_availability'] ?? false) ? 'Disponibilidad capturada' : 'Sin disponibilidad'" />
+                                @if ($record->is_active)
+                                    <x-core::status-badge :tone="($ready['has_availability'] ?? false) ? 'success' : 'warning'" :label="($ready['has_availability'] ?? false) ? 'Disponibilidad capturada' : 'Sin disponibilidad'" />
+                                @else
+                                    <span>Docente inactivo</span>
+                                @endif
                                 · <span class="font-mono tabular-nums">{{ $ready['subjects'] ?? 0 }}</span> materias en perfil · <span class="font-mono tabular-nums">{{ $ready['external_hours'] ?? 0 }}</span> h fuera
                                 @break
                             @case (\App\Modules\CatalogValidation\Enums\Catalog::StudyPlans)

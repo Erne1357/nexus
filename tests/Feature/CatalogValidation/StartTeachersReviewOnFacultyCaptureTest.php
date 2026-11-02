@@ -10,12 +10,15 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Actions\AddExternalLoad;
+use App\Modules\Faculty\Actions\RemoveAdscription;
 use App\Modules\Faculty\Actions\SetQualification;
 use App\Modules\Faculty\Actions\SetTeacherAvailability;
 use App\Modules\Faculty\Enums\AvailabilityKind;
 use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Events\AdscriptionChanged;
+use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
 use App\Modules\Faculty\Models\Teacher;
@@ -43,7 +46,7 @@ beforeEach(function () {
 
 function teachersReviewStatus(Department $department): ReviewStatus
 {
-    return CatalogReview::query()->where('department_id', $department->id)->where('catalog', Catalog::Teachers)->sole()->status;
+    return CatalogReview::query()->where('term_id', test()->term->id)->where('department_id', $department->id)->where('catalog', Catalog::Teachers)->sole()->status;
 }
 
 function captureQualification(User $actor): void
@@ -75,9 +78,9 @@ it('los cambios de ficha, adscripción y plaza del jefe la inician', function (s
     $this->actingAs($this->jefe);
 
     match ($change) {
-        'ficha' => TeacherUpdated::dispatch($this->teacher, ['name']),
-        'adscripción' => AdscriptionChanged::dispatch($this->teacher->adscriptions()->first()),
-        'plaza' => PositionChanged::dispatch(TeacherPosition::factory()->for($this->teacher)->tiempoCompleto()->create()),
+        'ficha' => TeacherUpdated::dispatch($this->teacher, ['name'], $this->jefe),
+        'adscripción' => AdscriptionChanged::dispatch($this->teacher->adscriptions()->first(), $this->jefe),
+        'plaza' => PositionChanged::dispatch(TeacherPosition::factory()->for($this->teacher)->tiempoCompleto()->create(), $this->jefe),
     };
 
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
@@ -116,8 +119,46 @@ it('la revisión de un periodo que no es el actual no cambia', function () {
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::Pending);
 });
 
-it('sin sesión no hace nada', function () {
+it('sin sesión usa el actor del evento, como en un job', function () {
     app(SetQualification::class)->handle($this->teacher, $this->subject, QualificationLevel::Apto, $this->jefe);
 
+    expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
+});
+
+it('sin sesión y sin actor no hace nada', function () {
+    app(AddExternalLoad::class)->handle($this->teacher, $this->term, ['source' => 'Otra escuela', 'hours' => 5]);
+
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::Pending);
+});
+
+it('con otro periodo activo en la sesión, inicia la revisión de ese periodo y no la del actual', function () {
+    $active = Term::factory()->create();
+    app(CreateTermReviews::class)->handle($active, $this->campus);
+    $this->withSession([ScopedContext::ACTIVE_TERM => $active->id]);
+
+    captureQualification($this->jefe);
+
+    $status = fn (Term $term): ReviewStatus => CatalogReview::query()->where('term_id', $term->id)->where('department_id', $this->sis->id)->where('catalog', Catalog::Teachers)->sole()->status;
+    expect($status($active))->toBe(ReviewStatus::InReview)
+        ->and($status($this->term))->toBe(ReviewStatus::Pending);
+});
+
+it('la disponibilidad y las horas fuera traen su periodo y ese usa', function () {
+    $other = Term::factory()->create();
+    app(CreateTermReviews::class)->handle($other, $this->campus);
+    $this->actingAs($this->jefe);
+
+    AvailabilityChanged::dispatch($this->teacher, $other, $this->jefe);
+
+    expect(CatalogReview::query()->where('term_id', $other->id)->where('catalog', Catalog::Teachers)->where('department_id', $this->sis->id)->sole()->status)->toBe(ReviewStatus::InReview)
+        ->and(teachersReviewStatus($this->sis))->toBe(ReviewStatus::Pending);
+});
+
+it('Quitar de mi departamento también inicia la revisión, aunque el docente ya no sea del departamento', function () {
+    TeacherDepartment::factory()->for($this->teacher)->for($this->ele)->create(['is_primary' => false]);
+    $this->actingAs($this->jefe);
+
+    app(RemoveAdscription::class)->handle(TeacherDepartment::query()->where('teacher_id', $this->teacher->id)->where('department_id', $this->sis->id)->sole());
+
+    expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
 });

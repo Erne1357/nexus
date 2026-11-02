@@ -7,7 +7,6 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
@@ -15,14 +14,21 @@ use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
-use App\Modules\Faculty\Models\Teacher;
+use Illuminate\Support\Collection;
 
 /**
  * La primera captura del jefe de departamento sobre un docente de su departamento (perfil, disponibilidad, horas
- * fuera del ITCJ, ficha, adscripción o plaza) pasa la revisión de docentes del periodo actual de pendiente a en
- * revisión (StartReview), como su primera corrección (CV-S4, extensión por confirmar). Quien actúa es el usuario de
- * la sesión: los eventos de Faculty no lo traen. El admin, Subdirección y el jefe de proyecto docente no la mueven,
- * ni una revisión ya en revisión o validada. Sale después del commit de la Action de Faculty.
+ * fuera del ITCJ, ficha, adscripción o plaza) pasa la revisión de docentes de pendiente a en revisión
+ * (StartReview), como su primera corrección (CV-S4, extensión por confirmar).
+ *
+ * Quien actúa es el `actor` del evento (null si no hubo sesión: no hace nada), así que sirve también desde un job.
+ * El periodo es el del evento si lo trae (disponibilidad, horas fuera); si no, el activo del actor, el mismo que
+ * usan la validación y el editor de disponibilidad, que sin elección es el actual. El departamento es cualquiera
+ * de los del docente que el actor cubre como jefe, incluido el de la adscripción que se acaba de quitar. El admin,
+ * Subdirección y el jefe de proyecto docente no la mueven, ni una revisión ya en revisión o validada.
+ *
+ * Limitación: Nexus no tiene un rol activo que el usuario elija, solo campus y periodo; basta con que el actor sea
+ * jefe del departamento aunque tenga otros roles. Sale después del commit de la Action de Faculty.
  */
 final class StartTeachersReviewOnFacultyCapture
 {
@@ -33,22 +39,28 @@ final class StartTeachersReviewOnFacultyCapture
 
     public function handle(AvailabilityChanged|QualificationChanged|ExternalLoadChanged|TeacherUpdated|AdscriptionChanged|PositionChanged $event): void
     {
-        $actor = $this->context->user();
+        $actor = $event->actor;
 
-        if ($actor === null || $this->context->isAdmin() || ! $this->context->has(Role::JefeDepartamento)) {
+        if ($actor === null) {
             return;
         }
 
-        $teacher = $this->teacherOf($event);
-        $departments = $teacher->adscriptions()->pluck('department_id')
-            ->filter(fn (string $department): bool => $this->context->coversDepartment(Role::JefeDepartamento, $department));
+        $context = $this->context->forUser($actor);
 
-        if ($departments->isEmpty()) {
+        if ($context->user() === null || $context->isAdmin() || ! $context->has(Role::JefeDepartamento)) {
+            return;
+        }
+
+        $departments = $this->departmentsOf($event)
+            ->filter(fn (string $department): bool => $context->coversDepartment(Role::JefeDepartamento, $department));
+        $term = $this->termOf($event) ?? $context->activeTerm()?->getKey();
+
+        if ($departments->isEmpty() || $term === null) {
             return;
         }
 
         CatalogReview::query()
-            ->whereIn('term_id', Term::query()->current()->select('id'))
+            ->where('term_id', $term)
             ->whereIn('department_id', $departments)
             ->where('catalog', Catalog::Teachers)
             ->where('status', ReviewStatus::Pending)
@@ -56,14 +68,33 @@ final class StartTeachersReviewOnFacultyCapture
             ->each(fn (CatalogReview $review) => $this->startReview->handle($review, $actor));
     }
 
-    private function teacherOf(object $event): Teacher
+    /**
+     * Los departamentos del docente, más el de la adscripción del evento (que llega borrada al quitarla).
+     *
+     * @return Collection<int, string>
+     */
+    private function departmentsOf(object $event): Collection
     {
-        return match (true) {
+        $teacher = match (true) {
             $event instanceof AvailabilityChanged, $event instanceof TeacherUpdated => $event->teacher,
             $event instanceof QualificationChanged => $event->qualification->teacher,
             $event instanceof ExternalLoadChanged => $event->load->teacher,
             $event instanceof AdscriptionChanged => $event->adscription->teacher,
             $event instanceof PositionChanged => $event->position->teacher,
+        };
+
+        return $teacher->adscriptions()->pluck('department_id')
+            ->when($event instanceof AdscriptionChanged, fn (Collection $departments) => $departments->push($event->adscription->department_id))
+            ->unique()
+            ->values();
+    }
+
+    private function termOf(object $event): ?string
+    {
+        return match (true) {
+            $event instanceof AvailabilityChanged => $event->term->getKey(),
+            $event instanceof ExternalLoadChanged => $event->load->term_id,
+            default => null,
         };
     }
 }
