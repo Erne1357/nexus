@@ -1,6 +1,6 @@
 {{--
     La confirmación de aceptar una parte (academic-load::pages.inbox), dentro de x-modal: los totales de lo que se
-    acepta. Confirmar llama a `accept`.
+    acepta y, destacado, que lo aceptado ya no cambia. Confirmar llama a `accept`.
 --}}
 <div class="space-y-4">
     <h2 id="accept-title" class="text-xl font-bold">Aceptar la parte de {{ $target['career']->code }}</h2>
@@ -12,9 +12,9 @@
             </div>
         @endforeach
     </dl>
-    <p class="text-sm text-neutral">Lo aceptado ya no cambia.</p>
+    <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft text-sm font-semibold" title="Lo aceptado ya no cambia." data-testid="accept-warning" />
     <div class="flex justify-end gap-2">
-        <x-button label="Cancelar" class="btn-ghost" wire:click="$set('showAccept', false)" />
-        <x-button label="Aceptar" icon="o-check" class="btn-primary" wire:click="accept" spinner="accept" data-testid="confirm-accept" />
+        <x-button label="Cancelar" class="btn-ghost max-md:h-11 max-md:min-h-11" wire:click="$set('showAccept', false)" />
+        <x-button label="Aceptar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11" wire:click="accept" spinner="accept" data-testid="confirm-accept" />
     </div>
 </div>

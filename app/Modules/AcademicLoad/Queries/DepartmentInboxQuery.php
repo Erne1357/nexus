@@ -70,8 +70,10 @@ final class DepartmentInboxQuery
         $careers = $this->careers($campus, $reviews->keys()->map(fn (string $id): string => $proposals->get($id)->career_id)->all());
         $proposalsByCareer = $proposals->keyBy('career_id');
 
+        $anomalies = ProposalAnomalies::fromSettings();
+
         $rows = $careers
-            ->map(function (Career $career) use ($proposalsByCareer, $reviews, $items): array {
+            ->map(function (Career $career) use ($proposalsByCareer, $reviews, $items, $anomalies): array {
                 $proposal = $proposalsByCareer->get($career->getKey());
                 $review = $proposal === null || $proposal->status === ProposalStatus::Draft ? null : $reviews->get($proposal->getKey());
                 $review?->setRelation('proposal', $proposal);
@@ -87,6 +89,7 @@ final class DepartmentInboxQuery
                     'groups' => (int) $requested->sum('requested_groups'),
                     'expected' => (int) $requested->sum('expected_students'),
                     'rows' => $requested->values()->all(),
+                    'anomalies' => $requested->filter(fn (ProposalItem $item): bool => $anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups) !== [])->count(),
                 ];
             })
             ->sortBy([
@@ -103,7 +106,7 @@ final class DepartmentInboxQuery
             pendingCatalogs: $this->catalogReviews->pendingFor($term, $campus, $department),
             careers: $rows->all(),
             subjects: $this->parallels($rows),
-            anomalies: ProposalAnomalies::fromSettings(),
+            anomalies: $anomalies,
         );
     }
 
@@ -128,6 +131,26 @@ final class DepartmentInboxQuery
             ->get()
             ->filter(fn (Department $department): bool => $context->covers(AcademicLoadPolicy::VIEWERS, $campus, department: $department->getKey()))
             ->values();
+    }
+
+    /**
+     * Las carreras con una parte del departamento que se puede decidir (ProposalReviewRules::isDecidable) en el
+     * periodo y campus, por clave de carrera, de `id => clave`; una sola consulta, sin armar la bandeja. Para
+     * saber a cuál pasar después de decidir una.
+     *
+     * @return array<string, string>
+     */
+    public function decidableCareers(string $termId, string $campusId, Department $department): array
+    {
+        return ProposalReview::query()
+            ->where('department_id', $department->getKey())
+            ->whereHas('proposal', fn ($proposal) => $proposal->where('term_id', $termId)->where('campus_id', $campusId))
+            ->with(['proposal.career' => fn ($career) => $career->withTrashed()])
+            ->get()
+            ->filter(fn (ProposalReview $review): bool => $this->reviewRules->isDecidable($review->proposal->status, $review->status))
+            ->mapWithKeys(fn (ProposalReview $review): array => [$review->proposal->career->getKey() => $review->proposal->career->code])
+            ->sort()
+            ->all();
     }
 
     /**

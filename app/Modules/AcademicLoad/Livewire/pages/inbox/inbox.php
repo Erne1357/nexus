@@ -1,9 +1,11 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Proposals\AcceptProposalReview;
 use App\Modules\AcademicLoad\Actions\Proposals\ReturnProposalReview;
 use App\Modules\AcademicLoad\Enums\InboxStatus;
+use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
 use App\Modules\AcademicLoad\Queries\DepartmentInbox;
@@ -85,6 +87,12 @@ new #[Title('Bandeja del departamento')] class extends Component
 
     public string $comment = '';
 
+    /** La materia de la que se ven los paralelos. */
+    #[Locked]
+    public ?string $parallelsSubjectId = null;
+
+    public bool $showParallels = false;
+
     public function mount(ScopedContext $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
         abort_unless($context->has(Role::JefeDepartamento) || $context->has(Role::JefeProyectoDocente) || $context->has(Role::Subdireccion), 403);
@@ -98,8 +106,25 @@ new #[Title('Bandeja del departamento')] class extends Component
      */
     public function updatedDepartment(ScopedContext $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
-        $this->reset('careerId', 'reviewId', 'showAccept', 'showReturn', 'comment', 'mobileDetail');
+        $this->reset('careerId', 'reviewId', 'showAccept', 'showReturn', 'comment', 'mobileDetail', 'showParallels', 'parallelsSubjectId');
         $this->resolve($context, $inbox, $proposals);
+    }
+
+    /**
+     * Cerrar la confirmación o el drawer (Esc, el velo, Cancelar) suelta la parte que se decidía.
+     */
+    public function updatedShowAccept(bool $open): void
+    {
+        if (! $open && ! $this->showReturn) {
+            $this->reviewId = null;
+        }
+    }
+
+    public function updatedShowReturn(bool $open): void
+    {
+        if (! $open && ! $this->showAccept) {
+            $this->reviewId = null;
+        }
     }
 
     public function updatedFilter(): void
@@ -126,6 +151,20 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
+     * Abre el detalle de los paralelos de una materia de la bandeja.
+     */
+    public function openParallels(string $subjectId, DepartmentInboxQuery $query): void
+    {
+        $subject = collect($this->inbox($query)->subjects)->first(fn (array $row): bool => $row['subject']->getKey() === $subjectId);
+
+        abort_if($subject === null, 404);
+
+        $this->parallelsSubjectId = $subject['subject']->getKey();
+        $this->showAccept = $this->showReturn = false;
+        $this->showParallels = true;
+    }
+
+    /**
      * Abre la confirmación de aceptar una parte, con sus totales.
      */
     public function confirmAccept(string $id, DepartmentInboxQuery $query): void
@@ -146,13 +185,16 @@ new #[Title('Bandeja del departamento')] class extends Component
             $accept->handle($review, auth()->user());
         } catch (ValidationException $e) {
             $this->showAccept = false;
+            $this->reviewId = null;
             $this->report($e, 'No se aceptó');
 
             return;
         }
 
         $this->showAccept = false;
-        $this->success('Parte aceptada', e($this->label($review)));
+        $this->reviewId = null;
+        $this->goToNext($query, $review);
+        $this->success("Aceptaste la parte de {$review->proposal->career->code}", e($review->department->name));
     }
 
     /**
@@ -187,8 +229,10 @@ new #[Title('Bandeja del departamento')] class extends Component
         }
 
         $this->showReturn = false;
+        $this->reviewId = null;
         $this->comment = '';
-        $this->warning('Parte regresada', e($this->label($review)));
+        $this->goToNext($query, $review);
+        $this->warning("Regresaste la parte de {$review->proposal->career->code}", e($review->department->name));
     }
 
     /**
@@ -222,8 +266,11 @@ new #[Title('Bandeja del departamento')] class extends Component
             'canDecide' => $canDecide,
             'acceptBlock' => $inbox->canAccept() ? null : $this->acceptBlock($inbox),
             'catalogsUrl' => $catalogsUrl,
-            'suggestions' => $this->suggestions($inbox),
+            'chips' => $this->chips($inbox),
+            'anomalyCounts' => array_combine(array_map(fn (array $row): string => $row['career']->getKey(), $rows), array_column($rows, 'anomalies')),
             'target' => $target,
+            'targetAnomalies' => $target === null ? [] : $this->anomalousRows($inbox, $target['career']->getKey()),
+            'parallelsTarget' => $this->parallelsTarget($inbox),
         ];
     }
 
@@ -354,11 +401,6 @@ new #[Title('Bandeja del departamento')] class extends Component
         return null;
     }
 
-    private function label(ProposalReview $review): string
-    {
-        return "{$review->proposal->career->code} · {$review->department->code}";
-    }
-
     private function acceptBlock(DepartmentInbox $inbox): string
     {
         if ($inbox->pendingCatalogs !== []) {
@@ -369,14 +411,14 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * La sugerencia de paralelos de cada materia que piden varias carreras, por id de materia; solo la que ahorra
-     * grupos o arma un grupo mixto.
+     * El chip de paralelos de cada materia que piden varias carreras, por id de materia; solo la que ahorra grupos
+     * o arma un grupo mixto. `label` es su texto y `saved`, los grupos que ahorra (negativo si hacen falta).
      *
-     * @return array<string, string>
+     * @return array<string, array{label: string, saved: int}>
      */
-    private function suggestions(DepartmentInbox $inbox): array
+    private function chips(DepartmentInbox $inbox): array
     {
-        $suggestions = [];
+        $chips = [];
 
         foreach ($inbox->subjects as $row) {
             $parallels = $row['parallels'];
@@ -385,29 +427,73 @@ new #[Title('Bandeja del departamento')] class extends Component
                 continue;
             }
 
-            $suggestions[$row['subject']->getKey()] = $this->describe($parallels);
+            $saved = $parallels->saved();
+            $groups = fn (int $n): string => $n === 1 ? '1 grupo' : "{$n} grupos";
+            $rest = $parallels->isMixed() ? 'Con grupos mixtos' : '1 grupo más de '.array_key_first($parallels->mixedShares);
+
+            $chips[$row['subject']->getKey()] = [
+                'saved' => $saved,
+                'label' => match (true) {
+                    $parallels->suggested === 0 => 'Sin alumnos esperados',
+                    $saved > 0 => '−'.$groups($saved).' juntando carreras',
+                    $saved < 0 => '+'.$groups(-$saved).' juntando carreras',
+                    default => $rest,
+                },
+            ];
         }
 
-        return $suggestions;
+        return $chips;
+    }
+
+    /**
+     * La materia que se ve en el drawer de paralelos, con su sugerencia, su resumen y el reparto por carrera.
+     *
+     * @return array{subject: Subject, parallels: ParallelGroups, summary: string, mixed: ?string}|null
+     */
+    private function parallelsTarget(DepartmentInbox $inbox): ?array
+    {
+        if ($this->parallelsSubjectId === null) {
+            return null;
+        }
+
+        foreach ($inbox->subjects as $row) {
+            if ($row['subject']->getKey() === $this->parallelsSubjectId) {
+                return ['subject' => $row['subject'], 'parallels' => $row['parallels'], 'summary' => $this->describe($row['parallels']), 'mixed' => $this->describeMixed($row['parallels'])];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Las filas de la carrera con alguna anomalía.
+     *
+     * @return list<array{item: ProposalItem, total: array{careers: int, groups: int, expected: int}, anomalies: list<string>}>
+     */
+    private function anomalousRows(DepartmentInbox $inbox, string $careerId): array
+    {
+        return array_values(array_filter($inbox->rowsFor($careerId), fn (array $entry): bool => $entry['anomalies'] !== []));
+    }
+
+    /**
+     * Pasa a la carrera que sigue por decidir después de decidir la de la parte: la siguiente por clave entre las que
+     * se pueden decidir, o la primera si era la última; si no queda otra, se queda donde estaba. Una consulta
+     * (DepartmentInboxQuery::decidableCareers), sin armar la bandeja.
+     */
+    private function goToNext(DepartmentInboxQuery $query, ProposalReview $review): void
+    {
+        $left = $query->decidableCareers((string) $this->termId, (string) $this->campusId, $review->department);
+        $code = $review->proposal->career->code;
+        $next = collect($left)->first(fn (string $other): bool => $other > $code) ?? collect($left)->first();
+
+        if ($next !== null) {
+            $this->careerId = (string) array_search($next, $left, true);
+        }
     }
 
     private function describe(ParallelGroups $parallels): string
     {
-        $parts = [];
-
-        foreach ($parallels->careers as $code => $career) {
-            if ($career['full'] > 0) {
-                $parts[] = "{$career['full']} {$code}";
-            }
-        }
-
-        if ($parallels->mixed > 0) {
-            $parts[] = $parallels->isMixed()
-                ? $parallels->mixed.($parallels->mixed === 1 ? ' mixto' : ' mixtos').' ('.collect($parallels->mixedShares)->map(fn (int $share, string $code): string => "{$share} de {$code}")->implode(' + ').')'
-                : '1 más de '.array_key_first($parallels->mixedShares).' ('.array_sum($parallels->mixedShares).')';
-        }
-
-        if ($parts === []) {
+        if ($parallels->suggested === 0) {
             return "Piden {$parallels->requested} · sin alumnos esperados";
         }
 
@@ -417,10 +503,29 @@ new #[Title('Bandeja del departamento')] class extends Component
             default => 'son',
         };
 
-        $last = array_pop($parts);
-        $list = $parts === [] ? $last : implode(', ', $parts).' y '.$last;
+        return "Piden {$parallels->requested} · juntando carreras {$verb} {$parallels->suggested}";
+    }
 
-        return "Piden {$parallels->requested} · juntando carreras {$verb} {$parallels->suggested}: {$list}";
+    /**
+     * Los grupos con los restos: «2 mixtos (5 de IIND + 25 de ISC)» si juntan alumnos de varias carreras, o
+     * «1 más de ISC (25)» si son de una sola; null si no hay restos.
+     */
+    private function describeMixed(ParallelGroups $parallels): ?string
+    {
+        if ($parallels->mixed === 0) {
+            return null;
+        }
+
+        if (! $parallels->isMixed()) {
+            return '1 más de '.array_key_first($parallels->mixedShares).' ('.array_sum($parallels->mixedShares).')';
+        }
+
+        $groups = $parallels->mixed.($parallels->mixed === 1 ? ' mixto' : ' mixtos');
+
+        // Con muchas carreras, el reparto ya está en la columna «Al mixto» de la tabla: aquí solo el resumen.
+        return count($parallels->mixedShares) > 3
+            ? $groups.' con '.array_sum($parallels->mixedShares).' alumnos de '.count($parallels->mixedShares).' carreras'
+            : $groups.' ('.collect($parallels->mixedShares)->map(fn (int $share, string $code): string => "{$share} de {$code}")->implode(' + ').')';
     }
 
     private function report(ValidationException $e, string $title): void
