@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Rules;
 
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use DateTimeInterface;
@@ -15,9 +16,11 @@ use Illuminate\Validation\ValidationException;
  *
  * - `code`: código del SII, cuatro dígitos de año y un dígito de periodo (1 Ene-Jun, 2 Verano,
  *   3 Ago-Dic), único.
+ * - `code`: ya no cambia una vez que el periodo se abrió en algún campus (supuesto por confirmar, docs/dominio/
+ *   reglas-de-negocio.md, Periodo y calendario).
  * - Fechas: un periodo o una ventana no termina antes de empezar (`ends_on` >= `starts_on`).
  *   Una ventana no se compara con las fechas del periodo: la planeación ocurre antes de que empiece
- *   (S-A5, supuesto por confirmar).
+ *   (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por confirmar).
  */
 final class TermRules
 {
@@ -67,6 +70,47 @@ final class TermRules
 
         if ($taken) {
             throw $this->codeTaken($code);
+        }
+    }
+
+    /**
+     * Por qué el código del periodo ya no se puede cambiar: «El código ya no se puede cambiar: el periodo se abrió
+     * en C1 y C2.»; null si no se ha abierto en ningún campus (también cuenta uno desactivado o borrado después).
+     */
+    public function codeLockReason(Term $term): ?string
+    {
+        $codes = TermOpening::query()
+            ->where('term_id', $term->getKey())
+            ->join('campuses', 'campuses.id', '=', 'term_openings.campus_id')
+            ->orderBy('campuses.code')
+            ->pluck('campuses.code')
+            ->all();
+
+        if ($codes === []) {
+            return null;
+        }
+
+        $last = array_pop($codes);
+        $list = $codes === [] ? $last : implode(', ', $codes).' y '.$last;
+
+        return "El código ya no se puede cambiar: el periodo se abrió en {$list}.";
+    }
+
+    /**
+     * Rechaza un código distinto al guardado cuando el periodo ya se abrió en algún campus; conservar el propio vale.
+     *
+     * @throws ValidationException
+     */
+    public function ensureCodeIsUnlocked(Term $term, string $code): void
+    {
+        if ($code === $term->code) {
+            return;
+        }
+
+        $reason = $this->codeLockReason($term);
+
+        if ($reason !== null) {
+            throw ValidationException::withMessages(['code' => $reason]);
         }
     }
 

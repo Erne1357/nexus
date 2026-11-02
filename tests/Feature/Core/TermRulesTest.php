@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Rules\TermRules;
 use Illuminate\Validation\ValidationException;
 
@@ -67,4 +69,18 @@ it('rechaza fechas vacías, relativas, inexistentes o con otro formato, sobre su
 it('acepta una fecha Y-m-d o un DateTimeInterface', function () {
     expect(app(TermRules::class)->date('starts_on', '2027-02-28'))->toBe('2027-02-28')
         ->and(app(TermRules::class)->date('starts_on', new DateTimeImmutable('2027-03-01 10:00')))->toBe('2027-03-01');
+});
+
+it('explica por qué el código no cambia, con los campus donde se abrió, también uno desactivado', function () {
+    $term = Term::factory()->create();
+    $rules = app(TermRules::class);
+
+    expect($rules->codeLockReason($term))->toBeNull();
+
+    TermOpening::factory()->for($term)->for(Campus::factory()->create(['code' => 'C2']))->create();
+    expect($rules->codeLockReason($term))->toBe('El código ya no se puede cambiar: el periodo se abrió en C2.');
+
+    TermOpening::factory()->for($term)->for(Campus::factory()->inactive()->create(['code' => 'C1']))->create();
+    TermOpening::factory()->for($term)->for(Campus::factory()->create(['code' => 'EAD']))->create();
+    expect($rules->codeLockReason($term))->toBe('El código ya no se puede cambiar: el periodo se abrió en C1, C2 y EAD.');
 });
