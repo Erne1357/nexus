@@ -527,9 +527,16 @@ new #[Title('Bandeja del departamento')] class extends Component
             return null;
         }
 
-        return $parallels->isMixed()
-            ? $parallels->mixed.($parallels->mixed === 1 ? ' mixto' : ' mixtos').' ('.collect($parallels->mixedShares)->map(fn (int $share, string $code): string => "{$share} de {$code}")->implode(' + ').')'
-            : '1 más de '.array_key_first($parallels->mixedShares).' ('.array_sum($parallels->mixedShares).')';
+        if (! $parallels->isMixed()) {
+            return '1 más de '.array_key_first($parallels->mixedShares).' ('.array_sum($parallels->mixedShares).')';
+        }
+
+        $groups = $parallels->mixed.($parallels->mixed === 1 ? ' mixto' : ' mixtos');
+
+        // Con muchas carreras, el reparto ya está en la columna «Al mixto» de la tabla: aquí solo el resumen.
+        return count($parallels->mixedShares) > 3
+            ? $groups.' con '.array_sum($parallels->mixedShares).' alumnos de '.count($parallels->mixedShares).' carreras'
+            : $groups.' ('.collect($parallels->mixedShares)->map(fn (int $share, string $code): string => "{$share} de {$code}")->implode(' + ').')';
     }
 
     private function report(ValidationException $e, string $title): void
