@@ -42,7 +42,7 @@
             </x-slot:action>
         </x-core::catalog-toolbar>
 
-        <div class="mb-4 grid divide-y divide-base-300 overflow-hidden rounded-box border border-base-300 bg-base-100 md:grid-cols-3 md:divide-x md:divide-y-0" data-testid="progress-summary">
+        <div class="mb-4 grid divide-y divide-base-300 overflow-hidden rounded-box border border-base-300 bg-base-100 {{ $window ? 'lg:grid-cols-3' : 'lg:grid-cols-2' }} lg:divide-x lg:divide-y-0" data-testid="progress-summary">
             <section class="space-y-2 p-4" aria-labelledby="progress-global" data-testid="progress-global">
                 <h2 id="progress-global" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Avance global</h2>
                 <p class="flex items-baseline gap-2"><span class="text-3xl font-semibold leading-none tabular-nums">{{ $board['global']['validated'] }} de {{ $board['global']['total'] }}</span><span class="text-neutral">revisiones validadas</span></p>
@@ -58,12 +58,10 @@
                 @php($stage = $window['window'])
                 <section class="space-y-2 p-4" aria-labelledby="progress-stage" data-testid="progress-stage">
                     <h2 id="progress-stage" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Validación de catálogos</h2>
-                    <p class="flex flex-wrap items-center gap-2"><span class="font-mono text-3xl font-semibold leading-none tabular-nums">{{ \App\Modules\Core\Support\StageTimeline::rangeLabel($stage) }}</span><x-core::status-badge :tone="$stage->status->tone()" :label="$stage->status->label()" /></p>
+                    <p class="flex flex-wrap items-center gap-2"><span class="font-mono text-2xl font-semibold leading-none tabular-nums">{{ \App\Modules\Core\Support\StageTimeline::rangeLabel($stage) }}</span><x-core::status-badge :tone="$stage->status->tone()" :label="$stage->status->label()" /></p>
                     <div class="h-2 overflow-hidden rounded-full bg-base-300" aria-hidden="true"><i class="block h-full bg-primary" style="width: {{ $window['elapsed'] }}%"></i></div>
                     <p class="text-sm text-neutral">{{ \App\Modules\Core\Support\StageTimeline::daysLeftLabel($stage) ?? 'Etapa terminada' }}</p>
                 </section>
-            @else
-                <section class="hidden"></section>
             @endif
 
             <section class="space-y-2 p-4" aria-labelledby="progress-flags" data-testid="progress-flags">
@@ -85,7 +83,7 @@
                         <caption class="sr-only">Estado de cada catálogo por departamento</caption>
                         <thead class="bg-base-200 text-start">
                             <tr class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
-                                <th scope="col" class="w-[22%] px-4 py-3 text-start font-medium">Departamento</th>
+                                <th scope="col" class="w-[20%] px-4 py-3 text-start font-medium">Departamento</th>
                                 @foreach ($board['columns'] as $column)
                                     <th scope="col" class="px-2 py-3 text-start font-medium">{{ $column['catalog']->label() }}<span class="block text-[11px] font-normal normal-case tracking-normal">{{ $column['campus']?->name ?? 'Todo el Tec' }}</span></th>
                                 @endforeach
