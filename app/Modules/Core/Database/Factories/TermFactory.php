@@ -7,7 +7,8 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Periodo Ene-Jun de un año cualquiera, que no es el actual.
+ * Periodo Ene-Jun de un año cualquiera desde 2030, que no es el actual. Las pruebas usan códigos fijos de
+ * años anteriores (`20263`, `20271`): un año al azar desde 2030 nunca choca con ellos.
  *
  * @extends Factory<Term>
  */
@@ -19,7 +20,7 @@ class TermFactory extends Factory
      */
     public function definition(): array
     {
-        $year = fake()->unique()->numberBetween(2000, 2099);
+        $year = fake()->unique()->numberBetween(2030, 2099);
 
         return [
             'code' => "{$year}1",
