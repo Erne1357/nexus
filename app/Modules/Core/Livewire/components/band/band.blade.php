@@ -45,7 +45,7 @@
             data-testid="menu-search-trigger"
             aria-controls="nexus-menu"
             x-on:click="openMenu()"
-            class="flex h-10 w-[clamp(260px,26vw,520px)] flex-none cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-band-content/18 bg-band-content/8 px-3 whitespace-nowrap text-band-muted transition-[opacity,visibility] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-desktop:w-[226px] max-desktop:flex-none max-md:hidden in-data-[menu=open]:pointer-events-none in-data-[menu=open]:invisible in-data-[menu=open]:opacity-0"
+            class="flex h-10 w-[clamp(260px,26vw,520px)] flex-none cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-band-content/18 bg-band-content/8 px-3 whitespace-nowrap text-band-muted transition-[opacity,visibility] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-band-content motion-reduce:transition-none max-desktop:w-[226px] max-md:hidden in-data-[menu=open]:pointer-events-none in-data-[menu=open]:invisible in-data-[menu=open]:opacity-0"
         >
             <x-icon name="o-magnifying-glass" class="w-[18px] h-[18px] flex-none" />
             Buscar o ir a…

@@ -126,3 +126,39 @@ it('no abre la notificación de otro usuario', function () {
     expect(lastToastOf($component)['title'])->toBe('Esa notificación no es tuya.')
         ->and($beto->unreadNotifications()->count())->toBe(1);
 });
+
+it('un filtro desconocido en la URL vuelve a «Todas»', function () {
+    $ana = User::factory()->create();
+
+    Livewire::actingAs($ana)->withQueryParams(['filtro' => 'SIN-LEER'])->test('core::pages.notifications')
+        ->assertSet('filter', 'todas');
+});
+
+it('si al leer con «Sin leer» la página queda después de la última, vuelve a la última', function () {
+    $ana = User::factory()->create();
+
+    foreach (range(1, 26) as $number) {
+        $ana->notify(new class($number) extends NexusNotification
+        {
+            public function __construct(private readonly int $number) {}
+
+            public function message(object $notifiable): NotificationMessage
+            {
+                return new NotificationMessage(title: "Aviso {$this->number}", body: 'Detalle', icon: 'o-bell', route: 'home');
+            }
+        });
+    }
+
+    $component = Livewire::actingAs($ana)->withQueryParams(['filtro' => 'sin-leer', 'page' => 2])->test('core::pages.notifications');
+    $ana->unreadNotifications()->latest()->first()->markAsRead();
+
+    $component->call('refreshNotifications')->assertSee('Aviso')->assertSet('paginators.page', 1);
+});
+
+it('abrir o marcar todas avisa a la campana para que se vuelva a pintar', function () {
+    $ana = User::factory()->create();
+
+    Livewire::actingAs($ana)->test('core::pages.notifications')
+        ->call('markAllRead')
+        ->assertDispatched('notifications-changed');
+});

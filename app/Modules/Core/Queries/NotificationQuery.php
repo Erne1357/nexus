@@ -34,6 +34,20 @@ final class NotificationQuery
     }
 
     /**
+     * El total y las no leídas en una sola consulta, para la campana y la página.
+     *
+     * @return array{total: int, unread: int}
+     */
+    public function counts(User $user): array
+    {
+        $row = $user->notifications()->reorder()->toBase()
+            ->selectRaw('count(*) as total, count(*) filter (where read_at is null) as unread')
+            ->first();
+
+        return ['total' => (int) ($row->total ?? 0), 'unread' => (int) ($row->unread ?? 0)];
+    }
+
+    /**
      * @return Collection<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable}>
      */
     public function recent(User $user, int $limit = self::RECENT): Collection

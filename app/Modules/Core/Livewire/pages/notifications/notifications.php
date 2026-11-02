@@ -1,10 +1,8 @@
 <?php
 
-use App\Modules\Core\Actions\MarkAllNotificationsRead;
-use App\Modules\Core\Actions\OpenNotification;
+use App\Modules\Core\Livewire\Concerns\OpensNotifications;
 use App\Modules\Core\Queries\NotificationQuery;
 use App\Modules\Core\Queries\ScopedContext;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -15,22 +13,25 @@ use Mary\Traits\Toast;
 /**
  * «Todas las notificaciones» (se llega desde «Ver todas» de la campana; no está en el menú): la lista completa
  * del usuario, de 25 en 25, con el filtro Todas / Sin leer (`?filtro=`), «Marcar todas como leídas» y abrir cada
- * una con OpenNotification, igual que la campana. Solo ve y abre las suyas: la consulta parte de su relación.
+ * una con OpenNotification, igual que la campana (OpensNotifications). Solo ve y abre las suyas: la consulta parte
+ * de su relación.
  */
 new #[Title('Notificaciones')] class extends Component
 {
-    use Toast, WithPagination;
+    use OpensNotifications, Toast, WithPagination;
 
     /** `todas` o `sin-leer`; va en la URL. */
     #[Url(as: 'filtro', except: 'todas')]
     public string $filter = 'todas';
 
+    public function mount(): void
+    {
+        $this->normalizeFilter();
+    }
+
     public function updatedFilter(): void
     {
-        if (! in_array($this->filter, ['todas', 'sin-leer'], true)) {
-            $this->filter = 'todas';
-        }
-
+        $this->normalizeFilter();
         $this->resetPage();
     }
 
@@ -42,47 +43,28 @@ new #[Title('Notificaciones')] class extends Component
         $user = $context->user();
         $onlyUnread = $this->filter === 'sin-leer';
 
-        return [
-            'items' => $user === null
-                ? new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE)
-                : $notifications->paginated($user, $onlyUnread),
-            'unread' => $user === null ? 0 : $notifications->unreadCount($user),
-            'total' => $user === null ? 0 : $notifications->total($user),
-            'onlyUnread' => $onlyUnread,
-        ];
-    }
-
-    public function open(string $id, OpenNotification $openNotification, ScopedContext $context): mixed
-    {
-        $user = $context->user();
-
         if ($user === null) {
-            return null;
+            return ['items' => new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE), 'unread' => 0, 'total' => 0, 'onlyUnread' => $onlyUnread];
         }
 
-        try {
-            $target = $openNotification->handle($user, $id);
-        } catch (AuthorizationException $exception) {
-            $this->error($exception->getMessage());
+        $items = $notifications->paginated($user, $onlyUnread);
 
-            return null;
+        // Al leer avisos con el filtro «Sin leer», la página en curso puede quedar después de la última.
+        if ($items->currentPage() > max(1, $items->lastPage())) {
+            $this->setPage($items->lastPage());
+            $items = $notifications->paginated($user, $onlyUnread);
         }
 
-        if ($target->url === null) {
-            $this->warning($target->problem ?? 'Esa pantalla no está disponible.');
-
-            return null;
-        }
-
-        return $this->redirect($target->url, navigate: true);
+        return ['items' => $items, ...$notifications->counts($user), 'onlyUnread' => $onlyUnread];
     }
 
-    public function markAllRead(MarkAllNotificationsRead $markAllNotificationsRead, ScopedContext $context): void
+    /**
+     * Un `?filtro=` que no es `todas` ni `sin-leer` (por ejemplo, tecleado a mano) vuelve al de omisión.
+     */
+    private function normalizeFilter(): void
     {
-        $user = $context->user();
-
-        if ($user !== null) {
-            $markAllNotificationsRead->handle($user);
+        if (! in_array($this->filter, ['todas', 'sin-leer'], true)) {
+            $this->filter = 'todas';
         }
     }
 };
