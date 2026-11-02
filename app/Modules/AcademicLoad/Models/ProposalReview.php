@@ -16,7 +16,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * La parte de un departamento en una propuesta de carrera: todo lo que la carrera le pide (las filas con grupos
  * de sus materias), que el departamento acepta o regresa con comentario (confirmado el 2 de noviembre de 2026).
- * La crea SubmitCareerProposal; la decisión llega con la bandeja del departamento (tarea 2.8).
+ * La crea SubmitCareerProposal; la deciden AcceptProposalReview y ReturnProposalReview, desde la bandeja del
+ * departamento.
  */
 #[Fillable(['career_proposal_id', 'department_id', 'status', 'comment', 'decided_by', 'decided_at'])]
 #[UseFactory(ProposalReviewFactory::class)]

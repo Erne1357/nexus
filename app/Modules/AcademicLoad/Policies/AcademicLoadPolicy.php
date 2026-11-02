@@ -23,13 +23,16 @@ final class AcademicLoadPolicy
 {
     use UsesScopedContext;
 
+    /**
+     * Los roles que ven la carga; ProposalReviewPolicy los usa también para la bandeja del departamento.
+     *
+     * @var list<Role>
+     */
+    public const array VIEWERS = [Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente];
+
     public function view(User $user, AcademicLoad $load): bool
     {
-        return $this->scope($user)->covers(
-            [Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente],
-            $load->campus_id,
-            department: $load->department_id,
-        );
+        return $this->scope($user)->covers(self::VIEWERS, $load->campus_id, department: $load->department_id);
     }
 
     public function propose(User $user, AcademicLoad $load): bool
