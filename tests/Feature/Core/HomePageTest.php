@@ -74,6 +74,14 @@ it('se muestra dentro del layout de la aplicación', function () {
         ->assertSee('Cerrar sesión');
 });
 
+it('los bloques de rol son superficies planas, sin tarjeta con sombra', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    Livewire::test('core::pages.home')
+        ->assertSeeHtml('data-testid="role-block"')
+        ->assertDontSeeHtml('shadow-xl');
+});
+
 it('un invitado va al login', function () {
     $this->get('/')->assertRedirect('/login');
 });
@@ -150,6 +158,23 @@ describe('calendario en Inicio', function () {
         $this->actingAs(homeCalendarUser($this->campus));
 
         Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('enlaza la ficha del periodo a quien puede verla y a nadie más', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(User::factory()->admin()->create());
+        Livewire::test('core::pages.home')->assertSeeHtml('href="'.route('core.terms.show', $this->term).'"')->assertSee('Ver el periodo');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+        Livewire::test('core::pages.home')->assertSee('Propuesta por carrera')->assertDontSee('Ver el periodo');
+    });
+
+    it('explica la línea de hoy en una leyenda', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+        Livewire::test('core::pages.home')->assertSee('Hoy, 12 nov');
     });
 
     it('se oculta sin periodo activo', function () {

@@ -4,6 +4,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TermCalendarQuery;
 use App\Modules\Core\Support\StageTimeline;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -12,12 +13,12 @@ use Livewire\Component;
  * con su nombre (Role::label()) y lo que ese rol hace en Nexus según el glosario. El admin, que
  * tiene todos los roles, ve solo el suyo. A quien tiene al menos un rol le muestra además el bloque «Calendario»
  * (core::terms.mini-timeline): las etapas en curso y las dos que siguen del periodo y el campus activos, según
- * TermCalendarQuery; sin periodo activo o sin etapas por ver, no aparece.
+ * TermCalendarQuery; sin periodo activo o sin etapas por ver, no aparece. A quien puede ver el periodo (TermPolicy) le enlaza su ficha.
  */
 new #[Title('Inicio')] class extends Component
 {
     /**
-     * @return array{name: string, blocks: list<array{title: string, description: string}>, calendar: array{timeline: StageTimeline, caption: string}|null}
+     * @return array{name: string, blocks: list<array{title: string, description: string}>, calendar: array{timeline: StageTimeline, caption: string, termUrl: ?string}|null}
      */
     public function with(ScopedContext $context, TermCalendarQuery $calendar): array
     {
@@ -29,6 +30,7 @@ new #[Title('Inicio')] class extends Component
             'calendar' => $windows === [] ? null : [
                 'timeline' => StageTimeline::build($windows, [], today()->toImmutable()),
                 'caption' => $term->name.($campus === null ? '' : " · {$campus->name}"),
+                'termUrl' => Gate::allows('view', $term) ? route('core.terms.show', $term) : null,
             ],
             'name' => $context->user()?->name ?? '',
             'blocks' => array_map(fn (Role $role): array => [

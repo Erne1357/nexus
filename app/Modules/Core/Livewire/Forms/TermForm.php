@@ -29,6 +29,10 @@ class TermForm extends Form
     #[Locked]
     public string $suggestedName = '';
 
+    /** Si el formulario edita un periodo guardado (fillFrom): al editar, un código inválido no borra el nombre. */
+    #[Locked]
+    public bool $editing = false;
+
     /** Por qué el código no se puede cambiar (el periodo ya se abrió); null si se puede. Lo fija fillFrom(). */
     #[Locked]
     public ?string $codeLock = null;
@@ -38,11 +42,32 @@ class TermForm extends Form
      */
     protected function rules(): array
     {
+        $rules = new TermRules;
+
         return [
-            'code' => ['required', 'string', 'max:255'],
+            'code' => ['required', 'string', 'max:255', function (string $attribute, mixed $value, Closure $fail) use ($rules): void {
+                try {
+                    $rules->normalizeCode((string) $value);
+                } catch (ValidationException $e) {
+                    $fail($e->errors()['code'][0]);
+                }
+            }],
             'name' => ['required', 'string', 'max:255'],
             'starts_on' => ['required', 'date_format:Y-m-d'],
-            'ends_on' => ['required', 'date_format:Y-m-d'],
+            'ends_on' => ['required', 'date_format:Y-m-d', function (string $attribute, mixed $value, Closure $fail) use ($rules): void {
+                try {
+                    $starts = $rules->date('starts_on', $this->starts_on);
+                    $ends = $rules->date('ends_on', $value);
+                } catch (ValidationException) {
+                    return;
+                }
+
+                try {
+                    $rules->dates($starts, $ends);
+                } catch (ValidationException $e) {
+                    $fail($e->errors()['ends_on'][0]);
+                }
+            }],
         ];
     }
 
@@ -77,11 +102,23 @@ class TermForm extends Form
     {
         $suggestion = $rules->suggestedName($code);
 
-        if ($suggestion !== null && ($this->name === '' || $this->name === $this->suggestedName)) {
-            $this->name = $suggestion;
+        if ($this->name === '' || $this->name === $this->suggestedName) {
+            if ($suggestion !== null || ! $this->editing) {
+                $this->name = $suggestion ?? '';
+            }
         }
 
         $this->suggestedName = $suggestion ?? $this->suggestedName;
+    }
+
+    /**
+     * Deja el formulario de un alta con el código que sigue al más reciente y su nombre sugerido, y sin fechas.
+     */
+    public function prefillNext(?string $latestCode, TermRules $rules): void
+    {
+        $this->reset();
+        $this->code = $rules->nextCode($latestCode) ?? '';
+        $this->suggestName($this->code, $rules);
     }
 
     /**
@@ -89,6 +126,7 @@ class TermForm extends Form
      */
     public function fillFrom(Term $term, TermRules $rules): void
     {
+        $this->editing = true;
         $this->code = $term->code;
         $this->name = $term->name;
         $this->starts_on = $term->starts_on->toDateString();

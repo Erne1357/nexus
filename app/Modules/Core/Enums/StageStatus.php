@@ -23,13 +23,41 @@ enum StageStatus: string
         };
     }
 
+    /**
+     * El tono de la insignia: el mismo color que la barra y la leyenda de la línea de tiempo (azul en curso, gris
+     * próxima, verde terminada, punteada sin fecha).
+     */
     public function tone(): StatusTone
     {
         return match ($this) {
             self::Unscheduled => StatusTone::Draft,
-            self::Upcoming => StatusTone::Info,
-            self::InProgress => StatusTone::Success,
-            self::Finished => StatusTone::Neutral,
+            self::Upcoming => StatusTone::Neutral,
+            self::InProgress => StatusTone::Info,
+            self::Finished => StatusTone::Success,
+        };
+    }
+
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Unscheduled => 'o-minus-circle',
+            self::Upcoming => 'o-calendar',
+            self::InProgress => 'o-clock',
+            self::Finished => 'o-check-circle',
+        };
+    }
+
+    /**
+     * Las clases de la barra de la etapa en la línea de tiempo; la terminada va atenuada para que un periodo
+     * pasado no sea lo más fuerte de la pantalla.
+     */
+    public function barClasses(): string
+    {
+        return match ($this) {
+            self::Unscheduled => '',
+            self::Upcoming => 'border border-base-content/50 bg-base-content/15',
+            self::InProgress => 'bg-info',
+            self::Finished => 'border border-success/60 bg-success/35',
         };
     }
 }
