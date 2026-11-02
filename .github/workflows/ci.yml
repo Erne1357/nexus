@@ -10,8 +10,10 @@ on:
   # Todo PR, sin importar su rama base: un PR encadenado (base en otra feature/*)
   # también debe pasar los tres checks antes de revisarse.
   pull_request:
-  # Al mezclar a develop o main se calienta la caché de la imagen: un PR solo lee
-  # las cachés de su propia rama, de su rama base y de main.
+  # Al mezclar a develop o main solo se calienta la caché de la imagen (un PR solo lee
+  # las cachés de su propia rama, de su rama base y de main) y se corre lint: la suite ya
+  # corrió en el PR, y la protección exige la rama al día con su base, así que el código
+  # mezclado es el mismo que se probó.
   push:
     branches: [develop, main]
   workflow_dispatch:
@@ -48,25 +50,31 @@ jobs:
           cache-write: "true"
 
       - name: Levantar PostgreSQL y Valkey
+        if: ${{ github.event_name != 'push' }}
         run: docker compose up -d --wait postgres valkey
 
-      # Cobertura con pcov: Clover para el mínimo por módulo, texto para leer el detalle.
+      # Cobertura con pcov: Clover para el mínimo por módulo, texto para leer el detalle. En
+      # paralelo, un proceso por núcleo del runner: cada uno con su base nexus_test_test_<n>.
       - name: Unit, Feature y Arch
+        if: ${{ github.event_name != 'push' }}
         run: |
           docker compose run --rm -T app php artisan test \
             --testsuite=Unit,Feature,Arch --compact \
+            --parallel --processes="$(nproc)" \
             --coverage-clover=storage/logs/clover.xml \
             --coverage-text=storage/logs/coverage.txt
 
       # Bloqueante desde la fase 1: falla si un módulo de app/Modules/ queda debajo de 80 %.
       # `shell: bash` activa pipefail, para que el código de salida del script no se pierda en el tee.
       - name: Cobertura por módulo (mínimo 80 %)
-        if: ${{ !cancelled() && hashFiles('storage/logs/clover.xml') != '' }}
+        if: ${{ !cancelled() && github.event_name != 'push' && hashFiles('storage/logs/clover.xml') != '' }}
         shell: bash
         run: .github/scripts/coverage-summary.sh storage/logs/clover.xml storage/logs/coverage.txt 80 | tee -a "$GITHUB_STEP_SUMMARY"
 
   browser:
     name: browser
+    # Solo en PR: al mezclar no calienta ninguna caché que no caliente `tests`.
+    if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
