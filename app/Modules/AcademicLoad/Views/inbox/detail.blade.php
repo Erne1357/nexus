@@ -52,7 +52,10 @@
     @if ($items === [])
         <p class="text-sm text-neutral">Sin materias de este departamento en la propuesta.</p>
     @else
-        <ul class="divide-y divide-base-300 border-y border-base-300" data-testid="inbox-items">
+        <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 border-t border-base-300 pt-3 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral" aria-hidden="true">
+            <span>Materia</span><span class="text-right">Grupos</span><span class="w-[4.75rem] text-right">Esperados</span>
+        </div>
+        <ul class="-mt-1 divide-y divide-base-300 border-y border-base-300" data-testid="inbox-items">
             @foreach ($items as $entry)
                 @php($item = $entry['item'])
                 @php($total = $entry['total'])
@@ -62,7 +65,7 @@
                         <p class="font-mono text-xs text-neutral">{{ $item->subject->code }} · semestre {{ $item->semester }}</p>
                     </div>
                     <span class="text-right font-mono text-lg font-semibold tabular-nums" title="Grupos">{{ $item->requested_groups }}</span>
-                    <span class="w-14 text-right font-mono tabular-nums text-neutral" title="Esperados">{{ $item->expected_students }}</span>
+                    <span class="w-[4.75rem] text-right font-mono tabular-nums text-neutral" title="Esperados">{{ $item->expected_students }}</span>
                     <div class="col-span-3 space-y-1">
                         @if ($total['groups'] >= $item->requested_groups && $total['groups'] > 0)
                             <p class="text-xs"><span class="font-mono font-semibold">{{ $item->requested_groups }}</span> de {{ $total['groups'] }} grupos</p>
@@ -72,7 +75,7 @@
                             <p class="text-xs text-neutral" data-testid="parallels">{{ $suggestions[$item->subject_id] }}</p>
                         @endif
                         <p class="text-xs text-neutral">
-                            {{ $item->eligible_students }} elegibles
+                            {{ $item->eligible_students }} {{ $item->eligible_students === 1 ? 'elegible' : 'elegibles' }}
                             @if ($item->notes)
                                 · {{ $item->notes }}
                             @endif
