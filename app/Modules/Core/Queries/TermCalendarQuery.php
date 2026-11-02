@@ -13,7 +13,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * El calendario efectivo de un periodo (S-A5, supuesto por confirmar): las 8 etapas en el orden de
+ * El calendario efectivo de un periodo (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por confirmar): las 8 etapas en el orden de
  * Stage, cada una con la ventana de su campus si la tiene, si no la general, si no ninguna. Sin campus,
  * solo las generales. Solo informa (D4).
  *

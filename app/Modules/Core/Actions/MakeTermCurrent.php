@@ -9,7 +9,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Marca un periodo como el actual, el de omisión de la credencial (D3, confirmado el 1 de noviembre
- * de 2026; cualquier periodo puede marcarse, S-A4 supuesto por confirmar). Solo uno lo es: en la misma
+ * de 2026; cualquier periodo puede marcarse; supuesto por confirmar, docs/dominio/reglas-de-negocio.md, Periodo y calendario). Solo uno lo es: en la misma
  * transacción quita la marca al anterior ANTES de ponérsela a este, porque el índice único parcial
  * `terms_single_current_unique` rechazaría a los dos a la vez.
  *

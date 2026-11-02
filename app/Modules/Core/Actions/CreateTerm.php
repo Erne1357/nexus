@@ -13,7 +13,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Da de alta un periodo. Recibe datos ya validados en forma (el componente) y hace cumplir las reglas
  * de TermRules: código `AAAAP` único y fechas en orden. Nunca lo marca como actual: eso es
- * MakeTermCurrent (S-A4, supuesto por confirmar).
+ * MakeTermCurrent (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por confirmar).
  *
  * En una transacción revisa el código, escribe y deja bitácora; si otra sesión guarda el mismo código
  * entre la revisión y el insert, la restricción única de la base responde con el mismo error. Después

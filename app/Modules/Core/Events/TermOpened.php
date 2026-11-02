@@ -11,7 +11,7 @@ use Illuminate\Foundation\Events\Dispatchable;
  * Se abrió (o se completó la apertura de) un periodo en un campus (OpenTerm). Evento con reporte: se
  * despacha dentro de la transacción de OpenTerm y sus listeners corren en ella, así que abrir es todo o
  * nada. Los módulos de la derecha crean lo suyo para el periodo y el campus (AcademicLoad sus cargas,
- * CatalogValidation sus revisiones; S-A6, supuesto por confirmar), solo lo que falte, y lo dicen con
+ * CatalogValidation sus revisiones; supuesto por confirmar, docs/dominio/reglas-de-negocio.md, Periodo y calendario), solo lo que falte, y lo dicen con
  * report(). No es ShouldDispatchAfterCommit: un listener que oiga después del commit no podría
  * deshacer la apertura.
  */

@@ -6,7 +6,7 @@ use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 
 /**
- * Veta borrar un departamento que tiene cargas académicas (S-A8, supuesto por confirmar): «Tiene 1 carga
+ * Veta borrar un departamento que tiene cargas académicas (ver docs/dominio/reglas-de-negocio.md, Reglas de datos, supuesto por confirmar): «Tiene 1 carga
  * académica.» o «Tiene N cargas académicas.». Cuenta las de cualquier periodo, campus y estado. Corre en la
  * misma petición, dentro de la transacción de DeleteDepartment.
  */
