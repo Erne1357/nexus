@@ -264,7 +264,20 @@ Forma de la ficha del alumno, decidida el 30 de octubre de 2026 (variante A, pes
 
 ### Línea de tiempo de etapas
 
-El calendario de un periodo (`core::pages.term`, `/terms/{term}`) y el bloque «Calendario» de Inicio usan la misma línea de tiempo (`Support/StageTimeline`; maqueta B, aprobada por el usuario): encabezado de meses y semanas (el lunes de cada una), un renglón por etapa con su número, nombre, insignia de estado y días que faltan, y su barra (`bg-info` en curso, gris con borde próxima, `bg-success` terminada) más una barra delgada `bg-primary` con el código por cada campus con ventana propia; la línea «Hoy» cruza todo. En la ficha, cada renglón es un botón que abre el panel de la etapa (`x-drawer` a la derecha). Se acomoda por el ancho de su caja (`@container`): desde 672 px, columna de nombres a la izquierda; debajo, el renglón apila nombre, fechas y una mini barra. En Inicio es de solo lectura y solo trae las etapas en curso y las dos que siguen.
+El calendario de un periodo (`core::pages.term`, `/terms/{term}`) y el bloque «Calendario» de Inicio usan la misma línea de tiempo (`Support/StageTimeline`; maqueta B, aprobada por el usuario). Los tonos de la insignia, la barra y la leyenda son los mismos (`StageStatus::tone()`, `icon()` y `barClasses()`):
+
+| Estado | Insignia | Icono | Barra |
+|---|---|---|---|
+| En curso | `info` | `o-clock` | `bg-info` |
+| Próxima | `neutral` | `o-calendar` | gris con borde |
+| Terminada | `success` | `o-check-circle` | `bg-success/35` con borde `success/60` (atenuada: un periodo pasado no es lo más fuerte de la pantalla) |
+| Sin fecha | `draft` | `o-minus-circle` | recuadro punteado «Sin fecha» |
+
+- **Encabezado:** un carril propio para la marca «Hoy» (22 px, solo desde 672 px de caja; la marca se alinea a la derecha si cae después del 80 % del rango), los meses y, debajo, el lunes de cada semana. El rótulo de cada mes se acomoda al ancho de su celda con una consulta de contenedor: «noviembre 2026», «Nov 2026», «Nov» y, si ni eso cabe, nada visible; el nombre completo queda en `title` y en `sr-only`. La línea «Hoy» arranca bajo el encabezado y la leyenda es opaca. En Inicio, bajo 512 px, una leyenda «Hoy, 2 nov» explica la línea.
+- **Renglón:** número, nombre, insignia y días que faltan en la misma línea (columna de nombres de 360 px desde 896 px de caja), y su barra más una barra delgada `bg-primary` con el código por cada campus con ventana propia. En la ficha, cada renglón es un botón que abre el panel de la etapa (`x-drawer` a la derecha) y se llama por su contenido (nombre, estado, fechas, días que faltan): nunca lleva `aria-label`. Se acomoda por el ancho de su caja (`@container`): desde 672 px, columna de nombres a la izquierda; debajo, el renglón apila nombre, fechas y una mini barra. La leyenda solo lista los estados presentes.
+- **Sin calendario:** un periodo sin ninguna fecha no pinta 8 recuadros «Sin fecha»: dice «Este periodo no tiene calendario.» y lista las 8 etapas, cada una con «Poner fechas». Ahí queda el lugar (`data-slot="copy-calendar"`) de «Copiar de otro periodo».
+- **Resumen de campus (ficha):** entre el encabezado y «Calendario», un renglón con «Abierto en» y los códigos de los campus abiertos en Mono, y un «Abrir en <campus>» por cada campus activo sin abrir (un solo menú «Abrir en…» si faltan más de dos). La lista «Campus» (quién abrió, cuándo, «Completar apertura»; un campus abierto e inactivo en gris con «Campus inactivo») va al final.
+- **Inicio:** solo lectura, trae las etapas en curso y las dos que siguen, y enlaza la ficha del periodo a quien puede verla.
 
 ### Cuadrícula día x hora
 La disponibilidad de un docente en un periodo, decidida el 30 de octubre de 2026 (variante A, «herramienta y pintar»; maquetas en `.impeccable/mocks/decision/docente/`). Las piezas son de Faculty: `x-faculty::availability.grid`, `.ranges`, `.legend` y `.swatch` (`app/Modules/Faculty/Views/components/availability/`).

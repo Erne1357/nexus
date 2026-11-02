@@ -99,12 +99,12 @@ it('ubica la marca de hoy a media columna del día cuando cae dentro del rango',
         ->and($edge->today)->not->toBeNull();
 });
 
-it('rotula los meses del rango con los días que cubre cada uno', function () {
+it('rotula los meses del rango con su forma corta y completa y los días que cubre cada uno', function () {
     $timeline = StageTimeline::build(timelineGeneral(), [], CarbonImmutable::parse('2026-11-12'));
 
     expect($timeline->months)->toBe([
-        ['label' => 'Nov 2026', 'days' => 22],
-        ['label' => 'Dic 2026', 'days' => 6],
+        ['label' => 'Nov 2026', 'short' => 'Nov', 'full' => 'noviembre 2026', 'days' => 22],
+        ['label' => 'Dic 2026', 'short' => 'Dic', 'full' => 'diciembre 2026', 'days' => 6],
     ]);
 });
 

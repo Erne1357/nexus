@@ -29,6 +29,14 @@ final class TermQuery
     }
 
     /**
+     * El código más reciente que existe (el mayor, que sigue el orden cronológico del SII); null si no hay periodos.
+     */
+    public function latestCode(): ?string
+    {
+        return Term::query()->max('code');
+    }
+
+    /**
      * En qué campus se abrió el periodo, por código de campus, con el campus (también uno desactivado
      * o borrado después) y quién lo abrió, para la ficha del periodo.
      *
