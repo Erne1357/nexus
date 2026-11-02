@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
+use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
@@ -12,6 +13,7 @@ use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
+use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -46,5 +48,7 @@ class DemoSeeder extends Seeder
         $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C2' => 120]]);
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C2' => 35]]);
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C2']]]);
+        $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
+        $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
     }
 }
