@@ -131,6 +131,10 @@ new #[Title('Validación de catálogos')] class extends Component
         if ($this->department === '' && $state['department'] !== null) {
             $this->department = $state['department']->getKey();
         }
+
+        if ($this->missing !== '') {
+            $this->status = 'active';
+        }
     }
 
     /**
@@ -173,6 +177,17 @@ new #[Title('Validación de catálogos')] class extends Component
     {
         if (in_array($property, ['search', 'status', 'flagFilter', 'missing', 'department', 'catalog'], true)) {
             $this->resetPage();
+        }
+
+        /*
+        | «Falta» solo habla de docentes activos: al elegirlo, Estado pasa a Activos, y elegir Inactivos lo quita.
+        */
+        if ($property === 'missing' && $this->missing !== '') {
+            $this->status = 'active';
+        }
+
+        if ($property === 'status' && $this->status === 'inactive') {
+            $this->missing = '';
         }
 
         if (in_array($property, ['department', 'catalog'], true)) {
@@ -419,7 +434,7 @@ new #[Title('Validación de catálogos')] class extends Component
         return [
             'review' => $review,
             'summary' => $reviews->summary($review),
-            'readiness' => $isTeachers ? $this->readiness($review) : null,
+            'readiness' => $isTeachers && $withVetoes ? app(TeacherTermReadinessQuery::class)->counts($review->department, $review->term) : null,
             'canValidate' => Gate::allows('validate', $review),
             'canReopen' => $canReopen,
             'reopenVetoes' => $vetoes,
@@ -437,20 +452,6 @@ new #[Title('Validación de catálogos')] class extends Component
                 default => null,
             },
         ];
-    }
-
-    /**
-     * Lo que le falta a cada docente del departamento en el periodo de la revisión, con los conteos de los
-     * indicadores (CV6: solo avisan, no bloquean validar). Se calcula una vez por petición.
-     *
-     * @return array{rows: array<string, array<string, mixed>>, counts: array{no_availability: int, no_profile: int}}
-     */
-    private function readiness(CatalogReview $review): array
-    {
-        $query = app(TeacherTermReadinessQuery::class);
-        $rows = $query->forDepartment($review->department, $review->term);
-
-        return ['rows' => $rows, 'counts' => $query->counts($rows)];
     }
 
     /**
@@ -502,8 +503,11 @@ new #[Title('Validación de catálogos')] class extends Component
             'active' => true,
             'inactive' => false,
             default => null,
-        }, $this->flagFilter, onlyIds: $this->missingIds($current));
+        }, $this->flagFilter, onlyIds: $this->missingIds($review));
 
+        $readiness = $review->catalog === Catalog::Teachers
+            ? app(TeacherTermReadinessQuery::class)->forTeachers($review->department, $review->term, $page->getCollection()->map->getKey()->all())
+            : [];
         $editing = null;
 
         if ($this->showDrawer && $this->editingId !== null) {
@@ -517,7 +521,7 @@ new #[Title('Validación de catálogos')] class extends Component
 
         return [
             'page' => $page,
-            'readiness' => $current['readiness']['rows'] ?? [],
+            'readiness' => $readiness,
             'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin perfil']],
             'flagMap' => $records->openFlags($review, $page->getCollection()->map->getKey()),
             'headers' => $this->headersOf($review->catalog),
@@ -532,18 +536,17 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * Los docentes que deja el filtro «Falta»; null si no hay filtro o el catálogo no es el de docentes.
+     * Los docentes activos que deja el filtro «Falta»; null si no hay filtro o el catálogo no es el de docentes.
      *
-     * @param  array<string, mixed>  $current
      * @return ?list<string>
      */
-    private function missingIds(array $current): ?array
+    private function missingIds(CatalogReview $review): ?array
     {
-        if ($current['readiness'] === null || ! in_array($this->missing, ['disponibilidad', 'perfil'], true)) {
+        if ($review->catalog !== Catalog::Teachers || ! in_array($this->missing, ['disponibilidad', 'perfil'], true)) {
             return null;
         }
 
-        return app(TeacherTermReadinessQuery::class)->missingIds($current['readiness']['rows'], $this->missing);
+        return app(TeacherTermReadinessQuery::class)->missingIds($review->department, $review->term, $this->missing);
     }
 
     /**

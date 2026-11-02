@@ -84,7 +84,7 @@ final class RemoveAdscription
                     ->log("Hizo principal la adscripción del docente {$teacher->employee_number} a {$codes[$promoted->department_id]} al quitarlo de {$from}");
             }
 
-            AdscriptionChanged::dispatch($removed);
+            AdscriptionChanged::dispatch($removed, auth()->user());
 
             return [
                 'promoted' => $promoted,

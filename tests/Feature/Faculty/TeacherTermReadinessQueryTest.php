@@ -33,13 +33,6 @@ function readinessTeacher(Department $department, array $attributes = []): Teach
     return $teacher;
 }
 
-it('trae a los docentes adscritos al departamento y a nadie más', function () {
-    $mine = readinessTeacher($this->sis);
-    readinessTeacher($this->ele);
-
-    expect(array_keys($this->query->forDepartment($this->sis, $this->term)))->toBe([$mine->id]);
-});
-
 it('la disponibilidad de otro periodo o borrada no cuenta como capturada', function () {
     $with = readinessTeacher($this->sis);
     $otherTerm = readinessTeacher($this->sis);
@@ -48,7 +41,7 @@ it('la disponibilidad de otro periodo o borrada no cuenta como capturada', funct
     TeacherAvailability::factory()->for($otherTerm)->for($this->other)->create();
     TeacherAvailability::factory()->for($deleted)->for($this->term)->create()->delete();
 
-    $rows = $this->query->forDepartment($this->sis, $this->term);
+    $rows = $this->query->forTeachers($this->sis, $this->term, [$with->id, $otherTerm->id, $deleted->id]);
 
     expect($rows[$with->id]['has_availability'])->toBeTrue()
         ->and($rows[$otherTerm->id]['has_availability'])->toBeFalse()
@@ -64,7 +57,7 @@ it('el perfil cuenta aptos y preferentes solo en materias del departamento', fun
     TeacherSubjectQualification::factory()->apto()->for($teacher)->for(Subject::factory()->create(['department_id' => $this->sis->id]))->create()->delete();
     TeacherSubjectQualification::factory()->apto()->for($none)->for(Subject::factory()->create(['department_id' => $this->ele->id]))->create();
 
-    $rows = $this->query->forDepartment($this->sis, $this->term);
+    $rows = $this->query->forTeachers($this->sis, $this->term, [$teacher->id, $none->id]);
 
     expect($rows[$teacher->id]['subjects'])->toBe(2)
         ->and($rows[$none->id]['subjects'])->toBe(0);
@@ -76,38 +69,50 @@ it('las horas fuera del ITCJ son las del periodo y se suman', function () {
     TeacherExternalLoad::factory()->for($teacher)->for($this->term)->create(['hours' => 4]);
     TeacherExternalLoad::factory()->for($teacher)->for($this->other)->create(['hours' => 20]);
 
-    expect($this->query->forDepartment($this->sis, $this->term)[$teacher->id]['external_hours'])->toBe(10);
+    expect($this->query->forTeachers($this->sis, $this->term, [$teacher->id])[$teacher->id]['external_hours'])->toBe(10);
 });
 
 it('trae las horas de plaza del periodo', function () {
     $teacher = readinessTeacher($this->sis);
     TeacherPosition::factory()->for($teacher)->tiempoCompleto()->create(['valid_from' => '2026-08-01']);
 
-    expect($this->query->forDepartment($this->sis, $this->term)[$teacher->id]['base_hours'])->toBe(40);
+    expect($this->query->forTeachers($this->sis, $this->term, [$teacher->id])[$teacher->id]['base_hours'])->toBe(40);
 });
 
-it('cuenta los docentes activos sin disponibilidad y sin perfil, y da sus ids', function () {
+it('el perfil no cuenta materias inactivas ni borradas', function () {
+    $teacher = readinessTeacher($this->sis);
+    TeacherSubjectQualification::factory()->for($teacher)->for(Subject::factory()->inactive()->create(['department_id' => $this->sis->id]))->create();
+    TeacherSubjectQualification::factory()->for($teacher)->for(Subject::factory()->create(['department_id' => $this->sis->id, 'deleted_at' => now()]))->create();
+    TeacherSubjectQualification::factory()->for($teacher)->for(Subject::factory()->create(['department_id' => $this->sis->id]))->create();
+
+    expect($this->query->forTeachers($this->sis, $this->term, [$teacher->id])[$teacher->id]['subjects'])->toBe(1);
+});
+
+it('cuenta y da los ids de los docentes activos del departamento sin disponibilidad y sin perfil', function () {
     $ready = readinessTeacher($this->sis);
     $missingAll = readinessTeacher($this->sis);
-    $inactive = readinessTeacher($this->sis, ['is_active' => false]);
+    $onlyProfile = readinessTeacher($this->sis);
+    readinessTeacher($this->sis, ['is_active' => false]);
+    readinessTeacher($this->ele);
     TeacherAvailability::factory()->for($ready)->for($this->term)->create();
+    TeacherAvailability::factory()->for($missingAll)->for($this->other)->create();
     TeacherSubjectQualification::factory()->for($ready)->for(Subject::factory()->create(['department_id' => $this->sis->id]))->create();
+    TeacherSubjectQualification::factory()->for($onlyProfile)->for(Subject::factory()->create(['department_id' => $this->sis->id]))->create();
 
-    $rows = $this->query->forDepartment($this->sis, $this->term);
-
-    expect($this->query->counts($rows))->toBe(['no_availability' => 1, 'no_profile' => 1])
-        ->and($this->query->missingIds($rows, 'disponibilidad'))->toBe([$missingAll->id])
-        ->and($this->query->missingIds($rows, 'perfil'))->toBe([$missingAll->id])
-        ->and($rows[$inactive->id]['has_availability'])->toBeFalse();
+    expect($this->query->counts($this->sis, $this->term))->toBe(['no_availability' => 2, 'no_profile' => 1])
+        ->and($this->query->missingIds($this->sis, $this->term, 'disponibilidad'))->toEqualCanonicalizing([$missingAll->id, $onlyProfile->id])
+        ->and($this->query->missingIds($this->sis, $this->term, 'perfil'))->toBe([$missingAll->id])
+        ->and($this->query->missingIds($this->sis, $this->term, 'otra'))->toBe([]);
 });
 
 it('hace una consulta por dato, no una por docente', function () {
+    $ids = [];
     foreach (range(1, 6) as $i) {
-        readinessTeacher($this->sis);
+        $ids[] = readinessTeacher($this->sis)->id;
     }
 
     DB::enableQueryLog();
-    $this->query->forDepartment($this->sis, $this->term);
+    $this->query->forTeachers($this->sis, $this->term, $ids);
 
     expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(6);
 });

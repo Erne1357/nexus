@@ -58,7 +58,7 @@
             @include('catalog-validation::review.counters', ['summary' => $card['summary']])
 
             @if ($card['readiness'] !== null)
-                @include('catalog-validation::review.readiness', ['counts' => $card['readiness']['counts'], 'term' => $term, 'department' => $department])
+                @include('catalog-validation::review.readiness', ['counts' => $card['readiness'], 'term' => $term, 'department' => $department])
             @endif
 
             <div class="relative z-10 mt-auto flex gap-2">

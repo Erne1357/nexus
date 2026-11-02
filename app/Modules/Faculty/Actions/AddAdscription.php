@@ -89,7 +89,7 @@ final class AddAdscription
                 ]);
             }
 
-            AdscriptionChanged::dispatch($adscription);
+            AdscriptionChanged::dispatch($adscription, auth()->user());
 
             return $adscription->setRelation('department', $department);
         });

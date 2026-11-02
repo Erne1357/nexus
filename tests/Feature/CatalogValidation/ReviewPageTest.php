@@ -25,6 +25,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
+use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Role as SpatieRole;
@@ -541,6 +542,32 @@ describe('captura de docentes (2.6, CV6)', function () {
 
     it('un valor de «Falta» que no existe no filtra', function () {
         reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => 'otra'])->assertSee('Con Todo')->assertSee('Sin Nada');
+    });
+
+    it('un docente inactivo no sale como «Falta» ni con el 0 de perfil en advertencia, y no cuenta en los indicadores', function () {
+        $inactive = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '00009', 'name' => 'Ya Baja', 'is_active' => false]);
+
+        $component = reviewPage($this->jefe, ['catalogo' => 'teachers', 'search' => '']);
+        $component->set('search', 'Ya Baja')->assertSee('Ya Baja')->assertSeeHtml('Sin dato: docente inactivo')->assertSee('Docente inactivo');
+
+        reviewPage()->assertSeeHtml('data-testid="missing-disponibilidad"');
+        expect(app(TeacherTermReadinessQuery::class)->counts($this->sis, $this->term)['no_availability'])->toBe(2);
+    });
+
+    it('«Falta» implica activos: al elegirlo Estado pasa a Activos y elegir Inactivos lo quita', function () {
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->set('missing', 'perfil')->assertSet('status', 'active')
+            ->set('status', 'inactive')->assertSet('missing', '');
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => 'perfil'])->assertSet('status', 'active');
+    });
+
+    it('la lista solo prepara a los docentes de la página visible', function () {
+        DB::enableQueryLog();
+        reviewPage($this->jefe, ['catalogo' => 'teachers']);
+        $queries = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'teacher_external_loads'));
+
+        expect($queries)->toHaveCount(1);
     });
 
     it('Subdirección ve los indicadores del departamento que abre, en lectura', function () {
