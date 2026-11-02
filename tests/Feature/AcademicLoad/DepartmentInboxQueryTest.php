@@ -14,9 +14,12 @@ use App\Modules\AcademicLoad\Queries\DepartmentInbox;
 use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
@@ -352,4 +355,26 @@ it('busca la parte del departamento por id del cliente, sin fallar con un id que
     expect($query->reviewOrFail($this->cb, $part->id)->id)->toBe($part->id)
         ->and(fn () => $query->reviewOrFail($this->cb, $other->id))->toThrow(ModelNotFoundException::class)
         ->and(fn () => $query->reviewOrFail($this->cb, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
+});
+
+describe('departamentos de la bandeja de un usuario', function () {
+    it('da al jefe solo su departamento, y a subdirección y al admin todos', function () {
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->cb->id])->create();
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => offeredCareer('ISC')->id])->create();
+        $codes = fn (User $user): array => app(DepartmentInboxQuery::class)
+            ->departmentsFor(app(ScopedContext::class)->forUser($user), $this->campus)->pluck('code')->all();
+
+        expect($codes($jefe))->toBe(['CB'])
+            ->and($codes($subdireccion))->toContain('CB', 'SC')
+            ->and($codes(User::factory()->admin()->create()))->toContain('CB', 'SC')
+            ->and($codes($coordinador))->toBe([]);
+    });
+
+    it('no da el departamento a un jefe de otro campus', function () {
+        $otro = Campus::factory()->create();
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $otro->id, 'department_id' => $this->cb->id])->create();
+
+        expect(app(DepartmentInboxQuery::class)->departmentsFor(app(ScopedContext::class)->forUser($jefe), $this->campus))->toBeEmpty();
+    });
 });

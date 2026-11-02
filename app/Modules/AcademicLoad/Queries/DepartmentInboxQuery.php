@@ -13,12 +13,14 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Policies\AcademicLoadPolicy;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 
@@ -96,6 +98,32 @@ final class DepartmentInboxQuery
             careers: $rows->all(),
             subjects: $this->parallels($rows),
         );
+    }
+
+    /**
+     * Los departamentos cuya bandeja puede ver el usuario en el campus (los que cubre con alguno de los roles que
+     * ven la carga), por clave: el del jefe, o todos para subdirección y admin.
+     *
+     * @return Collection<int, Department>
+     */
+    public function departmentsFor(ScopedContext $context, Campus $campus): Collection
+    {
+        return Department::query()
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->get()
+            ->filter(fn (Department $department): bool => $context->covers(AcademicLoadPolicy::VIEWERS, $campus, department: $department->getKey()))
+            ->values();
+    }
+
+    /**
+     * La bandeja con los ids que la página guardó al entrar (periodo, campus y departamento, ya autorizados).
+     *
+     * @throws ModelNotFoundException<Term>
+     */
+    public function inboxOf(string $termId, string $campusId, string $departmentId): DepartmentInbox
+    {
+        return $this->inbox(KeyLookup::findOrFail(Term::query(), $termId), KeyLookup::findOrFail(Campus::query(), $campusId), KeyLookup::findOrFail(Department::query(), $departmentId));
     }
 
     /**

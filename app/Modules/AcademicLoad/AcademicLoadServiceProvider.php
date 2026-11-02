@@ -45,6 +45,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return [
             new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::Academico,
                 visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador) || $context->has(Role::Subdireccion)),
+            new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico,
+                visible: static fn (ScopedContext $context): bool => $context->has(Role::JefeDepartamento) || $context->has(Role::JefeProyectoDocente) || $context->has(Role::Subdireccion)),
         ];
     }
 }
