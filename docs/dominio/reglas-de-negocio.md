@@ -19,7 +19,7 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 | HC-11 | Un salón no puede usarse en bloques con `room_blocks` vigentes. | Scheduling | R1 |
 | HC-12 | Las horas semanales de sesiones de un grupo deben ser iguales a `theory_hours + practice_hours` de la materia (tolerancia configurable por campus para modalidades mixtas). | Scheduling | R1 |
 | HC-13 | Solo se pueden crear grupos de materias activas de planes activos, en carreras ofrecidas en el campus. | AcademicLoad | R1 |
-| HC-14 | La carga de un departamento no sale de `draft` hasta que sus `catalog_reviews` del periodo y campus estén `validated`. | CatalogValidation, AcademicLoad | R1 |
+| HC-14 | La carga de un departamento en un campus no sale de `draft` hasta que estén `validated` sus revisiones generales del periodo (docentes, materias, planes y carreras, una vez para todo el Tec) y, si el campus usa salones, la de sus salones en ese campus (confirmado el 1 de noviembre de 2026). Una revisión que no existe cuenta como no validada. | CatalogValidation, AcademicLoad | R1 |
 | HC-15 | Para cerrar (`closed`): cero choques duros, todos los grupos `confirmed` con docente y, si el campus usa salones, con salón en todas sus sesiones. Un grupo sin docente o salón solo pasa si se marca `cancelled` o con justificación registrada. | AcademicLoad | R1 |
 | HC-16 | Asignar un docente que no ocupa el primer lugar del ranking del grupo exige un motivo escrito; se guarda con la posición que tenía. | Staffing | R1 |
 | HC-17 | Toda la oferta (grupos) de un departamento es visible para todos los docentes activos del departamento desde que la carga entra a `staffing`. No existe forma de ocultar un grupo. | Staffing | R1 |
