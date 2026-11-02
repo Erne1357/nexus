@@ -25,6 +25,7 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 | HC-17 | Toda la oferta (grupos) de un departamento es visible para todos los docentes activos del departamento desde que la carga entra a `staffing`. No existe forma de ocultar un grupo. | Staffing | R1 |
 | HC-18 | Ningún registro de bitácora, transición o snapshot se edita ni se borra. | Core | R1 |
 | HC-19 | (R3) Un alumno solo puede inscribir una materia si aprobó su seriación, no la tiene aprobada, hay cupo en su carrera para ese grupo y no se empalma con sus otros grupos. | Enrollment | R3 |
+| HC-20 | La carga de un departamento en un campus no sale de `draft` sin al menos una parte aceptada del departamento en una propuesta de carrera del mismo periodo y campus ("Propuesta de carrera"); cuenta aunque esa propuesta esté regresada por otro departamento, porque lo aceptado ya no cambia (supuesto por confirmar). | AcademicLoad | R1 |
 
 ## Restricciones blandas (SC)
 
@@ -139,7 +140,7 @@ Etapa 3 de `docs/proceso/proceso-propuesto.md`: el coordinador pide, por cada ma
 | Consultar alumnos (listado y ficha) | `admin`, `subdireccion`, `jefe_departamento`, `coordinador` | `subdireccion`, los de cualquier campus; `jefe_departamento`, los de las carreras de su departamento en cualquier campus; `coordinador`, los de su carrera en su campus. Solo lectura: vienen del SII (confirmado el 29 de octubre de 2026) |
 | Validar catálogos del departamento | `jefe_departamento` del departamento | |
 | Ver la carga académica | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` | `jefe_departamento`, la de su departamento en cualquier campus; `jefe_proyecto_docente`, la de su departamento en su campus (supuesto por confirmar) |
-| Proponer la carga (sale de borrador) | `admin`, `jefe_departamento` del departamento | HC-14; la bandeja del departamento (tarea 2.8) la propone al aceptar las propuestas de las carreras y agregará esa condición (supuesto por confirmar) |
+| Proponer la carga (sale de borrador) | `admin`, `jefe_departamento` del departamento | HC-14 y HC-20. La bandeja del departamento la propone al aceptar la primera parte (confirmado el 2 de noviembre de 2026). Quién la propone es el jefe del departamento (supuesto por confirmar) |
 | Ver la propuesta de carrera | `admin`, `subdireccion`, `coordinador` de la carrera y campus | `subdireccion`, la de cualquier carrera y campus, solo lectura (supuesto por confirmar) |
 | Armar, corregir y enviar la propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
