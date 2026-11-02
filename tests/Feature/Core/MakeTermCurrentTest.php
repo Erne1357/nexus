@@ -95,3 +95,18 @@ it('la base rechaza dos periodos actuales a la vez (terms_single_current_unique)
 
     expect(fn () => Term::factory()->current()->create())->toThrow(UniqueConstraintViolationException::class);
 });
+
+it('toma el candado de asesoría antes de leer los periodos, para serializar a dos sesiones', function () {
+    $term = Term::factory()->create();
+    $queries = [];
+    DB::listen(function ($query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    app(MakeTermCurrent::class)->handle($term);
+
+    $lock = collect($queries)->search(fn (string $sql): bool => str_contains($sql, 'pg_advisory_xact_lock'));
+    $firstRead = collect($queries)->search(fn (string $sql): bool => str_contains($sql, 'from "terms"'));
+
+    expect($lock)->not->toBeFalse()->and($lock)->toBeLessThan($firstRead);
+});

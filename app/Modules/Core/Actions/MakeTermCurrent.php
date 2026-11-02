@@ -13,6 +13,11 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * transacción quita la marca al anterior ANTES de ponérsela a este, porque el índice único parcial
  * `terms_single_current_unique` rechazaría a los dos a la vez.
  *
+ * Dos sesiones que marcan periodos distintos a la vez se serializan con un candado de asesoría de la transacción
+ * (`pg_advisory_xact_lock`), lo primero que se toma: sin él, la relectura con `lockForUpdate()` de la segunda no vería
+ * al periodo que la primera acaba de marcar y el índice único fallaría con una excepción de base de datos. El
+ * candado se suelta solo al terminar la transacción.
+ *
  * Es idempotente: si ya era el actual no escribe, no registra ni avisa. Después del commit avisa con
  * CurrentTermChanged, con el periodo anterior si lo había.
  */
@@ -21,6 +26,8 @@ final class MakeTermCurrent
     public function handle(Term $term): Term
     {
         return DB::transaction(function () use ($term): Term {
+            DB::select('select pg_advisory_xact_lock(hashtext(?))', ['core.terms.current']);
+
             $term->setRawAttributes($term->newQuery()->lockForUpdate()->findOrFail($term->getKey())->getAttributes(), sync: true);
 
             if ($term->is_current) {
