@@ -322,6 +322,7 @@ El estado de una carga (`academic_loads.status`) cambia en un solo lugar: `Acade
 - **Veto para los módulos de la derecha**: `TransitionLoad` despacha `LoadTransitioning` (evento con veto, ver arriba) dentro de la transacción y antes de escribir. Los motivos de la guarda y los del veto se juntan; con cualquiera no se escribe nada y la excepción los lleva todos.
 - **Lo que deja una transición**: el nuevo estado, una fila inmutable en `load_transitions` (de, a, actor, comentario; HC-18), una entrada de bitácora de la carga (evento `transitioned`) y, después del commit, `LoadTransitioned`.
 - **Quién puede**: lo decide `AcademicLoadPolicy` (una ability por transición) antes de llamar a la Action.
+- **Desde otra Action**: una transición también se llama dentro de la transacción de otra Action, que bloquea la carga antes de leer su estado. `AcceptProposalReview` llama a `ProposeLoad` cuando el departamento acepta su primera parte con la carga en borrador; si la transición se bloquea, la parte no se acepta.
 
 Para agregar una transición: una Action `Transitions/<Verbo>Load` que llame a `TransitionLoad` con su estado destino y su guarda, la ability en la policy, y las pruebas con la regla que la bloquea. El diagrama ya la permite o se agrega a `LoadStatus::transitions()`.
 

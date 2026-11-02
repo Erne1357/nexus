@@ -16,8 +16,8 @@ use Illuminate\Validation\ValidationException;
  * Envía, o reenvía después de que un departamento la regresó, la propuesta de carrera a sus departamentos
  * (reglas-de-negocio.md, "Propuesta de carrera"). Cada departamento de una materia con grupos tiene su parte,
  * que decide completa; la propuesta queda aceptada cuando todas sus partes lo están (confirmado el 2 de
- * noviembre de 2026). La decisión de cada departamento es de la bandeja (tarea 2.8), que debe bloquear la
- * propuesta (`lockForUpdate`) antes de cambiar una parte, como lo hace esta Action.
+ * noviembre de 2026). La decisión de cada departamento es de la bandeja (AcceptProposalReview y
+ * ReturnProposalReview), que bloquea la propuesta (`lockForUpdate`) antes de cambiar una parte, como esta Action.
  *
  * En una transacción bloquea la propuesta (el estado que vale es el de la base) y exige que esté en borrador o
  * regresada; si no, una ValidationException sobre `status`. Exige al menos una materia con grupos, sobre
