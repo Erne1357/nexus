@@ -146,6 +146,8 @@ Etapa 3 de `docs/proceso/proceso-propuesto.md`: el coordinador pide, por cada ma
 | Proponer la carga (sale de borrador) | `admin`, `jefe_departamento` del departamento | HC-14 y HC-20. La bandeja del departamento la propone al aceptar la primera parte (confirmado el 2 de noviembre de 2026). Quién la propone es el jefe del departamento (supuesto por confirmar) |
 | Ver la propuesta de carrera | `admin`, `subdireccion`, `coordinador` de la carrera y campus | `subdireccion`, la de cualquier carrera y campus, solo lectura (supuesto por confirmar) |
 | Armar, corregir y enviar la propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
+| Ver la bandeja del departamento | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` | Los mismos que ven la carga del departamento en el campus (supuesto por confirmar) |
+| Aceptar o regresar la parte del departamento en una propuesta de carrera | `admin`, `jefe_departamento` del departamento | Aceptar exige HC-14; regresar no, y lleva comentario (confirmado el 2 de noviembre de 2026). Decide el jefe del departamento, como quien propone la carga (supuesto por confirmar) |
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
