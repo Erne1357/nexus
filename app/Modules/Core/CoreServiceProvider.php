@@ -6,6 +6,7 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
@@ -46,6 +47,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
             new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Campus::class]),
+            new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Academico,
+                ability: 'viewAny', arguments: [Term::class]),
         ];
     }
 }
