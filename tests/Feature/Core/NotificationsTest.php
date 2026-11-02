@@ -1,0 +1,167 @@
+<?php
+
+use App\Modules\Core\Actions\MarkAllNotificationsRead;
+use App\Modules\Core\Actions\OpenNotification;
+use App\Modules\Core\Database\Seeders\RoleSeeder;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\NexusNotification;
+use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Queries\NotificationQuery;
+use App\Modules\Core\Queries\ScopedContext;
+use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
+
+/*
+| Tarea 2.9: notificaciones en base de datos. Cada módulo define las suyas sobre NexusNotification, que
+| guarda un mensaje (título, detalle, icono y destino como ruta con parámetros, más el periodo y el campus
+| del aviso). La campana las lee con NotificationQuery y las abre con OpenNotification.
+*/
+
+final class TestNotice extends NexusNotification
+{
+    public function __construct(private readonly NotificationMessage $message) {}
+
+    public function message(object $notifiable): NotificationMessage
+    {
+        return $this->message;
+    }
+}
+
+function notice(string $title = 'Aviso', ?string $route = 'home', array $parameters = [], ?string $termId = null, ?string $campusId = null): TestNotice
+{
+    return new TestNotice(new NotificationMessage(
+        title: $title,
+        body: 'Detalle del aviso',
+        icon: 'o-bell',
+        route: $route,
+        parameters: $parameters,
+        termId: $termId,
+        campusId: $campusId,
+    ));
+}
+
+beforeEach(function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-02 12:00', 'America/Ciudad_Juarez'));
+});
+
+it('guarda el mensaje en la base con una llave UUIDv7 distinta por destinatario', function () {
+    [$ana, $beto] = User::factory()->count(2)->create();
+
+    Notification::send([$ana, $beto], notice('Tienes catálogos por validar', 'home', ['department' => 'x']));
+
+    $stored = DatabaseNotification::query()->orderBy('id')->get();
+
+    expect($stored)->toHaveCount(2)
+        ->and($stored->pluck('id')->unique())->toHaveCount(2)
+        ->and($stored->every(fn (DatabaseNotification $notification): bool => Str::isUuid($notification->id, 7)))->toBeTrue()
+        ->and($stored->first()->data)->toEqual([
+            'title' => 'Tienes catálogos por validar',
+            'body' => 'Detalle del aviso',
+            'icon' => 'o-bell',
+            'tone' => 'info',
+            'route' => 'home',
+            'parameters' => ['department' => 'x'],
+            'term_id' => null,
+            'campus_id' => null,
+        ]);
+});
+
+it('la campana cuenta las no leídas y lista las recientes del usuario, las nuevas primero', function () {
+    $ana = User::factory()->create();
+    $beto = User::factory()->create();
+
+    $ana->notify(notice('Primera'));
+    $this->travel(5)->minutes();
+    $ana->notify(notice('Segunda'));
+    $beto->notify(notice('De Beto'));
+    $ana->notifications()->first()->markAsRead();
+
+    $query = app(NotificationQuery::class);
+
+    expect($query->unreadCount($ana))->toBe(1)
+        ->and($query->recent($ana)->pluck('title')->all())->toBe(['Segunda', 'Primera'])
+        ->and($query->recent($ana)->pluck('read')->all())->toBe([true, false]);
+});
+
+it('abrir una notificación la marca leída y regresa la dirección de su ruta', function () {
+    $ana = User::factory()->create();
+    $ana->notify(notice(route: 'home'));
+    $id = $ana->notifications()->value('id');
+    $this->actingAs($ana);
+
+    $target = app(OpenNotification::class)->handle($ana, $id);
+
+    expect($target->url)->toBe(route('home'))
+        ->and($target->problem)->toBeNull()
+        ->and($ana->unreadNotifications()->count())->toBe(0);
+});
+
+it('si la pantalla ya no existe, avisa en lugar de llevarlo y la marca leída', function () {
+    $ana = User::factory()->create();
+    $ana->notify(notice(route: 'pantalla-que-no-existe', parameters: ['department' => 'x']));
+    $this->actingAs($ana);
+
+    $target = app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id'));
+
+    expect($target->url)->toBeNull()
+        ->and($target->problem)->toBe('Esa pantalla ya no está disponible.')
+        ->and($ana->unreadNotifications()->count())->toBe(0);
+});
+
+it('si ya no trabaja en el campus del aviso, avisa en lugar de llevarlo', function () {
+    $this->seed(RoleSeeder::class);
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $c1->id, 'career_id' => careerKey(20)])->create();
+    $coordinador->notify(notice(campusId: $c2->id));
+    $this->actingAs($coordinador);
+
+    $target = app(OpenNotification::class)->handle($coordinador, $coordinador->notifications()->value('id'));
+
+    expect($target->url)->toBeNull()
+        ->and($target->problem)->toBe('Ya no trabajas en el campus de ese aviso.');
+});
+
+it('abrirla cambia la credencial al periodo y el campus del aviso si el usuario trabaja ahí', function () {
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $term = Term::factory()->create(['is_current' => false]);
+    $admin = User::factory()->admin()->create();
+    $admin->notify(notice(termId: $term->id, campusId: $c2->id));
+    $this->actingAs($admin);
+
+    app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'));
+
+    $context = app(ScopedContext::class);
+    expect($context->activeTerm()?->id)->toBe($term->id)
+        ->and($context->activeCampus()?->id)->toBe($c2->id);
+});
+
+it('no abre la notificación de otro usuario', function () {
+    $ana = User::factory()->create();
+    $beto = User::factory()->create();
+    $beto->notify(notice());
+    $this->actingAs($ana);
+
+    expect(fn () => app(OpenNotification::class)->handle($ana, $beto->notifications()->value('id')))
+        ->toThrow(AuthorizationException::class);
+
+    expect($beto->unreadNotifications()->count())->toBe(1);
+});
+
+it('marcar todas como leídas solo toca las del usuario', function () {
+    $ana = User::factory()->create();
+    $beto = User::factory()->create();
+    $ana->notify(notice());
+    $ana->notify(notice());
+    $beto->notify(notice());
+
+    expect(app(MarkAllNotificationsRead::class)->handle($ana))->toBe(2)
+        ->and($ana->unreadNotifications()->count())->toBe(0)
+        ->and($beto->unreadNotifications()->count())->toBe(1);
+});

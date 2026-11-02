@@ -1,9 +1,9 @@
 {{--
     La banda (DESIGN.md, "Estructura" y "Responsivo"). Es fija arriba con su franja roja; la tarjeta
     de la credencial flota debajo. El estado (menú y credencial) es del componente Alpine nexusShell
-    de <body>; aquí solo se le llama. Sin prefijo es escritorio; max-desktop: es tableta (sin el área en
-    la ruta y la credencial con avatar y nombre) y max-md: es el celular (liebre, «Nexus», lupa y
-    avatar).
+    de <body>; aquí solo se le llama. Entre la búsqueda y la credencial va la campana de notificaciones
+    (core::components.bell). Sin prefijo es escritorio; max-desktop: es tableta (sin el área en la ruta y
+    la credencial con avatar y nombre) y max-md: es el celular (liebre, «Nexus», lupa, campana y avatar).
 --}}
 <div class="sticky top-0 z-[7] text-sm/[1.45]">
     <header class="flex h-16 items-center gap-[18px] bg-band pe-5 text-band-content max-md:h-14 max-md:gap-3 max-md:pe-2.5">
@@ -61,6 +61,8 @@
         >
             <x-icon name="o-magnifying-glass" class="w-[18px] h-[18px]" />
         </button>
+
+        <livewire:core::components.bell />
 
         <div x-on:click.outside="closeCard(false)" x-on:focusout="onCardFocusOut($event)" class="min-w-0">
             <button
