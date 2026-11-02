@@ -2,7 +2,7 @@
 
 > Archivo de estado. Se actualiza en cada PR que cierre o abra tareas de una fase. Contexto en [PROJECT.md](PROJECT.md); reglas de trabajo en [CLAUDE.md](CLAUDE.md).
 
-**Última actualización:** 2026-11-02 · **Fase activa:** 1 y 2 (A terminó su parte de la 2 el 2 de noviembre: 2.1 a 2.3; C terminó la suya el 2 de noviembre: 2.7 a 2.9; B en curso) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
+**Última actualización:** 2026-11-02 · **Fase activa:** 1 (falta la 1.16, con datos reales del SII); la fase 2 se cerró el 2 de noviembre (2.1 a 2.9) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
 
 ## Estados
 
@@ -20,7 +20,7 @@
 |---|---|---|---|---|---|---|
 | 0 | Fundación | R1 | 27 oct – 2 nov 2026 | Individual | ✅ | [fase-0-fundacion.md](docs/plan/fase-0-fundacion.md) |
 | 1 | Catálogos e importación | R1 | 3 – 14 nov 2026 | 3 en paralelo | 🟨 | [fase-1-catalogos-importacion.md](docs/plan/fase-1-catalogos-importacion.md) |
-| 2 | Validación de catálogos y periodo | R1 | 10 – 19 nov 2026 | 3 en paralelo | 🟨 | [fase-2-validacion-y-periodo.md](docs/plan/fase-2-validacion-y-periodo.md) |
+| 2 | Validación de catálogos y periodo | R1 | 10 – 19 nov 2026 | 3 en paralelo | ✅ | [fase-2-validacion-y-periodo.md](docs/plan/fase-2-validacion-y-periodo.md) |
 | 3 | Captura de carga: grupos, horarios, docentes, salones | R1 | 17 nov – 4 dic 2026 | 3 en paralelo | ⬜ | [fase-3-captura-de-carga.md](docs/plan/fase-3-captura-de-carga.md) |
 | 4 | Cierre, publicación y piloto Campus II | R1 | 30 nov – 18 dic 2026 | 3 en paralelo | ⬜ | [fase-4-cierre-publicacion-piloto.md](docs/plan/fase-4-cierre-publicacion-piloto.md) |
 | 5 | Proyección de demanda | R2 | feb 2027 | Paralelo | ⬜ | [fase-5-demanda.md](docs/plan/fase-5-demanda.md) |
@@ -52,7 +52,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Faculty | 1 | ✅ (modelos #159 y #160; usuarios, roles y jefaturas #164; seeders #165; adscripción sin campus #168; pantalla de docentes #169; ficha #170; perfil y horas fuera del ITCJ #173; jefaturas en la ficha #174; editor de disponibilidad #175; perfil y disponibilidad desde la validación, 2.6, #190. Sus plantillas de 1.13 están en Imports: #171 y #172) |
 | Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
 | Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120) |
-| CatalogValidation | 2 | ✅ (base y revisiones al abrir el periodo #179; validación del jefe, 2.4, #184 y #185; tablero de avance con recordatorios, 2.5, [#PR]; captura docente desde la validación, 2.6, #190) |
+| CatalogValidation | 2 | ✅ (base y revisiones al abrir el periodo #179; validación del jefe, 2.4, #184 y #185; tablero de avance con recordatorios, 2.5, #191; captura docente desde la validación, 2.6, #190) |
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179; máquina de estados con HC-14 #180; propuesta de carrera #187; bandeja del departamento con HC-20 y paralelos #188) |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
 | Staffing | 3 | ⬜ |
@@ -81,3 +81,4 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | 2026-10-29 | Identidad visual definida y `DESIGN.md` como norma para toda pantalla ([ADR-0015](docs/decisiones/0015-identidad-visual.md)): credencial con áreas, menú que se transforma, paleta institucional y la liebre como marca. Construir el shell en la app queda en el issue #108. |
 | 2026-10-30 | Alcance general contra alcance por campus: carreras, materias, planes de estudio y retículas, docentes, jefes de departamento (uno por departamento) y la Subdirección (una para todo el Tec) son de toda la institución; se atan a un campus los alumnos, los coordinadores (por carrera y campus), la oferta de carreras, los salones y las cargas. El jefe de proyecto docente queda por departamento y campus mientras se confirma (supuesto). Cambios en Core, Academic y Faculty en #166, #167 y #168; detalle en [PROJECT.md](PROJECT.md) y [reglas de negocio](docs/dominio/reglas-de-negocio.md). |
 | 2026-11-01 | Fase 2 abierta por A (tareas 2.1 a 2.3). Decisiones del usuario: el periodo se abre por campus (hoy solo C2); docentes, materias, planes y carreras se validan una vez por periodo para todo el Tec y los salones por campus (HC-14 reescrita); abrir un periodo no cierra el anterior; el calendario de etapas solo informa. Mapa de módulos: `CatalogValidation --> AcademicLoad` ([ADR-0017](docs/decisiones/0017-catalog-validation-antes-de-academic-load.md), #179). |
+| 2026-11-02 | Fase 2 cerrada en un día, con los tres carriles en sesiones paralelas: 2.1 a 2.3 (#178 a #180), 2.4 (#184, #185), 2.5 (#191), 2.6 (#190), 2.7 (#187), 2.8 (#188) y 2.9 (#183). Decisiones del usuario en la validación de catálogos (CV1 a CV6 en [reglas de negocio](docs/dominio/reglas-de-negocio.md)): el jefe corrige lo suyo mientras no valida; los salones, si el perfil del campus lo permite (`heads_edit_rooms`, confirmado en C1, por confirmar en C2 y EAD); altas y bajas contra la foto de la validación anterior; las observaciones y los docentes sin disponibilidad o perfil no bloquean; se reabre mientras la carga siga en borrador. La propuesta y la bandeja suman HC-20. CI: la suite completa corre una vez y en paralelo en cada PR (#182, #186). Vista previa por worktree con `.github/scripts/worktree-preview.sh` (#181). |
