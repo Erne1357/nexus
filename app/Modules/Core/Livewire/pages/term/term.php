@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Actions\CopyTermCalendar;
 use App\Modules\Core\Actions\MakeTermCurrent;
 use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Actions\SaveStageWindows;
@@ -14,6 +15,7 @@ use App\Modules\Core\Queries\TermQuery;
 use App\Modules\Core\Rules\TermRules;
 use App\Modules\Core\Support\StageTimeline;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -45,6 +47,12 @@ new #[Title('Ficha del periodo')] class extends Component
     public bool $showModal = false;
 
     public TermForm $form;
+
+    /** El modal «Copiar de otro periodo». */
+    public bool $showCopy = false;
+
+    /** El periodo del que se copia el calendario; viene del navegador, así que se vuelve a buscar y a validar. */
+    public string $sourceId = '';
 
     /** `showDrawer` no puede ser #[Locked]: el x-drawer lo cierra desde el navegador. */
     public bool $showDrawer = false;
@@ -83,6 +91,8 @@ new #[Title('Ficha del periodo')] class extends Component
         $general = $calendar->for($term, null);
         $stage = $this->stage === null ? null : Stage::from($this->stage);
         $campusRows = $terms->campusRows($term, $active);
+        $copySources = $calendar->copySources($term);
+        $source = $this->showCopy ? $copySources->firstWhere('id', $this->sourceId) : null;
 
         return [
             'term' => $term,
@@ -99,10 +109,62 @@ new #[Title('Ficha del periodo')] class extends Component
                 'generalPreview' => $this->generalPreview(),
                 'generalEmpty' => trim((string) ($this->general['starts_on'] ?? '')) === '' && trim((string) ($this->general['ends_on'] ?? '')) === '',
             ],
+            'copySources' => $copySources,
+            'copyWindowCount' => $this->showCopy ? $calendar->windowCount($term) : 0,
+            'copy' => $source === null ? null : $this->copyView($calendar->copyPreview($term, $source)),
             'canUpdate' => Gate::allows('update', $term),
             'canMakeCurrent' => Gate::allows('makeCurrent', $term),
             'canManageCalendar' => Gate::allows('manageCalendar', $term),
         ];
+    }
+
+    /**
+     * Abre el modal para copiar el calendario de otro periodo.
+     */
+    public function openCopy(TermQuery $terms): void
+    {
+        $this->authorize('manageCalendar', $terms->findOrFail($this->termId));
+
+        $this->resetValidation();
+        $this->sourceId = '';
+        $this->showCopy = true;
+    }
+
+    public function updatedSourceId(TermQuery $terms): void
+    {
+        $this->authorize('manageCalendar', $terms->findOrFail($this->termId));
+
+        $this->resetValidation();
+    }
+
+    /**
+     * Copia el calendario del periodo elegido con CopyTermCalendar (reemplaza las ventanas actuales) y dice en un
+     * toast cuántas ventanas copió. Un periodo desconocido o sin calendario se rechaza como error del campo.
+     */
+    public function copyCalendar(TermQuery $terms, CopyTermCalendar $copyTermCalendar): void
+    {
+        $term = $terms->findOrFail($this->termId);
+        $this->authorize('manageCalendar', $term);
+
+        try {
+            $source = $terms->findOrFail($this->sourceId);
+        } catch (ModelNotFoundException) {
+            $this->addError('sourceId', 'Elige un periodo de la lista.');
+
+            return;
+        }
+
+        try {
+            $written = $copyTermCalendar->handle($term, $source);
+        } catch (ValidationException $e) {
+            $this->addError('sourceId', collect($e->errors())->flatten()->implode(' '));
+
+            return;
+        }
+
+        $this->showCopy = false;
+        $this->sourceId = '';
+        $this->success('Calendario copiado', e($written === 1 ? "1 ventana copiada de {$source->code}" : "{$written} ventanas copiadas de {$source->code}"));
     }
 
     /**
@@ -305,6 +367,34 @@ new #[Title('Ficha del periodo')] class extends Component
             'own.*.ends_on.date_format' => 'El campo :attribute debe ser una fecha válida.',
             'own.*.array' => 'Las fechas del campus no son válidas.',
             'own.array' => 'Las fechas de los campus no son válidas.',
+        ];
+    }
+
+    /**
+     * La vista previa de la copia para el modal: las ventanas agrupadas por etapa con sus fechas, el corrimiento en
+     * semanas y lo que no se copia.
+     *
+     * @param  array{shiftDays: int, windows: list<array{stage: Stage, campus: ?Campus, starts_on: CarbonImmutable, ends_on: CarbonImmutable}>, skipped: list<array{stage: Stage, campus: Campus}>}  $preview
+     * @return array{weeks: int, direction: string, groups: list<array{stage: string, rows: list<array{who: string, general: bool, dates: string}>}>, skipped: list<string>}
+     */
+    private function copyView(array $preview): array
+    {
+        $groups = [];
+
+        foreach ($preview['windows'] as $window) {
+            $groups[$window['stage']->value] ??= ['stage' => $window['stage']->label(), 'rows' => []];
+            $groups[$window['stage']->value]['rows'][] = [
+                'who' => $window['campus']?->code ?? 'General',
+                'general' => $window['campus'] === null,
+                'dates' => StageTimeline::rangeBetween($window['starts_on'], $window['ends_on']),
+            ];
+        }
+
+        return [
+            'weeks' => intdiv(abs($preview['shiftDays']), 7),
+            'direction' => $preview['shiftDays'] < 0 ? 'atrás' : 'adelante',
+            'groups' => array_values($groups),
+            'skipped' => array_map(fn (array $row): string => "{$row['campus']->code} · {$row['stage']->label()} (campus ".($row['campus']->trashed() ? 'borrado' : 'inactivo').')', $preview['skipped']),
         ];
     }
 

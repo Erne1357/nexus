@@ -569,6 +569,90 @@ describe('panel de una etapa', function () {
     });
 });
 
+describe('copiar el calendario de otro periodo', function () {
+    beforeEach(function () {
+        termPageStage($this->other, Stage::CatalogValidation, null, '2026-08-17', '2026-08-28');
+        termPageStage($this->other, Stage::Proposal, null, '2026-08-24', '2026-09-04');
+        termPageStage($this->other, Stage::Proposal, $this->c1, '2026-08-26', '2026-09-08');
+    });
+
+    it('el admin copia el calendario a un periodo vacío y lo dice en un toast', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSee('Copiar de otro periodo')
+            ->call('openCopy')
+            ->assertSet('showCopy', true)
+            ->set('sourceId', $this->other->id)
+            ->assertSee('Fechas corridas 23 semanas hacia adelante.')
+            ->assertSee('Validación de catálogos')
+            ->assertSee('25 ene – 5 feb')
+            ->assertSee('Copiar calendario')
+            ->assertDontSee('Reemplazar calendario')
+            ->call('copyCalendar')
+            ->assertHasNoErrors()
+            ->assertSet('showCopy', false);
+
+        expect(TermStage::where('term_id', $this->term->id)->count())->toBe(3)
+            ->and(termPageWindows($this->term, Stage::CatalogValidation))->toBe(['general' => '2027-01-25/2027-02-05'])
+            ->and(lastToastOf($page))->title->toBe('Calendario copiado')->description->toBe('3 ventanas copiadas de 20263');
+    });
+
+    it('con ventanas previas el botón dice «Reemplazar calendario» y pide confirmar', function () {
+        termPageStage($this->term, Stage::Staffing, null, '2027-02-01', '2027-02-05');
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openCopy')
+            ->set('sourceId', $this->other->id)
+            ->assertSee('Reemplazar calendario')
+            ->assertSee('Se reemplazarán las 1 ventanas actuales del periodo.')
+            ->call('copyCalendar');
+
+        expect(termPageWindows($this->term, Stage::Staffing))->toBe([])
+            ->and(TermStage::where('term_id', $this->term->id)->count())->toBe(3);
+    });
+
+    it('lista lo que no se copia por un campus inactivo', function () {
+        $this->c1->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openCopy')
+            ->set('sourceId', $this->other->id)
+            ->assertSee('No se copian: C1 · Propuesta por carrera (campus inactivo)');
+    });
+
+    it('queda deshabilitado con su motivo si ningún otro periodo tiene calendario', function () {
+        TermStage::query()->delete();
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSeeHtml('data-tip="Ningún otro periodo tiene calendario."')
+            ->assertDontSeeHtml('wire:click="openCopy"');
+    });
+
+    it('rechaza como error del campo el mismo periodo, uno sin calendario y un id inválido, sin 500', function (string $case) {
+        $empty = Term::factory()->create(['code' => '20281', 'starts_on' => '2027-08-16', 'ends_on' => '2027-12-10']);
+        $id = match ($case) {
+            'mismo' => $this->term->id,
+            'sin calendario' => $empty->id,
+            'desconocido' => fakeKey(999),
+            'no uuid' => 'no-es-un-uuid',
+            'vacío' => '',
+        };
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openCopy')
+            ->set('sourceId', $id)
+            ->call('copyCalendar')
+            ->assertHasErrors('sourceId')
+            ->assertSet('showCopy', true);
+
+        expect(TermStage::where('term_id', $this->term->id)->count())->toBe(0);
+    })->with(['mismo', 'sin calendario', 'desconocido', 'no uuid', 'vacío']);
+});
+
 describe('otros roles e invitados', function () {
     $roles = [
         'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
@@ -609,6 +693,22 @@ describe('otros roles e invitados', function () {
             ->and($this->term->fresh())->name->toBe('Ene-Jun 2027')->is_current->toBeTrue()
             ->and(Activity::count())->toBe(0);
     })->with($roles)->with(['edit', 'save', 'makeCurrent', 'editStage', 'clearGeneral', 'addCampusWindow', 'removeCampusWindow', 'saveStage', 'openIn', 'completeIn']);
+
+    it('no pueden elegir el periodo de origen ni copiar aunque la página la abriera el admin', function () {
+        termPageStage($this->other, Stage::Proposal, null, '2026-08-24', '2026-09-04');
+        $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();
+        $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id])->call('openCopy');
+
+        $this->actingAs($user);
+        $page->set('sourceId', $this->other->id)->assertForbidden();
+
+        $this->actingAs($this->admin);
+        $page = Livewire::test('core::pages.term', ['term' => $this->term->id])->call('openCopy')->set('sourceId', $this->other->id);
+        $this->actingAs($user);
+        $page->call('copyCalendar')->assertForbidden();
+
+        expect(TermStage::where('term_id', $this->term->id)->count())->toBe(0);
+    });
 
     it('no pueden cambiar el código aunque la página la abriera el admin', function () {
         $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();

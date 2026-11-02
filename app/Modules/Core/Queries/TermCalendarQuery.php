@@ -107,6 +107,14 @@ final class TermCalendarQuery
     }
 
     /**
+     * Cuántas ventanas (generales y de campus) tiene guardadas el periodo.
+     */
+    public function windowCount(Term $term): int
+    {
+        return TermStage::query()->where('term_id', $term->getKey())->count();
+    }
+
+    /**
      * Los periodos de los que se puede copiar el calendario a `$target`: los demás que tienen al menos una
      * ventana, del más reciente al más antiguo.
      *

@@ -15,8 +15,9 @@
     <div class="px-4 py-5" data-testid="stage-timeline-empty">
         <p class="font-medium">Este periodo no tiene calendario.</p>
 
-        {{-- Aquí irá «Copiar de otro periodo» (acción CopyTermCalendar); `data-slot` marca el lugar. --}}
-        <div data-slot="copy-calendar"></div>
+        <div class="mt-3" data-slot="copy-calendar">
+            @include('core::terms.copy-button', ['variant' => 'outline'])
+        </div>
     </div>
 
     <ul class="divide-y divide-base-300 border-t border-base-300" data-testid="stage-list">

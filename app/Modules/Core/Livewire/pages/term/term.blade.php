@@ -120,7 +120,12 @@
     </section>
 
     <section aria-labelledby="term-calendar-title" class="space-y-3">
-        <h2 id="term-calendar-title" class="text-xl font-bold leading-tight">Calendario</h2>
+        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h2 id="term-calendar-title" class="text-xl font-bold leading-tight">Calendario</h2>
+            @if ($timeline->hasRange())
+                @include('core::terms.copy-button')
+            @endif
+        </div>
 
         <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
             @include('core::terms.timeline')
@@ -193,6 +198,73 @@
                 <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="save" />
             </x-slot:actions>
         </x-form>
+    </x-modal>
+
+    <x-modal wire:model="showCopy" title="Copiar el calendario de otro periodo" box-class="max-w-xl" separator data-testid="copy-modal">
+        <div class="space-y-4">
+            <x-select
+                label="Copiar de"
+                wire:model.live="sourceId"
+                :options="$copySources->map(fn ($source) => ['id' => $source->id, 'name' => $source->code.' · '.$source->name])->all()"
+                placeholder="Elige un periodo"
+                placeholder-value=""
+                data-testid="copy-source"
+            />
+
+            @if ($copy !== null)
+                <div class="space-y-3" data-testid="copy-preview">
+                    <p class="font-medium">
+                        @if ($copy['weeks'] === 0)
+                            Las fechas quedan igual.
+                        @else
+                            Fechas corridas {{ $copy['weeks'] }} {{ $copy['weeks'] === 1 ? 'semana' : 'semanas' }} hacia {{ $copy['direction'] }}.
+                        @endif
+                    </p>
+
+                    <dl class="divide-y divide-base-300 rounded-box border border-base-300">
+                        @foreach ($copy['groups'] as $group)
+                            <div class="grid gap-x-4 gap-y-1 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                <dt class="font-bold">{{ $group['stage'] }}</dt>
+                                <dd class="space-y-0.5">
+                                    @foreach ($group['rows'] as $row)
+                                        <span class="flex items-baseline justify-between gap-4 sm:justify-end">
+                                            <span @class(['text-sm', 'font-mono font-semibold' => ! $row['general'], 'text-neutral' => $row['general']])>{{ $row['who'] }}</span>
+                                            <span class="font-mono text-sm tabular-nums">{{ $row['dates'] }}</span>
+                                        </span>
+                                    @endforeach
+                                </dd>
+                            </div>
+                        @endforeach
+                    </dl>
+
+                    @if ($copy['skipped'] !== [])
+                        <p class="text-sm text-neutral" data-testid="copy-skipped">No se copian: {{ implode('; ', $copy['skipped']) }}</p>
+                    @endif
+
+                    @if ($copyWindowCount > 0)
+                        <p class="text-sm text-neutral">Se reemplazan las {{ $copyWindowCount }} {{ $copyWindowCount === 1 ? 'ventana actual' : 'ventanas actuales' }} del periodo.</p>
+                    @endif
+                </div>
+            @endif
+        </div>
+
+        <x-slot:actions>
+            <x-button label="Cancelar" @click="$wire.showCopy = false" class="max-md:h-11" />
+            @if ($copyWindowCount > 0)
+                <x-button
+                    label="Reemplazar calendario"
+                    icon="o-check"
+                    class="btn-primary max-md:h-11"
+                    wire:click="copyCalendar"
+                    wire:confirm="Se reemplazarán las {{ $copyWindowCount }} ventanas actuales del periodo."
+                    :disabled="$copy === null"
+                    spinner="copyCalendar"
+                    data-testid="copy-confirm"
+                />
+            @else
+                <x-button label="Copiar calendario" icon="o-check" class="btn-primary max-md:h-11" wire:click="copyCalendar" :disabled="$copy === null" spinner="copyCalendar" data-testid="copy-confirm" />
+            @endif
+        </x-slot:actions>
     </x-modal>
 
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="stage-drawer-title" data-testid="stage-drawer">
