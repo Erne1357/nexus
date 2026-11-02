@@ -48,6 +48,7 @@ it('el admin da de alta un periodo, lo edita y lo marca como actual desde la UI'
     expect(Term::where('code', '20271')->sole()->is_current)->toBeFalse();
 
     $page->click('@edit-20271')
+        ->waitForText('Editar periodo')
         ->assertValue('code', '20271')
         ->fill('name', 'Enero a Junio 2027')
         ->press('Guardar')

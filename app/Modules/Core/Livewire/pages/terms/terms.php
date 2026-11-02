@@ -119,6 +119,8 @@ new #[Title('Periodos')] class extends Component
         }
 
         $this->showModal = false;
+        $this->reset('editingId');
+        $this->form->reset();
     }
 
     public function makeCurrent(string $id, TermQuery $terms, MakeTermCurrent $makeTermCurrent): void
