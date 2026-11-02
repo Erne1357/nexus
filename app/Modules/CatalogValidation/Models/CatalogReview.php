@@ -11,6 +11,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -87,5 +88,15 @@ class CatalogReview extends Model
     public function flags(): HasMany
     {
         return $this->hasMany(CatalogReviewFlag::class, 'review_id');
+    }
+
+    /**
+     * «Materias de SIS» o «Salones de SIS en C2», para la bitácora.
+     *
+     * @return Attribute<string, never>
+     */
+    protected function title(): Attribute
+    {
+        return Attribute::get(fn (): string => "{$this->catalog->label()} de {$this->department?->code}".($this->campus_id === null ? '' : " en {$this->campus?->code}"));
     }
 }
