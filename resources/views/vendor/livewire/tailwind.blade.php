@@ -1,4 +1,6 @@
 @php
+$summary ??= true;
+
 if (! isset($scrollTo)) {
     $scrollTo = 'body';
 }
@@ -12,11 +14,23 @@ $scrollIntoViewJsSnippet = ($scrollTo !== false)
 
 <div>
     @if ($paginator->hasPages())
-        {{-- Solo los controles: el conteo («Periodos … · 1–15 de 42») lo pinta cada catálogo en su pie. Colores del tema daisyUI. --}}
+        {{-- Con `summary` en false (data de links()) solo van los controles: el catálogo pinta su propio conteo en su pie. Colores del tema daisyUI. --}}
         @php
             $pageName = $paginator->getPageName();
             $suffix = $pageName == 'page' ? '' : '.'.$pageName;
         @endphp
+        <div @class(['sm:flex sm:items-center sm:justify-between sm:gap-4', 'max-sm:w-full'])>
+        @if ($summary)
+            <p class="mb-2 text-sm text-neutral max-sm:hidden sm:mb-0">
+                {!! __('Showing') !!}
+                <span class="font-medium">{{ $paginator->firstItem() }}</span>
+                {!! __('to') !!}
+                <span class="font-medium">{{ $paginator->lastItem() }}</span>
+                {!! __('of') !!}
+                <span class="font-medium">{{ $paginator->total() }}</span>
+                {!! __('results') !!}
+            </p>
+        @endif
         <nav role="navigation" aria-label="Pagination Navigation" class="max-sm:w-full">
             <div class="flex items-center justify-between gap-2 sm:hidden">
                 @if ($paginator->onFirstPage())
@@ -62,5 +76,6 @@ $scrollIntoViewJsSnippet = ($scrollTo !== false)
                 @endif
             </div>
         </nav>
+        </div>
     @endif
 </div>
