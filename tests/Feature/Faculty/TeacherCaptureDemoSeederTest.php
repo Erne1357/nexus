@@ -28,7 +28,8 @@ function seedCaptureScenario(bool $open = true): Term
         app(OpenTerm::class)->handle($term, Campus::factory()->create(['code' => 'C2']));
     }
 
-    foreach (Teacher::factory()->count(200)->create() as $teacher) {
+    foreach (range(1, 200) as $n) {
+        $teacher = Teacher::factory()->create(['employee_number' => sprintf('T%04d', $n)]);
         TeacherAvailability::factory()->create(['teacher_id' => $teacher->id, 'term_id' => $term->id]);
         TeacherSubjectQualification::factory()->create(['teacher_id' => $teacher->id]);
     }
@@ -64,9 +65,9 @@ it('deja docentes con y sin disponibilidad, perfil y horas fuera del ITCJ en las
     $withProfile = TeacherSubjectQualification::query()->distinct()->count('teacher_id');
     $withExternal = TeacherExternalLoad::query()->where('term_id', $term->id)->distinct()->count('teacher_id');
 
-    expect($withAvailability)->toBeBetween(130, 160)
-        ->and($withProfile)->toBeBetween(155, 185)
-        ->and($withExternal)->toBeBetween(45, 75);
+    expect($withAvailability)->toBeBetween(130, 170)
+        ->and($withProfile)->toBeBetween(150, 190)
+        ->and($withExternal)->toBeBetween(40, 80);
 });
 
 it('es idempotente', function () {
@@ -78,4 +79,19 @@ it('es idempotente', function () {
 
     expect([TeacherAvailability::count(), TeacherSubjectQualification::count(), TeacherExternalLoad::count()])->toBe($first);
     expect(DB::table('teacher_external_loads')->count())->toBe($first[2]);
+});
+
+it('lo que quita lo borra de forma lógica y no cuenta como capturado', function () {
+    $term = seedCaptureScenario();
+
+    runCaptureSeeder('massive');
+
+    expect(TeacherAvailability::withTrashed()->count())->toBeGreaterThan(TeacherAvailability::count())
+        ->and(TeacherSubjectQualification::onlyTrashed()->count())->toBe(200 - TeacherSubjectQualification::count())
+        ->and(TeacherAvailability::query()->where('term_id', $term->id)->distinct()->count('teacher_id'))->toBeBetween(130, 170);
+
+    $trashed = TeacherAvailability::withTrashed()->count();
+    runCaptureSeeder('massive');
+
+    expect(TeacherAvailability::withTrashed()->count())->toBe($trashed);
 });

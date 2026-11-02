@@ -11,7 +11,7 @@ use RuntimeException;
  * Variedad en la captura de los docentes activos del último periodo abierto, para la pantalla de validación: de los
  * que FacultyDemoSeeder sembró, unos quedan sin disponibilidad, unos sin perfil (sin materias calificadas) y unos con
  * horas fuera del ITCJ (el resto, sin ellas). Quién cae en cada grupo sale de un hash del número de empleado, así que
- * es el mismo siempre y no cambia al sembrar más docentes. Idempotente. Sin periodos abiertos, no hace nada. No corre
+ * es el mismo siempre y no cambia al sembrar más docentes. Lo que quita lo borra de forma lógica (`deleted_at`). Idempotente. Sin periodos abiertos, no hace nada. No corre
  * en producción.
  *
  * Porcentajes: `demo` 20 % sin disponibilidad, 10 % sin perfil y 25 % con horas externas; `massive` 25, 15 y 30.
@@ -62,17 +62,17 @@ class TeacherCaptureDemoSeeder extends Seeder
             $this->in($number, 'external', $percent['external']) ? $withExternal[] = $id : $withoutExternal[] = $id;
         }
 
-        DB::transaction(function () use ($term, $stamps, $withoutAvailability, $withAvailability, $withoutProfile, $withExternal, $withoutExternal): void {
+        DB::transaction(function () use ($term, $now, $stamps, $withoutAvailability, $withAvailability, $withoutProfile, $withExternal, $withoutExternal): void {
             foreach (array_chunk($withoutAvailability, 1000) as $chunk) {
-                DB::table('teacher_availability')->where('term_id', $term->id)->whereIn('teacher_id', $chunk)->delete();
+                DB::table('teacher_availability')->where('term_id', $term->id)->whereNull('deleted_at')->whereIn('teacher_id', $chunk)->update(['deleted_at' => $now]);
             }
 
             foreach (array_chunk($withoutProfile, 1000) as $chunk) {
-                DB::table('teacher_subject_qualifications')->whereIn('teacher_id', $chunk)->delete();
+                DB::table('teacher_subject_qualifications')->whereNull('deleted_at')->whereIn('teacher_id', $chunk)->update(['deleted_at' => $now]);
             }
 
             foreach (array_chunk($withoutExternal, 1000) as $chunk) {
-                DB::table('teacher_external_loads')->where('term_id', $term->id)->whereIn('teacher_id', $chunk)->delete();
+                DB::table('teacher_external_loads')->where('term_id', $term->id)->whereNull('deleted_at')->whereIn('teacher_id', $chunk)->update(['deleted_at' => $now]);
             }
 
             $this->insertMissing('teacher_availability', $term->id, $withAvailability, fn (string $id): array => [
@@ -101,7 +101,7 @@ class TeacherCaptureDemoSeeder extends Seeder
     private function insertMissing(string $table, string $termId, array $ids, callable $row): void
     {
         foreach (array_chunk($ids, 1000) as $chunk) {
-            $has = DB::table($table)->where('term_id', $termId)->whereIn('teacher_id', $chunk)->distinct()->pluck('teacher_id')->flip();
+            $has = DB::table($table)->where('term_id', $termId)->whereNull('deleted_at')->whereIn('teacher_id', $chunk)->distinct()->pluck('teacher_id')->flip();
             $rows = [];
 
             foreach ($chunk as $id) {

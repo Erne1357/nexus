@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\CatalogValidation\Enums\Catalog;
@@ -200,4 +201,52 @@ it('es idempotente: correrlo dos veces no duplica observaciones, recordatorios n
     runCatalogDemoSeeder('massive');
 
     expect($count())->toBe($first);
+});
+
+it('el resumen del periodo actual muestra exactamente las bajas y las reactivaciones sembradas', function () {
+    seedCatalogScenario();
+    $department = Department::query()->where('code', 'CB')->firstOrFail();
+    $wasInactive = Teacher::query()->where('is_active', false)->whereHas('adscriptions', fn ($query) => $query->where('department_id', $department->id))->pluck('employee_number')->all();
+
+    runCatalogDemoSeeder('massive');
+
+    $summary = app(CatalogReviewQuery::class)->summary(cvReview('20271', 'CB', Catalog::Teachers));
+    $added = array_column($summary['added'], 'code');
+    $removed = array_column($summary['removed'], 'code');
+
+    expect($removed)->toHaveCount(6)
+        ->and($added)->toHaveCount(7)
+        ->and(array_intersect($wasInactive, $added))->toHaveCount(2)
+        ->and(array_intersect($removed, $wasInactive))->toBe([])
+        ->and(array_intersect($removed, $added))->toBe([]);
+});
+
+it('no desactiva a los jefes ni a los jefes de proyecto docente', function () {
+    seedCatalogScenario();
+    $kept = [];
+
+    foreach (Department::query()->orderBy('code')->get() as $department) {
+        foreach ([null, 'project'] as $kind) {
+            $user = User::factory()->create();
+            $teacher = Teacher::factory()->adscribedTo($department)->create(['employee_number' => 'A'.count($kept).'000', 'user_id' => $user->id]);
+            DepartmentHead::factory()->create(['department_id' => $department->id, 'user_id' => $user->id, 'campus_id' => $kind === null ? null : Campus::query()->where('code', 'C2')->value('id'), 'kind' => $kind === null ? 'jefe' : 'jefe_proyecto_docente']);
+            $kept[] = $teacher->id;
+        }
+    }
+
+    runCatalogDemoSeeder('massive');
+
+    expect(Teacher::query()->whereIn('id', $kept)->where('is_active', true)->count())->toBe(count($kept))
+        ->and(DepartmentHead::query()->whereNull('valid_to')->count())->toBe(count($kept))
+        ->and(User::query()->whereIn('id', Teacher::query()->whereIn('id', $kept)->select('user_id'))->where('is_active', true)->count())->toBe(count($kept));
+});
+
+it('reparte las observaciones en registros distintos', function () {
+    seedCatalogScenario();
+
+    runCatalogDemoSeeder('massive');
+
+    $flags = CatalogReviewFlag::query()->get();
+
+    expect($flags->groupBy(fn (CatalogReviewFlag $flag): string => $flag->review_id.'/'.$flag->flaggable_id)->filter(fn ($same) => $same->count() > 1)->count())->toBe(0);
 });

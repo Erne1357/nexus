@@ -30,9 +30,12 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Actions\CreateTeacher;
 use App\Modules\Faculty\Actions\SetTeacherActive;
 use App\Modules\Faculty\Models\Teacher;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Random\Engine\Mt19937;
+use Random\Randomizer;
 use RuntimeException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -139,7 +142,7 @@ class CatalogValidationDemoSeeder extends Seeder
     {
         $any = false;
 
-        foreach (CatalogReview::query()->where('term_id', $term->getKey())->where('status', '!=', ReviewStatus::Validated)->with(['department', 'campus'])->get() as $review) {
+        foreach (CatalogReview::query()->where('term_id', $term->getKey())->where('status', '!=', ReviewStatus::Validated)->with(['department', 'campus', 'term'])->get() as $review) {
             $this->validate->handle($review, $this->headOf($review));
             $any = true;
         }
@@ -159,12 +162,20 @@ class CatalogValidationDemoSeeder extends Seeder
 
         foreach ($departments as $index => $department) {
             $teachers = Teacher::query()->whereHas('adscriptions', fn ($query) => $query->where('department_id', $department->getKey()))->orderBy('employee_number');
+            $reactivate = (clone $teachers)->where('is_active', false)->limit($config['reactivate'])->get();
 
-            foreach ((clone $teachers)->where('is_active', true)->limit($config['deactivate'])->get() as $teacher) {
+            // Sin jefes ni jefes de proyecto docente: SetTeacherActive les termina la jefatura y desactiva su usuario.
+            $deactivate = (clone $teachers)
+                ->where('is_active', true)
+                ->where(fn ($query) => $query->whereNull('user_id')->orWhereNotIn('user_id', $this->currentHeadUsers()))
+                ->limit($config['deactivate'])
+                ->get();
+
+            foreach ($deactivate as $teacher) {
                 app(SetTeacherActive::class)->handle($teacher, false);
             }
 
-            foreach ((clone $teachers)->where('is_active', false)->limit($config['reactivate'])->get() as $teacher) {
+            foreach ($reactivate as $teacher) {
                 app(SetTeacherActive::class)->handle($teacher, true);
             }
 
@@ -200,11 +211,13 @@ class CatalogValidationDemoSeeder extends Seeder
     {
         $rooms = Room::query()->where('campus_id', $campus->getKey())->where('department_id', $department->getKey())->orderBy('code');
 
+        $reactivate = (clone $rooms)->where('is_active', false)->limit(1)->get();
+
         foreach ((clone $rooms)->where('is_active', true)->limit($config['rooms'])->get() as $room) {
             app(UpdateRoom::class)->handle($room, ['is_active' => false]);
         }
 
-        foreach ((clone $rooms)->where('is_active', false)->limit(1)->get() as $room) {
+        foreach ($reactivate as $room) {
             app(UpdateRoom::class)->handle($room, ['is_active' => true]);
         }
 
@@ -223,6 +236,19 @@ class CatalogValidationDemoSeeder extends Seeder
                 'department_id' => $department->getKey(),
             ]);
         }
+    }
+
+    /**
+     * Los usuarios con una jefatura de departamento vigente hoy.
+     *
+     * @return Builder
+     */
+    private function currentHeadUsers()
+    {
+        return DB::table('department_heads')
+            ->where('valid_from', '<=', today())
+            ->where(fn ($query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()))
+            ->select('user_id');
     }
 
     /**
@@ -246,7 +272,9 @@ class CatalogValidationDemoSeeder extends Seeder
      */
     private function seedCurrent(Term $term, array $config): void
     {
-        $reviews = CatalogReview::query()->where('term_id', $term->getKey())->with(['department', 'campus'])->get()->groupBy('department_id');
+        $reviews = CatalogReview::query()->where('term_id', $term->getKey())->with(['department', 'campus', 'term'])->get()->groupBy('department_id');
+
+        $order = array_flip(array_map(fn (Catalog $catalog): string => $catalog->value, Catalog::cases()));
 
         foreach ($reviews as $group) {
             if ($group->contains(fn (CatalogReview $review): bool => $review->status !== ReviewStatus::Pending)) {
@@ -254,15 +282,14 @@ class CatalogValidationDemoSeeder extends Seeder
             }
 
             $code = $group->first()->department->code;
-            $order = array_flip(array_map(fn (Catalog $catalog): string => $catalog->value, Catalog::cases()));
             $flags = [];
 
-            foreach ($group->sortBy(fn (CatalogReview $review): string => ($order[$review->catalog->value] ?? 9).$review->campus?->code) as $review) {
+            foreach ($group->sort(fn (CatalogReview $a, CatalogReview $b): int => [$order[$a->catalog->value], $a->campus?->code] <=> [$order[$b->catalog->value], $b->campus?->code]) as $review) {
                 $target = $this->target($code, $review->catalog, $review->campus?->code);
                 $actor = $this->headOf($review);
 
                 foreach ($this->flagRecords($review, $target, $config, $actor) as $created) {
-                    $flags[] = $created;
+                    $flags[] = [$review, $created];
                 }
 
                 match ($target) {
@@ -273,9 +300,9 @@ class CatalogValidationDemoSeeder extends Seeder
                 };
             }
 
-            foreach ($flags as $position => $created) {
+            foreach ($flags as $position => [$review, $created]) {
                 if ($position % 4 === 0) {
-                    $this->resolve->handle($created->review, $created, $this->headOf($created->review));
+                    $this->resolve->handle($review, $created, $this->headOf($review));
                 }
             }
         }
@@ -322,7 +349,7 @@ class CatalogValidationDemoSeeder extends Seeder
             return [];
         }
 
-        $records = $this->contents->query($review)->get()->values();
+        $records = collect((new Randomizer(new Mt19937(crc32($review->department->code.'/'.$review->catalog->value))))->shuffleArray($this->contents->query($review)->get()->all()));
         $types = array_values(array_filter(ReviewFlag::cases(), fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog)));
         $created = [];
 
@@ -331,7 +358,7 @@ class CatalogValidationDemoSeeder extends Seeder
             $comments = self::COMMENTS[$flag->value];
             $comment = $i % 3 === 2 && $flag !== ReviewFlag::Other ? null : $comments[$i % count($comments)];
 
-            $created[] = $this->flag->handle($review, $records[($i * 7) % $records->count()], $flag, $comment, $actor);
+            $created[] = $this->flag->handle($review, $records[$i], $flag, $comment, $actor);
         }
 
         return $created;
@@ -369,7 +396,7 @@ class CatalogValidationDemoSeeder extends Seeder
      */
     private function headOf(CatalogReview $review): User
     {
-        $key = $review->department_id.'/'.($review->campus_id ?? '');
+        $key = $review->term_id.'/'.$review->department_id.'/'.($review->campus_id ?? '');
 
         return $this->heads[$key] ??= $this->findHead($review);
     }
