@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\AcademicServiceProvider;
+use App\Modules\CatalogValidation\CatalogValidationServiceProvider;
 use App\Modules\Core\CoreServiceProvider;
 use App\Modules\Core\Providers\FortifyServiceProvider;
 use App\Modules\Facilities\FacilitiesServiceProvider;
@@ -20,4 +21,5 @@ return [
     FacultyServiceProvider::class,
     StudentsServiceProvider::class,
     ImportsServiceProvider::class,
+    CatalogValidationServiceProvider::class,
 ];
