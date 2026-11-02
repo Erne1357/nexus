@@ -35,13 +35,14 @@
                             $dimmed => 'border-base-300 bg-base-200/60 text-neutral',
                             $part === 'returned' => 'border-error bg-error/10 text-error',
                             $part === 'accepted' => 'border-base-300 bg-base-200 text-neutral',
+                            ! $requested => 'border-base-content/30 bg-base-200 text-base-content',
                             default => 'border-base-content/30 bg-base-100 text-base-content',
                         };
-                        $classes = Illuminate\Support\Arr::toCssClasses([$tone, 'border-dashed' => ! $requested, 'bg-base-200' => ! $requested && ! $dimmed && $part !== 'returned']);
-                        $title = implode(' · ', array_filter([$locks[$item->id] ?? null, ...$anomalies]));
+                        $classes = Illuminate\Support\Arr::toCssClasses([$tone, 'border-dashed' => ! $requested]);
+                        $title = implode(' · ', array_filter([isset($locks[$item->id]) ? $locks[$item->id]->message($code) : null, ...$anomalies]));
                     @endphp
                     @if ($specialty !== null && ($loop->first || $overview->specialtyFor($items[$loop->index - 1]) !== $specialty))
-                        <x-core::semester-grid.separator :specialty="$specialty" :name="$specialtyNames[$specialty]" />
+                        <x-core::semester-grid.separator :specialty="$specialty" :name="$specialtyNames[$specialty]" wire:key="separator-{{ $semester }}-{{ $specialty }}" />
                     @endif
 
                     <x-core::semester-grid.tile :row="$layout->rows[$item->subject->code]" :code="$item->subject->code" :name="$item->subject->name" soft :muted="$dimmed || $part === 'accepted' || ! $requested"

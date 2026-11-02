@@ -10,7 +10,7 @@
 --}}
 <div class="space-y-3" data-testid="proposal-table">
     @if ($generalLock)
-        <x-alert icon="o-lock-closed" class="alert-warning alert-soft text-sm" :title="$generalLock" data-testid="table-lock" />
+        <x-alert icon="o-lock-closed" class="alert-warning alert-soft text-sm" :title="$generalLock->message('')" data-testid="table-lock" />
     @endif
 
     <div>
@@ -35,16 +35,19 @@
                             $code = $item->subject->department->code;
                             $part = $parts[$item->subject->department_id];
                             $dimmed = $department !== '' && $code !== $department;
+                            $rowTone = match (true) {
+                                $dimmed, $part === 'accepted' => 'bg-base-200 text-neutral',
+                                $part === 'returned' => 'bg-error/10 text-base-content',
+                                default => 'bg-base-100 text-base-content',
+                            };
                             $anomalies = $overview->anomaliesFor($item);
-                            $ownLock = $lock !== null && $lock !== $generalLock ? \Illuminate\Support\Str::before($lock, ':') : null;
+                            $ownLock = $lock !== null && ! $lock->isGeneral() ? $lock->short($code) : null;
                             $cells = [['expected_students', 'Esperados', $item->expected_students, $maxExpected], ['requested_groups', 'Grupos', $item->requested_groups, $maxGroups]];
                         @endphp
                         <div wire:key="row-{{ $item->id }}-{{ $rejections }}-{{ $item->expected_students }}-{{ $item->requested_groups }}" data-testid="row-{{ $item->subject->code }}" data-part="{{ $part }}"
                             @class([
                                 'grid items-center gap-x-3 gap-y-1 px-4 py-2 [&:not(:first-of-type)]:border-t border-base-300 grid-cols-3 md:grid-cols-[6.5rem_minmax(0,1fr)_3rem_4.5rem_5.5rem_5.5rem]',
-                                'bg-base-100 text-base-content' => ! $dimmed && $part !== 'returned' && $part !== 'accepted',
-                                'bg-error/10 text-base-content' => ! $dimmed && $part === 'returned',
-                                'bg-base-200 text-neutral' => $dimmed || (! $dimmed && $part === 'accepted'),
+                                $rowTone,
                             ])>
                             <span class="flex items-center gap-1.5 font-mono text-sm font-semibold max-md:col-span-3">
                                 @if ($part === 'returned')

@@ -119,13 +119,17 @@ final class CareerProposalQuery
             ->with(['department' => fn ($query) => $query->withTrashed()])
             ->get();
 
-        $specialtyOf = StudyPlanSubject::query()
+        $placements = StudyPlanSubject::withTrashed()
             ->whereIn('study_plan_id', $items->pluck('study_plan_id')->unique()->all())
             ->whereIn('subject_id', $items->pluck('subject_id')->all())
             ->whereNotNull('specialty_id')
-            ->pluck('specialty_id', 'subject_id')
+            ->get(['study_plan_id', 'subject_id', 'specialty_id'])
+            ->mapWithKeys(fn (StudyPlanSubject $placement): array => ["{$placement->study_plan_id}|{$placement->subject_id}" => $placement->specialty_id]);
+        $specialtyOf = $items
+            ->filter(fn (ProposalItem $item): bool => $placements->has("{$item->study_plan_id}|{$item->subject_id}"))
+            ->mapWithKeys(fn (ProposalItem $item): array => [$item->subject_id => $placements["{$item->study_plan_id}|{$item->subject_id}"]])
             ->all();
-        $inProposal = array_count_values(array_values(array_intersect_key($specialtyOf, array_flip($items->pluck('subject_id')->all()))));
+        $inProposal = array_count_values(array_values($specialtyOf));
         $specialties = Specialty::withTrashed()->whereIn('id', array_keys($inProposal))->orderBy('code')->get(['id', 'name'])
             ->map(fn (Specialty $specialty): array => ['id' => $specialty->id, 'name' => $specialty->name, 'subjects' => $inProposal[$specialty->id]])
             ->all();

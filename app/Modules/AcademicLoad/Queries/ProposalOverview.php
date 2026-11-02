@@ -47,7 +47,7 @@ final readonly class ProposalOverview
     public function gridSemesters(): array
     {
         $band = array_flip(array_column($this->specialties, 'id'));
-        $position = fn (ProposalItem $item): int => isset($this->specialtyOf[$item->subject_id]) ? ($band[$this->specialtyOf[$item->subject_id]] ?? count($band)) + 1 : 0;
+        $position = fn (ProposalItem $item): int => isset($this->specialtyOf[$item->subject_id]) ? $band[$this->specialtyOf[$item->subject_id]] + 1 : 0;
 
         return array_map(function (array $items) use ($position): array {
             $indexed = array_map(null, $items, array_keys($items));

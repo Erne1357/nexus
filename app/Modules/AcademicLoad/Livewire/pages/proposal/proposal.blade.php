@@ -103,7 +103,7 @@
 
         <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="proposal-drawer-title" data-testid="proposal-drawer">
             @if ($selected !== null)
-                @include('academic-load::proposal.item-panel', ['item' => $selected, 'lock' => $locks[$selected->id] ?? null])
+                @include('academic-load::proposal.item-panel', ['item' => $selected, 'lock' => isset($locks[$selected->id]) ? $locks[$selected->id]->message($selected->subject->department->code) : null])
             @endif
         </x-drawer>
     @endif

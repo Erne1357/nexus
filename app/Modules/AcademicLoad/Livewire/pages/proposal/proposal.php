@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
+use App\Modules\AcademicLoad\Enums\ProposalLock;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -44,10 +45,6 @@ new #[Title('Propuesta de carrera')] class extends Component
     use Toast;
 
     private const array VIEWS = ['reticula', 'tabla'];
-
-    private const string LOCK_ACCEPTED = 'La propuesta ya se aceptó: ya no cambia.';
-
-    private const string LOCK_SUBMITTED = 'La propuesta ya se envió: solo se corrige si un departamento la regresa.';
 
     /** 'reticula' o 'tabla'; otro valor muestra la retícula. */
     #[Url(as: 'vista')]
@@ -255,6 +252,8 @@ new #[Title('Propuesta de carrera')] class extends Component
         $overview = $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit);
         $departments = $overview->departments();
         $gridSemesters = $overview->gridSemesters();
+        $selected = $this->itemId === null ? null : $this->findItem($overview, $this->itemId);
+        $rule = SuggestedGroups::fromSettings();
 
         $known = $this->department === '' || in_array($this->department, array_map(fn (array $row): string => $row['department']->code, $departments), true);
 
@@ -273,7 +272,8 @@ new #[Title('Propuesta de carrera')] class extends Component
             'returnedParts' => $this->returnedParts($overview, $departments),
             'parts' => $this->parts($overview),
             'submitReason' => $this->submitReason($overview),
-            'suggested' => $this->suggested($overview),
+            'suggested' => $this->suggested($selected, $rule),
+            'suggestedSize' => $selected === null ? null : $rule->sizeFor((bool) $selected->subject->needs_lab),
             'canEdit' => Gate::allows('update', $proposal),
             'canSubmit' => Gate::allows('submit', $proposal),
             'gridSemesters' => $gridSemesters,
@@ -283,7 +283,7 @@ new #[Title('Propuesta de carrera')] class extends Component
             ),
             'specialtyNames' => array_column($overview->specialties, 'name', 'id'),
             'tableSemesters' => $this->tableSemesters($overview),
-            'selected' => $this->itemId === null ? null : $this->findItem($overview, $this->itemId),
+            'selected' => $selected,
             'maxExpected' => ProposalItemRules::MAX_EXPECTED_STUDENTS,
             'maxGroups' => ProposalItemRules::MAX_REQUESTED_GROUPS,
         ];
@@ -391,25 +391,21 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * El motivo por el que cada fila no se edita, por id; las editables no aparecen.
+     * El tipo de bloqueo de cada fila que no se edita, por id; las editables no aparecen. La vista arma el texto
+     * (ProposalLock::message).
      *
-     * @return array<string, string>
+     * @return array<string, ProposalLock>
      */
     private function locks(ProposalOverview $overview): array
     {
         $locks = [];
+        $general = $this->generalLock($overview);
 
         foreach ($overview->semesters as $items) {
             foreach ($items as $item) {
-                if ($overview->isEditable($item)) {
-                    continue;
+                if (! $overview->isEditable($item)) {
+                    $locks[$item->id] = $general ?? ProposalLock::Department;
                 }
-
-                $locks[$item->id] = match (true) {
-                    $overview->proposal->status === ProposalStatus::Accepted => self::LOCK_ACCEPTED,
-                    ! $overview->proposal->status->isEditable() => self::LOCK_SUBMITTED,
-                    default => "{$item->subject->department->code} ya aceptó su parte: sus materias ya no cambian.",
-                };
             }
         }
 
@@ -417,14 +413,14 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * El motivo que vale para toda la propuesta y no para una fila: ya se aceptó o ya se envió. Null mientras se
+     * El bloqueo que vale para toda la propuesta y no para una fila: ya se aceptó o ya se envió. Null mientras se
      * pueda corregir (borrador o regresada): ahí solo se bloquean las partes aceptadas, cada una con su motivo.
      */
-    private function generalLock(ProposalOverview $overview): ?string
+    private function generalLock(ProposalOverview $overview): ?ProposalLock
     {
         return match (true) {
-            $overview->proposal->status === ProposalStatus::Accepted => self::LOCK_ACCEPTED,
-            ! $overview->proposal->status->isEditable() => self::LOCK_SUBMITTED,
+            $overview->proposal->status === ProposalStatus::Accepted => ProposalLock::Accepted,
+            ! $overview->proposal->status->isEditable() => ProposalLock::Submitted,
             default => null,
         };
     }
@@ -480,13 +476,12 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Los grupos que sugiere la regla para los esperados que se teclean en el panel, para «Usar sugerido: N».
+     * Los grupos que sugiere la regla para los esperados del panel, al abrirlo y al guardar: el número de
+     * «Usar sugerido: N». Mientras se teclea lo recalcula el navegador con `$size`, el tamaño objetivo de la materia.
      */
-    private function suggested(ProposalOverview $overview): ?int
+    private function suggested(?ProposalItem $selected, SuggestedGroups $rule): ?int
     {
-        $item = $this->itemId === null ? null : $this->findItem($overview, $this->itemId);
-
-        return $item === null ? null : SuggestedGroups::fromSettings()->for(max(0, (int) $this->expected_students), (bool) $item->subject->needs_lab);
+        return $selected === null ? null : $rule->for(max(0, (int) $this->expected_students), (bool) $selected->subject->needs_lab);
     }
 
     /**

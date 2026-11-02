@@ -4,7 +4,7 @@
     fila está bloqueada o el usuario no puede editar, los campos van deshabilitados y se dice por qué.
     `$item` es la fila de ProposalOverview y `$lock`, su motivo de bloqueo o null; `close()` es del x-drawer.
     Si el departamento de la materia regresó su parte, repite su comentario; si la fila es rara (ProposalAnomalies),
-    la advierte con icono y texto, sin impedir guardar ni enviar. «Usar sugerido» dice el número (`$suggested`).
+    la advierte con icono y texto, sin impedir guardar ni enviar. «Usar sugerido» dice el número (`$suggested`; mientras se teclea lo recalcula Alpine con `$suggestedSize`).
 --}}
 @php
     $readonly = $lock !== null || ! $canEdit;
@@ -45,13 +45,13 @@
         </div>
 
         <x-form wire:submit="save" class="gap-3!">
-            <x-input label="Alumnos esperados" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $maxExpected) }}" oninput="this.value = this.value.replace(/\D/g, '')" wire:model.live.debounce.300ms="expected_students" class="font-mono" :disabled="$readonly" data-testid="field-expected" />
+            <x-input label="Alumnos esperados" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $maxExpected) }}" oninput="this.value = this.value.replace(/\D/g, '')" wire:model="expected_students" class="font-mono" :disabled="$readonly" data-testid="field-expected" />
             <div class="flex items-end gap-3">
                 <div class="flex-1">
                     <x-input label="Grupos solicitados" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $maxGroups) }}" oninput="this.value = this.value.replace(/\D/g, '')" wire:model="requested_groups" class="font-mono" :disabled="$readonly" data-testid="field-groups" />
                 </div>
                 @unless ($readonly)
-                    <x-button :label="'Usar sugerido: '.$suggested" icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested" spinner="useSuggested" data-testid="use-suggested" />
+                    <x-button icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested" spinner="useSuggested" data-testid="use-suggested"><span x-text="'Usar sugerido: ' + Math.ceil(Math.max(0, parseInt($wire.expected_students) || 0) / {{ $suggestedSize }})">Usar sugerido: {{ $suggested }}</span></x-button>
                 @endunless
             </div>
             <x-textarea label="Nota" wire:model="notes" rows="3" maxlength="{{ \App\Modules\AcademicLoad\Rules\ProposalItemRules::MAX_NOTES_LENGTH }}" :disabled="$readonly" data-testid="field-notes" />
