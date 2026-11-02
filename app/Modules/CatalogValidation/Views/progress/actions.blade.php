@@ -4,11 +4,7 @@
     "Nada oculto"), y «Acciones» con «Ver detalle» y «Ver validación».
 --}}
 @php($department = $row['department'])
-@php($reason = match (true) {
-    $row['validated'] === $row['total'] => 'No le falta nada por validar.',
-    $row['head'] === null => 'No tiene jefe vigente.',
-    default => null,
-})
+@php($reason = $row['remind_blocked_reason'])
 <x-button
     icon="o-bell"
     wire:click="remind('{{ $department->id }}')"
@@ -17,7 +13,7 @@
     class="btn-ghost btn-sm"
     spinner="remind('{{ $department->id }}')"
     data-testid="remind-{{ $department->code }}"
-    aria-label="Recordar a {{ $row['head']?->name ?? 'el jefe de '.$department->name }}"
+    aria-label="Recordar a {{ $row['heads']->isEmpty() ? 'el jefe de '.$department->name : $row['heads']->pluck('name')->implode(', ') }}"
 >
     <span @class(['max-[1535px]:hidden' => $inTable])>Recordar</span>
 </x-button>

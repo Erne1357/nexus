@@ -8,6 +8,7 @@ use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
+use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
@@ -20,7 +21,9 @@ use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Tarea 2.5: el tablero de avance de validación (`/catalog-validation/progress`, catalog-validation::pages.progress),
@@ -155,23 +158,44 @@ describe('filtros', function () {
 });
 
 describe('recordar', function () {
-    it('«Recordar a todos» avisa a los jefes con pendientes y dice a cuántos', function () {
-        Notification::fake();
+    it('«Recordar a todos» manda a la cola un job con los departamentos con jefe y pendientes, y lo dice', function () {
+        Queue::fake();
 
         $page = progressPage()->call('remind');
 
-        Notification::assertSentTo($this->jefeSis, CatalogReviewsPending::class);
-        expect(lastToastOf($page)['title'])->toBe('Se avisó a 1 jefe');
+        Queue::assertPushed(RemindPendingReviewsJob::class, fn (RemindPendingReviewsJob $job) => $job->departmentIds === [$this->sis->id]
+            && $job->actorId === $this->subdireccion->id
+            && $job->campusIds !== []);
+        expect(lastToastOf($page)['title'])->toBe('Enviando recordatorios a 1 departamento');
     });
 
-    it('recuerda a un solo departamento y dice «Nadie por recordar» si no hay a quién', function () {
+    it('«Recordar a todos» respeta la búsqueda, el estado y el campus', function () {
+        $otro = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Raúl Terrazas']);
+        Queue::fake();
+
+        progressPage()->set('search', 'terrazas')->call('remind');
+        Queue::assertPushed(RemindPendingReviewsJob::class, fn (RemindPendingReviewsJob $job) => $job->departmentIds === [$this->ele->id]);
+
+        Queue::fake();
+        $page = progressPage()->set('search', 'nadie')->call('remind');
+        Queue::assertNothingPushed();
+        expect(lastToastOf($page)['title'])->toBe('Nadie por recordar');
+
+        Queue::fake();
+        progressPage()->set('search', '')->set('campus', $this->c1->id)->call('remind');
+        Queue::assertPushed(RemindPendingReviewsJob::class, fn (RemindPendingReviewsJob $job) => $job->campusIds === [$this->c1->id] && count($job->departmentIds) === 2);
+    });
+
+    it('«Recordar» de una fila avisa en línea y dice a cuántos jefes, o «Nadie por recordar»', function () {
         Notification::fake();
 
         $page = progressPage()->call('remind', $this->sis->id);
+        Notification::assertSentTo($this->jefeSis, CatalogReviewsPending::class);
         expect(lastToastOf($page)['title'])->toBe('Se avisó a 1 jefe');
 
         $page = progressPage()->call('remind', $this->ele->id);
         expect(lastToastOf($page)['title'])->toBe('Nadie por recordar');
+        progressPage()->call('remind', 'no-es-uuid')->assertNotFound();
     });
 
     it('el último recordatorio aparece en el drawer', function () {
@@ -183,9 +207,14 @@ describe('recordar', function () {
     it('con un campus filtrado solo avisa en ese campus', function () {
         Notification::fake();
 
-        $page = progressPage()->set('campus', $this->c1->id)->call('remind');
+        $page = progressPage()->set('campus', $this->c1->id)->call('remind', $this->sis->id);
 
         expect(lastToastOf($page)['title'])->toBe('Se avisó a 1 jefe');
+        expect(Activity::query()->where('event', 'reminded')->sole()->properties['campuses'])->toBe(['C1']);
+    });
+
+    it('el drawer de un departamento que el filtro dejó fuera se abre igual', function () {
+        progressPage()->set('search', 'sistemas')->call('open', $this->ele->id)->assertSee('Eléctrica y Electrónica')->assertSee('Catálogos');
     });
 });
 

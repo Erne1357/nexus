@@ -10,7 +10,7 @@
         <div class="min-w-0 flex-1">
             <p class="font-mono text-[15px] font-semibold">{{ $department->code }}</p>
             <h2 id="progress-drawer-title" class="mt-0.5 text-xl font-bold leading-tight">{{ $department->name }}</h2>
-            <p class="mt-1 text-sm text-neutral">{{ $row['head']?->name ?? 'Sin jefe vigente' }}</p>
+            <p class="mt-1 text-sm text-neutral">{{ $row['heads']->isEmpty() ? 'Sin jefe vigente' : $row['heads']->pluck('name')->implode(', ') }}</p>
         </div>
         <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar el panel" />
     </header>
@@ -82,11 +82,7 @@
     </div>
 
     <footer class="sticky bottom-0 flex items-center justify-end gap-2 border-t border-base-300 bg-base-100 px-5 py-3">
-        @php($reason = match (true) {
-            $row['validated'] === $row['total'] => 'No le falta nada por validar.',
-            $row['head'] === null => 'No tiene jefe vigente.',
-            default => null,
-        })
+        @php($reason = $row['remind_blocked_reason'])
         <x-button label="Cerrar" @click="close()" class="btn-ghost" />
         <x-button label="Recordar" icon="o-bell" wire:click="remind('{{ $department->id }}')" spinner="remind('{{ $department->id }}')" :disabled="$reason !== null" :title="$reason" data-testid="drawer-remind" />
         <x-button label="Ver validación" icon="o-eye" :link="route('catalog-validation.review', ['department' => $department->id])" class="btn-primary" data-testid="drawer-review" />

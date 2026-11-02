@@ -8,8 +8,10 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\RecipientsQuery;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Notification;
 
 /**
@@ -18,7 +20,7 @@ use Illuminate\Support\Facades\Notification;
  * revisiones pendientes del periodo en el campus, contadas igual que HC-14 (CatalogReviewQuery::pendingFor).
  * Con `$departmentId`, solo a los de ese departamento: el recordatorio del tablero de avance (tarea 2.5); un id
  * que no es de un departamento activo no avisa a nadie.
- * Lo llama NotifyPendingReviewsOnTermOpened al abrir el periodo. Da a cuántos usuarios avisó.
+ * Lo llama NotifyPendingReviewsOnTermOpened al abrir el periodo. `handle()` da a cuántos usuarios avisó y `notify()`, cuáles.
  */
 final class NotifyPendingReviews
 {
@@ -27,7 +29,21 @@ final class NotifyPendingReviews
         private readonly RecipientsQuery $recipients,
     ) {}
 
+    /**
+     * A cuántos usuarios avisó; un jefe de varios departamentos cuenta una vez por departamento.
+     */
     public function handle(Term $term, Campus $campus, ?string $departmentId = null): int
+    {
+        return $this->notify($term, $campus, $departmentId)->count();
+    }
+
+    /**
+     * Avisa y da los usuarios avisados, uno por aviso enviado (un jefe de varios departamentos aparece una vez por
+     * departamento), para que quien lo llama no vuelva a consultar los destinatarios (RemindPendingReviews).
+     *
+     * @return Collection<int, User>
+     */
+    public function notify(Term $term, Campus $campus, ?string $departmentId = null): Collection
     {
         $query = Department::query()->where('is_active', true)->orderBy('code');
 
@@ -38,7 +54,7 @@ final class NotifyPendingReviews
             $departments = $query->get();
         }
 
-        $notified = 0;
+        $notified = new Collection;
 
         foreach ($departments as $department) {
             $pending = $this->reviews->pendingFor($term, $campus, $department);
@@ -51,7 +67,7 @@ final class NotifyPendingReviews
 
             Notification::send($heads, new CatalogReviewsPending($term, $campus, $department, $pending));
 
-            $notified += $heads->count();
+            $notified = $notified->concat($heads);
         }
 
         return $notified;

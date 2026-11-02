@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
+use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Enums\Stage;
@@ -104,14 +105,38 @@ new #[Title('Avance de validación')] class extends Component
     }
 
     /**
-     * Recuerda a los jefes con pendientes, de todos los departamentos o de uno, en cada campus del filtro.
+     * Recuerda a los jefes con pendientes. De un departamento, en línea y en cada campus del filtro; sin
+     * departamento («Recordar a todos los pendientes»), de los departamentos de las filas visibles (búsqueda, estado y
+     * campus) en un job en cola, porque tarda.
      */
     public function remind(RemindPendingReviews $remind, ValidationProgressQuery $progress, ScopedContext $context, ?string $departmentId = null): void
     {
         Gate::authorize('remind', CatalogReview::class);
 
         $term = $context->activeTerm() ?? abort(404);
-        $notified = $remind->handle($term, $this->scope($progress->openCampuses($term)), $this->user(), $departmentId);
+        $campuses = $this->scope($progress->openCampuses($term));
+
+        if ($departmentId === null) {
+            $ids = collect($progress->board($term, $campuses, $this->search, $this->status)['rows'])
+                ->filter(fn (array $row): bool => $row['remind_blocked_reason'] === null)
+                ->map(fn (array $row): string => $row['department']->getKey())
+                ->values()
+                ->all();
+
+            if ($ids === []) {
+                $this->info('Nadie por recordar', 'Ningún departamento visible tiene jefe con catálogos pendientes.');
+
+                return;
+            }
+
+            RemindPendingReviewsJob::dispatch($term->getKey(), $campuses->pluck('id')->all(), $this->user()->getKey(), $ids);
+            $this->info('Enviando recordatorios a '.count($ids).(count($ids) === 1 ? ' departamento' : ' departamentos'), e($term->name));
+
+            return;
+        }
+
+        $department = KeyLookup::findOrFail(Department::query()->where('is_active', true), $departmentId);
+        $notified = $remind->handle($term, $campuses, $this->user(), [$department->getKey()]);
 
         if ($notified === 0) {
             $this->info('Nadie por recordar', 'Ningún jefe tiene catálogos pendientes que recordar.');
@@ -119,7 +144,7 @@ new #[Title('Avance de validación')] class extends Component
             return;
         }
 
-        $this->success($notified === 1 ? 'Se avisó a 1 jefe' : "Se avisó a {$notified} jefes", e($term->name));
+        $this->success($notified === 1 ? 'Se avisó a 1 jefe' : "Se avisó a {$notified} jefes", e($department->name));
     }
 
     public function resolveFlag(string $id, ValidationProgressQuery $progress, ResolveFlag $resolveFlag): void
@@ -190,7 +215,7 @@ new #[Title('Avance de validación')] class extends Component
         }
 
         $row = collect($board['rows'])->first(fn (array $candidate): bool => $candidate['department']->getKey() === $this->detailId)
-            ?? collect($progress->board($term, $campuses)['rows'])->first(fn (array $candidate): bool => $candidate['department']->getKey() === $this->detailId);
+            ?? ($progress->board($term, $campuses, departmentId: $this->detailId)['rows'][0] ?? null);
 
         return $row === null ? null : ['row' => $row, 'flags' => $progress->openFlags($term, $department, $campuses)];
     }

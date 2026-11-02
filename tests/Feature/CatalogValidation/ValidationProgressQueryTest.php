@@ -12,8 +12,11 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
+use App\Modules\Core\Database\Seeders\RoleSeeder;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\RoleScope;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -128,19 +131,65 @@ it('cuenta las observaciones abiertas y en cuántos departamentos, y las resuelt
         ->and(collect($board['rows'])->firstWhere('department.code', 'ELE')['open_flags'])->toBe(0);
 });
 
-it('trae el jefe vigente de cada departamento y nada si no lo tiene', function () {
-    $jefe = User::factory()->create(['name' => 'Dra. Ana Soto']);
-    DepartmentHead::factory()->create(['department_id' => $this->sis->id, 'user_id' => $jefe->id]);
+it('el jefe sale de quien recibe el aviso: alcance de rol vigente y usuario activo, aunque no tenga fila en department_heads', function () {
+    $this->seed(RoleSeeder::class);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Dra. Ana Soto']);
+    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Baja', 'is_active' => false]);
+    DepartmentHead::factory()->create(['department_id' => $this->ele->id, 'user_id' => User::factory()->create(['name' => 'Solo en la tabla'])->id]);
 
     $board = ($this->progress)();
+    $sis = collect($board['rows'])->firstWhere('department.code', 'SIS');
+    $ele = collect($board['rows'])->firstWhere('department.code', 'ELE');
 
-    expect(collect($board['rows'])->firstWhere('department.code', 'SIS')['head']?->name)->toBe('Dra. Ana Soto')
-        ->and(collect($board['rows'])->firstWhere('department.code', 'ELE')['head'])->toBeNull();
+    expect($sis['head']?->is($jefe))->toBeTrue()
+        ->and($sis['remind_blocked_reason'])->toBeNull()
+        ->and($ele['head'])->toBeNull()
+        ->and($ele['remind_blocked_reason'])->toBe('No tiene jefe vigente.')
+        ->and($board['remindable'])->toBe(['departments' => 1, 'heads' => 1]);
+});
+
+it('«Recordar» queda bloqueado si no falta nada, y la insignia cuenta jefes distintos', function () {
+    $this->seed(RoleSeeder::class);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
+    RoleScope::factory()->for($jefe)->create(['role' => Role::JefeDepartamento, 'department_id' => $this->ele->id]);
+
+    expect(($this->progress)()['remindable'])->toBe(['departments' => 2, 'heads' => 1]);
+
+    foreach ([$this->c1, $this->c2, null] as $campus) {
+        foreach (Catalog::cases() as $catalog) {
+            if ($campus === null && ! $catalog->isGeneral() || $campus !== null && $catalog->isGeneral()) {
+                continue;
+            }
+            progressValidate($this->sis, $catalog, $campus);
+        }
+    }
+
+    $sis = collect(($this->progress)()['rows'])->firstWhere('department.code', 'SIS');
+
+    expect($sis['remind_blocked_reason'])->toBe('No le falta nada por validar.')
+        ->and(($this->progress)()['remindable'])->toBe(['departments' => 1, 'heads' => 1]);
+});
+
+it('con un departamento dado arma solo su fila', function () {
+    $board = app(ValidationProgressQuery::class)->board($this->term, collect([$this->c2]), '', 'validated', $this->ele->id);
+
+    expect($board['rows'])->toBe([])
+        ->and(app(ValidationProgressQuery::class)->board($this->term, collect([$this->c2]), departmentId: $this->ele->id)['rows'])->toHaveCount(1);
+});
+
+it('el último recordatorio solo cuenta los campus del alcance', function () {
+    activity()->performedOn($this->sis)->event('reminded')->withProperties(['term_id' => $this->term->id, 'campuses' => ['C1'], 'notified' => 1, 'recipients' => []])->log('x');
+
+    $query = app(ValidationProgressQuery::class);
+
+    expect($query->lastReminders($this->term, [$this->sis->id], ['C2']))->toBe([])
+        ->and($query->lastReminders($this->term, [$this->sis->id], ['C2', 'C1']))->toHaveKey($this->sis->id)
+        ->and($query->lastReminders($this->term, [$this->sis->id], []))->toBe([]);
 });
 
 it('filtra por departamento o jefe y por estado', function () {
-    $jefe = User::factory()->create(['name' => 'Ing. Raúl Terrazas']);
-    DepartmentHead::factory()->create(['department_id' => $this->ele->id, 'user_id' => $jefe->id]);
+    $this->seed(RoleSeeder::class);
+    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Raúl Terrazas']);
     foreach (Catalog::cases() as $catalog) {
         progressValidate($this->sis, $catalog, $this->c2);
         progressValidate($this->sis, $catalog, $this->c1);

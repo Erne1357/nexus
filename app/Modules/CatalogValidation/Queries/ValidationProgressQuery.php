@@ -2,18 +2,18 @@
 
 namespace App\Modules\CatalogValidation\Queries;
 
-use App\Modules\Academic\Enums\DepartmentHeadKind;
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\RecipientsQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -28,6 +28,8 @@ use Spatie\Activitylog\Models\Activity;
  */
 final class ValidationProgressQuery
 {
+    public function __construct(private readonly RecipientsQuery $recipients) {}
+
     /**
      * Los campus donde el periodo está abierto, activos y sin borrar, por código.
      *
@@ -48,20 +50,25 @@ final class ValidationProgressQuery
      * `columns`: Docentes, Materias, Planes y Carreras, y una de Salones por campus que usa salones. `rows`: cada
      * departamento activo, con sus revisiones por columna (nula si falta), cuántas lleva validadas del total, sus
      * pendientes y en revisión, las observaciones abiertas, el jefe vigente, el estado de su carga por campus
-     * (evento LoadStatusesRequested) y el último recordatorio. `totals`: por columna. `global` y `flags` cuentan
+     * (evento LoadStatusesRequested) y el último recordatorio en los campus del alcance. El jefe sale de lo mismo que
+     * recibe el aviso (RecipientsQuery: alcance de rol vigente y usuario activo), `heads` y `head` (el primero), y de
+     * ahí `remind_blocked_reason`, el motivo por el que «Recordar» no aplica (nada pendiente o sin jefe), nulo si
+     * aplica; `remindable` cuenta los departamentos visibles a los que sí y sus jefes distintos. `totals`: por columna. `global` y `flags` cuentan
      * todos los departamentos; `search` (departamento o jefe) y `status` (`pending`: con algo sin validar;
      * `validated`: todo validado) solo filtran `rows` y `totals`.
      *
      * @param  Collection<int, Campus>  $campuses
+     *                                             Con `$departmentId`, solo ese departamento (para el drawer de uno que los filtros dejaron fuera).
      * @return array{
      *     columns: list<array{key: string, catalog: Catalog, campus: ?Campus}>,
      *     rows: list<array<string, mixed>>,
      *     totals: array<string, array{validated: int, in_review: int, total: int, unvalidated: int}>,
      *     global: array{validated: int, in_review: int, pending: int, total: int, percent: int},
-     *     flags: array{open: int, departments: int, resolved: int}
+     *     flags: array{open: int, departments: int, resolved: int},
+     *     remindable: array{departments: int, heads: int}
      * }
      */
-    public function board(Term $term, Collection $campuses, string $search = '', string $status = ''): array
+    public function board(Term $term, Collection $campuses, string $search = '', string $status = '', ?string $departmentId = null): array
     {
         $columns = [];
 
@@ -73,7 +80,7 @@ final class ValidationProgressQuery
             $columns[] = ['key' => 'rooms:'.$campus->getKey(), 'catalog' => Catalog::Rooms, 'campus' => $campus];
         }
 
-        $departments = Department::query()->where('is_active', true)->orderBy('code')->get();
+        $departments = Department::query()->where('is_active', true)->when($departmentId !== null, fn ($query) => $query->whereKey($departmentId))->orderBy('code')->get();
         $roomCampusIds = collect($columns)->pluck('campus.id')->filter()->all();
 
         $reviews = CatalogReview::query()
@@ -86,25 +93,23 @@ final class ValidationProgressQuery
 
         $flags = CatalogReviewFlag::query()
             ->join('catalog_reviews', 'catalog_reviews.id', '=', 'catalog_review_flags.review_id')
-            ->whereIn('catalog_reviews.id', $reviews->pluck('id')->all())
+            ->where('catalog_reviews.term_id', $term->getKey())
+            ->whereIn('catalog_reviews.department_id', $departments->modelKeys())
+            ->where(fn ($query) => $query->whereNull('catalog_reviews.campus_id')->orWhereIn('catalog_reviews.campus_id', $roomCampusIds))
             ->selectRaw('catalog_reviews.department_id, count(*) filter (where catalog_review_flags.resolved_at is null) as open, count(*) filter (where catalog_review_flags.resolved_at is not null) as resolved')
             ->groupBy('catalog_reviews.department_id')
             ->get()
             ->keyBy('department_id');
 
-        $heads = DepartmentHead::query()
-            ->currentOn(now())
-            ->where('kind', DepartmentHeadKind::Jefe)
-            ->whereNull('campus_id')
-            ->whereIn('department_id', $departments->modelKeys())
-            ->with('user')
-            ->get()
-            ->keyBy('department_id');
+        $campus = $campuses->first();
+        $heads = $departments->mapWithKeys(fn (Department $department): array => [
+            $department->getKey() => $campus === null ? collect() : $this->recipients->for(Role::JefeDepartamento, $campus, $department->getKey()),
+        ]);
 
         $statuses = new LoadStatusesRequested($term, $campuses->pluck('id')->all());
         event($statuses);
 
-        $reminders = $this->lastReminders($term, $departments->modelKeys());
+        $reminders = $this->lastReminders($term, $departments->modelKeys(), $campuses->pluck('code')->all());
 
         $rows = $departments->map(function (Department $department) use ($columns, $reviews, $flags, $heads, $campuses, $statuses, $reminders): array {
             $cells = [];
@@ -119,11 +124,17 @@ final class ValidationProgressQuery
 
             return [
                 'department' => $department,
-                'head' => $heads->get($department->getKey())?->user,
+                'heads' => $heads->get($department->getKey()),
+                'head' => $heads->get($department->getKey())->first(),
                 'cells' => $cells,
                 'validated' => $validated,
                 'in_review' => $inReview,
                 'pending' => $total - $validated - $inReview,
+                'remind_blocked_reason' => match (true) {
+                    $validated === $total => 'No le falta nada por validar.',
+                    $heads->get($department->getKey())->isEmpty() => 'No tiene jefe vigente.',
+                    default => null,
+                },
                 'total' => $total,
                 'open_flags' => (int) ($flags->get($department->getKey())?->open ?? 0),
                 'resolved_flags' => (int) ($flags->get($department->getKey())?->resolved ?? 0),
@@ -148,6 +159,9 @@ final class ValidationProgressQuery
 
         $rows = array_values(array_filter($rows, fn (array $row): bool => $this->matches($row, $search, $status)));
 
+        $remindable = array_filter($rows, fn (array $row): bool => $row['remind_blocked_reason'] === null);
+        $remindableHeads = ['departments' => count($remindable), 'heads' => collect($remindable)->flatMap(fn (array $row) => $row['heads']->pluck('id'))->unique()->count()];
+
         $totals = [];
 
         foreach ($columns as $column) {
@@ -162,7 +176,7 @@ final class ValidationProgressQuery
             ];
         }
 
-        return ['columns' => $columns, 'rows' => $rows, 'totals' => $totals, 'global' => $global, 'flags' => $summary];
+        return ['columns' => $columns, 'rows' => $rows, 'totals' => $totals, 'global' => $global, 'flags' => $summary, 'remindable' => $remindableHeads];
     }
 
     /**
@@ -194,18 +208,25 @@ final class ValidationProgressQuery
     }
 
     /**
-     * Cuándo se recordó por última vez a cada departamento el periodo, según la bitácora de RemindPendingReviews.
+     * Cuándo se recordó por última vez a cada departamento el periodo en alguno de los campus dados (códigos), según
+     * la bitácora de RemindPendingReviews (`properties.campuses`).
      *
      * @param  list<string>  $departmentIds
+     * @param  list<string>  $campusCodes
      * @return array<string, CarbonImmutable>
      */
-    public function lastReminders(Term $term, array $departmentIds): array
+    public function lastReminders(Term $term, array $departmentIds, array $campusCodes): array
     {
+        if ($campusCodes === []) {
+            return [];
+        }
+
         return Activity::query()
             ->where('subject_type', (new Department)->getMorphClass())
             ->whereIn('subject_id', $departmentIds)
             ->where('event', 'reminded')
             ->where('properties->term_id', $term->getKey())
+            ->whereRaw("jsonb_exists_any((properties::jsonb)->'campuses', ?::text[])", ['{'.implode(',', array_map(fn (string $code): string => '"'.addcslashes($code, '"\\').'"', $campusCodes)).'}'])
             ->selectRaw('subject_id, max(created_at) as last')
             ->groupBy('subject_id')
             ->pluck('last', 'subject_id')
@@ -232,7 +253,7 @@ final class ValidationProgressQuery
             return true;
         }
 
-        $haystack = Str::lower(Str::ascii($row['department']->code.' '.$row['department']->name.' '.($row['head']?->name ?? '')));
+        $haystack = Str::lower(Str::ascii($row['department']->code.' '.$row['department']->name.' '.($row['heads']->pluck('name')->implode(' '))));
 
         return str_contains($haystack, $needle);
     }

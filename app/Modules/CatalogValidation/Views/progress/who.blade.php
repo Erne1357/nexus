@@ -9,7 +9,7 @@
         <span class="font-mono text-[13px] text-neutral">{{ $department->code }}</span>
         <span class="font-semibold leading-snug underline decoration-transparent underline-offset-4 group-hover:decoration-current group-focus-visible:decoration-current">{{ $department->name }}</span>
     </button>
-    <p class="text-sm text-neutral">{{ $row['head']?->name ?? 'Sin jefe vigente' }}</p>
+    <p class="text-sm text-neutral">{{ $row['heads']->isEmpty() ? 'Sin jefe vigente' : $row['heads']->pluck('name')->implode(', ') }}</p>
     <div class="flex flex-wrap gap-1">
         @foreach ($campuses as $campus)
             @if ($load = $row['loads'][$campus->id] ?? null)

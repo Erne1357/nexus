@@ -26,7 +26,7 @@
             <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">Las revisiones nacen al abrir el periodo en un campus (Periodos); mientras no haya una, no hay nada que seguir.</p>
         </div>
     @else
-        @php($pendingHeads = collect($board['rows'])->filter(fn ($row) => $row['validated'] < $row['total'] && $row['head'] !== null)->count())
+        @php($pendingHeads = $board['remindable']['heads'])
         <x-core::catalog-toolbar narrow>
             <x-slot:search>
                 <x-input wire:model.live.debounce.300ms="search" icon="o-magnifying-glass" placeholder="Departamento o jefe" aria-label="Buscar por departamento o jefe" clearable />
@@ -36,7 +36,7 @@
             <x-select wire:model.live="status" aria-label="Estado" :options="[['id' => 'pending', 'name' => 'Con pendientes'], ['id' => 'validated', 'name' => 'Todo validado']]" placeholder="Estado" placeholder-value="" />
 
             <x-slot:action>
-                <x-button label="Recordar a todos los pendientes" icon="o-bell" class="btn-primary" wire:click="remind" spinner="remind" data-testid="remind-all" :disabled="$board['global']['validated'] === $board['global']['total']">
+                <x-button label="Recordar a todos los pendientes" icon="o-bell" class="btn-primary" wire:click="remind" spinner="remind" data-testid="remind-all" :disabled="$board['remindable']['departments'] === 0">
                     <span class="badge badge-sm badge-neutral" aria-label="{{ $pendingHeads }} jefes por recordar">{{ $pendingHeads }}</span>
                 </x-button>
             </x-slot:action>

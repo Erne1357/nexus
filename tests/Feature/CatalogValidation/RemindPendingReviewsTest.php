@@ -59,11 +59,11 @@ it('avisa solo a los jefes con pendientes y deja bitácora de quién recordó a 
 it('recuerda solo a un departamento y a nadie si no le falta nada', function () {
     Notification::fake();
 
-    expect(app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2]), $this->subdireccion, $this->ele->id))->toBe(0);
+    expect(app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2]), $this->subdireccion, [$this->ele->id]))->toBe(0);
     Notification::assertNothingSent();
     expect(Activity::query()->where('event', 'reminded')->count())->toBe(0);
 
-    expect(app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2]), $this->subdireccion, $this->sis->id))->toBe(1);
+    expect(app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2]), $this->subdireccion, [$this->sis->id]))->toBe(1);
 });
 
 it('avisa en cada campus que se le pasa y cuenta una vez al jefe', function () {
@@ -78,9 +78,9 @@ it('el último recordatorio de cada departamento sale de la bitácora', function
     $this->travelTo(now()->subDay());
     app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2]), $this->subdireccion);
     $this->travelBack();
-    app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2]), $this->subdireccion, $this->sis->id);
+    app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2]), $this->subdireccion, [$this->sis->id]);
 
-    $last = app(ValidationProgressQuery::class)->lastReminders($this->term, [$this->sis->id, $this->ele->id]);
+    $last = app(ValidationProgressQuery::class)->lastReminders($this->term, [$this->sis->id, $this->ele->id], ['C2']);
 
     expect($last)->toHaveKey($this->sis->id)->not->toHaveKey($this->ele->id)
         ->and($last[$this->sis->id]->isToday())->toBeTrue();

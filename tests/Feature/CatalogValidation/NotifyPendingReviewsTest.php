@@ -134,3 +134,14 @@ it('si la apertura falla, no avisa a nadie', function () {
 
     expect(DatabaseNotification::query()->count())->toBe(0);
 });
+
+it('notify() da los usuarios avisados y handle() sigue dando cuántos', function () {
+    Notification::fake();
+    reviewsFor($this->term, $this->c2, $this->sistemas, ReviewStatus::Pending);
+    reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
+
+    $users = app(NotifyPendingReviews::class)->notify($this->term, $this->c2);
+
+    expect($users->pluck('id')->all())->toBe([$this->jefeSistemas->id])
+        ->and(app(NotifyPendingReviews::class)->handle($this->term, $this->c2))->toBe(1);
+});
