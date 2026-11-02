@@ -59,7 +59,13 @@ function seedCatalogScenario(array $campuses = ['C1', 'C2'], bool $previous = tr
     $codes = $previous ? ['20263', '20271'] : ['20271'];
 
     foreach ($codes as $code) {
-        $term = Term::factory()->create(['code' => $code, 'name' => "Periodo {$code}"]);
+        $year = (int) substr($code, 0, 4);
+        $term = Term::factory()->create([
+            'code' => $code,
+            'name' => "Periodo {$code}",
+            'starts_on' => $year.($code[4] === '3' ? '-08-17' : '-01-25'),
+            'ends_on' => $year.($code[4] === '3' ? '-12-11' : '-06-11'),
+        ]);
         $models->each(fn (Campus $campus) => app(OpenTerm::class)->handle($term, $campus));
     }
 }
