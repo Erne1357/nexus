@@ -106,6 +106,63 @@ final class TermCalendarQuery
         return TermStage::query()->where('term_id', $term->getKey())->where('stage', $stage->value)->get();
     }
 
+    /**
+     * Los periodos de los que se puede copiar el calendario a `$target`: los demás que tienen al menos una
+     * ventana, del más reciente al más antiguo.
+     *
+     * @return Collection<int, Term>
+     */
+    public function copySources(Term $target): Collection
+    {
+        return Term::query()
+            ->whereKeyNot($target->getKey())
+            ->whereIn('id', TermStage::query()->select('term_id'))
+            ->orderByDesc('starts_on')
+            ->get();
+    }
+
+    /**
+     * Lo que haría copiar el calendario de `$source` a `$target`, sin escribir nada: los días del corrimiento (las
+     * semanas completas entre los inicios de los dos periodos, redondeadas a la más cercana, para que cada ventana
+     * conserve su día de la semana), las ventanas ya corridas (primero la general de cada etapa y luego las de
+     * campus, en el orden de Stage y de código de campus) y las ventanas de campus que no se copiarían porque el
+     * campus está inactivo o borrado.
+     *
+     * @return array{shiftDays: int, windows: list<array{stage: Stage, campus: ?Campus, starts_on: CarbonImmutable, ends_on: CarbonImmutable}>, skipped: list<array{stage: Stage, campus: Campus}>}
+     */
+    public function copyPreview(Term $target, Term $source): array
+    {
+        $shiftDays = (int) (round($source->starts_on->startOfDay()->diffInDays($target->starts_on->startOfDay(), false) / 7) * 7);
+        $stageOrder = array_flip(array_map(fn (Stage $stage): string => $stage->value, Stage::cases()));
+
+        $stored = TermStage::query()
+            ->where('term_id', $source->getKey())
+            ->with(['campus' => fn ($query) => $query->withTrashed()])
+            ->get()
+            ->sortBy(fn (TermStage $window): string => sprintf('%02d-%d-%s', $stageOrder[$window->stage->value], $window->campus_id === null ? 0 : 1, $window->campus?->code ?? ''))
+            ->values();
+
+        $windows = [];
+        $skipped = [];
+
+        foreach ($stored as $window) {
+            if ($window->campus !== null && (! $window->campus->is_active || $window->campus->trashed())) {
+                $skipped[] = ['stage' => $window->stage, 'campus' => $window->campus];
+
+                continue;
+            }
+
+            $windows[] = [
+                'stage' => $window->stage,
+                'campus' => $window->campus,
+                'starts_on' => CarbonImmutable::instance($window->starts_on)->addDays($shiftDays)->startOfDay(),
+                'ends_on' => CarbonImmutable::instance($window->ends_on)->addDays($shiftDays)->startOfDay(),
+            ];
+        }
+
+        return ['shiftDays' => $shiftDays, 'windows' => $windows, 'skipped' => $skipped];
+    }
+
     public static function key(string $termId): string
     {
         return 'core.term-calendar.'.$termId;

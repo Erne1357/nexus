@@ -153,3 +153,35 @@ it('lee todos los campus de una sola entrada de caché por periodo', function ()
 
     expect(array_unique($reads))->toBe([TermCalendarQuery::key($this->term->id)]);
 });
+
+it('copySources lista los demás periodos con ventanas, del más reciente al más antiguo', function () {
+    $old = Term::factory()->create(['starts_on' => '2026-01-26', 'ends_on' => '2026-06-12']);
+    $recent = Term::factory()->create(['starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    Term::factory()->create(['starts_on' => '2026-06-15', 'ends_on' => '2026-07-31']);
+    foreach ([$old, $recent, $this->term] as $term) {
+        TermStage::factory()->for($term)->create(['stage' => Stage::Proposal]);
+    }
+
+    expect(app(TermCalendarQuery::class)->copySources($this->term)->pluck('id')->all())->toBe([$recent->id, $old->id]);
+});
+
+it('copyPreview corre las ventanas por semanas completas, conserva el día y separa los campus inactivos', function () {
+    $source = Term::factory()->create(['starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
+    $target = Term::factory()->create(['starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
+    $inactive = Campus::factory()->create(['code' => 'C9', 'is_active' => false]);
+    TermStage::factory()->for($source)->create(['stage' => Stage::Rooms, 'starts_on' => '2026-10-05', 'ends_on' => '2026-10-16']);
+    TermStage::factory()->for($source)->create(['stage' => Stage::Proposal, 'campus_id' => $this->campus->id, 'starts_on' => '2026-09-01', 'ends_on' => '2026-09-04']);
+    TermStage::factory()->for($source)->create(['stage' => Stage::Proposal, 'starts_on' => '2026-08-31', 'ends_on' => '2026-09-11']);
+    TermStage::factory()->for($source)->create(['stage' => Stage::Closing, 'campus_id' => $inactive->id, 'starts_on' => '2026-11-02', 'ends_on' => '2026-11-06']);
+
+    $preview = app(TermCalendarQuery::class)->copyPreview($target, $source);
+
+    expect($preview['shiftDays'])->toBe(161)
+        ->and(array_map(fn ($w) => [$w['stage'], $w['campus']?->id], $preview['windows']))->toBe([
+            [Stage::Proposal, null], [Stage::Proposal, $this->campus->id], [Stage::Rooms, null],
+        ])
+        ->and($preview['windows'][0]['starts_on']->toDateString())->toBe('2027-02-08')
+        ->and($preview['windows'][0]['starts_on']->dayOfWeek)->toBe(CarbonImmutable::parse('2026-08-31')->dayOfWeek)
+        ->and($preview['skipped'])->toHaveCount(1)
+        ->and($preview['skipped'][0]['campus']->is($inactive))->toBeTrue();
+});
