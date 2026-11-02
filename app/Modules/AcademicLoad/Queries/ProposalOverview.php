@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Enums\Catalog;
 
 /**
@@ -30,7 +31,19 @@ final readonly class ProposalOverview
         public array $reviews,
         public array $totals,
         public array $pendingCatalogs,
+        public ProposalAnomalies $anomalies = new ProposalAnomalies,
     ) {}
+
+    /**
+     * Lo raro de la fila para marcarlo sin bloquear el envío (ProposalAnomalies): más esperados que elegibles y
+     * grupos con muy pocos alumnos.
+     *
+     * @return list<string>
+     */
+    public function anomaliesFor(ProposalItem $item): array
+    {
+        return $this->anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups);
+    }
 
     /**
      * La parte de un departamento, o null si no tiene (todavía no se envía o no se le piden grupos).
