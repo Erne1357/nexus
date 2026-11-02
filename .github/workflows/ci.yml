@@ -39,7 +39,7 @@ jobs:
   tests:
     name: tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -51,21 +51,12 @@ jobs:
         run: docker compose up -d --wait postgres valkey
 
       # Cobertura con pcov: Clover para el mínimo por módulo, texto para leer el detalle.
-      - name: Depuración temporal (registrar esperas por candado)
-        run: |
-          docker compose exec -T postgres psql -U nexus -d postgres -c "ALTER SYSTEM SET log_lock_waits = on" -c "ALTER SYSTEM SET deadlock_timeout = '2s'" -c "ALTER SYSTEM SET log_min_duration_statement = 20000"
-          docker compose exec -T postgres psql -U nexus -d postgres -c "SELECT pg_reload_conf()"
-
       - name: Unit, Feature y Arch
         run: |
           docker compose run --rm -T app php artisan test \
             --testsuite=Unit,Feature,Arch --compact \
             --coverage-clover=storage/logs/clover.xml \
             --coverage-text=storage/logs/coverage.txt
-
-      - name: Depuración temporal (log de PostgreSQL)
-        if: always()
-        run: docker compose logs postgres 2>&1 | grep -B3 -A15 -E "still waiting|acquired|duration:" | head -300 || true
 
       # Bloqueante desde la fase 1: falla si un módulo de app/Modules/ queda debajo de 80 %.
       # `shell: bash` activa pipefail, para que el código de salida del script no se pierda en el tee.
