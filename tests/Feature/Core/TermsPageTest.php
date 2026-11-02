@@ -157,8 +157,7 @@ describe('admin y subdirección', function () {
 
         $this->actingAs($this->admin)
             ->get(route('core.terms'))
-            ->assertSee('+2')
-            ->assertSee('title="C2, C3, C4, C5"', false);
+            ->assertSee('title="C2, C3, C4, C5">+1</span>', false);
     });
 
     it('al editar, escribir encima del código no borra el nombre guardado', function () {
