@@ -47,6 +47,35 @@ final readonly class ProposalOverview
     }
 
     /**
+     * El resumen de cada departamento involucrado, por clave: el que tiene materias con grupos pedidos o una
+     * parte, con cuántas materias y grupos se le piden y su parte (null si todavía no se envía). Es lo que la
+     * página muestra junto a la retícula y la tabla para resaltar y filtrar por departamento.
+     *
+     * @return list<array{department: Department, subjects: int, groups: int, review: ?ProposalReview}>
+     */
+    public function departments(): array
+    {
+        $rows = [];
+
+        foreach ($this->semesters as $items) {
+            foreach ($items as $item) {
+                $department = $item->subject->department;
+                $rows[$department->getKey()] ??= ['department' => $department, 'subjects' => 0, 'groups' => 0, 'review' => $this->reviewFor($department->getKey())];
+
+                if ($item->requested_groups > 0) {
+                    $rows[$department->getKey()]['subjects']++;
+                    $rows[$department->getKey()]['groups'] += $item->requested_groups;
+                }
+            }
+        }
+
+        $rows = array_filter($rows, fn (array $row): bool => $row['groups'] > 0 || $row['review'] !== null);
+        usort($rows, fn (array $a, array $b): int => $a['department']->code <=> $b['department']->code);
+
+        return $rows;
+    }
+
+    /**
      * Si el coordinador puede corregir la fila: la propuesta está en borrador o regresada y el departamento de
      * la materia no ha aceptado su parte (lo mismo que exige UpdateProposalItem). Para deshabilitar la fila con
      * su motivo.

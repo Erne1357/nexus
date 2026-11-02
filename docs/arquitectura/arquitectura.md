@@ -330,6 +330,15 @@ Para agregar una transición: una Action `Transitions/<Verbo>Load` que llame a `
 
 Lo que entra en el avance de los alumnos (la retícula de un plan, su especialidad y su seriación, los créditos totales del plan, los créditos o el tipo de una materia) es de Academic, pero `student_progress` es de Students. Cada Action de Academic que lo cambia despacha `Academic\Events\CurriculumChanged` con el plan afectado, la materia o los dos (al menos uno). Es `ShouldDispatchAfterCommit`, así que un cambio que se revierte no avisa. Students lo escucha (`RecomputeProgressOnCurriculumChange`, registrado en `StudentsServiceProvider`) y encola `RecomputeStudentProgress`, que es único en la cola y siempre recalcula completo: varios cambios seguidos esperan un solo recálculo. Hoy lo despacha `UpdateSubject` cuando cambian los créditos o el tipo; las Actions de planes y retícula de la tarea 1.8 lo usarán igual.
 
+### Notificaciones
+
+Los avisos del proceso van por el canal `database` de Laravel (tarea 2.9; el correo queda para después). Cada módulo define los suyos en `<Modulo>/Notifications` sobre `Core\Notifications\NexusNotification`, que guarda un `NotificationMessage`: título, detalle, icono y tono, el destino como nombre de ruta con parámetros, y el periodo y el campus del aviso. Así la campana de la banda (`core::components.bell`) los muestra sin conocer cada clase, y un aviso puede apuntar a una pantalla que todavía no existe.
+
+- A quién: `Core\Queries\RecipientsQuery::for($role, $campus, $department, $career)`, con la misma regla de alcance que las policies, solo por alcance (`ScopedContext::coversWithScope`): el admin que no tiene ese alcance no los recibe.
+- Cuándo: una Action del módulo que avisa (por ejemplo `NotifyPendingReviews`), llamada desde un listener en cola que se encola después del commit (`ShouldQueue` con `$afterCommit`), para que un cambio revertido no avise y avisar a muchos no haga esperar a quien hizo el cambio.
+- Al abrirlo (`OpenNotification`): se marca leído, la credencial pasa al periodo y el campus del aviso, y la clase decide si el destino sigue disponible (`NexusNotification::unavailableReason`: la ruta existe y, según la clase, el registro y el alcance), y la ruta tiene que aceptar los parámetros guardados. Si no, la campana lo dice en un toast en lugar de llevarlo.
+- Las llaves son UUIDv7: Laravel clona la notificación por destinatario y `__clone` le da a cada copia la suya.
+
 ## Colas y trabajos en segundo plano
 
 Todo lo que tarde más de un segundo va a la cola `redis` (servicio `queue`): validar y aplicar lotes de importación, recalcular `student_progress`, `staffing_rankings`, `teacher_term_loads` y `schedule_conflicts`, generar snapshots y exportes, y correr el motor. Las pantallas muestran progreso con polling de Livewire (`wire:poll`) y notificaciones en base de datos.

@@ -18,9 +18,11 @@ final class CareerProposalSubmitted implements ShouldDispatchAfterCommit
 
     /**
      * @param  list<string>  $pendingDepartmentIds  ids de los departamentos con su parte pendiente, por clave
+     * @param  bool  $resubmitted  si se reenvió después de que un departamento la regresó
      */
     public function __construct(
         public CareerProposal $proposal,
         public array $pendingDepartmentIds,
+        public bool $resubmitted = false,
     ) {}
 }
