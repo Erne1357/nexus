@@ -51,10 +51,17 @@ jobs:
         run: docker compose up -d --wait postgres valkey
 
       # Cobertura con pcov: Clover para el mínimo por módulo, texto para leer el detalle.
+      - name: Depuración temporal (solo ExportDemoFilesTest)
+        run: |
+          docker compose run --rm -T app php artisan test tests/Feature/Imports/ExportDemoFilesTest.php
+          docker compose run --rm -T app php artisan test tests/Feature/Imports/ExportDemoFilesTest.php --coverage-text=storage/logs/tmp-coverage.txt
+          docker compose run --rm -T app php artisan test tests/Feature/Imports tests/Feature/Core --compact
+          docker compose exec -T postgres psql -U nexus -d nexus_test -c "select relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze from pg_stat_user_tables order by n_dead_tup desc limit 8" || true
+
       - name: Unit, Feature y Arch
         run: |
           docker compose run --rm -T app php artisan test \
-            --testsuite=Unit,Feature,Arch --compact --debug \
+            --testsuite=Unit,Feature,Arch --compact \
             --coverage-clover=storage/logs/clover.xml \
             --coverage-text=storage/logs/coverage.txt
 
