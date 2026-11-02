@@ -24,8 +24,9 @@ use Spatie\Activitylog\Models\Activity;
 | SubmitCareerProposal envía la propuesta de carrera a los departamentos (reglas-de-negocio.md, "Propuesta de
 | carrera"): cada departamento con grupos pedidos recibe su parte, que decide completa; la propuesta queda
 | aceptada cuando todas sus partes lo están (confirmado el 2 de noviembre de 2026). Exige al menos una materia
-| con grupos. Al reenviar, la parte aceptada no cambia, las demás vuelven a pendiente sin comentario y la de un
-| departamento al que ya no se le piden grupos desaparece (supuestos por confirmar).
+| con grupos. Al reenviar, la parte aceptada no cambia, aunque se haya aceptado con la propuesta regresada
+| (confirmado el 2 de noviembre de 2026); la regresada vuelve a pendiente sin comentario, la pendiente sigue
+| pendiente y la de un departamento al que ya no se le piden grupos desaparece (supuestos por confirmar).
 */
 
 beforeEach(function () {
@@ -216,6 +217,26 @@ describe('al reenviar una propuesta regresada', function () {
             ->and($returned->decided_by)->toBeNull()
             ->and($returned->decided_at)->toBeNull()
             ->and($this->proposal->fresh()->submitted_by)->toBe($this->actor->id);
+    });
+
+    it('deja pendiente, sin reiniciarla, la parte que nadie decidió mientras estaba regresada', function () {
+        proposalRowIn($this->ii, 1);
+        $pending = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->ii->id]);
+
+        submitProposal();
+
+        expect(proposalPartsOf($this->proposal))->toBe([
+            'CB' => ['accepted', null],
+            'II' => ['pending', null],
+            'SC' => ['pending', null],
+        ])
+            ->and($pending->fresh()->decided_by)->toBeNull()
+            ->and(Activity::query()->where('event', 'submitted')->sole()->properties->all())->toBe([
+                'pending_department_ids' => [$this->ii->id, $this->sc->id],
+                'accepted_department_ids' => [$this->cb->id],
+                'reset_reviews' => [['department_id' => $this->sc->id, 'status' => 'returned', 'comment' => 'Pide un grupo más de Redes.']],
+                'removed_reviews' => [],
+            ]);
     });
 
     it('borra la parte del departamento al que ya no se le piden grupos', function () {
