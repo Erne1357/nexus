@@ -241,8 +241,8 @@
                         <p class="text-sm text-neutral" data-testid="copy-skipped">No se copian: {{ implode('; ', $copy['skipped']) }}</p>
                     @endif
 
-                    @if ($copyWindowCount > 0)
-                        <p class="text-sm text-neutral">Se reemplazan las {{ $copyWindowCount }} {{ $copyWindowCount === 1 ? 'ventana actual' : 'ventanas actuales' }} del periodo.</p>
+                    @if ($copyReplace !== null)
+                        <p class="text-sm text-neutral" data-testid="copy-replace">{{ $copyReplace['text'] }}</p>
                     @endif
                 </div>
             @endif
@@ -250,13 +250,13 @@
 
         <x-slot:actions>
             <x-button label="Cancelar" @click="$wire.showCopy = false" class="max-md:h-11" />
-            @if ($copyWindowCount > 0)
+            @if ($copyReplace !== null)
                 <x-button
                     label="Reemplazar calendario"
                     icon="o-check"
                     class="btn-primary max-md:h-11"
                     wire:click="copyCalendar"
-                    wire:confirm="Se reemplazarán las {{ $copyWindowCount }} ventanas actuales del periodo."
+                    wire:confirm="{{ $copyReplace['text'] }}"
                     :disabled="$copy === null"
                     spinner="copyCalendar"
                     data-testid="copy-confirm"

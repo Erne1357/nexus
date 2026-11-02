@@ -12,6 +12,7 @@ use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
@@ -605,11 +606,42 @@ describe('copiar el calendario de otro periodo', function () {
             ->call('openCopy')
             ->set('sourceId', $this->other->id)
             ->assertSee('Reemplazar calendario')
-            ->assertSee('Se reemplazarán las 1 ventanas actuales del periodo.')
+            ->assertSee('Se reemplazará la ventana actual del periodo.')
+            ->assertSeeHtml('wire:confirm="Se reemplazará la ventana actual del periodo."')
             ->call('copyCalendar');
 
         expect(termPageWindows($this->term, Stage::Staffing))->toBe([])
             ->and(TermStage::where('term_id', $this->term->id)->count())->toBe(3);
+    });
+
+    it('dice cuántas de las ventanas que reemplaza son de campus inactivos', function () {
+        termPageStage($this->term, Stage::Staffing, $this->c3, '2027-02-01', '2027-02-05');
+        termPageStage($this->term, Stage::Rooms, $this->c3, '2027-02-08', '2027-02-12');
+        $this->c3->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSee('Este periodo no tiene calendario.')
+            ->call('openCopy')
+            ->set('sourceId', $this->other->id)
+            ->assertSeeHtml('wire:confirm="Se reemplazarán las 2 ventanas actuales del periodo, 2 de ellas de campus inactivos."')
+            ->call('copyCalendar');
+
+        expect(TermStage::where('term_id', $this->term->id)->count())->toBe(3);
+    });
+
+    it('calcula la vista previa al elegir el periodo, no en cada petición', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openCopy')
+            ->set('sourceId', $this->other->id);
+
+        DB::enableQueryLog();
+        $page->call('$refresh');
+        $queries = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'term_stages') && str_contains($sql, '"term_id" = ?'))->count();
+        DB::disableQueryLog();
+
+        expect($queries)->toBe(0);
     });
 
     it('lista lo que no se copia por un campus inactivo', function () {
