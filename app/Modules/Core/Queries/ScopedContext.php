@@ -163,10 +163,18 @@ final class ScopedContext
      */
     public function covers(Role|array $roles, Campus|string $campus, ?string $department = null, ?string $career = null): bool
     {
-        if ($this->isAdmin()) {
-            return true;
-        }
+        return $this->isAdmin() || $this->coversWithScope($roles, $campus, $department, $career);
+    }
 
+    /**
+     * Lo mismo que covers(), solo por sus alcances: sin el atajo del admin, que lo cubre todo sin tener
+     * alcance. Para saber a quién le toca un aviso (RecipientsQuery): un admin que además es jefe recibe los
+     * de su departamento, y no los de todos.
+     *
+     * @param  Role|list<Role>  $roles
+     */
+    public function coversWithScope(Role|array $roles, Campus|string $campus, ?string $department = null, ?string $career = null): bool
+    {
         $roles = $this->withoutDocente($roles);
         $campusId = $campus instanceof Campus ? $campus->getKey() : $campus;
 
