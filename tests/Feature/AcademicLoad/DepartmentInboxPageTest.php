@@ -664,7 +664,7 @@ describe('segunda crítica con volumen', function () {
         ]);
 
         inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
-            ->assertSee('Con anomalías (1)')
+            ->assertSeeHtml('Con anomalías <span class="font-mono tabular-nums">1</span>')
             ->assertSee('Cálculo Diferencial')
             ->set('onlyAnomalies', true)
             ->assertViewHas('items', fn (array $items): bool => count($items) === 1 && $items[0]['item']->subject_id === $physics->id)
@@ -674,7 +674,7 @@ describe('segunda crítica con volumen', function () {
     });
 
     it('sin materias con anomalías no ofrece el filtro', function () {
-        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])->assertDontSee('Con anomalías (');
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])->assertDontSee('Con anomalías');
     });
 
     it('elegir una carrera avisa al navegador para llevar el detalle al inicio y el foco al título', function () {

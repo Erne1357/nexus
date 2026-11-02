@@ -29,7 +29,7 @@
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <x-core::status-badge :tone="$selected['status']->tone()" :label="$selected['status']->label()" data-testid="career-status" />
             @if ($selected['decidable'] && $selected['proposal']->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Returned)
-                <p class="text-sm" data-testid="proposal-in-correction"><span class="font-semibold">En corrección{{ $selected['correctionBy'] !== [] ? ' por '.implode(', ', $selected['correctionBy']) : '' }}.</span> <span class="text-neutral">El coordinador la corrige; tu parte se puede decidir.</span></p>
+                <p class="text-sm" data-testid="proposal-in-correction"><span class="font-semibold">En corrección{{ $selected['correctionBy'] !== [] ? ' por '.implode(', ', $selected['correctionBy']) : '' }}.</span></p>
             @endif
             <p class="text-sm text-neutral">
                 @if ($review === null)
@@ -76,7 +76,7 @@
             @if ($anomalousItemCount > 0)
                 <div class="flex justify-end">
                     <button type="button" wire:click="$toggle('onlyAnomalies')" aria-pressed="{{ $onlyAnomalies ? 'true' : 'false' }}" data-testid="filter-anomalies"
-                        @class(['btn btn-sm max-md:h-11 max-md:min-h-11', 'btn-warning' => $onlyAnomalies, 'btn-outline' => ! $onlyAnomalies])><x-icon name="o-exclamation-triangle" class="h-4 w-4" />Con anomalías ({{ $anomalousItemCount }})</button>
+                        @class(['btn btn-sm max-md:h-11 max-md:min-h-11', 'btn-warning' => $onlyAnomalies, 'btn-outline' => ! $onlyAnomalies])><x-icon name="o-exclamation-triangle" class="h-4 w-4" />Con anomalías <span class="font-mono tabular-nums">{{ $anomalousItemCount }}</span></button>
                 </div>
             @endif
             <div role="table" aria-label="Materias que pide {{ $career->code }}" data-testid="inbox-items">
