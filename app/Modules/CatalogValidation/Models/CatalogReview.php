@@ -15,12 +15,15 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Revisión de un catálogo de un departamento en un periodo. Sin campus si el catálogo es general (una vez
  * por periodo para todo el Tec); con el campus si son los salones (D2, confirmado el 1 de noviembre de 2026).
+ * `snapshot` es la foto de los registros activos al validarla: `list<array{id: string, code: string, name: ?string}>`,
+ * nula hasta la primera validación.
  */
-#[Fillable(['term_id', 'campus_id', 'department_id', 'catalog', 'status', 'validated_by', 'validated_at', 'notes'])]
+#[Fillable(['term_id', 'campus_id', 'department_id', 'catalog', 'status', 'validated_by', 'validated_at', 'notes', 'snapshot'])]
 #[UseFactory(CatalogReviewFactory::class)]
 class CatalogReview extends Model
 {
@@ -36,6 +39,7 @@ class CatalogReview extends Model
             'catalog' => Catalog::class,
             'status' => ReviewStatus::class,
             'validated_at' => 'immutable_datetime',
+            'snapshot' => 'array',
         ];
     }
 
@@ -73,5 +77,15 @@ class CatalogReview extends Model
     public function validator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'validated_by');
+    }
+
+    /**
+     * Sus observaciones sobre registros.
+     *
+     * @return HasMany<CatalogReviewFlag, $this>
+     */
+    public function flags(): HasMany
+    {
+        return $this->hasMany(CatalogReviewFlag::class, 'review_id');
     }
 }
