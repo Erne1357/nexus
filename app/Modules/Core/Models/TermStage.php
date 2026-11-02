@@ -2,11 +2,14 @@
 
 namespace App\Modules\Core\Models;
 
+use App\Modules\Core\Database\Factories\TermStageFactory;
 use App\Modules\Core\Enums\Stage;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -14,9 +17,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Ventana de fechas de una etapa del periodo. Sin campus aplica a todos los campus.
  */
 #[Fillable(['term_id', 'campus_id', 'stage', 'starts_on', 'ends_on'])]
+#[UseFactory(TermStageFactory::class)]
 class TermStage extends Model
 {
-    use HasUuids;
+    /** @use HasFactory<TermStageFactory> */
+    use HasFactory, HasUuids;
 
     /**
      * @return array<string, string>

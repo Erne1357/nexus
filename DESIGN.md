@@ -262,6 +262,10 @@ Forma de la ficha del alumno, decidida el 30 de octubre de 2026 (variante A, pes
 - Agregar o editar una plaza y quitar una adscripción (el aviso dice qué principal queda) o una plaza se hacen en un `x-modal`; lo que no se puede quitar queda deshabilitado con su motivo.
 - **Disponibilidad:** el resumen del periodo activo en un renglón, la cuadrícula de solo lectura con los rangos por día y «Editar disponibilidad», que abre el editor; ver "Cuadrícula día x hora".
 
+### Línea de tiempo de etapas
+
+El calendario de un periodo (`core::pages.term`, `/terms/{term}`) y el bloque «Calendario» de Inicio usan la misma línea de tiempo (`Support/StageTimeline`; maqueta B, aprobada por el usuario): encabezado de meses y semanas (el lunes de cada una), un renglón por etapa con su número, nombre, insignia de estado y días que faltan, y su barra (`bg-info` en curso, gris con borde próxima, `bg-success` terminada) más una barra delgada `bg-primary` con el código por cada campus con ventana propia; la línea «Hoy» cruza todo. En la ficha, cada renglón es un botón que abre el panel de la etapa (`x-drawer` a la derecha). Se acomoda por el ancho de su caja (`@container`): desde 672 px, columna de nombres a la izquierda; debajo, el renglón apila nombre, fechas y una mini barra. En Inicio es de solo lectura y solo trae las etapas en curso y las dos que siguen.
+
 ### Cuadrícula día x hora
 La disponibilidad de un docente en un periodo, decidida el 30 de octubre de 2026 (variante A, «herramienta y pintar»; maquetas en `.impeccable/mocks/decision/docente/`). Las piezas son de Faculty: `x-faculty::availability.grid`, `.ranges`, `.legend` y `.swatch` (`app/Modules/Faculty/Views/components/availability/`).
 

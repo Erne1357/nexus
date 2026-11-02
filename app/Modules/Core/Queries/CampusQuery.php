@@ -6,6 +6,7 @@ use App\Modules\Core\Models\Campus;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -47,6 +48,16 @@ final class CampusQuery
             ->get(['id', 'code', 'name'])
             ->map(fn (Campus $campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])
             ->all();
+    }
+
+    /**
+     * Los campus activos, por código: los que se ofrecen al fijar la ventana propia de una etapa.
+     *
+     * @return Collection<int, Campus>
+     */
+    public function active(): Collection
+    {
+        return Campus::query()->where('is_active', true)->orderBy('code')->get();
     }
 
     /**

@@ -143,12 +143,12 @@ describe('agrupado por área', function () {
 
         // Presencia y ausencia, no listas exactas, como arriba.
         expect(navigationAreasFor($admin))
-            ->academico->toContain('Inicio', 'Campus')
+            ->academico->toContain('Inicio', 'Campus', 'Periodos')
             ->servicios_escolares->toContain('Saludo')
             ->recursos_humanos->toContain('Elementos')
             ->datos->toContain('Importaciones')
             ->and(navigationAreasFor($coordinador))
-            ->academico->toContain('Inicio')->not->toContain('Campus')
+            ->academico->toContain('Inicio')->not->toContain('Campus')->not->toContain('Periodos')
             ->servicios_escolares->toContain('Saludo');
     });
 });
@@ -194,9 +194,9 @@ it('filtra por rol: admin, coordinador y docente ven menús distintos', function
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
     // Presencia y ausencia, no listas exactas: cada módulo nuevo agrega entradas sin romper esta prueba.
-    expect(navigationLabelsFor($admin))->toContain('Inicio', 'Campus', 'Saludo', 'Elementos')
-        ->and(navigationLabelsFor($coordinador))->toContain('Inicio', 'Saludo')->not->toContain('Campus')->not->toContain('Elementos')
-        ->and(navigationLabelsFor($docente))->toContain('Inicio')->not->toContain('Campus')->not->toContain('Saludo')->not->toContain('Elementos');
+    expect(navigationLabelsFor($admin))->toContain('Inicio', 'Campus', 'Periodos', 'Saludo', 'Elementos')
+        ->and(navigationLabelsFor($coordinador))->toContain('Inicio', 'Saludo')->not->toContain('Campus')->not->toContain('Periodos')->not->toContain('Elementos')
+        ->and(navigationLabelsFor($docente))->toContain('Inicio')->not->toContain('Campus')->not->toContain('Periodos')->not->toContain('Saludo')->not->toContain('Elementos');
 });
 
 it('decide por la ability de Gate con la policy del módulo', function () {
@@ -273,7 +273,7 @@ describe('menú', function () {
         $this->actingAs(User::factory()->admin()->create());
 
         expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))
-            ->{'Académico'}->toContain('Inicio', 'Campus')
+            ->{'Académico'}->toContain('Inicio', 'Campus', 'Periodos')
             ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
             ->{'Recursos humanos'}->toContain('Elementos')
             ->{'Datos'}->toContain('Importaciones');
@@ -361,6 +361,7 @@ describe('menú', function () {
             ->and($current->item(0)->getAttribute('aria-label'))->toBe($area);
     })->with([
         'Campus' => ['core.campuses', 'Académico'],
+        'Periodos' => ['core.terms', 'Académico'],
         'Importaciones' => ['imports.wizard', 'Datos'],
         'Alumnos' => ['students.index', 'Servicios escolares'],
         'la ficha de un alumno, hija de Alumnos' => ['students.show', 'Servicios escolares'],

@@ -1,8 +1,11 @@
 <?php
 
+use App\Modules\Core\Actions\SetTermStage;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Livewire\Livewire;
 
@@ -73,4 +76,108 @@ it('se muestra dentro del layout de la aplicación', function () {
 
 it('un invitado va al login', function () {
     $this->get('/')->assertRedirect('/login');
+});
+
+/*
+| Bloque «Calendario» de Inicio (tarea 2.1, maqueta B): las etapas en curso, con los días que quedan, y las dos que
+| siguen, del periodo y el campus activos; la ventana propia del campus gana a la general. Solo lectura; se oculta sin
+| periodo activo o sin etapas con fecha.
+*/
+
+function homeCalendarUser(Campus $campus): User
+{
+    return User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(20)])->create();
+}
+
+function homeCalendarStage(Term $term, Stage $stage, ?Campus $campus, string $from, string $to): void
+{
+    app(SetTermStage::class)->handle($term, $stage, $campus, $from, $to);
+}
+
+describe('calendario en Inicio', function () {
+    beforeEach(function () {
+        $this->travelTo('2026-11-12 10:00:00');
+        $this->term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'code' => '20271']);
+    });
+
+    it('muestra la etapa en curso con sus días y las dos que siguen, y no más', function () {
+        homeCalendarStage($this->term, Stage::CatalogValidation, null, '2026-11-02', '2026-11-05');
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        homeCalendarStage($this->term, Stage::Scheduling, null, '2026-11-20', '2026-12-04');
+        homeCalendarStage($this->term, Stage::Staffing, null, '2026-11-24', '2026-12-04');
+        homeCalendarStage($this->term, Stage::Rooms, null, '2026-11-30', '2026-12-04');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')
+            ->assertSeeInOrder(['Calendario', 'Ene-Jun 2027 · Campus', 'Propuesta por carrera', 'En curso', '10–19 nov', 'quedan 7 días', 'Horarios y cupos', 'Próxima', 'empieza en 8 días', 'Asignación docente', 'empieza en 12 días'])
+            ->assertDontSee('Validación de catálogos')
+            ->assertDontSee('Salones y acuerdos');
+    });
+
+    it('para el campus activo, su ventana propia gana a la general', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        homeCalendarStage($this->term, Stage::Proposal, $this->campus, '2026-11-11', '2026-11-30');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')
+            ->assertSee('11–30 nov')
+            ->assertSee('quedan 18 días')
+            ->assertDontSee('10–19 nov');
+    });
+
+    it('lo ve cualquier usuario con un rol vigente', function (Role $role, array $scope) {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(User::factory()->withRole($role, ['campus_id' => $this->campus->id, ...$scope])->create());
+
+        Livewire::test('core::pages.home')->assertSee('Propuesta por carrera')->assertSee('quedan 7 días');
+    })->with([
+        'docente' => [Role::Docente, []],
+        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
+    ]);
+
+    it('se oculta sin etapas con fecha', function () {
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')->assertDontSee('Calendario')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('se oculta si ya terminaron todas las etapas', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-10-01', '2026-10-10');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('se oculta sin periodo activo', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        $this->term->update(['is_current' => false]);
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('se oculta a quien no tiene un rol vigente', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $user = homeCalendarUser($this->campus);
+        RoleScope::where('user_id', $user->id)->update(['valid_to' => today()->subDay()]);
+        $this->actingAs($user);
+
+        Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('sin campus activo usa el calendario general', function () {
+        $other = Campus::factory()->create(['code' => 'C1']);
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        homeCalendarStage($this->term, Stage::Proposal, $this->campus, '2026-11-11', '2026-11-30');
+
+        $this->actingAs(User::factory()->admin()->create());
+
+        Livewire::test('core::pages.home')->assertSee('10–19 nov')->assertSee('Ene-Jun 2027');
+    });
 });
