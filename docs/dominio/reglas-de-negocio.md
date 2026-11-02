@@ -108,6 +108,24 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 - Cada notificación lleva a la pantalla de lo que avisa, con la credencial en el periodo y el campus del aviso. Si esa pantalla o lo que avisa ya no está disponible para quien la abre, la campana se lo dice en lugar de llevarlo (confirmado el 2 de noviembre de 2026): por ejemplo, si el departamento se borró o ya no es su jefe.
 - La carga solo cambia de estado por el diagrama de `docs/proceso/proceso-propuesto.md`, y cada cambio queda en su historial con quién lo hizo (HC-18). De `closed` pasa a `approved` solo si el campus exige el visto bueno de Subdirección, y directo a `published` solo si no lo exige.
 
+## Propuesta de carrera
+
+Etapa 3 de `docs/proceso/proceso-propuesto.md`: el coordinador pide, por cada materia de la retícula de su carrera en su campus, cuántos alumnos espera y cuántos grupos abrir.
+
+- Cada propuesta pide materias de varios departamentos. Cada departamento decide su parte, que es todo lo que esa carrera le pide: la acepta o la regresa con comentario. La propuesta queda aceptada cuando todos los departamentos involucrados aceptaron su parte; si uno la regresa, vuelve al coordinador (confirmado el 2 de noviembre de 2026).
+- Precarga de cada materia: los alumnos esperados son los elegibles, y los grupos son `ceil(esperados / 35)`, o `ceil(esperados / 25)` si la materia lleva laboratorio (`needs_lab`), con el tamaño objetivo de `demand.target_group_size` ("Elegibilidad y demanda"). El coordinador corrige los dos (confirmado el 2 de noviembre de 2026).
+- Una propuesta enviada queda de solo lectura. Si un departamento la regresa, el coordinador la corrige y la reenvía, y lo que ya le aceptaron no cambia: las materias de un departamento que aceptó su parte quedan bloqueadas (confirmado el 2 de noviembre de 2026).
+- Enviarla con catálogos sin validar de algún departamento involucrado da un aviso, no la bloquea ("Aprobaciones y permisos").
+- La propuesta solo se arma en un periodo abierto en el campus (`term_openings`) y para una carrera que se ofrece en él (`career_campus` activa) (supuesto por confirmar). Enviarla, o reenviarla, lo vuelve a revisar: si el periodo ya no está abierto en el campus o la carrera ya no se ofrece en él, no se envía (supuesto por confirmar).
+- Sus materias son las de la retícula de los planes activos de la carrera, solo las materias activas, como pide HC-13 (supuesto por confirmar).
+- Residencia profesional, servicio social y actividades complementarias no entran a la propuesta: no abren grupos de clase (confirmado el 2 de noviembre de 2026). Se reconocen por su tipo de materia y, como la exportación del SII no trae el tipo, también por no tener horas de clase (teoría más práctica en cero) (supuesto por confirmar). Una materia que está en dos planes activos es una sola fila, con el plan y el semestre del primer plan activo por clave (supuesto por confirmar).
+- Los elegibles de cada fila son los del momento en que se arma la propuesta; volver a abrirla no la arma de nuevo ni cambia sus filas (supuesto por confirmar).
+- El tamaño objetivo se lee del parámetro global `demand.target_group_size` (`{"default": 35, "lab": 25}`). Si no existe, o uno de sus dos valores no es un entero mayor que cero, ese valor es 35 o 25 (supuesto por confirmar).
+- Por materia, los alumnos esperados van de 0 a 1000, los grupos de 0 a 30 y las notas llevan hasta 500 caracteres (supuesto por confirmar).
+- Enviar exige al menos una materia con grupos (supuesto por confirmar). Las partes son las de los departamentos de las materias con grupos: a un departamento cuyas materias van todas con cero grupos no se le pide nada (supuesto por confirmar).
+- Al reenviar, la parte aceptada se queda como está, las demás vuelven a pendiente y se limpia su comentario, que queda en la bitácora, y la parte de un departamento al que ya no se le piden grupos desaparece. Si todas las partes que quedan ya estaban aceptadas, la propuesta queda aceptada al reenviarla (supuestos por confirmar).
+- Al enviar o reenviar la propuesta, el jefe de cada departamento con su parte pendiente recibe un aviso en la campana con cuántas materias y grupos le pide la carrera, que lo lleva a la bandeja de su departamento (tarea 2.8); los departamentos que ya la aceptaron no reciben nada (supuesto por confirmar).
+
 ## Aprobaciones y permisos
 
 | Acción | Quién | Condición |
@@ -123,7 +141,8 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Validar catálogos del departamento | `jefe_departamento` del departamento | |
 | Ver la carga académica | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` | `jefe_departamento`, la de su departamento en cualquier campus; `jefe_proyecto_docente`, la de su departamento en su campus (supuesto por confirmar) |
 | Proponer la carga (sale de borrador) | `admin`, `jefe_departamento` del departamento | HC-14; la bandeja del departamento (tarea 2.8) la propone al aceptar las propuestas de las carreras y agregará esa condición (supuesto por confirmar) |
-| Enviar propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
+| Ver la propuesta de carrera | `admin`, `subdireccion`, `coordinador` de la carrera y campus | `subdireccion`, la de cualquier carrera y campus, solo lectura (supuesto por confirmar) |
+| Armar, corregir y enviar la propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
