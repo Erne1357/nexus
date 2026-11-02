@@ -38,9 +38,9 @@ const DEMO_TEMPLATES = ['departments', 'careers', 'study_plans', 'subjects', 'pr
 
 /*
 | El demo de DemoSeeder (los mismos seeders) con menos docentes y alumnos: lo que prueba este archivo (cada
-| plantilla se exporta y
-| vuelve a entrar sin errores) no depende del volumen, y sembrar el demo completo en cada prueba hacía de este
-| archivo el más lento de la suite (con cobertura, más que todo lo demás junto en un proceso paralelo).
+| plantilla se exporta y vuelve a entrar sin errores) no depende del volumen, y sembrar el demo completo en
+| cada prueba hacía de este archivo el más lento de la suite (con cobertura, más que todo lo demás junto en un
+| proceso paralelo).
 */
 beforeEach(function () {
     Storage::fake('imports');
