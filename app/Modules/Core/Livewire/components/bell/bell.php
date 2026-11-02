@@ -13,13 +13,28 @@ use Mary\Traits\Toast;
  * con las no leídas y, al abrirlo, una tarjeta flotante con la misma forma que la de la credencial con las
  * notificaciones recientes del usuario (NotificationQuery) y «Marcar todas como leídas». Abrir una la marca
  * leída y lleva a su pantalla (OpenNotification); si ya no está disponible, lo avisa con un toast y se queda.
- * Se refresca cada minuto mientras está a la vista: un conteo y las 15 recientes, para que la tarjeta abra sin
- * esperar al servidor. Abrir y cerrar es de Alpine; cerrar la credencial al
+ * La banda la carga en diferido (lazy). Se refresca cada minuto mientras está a la vista: un conteo y las 15
+ * recientes, para que la tarjeta abra sin esperar al servidor. Abrir y cerrar es de Alpine; cerrar la credencial al
  * abrirla usa el componente nexusShell de <body>.
  */
 new class extends Component
 {
     use Toast;
+
+    /**
+     * Lo que se ve mientras llega la campana (la banda la carga en diferido, para no sumar sus consultas a las
+     * de cada pantalla): el mismo botón, sin globo ni acción.
+     */
+    public function placeholder(): string
+    {
+        return <<<'HTML'
+            <div class="flex-none in-data-[menu=open]:invisible">
+                <span data-testid="bell-placeholder" aria-hidden="true" class="grid size-11 place-items-center rounded-lg border border-band-content/20 text-band-content/70">
+                    <x-icon name="o-bell" class="w-[22px] h-[22px]" />
+                </span>
+            </div>
+            HTML;
+    }
 
     /**
      * @return array<string, mixed>

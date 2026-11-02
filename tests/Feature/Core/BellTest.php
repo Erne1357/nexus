@@ -26,8 +26,10 @@ beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-02 12:00', 'America/Ciudad_Juarez'));
 });
 
-it('está en la banda de toda pantalla con sesión', function () {
-    $this->actingAs(User::factory()->create())->get('/')->assertOk()->assertSeeHtml('data-testid="bell"');
+it('está en la banda de toda pantalla con sesión, en diferido para no sumar consultas a la pantalla', function () {
+    $this->actingAs(User::factory()->create())->get('/')->assertOk()
+        ->assertSeeHtml('data-testid="bell-placeholder"')
+        ->assertDontSeeHtml('data-testid="bell"');
 });
 
 it('muestra cuántas no ha leído y las recientes del usuario, sin las de otros', function () {
