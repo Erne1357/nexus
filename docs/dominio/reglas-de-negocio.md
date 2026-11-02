@@ -105,6 +105,7 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 - Al abrir un periodo en un campus se crean una carga académica en borrador por cada departamento activo, las revisiones de catálogo generales de cada departamento activo si el periodo todavía no las tenía, y la de salones de cada departamento activo en ese campus si su perfil usa salones (supuesto por confirmar). Docentes, materias, planes y carreras se validan una vez por periodo y departamento, para todo el Tec; los salones, por departamento en cada campus (confirmado el 1 de noviembre de 2026). Volver a abrir un campus ya abierto solo crea lo que falte, como lo de un departamento nuevo; si el campus empieza a usar salones, se crean solas las revisiones de salones que falten en los periodos abiertos en él (supuestos por confirmar).
 - El código de un periodo ya no se cambia una vez abierto en algún campus (supuesto por confirmar).
 - El aviso a los jefes de que tienen catálogos por validar llega con la campana de notificaciones (tarea 2.9).
+- La carga solo cambia de estado por el diagrama de `docs/proceso/proceso-propuesto.md`, y cada cambio queda en su historial con quién lo hizo (HC-18). De `closed` pasa a `approved` solo si el campus exige el visto bueno de Subdirección, y directo a `published` solo si no lo exige.
 
 ## Aprobaciones y permisos
 
@@ -119,6 +120,8 @@ La ficha del alumno muestra cada materia de su retícula con el estado que usa e
 | Dar de alta usuarios de docentes, reiniciar contraseñas y nombrar jefes | `admin` | Supuesto por confirmar (nombrar jefes es S7) |
 | Consultar alumnos (listado y ficha) | `admin`, `subdireccion`, `jefe_departamento`, `coordinador` | `subdireccion`, los de cualquier campus; `jefe_departamento`, los de las carreras de su departamento en cualquier campus; `coordinador`, los de su carrera en su campus. Solo lectura: vienen del SII (confirmado el 29 de octubre de 2026) |
 | Validar catálogos del departamento | `jefe_departamento` del departamento | |
+| Ver la carga académica | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` | `jefe_departamento`, la de su departamento en cualquier campus; `jefe_proyecto_docente`, la de su departamento en su campus (supuesto por confirmar) |
+| Proponer la carga (sale de borrador) | `admin`, `jefe_departamento` del departamento | HC-14; la bandeja del departamento (tarea 2.8) la propone al aceptar las propuestas de las carreras y agregará esa condición (supuesto por confirmar) |
 | Enviar propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
