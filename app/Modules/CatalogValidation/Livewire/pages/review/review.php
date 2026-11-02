@@ -21,6 +21,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Rules\RoomRules;
+use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Arr;
@@ -59,6 +60,10 @@ new #[Title('Validación de catálogos')] class extends Component
     /** El catálogo de la lista abierta (`teachers`, `rooms`, `subjects`, `study_plans`, `careers`); vacío es el tablero. */
     #[Url(as: 'catalogo')]
     public string $catalog = '';
+
+    /** Solo docentes: '' (todos), 'disponibilidad' o 'perfil' (los activos a los que les falta, CV6). */
+    #[Url(as: 'falta')]
+    public string $missing = '';
 
     public string $search = '';
 
@@ -166,12 +171,12 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'status', 'flagFilter', 'department', 'catalog'], true)) {
+        if (in_array($property, ['search', 'status', 'flagFilter', 'missing', 'department', 'catalog'], true)) {
             $this->resetPage();
         }
 
         if (in_array($property, ['department', 'catalog'], true)) {
-            $this->reset('search', 'status', 'flagFilter', 'showDrawer', 'editingId');
+            $this->reset('search', 'status', 'flagFilter', 'missing', 'showDrawer', 'editingId');
         }
     }
 
@@ -414,6 +419,7 @@ new #[Title('Validación de catálogos')] class extends Component
         return [
             'review' => $review,
             'summary' => $reviews->summary($review),
+            'readiness' => $isTeachers ? $this->readiness($review) : null,
             'canValidate' => Gate::allows('validate', $review),
             'canReopen' => $canReopen,
             'reopenVetoes' => $vetoes,
@@ -431,6 +437,20 @@ new #[Title('Validación de catálogos')] class extends Component
                 default => null,
             },
         ];
+    }
+
+    /**
+     * Lo que le falta a cada docente del departamento en el periodo de la revisión, con los conteos de los
+     * indicadores (CV6: solo avisan, no bloquean validar). Se calcula una vez por petición.
+     *
+     * @return array{rows: array<string, array<string, mixed>>, counts: array{no_availability: int, no_profile: int}}
+     */
+    private function readiness(CatalogReview $review): array
+    {
+        $query = app(TeacherTermReadinessQuery::class);
+        $rows = $query->forDepartment($review->department, $review->term);
+
+        return ['rows' => $rows, 'counts' => $query->counts($rows)];
     }
 
     /**
@@ -482,7 +502,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'active' => true,
             'inactive' => false,
             default => null,
-        }, $this->flagFilter);
+        }, $this->flagFilter, onlyIds: $this->missingIds($current));
 
         $editing = null;
 
@@ -497,6 +517,8 @@ new #[Title('Validación de catálogos')] class extends Component
 
         return [
             'page' => $page,
+            'readiness' => $current['readiness']['rows'] ?? [],
+            'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin perfil']],
             'flagMap' => $records->openFlags($review, $page->getCollection()->map->getKey()),
             'headers' => $this->headersOf($review->catalog),
             'rowDecoration' => ['text-neutral' => fn (Model $record): bool => ! $record->is_active],
@@ -507,6 +529,21 @@ new #[Title('Validación de catálogos')] class extends Component
             'kinds' => array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases()),
             'roomTypes' => array_map(fn (RoomType $type): array => ['id' => $type->value, 'name' => $type->label()], RoomType::cases()),
         ];
+    }
+
+    /**
+     * Los docentes que deja el filtro «Falta»; null si no hay filtro o el catálogo no es el de docentes.
+     *
+     * @param  array<string, mixed>  $current
+     * @return ?list<string>
+     */
+    private function missingIds(array $current): ?array
+    {
+        if ($current['readiness'] === null || ! in_array($this->missing, ['disponibilidad', 'perfil'], true)) {
+            return null;
+        }
+
+        return app(TeacherTermReadinessQuery::class)->missingIds($current['readiness']['rows'], $this->missing);
     }
 
     /**
@@ -539,7 +576,14 @@ new #[Title('Validación de catálogos')] class extends Component
                 [...$name, 'label' => 'Plan', 'class' => 'max-[1200px]:hidden'],
             ],
             Catalog::Careers => [['key' => 'code', 'label' => 'Clave'], [...$name, 'label' => 'Carrera']],
-            Catalog::Teachers => [['key' => 'employee_number', 'label' => 'Número'], [...$name, 'label' => 'Docente']],
+            Catalog::Teachers => [
+                ['key' => 'employee_number', 'label' => 'Número'],
+                [...$name, 'label' => 'Docente'],
+                ['key' => 'availability', 'label' => 'Disponibilidad'],
+                ['key' => 'profile', 'label' => 'Perfil', 'class' => 'text-end max-[1535px]:hidden'],
+                ['key' => 'external', 'label' => 'Fuera', 'class' => 'text-end max-[1023px]:hidden'],
+                ['key' => 'base', 'label' => 'Plaza', 'class' => 'text-end max-[1535px]:hidden'],
+            ],
         }, ...$closing];
     }
 

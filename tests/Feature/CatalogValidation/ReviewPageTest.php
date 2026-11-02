@@ -22,6 +22,9 @@ use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherAvailability;
+use App\Modules\Faculty\Models\TeacherExternalLoad;
+use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Role as SpatieRole;
@@ -495,5 +498,54 @@ describe('acciones de fila', function () {
             ->set('features', 'Proyector, '.str_repeat('x', 41))
             ->call('save')
             ->assertHasErrors('features');
+    });
+});
+
+describe('captura de docentes (2.6, CV6)', function () {
+    beforeEach(function () {
+        $this->ready = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '00001', 'name' => 'Con Todo']);
+        $this->bare = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '00002', 'name' => 'Sin Nada']);
+        $this->profileOnly = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '00003', 'name' => 'Solo Perfil']);
+        TeacherAvailability::factory()->for($this->ready)->for($this->term)->create();
+        TeacherSubjectQualification::factory()->for($this->ready)->for($this->subject)->create();
+        TeacherSubjectQualification::factory()->for($this->profileOnly)->for($this->subject)->create();
+        TeacherExternalLoad::factory()->for($this->ready)->for($this->term)->create(['hours' => 8]);
+    });
+
+    it('la tarjeta de docentes avisa cuántos faltan y enlaza a la lista filtrada, sin bloquear validar', function () {
+        $component = reviewPage()
+            ->assertSee('sin disponibilidad en 20271')
+            ->assertSee('sin perfil')
+            ->assertSeeHtml(e(route('catalog-validation.review', ['department' => $this->sis->id, 'catalogo' => 'teachers', 'falta' => 'disponibilidad'])))
+            ->assertSeeHtml('data-testid="missing-perfil"');
+
+        $component->call('confirm', 'validate', 'teachers')->assertSet('showConfirm', true);
+    });
+
+    it('la lista trae disponibilidad, perfil, horas fuera y plaza, y las acciones de ficha y disponibilidad', function () {
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->assertSee('Disponibilidad')->assertSee('Capturada')->assertSee('Falta')
+            ->assertSee('Plaza')
+            ->assertSeeHtml(route('faculty.teachers.availability', $this->bare->id))
+            ->assertSeeHtml(route('faculty.teachers.show', $this->bare->id));
+    });
+
+    it('el filtro «Falta» deja solo a quienes les falta disponibilidad o perfil', function (string $falta, array $see, array $dontSee) {
+        reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => $falta])
+            ->assertSet('missing', $falta)
+            ->assertSee($see)->assertDontSee($dontSee);
+    })->with([
+        'disponibilidad' => ['disponibilidad', ['Sin Nada', 'Solo Perfil'], ['Con Todo']],
+        'perfil' => ['perfil', ['Sin Nada'], ['Con Todo', 'Solo Perfil']],
+    ]);
+
+    it('un valor de «Falta» que no existe no filtra', function () {
+        reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => 'otra'])->assertSee('Con Todo')->assertSee('Sin Nada');
+    });
+
+    it('Subdirección ve los indicadores del departamento que abre, en lectura', function () {
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        reviewPage($subdireccion, ['department' => $this->sis->id])->assertOk()->assertSee('sin disponibilidad en 20271');
     });
 });

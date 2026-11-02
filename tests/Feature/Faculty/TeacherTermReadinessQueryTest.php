@@ -9,6 +9,7 @@ use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
+use App\Modules\Faculty\Queries\TeacherBaseHoursQuery;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
 
 /*
@@ -21,7 +22,7 @@ beforeEach(function () {
     $this->other = Term::factory()->create(['starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
     $this->sis = Department::factory()->create();
     $this->ele = Department::factory()->create();
-    $this->query = new TeacherTermReadinessQuery(new App\Modules\Faculty\Queries\TeacherBaseHoursQuery);
+    $this->query = new TeacherTermReadinessQuery(new TeacherBaseHoursQuery);
 });
 
 function readinessTeacher(Department $department, array $attributes = []): Teacher
