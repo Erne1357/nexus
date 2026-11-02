@@ -6,11 +6,39 @@
     con los totales y avisa, sin bloquear, de los catálogos sin validar. Todo lo que se pinta viene de
     CareerProposalQuery::overview.
 
-    Con volumen (DESIGN.md, "Propuesta de carrera"): los departamentos son un riel a la izquierda solo desde 1700 px;
+    Con volumen (mismas medidas que "Retícula del alumno" y "Retícula del plan (editor)" de DESIGN.md): los departamentos son un riel a la izquierda solo desde 1700 px;
     debajo, una franja de chips sobre la vista, para que los nueve semestres quepan desde 1366 px. Al cerrar el panel
-    o un diálogo, el foco vuelve al mosaico o al botón que lo abrió (`data-opener`).
+    o un diálogo, el foco vuelve al mosaico o al botón que lo abrió (`data-opener`). Los totales de la retícula van
+    en el renglón de la vista y la alerta de cada departamento regresado es de un renglón, para que la retícula
+    empiece alta en 1366 x 768. Dos eventos de la página se atienden aquí: `proposal-focus` («Ver» en la alerta)
+    desplaza la vista a la materia, le da el foco y la marca un momento; `cell-saved` marca con una palomita la celda
+    de la tabla que se guardó.
 --}}
-<div class="relative space-y-5 overflow-x-clip" x-data="{ opener: null }"
+<div class="relative space-y-4 overflow-x-clip"
+    x-data="{
+        opener: null,
+        reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+        mark(el, attribute, ms) {
+            el.setAttribute(attribute, '');
+            setTimeout(() => el.removeAttribute(attribute), ms);
+        },
+        found(id) {
+            const el = $root.querySelector('[data-item=&quot;' + id + '&quot;]');
+            if (! el) { return; }
+            el.scrollIntoView({ block: 'center', inline: 'center', behavior: this.reduced ? 'auto' : 'smooth' });
+            el.focus({ preventScroll: true });
+            this.mark(el, 'data-found', 2500);
+        },
+        saved(detail) {
+            const cell = $root.querySelector('[data-cell=&quot;' + detail.id + '.' + detail.field + '&quot;]');
+            if (! cell) { return; }
+            const status = cell.querySelector('[data-saved-status]');
+            if (status) { status.textContent = 'Guardado'; setTimeout(() => status.textContent = '', 2000); }
+            this.mark(cell, 'data-saved', 1800);
+        },
+    }"
+    x-on:proposal-focus.window="$nextTick(() => found($event.detail.id))"
+    x-on:cell-saved.window="$nextTick(() => saved($event.detail))"
     x-init="['showDrawer', 'showSubmit'].forEach((property) => $wire.$watch(property, (open) => { if (! open) { $nextTick(() => { if (opener?.isConnected) { opener.focus(); } }); } }))"
     x-on:click.capture="opener = $event.target.closest('[data-opener]') ?? opener">
     @if ($overview === null)
@@ -49,29 +77,37 @@
         </div>
 
         @if ($returnedParts !== [])
-            <div class="space-y-2" data-testid="returned-parts">
+            <div class="space-y-1.5" data-testid="returned-parts">
                 @foreach ($returnedParts as $part)
-                    <x-alert icon="o-arrow-uturn-left" class="alert-error alert-soft items-start text-sm" wire:key="returned-{{ $part['department']->code }}" data-testid="returned-{{ $part['department']->code }}">
-                        <span><span class="font-semibold">{{ $part['department']->name }} regresó su parte</span>@if ($part['comment']): “{{ $part['comment'] }}”@endif · {{ $part['subjects'] }} {{ $part['subjects'] === 1 ? 'materia' : 'materias' }}</span>
+                    @php
+                        $partCode = $part['department']->code;
+                        $total = count($part['items']);
+                        $position = $returnedAt === null ? 0 : min($returnedAt, $total - 1);
+                        $here = $department === $partCode && $returnedAt !== null && $total > 1;
+                        $lead = $part['department']->name.' regresó su parte';
+                        $rest = ($part['comment'] ? ": “{$part['comment']}”" : '').' · '.$part['subjects'].' '.($part['subjects'] === 1 ? 'materia' : 'materias');
+                    @endphp
+                    <x-alert icon="o-arrow-uturn-left" class="alert-error alert-soft min-h-0 items-center gap-x-2 py-1.5 text-sm" wire:key="returned-{{ $partCode }}" data-testid="returned-{{ $partCode }}">
+                        <span class="min-w-0 md:truncate" title="{{ $lead.$rest }}"><span class="font-semibold">{{ $lead }}</span>{{ $rest }}</span>
                         <x-slot:actions>
-                            <x-button label="Ver" class="btn-sm btn-ghost" wire:click="showDepartment('{{ $part['department']->code }}')" aria-label="Ver las materias de {{ $part['department']->name }}" />
+                            <x-button :label="$here ? ($position + 1).' de '.$total.' ›' : 'Ver'" class="btn-xs btn-ghost" wire:click="showDepartment('{{ $partCode }}')"
+                                :aria-label="$here ? 'Ir a la siguiente materia regresada de '.$part['department']->name.': '.($position + 1).' de '.$total : 'Ver las materias de '.$part['department']->name" data-testid="see-{{ $partCode }}" />
                         </x-slot:actions>
                     </x-alert>
                 @endforeach
             </div>
         @endif
 
-        @if ($view !== 'tabla')
-            @include('academic-load::proposal.totals')
-        @endif
-
-        <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
             <div role="group" aria-label="Vista" class="join">
                 <button type="button" wire:click="setView('reticula')" aria-pressed="{{ $view === 'reticula' ? 'true' : 'false' }}" data-testid="view-grid"
                     @class(['btn btn-sm join-item', 'btn-primary' => $view === 'reticula'])><x-icon name="o-squares-2x2" class="w-4 h-4" />Retícula</button>
                 <button type="button" wire:click="setView('tabla')" aria-pressed="{{ $view === 'tabla' ? 'true' : 'false' }}" data-testid="view-table"
                     @class(['btn btn-sm join-item', 'btn-primary' => $view === 'tabla'])><x-icon name="o-table-cells" class="w-4 h-4" />Tabla</button>
             </div>
+            @if ($view !== 'tabla')
+                @include('academic-load::proposal.totals')
+            @endif
             @if ($view === 'tabla' && $department !== '')
                 <label class="flex cursor-pointer items-center gap-2 text-sm">
                     <input type="checkbox" class="checkbox checkbox-sm" wire:model.live="onlyDepartment" data-testid="only-department" />

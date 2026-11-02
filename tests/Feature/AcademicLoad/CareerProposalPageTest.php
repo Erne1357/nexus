@@ -539,7 +539,7 @@ describe('volumen: lo que dice y cómo se pinta', function () {
         $cb = proposalPageAs($this->coordinator, ['depto' => 'CB'])->html();
 
         expect($all)->toContain('data-figure="1">2 grupos')->toContain('data-figure="5">1 grupo<')
-            ->and($cb)->toContain('data-figure="1">2 grupos')->toContain('data-figure="5">0 grupos');
+            ->and($cb)->toContain('data-figure="1">2 de CB<')->toContain('data-figure="5">0 de CB<');
     });
 
     it('pinta las bandas de especialidad como la retícula del plan', function () {
@@ -552,5 +552,216 @@ describe('volumen: lo que dice y cómo se pinta', function () {
         proposalPageAs($this->coordinator)
             ->assertSeeHtml('data-band="'.$redes->id.'"')
             ->assertSee('Redes y Seguridad');
+    });
+});
+
+/**
+ * La etiqueta de apertura del elemento con ese data-testid, para revisar sus atributos sin atarse a su orden.
+ */
+function proposalPageTag(string $html, string $testid): string
+{
+    preg_match('/<[a-z]+\s[^>]*data-testid="'.preg_quote($testid, '/').'"[^>]*>/s', $html, $match);
+
+    return $match[0] ?? '';
+}
+
+describe('segunda crítica con volumen', function () {
+    beforeEach(function () {
+        $this->proposal->update(['status' => ProposalStatus::Returned]);
+        ProposalReview::factory()->returned('Falta un grupo.')->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->sc->id]);
+        $this->early = proposalPageRow($this->proposal, $this->sc, 'SCD-1001', 'Fundamentos de Programación', 3, 1, 30);
+        $this->late = proposalPageRow($this->proposal, $this->sc, 'SCD-1020', 'Bases de Datos', 5, 1, 30);
+    });
+
+    it('«Ver» lleva a la primera materia regresada y le da el foco', function () {
+        proposalPageAs($this->coordinator)
+            ->call('showDepartment', 'SC')
+            ->assertSet('department', 'SC')
+            ->assertDispatched('proposal-focus', id: $this->early->id);
+    });
+
+    it('«Ver» en la tabla activa «Mostrar solo» y con varias materias va a la siguiente: «1 de 3 ›»', function () {
+        $page = proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+            ->call('showDepartment', 'SC')
+            ->assertSet('onlyDepartment', true)
+            ->assertDispatched('proposal-focus', id: $this->early->id)
+            ->assertSee('1 de 3')
+            ->call('showDepartment', 'SC')
+            ->assertDispatched('proposal-focus', id: $this->networks->id)
+            ->assertSee('2 de 3')
+            ->call('showDepartment', 'SC')
+            ->call('showDepartment', 'SC')
+            ->assertDispatched('proposal-focus', id: $this->early->id)
+            ->assertSee('1 de 3');
+
+        expect($page->get('returnedAt'))->toBe(0);
+    });
+
+    it('«Ver» ignora un departamento que la propuesta no involucra', function () {
+        proposalPageAs($this->coordinator)->call('showDepartment', 'XX')->assertSet('department', '')->assertNotDispatched('proposal-focus');
+    });
+
+    it('en la tabla cada fila tiene una acción que abre el mismo panel, también en solo lectura', function () {
+        proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+            ->assertSeeHtml('data-testid="open-ACF-0901"')
+            ->assertSeeHtml('data-item="'.$this->calculus->id.'"')
+            ->call('edit', $this->calculus->id)
+            ->assertSet('showDrawer', true);
+
+        proposalPageAs($this->subdirection, ['carrera' => $this->career->id, 'vista' => 'tabla'])->assertSeeHtml('data-testid="open-ACF-0901"');
+    });
+
+    it('la nota de una fila se lee en la tabla, no solo en un title', function () {
+        $this->calculus->update(['notes' => 'Dos grupos de más.']);
+
+        proposalPageAs($this->coordinator, ['vista' => 'tabla'])->assertSeeHtml('data-testid="note-ACF-0901"')->assertSee('Dos grupos de más.');
+    });
+
+    it('el panel de solo lectura dice los valores como texto, no como campos deshabilitados', function () {
+        $this->calculus->update(['notes' => 'Dos grupos de más.']);
+
+        $html = proposalPageAs($this->subdirection, ['carrera' => $this->career->id])->call('edit', $this->calculus->id)->html();
+
+        expect($html)->toContain('data-readonly-value="expected_students"')
+            ->toContain('data-readonly-value="requested_groups"')
+            ->toContain('data-readonly-value="notes"')
+            ->toContain('Dos grupos de más.')
+            ->not->toContain('data-testid="field-groups"')
+            ->not->toContain('data-testid="save-item"');
+
+        $editable = proposalPageAs($this->coordinator)->call('edit', $this->calculus->id)->html();
+
+        expect($editable)->toContain('data-testid="field-groups"')->not->toContain('data-readonly-value');
+    });
+
+    it('el mosaico dice «Grupos N» en grande, con elegibles y esperados', function () {
+        $html = proposalPageAs($this->coordinator)->html();
+
+        expect(proposalPageTag($html, 'tile-ACF-0901'))->not->toBe('')
+            ->and($html)->toContain('data-testid="groups-ACF-0901"')
+            ->toContain('data-testid="figures-ACF-0901"');
+
+        proposalPageAs($this->coordinator)->assertSeeHtml('Esp.</span> <span class="font-mono">70</span>');
+    });
+
+    it('el código de departamento solo aparece en los mosaicos que no son del departamento mayoritario', function () {
+        $this->proposal->update(['status' => ProposalStatus::Draft]);
+        ProposalReview::query()->delete();
+        proposalPageRow($this->proposal, $this->cb, 'ACF-0902', 'Cálculo Integral', 2, 1, 30);
+        proposalPageRow($this->proposal, $this->cb, 'ACF-0903', 'Cálculo Vectorial', 3, 1, 30);
+        proposalPageRow($this->proposal, $this->cb, 'ACF-0904', 'Ecuaciones Diferenciales', 4, 1, 30);
+
+        $html = proposalPageAs($this->coordinator)->html();
+
+        expect($html)->toContain('data-testid="dept-SCD-1015"')
+            ->not->toContain('data-testid="dept-ACF-0901"');
+    });
+
+    it('la anomalía del mosaico dice su conteo a la vista', function () {
+        $this->calculus->update(['eligible_students' => 98, 'expected_students' => 105]);
+
+        proposalPageAs($this->coordinator)->assertSeeHtml('<span data-anomaly-count>1</span>');
+    });
+
+    it('distingue lo aceptado de lo que es de otro departamento', function () {
+        $this->proposal->update(['status' => ProposalStatus::Draft]);
+        ProposalReview::query()->where('department_id', $this->sc->id)->delete();
+        ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
+
+        $html = proposalPageAs($this->coordinator, ['depto' => 'CB'])->html();
+
+        expect(proposalPageTag($html, 'tile-ACF-0901'))->toContain('data-tone="accepted"')
+            ->and(proposalPageTag($html, 'tile-SCD-1015'))->toContain('data-tone="other"')
+            ->and(proposalPageTag($html, 'tile-SCD-1015'))->not->toContain('data-tone="accepted"');
+    });
+
+    it('con un departamento elegido, el encabezado de semestre dice «N de SC» a la vista', function () {
+        proposalPageAs($this->coordinator, ['depto' => 'SC'])
+            ->assertSeeHtml('data-figure="5">2 de SC<')
+            ->assertSeeHtml('data-figure="1">0 de SC<');
+
+        proposalPageAs($this->coordinator)->assertSeeHtml('data-figure="5">2 grupos<');
+    });
+
+    it('los totales van en el renglón de la vista y no en una franja aparte', function () {
+        $html = proposalPageAs($this->coordinator)->html();
+
+        expect($html)->toContain('data-testid="proposal-totals"');
+    });
+
+    it('«Usar sugerido» dice con qué base', function () {
+        proposalPageAs($this->coordinator)
+            ->call('edit', $this->calculus->id)
+            ->set('expected_students', 71)
+            ->assertSee('Usar sugerido: 3 (35 por grupo)');
+    });
+
+    it('el panel dice el semestre de la materia junto a su departamento', function () {
+        proposalPageAs($this->coordinator)->call('edit', $this->networks->id)->assertSee('Semestre 5');
+    });
+
+    it('guardar una celda avisa a la fila con un evento', function () {
+        proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+            ->call('saveCell', $this->networks->id, 'requested_groups', '2')
+            ->assertDispatched('cell-saved', id: $this->networks->id, field: 'requested_groups');
+    });
+
+    it('un valor rechazado se dice en la celda y no avisa de guardado', function () {
+        $page = proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+            ->call('saveCell', $this->networks->id, 'requested_groups', '99')
+            ->assertNotDispatched('cell-saved')
+            ->assertSeeHtml('data-testid="cell-error-SCD-1015-requested_groups"')
+            ->assertSee('Los grupos solicitados van de 0 a 30.');
+
+        $page->call('saveCell', $this->networks->id, 'requested_groups', 'abc')
+            ->assertSee('Escribe un número entero.');
+
+        $page->call('saveCell', $this->networks->id, 'requested_groups', '2')
+            ->assertDontSeeHtml('data-testid="cell-error-SCD-1015-requested_groups"');
+    });
+
+    it('limita el ancho de la tabla', function () {
+        proposalPageAs($this->coordinator, ['vista' => 'tabla'])->assertSeeHtml('data-table-width');
+    });
+
+    it('«N de M ›» nunca pasa de M cuando la lista se achica', function () {
+        $page = proposalPageAs($this->coordinator)
+            ->call('showDepartment', 'SC')->call('showDepartment', 'SC')->call('showDepartment', 'SC')
+            ->assertSee('3 de 3');
+
+        $this->late->update(['requested_groups' => 0]);
+        $this->early->update(['requested_groups' => 0]);
+
+        $page->call('$refresh')->assertDontSee('3 de 1')->assertDontSee('3 de 2')->assertSet('returnedAt', null);
+    });
+
+    it('cambiar de vista o de departamento reinicia el recorrido de «Ver»', function () {
+        proposalPageAs($this->coordinator)->call('showDepartment', 'SC')->assertSet('returnedAt', 0)->call('setView', 'tabla')->assertSet('returnedAt', null);
+        proposalPageAs($this->coordinator)->call('showDepartment', 'SC')->call('pickDepartment', 'CB')->assertSet('returnedAt', null);
+    });
+
+    it('guardar bien una celda limpia los errores de toda la fila', function () {
+        proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+            ->call('saveCell', $this->networks->id, 'expected_students', '99999')
+            ->assertSeeHtml('data-testid="cell-error-SCD-1015-expected_students"')
+            ->call('saveCell', $this->networks->id, 'requested_groups', '2')
+            ->assertDontSeeHtml('data-testid="cell-error-SCD-1015-expected_students"');
+    });
+
+    it('el código del departamento minoritario se ve también en mosaicos regresados y aceptados', function () {
+        foreach ([['ACF-0902', 2], ['ACF-0903', 3], ['ACF-0904', 4]] as [$code, $semester]) {
+            proposalPageRow($this->proposal, $this->cb, $code, "Materia {$code}", $semester, 1, 30);
+        }
+        ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
+
+        $html = proposalPageAs($this->coordinator)->html();
+
+        expect($html)->toContain('data-testid="dept-SCD-1015"')->and(proposalPageTag($html, 'tile-SCD-1015'))->toContain('data-part="returned"');
+    });
+
+    it('en solo lectura la celda no lleva un label que apunte a un campo inexistente', function () {
+        $html = proposalPageAs($this->subdirection, ['carrera' => $this->career->id, 'vista' => 'tabla'])->html();
+
+        expect($html)->not->toContain('for="cell-'.$this->calculus->id.'-requested_groups"');
     });
 });

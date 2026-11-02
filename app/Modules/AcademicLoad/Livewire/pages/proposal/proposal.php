@@ -78,9 +78,27 @@ new #[Title('Propuesta de carrera')] class extends Component
     #[Locked]
     public ?string $message = null;
 
+    /**
+     * Qué materia regresada va en «Ver» (índice desde 0) del departamento resaltado; null si todavía no se empieza.
+     * Sube con cada «Ver» y da la vuelta.
+     */
+    #[Locked]
+    public ?int $returnedAt = null;
+
+    /**
+     * El error de cada celda de la tabla que no se pudo guardar, por «<id de la fila>.<campo>».
+     *
+     * @var array<string, string>
+     */
+    #[Locked]
+    public array $cellErrors = [];
+
     /** La fila abierta en el panel. */
     #[Locked]
     public ?string $itemId = null;
+
+    /** El resumen que armó la acción de esta petición, para no armarlo otra vez al pintar. */
+    private ?ProposalOverview $fresh = null;
 
     public bool $showDrawer = false;
 
@@ -108,13 +126,15 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     public function updatedCareerId(ScopedContext $context, CareerProposalQuery $proposals): void
     {
-        $this->reset('department', 'onlyDepartment', 'itemId', 'showDrawer', 'showSubmit');
+        $this->reset('department', 'onlyDepartment', 'itemId', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
         $this->resolve($context, $proposals);
     }
 
     public function setView(string $view): void
     {
+        $this->returnedAt = null;
         $this->view = in_array($view, self::VIEWS, true) ? $view : 'reticula';
+        $this->cellErrors = [];
     }
 
     /**
@@ -123,6 +143,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     public function pickDepartment(string $code): void
     {
         $this->department = $this->department === $code ? '' : $code;
+        $this->returnedAt = null;
 
         if ($this->department === '') {
             $this->onlyDepartment = false;
@@ -130,11 +151,30 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * «Ver» en la alerta de un departamento que regresó su parte: lo resalta, sin quitarlo si ya lo estaba.
+     * «Ver» en la alerta de un departamento que regresó su parte: lo resalta (en la tabla, además, deja solo sus
+     * filas) y lleva la vista a su primera materia, con el foco. Con varias, cada «Ver» va a la siguiente y da la
+     * vuelta (`proposal-focus`, que atiende la página).
      */
-    public function showDepartment(string $code): void
+    public function showDepartment(string $code, CareerProposalQuery $proposals): void
     {
+        $this->fresh = $proposals->overview($this->authorizedProposal('view', $proposals));
+        $ids = $this->walk($this->fresh)['ids'][$code] ?? null;
+
+        if ($ids === null) {
+            return;
+        }
+
+        $ids = $ids['requested'] !== [] ? $ids['requested'] : $ids['all'];
+        $next = $this->returnedAt === null || $this->department !== $code ? 0 : ($this->returnedAt + 1) % count($ids);
+
         $this->department = $code;
+        $this->returnedAt = $next;
+
+        if ($this->view === 'tabla') {
+            $this->onlyDepartment = true;
+        }
+
+        $this->dispatch('proposal-focus', id: $ids[$next]);
     }
 
     /**
@@ -198,19 +238,29 @@ new #[Title('Propuesta de carrera')] class extends Component
             return;
         }
 
+        $cell = "{$item->id}.{$field}";
+        unset($this->cellErrors[$cell]);
+
         if (! preg_match('/^\d+$/', trim($value))) {
+            $this->cellErrors[$cell] = 'Escribe un número entero.';
             $this->error('No se guardó', 'Escribe un número entero.');
 
             return;
         }
 
-        $this->applyChange(
+        $saved = $this->applyChange(
             $update,
             $item,
             $field === 'expected_students' ? (int) $value : $item->expected_students,
             $field === 'requested_groups' ? (int) $value : $item->requested_groups,
             $item->notes,
+            $cell,
         );
+
+        if ($saved) {
+            unset($this->cellErrors["{$item->id}.expected_students"], $this->cellErrors["{$item->id}.requested_groups"]);
+            $this->dispatch('cell-saved', id: $item->id, field: $field);
+        }
     }
 
     /**
@@ -249,7 +299,9 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         $proposal = $this->authorizedProposal('view', $proposals);
-        $overview = $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit);
+        $overview = ($this->showSubmit ? null : $this->fresh) ?? $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit);
+        $this->fresh = null;
+        $walk = $this->walk($overview);
         $departments = $overview->departments();
         $gridSemesters = $overview->gridSemesters();
         $selected = $this->itemId === null ? null : $this->findItem($overview, $this->itemId);
@@ -261,6 +313,12 @@ new #[Title('Propuesta de carrera')] class extends Component
             $this->reset('department', 'onlyDepartment');
         }
 
+        $own = $this->department === '' ? null : ($walk['ids'][$this->department] ?? null);
+
+        if ($this->returnedAt !== null && ($own === null || $this->returnedAt >= count($own['requested'] ?: $own['all']))) {
+            $this->returnedAt = null;
+        }
+
         return [
             'proposal' => $proposal,
             'overview' => $overview,
@@ -269,8 +327,9 @@ new #[Title('Propuesta de carrera')] class extends Component
             'onlyDepartment' => $this->onlyDepartment,
             'locks' => $this->locks($overview),
             'generalLock' => $this->generalLock($overview),
-            'returnedParts' => $this->returnedParts($overview, $departments),
+            'returnedParts' => $this->returnedParts($departments, $walk['ids']),
             'parts' => $this->parts($overview),
+            'majority' => $walk['majority'],
             'submitReason' => $this->submitReason($overview),
             'suggested' => $this->suggested($selected, $rule),
             'suggestedSize' => $selected === null ? null : $rule->sizeFor((bool) $selected->subject->needs_lab),
@@ -363,12 +422,12 @@ new #[Title('Propuesta de carrera')] class extends Component
         return $proposal->loadMissing(['term', 'career' => fn ($query) => $query->withTrashed()]);
     }
 
-    private function applyChange(UpdateProposalItem $update, ProposalItem $item, int $expected, int $groups, ?string $notes): bool
+    private function applyChange(UpdateProposalItem $update, ProposalItem $item, int $expected, int $groups, ?string $notes, ?string $cell = null): bool
     {
         try {
             $update->handle($item, $expected, $groups, $notes, auth()->user());
         } catch (ValidationException $e) {
-            $this->report($e);
+            $this->report($e, $item->id, $cell);
 
             return false;
         }
@@ -377,14 +436,21 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Los errores de una Action: en su campo y, juntos, en un toast, porque la tabla no tiene dónde mostrarlos.
+     * Los errores de una Action: en su campo, en la celda de la tabla que se editó (`$cell`, o la del campo que
+     * nombra el error en la fila `$itemId`) y, juntos, en un toast.
      */
-    private function report(ValidationException $e): void
+    private function report(ValidationException $e, ?string $itemId = null, ?string $cell = null): void
     {
         $this->rejections++;
 
         foreach ($e->errors() as $field => $messages) {
             $this->addError($field, $messages[0]);
+        }
+
+        if ($cell !== null) {
+            $field = array_key_first($e->errors());
+            $own = in_array($field, ['expected_students', 'requested_groups'], true) ? "{$itemId}.{$field}" : $cell;
+            $this->cellErrors[$own] = (string) collect($e->errors())->flatten()->first();
         }
 
         $this->error('No se guardó', e(collect($e->errors())->flatten()->first()));
@@ -426,18 +492,54 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Las partes que un departamento regresó, por departamento, con cuántas materias con grupos se le piden: lo
-     * que dicen las alertas de arriba.
+     * Las partes que un departamento regresó, por departamento, con cuántas materias con grupos se le piden y las
+     * filas que «Ver» recorre: lo que dicen las alertas de arriba.
      *
      * @param  list<array{department: Department, subjects: int, groups: int, review: ?ProposalReview}>  $departments
-     * @return list<array{department: Department, subjects: int, comment: ?string}>
+     * @param  array<string, array{all: list<string>, requested: list<string>}>  $ids
+     * @return list<array{department: Department, subjects: int, comment: ?string, items: list<string>}>
      */
-    private function returnedParts(ProposalOverview $overview, array $departments): array
+    private function returnedParts(array $departments, array $ids): array
     {
         return array_values(array_map(
-            fn (array $row): array => ['department' => $row['department'], 'subjects' => $row['subjects'], 'comment' => $row['review']->comment],
+            fn (array $row): array => [
+                'department' => $row['department'],
+                'subjects' => $row['subjects'],
+                'comment' => $row['review']->comment,
+                'items' => ($ids[$row['department']->code]['requested'] ?? []) ?: ($ids[$row['department']->code]['all'] ?? []),
+            ],
             array_filter($departments, fn (array $row): bool => $row['review']?->status === ProposalReviewStatus::Returned),
         ));
+    }
+
+    /**
+     * Una sola pasada por las filas, en el orden de la vista: por código de departamento, los ids de todas sus
+     * filas y de las que piden grupos (lo que «Ver» recorre), y el departamento con más materias, cuyo código no
+     * se repite en cada mosaico.
+     *
+     * @return array{ids: array<string, array{all: list<string>, requested: list<string>}>, majority: ?string}
+     */
+    private function walk(ProposalOverview $overview): array
+    {
+        $ids = [];
+        $counts = [];
+
+        foreach ($this->view === 'tabla' ? $overview->semesters : $overview->gridSemesters() as $items) {
+            foreach ($items as $item) {
+                $code = $item->subject->department->code;
+                $ids[$code] ??= ['all' => [], 'requested' => []];
+                $ids[$code]['all'][] = $item->id;
+                $counts[$code] = ($counts[$code] ?? 0) + 1;
+
+                if ($item->requested_groups > 0) {
+                    $ids[$code]['requested'][] = $item->id;
+                }
+            }
+        }
+
+        arsort($counts);
+
+        return ['ids' => $ids, 'majority' => array_key_first($counts)];
     }
 
     /**
