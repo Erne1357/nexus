@@ -3,6 +3,7 @@
 namespace App\Modules\Core;
 
 use App\Modules\Core\Authorization\OrgTree;
+use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
@@ -33,6 +34,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
         $this->app->singleton(Navigation::class, fn (Application $app): Navigation => Navigation::fromModules(
             $app->getProviders(ModuleServiceProvider::class),
         ));
+
+        // Singleton porque es inmutable: el catálogo de permisos y las concesiones por puesto de todos
+        // los módulos, sin nada del usuario ni de la petición.
+        $this->app->singleton(PermissionRegistry::class, fn (Application $app): PermissionRegistry => PermissionRegistry::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
     }
 
     public function boot(): void
@@ -43,7 +50,10 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
-        $this->app->booted(fn (Application $app): Navigation => $app->make(Navigation::class));
+        $this->app->booted(function (Application $app): void {
+            $app->make(Navigation::class);
+            $app->make(PermissionRegistry::class);
+        });
     }
 
     public function navigation(): array
