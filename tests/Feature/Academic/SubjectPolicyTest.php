@@ -57,3 +57,25 @@ it('no hay ability para borrar: las materias no se borran, se desactivan', funct
 
     expect($admin->can('delete', $this->subject))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->admin()->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Admin);
+    expect([
+        $user->can('viewAny', Subject::class),
+        $user->can('create', Subject::class),
+        $user->can('view', $this->subject),
+        $user->can('update', $this->subject),
+    ])
+        ->each->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect([
+        $user->can('viewAny', Subject::class),
+        $user->can('create', Subject::class),
+        $user->can('view', $this->subject),
+        $user->can('update', $this->subject),
+    ])
+        ->each->toBeFalse();
+});

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Academic\Policies;
 
+use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
@@ -18,17 +19,17 @@ final class StudyPlanPolicy
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allowsAny(AcademicPermission::StudyPlanView);
     }
 
     public function view(User $user, StudyPlan $plan): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::StudyPlanView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::StudyPlanCreate);
     }
 
     /**
@@ -37,7 +38,7 @@ final class StudyPlanPolicy
      */
     public function update(User $user, StudyPlan $plan): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::StudyPlanUpdate);
     }
 
     /**
@@ -45,6 +46,6 @@ final class StudyPlanPolicy
      */
     public function editGrid(User $user, StudyPlan $plan): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::StudyPlanEditGrid);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Academic\Policies;
 
+use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
@@ -17,17 +18,17 @@ final class DepartmentPolicy
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allowsAny(AcademicPermission::DepartmentView);
     }
 
     public function view(User $user, Department $department): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::DepartmentView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::DepartmentCreate);
     }
 
     /**
@@ -35,7 +36,7 @@ final class DepartmentPolicy
      */
     public function update(User $user, Department $department): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::DepartmentUpdate);
     }
 
     /**
@@ -43,6 +44,6 @@ final class DepartmentPolicy
      */
     public function delete(User $user, Department $department): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::DepartmentDelete);
     }
 }

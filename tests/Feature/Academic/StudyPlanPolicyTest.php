@@ -55,3 +55,27 @@ it('niega todo a un admin desactivado', function () {
 it('no hay ability para borrar: los planes no se borran, se desactivan', function () {
     expect(User::factory()->admin()->create()->can('delete', $this->plan))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->admin()->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Admin);
+    expect([
+        $user->can('viewAny', StudyPlan::class),
+        $user->can('create', StudyPlan::class),
+        $user->can('view', $this->plan),
+        $user->can('update', $this->plan),
+        $user->can('editGrid', $this->plan),
+    ])
+        ->each->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect([
+        $user->can('viewAny', StudyPlan::class),
+        $user->can('create', StudyPlan::class),
+        $user->can('view', $this->plan),
+        $user->can('update', $this->plan),
+        $user->can('editGrid', $this->plan),
+    ])
+        ->each->toBeFalse();
+});
