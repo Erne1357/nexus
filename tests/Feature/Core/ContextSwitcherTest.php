@@ -253,13 +253,13 @@ it('con un solo puesto no muestra selector de perfil', function () {
         ->assertDontSeeHtml('wire:model="roleValue"');
 });
 
-it('al cambiar de perfil regresa a Inicio', function () {
+it('al elegir un perfil lo cambia y regresa a Inicio', function () {
     $user = multiRoleUser($this->c2);
     actingAsRole($user, Role::JefeDepartamento);
 
     Livewire::test('core::components.context-switcher')
         ->set('roleValue', 'coordinador')
-        ->call('apply')
+        ->call('switchRole')
         ->assertRedirect(route('home'));
 
     expect($user->fresh()->last_role)->toBe(Role::Coordinador)
@@ -272,11 +272,54 @@ it('rechaza un puesto que no tiene y deja el perfil como estaba', function () {
 
     Livewire::test('core::components.context-switcher')
         ->set('roleValue', 'subdireccion')
-        ->call('apply')
+        ->call('switchRole')
         ->assertNoRedirect()
         ->assertSet('roleValue', 'jefe_departamento');
 
     expect(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
+});
+
+it('cambiar el campus nunca cambia el perfil, aunque el perfil elegido en el selector sea otro', function () {
+    $user = User::factory()
+        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
+        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->create();
+    actingAsRole($user, Role::JefeProyectoDocente);
+
+    Livewire::test('core::components.context-switcher')
+        ->set('roleValue', 'coordinador')
+        ->set('campusId', $this->c1->id)
+        ->call('apply')
+        ->assertRedirect(Livewire::originalUrl());
+
+    expect(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeProyectoDocente->value)
+        ->and(session(ScopedContext::ACTIVE_CAMPUS))->toBe($this->c1->id)
+        ->and($user->fresh()->last_role)->toBeNull();
+});
+
+it('arma los renglones de perfil una vez al montar, no en cada pintado', function () {
+    $labels = new class implements ScopeLabels
+    {
+        public int $calls = 0;
+
+        public function careers(array $careerIds): array
+        {
+            $this->calls++;
+
+            return [];
+        }
+    };
+    app()->instance(ScopeLabels::class, $labels);
+    actingAsRole(multiRoleUser($this->c2), Role::JefeDepartamento);
+
+    Livewire::test('core::components.context-switcher')
+        ->assertSee('Actuando como')
+        ->call('$refresh')
+        ->assertSee('Actuando como')
+        ->assertSee('Coordinador de carrera · 1 carrera (C2)');
+
+    expect($labels->calls)->toBe(1);
 });
 
 it('sin quien nombre las carreras, el resumen cuenta cuántas son', function () {

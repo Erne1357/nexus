@@ -4,7 +4,7 @@
         <div class="grid gap-1.5">
             <span id="nexus-role-label" class="text-[11.5px] font-medium tracking-[.09em] text-neutral uppercase">Actuando como</span>
             <div role="radiogroup" aria-labelledby="nexus-role-label" data-testid="role-switcher">
-                <x-radio :options="$roles" wire:model="roleValue" wire:change="apply" class="radio-sm radio-primary" />
+                <x-radio :options="$roles" wire:model="roleValue" wire:change="switchRole" class="radio-sm radio-primary" />
             </div>
         </div>
     @endif
