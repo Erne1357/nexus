@@ -4,10 +4,11 @@ namespace App\Modules\CatalogValidation\Queries;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Models\CatalogReview;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\ScopedContext;
@@ -70,8 +71,17 @@ final class CatalogReviewQuery
         return Department::query()
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => $context->coversDepartment([Role::Subdireccion, Role::JefeDepartamento], $department->getKey()))
+            ->filter(fn (Department $department): bool => $this->coversDepartment($context, CatalogValidationPermission::ReviewView, $department->getKey()))
             ->values();
+    }
+
+    /**
+     * Si `$permission` vale sobre el departamento en alguno de los campus del usuario: lo que cubre las revisiones
+     * generales, que no son de un campus (misma regla que CatalogReviewPolicy).
+     */
+    public function coversDepartment(ScopedContext $context, CatalogValidationPermission $permission, string $department): bool
+    {
+        return $context->allows($permission, Target::of(campus: $context->campuses()->map->getKey()->all(), unit: $department));
     }
 
     /**

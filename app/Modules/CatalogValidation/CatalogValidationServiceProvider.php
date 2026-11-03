@@ -2,6 +2,7 @@
 
 namespace App\Modules\CatalogValidation;
 
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Listeners\CreateReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnCampusUpdated;
 use App\Modules\CatalogValidation\Listeners\NotifyPendingReviewsOnTermOpened;
@@ -54,9 +55,53 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     {
         return [
             new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico,
-                visible: static fn (ScopedContext $context): bool => $context->has(Role::JefeDepartamento) || $context->has(Role::Subdireccion)),
+                visible: static fn (ScopedContext $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView)),
             new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico,
-                visible: static fn (ScopedContext $context): bool => $context->has(Role::Subdireccion)),
+                visible: static fn (ScopedContext $context): bool => $context->allowsAny(CatalogValidationPermission::ProgressView)),
+        ];
+    }
+
+    public function permissions(): array
+    {
+        return [CatalogValidationPermission::class];
+    }
+
+    /**
+     * Subdirección: el avance, recordar, y ver y resolver observaciones en todo; el jefe de departamento, ver, resolver
+     * y, de su departamento, corregir, validar, reabrir y observar. La condición del campus para corregir salones
+     * (CV2) la pone la Policy.
+     */
+    public function grants(): array
+    {
+        return [
+            Role::Subdireccion->value => [
+                CatalogValidationPermission::ProgressView,
+                CatalogValidationPermission::ProgressRemind,
+                CatalogValidationPermission::ReviewView,
+                CatalogValidationPermission::ReviewResolveFlag,
+            ],
+            Role::JefeDepartamento->value => [
+                CatalogValidationPermission::ReviewView,
+                CatalogValidationPermission::ReviewResolveFlag,
+                CatalogValidationPermission::ReviewCorrect,
+                CatalogValidationPermission::ReviewValidate,
+                CatalogValidationPermission::ReviewReopen,
+                CatalogValidationPermission::ReviewFlag,
+            ],
+        ];
+    }
+
+    /**
+     * Corregir, validar, reabrir y observar son solo del jefe que cubre el departamento: ni el admin ni
+     * Subdirección (CV-S1).
+     */
+    public function adminDenies(): array
+    {
+        return [
+            CatalogValidationPermission::ReviewCorrect,
+            CatalogValidationPermission::ReviewValidate,
+            CatalogValidationPermission::ReviewReopen,
+            CatalogValidationPermission::ReviewFlag,
         ];
     }
 }

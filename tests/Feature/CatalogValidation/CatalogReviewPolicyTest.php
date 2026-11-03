@@ -114,3 +114,27 @@ it('el tablero de avance y el recordatorio son de Subdirección y del admin (tar
     ['coordinador', false],
     ['docente', false],
 ]);
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $jefe = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(20)])
+        ->create();
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->withRole(Role::Docente)->create();
+
+    actingAsRole($jefe, Role::JefeDepartamento);
+    expect(reviewAbilitiesOf($jefe, $this->general))->toBe(reviewAbilities(true, true, true, true, true, true));
+
+    actingAsRole($jefe, Role::Coordinador);
+    expect(reviewAbilitiesOf($jefe, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false));
+
+    actingAsRole($subdireccion, Role::Subdireccion);
+    expect(reviewAbilitiesOf($subdireccion, $this->general))->toBe(reviewAbilities(true, false, false, false, false, true))
+        ->and($subdireccion->can('viewProgress', CatalogReview::class))->toBeTrue()
+        ->and($subdireccion->can('remind', CatalogReview::class))->toBeTrue();
+
+    actingAsRole($subdireccion, Role::Docente);
+    expect(reviewAbilitiesOf($subdireccion, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false))
+        ->and($subdireccion->can('viewProgress', CatalogReview::class))->toBeFalse()
+        ->and($subdireccion->can('remind', CatalogReview::class))->toBeFalse();
+});

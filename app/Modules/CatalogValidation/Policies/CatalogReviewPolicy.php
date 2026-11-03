@@ -2,12 +2,12 @@
 
 namespace App\Modules\CatalogValidation\Policies;
 
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Models\CatalogReview;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
-use App\Modules\Core\Queries\ScopedContext;
 
 /**
  * Quién revisa los catálogos de un departamento, según docs/dominio/reglas-de-negocio.md, "Validación de
@@ -24,6 +24,10 @@ use App\Modules\Core\Queries\ScopedContext;
  * - Ver la revisión y sus observaciones, y marcar una observación como resuelta: ese jefe, el admin y
  *   Subdirección (CV-S1, supuesto por confirmar).
  *
+ * Se resuelve con los permisos de CatalogValidationPermission (`catalog_validation.review.*` por campus y
+ * departamento; los catálogos generales no son de un campus: los cubre cualquier nombramiento del departamento, sea cual sea su campus), que el
+ * provider concede por puesto; corregir, validar, reabrir y observar no se conceden al admin (adminDenies).
+ *
  * El estado de la revisión (corregir y observar mientras no está validada, reabrir una validada) lo hacen
  * cumplir las Actions. Que ninguna carga del departamento haya salido de borrador al reabrir lo veta
  * AcademicLoad con CatalogReviewReopening. Sin `delete`: una revisión no se borra.
@@ -37,7 +41,7 @@ final class CatalogReviewPolicy
      */
     public function viewProgress(User $user): bool
     {
-        return $this->scope($user)->has(Role::Subdireccion);
+        return $this->scope($user)->allows(CatalogValidationPermission::ProgressView);
     }
 
     /**
@@ -45,12 +49,12 @@ final class CatalogReviewPolicy
      */
     public function remind(User $user): bool
     {
-        return $this->scope($user)->has(Role::Subdireccion);
+        return $this->scope($user)->allows(CatalogValidationPermission::ProgressRemind);
     }
 
     public function view(User $user, CatalogReview $review): bool
     {
-        return $this->covers($this->scope($user), [Role::Subdireccion, Role::JefeDepartamento], $review);
+        return $this->can($user, CatalogValidationPermission::ReviewView, $review);
     }
 
     /**
@@ -58,7 +62,7 @@ final class CatalogReviewPolicy
      */
     public function correct(User $user, CatalogReview $review): bool
     {
-        if (! $this->isHead($this->scope($user), $review)) {
+        if (! $this->can($user, CatalogValidationPermission::ReviewCorrect, $review)) {
             return false;
         }
 
@@ -67,12 +71,12 @@ final class CatalogReviewPolicy
 
     public function validate(User $user, CatalogReview $review): bool
     {
-        return $this->isHead($this->scope($user), $review);
+        return $this->can($user, CatalogValidationPermission::ReviewValidate, $review);
     }
 
     public function reopen(User $user, CatalogReview $review): bool
     {
-        return $this->isHead($this->scope($user), $review);
+        return $this->can($user, CatalogValidationPermission::ReviewReopen, $review);
     }
 
     /**
@@ -80,7 +84,7 @@ final class CatalogReviewPolicy
      */
     public function flag(User $user, CatalogReview $review): bool
     {
-        return $this->isHead($this->scope($user), $review);
+        return $this->can($user, CatalogValidationPermission::ReviewFlag, $review);
     }
 
     /**
@@ -88,26 +92,16 @@ final class CatalogReviewPolicy
      */
     public function resolveFlag(User $user, CatalogReview $review): bool
     {
-        return $this->view($user, $review);
+        return $this->can($user, CatalogValidationPermission::ReviewResolveFlag, $review);
     }
 
-    /**
-     * El jefe del departamento de la revisión, y no por ser admin.
-     */
-    private function isHead(ScopedContext $scope, CatalogReview $review): bool
+    private function can(User $user, CatalogValidationPermission $permission, CatalogReview $review): bool
     {
-        return ! $scope->isAdmin() && $this->covers($scope, [Role::JefeDepartamento], $review);
-    }
+        $scope = $this->scope($user);
 
-    /**
-     * Una general, en cualquier campus (coversDepartment); la de salones, en su campus (covers). Incluye al admin.
-     *
-     * @param  list<Role>  $roles
-     */
-    private function covers(ScopedContext $scope, array $roles, CatalogReview $review): bool
-    {
-        return $review->campus_id === null
-            ? $scope->coversDepartment($roles, $review->department_id)
-            : $scope->covers($roles, $review->campus_id, department: $review->department_id);
+        return $scope->allows($permission, Target::of(
+            campus: $review->campus_id ?? $scope->campuses()->map->getKey()->all(),
+            unit: $review->department_id,
+        ));
     }
 }

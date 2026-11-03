@@ -8,13 +8,13 @@ use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -397,7 +397,7 @@ new #[Title('Validación de catálogos')] class extends Component
             $department = $departments->first(fn (Department $candidate): bool => $candidate->getKey() === $this->department);
             abort_if($department === null, 403);
         } else {
-            $department = $context->isAdmin() ? null : $departments->first(fn (Department $candidate): bool => $context->coversDepartment(Role::JefeDepartamento, $candidate->getKey()));
+            $department = $context->isAdmin() ? null : $departments->first(fn (Department $candidate): bool => app(CatalogReviewQuery::class)->coversDepartment($context, CatalogValidationPermission::ReviewFlag, $candidate->getKey()));
         }
 
         $term = $context->activeTerm();
