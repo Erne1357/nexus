@@ -74,11 +74,12 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 
 ### 6. Policy
 
-- `Policies/<Modelo>Policy.php` junto a `Models/<Modelo>`: Laravel la descubre sola. Copia `Policies/CampusPolicy.php`: `final`, `use UsesScopedContext;` (`Policies/Concerns/UsesScopedContext.php`, exigido por arch) y cada ability pregunta a `$this->scope($user)`: `isAdmin()`, `has(Role)`, `covers(roles, campus, department:, career:)` o `canAccessCampus()`.
+- `Policies/<Modelo>Policy.php` junto a `Models/<Modelo>`: Laravel la descubre sola. Copia `Policies/CampusPolicy.php`: `final`, `use UsesScopedContext;` (`Policies/Concerns/UsesScopedContext.php`, exigido por arch) y cada ability pregunta por un permiso del módulo, nunca por una lista de puestos: `$this->scope($user)->allows(<Modulo>Permission::X, Target::of(campus:, unit:, career:))` sobre un registro, o `->allowsAny(<Modulo>Permission::X)` cuando no hay objetivo (`viewAny`). `Target` solo lleva las dimensiones que el permiso declara.
 - El docblock cita la fila de `docs/dominio/reglas-de-negocio.md`, "Aprobaciones y permisos". Si la acción no aparece ahí, resuélvelo en el issue antes de la primera prueba: la policy, la Query, la página, el menú y sus pruebas dependen de esa respuesta.
-- Si el registro pertenece a un campus o un departamento, la ability recibe ese objetivo: `authorize('create', [Building::class, $campus])` y `covers(…, $building->campus_id, department: …)`.
+- Si el registro pertenece a un campus o un departamento, la ability recibe ese objetivo: `authorize('create', [Building::class, $campus])` y `allows(FacilitiesPermission::BuildingCreate, Target::of(campus: $building->campus_id))`.
+- Los permisos se declaran en el módulo: `Enums/<Modulo>Permission.php`, `enum … : string implements Permission` con clave `modulo.recurso.accion`, `label()` en español, `dimensions()` (campus, unidad, carrera) y `isPersonal()`; copia `Core/Enums/CorePermission.php`. El provider lo registra en `permissions()` y concede a cada puesto los suyos en `grants()` (llave `Role->value`); lo que el admin no debe tener va en `adminDenies()`. Qué puesto recibe qué se decide ahí, no en la Policy.
 - Catálogo: sin `delete` ni `forceDelete`; se desactiva con `is_active`.
-- `covers()` ya incluye al admin, no lo repitas. El flujo se decide por `$campus->profile`, nunca por `$campus->code`.
+- El admin tiene todos los permisos menos los de `adminDenies()`: no lo repitas en la Policy. El flujo se decide por `$campus->profile`, nunca por `$campus->code`.
 
 ### 7. Rules, Actions y eventos
 
@@ -94,7 +95,7 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 ### 8. Queries
 
 - Copia `Queries/CampusQuery.php`, `final`:
-  - `forTable(ScopedContext $context, string $search = '', ?bool $active = null, int $perPage = 15)`: al admin todo; a los demás, solo lo que la policy les deja ver, sin repetir la lógica de alcance. Búsqueda con `->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))` (`Queries/TextSearch.php`); filtro de estado; orden por la clave natural; `paginate()`.
+  - `forTable(ScopedContext $context, string $search = '', ?bool $active = null, int $perPage = 15)`: al admin todo; a los demás, solo lo que la policy les deja ver, sin repetir la lógica de alcance: una tabla con columnas de alcance se filtra en SQL con `$context->constrain($query, <Modulo>Permission::X, ['campus' => '<tabla>.campus_id', 'unit' => …, 'career' => …])`, sin pre-chequeos de admin ni de campus. Búsqueda con `->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))` (`Queries/TextSearch.php`); filtro de estado; orden por la clave natural; `paginate()`.
   - `findOrFail(string $id)` carga lo que se edita con `KeyLookup::findOrFail(<Modelo>::query(), $id)`: el id llega del cliente y uno que no es uuid haría fallar a PostgreSQL.
 - CampusQuery filtra con `Gate::forUser($context->user())` sobre `ScopedContext::campuses()` porque los campus son el alcance mismo. Una tabla con columnas de alcance (`campus_id`, `department_id`, `career_id`) no se autoriza fila por fila: se filtra en SQL con los alcances de `$context->scopes()`, y una prueba confirma que el resultado coincide con la policy.
 
@@ -127,7 +128,7 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 
 - En `navigation()` del provider, como `CoreServiceProvider::navigation()`:
   `new NavigationItem('Departamentos', 'academic.departments', 'o-…', NavigationArea::Academico, ability: 'viewAny', arguments: [Department::class])`.
-  Si depende del rol y no de una policy: `visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador)`. Siempre `static` y sin estado: el registro es inmutable y se comparte entre peticiones.
+  Si no hay una policy que la cubra: `visible: static fn (ScopedContext $context): bool => $context->allowsAny(<Modulo>Permission::X)`, nunca una lista de puestos. Siempre `static` y sin estado: el registro es inmutable y se comparte entre peticiones.
 - Toda entrada declara su área (`Core\Enums\NavigationArea`, cuarto argumento, obligatorio): Académico, Servicios escolares, Recursos humanos, Recursos financieros o Datos. El orden de las áreas en el menú es el de los casos del enum, no el de los módulos; dentro de un área, las entradas van en el orden de `bootstrap/providers.php` y de su `navigation()`. Un área nueva es un caso nuevo del enum, en el lugar donde debe aparecer, y cambia ADR-0015: se acuerda antes.
 - El nombre debe ser una ruta registrada (`tests/Feature/Core/NavigationTest.php` revisa todas). La entrada entra en el mismo PR que su pantalla, con prueba de quién la ve y quién no.
 - La misma prueba compara listas exactas de etiquetas por rol: una entrada nueva visible para ese rol la rompe. Actualízala en el mismo PR y avísalo en el issue, porque es una prueba de Core.

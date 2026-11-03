@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Gate;
  *     new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Academico,
  *         ability: 'viewAny', arguments: [Campus::class])
  *     new NavigationItem('Propuestas', 'academic-load.proposals', 'o-document-text', NavigationArea::Academico,
- *         visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador))
+ *         visible: static fn (ScopedContext $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalView))
  *
  * Una pantalla hija que no va en el menú (la ficha de un alumno) se declara en `childRoutes` de la entrada
  * de su listado: así el menú y la banda la ubican en esa entrada.

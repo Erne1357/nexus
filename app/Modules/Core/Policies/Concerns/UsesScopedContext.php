@@ -6,13 +6,15 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 
 /**
- * Para las policies de todos los módulos: rol y alcance siempre con ScopedContext.
+ * Para las policies de todos los módulos: permiso y alcance siempre con ScopedContext. El módulo declara
+ * su enum `<Modulo>Permission`, lo registra en `permissions()` de su provider y lo concede por puesto en `grants()`;
+ * la Policy solo pregunta por el permiso, nunca por una lista de puestos.
  *
  *     public function update(User $user, Group $group): bool
  *     {
- *         return $this->scope($user)->covers(
- *             [Role::JefeDepartamento, Role::Coordinador],
- *             $group->campus_id, department: $group->department_id, career: $group->career_id,
+ *         return $this->scope($user)->allows(
+ *             SchedulingPermission::GroupUpdate,
+ *             Target::of(campus: $group->campus_id, unit: $group->department_id, career: $group->career_id),
  *         );
  *     }
  */
