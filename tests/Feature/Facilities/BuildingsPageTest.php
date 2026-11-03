@@ -141,15 +141,19 @@ describe('subdirección', function () {
         expect(Building::where('code', 'D')->exists())->toBeTrue()->and($this->b->fresh()->is_active)->toBeFalse();
     });
 
-    it('con C1 como campus activo (donde no es subdirección) no ve nada ni puede crear', function () {
+    it('con Coordinación activa (la que trae C1 a su credencial) no entra; con Subdirección activa, C1 guardado en la sesión no cuenta', function () {
         vacate(Role::Subdireccion);
         $multi = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id, 'valid_from' => today()->toDateString()])
             ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(1)])->create();
+
+        actingAsRole($multi, Role::Coordinador);
         session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id]);
 
-        Livewire::actingAs($multi)->test('facilities::pages.buildings')
-            ->assertViewHas('buildings', listsBuildings([]))
-            ->call('create')->assertForbidden();
+        Livewire::test('facilities::pages.buildings')->assertForbidden();
+
+        actingAsRole($multi, Role::Subdireccion);
+
+        Livewire::test('facilities::pages.buildings')->assertViewHas('buildings', listsBuildings(['A', 'B', 'OLD']));
     });
 
     it('de C1 no puede editar ni desactivar un edificio de C2 llamando directo', function () {

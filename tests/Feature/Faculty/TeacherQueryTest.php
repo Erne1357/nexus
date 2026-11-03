@@ -75,7 +75,7 @@ it('el jefe de proyecto docente de SC en un campus ve a todos los adscritos a SC
 
 it('con varios alcances ve la unión, y al coordinador y al docente no les trae a nadie', function () {
     $both = User::factory()
-        ->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
+        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])
         ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->ii->id])
         ->create();
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();

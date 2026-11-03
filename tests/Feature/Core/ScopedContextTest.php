@@ -321,7 +321,8 @@ describe('alcance de todo el Tec (sin campus)', function () {
     });
 
     it('un alcance de docente sin campus no extiende a otro campus el de su coordinación', function () {
-        $context = scopedContextOf(User::factory()
+        // Con los dos puestos a la vez: el contexto de otro usuario (forUser), sin perfil activo.
+        $context = app(ScopedContext::class)->forUser(User::factory()
             ->withRole(Role::Docente)
             ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
             ->create());
@@ -613,8 +614,8 @@ describe('campus y periodo activos por omisión', function () {
 
     it('no elige campus activo por omisión si el alcance tiene varios', function () {
         $user = User::factory()
-            ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
-            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
+            ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
             ->create();
 
         $context = scopedContextOf($user);
