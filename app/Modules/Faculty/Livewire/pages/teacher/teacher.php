@@ -7,7 +7,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Core\Actions\ResetUserPassword;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\KeyLookup;
@@ -25,6 +25,7 @@ use App\Modules\Faculty\Actions\SyncTeacherAccess;
 use App\Modules\Faculty\Actions\UpdateExternalLoad;
 use App\Modules\Faculty\Actions\UpdatePosition;
 use App\Modules\Faculty\Actions\UpdateTeacher;
+use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Enums\TeacherDegree;
@@ -32,7 +33,6 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
-use App\Modules\Faculty\Policies\TeacherPolicy;
 use App\Modules\Faculty\Queries\AvailabilityGridQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
@@ -215,7 +215,7 @@ new #[Title('Ficha del docente')] class extends Component
         foreach ($record->adscriptions as $adscription) {
             $removal[$adscription->id] = Gate::allows('removeAdscription', [Teacher::class, $adscription])
                 ? null
-                : ($context->coversDepartment(TeacherPolicy::EDITORS, $adscription->department_id)
+                : ($context->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
                     ? 'No te puedes quitar a ti mismo de un departamento.'
                     : 'Solo quien administra ese departamento lo quita.');
             $primaryReasons[$adscription->id] = Gate::allows('setPrimaryAdscription', [Teacher::class, $adscription])
@@ -255,7 +255,7 @@ new #[Title('Ficha del docente')] class extends Component
             'positionCounts' => $this->showPositionModal ? $this->positionCountsInTerm($record->term) : false,
             'canReset' => Gate::allows('resetPassword', $teacher),
             'canDeactivate' => Gate::allows('deactivate', $teacher),
-            'deactivateReason' => $context->isAdmin() || $context->has(Role::Subdireccion)
+            'deactivateReason' => $context->allows(FacultyPermission::TeacherDeactivate)
                 ? 'No te puedes dar de baja a ti mismo.'
                 : 'Solo el administrador y la Subdirección dan de baja.',
             'degrees' => array_map(fn (TeacherDegree $degree): array => ['id' => $degree->value, 'name' => $degree->label()], TeacherDegree::cases()),
@@ -790,7 +790,7 @@ new #[Title('Ficha del docente')] class extends Component
             'loads' => $loads,
             'canManageLoads' => Gate::allows('manageExternalLoads', $teacher),
             'subjectOptions' => $this->showQualificationModal && $this->editingQualificationId === null
-                ? $records->qualifiableSubjects($teachers->coveredDepartments($context), $this->qualSearch)
+                ? $records->qualifiableSubjects($teachers->coveredDepartments($context, FacultyPermission::TeacherQualificationManage), $this->qualSearch)
                 : collect(),
         ];
     }
@@ -808,7 +808,8 @@ new #[Title('Ficha del docente')] class extends Component
         $allowed = [];
 
         foreach ($profile as $qualification) {
-            $allowed[$qualification->id] = $coversTeacher && $context->coversDepartment(TeacherPolicy::EDITORS, (string) $qualification->subject?->department_id);
+            $allowed[$qualification->id] = $coversTeacher
+                && $context->allows(FacultyPermission::TeacherQualificationManage, Target::of(unit: $qualification->subject?->department_id));
         }
 
         return $allowed;

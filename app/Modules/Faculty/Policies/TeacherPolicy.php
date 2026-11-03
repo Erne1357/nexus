@@ -4,10 +4,11 @@ namespace App\Modules\Faculty\Policies;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
 use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use Illuminate\Support\Collection;
@@ -33,6 +34,21 @@ use Illuminate\Support\Collection;
  *   registrado (S9).
  * - Nombrar jefes (S7), dar de alta usuarios y reiniciar contraseñas, solo el admin.
  *
+ * Se resuelve con los permisos de FacultyPermission, que el provider concede por puesto:
+ * - Sobre un docente (`view`, `update`, `managePositions`, `manageAvailability`, `manageExternalLoads` y la parte del
+ *   docente de `manageQualification`): `faculty.teacher.view_all`, que cubre a todos, también sin adscripción (la
+ *   Subdirección), o el permiso por unidad de la acción (`faculty.teacher.view`, `update`, `manage_positions`,
+ *   `manage_availability`, `manage_external_loads`, `faculty.teacher_qualification.manage`) sobre los departamentos
+ *   de sus adscripciones sin borrar.
+ * - Sobre un departamento (`create` con destino, `removeAdscription`, `setPrimaryAdscription` y la materia de
+ *   `manageQualification`): solo el permiso por unidad (`faculty.teacher.create`, `faculty.teacher_department.remove`,
+ *   `faculty.teacher_department.set_primary`, `faculty.teacher_qualification.manage`) sobre ese departamento.
+ *   `view_all` no lo abre: la Subdirección cubre los de su subárbol, Subdirección Académica, como antes.
+ * - Sin dimensiones: `faculty.teacher.deactivate` y `faculty.teacher.adscribe` (la Subdirección), y
+ *   `faculty.department_head.appoint`, `faculty.teacher_user.provision` y `faculty.teacher_user.reset_password`, que
+ *   no se conceden a nadie: solo el admin, que tiene todo.
+ * «No sobre sí mismo» es una condición del recurso y se queda aquí.
+ *
  * No hay `delete`: un docente se da de baja. TeacherQuery lista con la misma regla, en SQL; si cambia aquí, cambia
  * allá.
  */
@@ -40,19 +56,14 @@ final class TeacherPolicy
 {
     use UsesScopedContext;
 
-    /** Los roles que administran docentes; la Subdirección, a todos, y los jefes, a los de su departamento. */
-    public const array EDITORS = [Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente];
-
     public function viewAny(User $user): bool
     {
-        $scope = $this->scope($user);
-
-        return array_any(self::EDITORS, fn (Role $role): bool => $scope->has($role));
+        return $this->scope($user)->allowsAny(FacultyPermission::TeacherView);
     }
 
     public function view(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher);
+        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherView);
     }
 
     /**
@@ -60,7 +71,7 @@ final class TeacherPolicy
      */
     public function update(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher);
+        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherUpdate);
     }
 
     /**
@@ -68,17 +79,17 @@ final class TeacherPolicy
      */
     public function deactivate(User $user, Teacher $teacher): bool
     {
-        return $this->coversEveryone($this->scope($user)) && ! $this->isSelf($user, $teacher->user_id);
+        return $this->scope($user)->allows(FacultyPermission::TeacherDeactivate) && ! $this->isSelf($user, $teacher->user_id);
     }
 
     public function managePositions(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher);
+        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherManagePositions);
     }
 
     public function manageAvailability(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher);
+        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherManageAvailability);
     }
 
     /**
@@ -86,17 +97,18 @@ final class TeacherPolicy
      */
     public function manageExternalLoads(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher);
+        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherManageExternalLoads);
     }
 
     /**
-     * Su perfil en una materia: la materia es de un departamento que cubre.
+     * Su perfil en una materia: cubre al docente y la materia es de un departamento que cubre.
      */
     public function manageQualification(User $user, Teacher $teacher, Subject $subject): bool
     {
         $scope = $this->scope($user);
 
-        return $this->coversTeacher($scope, $teacher) && $scope->coversDepartment(self::EDITORS, $subject->department_id);
+        return $this->coversTeacher($scope, $teacher, FacultyPermission::TeacherQualificationManage)
+            && $scope->allows(FacultyPermission::TeacherQualificationManage, Target::of(unit: $subject->department_id));
     }
 
     /**
@@ -109,7 +121,8 @@ final class TeacherPolicy
             ? $adscription->teacher?->user_id
             : Teacher::withTrashed()->whereKey($adscription->teacher_id)->value('user_id');
 
-        return $this->scope($user)->coversDepartment(self::EDITORS, $adscription->department_id) && ! $this->isSelf($user, $teacherUserId);
+        return $this->scope($user)->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
+            && ! $this->isSelf($user, $teacherUserId);
     }
 
     /**
@@ -118,20 +131,24 @@ final class TeacherPolicy
      */
     public function setPrimaryAdscription(User $user, TeacherDepartment $adscription): bool
     {
-        return $this->scope($user)->coversDepartment(self::EDITORS, $adscription->department_id);
+        return $this->scope($user)->allows(FacultyPermission::TeacherDepartmentSetPrimary, Target::of(unit: $adscription->department_id));
     }
 
     /**
      * Sin destino, si da de alta docentes en algún departamento; con el departamento de la adscripción nueva, si lo
-     * cubre.
+     * cubre. Un id vacío (llega del navegador) no es ningún departamento: solo el admin.
      */
     public function create(User $user, Department|string|null $department = null): bool
     {
+        $scope = $this->scope($user);
+
         if ($department === null) {
-            return $this->viewAny($user);
+            return $scope->allowsAny(FacultyPermission::TeacherCreate);
         }
 
-        return $this->scope($user)->coversDepartment(self::EDITORS, $department instanceof Department ? $department->getKey() : $department);
+        $departmentId = $department instanceof Department ? $department->getKey() : $department;
+
+        return $scope->allows(FacultyPermission::TeacherCreate, Target::of(unit: $departmentId === '' ? null : $departmentId));
     }
 
     /**
@@ -140,12 +157,12 @@ final class TeacherPolicy
      */
     public function adscribe(User $user): bool
     {
-        return $this->coversEveryone($this->scope($user));
+        return $this->scope($user)->allows(FacultyPermission::TeacherAdscribe);
     }
 
     public function appointHeads(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(FacultyPermission::DepartmentHeadAppoint);
     }
 
     /**
@@ -153,26 +170,22 @@ final class TeacherPolicy
      */
     public function provisionUsers(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(FacultyPermission::TeacherUserProvision);
     }
 
     public function resetPassword(User $user, Teacher $teacher): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(FacultyPermission::TeacherUserResetPassword);
     }
 
     /**
-     * El admin y la Subdirección, a todos los docentes, también a los que no tienen departamento.
+     * Si cubre al docente para `$permission`: con `faculty.teacher.view_all`, a todos, también a los que no tienen
+     * departamento; si no, con `$permission` sobre los departamentos de sus adscripciones sin borrar.
      */
-    private function coversEveryone(ScopedContext $scope): bool
+    private function coversTeacher(ScopedContext $scope, Teacher $teacher, FacultyPermission $permission): bool
     {
-        return $scope->isAdmin() || $scope->has(Role::Subdireccion);
-    }
-
-    private function coversTeacher(ScopedContext $scope, Teacher $teacher): bool
-    {
-        return $this->coversEveryone($scope)
-            || $this->adscriptionsOf($teacher)->contains(fn (TeacherDepartment $adscription): bool => $scope->coversDepartment(self::EDITORS, $adscription->department_id));
+        return $scope->allows(FacultyPermission::TeacherViewAll)
+            || $scope->allows($permission, Target::of(unit: $this->adscriptionsOf($teacher)->pluck('department_id')->unique()->values()->all()));
     }
 
     private function isSelf(User $user, int|string|null $teacherUserId): bool

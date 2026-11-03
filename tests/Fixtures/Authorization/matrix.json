@@ -4,7 +4,27 @@
             "students.student.view"
         ],
         "jefe_departamento": [
+            "faculty.teacher.create",
+            "faculty.teacher.manage_availability",
+            "faculty.teacher.manage_external_loads",
+            "faculty.teacher.manage_positions",
+            "faculty.teacher.update",
+            "faculty.teacher.view",
+            "faculty.teacher_department.remove",
+            "faculty.teacher_department.set_primary",
+            "faculty.teacher_qualification.manage",
             "students.student.view"
+        ],
+        "jefe_proyecto_docente": [
+            "faculty.teacher.create",
+            "faculty.teacher.manage_availability",
+            "faculty.teacher.manage_external_loads",
+            "faculty.teacher.manage_positions",
+            "faculty.teacher.update",
+            "faculty.teacher.view",
+            "faculty.teacher_department.remove",
+            "faculty.teacher_department.set_primary",
+            "faculty.teacher_qualification.manage"
         ],
         "subdireccion": [
             "core.campus.update_profile",
@@ -21,6 +41,18 @@
             "facilities.room.create",
             "facilities.room.update",
             "facilities.room.view",
+            "faculty.teacher.adscribe",
+            "faculty.teacher.create",
+            "faculty.teacher.deactivate",
+            "faculty.teacher.manage_availability",
+            "faculty.teacher.manage_external_loads",
+            "faculty.teacher.manage_positions",
+            "faculty.teacher.update",
+            "faculty.teacher.view",
+            "faculty.teacher.view_all",
+            "faculty.teacher_department.remove",
+            "faculty.teacher_department.set_primary",
+            "faculty.teacher_qualification.manage",
             "students.student.view"
         ]
     },

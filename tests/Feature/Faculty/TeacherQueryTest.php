@@ -6,6 +6,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -248,4 +249,49 @@ it('findOrFail no trae borrados ni acepta un id que no es uuid; findByEmployeeNu
         ->and($query->findByEmployeeNumber('1000002')?->is($this->beto))->toBeTrue()
         ->and($query->findByEmployeeNumber('1000005'))->toBeNull()
         ->and($query->findByEmployeeNumber('9999999'))->toBeNull();
+});
+
+it('la lista de docentes da las mismas filas que antes por puesto', function () {
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ii->id])->create();
+    $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
+    $both = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->create();
+
+    // La Subdirección, también a Fausto, que no tiene departamento; el jefe de II, a Ana, Carla y Elena; el JPD de SC
+    // en C2, a los de SC, porque el docente no es de un campus.
+    expect(teacherNumbersFor($subdireccion))->toBe(['1000001', '1000002', '1000003', '1000006', '1000007'])
+        ->and(teacherNumbersFor($jefe))->toBe(['1000001', '1000003', '1000006'])
+        ->and(teacherNumbersFor($jpd))->toBe(['1000001', '1000002']);
+
+    actingAsRole($both, Role::JefeDepartamento);
+    expect(app(TeacherQuery::class)->forTable(app(ScopedContext::class))->pluck('employee_number')->all())->toBe(['1000001', '1000002']);
+
+    actingAsRole($both, Role::Coordinador);
+    expect(app(TeacherQuery::class)->forTable(app(ScopedContext::class))->pluck('employee_number')->all())->toBe([]);
+});
+
+it('los departamentos del perfil de materias y del alta son los de antes por puesto', function () {
+    $both = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->create();
+    $covered = fn (): ?array => app(TeacherQuery::class)->coveredDepartments(app(ScopedContext::class), FacultyPermission::TeacherQualificationManage);
+    $targets = fn (): array => array_column(app(TeacherQuery::class)->adscriptionTargets(app(ScopedContext::class)), 'code');
+
+    $this->actingAs(User::factory()->admin()->create());
+    expect($covered())->toBeNull();
+
+    $this->actingAs(User::factory()->withRole(Role::Subdireccion)->create());
+    expect($covered())->toContain($this->sc->id, $this->ii->id);
+
+    actingAsRole($both, Role::JefeDepartamento);
+    expect($covered())->toBe([$this->sc->id])
+        ->and($targets())->toBe(['SC']);
+
+    actingAsRole($both, Role::Coordinador);
+    expect($covered())->toBe([])
+        ->and($targets())->toBe([]);
 });

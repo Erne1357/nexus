@@ -212,3 +212,42 @@ it('no deja borrar docentes a nadie: se dan de baja', function () {
     expect(method_exists(TeacherPolicy::class, 'delete'))->toBeFalse()
         ->and(method_exists(TeacherPolicy::class, 'forceDelete'))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $jefe = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->create();
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->withRole(Role::Docente)->create();
+    $own = $this->inSc->adscriptions()->where('department_id', $this->sc->id)->sole();
+    $systems = Subject::factory()->create(['department_id' => $this->sc->id]);
+
+    actingAsRole($jefe, Role::JefeDepartamento);
+    expect($jefe->can('viewAny', Teacher::class))->toBeTrue()
+        ->and($jefe->can('create', [Teacher::class, $this->sc]))->toBeTrue()
+        ->and(teacherAbilitiesOf($jefe, $this->inSc))->toBe(allTeacherAbilities(true))
+        ->and($jefe->can('manageQualification', [$this->inSc, $systems]))->toBeTrue()
+        ->and($jefe->can('removeAdscription', [Teacher::class, $own]))->toBeTrue()
+        ->and($jefe->can('setPrimaryAdscription', [Teacher::class, $own]))->toBeTrue();
+
+    actingAsRole($jefe, Role::Coordinador);
+    expect($jefe->can('viewAny', Teacher::class))->toBeFalse()
+        ->and($jefe->can('create', Teacher::class))->toBeFalse()
+        ->and($jefe->can('create', [Teacher::class, $this->sc]))->toBeFalse()
+        ->and(teacherAbilitiesOf($jefe, $this->inSc))->toBe(allTeacherAbilities(false))
+        ->and($jefe->can('manageQualification', [$this->inSc, $systems]))->toBeFalse()
+        ->and($jefe->can('removeAdscription', [Teacher::class, $own]))->toBeFalse()
+        ->and($jefe->can('setPrimaryAdscription', [Teacher::class, $own]))->toBeFalse();
+
+    actingAsRole($subdireccion, Role::Subdireccion);
+    expect(teacherAbilitiesOf($subdireccion, $this->loose))->toBe(allTeacherAbilities(true))
+        ->and($subdireccion->can('deactivate', $this->loose))->toBeTrue()
+        ->and($subdireccion->can('adscribe', Teacher::class))->toBeTrue();
+
+    actingAsRole($subdireccion, Role::Docente);
+    expect($subdireccion->can('viewAny', Teacher::class))->toBeFalse()
+        ->and(teacherAbilitiesOf($subdireccion, $this->loose))->toBe(allTeacherAbilities(false))
+        ->and(teacherAbilitiesOf($subdireccion, $this->inSc))->toBe(allTeacherAbilities(false))
+        ->and($subdireccion->can('deactivate', $this->loose))->toBeFalse()
+        ->and($subdireccion->can('adscribe', Teacher::class))->toBeFalse();
+});
