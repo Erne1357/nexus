@@ -69,3 +69,9 @@ it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe'
 
     expect(ProposalReturned::unavailableReason(app(ScopedContext::class)->forUser($this->coordinador), $message))->toBeNull();
 });
+
+it('guarda el puesto de coordinador en el aviso', function () {
+    app(ReturnProposalReview::class)->handle($this->part, 'Revisa Cálculo.', $this->jefe);
+
+    expect($this->coordinador->notifications()->first()->data['role'])->toBe('coordinador');
+});

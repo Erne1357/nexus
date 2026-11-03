@@ -1,15 +1,11 @@
 <?php
 
-use App\Modules\AcademicLoad\Notifications\ProposalReturned;
-use App\Modules\AcademicLoad\Notifications\ProposalSubmitted;
-use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Actions\MarkAllNotificationsRead;
 use App\Modules\Core\Actions\OpenNotification;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\NotificationQuery;
@@ -38,13 +34,11 @@ final class TestNotice extends NexusNotification
     }
 }
 
-final class TestJefeNotice extends NexusNotification implements AddressedToRole
+final class TestJefeNotice extends NexusNotification
 {
-    public function __construct(private readonly NotificationMessage $message) {}
-
-    public static function addressedRole(): Role
+    public function __construct(private readonly NotificationMessage $message)
     {
-        return Role::JefeDepartamento;
+        $this->addressedTo(Role::JefeDepartamento);
     }
 
     public function message(object $notifiable): NotificationMessage
@@ -53,13 +47,11 @@ final class TestJefeNotice extends NexusNotification implements AddressedToRole
     }
 }
 
-final class TestStrictJefeNotice extends NexusNotification implements AddressedToRole
+final class TestStrictJefeNotice extends NexusNotification
 {
-    public function __construct(private readonly NotificationMessage $message) {}
-
-    public static function addressedRole(): Role
+    public function __construct(private readonly NotificationMessage $message)
     {
-        return Role::JefeDepartamento;
+        $this->addressedTo(Role::JefeDepartamento);
     }
 
     public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
@@ -317,8 +309,72 @@ it('un aviso que cambia de perfil abre su pantalla con una carga completa, sin r
     expect($plain->effects['redirectUsingNavigate'] ?? false)->toBeTrue();
 });
 
-it('los avisos de jefe y de coordinación declaran su puesto', function () {
-    expect(ProposalSubmitted::addressedRole())->toBe(Role::JefeDepartamento)
-        ->and(ProposalReturned::addressedRole())->toBe(Role::Coordinador)
-        ->and(CatalogReviewsPending::addressedRole())->toBe(Role::JefeDepartamento);
+it('guarda el puesto del aviso en data.role solo si va a un puesto', function () {
+    $ana = User::factory()->create();
+
+    $ana->notify(new TestJefeNotice(new NotificationMessage(title: 'De jefe', body: 'x', icon: 'o-bell', route: 'home')));
+    $ana->notify(notice('Sin puesto'));
+
+    $withRole = $ana->notifications()->where('type', TestJefeNotice::class)->first()->data;
+    $without = $ana->notifications()->where('type', TestNotice::class)->first()->data;
+
+    expect($withRole['role'])->toBe('jefe_departamento')
+        ->and($without)->not->toHaveKey('role');
+});
+
+it('NotificationMessage lee el puesto guardado; uno ausente o desconocido es null', function () {
+    expect(NotificationMessage::fromArray(['role' => 'jefe_departamento'])->role)->toBe(Role::JefeDepartamento)
+        ->and(NotificationMessage::fromArray(['role' => 'rector'])->role)->toBeNull()
+        ->and(NotificationMessage::fromArray([])->role)->toBeNull();
+});
+
+it('un aviso sin puesto válido se abre con el perfil activo y no lo cambia', function () {
+    $ana = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(20)])
+        ->create();
+    $data = ['title' => 'Viejo', 'body' => 'x', 'icon' => 'o-bell', 'tone' => 'info', 'route' => 'home', 'parameters' => [], 'term_id' => null, 'campus_id' => null];
+    $ana->notifications()->create(['id' => (string) Str::uuid7(), 'type' => TestJefeNotice::class, 'data' => $data]);
+    $ana->notifications()->create(['id' => (string) Str::uuid7(), 'type' => TestJefeNotice::class, 'data' => [...$data, 'role' => 'rector']]);
+    actingAsRole($ana, Role::Coordinador);
+
+    foreach ($ana->notifications()->pluck('id') as $id) {
+        $target = app(OpenNotification::class)->handle($ana, $id);
+
+        expect($target->url)->toBe(route('home'))
+            ->and($target->switchedRole)->toBeFalse()
+            ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador);
+    }
+});
+
+it('la campana etiqueta cada aviso con su puesto si la persona tiene más de uno', function () {
+    $ana = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(20)])
+        ->create();
+    $ana->notify(new TestJefeNotice(new NotificationMessage(title: 'De jefe', body: 'x', icon: 'o-bell', route: 'home')));
+    $ana->notify((new TestNotice(new NotificationMessage(title: 'De coordinación', body: 'x', icon: 'o-bell', route: 'home')))->addressedTo(Role::Coordinador));
+    $ana->notify(notice('Sin puesto'));
+    actingAsRole($ana, Role::Coordinador);
+
+    Livewire::test('core::components.bell')
+        ->assertSee('Jefe de departamento académico')
+        ->assertSee('Coordinador de carrera')
+        ->assertSeeHtml('data-testid="notification-role"');
+
+    $rows = app(NotificationQuery::class)->recent($ana);
+
+    expect($rows->pluck('role', 'title')->all())->toBe([
+        'Sin puesto' => null,
+        'De coordinación' => Role::Coordinador->label(),
+        'De jefe' => Role::JefeDepartamento->label(),
+    ]);
+
+    $single = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(11)])->create();
+    $single->notify(new TestJefeNotice(new NotificationMessage(title: 'De jefe', body: 'x', icon: 'o-bell', route: 'home')));
+    actingAsRole($single, Role::JefeDepartamento);
+
+    Livewire::test('core::components.bell')
+        ->assertSee('De jefe')
+        ->assertDontSeeHtml('data-testid="notification-role"');
 });

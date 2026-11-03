@@ -60,7 +60,7 @@ final class NotificationQuery
     }
 
     /**
-     * @return Collection<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string}>
+     * @return Collection<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string, role: ?string}>
      */
     public function recent(User $user, int $limit = self::RECENT, bool $withCampus = false): Collection
     {
@@ -100,7 +100,7 @@ final class NotificationQuery
      * `$onlyUnread`, solo las que no ha leído; con `$classes`, solo las de esos tipos de aviso.
      *
      * @param  list<string>  $classes
-     * @return LengthAwarePaginator<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string}>
+     * @return LengthAwarePaginator<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string, role: ?string}>
      */
     public function paginated(User $user, bool $onlyUnread = false, int $perPage = self::PER_PAGE, array $classes = [], bool $withCampus = false): LengthAwarePaginator
     {
@@ -131,7 +131,7 @@ final class NotificationQuery
 
     /**
      * @param  array<string, string>  $campusCodes
-     * @return array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string}
+     * @return array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string, role: ?string}
      */
     private function row(DatabaseNotification $notification, array $campusCodes, CarbonImmutable $today): array
     {
@@ -150,6 +150,7 @@ final class NotificationQuery
             'group' => $group,
             'group_label' => $groupLabel,
             'campus' => $message->campusId === null ? null : ($campusCodes[$message->campusId] ?? null),
+            'role' => $message->role?->label(),
         ];
     }
 

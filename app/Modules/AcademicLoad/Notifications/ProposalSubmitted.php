@@ -4,9 +4,9 @@ namespace App\Modules\AcademicLoad\Notifications;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
-use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Notifications\AddressedToRole;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
@@ -18,13 +18,8 @@ use App\Modules\Core\Queries\ScopedContext;
  * bandeja de su departamento con esa carrera elegida (tarea 2.8), en el periodo y el campus de la propuesta.
  * Deja de poder abrirse si la propuesta o el departamento ya no existen, o el usuario ya no es su jefe.
  */
-final class ProposalSubmitted extends NexusNotification implements AddressedToRole
+final class ProposalSubmitted extends NexusNotification
 {
-    public static function addressedRole(): Role
-    {
-        return Role::JefeDepartamento;
-    }
-
     public static function typeKey(): string
     {
         return 'proposal-submitted';
@@ -74,7 +69,7 @@ final class ProposalSubmitted extends NexusNotification implements AddressedToRo
             return 'Esa propuesta ya no existe.';
         }
 
-        if (! $context->covers(Role::JefeDepartamento, $proposal->campus_id, $department->getKey())) {
+        if (! $context->allows(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $proposal->campus_id, unit: $department->getKey()))) {
             return "Ya no eres jefe de {$department->name}.";
         }
 

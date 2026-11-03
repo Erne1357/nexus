@@ -1,6 +1,6 @@
 {{--
     Un renglón de notificación, el mismo en la tarjeta de la campana y en «Todas las notificaciones»: icono con su
-    tono, título (en negrita mientras no se lee), detalle, hace cuánto, la clave del campus al frente si el usuario trabaja en varios (`$showCampus`) y el punto de «sin leer». Abrirlo es
+    tono, título (en negrita mientras no se lee), detalle, hace cuánto, la clave del campus al frente si el usuario trabaja en varios (`$showCampus`), el puesto al que va el aviso tras la hora si tiene más de un puesto (`$showRole`) y el punto de «sin leer». Abrirlo es
     `open(id)` del componente que lo incluye. Tamaños de la rampa de DESIGN.md: 14 px.
 --}}
 <button
@@ -32,7 +32,12 @@
             {{ $item['title'] }}
         </span>
         <span class="mt-0.5 block text-neutral [overflow-wrap:anywhere]">{{ $item['body'] }}</span>
-        <span class="mt-1 block text-neutral">{{ $item['at']->locale('es')->diffForHumans() }}</span>
+        <span class="mt-1 block text-neutral">
+            {{ $item['at']->locale('es')->diffForHumans() }}
+            @if (($showRole ?? false) && $item['role'] !== null)
+                · <span data-testid="notification-role">{{ $item['role'] }}</span>
+            @endif
+        </span>
     </span>
 
     <span aria-hidden="true" @class(['mt-[7px] size-[9px] rounded-full bg-info', 'invisible' => $item['read']])></span>

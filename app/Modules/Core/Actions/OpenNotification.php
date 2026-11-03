@@ -6,7 +6,6 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Notifications\NotificationTarget;
@@ -24,7 +23,7 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * dice el aviso; si el usuario ya no trabaja en ese campus, tampoco lo lleva. Solo abre notificaciones del
  * usuario, que es el de la sesión: la credencial que cambia es la suya.
  *
- * Si el aviso es de un puesto (AddressedToRole) que el usuario tiene y no es el activo, todo lo anterior se decide
+ * Si el aviso es de un puesto (`data.role`; sin él o con uno que ya no existe, se abre con el perfil activo) que el usuario tiene y no es el activo, todo lo anterior se decide
  * con ese puesto (ScopedContext::asRole(), sin tocar la sesión) y, solo si se puede abrir, cambia a ese perfil
  * (SwitchRole) antes de mover la credencial, para que el destino se vea con su alcance; si no se puede, la sesión
  * se queda como estaba. Si ya no tiene el puesto, se decide con ese puesto igual (AZ-S8): sin roles, el aviso
@@ -57,7 +56,7 @@ final class OpenNotification
 
         $message = NotificationMessage::fromArray($notification->data);
         $type = is_subclass_of($notification->type, NexusNotification::class) ? $notification->type : NexusNotification::class;
-        $addressed = is_subclass_of($type, AddressedToRole::class) ? $type::addressedRole() : null;
+        $addressed = $message->role;
         $role = $this->roleToSwitchTo($addressed);
         $context = $addressed === null ? $this->context : $this->context->asRole($addressed);
 

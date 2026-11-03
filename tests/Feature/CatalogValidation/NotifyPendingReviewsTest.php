@@ -143,3 +143,11 @@ it('notify() da los usuarios avisados y handle() sigue dando cuántos', function
     expect($users->pluck('id')->all())->toBe([$this->jefeSistemas->id])
         ->and(app(NotifyPendingReviews::class)->handle($this->term, $this->c2))->toBe(1);
 });
+
+it('guarda el puesto de jefe en el aviso', function () {
+    reviewsFor($this->term, $this->c2, $this->sistemas, ReviewStatus::Pending);
+
+    app(NotifyPendingReviews::class)->handle($this->term, $this->c2);
+
+    expect($this->jefeSistemas->notifications()->first()->data['role'])->toBe('jefe_departamento');
+});

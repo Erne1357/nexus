@@ -65,7 +65,7 @@
                 </div>
             @else
                 <ul role="list">
-                    @include('core::notifications.list', ['rows' => $items->items(), 'showCampus' => $showCampus])
+                    @include('core::notifications.list', ['rows' => $items->items(), 'showCampus' => $showCampus, 'showRole' => $showRole])
                 </ul>
 
                 @if ($items->hasPages())

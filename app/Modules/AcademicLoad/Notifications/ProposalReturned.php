@@ -4,9 +4,9 @@ namespace App\Modules\AcademicLoad\Notifications;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
-use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Notifications\AddressedToRole;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
@@ -19,13 +19,8 @@ use Illuminate\Support\Str;
  * campus de la propuesta. Deja de poder abrirse si la propuesta ya no existe o el usuario ya no coordina esa
  * carrera en ese campus.
  */
-final class ProposalReturned extends NexusNotification implements AddressedToRole
+final class ProposalReturned extends NexusNotification
 {
-    public static function addressedRole(): Role
-    {
-        return Role::Coordinador;
-    }
-
     public static function typeKey(): string
     {
         return 'proposal-returned';
@@ -69,7 +64,7 @@ final class ProposalReturned extends NexusNotification implements AddressedToRol
             return 'Esa propuesta ya no existe.';
         }
 
-        if (! $context->covers(Role::Coordinador, $message->campusId, career: $career->getKey())) {
+        if (! $context->allows(AcademicLoadPermission::ProposalUpdate, Target::of(campus: $message->campusId, career: $career->getKey()))) {
             return "Ya no coordinas {$career->name} en ese campus.";
         }
 
