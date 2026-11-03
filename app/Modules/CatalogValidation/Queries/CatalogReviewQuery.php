@@ -71,17 +71,17 @@ final class CatalogReviewQuery
         return Department::query()
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => $this->coversDepartment($context, CatalogValidationPermission::ReviewView, $department->getKey()))
+            ->filter(fn (Department $department): bool => self::allowsOnDepartment($context, CatalogValidationPermission::ReviewView, null, $department->getKey()))
             ->values();
     }
 
     /**
-     * Si `$permission` vale sobre el departamento en alguno de los campus del usuario: lo que cubre las revisiones
-     * generales, que no son de un campus (misma regla que CatalogReviewPolicy).
+     * Si `$permission` vale sobre el departamento en el campus de la revisión o, sin campus (las revisiones generales
+     * no son de uno), en alguno de los campus del usuario. Es la regla única de CatalogReviewPolicy y de las pantallas.
      */
-    public function coversDepartment(ScopedContext $context, CatalogValidationPermission $permission, string $department): bool
+    public static function allowsOnDepartment(ScopedContext $context, CatalogValidationPermission $permission, ?string $campus, string $department): bool
     {
-        return $context->allows($permission, Target::of(campus: $context->campuses()->map->getKey()->all(), unit: $department));
+        return $context->allows($permission, Target::of(campus: $campus ?? $context->campuses()->map->getKey()->all(), unit: $department));
     }
 
     /**

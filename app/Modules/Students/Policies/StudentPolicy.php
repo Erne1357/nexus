@@ -20,7 +20,7 @@ use App\Modules\Students\Models\Student;
  * Un alcance que todavía trae campus vale solo en ese campus (ScopedContext).
  *
  * Se resuelve con el permiso `students.student.view` (StudentsPermission). Nadie más, ni el jefe de proyecto docente. Nadie los edita ni los borra: vienen del SII (no hay `update` ni
- * `delete`). covers() ya da por cubierto todo al admin, así que `view` no lo repite.
+ * `delete`). El admin pasa por la concesión implícita del registro.
  */
 final class StudentPolicy
 {

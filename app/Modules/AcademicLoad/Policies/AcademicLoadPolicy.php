@@ -16,7 +16,7 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  * - Ven la carga la subdirección, el jefe de departamento y el jefe de proyecto docente, dentro de su
  *   campus y su departamento.
  * - Propone (sale de borrador) el jefe de departamento de ese campus y departamento (supuesto por
- *   confirmar). covers() ya incluye al admin.
+ *   confirmar). El admin pasa por la concesión implícita del registro.
  *
  * Las demás abilities llegan con las transiciones de las fases 3 y 4.
  */

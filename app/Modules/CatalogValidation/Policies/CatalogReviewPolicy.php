@@ -4,7 +4,7 @@ namespace App\Modules\CatalogValidation\Policies;
 
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Models\CatalogReview;
-use App\Modules\Core\Authorization\Target;
+use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
@@ -97,11 +97,6 @@ final class CatalogReviewPolicy
 
     private function can(User $user, CatalogValidationPermission $permission, CatalogReview $review): bool
     {
-        $scope = $this->scope($user);
-
-        return $scope->allows($permission, Target::of(
-            campus: $review->campus_id ?? $scope->campuses()->map->getKey()->all(),
-            unit: $review->department_id,
-        ));
+        return CatalogReviewQuery::allowsOnDepartment($this->scope($user), $permission, $review->campus_id, $review->department_id);
     }
 }

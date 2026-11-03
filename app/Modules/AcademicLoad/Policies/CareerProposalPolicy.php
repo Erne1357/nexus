@@ -19,7 +19,7 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  *   la carrera en ese campus.
  * - La ve también la subdirección, en cualquier campus y solo lectura (supuesto por confirmar).
  *
- * covers() ya incluye al admin. Los jefes deciden la parte de su departamento desde su bandeja, con
+ * El admin pasa por la concesión implícita del registro. Los jefes deciden la parte de su departamento desde su bandeja, con
  * ProposalReviewPolicy.
  */
 final class CareerProposalPolicy

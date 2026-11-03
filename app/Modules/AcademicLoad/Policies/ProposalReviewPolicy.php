@@ -21,7 +21,7 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  * - Acepta (AcceptProposalReview) o regresa (ReturnProposalReview) la parte el jefe de ese departamento en el
  *   campus de la propuesta, como quien propone la carga (supuesto por confirmar).
  *
- * covers() ya incluye al admin.
+ * El admin pasa por la concesión implícita del registro.
  */
 final class ProposalReviewPolicy
 {
