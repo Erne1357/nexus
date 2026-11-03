@@ -274,8 +274,9 @@ describe('robustez y perfil del campus', function () {
     });
 
     it('si el usuario pierde el alcance del salón del panel, lo cierra sin 403', function () {
-        $component = Livewire::actingAs($this->sub)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id);
-        $this->sub->roleAssignments()->update(['valid_to' => today()->subDay()]);
+        $component = Livewire::actingAs($this->sub)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id)->assertSet('showDrawer', true);
+        // Sigue en Subdirección, ahora de C1. Perder el puesto activo es otro caso: ActiveRoleHook responde 419.
+        $this->sub->roleAssignments()->update(['campus_id' => $this->c1->id]);
         app(ScopedContext::class)->refresh();
 
         $component->call('$refresh')->assertOk()->assertSet('showDrawer', false);
