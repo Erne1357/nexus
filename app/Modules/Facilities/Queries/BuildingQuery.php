@@ -2,11 +2,11 @@
 
 namespace App\Modules\Facilities\Queries;
 
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Models\Building;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,7 +29,7 @@ final class BuildingQuery
     {
         return Building::query()
             ->where('campus_id', $campus->getKey())
-            ->unless($context->covers(Role::Subdireccion, $campus), fn (Builder $query) => $query->whereRaw('false'))
+            ->tap(fn (Builder $query) => $context->constrain($query, FacilitiesPermission::BuildingView, ['campus' => 'buildings.campus_id']))
             ->withCount('rooms')
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))

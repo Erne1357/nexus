@@ -8,7 +8,13 @@
             "core.term.manage_calendar",
             "core.term.open",
             "core.term.update",
-            "core.term.view"
+            "core.term.view",
+            "facilities.building.create",
+            "facilities.building.update",
+            "facilities.building.view",
+            "facilities.room.create",
+            "facilities.room.update",
+            "facilities.room.view"
         ]
     },
     "admin_denies": []

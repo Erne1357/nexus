@@ -70,3 +70,19 @@ it('no define delete: un edificio se desactiva', function () {
     expect(method_exists(BuildingPolicy::class, 'delete'))->toBeFalse()
         ->and(method_exists(BuildingPolicy::class, 'forceDelete'))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])
+        ->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Subdireccion);
+    expect($user->can('viewAny', Building::class))->toBeTrue()
+        ->and($user->can('view', $this->building))->toBeTrue()
+        ->and($user->can('update', $this->building))->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect($user->can('viewAny', Building::class))->toBeFalse()
+        ->and($user->can('view', $this->building))->toBeFalse()
+        ->and($user->can('create', [Building::class, $this->c2]))->toBeFalse()
+        ->and($user->can('update', $this->building))->toBeFalse();
+});

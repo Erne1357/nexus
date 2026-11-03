@@ -71,3 +71,19 @@ it('no define delete: un salón se desactiva', function () {
     expect(method_exists(RoomPolicy::class, 'delete'))->toBeFalse()
         ->and(method_exists(RoomPolicy::class, 'forceDelete'))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])
+        ->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Subdireccion);
+    expect($user->can('viewAny', Room::class))->toBeTrue()
+        ->and($user->can('view', $this->room))->toBeTrue()
+        ->and($user->can('update', $this->room))->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect($user->can('viewAny', Room::class))->toBeFalse()
+        ->and($user->can('view', $this->room))->toBeFalse()
+        ->and($user->can('create', [Room::class, $this->c2]))->toBeFalse()
+        ->and($user->can('update', $this->room))->toBeFalse();
+});
