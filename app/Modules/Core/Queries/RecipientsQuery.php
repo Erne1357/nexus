@@ -12,7 +12,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * A quién le llega un aviso del proceso (tarea 2.9): los usuarios activos que, con `$role`, cubren el campus
+ * A quién le llega un aviso del proceso. holders() da, por permiso y objetivo, los usuarios activos que con alguno
+ * de sus puestos vigentes lo tienen (cada uno con el puesto al que va el aviso). for() es la forma anterior (tarea
+ * 2.9), obsoleta hasta 3.P9: los usuarios activos que, con `$role`, cubren el campus
  * y, si se piden, el departamento o la carrera. La regla es la misma de las policies (ScopedContext::covers):
  * un nombramiento sin campus vale en cualquier campus activo, y uno sobre una unidad cubre los departamentos de su
  * subárbol. Cuenta solo el nombramiento: el admin lo cubre todo sin tenerlo, y los avisos van a quien hace el
