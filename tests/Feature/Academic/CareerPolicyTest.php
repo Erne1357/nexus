@@ -53,3 +53,27 @@ it('niega todo a un admin desactivado', function () {
         ->and($admin->can('update', $this->career))->toBeFalse()
         ->and($admin->can('delete', $this->career))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->admin()->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Admin);
+    expect([
+        $user->can('viewAny', Career::class),
+        $user->can('create', Career::class),
+        $user->can('view', $this->career),
+        $user->can('update', $this->career),
+        $user->can('delete', $this->career),
+    ])
+        ->each->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect([
+        $user->can('viewAny', Career::class),
+        $user->can('create', Career::class),
+        $user->can('view', $this->career),
+        $user->can('update', $this->career),
+        $user->can('delete', $this->career),
+    ])
+        ->each->toBeFalse();
+});

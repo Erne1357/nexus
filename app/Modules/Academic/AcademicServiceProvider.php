@@ -3,6 +3,7 @@
 namespace App\Modules\Academic;
 
 use App\Modules\Academic\Authorization\AcademicScopeLabels;
+use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
@@ -24,6 +25,11 @@ final class AcademicServiceProvider extends ModuleServiceProvider
 
         // Los códigos de carrera para el resumen de puestos de la credencial (reemplaza el de Core).
         $this->app->bind(ScopeLabels::class, AcademicScopeLabels::class);
+    }
+
+    public function permissions(): array
+    {
+        return [AcademicPermission::class];
     }
 
     public function navigation(): array

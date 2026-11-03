@@ -2,6 +2,7 @@
 
 namespace App\Modules\Academic\Policies;
 
+use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
@@ -17,17 +18,17 @@ final class CareerPolicy
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allowsAny(AcademicPermission::CareerView);
     }
 
     public function view(User $user, Career $career): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::CareerView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::CareerCreate);
     }
 
     /**
@@ -35,7 +36,7 @@ final class CareerPolicy
      */
     public function update(User $user, Career $career): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::CareerUpdate);
     }
 
     /**
@@ -43,6 +44,6 @@ final class CareerPolicy
      */
     public function delete(User $user, Career $career): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(AcademicPermission::CareerDelete);
     }
 }
