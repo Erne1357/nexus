@@ -22,3 +22,14 @@ it('siembra los avisos y atajos de ejemplo sin duplicarlos y copia la foto del e
         ->and(LoginShortcut::query()->count())->toBe(2);
     Storage::disk('public')->assertExists(LoginScreenDemoSeeder::PHOTO);
 });
+
+it('no vuelve a crear un aviso de ejemplo que se borró', function () {
+    Storage::fake('public');
+    $seeder = (new DatabaseSeeder)->setContainer(app());
+    $seeder->call(LoginScreenDemoSeeder::class);
+    LoginNotice::query()->where('title', 'Vacaciones de invierno')->first()->delete();
+
+    $seeder->call(LoginScreenDemoSeeder::class);
+
+    expect(LoginNotice::withTrashed()->where('title', 'Vacaciones de invierno')->count())->toBe(1);
+});

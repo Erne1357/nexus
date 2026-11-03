@@ -4,7 +4,7 @@
 |
 | - Bienvenida: la primera vez en ese equipo la foto se abre desde la orilla, los logos suben y la marca se
 |   escribe de izquierda a derecha (~1.7 s); después, solo la marca, en medio segundo. Cualquier tecla o toque
-|   termina la bienvenida. La marca de «ya vino» es nexus.login.visto en localStorage.
+|   termina la bienvenida. La marca de «ya vino» es nexus.login.visto en localStorage y se pone al verla.
 | - Avisos (LG-01): cambian cada 7 s; el punto del aviso actual se llena mientras dura. Se detienen al pasar
 |   el mouse o con el foco dentro.
 | - Atajos (LG-02): caen en el lugar del formulario de arriba hacia abajo, uno tras otro, con un rebote corto.
@@ -49,8 +49,8 @@ document.addEventListener('alpine:init', () => {
 
         init() {
             this.welcome(!storage.get(SEEN_KEY));
+            storage.set(SEEN_KEY, '1');
             this.$nextTick(() => this.runProgress());
-            this.$root.querySelector('form')?.addEventListener('submit', () => storage.set(SEEN_KEY, '1'));
             ['keydown', 'pointerdown'].forEach((type) => window.addEventListener(type, () => this.finishWelcome(), { capture: true, once: true }));
             window.addEventListener('keydown', (event) => {
                 if (event.key === 'Escape' && this.view === 'shortcuts') {
@@ -110,6 +110,13 @@ document.addEventListener('alpine:init', () => {
             this.$nextTick(() => this.runProgress());
         },
 
+        /* El mouse detiene el carrusel solo donde hay mouse: en pantallas táctiles un toque no trae mouseleave. */
+        hover(over) {
+            if (window.matchMedia('(hover: hover)').matches) {
+                this.hold(over);
+            }
+        },
+
         hold(held) {
             this.held = held;
             if (this.progress) {
@@ -126,6 +133,8 @@ document.addEventListener('alpine:init', () => {
             const bar = this.$root.querySelectorAll('[data-progress]')[this.current];
             this.progress = bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: NOTICE_MS });
             this.progress.onfinish = () => {
+                // Al avanzar solo, el lector de pantalla no anuncia cada aviso.
+                this.$refs.slides.setAttribute('aria-live', 'off');
                 this.current = (this.current + 1) % total;
                 this.$nextTick(() => this.runProgress());
             };
@@ -169,6 +178,7 @@ document.addEventListener('alpine:init', () => {
                     section.animate([{ opacity: 0, transform: 'translateX(-28px)' }, { opacity: 1, transform: 'none' }], { duration: 340, easing: OPEN });
                 }
                 this.$refs.shortcutsButton?.focus({ preventScroll: true });
+                this.hold(false);
             });
         },
     }));

@@ -4,10 +4,9 @@ namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Database\Factories\LoginShortcutFactory;
 use App\Modules\Core\Enums\LoginShortcutKind;
-use Carbon\CarbonInterface;
+use App\Modules\Core\Models\Concerns\HasVisibilityWindow;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -22,7 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class LoginShortcut extends Model
 {
     /** @use HasFactory<LoginShortcutFactory> */
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory, HasUuids, HasVisibilityWindow, SoftDeletes;
 
     /**
      * @return array<string, string>
@@ -36,19 +35,5 @@ class LoginShortcut extends Model
             'ends_at' => 'immutable_datetime',
             'is_active' => 'boolean',
         ];
-    }
-
-    /**
-     * Activos y vigentes en el momento dado (LG-02), en su orden.
-     *
-     * @param  Builder<LoginShortcut>  $query
-     */
-    public function scopeVisibleAt(Builder $query, CarbonInterface $moment): void
-    {
-        $query->where('is_active', true)
-            ->where(fn (Builder $q) => $q->whereNull('starts_at')->orWhere('starts_at', '<=', $moment))
-            ->where(fn (Builder $q) => $q->whereNull('ends_at')->orWhere('ends_at', '>', $moment))
-            ->orderBy('sort_order')
-            ->orderBy('created_at');
     }
 }

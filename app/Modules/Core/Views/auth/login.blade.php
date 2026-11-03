@@ -123,14 +123,16 @@
         </main>
 
         {{-- Avisos (LG-01) sobre la foto; sin avisos, la foto del edificio sola --}}
-        <h2 class="order-2 mx-auto mt-2 mb-2.5 w-full max-w-[560px] px-4 text-[19px] font-bold lg:hidden">Avisos</h2>
+        @if ($notices !== [])
+            <h2 class="order-2 mx-auto mt-2 mb-2.5 w-full max-w-[560px] px-4 text-[19px] font-bold lg:hidden">Avisos</h2>
+        @endif
         <section
             aria-roledescription="carrusel"
             aria-label="Avisos"
             data-login-photos
             class="@container relative order-3 mx-4 mb-16 overflow-hidden rounded-[14px] border border-base-300 bg-base-100 shadow-[0_2px_4px_rgb(0_0_0/0.08),0_18px_40px_-18px_rgb(0_0_0/0.42)] sm:mx-auto sm:w-[calc(100%-32px)] sm:max-w-[560px] lg:sticky lg:top-0 lg:order-1 lg:m-0 lg:h-svh lg:w-auto lg:max-w-none lg:rounded-none lg:border-0 lg:shadow-none"
-            x-on:mouseenter="hold(true)"
-            x-on:mouseleave="hold(false)"
+            x-on:mouseenter="hover(true)"
+            x-on:mouseleave="hover(false)"
             x-on:focusin="hold(true)"
             x-on:focusout="hold($el.contains($event.relatedTarget))"
         >
@@ -146,7 +148,7 @@
                         class="col-start-1 row-start-1 flex flex-col lg:absolute lg:inset-0"
                     >
                         @if ($notice['image_url'])
-                            <div class="aspect-[16/11] bg-cover bg-center lg:absolute lg:inset-0 lg:aspect-auto" style="background-image: url('{{ $notice['image_url'] }}')" aria-hidden="true"></div>
+                            <img src="{{ $notice['image_url'] }}" alt="" class="aspect-[16/11] w-full object-cover lg:absolute lg:inset-0 lg:aspect-auto lg:h-full" />
                         @else
                             <div class="relative aspect-[16/11] overflow-hidden bg-primary lg:absolute lg:inset-0 lg:aspect-auto" aria-hidden="true">
                                 <x-core::login.blade class="absolute top-[10%] -right-[12%] w-[118%] -rotate-[8deg]" />
@@ -155,7 +157,7 @@
                         <div
                             @class([
                                 'px-5 pt-4 pb-4 lg:absolute lg:top-[clamp(24px,3.4vw,56px)] lg:right-[clamp(24px,3.4vw,56px)] lg:max-w-[calc(100%-2*clamp(24px,3.4vw,56px))] lg:rounded-[12px] lg:px-[clamp(16px,1.6vw,24px)] lg:py-[clamp(12px,1.1vw,16px)] lg:shadow-[0_2px_4px_rgb(0_0_0/0.08),0_18px_40px_-18px_rgb(0_0_0/0.42)] lg:backdrop-blur-md',
-                                'lg:bg-[rgb(236_241_246/0.5)]' => $notice['image_url'],
+                                'lg:bg-base-200/60' => $notice['image_url'],
                                 'lg:bg-white/12 lg:text-white' => ! $notice['image_url'],
                             ])
                         >
@@ -169,13 +171,13 @@
                         </div>
                     </article>
                 @empty
-                    <div class="aspect-[16/11] bg-cover bg-center lg:absolute lg:inset-0 lg:aspect-auto" style="background-image: url('{{ $fallbackPhoto }}')" aria-hidden="true"></div>
+                    <img src="{{ $fallbackPhoto }}" alt="" class="aspect-[16/11] w-full object-cover lg:absolute lg:inset-0 lg:aspect-auto lg:h-full" />
                 @endforelse
             </div>
 
             @if (count($notices) > 1)
                 <div
-                    class="mb-3.5 ml-3 inline-flex items-center gap-0.5 rounded-full px-2.5 py-1 lg:absolute lg:top-[calc(clamp(24px,3.4vw,56px)+clamp(60px,4.6vw,70px))] lg:right-[clamp(24px,3.4vw,56px)] lg:z-10 lg:m-0 lg:bg-[rgb(236_241_246/0.5)] lg:shadow-[0_2px_4px_rgb(0_0_0/0.08),0_18px_40px_-18px_rgb(0_0_0/0.42)] lg:backdrop-blur-md"
+                    class="mb-3.5 ml-3 inline-flex items-center gap-0.5 rounded-full px-2.5 py-1 lg:absolute lg:top-[calc(clamp(24px,3.4vw,56px)+clamp(60px,4.6vw,70px))] lg:right-[clamp(24px,3.4vw,56px)] lg:z-10 lg:m-0 lg:bg-base-200/60 lg:shadow-[0_2px_4px_rgb(0_0_0/0.08),0_18px_40px_-18px_rgb(0_0_0/0.42)] lg:backdrop-blur-md"
                 >
                     @foreach ($notices as $index => $notice)
                         <button
@@ -188,7 +190,7 @@
                         >
                             <i
                                 class="block h-2 overflow-hidden rounded-full transition-[width,background-color] duration-300"
-                                x-bind:class="current === {{ $index }} ? 'w-[34px] bg-[#c9d4de]' : 'w-2 bg-[#8c8a8b] group-hover:bg-primary'"
+                                x-bind:class="current === {{ $index }} ? 'w-[34px] bg-base-300' : 'w-2 bg-neutral group-hover:bg-primary'"
                             ><span data-progress class="block h-full w-full origin-left scale-x-0 bg-primary"></span></i>
                         </button>
                     @endforeach

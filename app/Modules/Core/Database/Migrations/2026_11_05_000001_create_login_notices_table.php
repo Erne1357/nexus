@@ -29,6 +29,8 @@ return new class extends Migration
             $table->index(['is_active', 'sort_order']);
         });
 
+        // Solo enlaces web: la pantalla es pública y un `javascript:` correría en quien lo toque.
+        DB::statement("ALTER TABLE login_notices ADD CONSTRAINT login_notices_link_check CHECK (link_url IS NULL OR link_url ~ '^https?://')");
         DB::statement('ALTER TABLE login_notices ADD CONSTRAINT login_notices_window_check CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at > starts_at)');
     }
 

@@ -48,3 +48,8 @@ it('no guarda un atajo de enlace sin URL ni una vigencia que termina antes de em
     expect(fn () => LoginShortcut::factory()->create(['url' => null]))->toThrow(QueryException::class);
     expect(fn () => LoginNotice::factory()->create(['starts_at' => '2026-11-05', 'ends_at' => '2026-11-04']))->toThrow(QueryException::class);
 });
+
+it('no guarda enlaces que no sean web, porque la pantalla es pública', function () {
+    expect(fn () => LoginNotice::factory()->create(['link_url' => 'javascript:alert(1)']))->toThrow(QueryException::class);
+    expect(fn () => LoginShortcut::factory()->create(['url' => 'javascript:alert(1)']))->toThrow(QueryException::class);
+});

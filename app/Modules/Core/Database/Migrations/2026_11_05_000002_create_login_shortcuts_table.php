@@ -32,6 +32,8 @@ return new class extends Migration
         });
 
         DB::statement("ALTER TABLE login_shortcuts ADD CONSTRAINT login_shortcuts_kind_check CHECK ((kind = 'enlace' AND url IS NOT NULL) OR (kind = 'descarga' AND file_path IS NOT NULL))");
+        // Solo enlaces web: la pantalla es pública y un `javascript:` correría en quien lo toque.
+        DB::statement("ALTER TABLE login_shortcuts ADD CONSTRAINT login_shortcuts_url_check CHECK (url IS NULL OR url ~ '^https?://')");
         DB::statement('ALTER TABLE login_shortcuts ADD CONSTRAINT login_shortcuts_window_check CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at > starts_at)');
     }
 

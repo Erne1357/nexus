@@ -62,10 +62,11 @@ final class FortifyServiceProvider extends ServiceProvider
         Password::defaults(fn (): Password => Password::min(8)->letters()->numbers());
 
         // La pantalla de acceso G (tarea 1.17): avisos del carrusel (LG-01) y atajos (LG-02).
-        Fortify::loginView(fn () => view('core::auth.login', [
-            'notices' => app(LoginScreenQuery::class)->notices(),
-            'shortcuts' => app(LoginScreenQuery::class)->shortcuts(),
-        ]));
+        Fortify::loginView(function () {
+            $screen = app(LoginScreenQuery::class);
+
+            return view('core::auth.login', ['notices' => $screen->notices(), 'shortcuts' => $screen->shortcuts()]);
+        });
         Fortify::confirmPasswordView(fn () => view('core::auth.confirm-password'));
         Fortify::authenticateUsing($this->authenticate(...));
         Fortify::updateUserPasswordsUsing(UpdateUserPassword::class);
