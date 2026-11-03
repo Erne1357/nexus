@@ -89,11 +89,11 @@ it('un nombramiento nuevo cuenta en la siguiente petición', function () {
     $user = User::factory()->withRole(Role::Docente)->create();
     $before = User::find($user->id);
 
-    expect(nextRequestOf($user)->has(Role::Coordinador))->toBeFalse();
+    expect(nextRequestOf($user)->heldRoles())->not->toContain(Role::Coordinador);
 
     RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
 
-    expect(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue()
+    expect(nextRequestOf($user)->heldRoles())->toContain(Role::Coordinador)
         ->and(app(AuthorizationSnapshots::class)->for($before)->roles())->toBe([Role::Docente]);
 });
 
@@ -103,15 +103,15 @@ it('un nombramiento que empieza mañana cuenta desde mañana', function () {
         'role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20), 'valid_from' => today()->addDay()->toDateString(),
     ]);
 
-    expect(nextRequestOf($user)->has(Role::Coordinador))->toBeFalse();
+    expect(nextRequestOf($user)->heldRoles())->not->toContain(Role::Coordinador);
 
     $this->travelTo(CarbonImmutable::parse('2026-11-03 23:59', 'America/Ciudad_Juarez'));
 
-    expect(nextRequestOf($user)->has(Role::Coordinador))->toBeFalse();
+    expect(nextRequestOf($user)->heldRoles())->not->toContain(Role::Coordinador);
 
     $this->travelTo(CarbonImmutable::parse('2026-11-04 00:01', 'America/Ciudad_Juarez'));
 
-    expect(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue();
+    expect(nextRequestOf($user)->heldRoles())->toContain(Role::Coordinador);
 });
 
 it('sin authz_version cargada lee los nombramientos de la base y no los guarda en caché', function () {
@@ -129,15 +129,15 @@ it('refresh() vuelve a leer authz_version y ve un nombramiento nuevo en la misma
     $user = User::factory()->withRole(Role::Docente)->create();
     $context = nextRequestOf($user);
 
-    expect($context->has(Role::Coordinador))->toBeFalse();
+    expect($context->heldRoles())->not->toContain(Role::Coordinador);
 
     RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
 
-    expect($context->has(Role::Coordinador))->toBeFalse();
+    expect($context->heldRoles())->not->toContain(Role::Coordinador);
 
     $context->refresh();
 
-    expect($context->has(Role::Coordinador))->toBeTrue()
+    expect($context->heldRoles())->toContain(Role::Coordinador)
         ->and($context->user()->authz_version)->toBe(User::find($user->id)->authz_version)
         ->and($context->user()->isDirty())->toBeFalse();
 });

@@ -34,8 +34,9 @@ use LogicException;
  *
  * Perfil activo (spec 8.1, AZ-S4): en la sesión de quien entró solo cuenta un puesto, el que eligió, con sus
  * nombramientos. activeRole() es la elección de la sesión (ACTIVE_ROLE) si todavía tiene ese puesto; si no, el último
- * que usó (`users.last_role`) si lo conserva; si no, el primero de heldRoles() en el orden del enum. Sin puestos no
- * hay perfil. Esta clase solo lo lee: lo escribe el cambio de perfil. Sus puestos efectivos (effectiveRoles()) son
+ * que usó (`users.last_role`) si lo conserva; si no, el primero de heldRoles() en el orden del enum, y ese de omisión
+ * queda fijo en la sesión la primera vez que se pregunta. Sin puestos no hay perfil. Elegir otro es del cambio de
+ * perfil (SwitchRole). Sus puestos efectivos (effectiveRoles()) son
  * solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, has, isAdmin, scopes, covers,
  * coversDepartment, canAccessCampus y campuses) responde con ellos. El contexto de otro usuario (forUser()) y uno sin
  * usuario autenticado no tienen perfil activo (el código de consola que fija el usuario del guard sí recibe el
@@ -347,10 +348,11 @@ final class ScopedContext
     }
 
     /**
-     * El perfil con que actúa en su sesión (spec 8.1, AZ-S4): la elección de la sesión si todavía tiene ese puesto;
-     * si no, `users.last_role` si lo conserva; si no, el primero de heldRoles(). Nulo sin puestos, y en el contexto
-     * de otro usuario (forUser()) o sin sesión, que cuentan todos sus puestos. Solo lo lee: no escribe la sesión ni
-     * `last_role`.
+     * El perfil con que actúa en su sesión (spec 8.1, AZ-S4): la elección de la sesión (ACTIVE_ROLE) si todavía tiene
+     * ese puesto. Si la sesión no tiene una que valga, resuelve el de omisión, `users.last_role` si lo conserva o el
+     * primero de heldRoles(), y lo fija en la sesión: así un cambio de perfil en otra sesión (otro dispositivo), que
+     * cambia `last_role`, no le cambia el perfil a esta. Nulo sin puestos, y en el contexto de otro usuario
+     * (forUser()), que no tiene sesión y cuenta todos sus puestos. No escribe `last_role`: eso es del cambio de perfil.
      */
     public function activeRole(): ?Role
     {
@@ -363,16 +365,17 @@ final class ScopedContext
         $selected = $this->session->get(self::ACTIVE_ROLE);
         $selected = $selected instanceof Role ? $selected : (is_string($selected) ? Role::tryFrom($selected) : null);
 
-        $stored = $this->user()?->getAttributes()['last_role'] ?? null;
-        $last = is_string($stored) ? Role::tryFrom($stored) : null;
-
-        foreach ([$selected, $last] as $candidate) {
-            if ($candidate !== null && in_array($candidate, $held, true)) {
-                return $candidate;
-            }
+        if ($selected !== null && in_array($selected, $held, true)) {
+            return $selected;
         }
 
-        return $held[0];
+        $stored = $this->user()?->getAttributes()['last_role'] ?? null;
+        $last = is_string($stored) ? Role::tryFrom($stored) : null;
+        $default = $last !== null && in_array($last, $held, true) ? $last : $held[0];
+
+        $this->session->put(self::ACTIVE_ROLE, $default->value);
+
+        return $default;
     }
 
     /**

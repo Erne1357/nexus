@@ -1,7 +1,10 @@
 <?php
 
 use App\Modules\Core\Actions\SetActiveContext;
+use App\Modules\Core\Actions\SwitchRole;
+use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\OrgTree;
+use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -11,6 +14,8 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Session\ArraySessionHandler;
+use Illuminate\Session\Store;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -697,11 +702,17 @@ describe('perfil activo', function () {
             ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
             ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey($department)])
             ->create(['last_role' => $last]);
+        // Cada persona entra con una sesión nueva: el perfil de omisión queda fijo en la sesión de quien entró.
+        $loginAs = function (User $user): ScopedContext {
+            session()->flush();
 
-        expect(scopedContextOf($holder(Role::Coordinador, 10))->activeRole())->toBe(Role::Coordinador)
-            ->and(scopedContextOf($holder(Role::Subdireccion, 11))->activeRole())->toBe(Role::JefeDepartamento)
-            ->and(scopedContextOf($holder(null, 12))->activeRole())->toBe(Role::JefeDepartamento)
-            ->and(scopedContextOf(User::factory()->create(['last_role' => Role::Docente]))->activeRole())->toBeNull();
+            return scopedContextOf($user);
+        };
+
+        expect($loginAs($holder(Role::Coordinador, 10))->activeRole())->toBe(Role::Coordinador)
+            ->and($loginAs($holder(Role::Subdireccion, 11))->activeRole())->toBe(Role::JefeDepartamento)
+            ->and($loginAs($holder(null, 12))->activeRole())->toBe(Role::JefeDepartamento)
+            ->and($loginAs(User::factory()->create(['last_role' => Role::Docente]))->activeRole())->toBeNull();
 
         $user = $holder(Role::Docente, 13);
         actingAsRole($user, Role::Coordinador);
@@ -715,6 +726,26 @@ describe('perfil activo', function () {
         session([ScopedContext::ACTIVE_ROLE => 'no-es-un-puesto']);
 
         expect(app(ScopedContext::class)->activeRole())->toBe(Role::Docente);
+    });
+
+    it('cambiar de perfil en otra sesión no cambia el perfil de esta', function () {
+        $user = User::factory()
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create();
+        // El dispositivo A tiene su propia sesión; cada petición suya arma su contexto con el usuario recién leído.
+        $sessionA = new Store('nexus_session', new ArraySessionHandler(120));
+        $requestInA = fn (): ScopedContext => new ScopedContext(fn (): ?User => $user->fresh(), app(OrgTree::class), app(AuthorizationSnapshots::class), app(PermissionRegistry::class), $sessionA);
+
+        expect($requestInA()->activeRole())->toBe(Role::JefeDepartamento);
+
+        // El dispositivo B (la sesión de la prueba) cambia a Coordinación, que queda como `last_role`.
+        $this->actingAs($user);
+        app(SwitchRole::class)->handle(Role::Coordinador);
+
+        expect($user->fresh()->last_role)->toBe(Role::Coordinador)
+            ->and($requestInA()->activeRole())->toBe(Role::JefeDepartamento)
+            ->and($sessionA->get(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
     });
 
     it('un last_role desconocido no rompe el perfil activo', function () {
