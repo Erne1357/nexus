@@ -76,7 +76,7 @@ it('deja en la bitácora del periodo la apertura, con el campus y el reporte', f
         ->description->toBe('Abrió el periodo 20271 en C2')
         ->and($entry->subject->is($term))->toBeTrue()
         ->and($entry->causer->is($this->opener))->toBeTrue()
-        ->and($entry->properties->toArray())->toBe(['campus_id' => $campus->id, 'report' => ['3 cosas nuevas']]);
+        ->and($entry->properties->toArray())->toBe(['campus_id' => $campus->id, 'report' => ['3 cosas nuevas'], 'acting_as' => 'admin']);
 });
 
 it('volver a abrir no repite la apertura ni cambia quién y cuándo, y registra que completó la apertura', function () {
@@ -95,7 +95,7 @@ it('volver a abrir no repite la apertura ni cambia quién y cuándo, y registra 
 
     expect($entry->description)->toBe('Completó la apertura del periodo 20271 en C2')
         ->and($entry->causer->is($other))->toBeTrue()
-        ->and($entry->properties->toArray())->toBe(['campus_id' => $campus->id, 'report' => []]);
+        ->and($entry->properties->toArray())->toBe(['campus_id' => $campus->id, 'report' => [], 'acting_as' => 'admin']);
 });
 
 it('vuelve a despachar TermOpened al completar una apertura, para crear lo que falte', function () {
