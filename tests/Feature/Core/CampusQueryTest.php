@@ -85,9 +85,10 @@ it('a la subdirección le lista solo los campus de su alcance', function () {
 });
 
 it('a la subdirección nunca le lista inactivos, aunque su alcance sea de uno o los pida', function () {
+    // El alcance en EAD es de otro puesto: la Subdirección es una sola por unidad en cada fecha (AZ-S7).
     $subdireccion = User::factory()
         ->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])
-        ->withRole(Role::Subdireccion, ['campus_id' => $this->ead->id])
+        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->ead->id, 'department_id' => departmentKey(10)])
         ->create();
 
     expect(campusCodesFor($subdireccion))->toBe(['C1'])

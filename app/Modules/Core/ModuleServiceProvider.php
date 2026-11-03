@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core;
 
+use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Navigation\NavigationItem;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -81,6 +82,39 @@ abstract class ModuleServiceProvider extends ServiceProvider
      * @return list<NavigationItem>
      */
     public function navigation(): array
+    {
+        return [];
+    }
+
+    /**
+     * Enums de permisos que declara el módulo (cada uno implementa Permission). Core los junta en el
+     * registro inmutable PermissionRegistry, que rechaza claves repetidas o que no sean
+     * `modulo.recurso.accion`.
+     *
+     * @return list<class-string<Permission>>
+     */
+    public function permissions(): array
+    {
+        return [];
+    }
+
+    /**
+     * Permisos que el módulo concede a cada puesto, con llave `Role->value`. Solo se pueden conceder
+     * permisos declarados; el admin no se lista: tiene todo menos adminDenies().
+     *
+     * @return array<string, list<Permission>>
+     */
+    public function grants(): array
+    {
+        return [];
+    }
+
+    /**
+     * Permisos declarados que el admin no tiene aunque tenga todo lo demás.
+     *
+     * @return list<Permission>
+     */
+    public function adminDenies(): array
     {
         return [];
     }

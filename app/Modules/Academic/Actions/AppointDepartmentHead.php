@@ -14,23 +14,22 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
-use Spatie\Permission\Models\Role as SpatieRole;
 use Throwable;
 
 /**
  * Nombra a un usuario jefe de un departamento o jefe de proyecto docente de un departamento en un campus, del día
- * `$from` al `$to` (sin fin si es nulo). Jefaturas (confirmado el 30 de octubre de 2026): al guardar recibe rol y
- * alcance. En una transacción escribe la fila de `department_heads`, le da el rol de spatie
- * (`DepartmentHeadKind::role()`) y un alcance (`role_scopes`) con el mismo campus, departamento y fechas, que es lo
- * que cuenta ScopedContext. Quién puede nombrar lo decide la policy antes de llamarla.
+ * `$from` al `$to` (sin fin si es nulo). Jefaturas (confirmado el 30 de octubre de 2026): al guardar recibe su
+ * nombramiento. En una transacción escribe la fila de `department_heads` y un nombramiento (`role_assignments`) del puesto
+ * (`DepartmentHeadKind::role()`) con el mismo campus, fechas y, como unidad,
+ * el departamento, que es lo que cuenta ScopedContext. Quién puede nombrar lo decide la policy antes de llamarla.
  *
  * El jefe es uno por departamento para todo el Tec (confirmado el 30 de octubre de 2026): no lleva campus, y su
  * alcance tampoco. El jefe de proyecto docente es de un campus (supuesto por confirmar). Un campus para el jefe, o
  * ninguno para el jefe de proyecto docente, es una ValidationException sobre `campus`.
  *
  * Un usuario inactivo no se nombra: es una ValidationException sobre `user`. La base rechaza un segundo jefe vigente
- * del departamento, y a la misma persona dos veces en el mismo cargo con fechas que se traslapan (confirmado el 29
- * de octubre de 2026). Los dos rechazos se vuelven una
+ * del departamento, en `department_heads` o en sus nombramientos (AZ-S7), y a la misma persona dos veces en el mismo
+ * cargo con fechas que se traslapan (confirmado el 29 de octubre de 2026). Los rechazos se vuelven una
  * ValidationException sobre `user` y no se escribe nada. Deja la bitácora sobre el usuario, recarga ScopedContext
  * (también el del usuario autenticado) y avisa con DepartmentHeadAppointed después del commit.
  */
@@ -84,15 +83,17 @@ final class AppointDepartmentHead
 
             $role = $kind->role();
 
-            $user->unsetRelation('roles');
-            $user->assignRole(SpatieRole::findOrCreate($role->value));
-            $user->roleScopes()->create([
-                'role' => $role,
-                'campus_id' => $campus?->getKey(),
-                'department_id' => $department->getKey(),
-                'valid_from' => $validFrom,
-                'valid_to' => $validTo,
-            ]);
+            try {
+                $user->roleAssignments()->create([
+                    'role' => $role,
+                    'campus_id' => $campus?->getKey(),
+                    'org_unit_id' => $department->getKey(),
+                    'valid_from' => $validFrom,
+                    'valid_to' => $validTo,
+                ]);
+            } catch (QueryException $exception) {
+                throw $this->overlapping($exception, $department, $campus, $user, $kind);
+            }
 
             activity()
                 ->performedOn($user)
@@ -116,8 +117,9 @@ final class AppointDepartmentHead
     }
 
     /**
-     * El rechazo de una de las exclusiones de `department_heads` (SQLSTATE 23P01, `exclusion_violation`) como error
-     * de validación; otro error de la base sigue igual, aunque su mensaje nombre la restricción.
+     * El rechazo de una de las exclusiones de `department_heads` o de `role_assignments_one_jefe` (SQLSTATE 23P01,
+     * `exclusion_violation`) como error de validación; otro error de la base sigue igual, aunque su mensaje nombre la
+     * restricción.
      */
     private function overlapping(QueryException $exception, Department $department, ?Campus $campus, User $user, DepartmentHeadKind $kind): Throwable
     {
@@ -127,7 +129,7 @@ final class AppointDepartmentHead
 
         $message = $exception->getMessage();
 
-        if (str_contains($message, 'department_heads_one_jefe')) {
+        if (str_contains($message, 'department_heads_one_jefe') || str_contains($message, 'role_assignments_one_jefe')) {
             return ValidationException::withMessages(['user' => "Ya hay un jefe de {$department->name} vigente en esas fechas."]);
         }
 

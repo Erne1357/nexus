@@ -4,7 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\ProvisionTeacherUsers;
 use App\Modules\Faculty\Jobs\ProvisionTeacherUsersJob;
@@ -59,8 +59,8 @@ it('con 3 activos, 1 inactivo, 1 borrado y 1 conflicto devuelve las cuentas', fu
     expect($created)->toHaveCount(3)
         ->and($created->pluck('password')->unique())->toHaveCount(1)
         ->and($created->every(fn (User $user): bool => $user->must_change_password && $user->is_active))->toBeTrue()
-        ->and(RoleScope::where('role', Role::Docente)->whereNull('campus_id')->whereIn('user_id', $created->pluck('id'))->count())->toBe(3)
-        ->and(RoleScope::whereNotNull('campus_id')->exists())->toBeFalse()
+        ->and(RoleAssignment::where('role', Role::Docente)->whereNull('campus_id')->whereIn('user_id', $created->pluck('id'))->count())->toBe(3)
+        ->and(RoleAssignment::whereNotNull('campus_id')->exists())->toBeFalse()
         ->and($run->subject)->toBeNull()
         ->and($run->description)->toBe('Sincronizó el acceso de 6 docentes: 3 usuarios creados, 0 ligados, 0 actualizados, 2 sin cambios y 1 en conflicto')
         ->and($run->properties->all())->toBe([

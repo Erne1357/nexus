@@ -8,6 +8,9 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\Core\Authorization\OrgTree;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\RoleAssignment;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Builder;
@@ -61,6 +64,25 @@ function lastToastOf(Testable $component): ?array
         ->last(fn (string $expression): bool => str_starts_with($expression, 'toast('));
 
     return $expression === null ? null : json_decode(substr($expression, 6, -1), true)['toast'];
+}
+
+/**
+ * Deja libre un puesto exclusivo (AZ-S7: una Subdirección y un jefe por unidad en cada fecha) para nombrar a otra
+ * persona desde hoy: los nombramientos de `$role` en la unidad que empezaron antes de hoy terminan ayer, como un
+ * relevo, y los que empiezan hoy o después se borran. La Subdirección va, sin `$orgUnitId`, en Subdirección
+ * Académica. El nombramiento nuevo debe empezar hoy (`'valid_from' => today()->toDateString()`).
+ */
+function vacate(Role $role, ?string $orgUnitId = null): void
+{
+    $unit = $orgUnitId ?? app(OrgTree::class)->idOf(OrgTree::ACADEMIC);
+    $today = today()->toDateString();
+    $seat = fn () => RoleAssignment::query()
+        ->where('role', $role)
+        ->where('org_unit_id', $unit)
+        ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $today));
+
+    $seat()->where('valid_from', '>=', $today)->delete();
+    $seat()->update(['valid_to' => today()->subDay()->toDateString()]);
 }
 
 /**

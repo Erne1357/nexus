@@ -5,7 +5,6 @@ use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -20,7 +19,6 @@ use Spatie\Activitylog\Models\Activity;
 */
 
 it('es un job en cola que avisa solo a los departamentos dados y deja bitácora de quien lo pidió', function () {
-    $this->seed(RoleSeeder::class);
     Notification::fake();
     $term = Term::factory()->current()->create();
     $campus = Campus::factory()->create(['code' => 'C2']);

@@ -6,12 +6,12 @@ use Illuminate\Support\Str;
 
 /*
 | ADR-0014: las tablas de Nexus usan UUIDv7 en la llave primaria y en toda columna que apunta a
-| un registro, también las polimórficas de la bitácora y de spatie. Solo conservan bigint las
-| tablas de infraestructura de Laravel y de spatie, que no son entidades de Nexus: sus llaves
+| un registro, también las polimórficas de la bitácora. Solo conservan bigint las
+| tablas de infraestructura de Laravel y la bitácora, que no son entidades de Nexus: sus llaves
 | no salen en URLs ni las referencia otra tabla de Nexus.
 */
 
-$infrastructureTables = ['activity_log', 'failed_jobs', 'jobs', 'permissions', 'roles'];
+$infrastructureTables = ['activity_log', 'failed_jobs', 'jobs'];
 
 $columns = fn (): array => DB::select(<<<'SQL'
     select table_name, column_name, data_type, column_default
@@ -46,13 +46,7 @@ it('usa uuid en toda columna que apunta a un registro de Nexus', function () use
         ->map(fn (object $column): string => "{$column->table_name}.{$column->column_name}")
         ->values();
 
-    // Solo las que apuntan a los roles y permisos de spatie, que siguen en bigint.
-    expect($bigintReferences->all())->toEqualCanonicalizing([
-        'model_has_permissions.permission_id',
-        'model_has_roles.role_id',
-        'role_has_permissions.permission_id',
-        'role_has_permissions.role_id',
-    ]);
+    expect($bigintReferences->all())->toBeEmpty();
 });
 
 it('genera un UUIDv7 en la app al crear un modelo', function () {

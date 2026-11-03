@@ -50,7 +50,7 @@ final class DeleteDepartment
                 throw ValidationException::withMessages(['department' => $event->reasons()]);
             }
 
-            $this->closeRoleScopes->handle('department_id', $department->id);
+            $this->closeRoleScopes->handle('org_unit_id', $department->id);
 
             $department->delete();
 

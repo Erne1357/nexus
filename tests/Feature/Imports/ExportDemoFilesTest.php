@@ -6,7 +6,6 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
@@ -51,7 +50,7 @@ beforeEach(function () {
 
         public function run(): void
         {
-            $this->call([RoleSeeder::class, CampusSeeder::class, AdminUserSeeder::class, DemoTermSeeder::class]);
+            $this->call([CampusSeeder::class, AdminUserSeeder::class, DemoTermSeeder::class]);
             $this->callWith(AcademicDemoSeeder::class, ['campuses' => ['C2']]);
             $this->callWith(DemoStaffSeeder::class, ['campuses' => ['C2']]);
             $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C2']]);

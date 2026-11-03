@@ -40,7 +40,7 @@ docker compose exec app composer require <paquete>         # dependencias siempr
 | Livewire 4 MFC + MaryUI (daisyUI) + Tailwind 4 | Sin SPA, sin API para la UI |
 | PostgreSQL 18 | Única fuente de verdad; pruebas contra `nexus_test`, nunca SQLite |
 | Valkey | Caché, sesiones y colas (`redis`) |
-| Fortify (username) + spatie/permission + alcances propios | Sin registro público |
+| Fortify (username) + puestos y nombramientos propios (ADR-0018) | Sin registro público |
 | spatie/activitylog | Bitácora inmutable |
 | Pest 5 | Unit, feature, browser y arch |
 | Laravel Boost (MCP) | Docs exactas de Laravel, Livewire y Pest; ver `docs/herramientas/ia-tooling.md` |

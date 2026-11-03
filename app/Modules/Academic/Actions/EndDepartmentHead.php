@@ -4,7 +4,7 @@ namespace App\Modules\Academic\Actions;
 
 use App\Modules\Academic\Events\DepartmentHeadEnded;
 use App\Modules\Academic\Models\DepartmentHead;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
@@ -15,14 +15,15 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Termina una jefatura y su alcance con `$lastDay` como último día, con la regla de CloseRoleScopes (confirmado el
  * 29 de octubre de 2026): si ya empezó, la jefatura y su alcance terminan ese día (`valid_to`); si empieza
  * después, las dos se borran, porque `valid_to` no puede ser anterior a `valid_from` (la jefatura de forma
- * lógica; el alcance, que no tiene borrado lógico, de verdad). Su alcance es el que escribió AppointDepartmentHead:
- * mismo usuario, rol, campus (ninguno para el jefe, que es de todo el Tec) y departamento, y el mismo `valid_from`;
+ * lógica; el alcance, que no tiene borrado lógico, de verdad). Su alcance es el nombramiento (`role_assignments`)
+ * que escribió AppointDepartmentHead: mismo usuario, rol, campus (ninguno para el jefe, que es de todo el Tec) y
+ * departamento como unidad, y el mismo `valid_from`;
  * otro alcance del mismo cargo que empezó otro día o que tiene otro campus (uno capturado a mano, uno de antes de que
  * el jefe fuera de todo el Tec o el de otra jefatura) no se toca. Si no encuentra ninguno, termina solo la jefatura
  * y la bitácora lo dice.
  *
  * Nunca alarga: una jefatura borrada o que ya termina para `$lastDay` se queda como está, sin bitácora ni aviso.
- * El rol de spatie se queda, porque sin alcance vigente no cuenta en ScopedContext. Deja la bitácora sobre el
+ * Deja la bitácora sobre el
  * usuario, recarga ScopedContext y avisa con DepartmentHeadEnded después del commit.
  */
 final class EndDepartmentHead
@@ -98,14 +99,15 @@ final class EndDepartmentHead
     }
 
     /**
-     * Los alcances de la jefatura: mismo usuario, rol, campus, departamento y `valid_from`, como los escribe
-     * AppointDepartmentHead. El del jefe no tiene campus (`campus_id` nulo); uno con campus del mismo día no es suyo.
+     * Los nombramientos de la jefatura: mismo usuario, rol, campus, departamento (como unidad) y `valid_from`, como
+     * los escribe AppointDepartmentHead. El del jefe no tiene campus (`campus_id` nulo); uno con campus del mismo día
+     * no es suyo.
      *
-     * @return Collection<int, RoleScope>
+     * @return Collection<int, RoleAssignment>
      */
     private function scopesOf(DepartmentHead $head): Collection
     {
-        return RoleScope::query()
+        return RoleAssignment::query()
             ->where('user_id', $head->user_id)
             ->where('role', $head->kind->role())
             ->when(
@@ -113,7 +115,7 @@ final class EndDepartmentHead
                 fn ($query) => $query->whereNull('campus_id'),
                 fn ($query) => $query->where('campus_id', $head->campus_id),
             )
-            ->where('department_id', $head->department_id)
+            ->where('org_unit_id', $head->department_id)
             ->whereNull('career_id')
             ->where('valid_from', $head->valid_from->toDateString())
             ->lockForUpdate()

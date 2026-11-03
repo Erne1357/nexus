@@ -7,21 +7,22 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\DepartmentHead;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 use RuntimeException;
-use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
- * Usuarios de prueba del demo, con su rol y su alcance vigentes desde hoy:
+ * Usuarios de prueba del demo, con su nombramiento (`role_assignments`) vigente desde hoy:
  *
- * - `subdir`: Subdirección Académica, una para todo el Tec (sin campus).
+ * - `subdir`: Subdirección Académica, una para todo el Tec (sin campus), sobre la unidad Subdirección Académica.
  * - `jefe.<depto>`: jefe de cada departamento activo de los campus de `$campuses`, de todo el Tec (sin campus).
  * - `jpd.<depto>.<campus>`: jefe de proyecto docente del departamento en cada campus de `$campuses`.
  * - `coord.<carrera>.<campus>`: coordinador de cada carrera ofrecida en el campus (`alias` de data/careers.php).
@@ -30,8 +31,11 @@ use Spatie\Permission\Models\Role as SpatieRole;
  * sus planes vigentes. Jefes y jefes de proyecto docente llevan su fila en `department_heads`.
  *
  * Entran con la contraseña `password` sin tener que cambiarla (supuesto S5, por confirmar). Requiere el catálogo
- * (AcademicDemoSeeder) y los roles (RoleSeeder). A un usuario que ya existe solo se le completan el rol y el
- * alcance si le faltan, y un departamento que ya tiene jefe vigente lo conserva. No corre en producción.
+ * (AcademicDemoSeeder), y la unidad Subdirección Académica. A un usuario que ya existe solo
+ * se le completan el rol y el nombramiento si le faltan, y un departamento que ya tiene jefe vigente lo conserva.
+ * Los puestos exclusivos son uno por unidad (AZ-S7): si la Subdirección Académica o un departamento ya tienen, de
+ * otro usuario, un nombramiento de Subdirección o de jefe vigente o por empezar, no se crea `subdir` o
+ * `jefe.<depto>`. No corre en producción.
  */
 class DemoStaffSeeder extends Seeder
 {
@@ -49,7 +53,12 @@ class DemoStaffSeeder extends Seeder
         $aliases = array_map(fn (array $career): string => $career['alias'], AcademicDemoSeeder::data('careers'));
         $headed = [];
 
-        $this->user('subdir', 'Subdirección Académica', Role::Subdireccion, []);
+        $academic = app(OrgTree::class)->idOf(OrgTree::ACADEMIC)
+            ?? throw new RuntimeException('Falta la unidad '.OrgTree::ACADEMIC.': corre antes las migraciones.');
+
+        if (! $this->seatTaken(Role::Subdireccion, $academic, 'subdir')) {
+            $this->user('subdir', 'Subdirección Académica', Role::Subdireccion, ['org_unit_id' => $academic]);
+        }
 
         foreach ($campuses as $code) {
             $campus = Campus::query()->where('code', $code)->first()
@@ -61,12 +70,15 @@ class DemoStaffSeeder extends Seeder
                 $slug = Str::lower($department->code);
 
                 if (! isset($headed[$department->id])) {
-                    $head = $this->user("jefe.{$slug}", "Jefatura de {$department->name}", Role::JefeDepartamento, ['department_id' => $department->id]);
-                    $this->head($head, $department, null, DepartmentHeadKind::Jefe);
+                    if (! $this->seatTaken(Role::JefeDepartamento, $department->id, "jefe.{$slug}")) {
+                        $head = $this->user("jefe.{$slug}", "Jefatura de {$department->name}", Role::JefeDepartamento, ['org_unit_id' => $department->id]);
+                        $this->head($head, $department, null, DepartmentHeadKind::Jefe);
+                    }
+
                     $headed[$department->id] = true;
                 }
 
-                $projectLead = $this->user("jpd.{$slug}.{$suffix}", "Jefatura de proyecto docente de {$department->name} · {$campus->name}", Role::JefeProyectoDocente, ['campus_id' => $campus->id, 'department_id' => $department->id]);
+                $projectLead = $this->user("jpd.{$slug}.{$suffix}", "Jefatura de proyecto docente de {$department->name} · {$campus->name}", Role::JefeProyectoDocente, ['campus_id' => $campus->id, 'org_unit_id' => $department->id]);
                 $this->head($projectLead, $department, $campus, DepartmentHeadKind::JefeProyectoDocente);
             }
 
@@ -110,14 +122,15 @@ class DemoStaffSeeder extends Seeder
     }
 
     /**
-     * El usuario con ese username, nuevo si no existe, con el rol y un alcance vigente sobre exactamente `$scope`:
-     * si una corrida anterior lo dejó sin rol o sin alcance, se los da (desde hoy) sin duplicar los que ya tiene.
+     * El usuario con ese username, nuevo si no existe, con un nombramiento vigente sobre exactamente
+     * `$scope`: si una corrida anterior lo dejó sin nombramiento, se lo da (desde hoy) sin duplicar los que
+     * ya tiene. En un puesto exclusivo basta uno vigente en la misma unidad, con el campus que sea.
      *
      * @param  array<string, string>  $scope
      */
     private function user(string $username, string $name, Role $role, array $scope): User
     {
-        $scope = ['campus_id' => null, 'department_id' => null, 'career_id' => null, ...$scope];
+        $scope = ['campus_id' => null, 'org_unit_id' => null, 'career_id' => null, ...$scope];
         $user = User::query()->where('username', $username)->first();
 
         if ($user === null) {
@@ -126,13 +139,35 @@ class DemoStaffSeeder extends Seeder
                 ->create(['username' => $username, 'name' => $name, 'email' => null, 'email_verified_at' => null]);
         }
 
-        $user->assignRole(SpatieRole::findOrCreate($role->value));
+        $held = $user->roleAssignments()
+            ->current()
+            ->where('role', $role)
+            ->where($role->isExclusive() ? ['org_unit_id' => $scope['org_unit_id']] : $scope)
+            ->exists();
 
-        if (! $user->roleScopes()->current()->where(['role' => $role, ...$scope])->exists()) {
-            $user->roleScopes()->create(['role' => $role, ...$scope, 'valid_from' => today()->toDateString()]);
+        if (! $held) {
+            $user->roleAssignments()->create(['role' => $role, ...$scope, 'valid_from' => today()->toDateString()]);
         }
 
         return $user;
+    }
+
+    /**
+     * Si el puesto exclusivo de la unidad ya está ocupado o apartado: un nombramiento vigente o por empezar de otro
+     * usuario, o uno por empezar de `$username`, con el que chocaría el de hoy.
+     */
+    private function seatTaken(Role $role, string $unit, string $username): bool
+    {
+        $today = today()->toDateString();
+
+        return RoleAssignment::query()
+            ->where('role', $role)
+            ->where('org_unit_id', $unit)
+            ->notEnded()
+            ->where(fn (Builder $query) => $query
+                ->whereRelation('user', 'username', '<>', $username)
+                ->orWhere('valid_from', '>', $today))
+            ->exists();
     }
 
     /**

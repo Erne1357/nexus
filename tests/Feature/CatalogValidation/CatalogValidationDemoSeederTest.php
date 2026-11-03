@@ -12,7 +12,6 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Actions\OpenTerm;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -37,7 +36,6 @@ use Spatie\Activitylog\Models\Activity;
  */
 function seedCatalogScenario(array $campuses = ['C1', 'C2'], bool $previous = true): void
 {
-    test()->seed(RoleSeeder::class);
     $admin = User::factory()->admin()->create(['username' => 'admin']);
     test()->actingAs($admin);
 
@@ -93,7 +91,6 @@ it('rechaza correr en producción', function () {
 });
 
 it('no hace nada si no hay periodos abiertos', function () {
-    test()->seed(RoleSeeder::class);
     User::factory()->admin()->create(['username' => 'admin']);
     Term::factory()->create(['code' => '20271']);
 

@@ -9,8 +9,8 @@ use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
- * Usuario `admin` con rol admin, obligado a cambiar su contraseña en el primer acceso. Requiere
- * RoleSeeder antes.
+ * Usuario `admin` con un nombramiento `admin` sin alcance (desde hoy, sin duplicarlo) y obligado a cambiar su
+ * contraseña en el primer acceso.
  *
  * La contraseña inicial sale de `auth.admin_initial_password` (ADMIN_INITIAL_PASSWORD), obligatoria
  * fuera de local y testing para que producción nunca tenga una contraseña conocida. En local y
@@ -31,7 +31,9 @@ class AdminUserSeeder extends Seeder
             'must_change_password' => true,
         ]);
 
-        $admin->assignRole(Role::Admin->value);
+        if (! $admin->roleAssignments()->current()->where('role', Role::Admin)->exists()) {
+            $admin->roleAssignments()->create(['role' => Role::Admin, 'valid_from' => today()->toDateString()]);
+        }
     }
 
     private function initialPassword(): string

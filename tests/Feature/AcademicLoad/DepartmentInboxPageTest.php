@@ -555,7 +555,8 @@ describe('alcance', function () {
 
     it('un jefe de otro campus no ve la bandeja', function () {
         $otroCampus = Campus::factory()->create();
-        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $otroCampus->id, 'department_id' => $this->cb->id])->create();
+        vacate(Role::JefeDepartamento, $this->cb->id);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $otroCampus->id, 'department_id' => $this->cb->id, 'valid_from' => today()->toDateString()])->create();
 
         inboxPageAs($jefe)->assertDontSee('Nota de ISC');
     });
@@ -589,8 +590,9 @@ describe('alcance', function () {
     });
 
     it('un jefe que cubre dos departamentos los elige y cambia de bandeja', function () {
+        vacate(Role::JefeDepartamento, $this->cb->id);
         $jefe = User::factory()
-            ->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->cb->id])
+            ->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->cb->id, 'valid_from' => today()->toDateString()])
             ->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])
             ->create();
 

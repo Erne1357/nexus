@@ -93,7 +93,7 @@ it('pregunta por otro usuario sin cargar los roles ni alcances del autenticado',
     DB::enableQueryLog();
     Gate::forUser($coordinador)->allows('update', $this->item);
 
-    $scopeQueries = collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'role_scopes'));
+    $scopeQueries = collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'role_assignments'));
 
     expect($scopeQueries)->toHaveCount(1);
 });

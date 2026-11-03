@@ -10,19 +10,9 @@ use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role as SpatieRole;
 
 beforeEach(function () {
     config(['auth.admin_initial_password' => 'Inicial-2026!']);
-});
-
-it('crea los seis roles de R1 sin permisos finos', function () {
-    $this->seed(DatabaseSeeder::class);
-
-    expect(SpatieRole::pluck('name')->all())->toEqualCanonicalizing([
-        'admin', 'subdireccion', 'jefe_departamento', 'jefe_proyecto_docente', 'coordinador', 'docente',
-    ])->and(Permission::count())->toBe(0);
 });
 
 it('crea los cinco campus con su modalidad', function () {
@@ -108,15 +98,30 @@ it('siembra TecNM Virtual con docentes externos', function () {
     expect(Campus::where('code', 'TNMV')->sole()->profile->allowExternalTeachers)->toBeTrue();
 });
 
-it('crea el admin activo, con rol admin, la contraseña inicial configurada y obligado a cambiarla', function () {
+it('crea el admin activo, con nombramiento admin, la contraseña inicial configurada y obligado a cambiarla', function () {
     $this->seed(DatabaseSeeder::class);
 
     $admin = User::where('username', 'admin')->sole();
 
     expect($admin->is_active)->toBeTrue()
         ->and($admin->must_change_password)->toBeTrue()
-        ->and($admin->hasRole(Role::Admin->value))->toBeTrue()
+        ->and($admin->roleAssignments()->current()->where('role', Role::Admin)->exists())->toBeTrue()
         ->and(Hash::check('Inicial-2026!', $admin->password))->toBeTrue();
+});
+
+it('AdminUserSeeder da al admin un nombramiento admin sin alcance, desde hoy y sin duplicarlo', function () {
+    $this->seed(DatabaseSeeder::class);
+    $this->seed(AdminUserSeeder::class);
+
+    $assignments = User::where('username', 'admin')->sole()->roleAssignments()->get();
+
+    expect($assignments)->toHaveCount(1)
+        ->and($assignments->first()->role)->toBe(Role::Admin)
+        ->and($assignments->first()->campus_id)->toBeNull()
+        ->and($assignments->first()->org_unit_id)->toBeNull()
+        ->and($assignments->first()->career_id)->toBeNull()
+        ->and($assignments->first()->valid_from->toDateString())->toBe(today()->toDateString())
+        ->and($assignments->first()->valid_to)->toBeNull();
 });
 
 it('genera y muestra una contraseña aleatoria para el admin en local o testing si no se configura', function () {
@@ -155,8 +160,7 @@ it('no duplica ni pisa lo sembrado al volver a sembrar', function () {
     config(['auth.admin_initial_password' => null]);
     $this->app->make(DatabaseSeeder::class)->run();
 
-    expect(SpatieRole::count())->toBe(6)
-        ->and(Campus::withTrashed()->count())->toBe(5)
+    expect(Campus::withTrashed()->count())->toBe(5)
         ->and(Campus::where('code', 'ENL')->exists())->toBeFalse()
         ->and(Campus::where('code', 'C2')->sole()->profile->requiresSubdireccionApproval)->toBeTrue()
         ->and(User::where('username', 'admin')->count())->toBe(1)

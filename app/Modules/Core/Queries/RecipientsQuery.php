@@ -11,8 +11,11 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * A quién le llega un aviso del proceso (tarea 2.9): los usuarios activos que, con `$role`, cubren el campus
  * y, si se piden, el departamento o la carrera. La regla es la misma de las policies (ScopedContext::covers):
- * un alcance sin campus vale en cualquier campus activo. Cuenta solo el alcance: el admin lo cubre todo sin
- * tenerlo, y los avisos van a quien hace el trabajo; un admin que además tiene el alcance sí los recibe.
+ * un nombramiento sin campus vale en cualquier campus activo, y uno sobre una unidad cubre los departamentos de su
+ * subárbol. Cuenta solo el nombramiento: el admin lo cubre todo sin tenerlo, y los avisos van a quien hace el
+ * trabajo; un admin que además tiene el nombramiento sí los recibe.
+ *
+ * En SQL solo se acota por puesto vigente y carrera; la unidad, que es jerárquica, la decide coversWithScope().
  */
 final class RecipientsQuery
 {
@@ -25,10 +28,9 @@ final class RecipientsQuery
     {
         $candidates = User::query()
             ->where('is_active', true)
-            ->whereHas('roleScopes', fn (Builder $scopes) => $scopes
+            ->whereHas('roleAssignments', fn (Builder $assignments) => $assignments
                 ->current()
                 ->where('role', $role)
-                ->when($department !== null, fn (Builder $query) => $query->where(fn (Builder $any) => $any->whereNull('department_id')->orWhere('department_id', $department)))
                 ->when($career !== null, fn (Builder $query) => $query->where(fn (Builder $any) => $any->whereNull('career_id')->orWhere('career_id', $career))))
             ->orderBy('name')
             ->get();

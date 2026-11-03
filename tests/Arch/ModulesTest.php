@@ -246,3 +246,7 @@ test('module queries and components look up keys through KeyLookup', function (s
 
     expect($violations)->toBeEmpty(implode(PHP_EOL, $violations));
 })->with(array_keys($leftOf));
+
+arch('nobody uses spatie/permission')
+    ->expect('Spatie\\Permission')
+    ->not->toBeUsed();

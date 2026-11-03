@@ -4,7 +4,7 @@ use App\Modules\Core\Actions\SetTermStage;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Livewire\Livewire;
@@ -56,7 +56,7 @@ it('al admin le muestra el bloque de administración y no uno por cada rol', fun
 
 it('a quien no tiene un rol vigente le dice que pida uno', function () {
     $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
-    RoleScope::where('user_id', $user->id)->update(['valid_to' => today()->subDay()]);
+    RoleAssignment::where('user_id', $user->id)->update(['valid_to' => today()->subDay()]);
 
     $this->actingAs($user);
 
@@ -190,7 +190,7 @@ describe('calendario en Inicio', function () {
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
 
         $user = homeCalendarUser($this->campus);
-        RoleScope::where('user_id', $user->id)->update(['valid_to' => today()->subDay()]);
+        RoleAssignment::where('user_id', $user->id)->update(['valid_to' => today()->subDay()]);
         $this->actingAs($user);
 
         Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');

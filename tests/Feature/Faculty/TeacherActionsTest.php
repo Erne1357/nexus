@@ -80,7 +80,7 @@ describe('alta', function () {
             ->is_primary->toBeTrue()
             ->and($teacher->user)->not->toBeNull()
             ->and($teacher->user->username)->toBe('1234567')
-            ->and($teacher->user->hasRole(Role::Docente->value))->toBeTrue();
+            ->and($teacher->user->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue();
     });
 
     it('acepta un docente sin correo, grado ni fecha de ingreso', function () {

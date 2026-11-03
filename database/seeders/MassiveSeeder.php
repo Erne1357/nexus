@@ -12,7 +12,6 @@ use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\LoginScreenDemoSeeder;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Database\Seeders\TermCalendarDemoSeeder;
 use App\Modules\Core\Database\Seeders\TermHistorySeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
@@ -42,7 +41,6 @@ class MassiveSeeder extends Seeder
         $started = hrtime(true);
 
         $this->call([
-            RoleSeeder::class,
             CampusSeeder::class,
             OrgChartSeeder::class,
             AdminUserSeeder::class,

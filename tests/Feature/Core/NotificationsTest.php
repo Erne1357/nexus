@@ -2,7 +2,6 @@
 
 use App\Modules\Core\Actions\MarkAllNotificationsRead;
 use App\Modules\Core\Actions\OpenNotification;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -138,7 +137,6 @@ it('solo abre notificaciones del usuario de la sesión', function () {
 });
 
 it('si ya no trabaja en el campus del aviso, avisa en lugar de llevarlo', function () {
-    $this->seed(RoleSeeder::class);
     $c1 = Campus::factory()->create(['code' => 'C1']);
     $c2 = Campus::factory()->create(['code' => 'C2']);
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $c1->id, 'career_id' => careerKey(20)])->create();

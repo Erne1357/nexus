@@ -329,6 +329,6 @@ describe('DeleteCareer', function () {
 
         app(DeleteCareer::class)->handle($this->career);
 
-        expect($coordinador->roleScopes()->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString());
+        expect($coordinador->roleAssignments()->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString());
     });
 });
