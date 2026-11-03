@@ -2,6 +2,9 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\PermissionRegistry;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -19,9 +22,48 @@ use Illuminate\Database\Eloquent\Collection;
  */
 final class RecipientsQuery
 {
-    public function __construct(private readonly ScopedContext $context) {}
+    public function __construct(
+        private readonly ScopedContext $context,
+        private readonly PermissionRegistry $permissions,
+    ) {}
 
     /**
+     * A quién le llega un aviso por permiso: los usuarios activos que, con alguno de sus puestos vigentes (no solo el
+     * activo), tienen `$permission` y cubren `$target` (ScopedContext::rolesAllowing). El admin no entra por serlo.
+     * Cada persona va una vez, con el primer puesto del enum que cubre. Ordenados por nombre.
+     *
+     * @return list<array{user: User, role: Role}>
+     */
+    public function holders(Permission $permission, Target $target): array
+    {
+        $roles = $this->permissions->rolesGranting($permission);
+
+        if ($roles === []) {
+            return [];
+        }
+
+        $candidates = User::query()
+            ->where('is_active', true)
+            ->whereHas('roleAssignments', fn (Builder $assignments) => $assignments->current()->whereIn('role', $roles))
+            ->orderBy('name')
+            ->get();
+
+        $holders = [];
+
+        foreach ($candidates as $user) {
+            $role = $this->context->forUser($user)->rolesAllowing($permission, $target)[0] ?? null;
+
+            if ($role !== null) {
+                $holders[] = ['user' => $user, 'role' => $role];
+            }
+        }
+
+        return $holders;
+    }
+
+    /**
+     * @deprecated Se borra en 3.P9 junto con coversWithScope(); usa holders().
+     *
      * @return Collection<int, User>
      */
     public function for(Role $role, Campus|string $campus, ?string $department = null, ?string $career = null): Collection
