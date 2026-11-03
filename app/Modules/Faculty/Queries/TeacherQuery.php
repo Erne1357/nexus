@@ -105,8 +105,8 @@ final class TeacherQuery
 
     /**
      * En qué departamentos puede dar de alta (o adscribir) docentes: los sin borrar que cubre con
-     * TeacherPolicy::EDITORS. Al admin, todos; a la Subdirección, los de Subdirección Académica; a un jefe, el suyo. Con `code` para nombrar el
-     * destino y los inactivos marcados.
+     * TeacherPolicy::EDITORS. Al admin, todos; a la Subdirección, los de Subdirección Académica; a un jefe, el
+     * suyo. Con `code` para nombrar el destino y los inactivos marcados.
      *
      * @return list<array{id: string, code: string, name: string}>
      */

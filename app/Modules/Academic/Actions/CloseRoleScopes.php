@@ -13,14 +13,13 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Cierra los alcances (nombramientos, `role_assignments`) de un departamento o una carrera que se borra
  * (reglas-de-negocio.md, confirmado el 29 de octubre de 2026): Core no depende de Academic, así que lo hace quien
- * borra. Los alcances
- * vigentes que empezaron antes de hoy terminan ayer (`valid_to`); los que empiezan hoy o después se
- * eliminan, porque el CHECK `valid_to >= valid_from` impide cerrarlos antes de empezar; los ya
- * vencidos no se tocan. Cada cambio deja su entrada en la bitácora sobre el usuario del alcance.
+ * borra. Los alcances vigentes que empezaron antes de hoy terminan ayer (`valid_to`); los que empiezan hoy o
+ * después se eliminan, porque el CHECK `valid_to >= valid_from` impide cerrarlos antes de empezar; los ya vencidos
+ * no se tocan. Cada cambio deja su entrada en la bitácora sobre el usuario del alcance.
  *
- * Se llama dentro de la transacción de DeleteDepartment o DeleteCareer. Devuelve cuántos alcances
- * tocó y le avisa a ScopedContext que recargue roles y alcances. El departamento se busca en `org_unit_id` (su id es
- * el de su unidad); la bitácora lo sigue llamando `department_id`. El nombre de la clase cambia en 3.P9.
+ * Se llama dentro de la transacción de DeleteDepartment o DeleteCareer. Devuelve cuántos alcances tocó y le avisa
+ * a ScopedContext que recargue roles y alcances. El departamento se busca en `org_unit_id` (su id es el de su
+ * unidad); la bitácora lo sigue llamando `department_id`. El nombre de la clase cambia en 3.P9.
  */
 final class CloseRoleScopes
 {

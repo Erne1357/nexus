@@ -42,6 +42,8 @@ return new class extends Migration
 
     public function up(): void
     {
+        DB::statement('create extension if not exists btree_gist');
+
         DB::unprepared(<<<'SQL'
             alter table role_scopes rename to role_assignments;
             alter table role_assignments rename column department_id to org_unit_id;
@@ -254,9 +256,10 @@ return new class extends Migration
             from model_has_roles
             join roles on roles.id = model_has_roles.role_id and roles.name = 'admin'
             join users on users.id = model_has_roles.model_id
-            where not exists (
+            where model_has_roles.model_type = ?
+              and not exists (
                 select 1 from role_assignments existing where existing.user_id = users.id and existing.role = 'admin'
             )
-            SQL, [$today]);
+            SQL, [$today, (new User)->getMorphClass()]);
     }
 };

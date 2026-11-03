@@ -83,7 +83,7 @@ describe('quién entra', function () {
         $this->actingAs($this->subdireccion)->get(route('catalog-validation.progress'))->assertOk()->assertSee('Avance de validación');
     });
 
-    it('jefe, coordinador, jefe de proyecto docente y docente reciben 403 en la página, en la ruta y en cada método', function (Role $role, array $scope) {
+    it('jefe, coordinador, jefe de proyecto docente y docente reciben 403 en la página, en la ruta y en cada método', function (Role $role, array $scope, string $department) {
         $user = User::factory()->withRole($role, $scope)->create();
 
         progressPage($user)->assertForbidden();
@@ -94,12 +94,12 @@ describe('quién entra', function () {
         $page->call('remind')->assertForbidden();
         $page = progressPage($this->subdireccion);
         $this->actingAs($user);
-        $page->call('open', $this->sis->id)->assertForbidden();
+        $page->call('open', $department)->assertForbidden();
     })->with([
-        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => test()->ele->id]],
-        'coordinador' => [Role::Coordinador, fn () => ['campus_id' => test()->c2->id, 'career_id' => careerKey(20)]],
-        'jefe de proyecto docente' => [Role::JefeProyectoDocente, fn () => ['campus_id' => test()->c2->id, 'department_id' => test()->sis->id]],
-        'docente' => [Role::Docente, fn () => ['campus_id' => test()->c2->id]],
+        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => test()->ele->id], fn () => test()->ele->id],
+        'coordinador' => [Role::Coordinador, fn () => ['campus_id' => test()->c2->id, 'career_id' => careerKey(20)], fn () => test()->sis->id],
+        'jefe de proyecto docente' => [Role::JefeProyectoDocente, fn () => ['campus_id' => test()->c2->id, 'department_id' => test()->sis->id], fn () => test()->sis->id],
+        'docente' => [Role::Docente, fn () => ['campus_id' => test()->c2->id], fn () => test()->sis->id],
     ]);
 
     it('el menú de Académico lo ofrece a Subdirección y no al jefe', function () {
