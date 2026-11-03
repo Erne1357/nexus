@@ -3,17 +3,15 @@
 namespace App\Modules\Faculty\Queries;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Authorization\OrgTree;
-use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
-use App\Modules\Faculty\Policies\TeacherPolicy;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -23,17 +21,14 @@ use Illuminate\Support\Str;
 
 /**
  * Lecturas de docentes para las pantallas (tarea 1.12). Los docentes son de todo el Tec: nada aquí depende de un
- * campus. El listado deja ver lo mismo que TeacherPolicy (`view`): al admin y a la Subdirección, todos, también los
- * que no tienen departamento (confirmado el 30 de octubre de 2026); a los demás, filtrado en SQL con los alcances de
- * ScopedContext y la misma regla que ScopedContext::coversDepartment(), los docentes con una adscripción sin borrar a
- * un departamento que cubren (coveredDepartments()). Incluye a los inactivos; los borrados no.
+ * campus. El listado deja ver lo mismo que TeacherPolicy (`view`): con `faculty.teacher.view_all` (el admin y la
+ * Subdirección), todos, también los que no tienen departamento (confirmado el 30 de octubre de 2026); a los demás,
+ * filtrado en SQL con ScopedContext::constrain() y `faculty.teacher.view`, los docentes con una adscripción sin borrar
+ * a un departamento que cubren. Incluye a los inactivos; los borrados no.
  */
 final class TeacherQuery
 {
-    public function __construct(
-        private readonly TeacherBaseHoursQuery $baseHours,
-        private readonly OrgTree $orgTree,
-    ) {}
+    public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
 
     /**
      * La tabla de Docentes, por número de empleado, con sus adscripciones sin borrar (la principal primero y luego
@@ -104,18 +99,16 @@ final class TeacherQuery
     }
 
     /**
-     * En qué departamentos puede dar de alta (o adscribir) docentes: los sin borrar que cubre con
-     * TeacherPolicy::EDITORS. Al admin, todos; a la Subdirección, los de Subdirección Académica; a un jefe, el
-     * suyo. Con `code` para nombrar el destino y los inactivos marcados.
+     * En qué departamentos puede dar de alta (o adscribir) docentes: los sin borrar en los que tiene
+     * `faculty.teacher.create` (ScopedContext::constrain()), como TeacherPolicy::create(). Al admin, todos; a la
+     * Subdirección, los de Subdirección Académica; a un jefe, el suyo. Con `code` para nombrar el destino y los
+     * inactivos marcados.
      *
      * @return list<array{id: string, code: string, name: string}>
      */
     public function adscriptionTargets(ScopedContext $context): array
     {
-        $departments = $this->coveredDepartments($context);
-
-        return Department::query()
-            ->when($departments !== null, fn (Builder $query) => $query->whereKey($departments))
+        return $context->constrain(Department::query(), FacultyPermission::TeacherCreate, ['unit' => 'departments.id'])
             ->orderBy('code')
             ->get(['id', 'code', 'name', 'is_active'])
             ->map(fn (Department $department): array => ['id' => $department->id, 'code' => $department->code, 'name' => $this->label($department)])
@@ -170,46 +163,42 @@ final class TeacherQuery
     }
 
     /**
-     * Los docentes que el usuario puede ver: todos, al admin y a la Subdirección, como TeacherPolicy::coversEveryone();
-     * a los demás, los adscritos a uno de los departamentos que cubre.
+     * Los docentes que el usuario puede ver, como TeacherPolicy::view(): todos con `faculty.teacher.view_all` (el admin
+     * y la Subdirección); si no, con ScopedContext::constrain() y `faculty.teacher.view`, los que tienen una adscripción
+     * sin borrar a un departamento de su unidad o de su subárbol.
      *
      * @return Builder<Teacher>
      */
     private function visible(ScopedContext $context): Builder
     {
-        $departments = $context->has(Role::Subdireccion) ? null : $this->coveredDepartments($context);
+        $query = Teacher::query();
 
-        return Teacher::query()->when($departments !== null, fn (Builder $query) => $departments === []
-            ? $query->whereRaw('false')
-            : $query->whereHas('adscriptions', fn (Builder $adscription) => $adscription->whereIn('department_id', $departments)));
+        if ($context->allows(FacultyPermission::TeacherViewAll)) {
+            return $query;
+        }
+
+        return $context->constrain($query, FacultyPermission::TeacherView, [
+            'unit' => fn (Builder $teachers, array $departments) => $teachers
+                ->whereHas('adscriptions', fn (Builder $adscription) => $adscription->whereIn('department_id', $departments)),
+        ]);
     }
 
     /**
-     * Los departamentos que cubre con TeacherPolicy::EDITORS, como ScopedContext::coversDepartment(): null si los
-     * cubre todos (el admin, o un nombramiento sin unidad ni carrera). Cada unidad se expande a su subárbol
-     * (OrgTree): la de un jefe es su departamento; la de la Subdirección, los de Subdirección Académica. Puede traer
-     * ids de unidades que no son departamentos, que no coinciden con ninguno. Un nombramiento que fija carrera no
-     * cubre docentes.
+     * Los departamentos en los que puede `$permission` (uno por unidad), para filtrar lo que no es un docente, como
+     * las materias del perfil: null si los cubre todos, es decir, si cubre un objetivo sin unidad (el admin, o un
+     * nombramiento sin unidad); si no, los ids de los departamentos, también los borrados, de su unidad o de su
+     * subárbol (ScopedContext::constrain()): a un jefe, el suyo; a la Subdirección, los de Subdirección Académica.
      *
      * @return list<string>|null
      */
-    public function coveredDepartments(ScopedContext $context): ?array
+    public function coveredDepartments(ScopedContext $context, FacultyPermission $permission): ?array
     {
-        if ($context->isAdmin()) {
+        if ($context->allows($permission, Target::of())) {
             return null;
         }
 
-        $scopes = $context->scopes()
-            ->filter(fn (RoleAssignment $scope): bool => in_array($scope->role, TeacherPolicy::EDITORS, true) && $scope->career_id === null);
-
-        if ($scopes->contains(fn (RoleAssignment $scope): bool => $scope->org_unit_id === null)) {
-            return null;
-        }
-
-        return $scopes
-            ->flatMap(fn (RoleAssignment $scope): array => $this->orgTree->descendantsOrSelf($scope->org_unit_id))
-            ->unique()
-            ->values()
+        return $context->constrain(Department::withTrashed(), $permission, ['unit' => 'departments.id'])
+            ->pluck('departments.id')
             ->all();
     }
 

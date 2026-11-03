@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Queries\DepartmentQuery;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Support\DefaultPassword;
 use App\Modules\Faculty\Actions\AddAdscription;
@@ -9,12 +10,12 @@ use App\Modules\Faculty\Actions\CreateTeacher;
 use App\Modules\Faculty\Actions\RemoveAdscription;
 use App\Modules\Faculty\Actions\SetTeacherActive;
 use App\Modules\Faculty\Actions\UpdateTeacher;
+use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Jobs\ProvisionTeacherUsersJob;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
-use App\Modules\Faculty\Policies\TeacherPolicy;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Rules\TeacherRules;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -403,7 +404,7 @@ new #[Title('Docentes')] class extends Component
             $removals = [];
 
             foreach ($teacher->adscriptions as $adscription) {
-                if (! $context->coversDepartment(TeacherPolicy::EDITORS, $adscription->department_id)) {
+                if (! $context->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))) {
                     continue;
                 }
 
