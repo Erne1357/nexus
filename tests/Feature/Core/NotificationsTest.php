@@ -53,6 +53,26 @@ final class TestJefeNotice extends NexusNotification implements AddressedToRole
     }
 }
 
+final class TestStrictJefeNotice extends NexusNotification implements AddressedToRole
+{
+    public function __construct(private readonly NotificationMessage $message) {}
+
+    public static function addressedRole(): Role
+    {
+        return Role::JefeDepartamento;
+    }
+
+    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
+    {
+        return $context->has(Role::JefeDepartamento) ? parent::unavailableReason($context, $message) : 'Ese aviso ya no es de tu puesto.';
+    }
+
+    public function message(object $notifiable): NotificationMessage
+    {
+        return $this->message;
+    }
+}
+
 function notice(string $title = 'Aviso', ?string $route = 'home', array $parameters = [], ?string $termId = null, ?string $campusId = null): TestNotice
 {
     return new TestNotice(new NotificationMessage(
@@ -234,6 +254,18 @@ it('si ya no tiene el puesto del aviso, no cambia de perfil', function () {
     expect($target->url)->toBe(route('home'))
         ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador)
         ->and($ana->fresh()->last_role)->toBeNull();
+});
+
+it('con Administración activa, un aviso de un puesto que ya no tiene no abre el destino', function () {
+    $ana = User::factory()->admin()->create();
+    $ana->notify(new TestStrictJefeNotice(new NotificationMessage(title: 'Aviso de jefe', body: 'x', icon: 'o-bell', route: 'home')));
+    actingAsRole($ana, Role::Admin);
+
+    $target = app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id'));
+
+    expect($target->url)->toBeNull()
+        ->and($target->problem)->toBe('Ese aviso ya no es de tu puesto.')
+        ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Admin);
 });
 
 it('un aviso que ya no se puede abrir no cambia el perfil', function () {

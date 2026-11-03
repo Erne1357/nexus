@@ -9,6 +9,7 @@ use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Events\TermCalendarChanged;
+use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Models\Campus;
@@ -16,6 +17,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Livewire\ComponentHookRegistry;
@@ -64,6 +66,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
+        Event::listen(Login::class, ForgetActiveRole::class);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.

@@ -36,8 +36,8 @@ use LogicException;
  * nombramientos. activeRole() es la elección de la sesión (ACTIVE_ROLE) si todavía tiene ese puesto; si no, el último
  * que usó (`users.last_role`) si lo conserva; si no, el primero de heldRoles() en el orden del enum, y ese de omisión
  * queda fijo en la sesión la primera vez que se pregunta. Sin puestos no hay perfil. Elegir otro es del cambio de
- * perfil (SwitchRole); asRole() responde como si ya hubiera cambiado, sin tocar la sesión. Sus puestos efectivos (effectiveRoles()) son
- * solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, has, isAdmin, scopes, covers,
+ * perfil (SwitchRole); asRole() responde como si ya hubiera cambiado, sin tocar la sesión. Sus puestos efectivos
+ * (effectiveRoles()) son solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, has, isAdmin, scopes, covers,
  * coversDepartment, canAccessCampus y campuses) responde con ellos. El contexto de otro usuario (forUser()) y uno sin
  * usuario autenticado no tienen perfil activo (el código de consola que fija el usuario del guard sí recibe el
  * predeterminado): sus puestos efectivos son todos los que tiene, porque responden «quién podría», que

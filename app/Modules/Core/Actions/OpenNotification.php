@@ -27,7 +27,8 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * Si el aviso es de un puesto (AddressedToRole) que el usuario tiene y no es el activo, todo lo anterior se decide
  * con ese puesto (ScopedContext::asRole(), sin tocar la sesión) y, solo si se puede abrir, cambia a ese perfil
  * (SwitchRole) antes de mover la credencial, para que el destino se vea con su alcance; si no se puede, la sesión
- * se queda como estaba. Si ya no tiene el puesto, lo abre como cualquiera.
+ * se queda como estaba. Si ya no tiene el puesto, se decide con ese puesto igual (AZ-S8): sin roles, el aviso
+ * no está disponible, aunque el perfil activo sea otro (el de Administración cubre todo).
  */
 final class OpenNotification
 {
@@ -56,8 +57,9 @@ final class OpenNotification
 
         $message = NotificationMessage::fromArray($notification->data);
         $type = is_subclass_of($notification->type, NexusNotification::class) ? $notification->type : NexusNotification::class;
-        $role = $this->roleToSwitchTo($type);
-        $context = $role === null ? $this->context : $this->context->asRole($role);
+        $addressed = is_subclass_of($type, AddressedToRole::class) ? $type::addressedRole() : null;
+        $role = $this->roleToSwitchTo($addressed);
+        $context = $addressed === null ? $this->context : $this->context->asRole($addressed);
 
         $problem = $type::unavailableReason($context, $message);
 
@@ -100,20 +102,16 @@ final class OpenNotification
     }
 
     /**
-     * El perfil al que hay que cambiar para abrir un aviso de `$type`: el de un aviso de un puesto (AddressedToRole)
-     * si el usuario lo tiene y no es el activo; si no, ninguno.
-     *
-     * @param  class-string<NexusNotification>  $type
+     * El perfil al que hay que cambiar para abrir un aviso del puesto `$addressed` (null si no es de un puesto): ese
+     * puesto si el usuario lo tiene y no es el activo; si no, ninguno.
      */
-    private function roleToSwitchTo(string $type): ?Role
+    private function roleToSwitchTo(?Role $addressed): ?Role
     {
-        if (! is_subclass_of($type, AddressedToRole::class)) {
+        if ($addressed === null) {
             return null;
         }
 
-        $role = $type::addressedRole();
-
-        return $this->context->activeRole() !== $role && in_array($role, $this->context->heldRoles(), true) ? $role : null;
+        return $this->context->activeRole() !== $addressed && in_array($addressed, $this->context->heldRoles(), true) ? $addressed : null;
     }
 
     /**

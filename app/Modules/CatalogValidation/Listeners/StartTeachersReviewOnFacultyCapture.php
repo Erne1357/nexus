@@ -28,8 +28,9 @@ use Illuminate\Support\Collection;
  * Subdirección y el jefe de proyecto docente no la mueven, ni una revisión ya en revisión o validada.
  *
  * Si el actor es quien está en sesión, cuenta su perfil activo (ScopedContext): la mueve si actúa como jefe del
- * departamento. Si el actor es otro usuario (forUser()) o no hay usuario autenticado (un job), basta con que sea jefe aunque tenga otros puestos; el código de consola que fija el usuario del guard recibe el perfil predeterminado. Sale después del commit de la
- * Action de Faculty.
+ * departamento. Si el actor es otro usuario (forUser()) o no hay usuario autenticado (un job), basta con que sea jefe aunque tenga otros
+ * puestos; el código de consola que fija el usuario del guard recibe el perfil predeterminado. Sale después del
+ * commit de la Action de Faculty.
  */
 final class StartTeachersReviewOnFacultyCapture
 {

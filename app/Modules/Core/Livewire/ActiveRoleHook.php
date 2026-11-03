@@ -10,12 +10,14 @@ use Livewire\ComponentHook;
  * `nexus_role` el perfil activo; al hidratar, si el memo no coincide con el perfil activo de la sesión, responde 419
  * con el encabezado `X-Nexus-Role-Changed: 1`, que resources/js/app.js usa para ofrecer recargar con un mensaje
  * neutro. No distingue por qué cambió: la sesión cambió de perfil en otra pestaña, o cambiaron sus puestos (perdió
- * el activo, se desactivó el campus de su único nombramiento o recibió el primero). Sin usuario autenticado, con un memo pintado sin usuario o con otro usuario (`nexus_user`), no hace nada. La petición
- * que cambia el perfil no se rechaza: el cambio ocurre en su acción, después de hidratar.
+ * el activo, se desactivó el campus de su único nombramiento o recibió el primero). Sin usuario autenticado,
+ * con un memo pintado sin usuario o con otro usuario (`nexus_user`), no hace nada. La petición que cambia el
+ * perfil no se rechaza: el cambio ocurre en su acción, después de hidratar.
  *
  * API confirmada en livewire/livewire v4.4.8: ComponentHook::hydrate($memo, $context) y dehydrate($context);
- * $context->addMemo(); registro con ComponentHookRegistry::register() desde CoreServiceProvider::register() (Livewire::componentHook() desde boot() llega tarde: los hooks se cablean en LivewireServiceProvider::boot()); en JS, Livewire.interceptRequest(({ onError }) => …)
- * con onError({ response, preventDefault }) (el manejo por omisión del 419 es un confirm en inglés).
+ * $context->addMemo(); registro con ComponentHookRegistry::register() desde CoreServiceProvider::register()
+ * (Livewire::componentHook() desde boot() llega tarde: los hooks se cablean en
+ * LivewireServiceProvider::boot()); en JS, Livewire.interceptRequest(({ onError }) => …) con onError({ response, preventDefault }) (el manejo por omisión del 419 es un confirm en inglés).
  */
 final class ActiveRoleHook extends ComponentHook
 {
