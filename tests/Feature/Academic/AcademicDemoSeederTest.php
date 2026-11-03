@@ -18,7 +18,7 @@ use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
@@ -59,7 +59,7 @@ function demoCounts(): array
             ->mapWithKeys(fn (string $model): array => [$model => $model::withTrashed()->count()])
             ->all(),
         'users' => User::query()->count(),
-        'role_scopes' => RoleScope::query()->count(),
+        'role_assignments' => RoleAssignment::query()->count(),
         'terms' => Term::query()->count(),
     ];
 }
@@ -329,7 +329,7 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
     $seedBothCampuses();
 
     $offered = fn (string $campus): int => CareerCampus::query()->whereRelation('campus', 'code', $campus)->where('is_active', true)->count();
-    $scopes = RoleScope::query()->get();
+    $scopes = RoleAssignment::query()->get();
     $staff = demoStaff();
     $roleOf = ['subdir' => Role::Subdireccion, 'jefe' => Role::JefeDepartamento, 'jpd' => Role::JefeProyectoDocente, 'coord' => Role::Coordinador];
     $campusIds = Campus::query()->pluck('id', 'code');
@@ -339,7 +339,7 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
     expect(demoCounts())->toBe($first)
         ->and($offered('C1'))->toBe(12)
         ->and($offered('C2'))->toBe(6)
-        ->and($scopes->countBy(fn (RoleScope $scope): string => "{$scope->user_id}|{$scope->role->value}|{$scope->campus_id}|{$scope->department_id}|{$scope->career_id}")->max())->toBe(1)
+        ->and($scopes->countBy(fn (RoleAssignment $scope): string => "{$scope->user_id}|{$scope->role->value}|{$scope->campus_id}|{$scope->org_unit_id}|{$scope->career_id}")->max())->toBe(1)
         ->and($named('/^subdir$/'))->toHaveCount(1)
         ->and($named('/^jpd\.[a-z]+\.c1$/'))->toHaveCount(6)
         ->and($named('/^jpd\.[a-z]+\.c2$/'))->toHaveCount(4)
@@ -378,8 +378,8 @@ it('completa el rol y el alcance de un usuario de prueba que una corrida anterio
 
     expect(app(ScopedContext::class)->forUser($coordinator)->covers(Role::Coordinador, $c2, null, Career::query()->where('code', 'ISIC')->value('id')))->toBeTrue()
         ->and(app(ScopedContext::class)->forUser($subdirection)->covers(Role::Subdireccion, $c2))->toBeTrue()
-        ->and($coordinator->roleScopes()->count())->toBe(1)
-        ->and($subdirection->roleScopes()->count())->toBe(2);
+        ->and($coordinator->roleAssignments()->count())->toBe(1)
+        ->and($subdirection->roleAssignments()->count())->toBe(2);
 });
 
 it('no corre en producción', function () {

@@ -3,7 +3,9 @@
 namespace App\Modules\Faculty\Queries;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Authorization\OrgTree;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ScopedContext;
@@ -21,14 +23,17 @@ use Illuminate\Support\Str;
 
 /**
  * Lecturas de docentes para las pantallas (tarea 1.12). Los docentes son de todo el Tec: nada aquí depende de un
- * campus. El listado deja ver lo mismo que TeacherPolicy (`view`), filtrado en SQL con los alcances de
- * ScopedContext y la misma regla que ScopedContext::coversDepartment(): al admin y a quien tiene un alcance de
- * TeacherPolicy::EDITORS sin departamento (la Subdirección), todos; a los jefes, los docentes con una adscripción
- * sin borrar a uno de sus departamentos. Incluye a los inactivos; los borrados no.
+ * campus. El listado deja ver lo mismo que TeacherPolicy (`view`): al admin y a la Subdirección, todos, también los
+ * que no tienen departamento (confirmado el 30 de octubre de 2026); a los demás, filtrado en SQL con los alcances de
+ * ScopedContext y la misma regla que ScopedContext::coversDepartment(), los docentes con una adscripción sin borrar a
+ * un departamento que cubren (coveredDepartments()). Incluye a los inactivos; los borrados no.
  */
 final class TeacherQuery
 {
-    public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
+    public function __construct(
+        private readonly TeacherBaseHoursQuery $baseHours,
+        private readonly OrgTree $orgTree,
+    ) {}
 
     /**
      * La tabla de Docentes, por número de empleado, con sus adscripciones sin borrar (la principal primero y luego
@@ -100,7 +105,7 @@ final class TeacherQuery
 
     /**
      * En qué departamentos puede dar de alta (o adscribir) docentes: los sin borrar que cubre con
-     * TeacherPolicy::EDITORS. Al admin y a la Subdirección, todos; a un jefe, el suyo. Con `code` para nombrar el
+     * TeacherPolicy::EDITORS. Al admin, todos; a la Subdirección, los de Subdirección Académica; a un jefe, el suyo. Con `code` para nombrar el
      * destino y los inactivos marcados.
      *
      * @return list<array{id: string, code: string, name: string}>
@@ -165,13 +170,14 @@ final class TeacherQuery
     }
 
     /**
-     * Los docentes que el usuario puede ver: todos, o los adscritos a uno de los departamentos que cubre.
+     * Los docentes que el usuario puede ver: todos, al admin y a la Subdirección, como TeacherPolicy::coversEveryone();
+     * a los demás, los adscritos a uno de los departamentos que cubre.
      *
      * @return Builder<Teacher>
      */
     private function visible(ScopedContext $context): Builder
     {
-        $departments = $this->coveredDepartments($context);
+        $departments = $context->has(Role::Subdireccion) ? null : $this->coveredDepartments($context);
 
         return Teacher::query()->when($departments !== null, fn (Builder $query) => $departments === []
             ? $query->whereRaw('false')
@@ -180,8 +186,10 @@ final class TeacherQuery
 
     /**
      * Los departamentos que cubre con TeacherPolicy::EDITORS, como ScopedContext::coversDepartment(): null si los
-     * cubre todos (el admin, o un alcance sin departamento ni carrera, como el de la Subdirección). Un alcance que
-     * fija carrera no cubre docentes.
+     * cubre todos (el admin, o un nombramiento sin unidad ni carrera). Cada unidad se expande a su subárbol
+     * (OrgTree): la de un jefe es su departamento; la de la Subdirección, los de Subdirección Académica. Puede traer
+     * ids de unidades que no son departamentos, que no coinciden con ninguno. Un nombramiento que fija carrera no
+     * cubre docentes.
      *
      * @return list<string>|null
      */
@@ -192,13 +200,17 @@ final class TeacherQuery
         }
 
         $scopes = $context->scopes()
-            ->filter(fn (RoleScope $scope): bool => in_array($scope->role, TeacherPolicy::EDITORS, true) && $scope->career_id === null);
+            ->filter(fn (RoleAssignment $scope): bool => in_array($scope->role, TeacherPolicy::EDITORS, true) && $scope->career_id === null);
 
-        if ($scopes->contains(fn (RoleScope $scope): bool => $scope->department_id === null)) {
+        if ($scopes->contains(fn (RoleAssignment $scope): bool => $scope->org_unit_id === null)) {
             return null;
         }
 
-        return $scopes->pluck('department_id')->unique()->values()->all();
+        return $scopes
+            ->flatMap(fn (RoleAssignment $scope): array => $this->orgTree->descendantsOrSelf($scope->org_unit_id))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

@@ -4,21 +4,23 @@ namespace App\Modules\Academic\Actions;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Cierra los alcances (`role_scopes`) de un departamento o una carrera que se borra (reglas-de-negocio.md,
- * confirmado el 29 de octubre de 2026): Core no depende de Academic, así que lo hace quien borra. Los alcances
+ * Cierra los alcances (nombramientos, `role_assignments`) de un departamento o una carrera que se borra
+ * (reglas-de-negocio.md, confirmado el 29 de octubre de 2026): Core no depende de Academic, así que lo hace quien
+ * borra. Los alcances
  * vigentes que empezaron antes de hoy terminan ayer (`valid_to`); los que empiezan hoy o después se
  * eliminan, porque el CHECK `valid_to >= valid_from` impide cerrarlos antes de empezar; los ya
  * vencidos no se tocan. Cada cambio deja su entrada en la bitácora sobre el usuario del alcance.
  *
  * Se llama dentro de la transacción de DeleteDepartment o DeleteCareer. Devuelve cuántos alcances
- * tocó y le avisa a ScopedContext que recargue roles y alcances.
+ * tocó y le avisa a ScopedContext que recargue roles y alcances. El departamento se busca en `org_unit_id` (su id es
+ * el de su unidad); la bitácora lo sigue llamando `department_id`. El nombre de la clase cambia en 3.P9.
  */
 final class CloseRoleScopes
 {
@@ -40,9 +42,9 @@ final class CloseRoleScopes
         $today = today();
 
         return DB::transaction(function () use ($column, $id, $record, $today): int {
-            $scopes = RoleScope::query()
+            $scopes = RoleAssignment::query()
                 ->with('user')
-                ->where($column, $id)
+                ->where($column === 'department_id' ? 'org_unit_id' : $column, $id)
                 ->where(fn ($query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $today->toDateString()))
                 ->lockForUpdate()
                 ->get();
@@ -71,7 +73,7 @@ final class CloseRoleScopes
                     ->withChanges(['old' => [
                         'role' => $scope->role->value,
                         'campus_id' => $scope->campus_id,
-                        'department_id' => $scope->department_id,
+                        'department_id' => $scope->org_unit_id,
                         'career_id' => $scope->career_id,
                         'valid_from' => $scope->valid_from->toDateString(),
                         'valid_to' => $scope->valid_to?->toDateString(),

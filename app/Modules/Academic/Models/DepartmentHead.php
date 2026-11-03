@@ -21,7 +21,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Quién dirige un departamento y desde cuándo (`kind`: jefe o jefe de proyecto docente). El jefe es de todo el
  * Tec, sin campus (`campus_id` nulo), y hay uno solo vigente por departamento. El jefe de proyecto docente es de un
  * campus, y puede haber varios a la vez. La base garantiza las dos reglas. `valid_to` nulo es vigente sin fecha de
- * fin.
+ * fin. Lo que cuenta para los permisos es el nombramiento que AppointDepartmentHead escribe junto con la fila
+ * (`role_assignments`, con el departamento como unidad); las dos tablas se funden en un PR posterior (ADR-0018).
  */
 #[Fillable(['department_id', 'campus_id', 'user_id', 'kind', 'valid_from', 'valid_to'])]
 #[UseFactory(DepartmentHeadFactory::class)]
@@ -68,7 +69,7 @@ class DepartmentHead extends Model
 
     /**
      * Vigentes en una fecha: `valid_from` ≤ fecha ≤ `valid_to`, con `valid_to` nulo sin fecha de fin. El día
-     * se cuenta en Ciudad Juárez (config/app.php) aunque la fecha llegue en otra zona, como RoleScope::current().
+     * se cuenta en Ciudad Juárez (config/app.php) aunque la fecha llegue en otra zona, como RoleAssignment::current().
      *
      * @param  Builder<self>  $query
      */

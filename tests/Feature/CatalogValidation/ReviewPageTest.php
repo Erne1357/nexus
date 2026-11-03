@@ -15,7 +15,7 @@ use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
@@ -85,8 +85,8 @@ describe('quién entra', function () {
     });
 
     it('un jefe de varios departamentos elige entre ellos', function () {
-        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
-        RoleScope::factory()->for($jefe)->create(['role' => Role::JefeDepartamento, 'department_id' => $this->ele->id]);
+        $jefe = $this->jefe;
+        RoleAssignment::factory()->for($jefe)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => $this->ele->id]);
 
         reviewPage($jefe)->assertSee('Sistemas y Computación')->assertSee('Eléctrica-Electrónica');
         reviewPage($jefe, ['department' => $this->ele->id])->assertOk()->assertSee('ELE');
@@ -167,9 +167,10 @@ describe('tablero', function () {
         | visibles (son de todo el Tec) y la de salones de C2, no.
         */
         $c1 = Campus::factory()->create(['code' => 'C1']);
-        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'campus_id' => $c1->id])->create();
+        vacate(Role::JefeDepartamento, $this->sis->id);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'campus_id' => $c1->id, 'valid_from' => today()->toDateString()])->create();
         $jefe->assignRole(SpatieRole::findOrCreate(Role::Coordinador->value));
-        RoleScope::factory()->for($jefe)->create(['role' => Role::Coordinador, 'campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id]);
+        RoleAssignment::factory()->for($jefe)->create(['role' => Role::Coordinador, 'campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id]);
         session([ScopedContext::ACTIVE_CAMPUS => $this->campus->id]);
 
         reviewPage($jefe)

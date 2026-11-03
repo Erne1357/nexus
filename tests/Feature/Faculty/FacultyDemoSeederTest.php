@@ -140,13 +140,13 @@ it('algunos docentes son jefe de proyecto docente de su departamento, con su rol
         ->get();
 
     expect($heads)->not->toBeEmpty()
-        ->and(DB::table('role_scopes')->whereIn('user_id', $heads->pluck('user_id'))->where('role', 'jefe_proyecto_docente')->count())->toBe($heads->count());
+        ->and(DB::table('role_assignments')->whereIn('user_id', $heads->pluck('user_id'))->where('role', 'jefe_proyecto_docente')->count())->toBe($heads->count());
 });
 
 it('volver a sembrar no duplica nada', function () {
     seedDemoTeachers();
 
-    $tables = ['teachers', 'teacher_departments', 'teacher_positions', 'teacher_availability', 'teacher_external_loads', 'teacher_subject_history', 'teacher_subject_qualifications', 'teacher_evaluations', 'users', 'department_heads', 'role_scopes'];
+    $tables = ['teachers', 'teacher_departments', 'teacher_positions', 'teacher_availability', 'teacher_external_loads', 'teacher_subject_history', 'teacher_subject_qualifications', 'teacher_evaluations', 'users', 'department_heads', 'role_assignments'];
     $before = array_map(fn (string $table) => DB::table($table)->count(), $tables);
 
     seedDemoTeachers();

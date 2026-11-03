@@ -176,7 +176,7 @@ it('rechaza borrar con el motivo de un listener que lo veta, sin borrar ni cerra
     }
 
     expect(Department::find($this->department->id))->not->toBeNull()
-        ->and($jefe->roleScopes()->sole()->valid_to)->toBeNull();
+        ->and($jefe->roleAssignments()->sole()->valid_to)->toBeNull();
 });
 
 it('al borrar cierra los alcances de sus jefes', function () {
@@ -185,5 +185,5 @@ it('al borrar cierra los alcances de sus jefes', function () {
 
     app(DeleteDepartment::class)->handle($this->department);
 
-    expect($jefe->roleScopes()->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString());
+    expect($jefe->roleAssignments()->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString());
 });

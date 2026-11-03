@@ -9,7 +9,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
@@ -52,7 +52,7 @@ it('nombrar a un jefe le da la fila, el rol y un alcance de todo el Tec con las 
 
     $head = appointHead($this->user, $this->sis, null, DepartmentHeadKind::Jefe, $from, $to);
 
-    $scope = RoleScope::sole();
+    $scope = RoleAssignment::sole();
     $context = app(ScopedContext::class)->forUser($this->user->fresh());
 
     expect($head->fresh())
@@ -67,7 +67,7 @@ it('nombrar a un jefe le da la fila, el rol y un alcance de todo el Tec con las 
         ->user_id->toBe($this->user->id)
         ->role->toBe(Role::JefeDepartamento)
         ->campus_id->toBeNull()
-        ->department_id->toBe($this->sis->id)
+        ->org_unit_id->toBe($this->sis->id)
         ->career_id->toBeNull()
         ->and($scope->valid_from->toDateString())->toBe($from->toDateString())
         ->and($scope->valid_to->toDateString())->toBe($to->toDateString())
@@ -116,7 +116,7 @@ it('un jefe con campus es error de validación en campus y no escribe nada', fun
     }
 
     expect(DepartmentHead::count())->toBe(0)
-        ->and(RoleScope::count())->toBe(0)
+        ->and(RoleAssignment::count())->toBe(0)
         ->and($this->user->fresh()->roles)->toBeEmpty()
         ->and(Activity::count())->toBe(0);
 });
@@ -130,7 +130,7 @@ it('un jefe de proyecto docente sin campus es error de validación en campus y n
     }
 
     expect(DepartmentHead::count())->toBe(0)
-        ->and(RoleScope::count())->toBe(0)
+        ->and(RoleAssignment::count())->toBe(0)
         ->and($this->user->fresh()->roles)->toBeEmpty()
         ->and(Activity::count())->toBe(0);
 });
@@ -148,8 +148,24 @@ it('un segundo jefe vigente del mismo departamento es error de validación en us
 
     expect(DepartmentHead::count())->toBe(1)
         ->and($other->fresh()->roles)->toBeEmpty()
-        ->and($other->roleScopes()->exists())->toBeFalse()
+        ->and($other->roleAssignments()->exists())->toBeFalse()
         ->and(Activity::count())->toBe(1);
+});
+
+it('un jefe vigente solo en los nombramientos también es error de validación en user', function () {
+    $other = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
+
+    try {
+        appointHead($this->user, $this->sis, from: today()->toImmutable());
+        $this->fail('Se esperaba ValidationException.');
+    } catch (ValidationException $exception) {
+        expect($exception->errors())->toBe(['user' => ['Ya hay un jefe de Sistemas y Computación vigente en esas fechas.']]);
+    }
+
+    expect(DepartmentHead::count())->toBe(0)
+        ->and($this->user->roleAssignments()->exists())->toBeFalse()
+        ->and($other->roleAssignments()->count())->toBe(1)
+        ->and(Activity::count())->toBe(0);
 });
 
 it('otro departamento tiene su propio jefe, y el departamento su jefe de proyecto docente en cada campus', function () {
@@ -172,7 +188,7 @@ it('dos jefes de proyecto docente vigentes a la vez sí', function () {
         ->and(app(ScopedContext::class)->forUser($this->user)->covers(Role::JefeProyectoDocente, $this->c2, $this->sis->id))->toBeTrue()
         ->and(app(ScopedContext::class)->forUser($other)->covers(Role::JefeProyectoDocente, $this->c2, $this->sis->id))->toBeTrue()
         ->and(app(ScopedContext::class)->forUser($other)->covers(Role::JefeProyectoDocente, $this->c1, $this->sis->id))->toBeFalse()
-        ->and(RoleScope::query()->pluck('campus_id')->unique()->all())->toBe([$this->c2->id]);
+        ->and(RoleAssignment::query()->pluck('campus_id')->unique()->all())->toBe([$this->c2->id]);
 });
 
 it('la misma persona no es dos veces jefe de proyecto docente en fechas que se traslapan', function () {
@@ -182,7 +198,7 @@ it('la misma persona no es dos veces jefe de proyecto docente en fechas que se t
         ->toThrow(ValidationException::class, 'Ana Pérez ya es jefe de proyecto docente de Sistemas y Computación en Campus II en esas fechas.');
 
     expect(DepartmentHead::count())->toBe(1)
-        ->and(RoleScope::count())->toBe(1);
+        ->and(RoleAssignment::count())->toBe(1);
 });
 
 it('rechaza una jefatura que termina antes de empezar', function () {
@@ -190,7 +206,7 @@ it('rechaza una jefatura que termina antes de empezar', function () {
         ->toThrow(ValidationException::class, 'La fecha de fin no puede ser anterior a la de inicio.');
 
     expect(DepartmentHead::count())->toBe(0)
-        ->and(RoleScope::count())->toBe(0);
+        ->and(RoleAssignment::count())->toBe(0);
 });
 
 it('recarga el contexto del usuario autenticado al nombrarlo', function () {
@@ -215,7 +231,7 @@ it('terminar ayer una jefatura deja de cubrir hoy', function () {
     $yesterday = today()->subDay()->toDateString();
 
     expect($head->fresh()->valid_to->toDateString())->toBe($yesterday)
-        ->and(RoleScope::sole()->valid_to->toDateString())->toBe($yesterday)
+        ->and(RoleAssignment::sole()->valid_to->toDateString())->toBe($yesterday)
         ->and($context->coversDepartment(Role::JefeDepartamento, $this->sis->id))->toBeFalse();
 
     $entry = Activity::latest('id')->first();
@@ -240,7 +256,7 @@ it('terminar una jefatura que empieza mañana la borra con su alcance', function
 
     expect(DepartmentHead::find($head->id))->toBeNull()
         ->and(DepartmentHead::withTrashed()->find($head->id)->trashed())->toBeTrue()
-        ->and(RoleScope::count())->toBe(0)
+        ->and(RoleAssignment::count())->toBe(0)
         ->and($entry->subject->is($this->user))->toBeTrue()
         ->and($entry->event)->toBe('deleted')
         ->and($entry->description)->toBe('Quitó la jefatura de Ana Pérez como jefe de departamento de Sistemas y Computación, que todavía no empezaba')
@@ -269,7 +285,7 @@ it('no alarga una jefatura que ya termina antes del último día dado', function
     app(EndDepartmentHead::class)->handle($head, today()->addDays(20)->toImmutable());
 
     expect($head->fresh()->valid_to->toDateString())->toBe($end->toDateString())
-        ->and(RoleScope::sole()->valid_to->toDateString())->toBe($end->toDateString())
+        ->and(RoleAssignment::sole()->valid_to->toDateString())->toBe($end->toDateString())
         ->and(Activity::count())->toBe($entries);
 });
 
@@ -310,7 +326,7 @@ it('solo vuelve error de validación el rechazo de una exclusión (SQLSTATE 23P0
 
     expect(fn () => appointHead($this->user, $this->sis))->toThrow(QueryException::class);
 
-    expect(RoleScope::count())->toBe(0)
+    expect(RoleAssignment::count())->toBe(0)
         ->and(Activity::count())->toBe(0);
 });
 
@@ -322,39 +338,41 @@ it('termina antes de tiempo una jefatura que tenía fecha de fin, con su alcance
     $yesterday = today()->subDay()->toDateString();
 
     expect($head->fresh()->valid_to->toDateString())->toBe($yesterday)
-        ->and(RoleScope::sole()->valid_to->toDateString())->toBe($yesterday)
+        ->and(RoleAssignment::sole()->valid_to->toDateString())->toBe($yesterday)
         ->and(app(ScopedContext::class)->forUser($this->user)->coversDepartment(Role::JefeDepartamento, $this->sis->id))->toBeFalse();
 });
 
+// Un jefe por unidad en cada fecha (AZ-S7): el otro nombramiento del mismo cargo empieza después de que esta
+// jefatura termina, porque la base no deja que se traslapen.
 it('al terminar una jefatura solo cierra el alcance que empezó con ella', function () {
-    $head = appointHead($this->user, $this->sis);
-    $other = RoleScope::factory()->for($this->user)->create([
+    $head = appointHead($this->user, $this->sis, to: today()->addDays(9)->toImmutable());
+    $other = RoleAssignment::factory()->for($this->user)->create([
         'role' => Role::JefeDepartamento,
         'campus_id' => null,
-        'department_id' => $this->sis->id,
-        'valid_from' => today()->subDays(10)->toDateString(),
+        'org_unit_id' => $this->sis->id,
+        'valid_from' => today()->addDays(10)->toDateString(),
     ]);
 
     app(EndDepartmentHead::class)->handle($head, today()->subDay()->toImmutable());
 
-    expect(RoleScope::whereKeyNot($other->id)->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
+    expect(RoleAssignment::whereKeyNot($other->id)->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
+        ->and($other->fresh())->not->toBeNull()
         ->and($other->fresh()->valid_to)->toBeNull();
 });
 
-it('al terminar la jefatura de un jefe cierra su alcance sin campus, no uno con campus del mismo día', function () {
-    $head = appointHead($this->user, $this->sis);
-    $withCampus = RoleScope::factory()->for($this->user)->create([
-        'role' => Role::JefeDepartamento,
-        'campus_id' => $this->c2->id,
-        'department_id' => $this->sis->id,
-        'valid_from' => $head->valid_from->toDateString(),
-    ]);
+// Antes con dos alcances de jefe del mismo departamento y día, uno con campus; la base ya no deja dos jefes de la
+// misma unidad a la vez (AZ-S7), así que el campus se distingue con el jefe de proyecto docente.
+it('al terminar una jefatura de proyecto docente cierra el alcance de su campus, no el de otro campus del mismo día', function () {
+    $head = appointHead($this->user, $this->sis, $this->c2);
+    $otherCampus = appointHead($this->user, $this->sis, $this->c1);
+    $kept = RoleAssignment::where('campus_id', $this->c1->id)->sole();
 
     app(EndDepartmentHead::class)->handle($head, today()->subDay()->toImmutable());
 
-    expect(RoleScope::whereNull('campus_id')->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
-        ->and($withCampus->fresh()->valid_to)->toBeNull()
-        ->and(Activity::latest('id')->first()->properties['role_scope_ids'])->toBe([RoleScope::whereNull('campus_id')->sole()->id]);
+    expect(RoleAssignment::where('campus_id', $this->c2->id)->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
+        ->and($kept->fresh()->valid_to)->toBeNull()
+        ->and($otherCampus->fresh()->valid_to)->toBeNull()
+        ->and(Activity::latest('id')->first()->properties['role_scope_ids'])->toBe([RoleAssignment::where('campus_id', $this->c2->id)->sole()->id]);
 });
 
 it('termina una jefatura sin alcance y deja dicho en la bitácora que no encontró uno', function () {
@@ -383,7 +401,7 @@ it('no nombra jefe a un usuario inactivo', function () {
     }
 
     expect(DepartmentHead::count())->toBe(0)
-        ->and(RoleScope::count())->toBe(0)
+        ->and(RoleAssignment::count())->toBe(0)
         ->and($this->user->fresh()->roles)->toBeEmpty()
         ->and(Activity::count())->toBe(0);
 });

@@ -251,7 +251,8 @@ describe('bloqueos del salón en el panel', function () {
     });
 
     it('la subdirección de C1 no abre, agrega ni quita bloqueos de un salón de C2', function () {
-        $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])->create();
+        vacate(Role::Subdireccion);
+        $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id, 'valid_from' => today()->toDateString()])->create();
         session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id]);
 
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id)->assertForbidden();
@@ -274,7 +275,7 @@ describe('robustez y perfil del campus', function () {
 
     it('si el usuario pierde el alcance del salón del panel, lo cierra sin 403', function () {
         $component = Livewire::actingAs($this->sub)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id);
-        $this->sub->roleScopes()->update(['valid_to' => today()->subDay()]);
+        $this->sub->roleAssignments()->update(['valid_to' => today()->subDay()]);
         app(ScopedContext::class)->refresh();
 
         $component->call('$refresh')->assertOk()->assertSet('showDrawer', false);
@@ -330,7 +331,8 @@ describe('subdirección', function () {
     });
 
     it('de C1 no puede editar ni desactivar un salón de C2 llamando directo', function () {
-        $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])->create();
+        vacate(Role::Subdireccion);
+        $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id, 'valid_from' => today()->toDateString()])->create();
         session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id]);
 
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('edit', $this->a101->id)->assertForbidden();
@@ -339,7 +341,8 @@ describe('subdirección', function () {
     });
 
     it('con un campus activo que no administra no ve nada ni puede crear', function () {
-        $multi = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])
+        vacate(Role::Subdireccion);
+        $multi = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id, 'valid_from' => today()->toDateString()])
             ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(1)])->create();
         session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id]);
 

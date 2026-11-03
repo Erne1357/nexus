@@ -96,7 +96,7 @@ describe('quién entra', function () {
         $this->actingAs($user);
         $page->call('open', $this->sis->id)->assertForbidden();
     })->with([
-        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => test()->sis->id]],
+        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => test()->ele->id]],
         'coordinador' => [Role::Coordinador, fn () => ['campus_id' => test()->c2->id, 'career_id' => careerKey(20)]],
         'jefe de proyecto docente' => [Role::JefeProyectoDocente, fn () => ['campus_id' => test()->c2->id, 'department_id' => test()->sis->id]],
         'docente' => [Role::Docente, fn () => ['campus_id' => test()->c2->id]],

@@ -4,7 +4,7 @@ use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\RecentPages;
@@ -18,8 +18,8 @@ beforeEach(function () {
     $this->previous = Term::factory()->create();
 
     $this->user = User::factory()
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
-        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
+        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
+        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
         ->create();
 });
 
@@ -85,7 +85,7 @@ it('deja de usar el campus elegido cuando el alcance sobre él vence', function 
     $this->actingAs($this->user);
     app(SetActiveContext::class)->handle($this->c1, null);
 
-    RoleScope::where('user_id', $this->user->id)->where('campus_id', $this->c1->id)->update(['valid_to' => today()->subDay()]);
+    RoleAssignment::where('user_id', $this->user->id)->where('campus_id', $this->c1->id)->update(['valid_to' => today()->subDay()]);
     app()->forgetScopedInstances();
 
     expect(app(ScopedContext::class)->activeCampus()?->is($this->c2))->toBeTrue();

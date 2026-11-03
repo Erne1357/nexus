@@ -2,14 +2,16 @@
 
 namespace App\Modules\Core\Database\Factories;
 
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use RuntimeException;
 use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
@@ -43,7 +45,7 @@ class UserFactory extends Factory
     }
 
     /**
-     * Admin: le basta el rol de spatie, sin alcance.
+     * Admin: el rol de spatie, mientras exista, y un nombramiento `admin` sin alcance.
      */
     public function admin(): static
     {
@@ -51,29 +53,40 @@ class UserFactory extends Factory
     }
 
     /**
-     * Con el rol de spatie y, salvo admin, un alcance vigente con las columnas de `$scope`
-     * (`campus_id`, `department_id`, `career_id`, `valid_from`, `valid_to`). Sin `campus_id`, el
-     * alcance es de todo el Tec, lo que solo vale para los roles que no piden campus. Se encadena
-     * para dar varios roles o varios alcances del mismo rol.
+     * Con el rol de spatie y un nombramiento vigente con las columnas de `$scope` (`campus_id`, `org_unit_id`,
+     * `career_id`, `valid_from`, `valid_to`); el de admin, sin alcance. `department_id` es otro nombre de
+     * `org_unit_id`: el id de un departamento es el de su unidad. Sin `org_unit_id`, la Subdirección va sobre la unidad
+     * Subdirección Académica (AZ-S3). Sin `campus_id`, el nombramiento es de todo el Tec, lo que solo vale para los
+     * puestos que no piden campus. Se encadena para dar varios puestos o varios nombramientos del mismo puesto.
      *
      * @param  array<string, mixed>  $scope
      *
-     * @throws InvalidArgumentException si `$scope` no llena Role::scopeColumns() del rol
+     * @throws InvalidArgumentException si `$scope` no llena Role::scopeColumns() del puesto
      */
     public function withRole(Role $role, array $scope = []): static
     {
+        if (array_key_exists('department_id', $scope)) {
+            $scope['org_unit_id'] ??= $scope['department_id'];
+            unset($scope['department_id']);
+        }
+
+        $academicDefault = $role === Role::Subdireccion && ($scope['org_unit_id'] ?? null) === null;
+
         foreach ($role->scopeColumns() as $column) {
-            if (($scope[$column] ?? null) === null) {
+            if (($scope[$column] ?? null) === null && ! ($academicDefault && $column === 'org_unit_id')) {
                 throw new InvalidArgumentException("El alcance de {$role->value} necesita {$column}.");
             }
         }
 
-        return $this->afterCreating(function (User $user) use ($role, $scope): void {
+        return $this->afterCreating(function (User $user) use ($role, $scope, $academicDefault): void {
             $user->assignRole(SpatieRole::findOrCreate($role->value));
 
-            if ($role !== Role::Admin) {
-                RoleScope::factory()->for($user)->create(['role' => $role, ...$scope]);
+            if ($academicDefault) {
+                $scope['org_unit_id'] = app(OrgTree::class)->idOf(OrgTree::ACADEMIC)
+                    ?? throw new RuntimeException('Falta la unidad '.OrgTree::ACADEMIC.' para el nombramiento de Subdirección.');
             }
+
+            RoleAssignment::factory()->for($user)->create(['role' => $role, ...$scope]);
         });
     }
 }

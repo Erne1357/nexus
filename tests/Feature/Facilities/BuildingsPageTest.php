@@ -142,7 +142,8 @@ describe('subdirección', function () {
     });
 
     it('con C1 como campus activo (donde no es subdirección) no ve nada ni puede crear', function () {
-        $multi = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])
+        vacate(Role::Subdireccion);
+        $multi = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id, 'valid_from' => today()->toDateString()])
             ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(1)])->create();
         session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id]);
 
@@ -152,7 +153,8 @@ describe('subdirección', function () {
     });
 
     it('de C1 no puede editar ni desactivar un edificio de C2 llamando directo', function () {
-        $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])->create();
+        vacate(Role::Subdireccion);
+        $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id, 'valid_from' => today()->toDateString()])->create();
         session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id]);
 
         Livewire::actingAs($c1)->test('facilities::pages.buildings')->call('edit', $this->a->id)->assertForbidden();

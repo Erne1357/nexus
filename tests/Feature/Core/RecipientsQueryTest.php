@@ -47,8 +47,9 @@ it('el coordinador solo recibe los de su carrera en su campus', function () {
 
 it('deja fuera al admin, a los usuarios inactivos, a los alcances vencidos y a otros roles', function () {
     User::factory()->admin()->create(['name' => 'Admin']);
-    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(['name' => 'Inactivo', 'is_active' => false]);
-    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10), 'valid_from' => '2026-01-01', 'valid_to' => '2026-10-31'])->create(['name' => 'Vencido']);
+    // Un jefe por departamento en cada fecha (AZ-S7): el inactivo releva al vencido.
+    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10), 'valid_from' => '2026-07-01'])->create(['name' => 'Inactivo', 'is_active' => false]);
+    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10), 'valid_from' => '2026-01-01', 'valid_to' => '2026-06-30'])->create(['name' => 'Vencido']);
     User::factory()->withRole(Role::JefeProyectoDocente, ['department_id' => departmentKey(10), 'campus_id' => $this->c2->id])->create(['name' => 'JPD']);
 
     expect(recipientNames(Role::JefeDepartamento, $this->c2, departmentKey(10)))->toBe([]);

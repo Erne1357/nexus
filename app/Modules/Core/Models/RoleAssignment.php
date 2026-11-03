@@ -2,7 +2,7 @@
 
 namespace App\Modules\Core\Models;
 
-use App\Modules\Core\Database\Factories\RoleScopeFactory;
+use App\Modules\Core\Database\Factories\RoleAssignmentFactory;
 use App\Modules\Core\Enums\Role;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -14,16 +14,18 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Alcance de un rol (ADR-0004): sobre qué campus, departamento o carrera ejerce `user` el rol
- * `role`, y desde cuándo. `department_id` y `career_id` tienen FK a `departments` y `careers`
- * (las agrega Academic), pero sin relación en el modelo porque Core no depende de Academic. Quién
- * cubre qué lo decide ScopedContext, no este modelo.
+ * Nombramiento (ADR-0018): `user` ocupa el puesto `role` sobre un campus, una unidad del organigrama o una carrera
+ * (nulo = sin límite en esa dimensión), del día `valid_from` al `valid_to` (nulo, sin fin). Es la única fuente de
+ * quién tiene qué puesto. Un departamento académico es una unidad con su mismo id, así que `org_unit_id` de un jefe
+ * es el id de su departamento. `career_id` tiene FK a `careers` (la agrega Academic), pero sin relación aquí porque
+ * Core no depende de Academic. La base garantiza un solo jefe y una sola Subdirección por unidad en cada fecha, y
+ * sube `users.authz_version` en cada cambio. Quién cubre qué lo decide ScopedContext, no este modelo.
  */
-#[Fillable(['user_id', 'role', 'campus_id', 'department_id', 'career_id', 'valid_from', 'valid_to'])]
-#[UseFactory(RoleScopeFactory::class)]
-class RoleScope extends Model
+#[Fillable(['user_id', 'role', 'campus_id', 'org_unit_id', 'career_id', 'valid_from', 'valid_to'])]
+#[UseFactory(RoleAssignmentFactory::class)]
+class RoleAssignment extends Model
 {
-    /** @use HasFactory<RoleScopeFactory> */
+    /** @use HasFactory<RoleAssignmentFactory> */
     use HasFactory, HasUuids;
 
     /**
@@ -52,6 +54,14 @@ class RoleScope extends Model
     public function campus(): BelongsTo
     {
         return $this->belongsTo(Campus::class);
+    }
+
+    /**
+     * @return BelongsTo<OrgUnit, $this>
+     */
+    public function orgUnit(): BelongsTo
+    {
+        return $this->belongsTo(OrgUnit::class);
     }
 
     /**

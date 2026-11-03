@@ -2,7 +2,7 @@
 
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Livewire\Livewire;
@@ -95,7 +95,7 @@ describe('banda', function () {
             ->withRole(Role::Docente, ['campus_id' => $this->c2->id])
             ->create(['name' => 'Juan Pérez']);
         $vencido = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create(['name' => 'Eva Luna']);
-        RoleScope::where('user_id', $vencido->id)->update(['valid_to' => today()->subDay()]);
+        RoleAssignment::where('user_id', $vencido->id)->update(['valid_to' => today()->subDay()]);
 
         expect(textOf(domOf($this->actingAs($jefe)->get('/'))->querySelector('[data-testid="credential"]')))
             ->toBe('JP Juan Pérez Jefe de departamento académico · Campus II · Ene-Jun 2027')

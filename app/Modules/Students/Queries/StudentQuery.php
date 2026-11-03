@@ -4,8 +4,9 @@ namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
@@ -20,14 +21,16 @@ use Illuminate\Support\Str;
 /**
  * Lecturas de alumnos para las pantallas (tarea 1.6). El listado es de un campus, el activo de la credencial, y
  * deja ver lo mismo que StudentPolicy, filtrado en SQL con los alcances de ScopedContext y la misma regla que
- * ScopedContext::covers(): al admin y a la subdirección, todo el campus; al jefe de departamento, las carreras
- * de su departamento; al coordinador, su carrera (reglas-de-negocio.md, "Consultar alumnos"). Incluye a los
- * alumnos inactivos, como todo catálogo; los borrados no.
+ * ScopedContext::covers(): al admin, todo el campus; a la subdirección, las carreras de los departamentos de
+ * Subdirección Académica; al jefe de departamento, las carreras de su departamento; al coordinador, su carrera
+ * (reglas-de-negocio.md, "Consultar alumnos"). Incluye a los alumnos inactivos, como todo catálogo; los borrados no.
  */
 final class StudentQuery
 {
     /** Valor del filtro de estatus para los alumnos que quedaron sin estatus. */
     public const string WITHOUT_STATUS = 'sin_estatus';
+
+    public function __construct(private readonly OrgTree $orgTree) {}
 
     /**
      * La tabla de alumnos del campus, por número de control y sin los borrados, con su avance para la columna de
@@ -92,9 +95,9 @@ final class StudentQuery
 
     /**
      * Los alumnos del campus que el usuario puede ver: si trabaja en el campus (ScopedContext::canAccessCampus()),
-     * con cada alcance de StudentPolicy::VIEWERS de ese campus o sin campus (de todo el Tec), los que covers() le
-     * daría, es decir, su departamento (de la carrera) y su carrera cuando el alcance los trae. Un alcance sin
-     * ninguno de los dos cubre todo el campus.
+     * con cada nombramiento de StudentPolicy::VIEWERS de ese campus o sin campus (de todo el Tec), los que covers()
+     * le daría: los de las carreras de un departamento de su unidad o de su subárbol (OrgTree) y de su carrera,
+     * cuando el nombramiento las trae. Uno sin unidad ni carrera cubre todo el campus.
      *
      * @return Builder<Student>
      */
@@ -110,7 +113,7 @@ final class StudentQuery
             return $query->whereRaw('false');
         }
 
-        $scopes = $context->scopes()->filter(fn (RoleScope $scope): bool => in_array($scope->role, StudentPolicy::VIEWERS, true)
+        $scopes = $context->scopes()->filter(fn (RoleAssignment $scope): bool => in_array($scope->role, StudentPolicy::VIEWERS, true)
             && ($scope->campus_id === null || $scope->campus_id === $campus->id));
 
         return $query->where(function (Builder $query) use ($scopes): void {
@@ -119,8 +122,8 @@ final class StudentQuery
             foreach ($scopes as $scope) {
                 $query->orWhere(fn (Builder $covered) => $covered
                     ->whereRaw('true')
-                    ->when($scope->department_id, fn (Builder $covered, string $department) => $covered
-                        ->whereIn('career_id', Career::withTrashed()->where('department_id', $department)->select('id')))
+                    ->when($scope->org_unit_id, fn (Builder $covered, string $unit) => $covered
+                        ->whereIn('career_id', Career::withTrashed()->whereIn('department_id', $this->orgTree->descendantsOrSelf($unit))->select('id')))
                     ->when($scope->career_id, fn (Builder $covered, string $career) => $covered->where('career_id', $career)));
             }
         });

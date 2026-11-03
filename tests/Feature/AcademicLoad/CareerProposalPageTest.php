@@ -253,7 +253,7 @@ describe('coordinador', function () {
         $other = Career::factory()->create(['code' => 'IND']);
         CareerCampus::factory()->create(['career_id' => $other->id, 'campus_id' => $this->campus->id]);
         $both = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])->create();
-        $both->roleScopes()->create(['role' => Role::Coordinador, 'campus_id' => $this->campus->id, 'career_id' => $other->id, 'valid_from' => today()->subMonth()->toDateString()]);
+        $both->roleAssignments()->create(['role' => Role::Coordinador, 'campus_id' => $this->campus->id, 'career_id' => $other->id, 'valid_from' => today()->subMonth()->toDateString()]);
 
         proposalPageAs($both, ['carrera' => $this->career->id])->assertSee('Cálculo Diferencial')->assertSee('IND');
         proposalPageAs($both, ['carrera' => 'no-es-uuid'])->assertForbidden();

@@ -7,7 +7,7 @@ use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Core\Actions\CreateStaffUser;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Enums\AccessSync;
@@ -23,8 +23,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
- * Pone el usuario, el rol y los alcances de un docente de acuerdo con su estado (docs/arquitectura/arquitectura.md,
- * "Acceso de docentes"). Es idempotente: correrla otra vez sin cambios en el docente no escribe nada.
+ * Pone el usuario, el rol y los alcances (nombramientos, `role_assignments`) de un docente de acuerdo con su estado
+ * (docs/arquitectura/arquitectura.md, "Acceso de docentes"). Es idempotente: correrla otra vez sin cambios en el
+ * docente no escribe nada.
  *
  * - Docente activo: su usuario es el ligado o, si no tiene, el de username = número de empleado, que se liga sin
  *   tocar su contraseña (S15, supuesto por confirmar), solo si está activo, no es de otro docente (aunque esté
@@ -179,15 +180,15 @@ final class SyncTeacherAccess
             $done[] = 'le dio el rol '.Role::Docente->label();
         }
 
-        $scopes = $user->roleScopes()
+        $scopes = $user->roleAssignments()
             ->where('role', Role::Docente)
             ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()->toDateString()))
             ->lockForUpdate()
             ->get();
-        $closing = $scopes->filter(fn (RoleScope $scope): bool => $scope->campus_id !== null);
+        $closing = $scopes->filter(fn (RoleAssignment $scope): bool => $scope->campus_id !== null);
 
-        if ($scopes->every(fn (RoleScope $scope): bool => $scope->campus_id !== null)) {
-            $user->roleScopes()->create(['role' => Role::Docente, 'valid_from' => today()->toDateString()]);
+        if ($scopes->every(fn (RoleAssignment $scope): bool => $scope->campus_id !== null)) {
+            $user->roleAssignments()->create(['role' => Role::Docente, 'valid_from' => today()->toDateString()]);
             [$old['docente_general'], $new['docente_general']] = [false, true];
             $done[] = 'abrió su alcance de '.Role::Docente->label().' en todo el Tec';
         }

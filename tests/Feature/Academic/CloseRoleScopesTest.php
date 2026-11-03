@@ -5,7 +5,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
 use Spatie\Activitylog\Models\Activity;
@@ -24,18 +24,18 @@ beforeEach(function () {
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => $this->department->id])->create();
 });
 
-function departmentScope(User $user, string $departmentId, array $dates): RoleScope
+function departmentScope(User $user, string $departmentId, array $dates): RoleAssignment
 {
-    return RoleScope::factory()->for($user)->create([
+    return RoleAssignment::factory()->for($user)->create([
         'role' => Role::JefeDepartamento,
-        'campus_id' => $user->roleScopes()->first()?->campus_id ?? Campus::factory()->create()->id,
-        'department_id' => $departmentId,
+        'campus_id' => $user->roleAssignments()->first()?->campus_id ?? Campus::factory()->create()->id,
+        'org_unit_id' => $departmentId,
         ...$dates,
     ]);
 }
 
 it('termina ayer un alcance vigente desde hace un mes', function () {
-    $scope = $this->jefe->roleScopes()->sole();
+    $scope = $this->jefe->roleAssignments()->sole();
 
     expect(app(CloseRoleScopes::class)->handle('department_id', $this->department->id))->toBe(1);
 
@@ -43,14 +43,14 @@ it('termina ayer un alcance vigente desde hace un mes', function () {
 });
 
 it('elimina un alcance que empieza hoy o mañana', function (int $daysFromToday) {
-    $this->jefe->roleScopes()->delete();
+    $this->jefe->roleAssignments()->delete();
     $scope = departmentScope($this->jefe, $this->department->id, ['valid_from' => today()->addDays($daysFromToday)->toDateString()]);
 
     expect(app(CloseRoleScopes::class)->handle('department_id', $this->department->id))->toBe(1);
 
     $entry = Activity::sole();
 
-    expect(RoleScope::find($scope->id))->toBeNull()
+    expect(RoleAssignment::find($scope->id))->toBeNull()
         ->and($entry->event)->toBe('deleted')
         ->and($entry->description)->toBe('Cerró el alcance de '.Role::JefeDepartamento->label().' por borrar el departamento SIS')
         ->and($entry->attribute_changes['old'])->toMatchArray([
@@ -62,7 +62,7 @@ it('elimina un alcance que empieza hoy o mañana', function (int $daysFromToday)
 })->with(['hoy' => 0, 'mañana' => 1]);
 
 it('no toca un alcance que ya venció', function () {
-    $this->jefe->roleScopes()->delete();
+    $this->jefe->roleAssignments()->delete();
     $scope = departmentScope($this->jefe, $this->department->id, [
         'valid_from' => today()->subMonths(6)->toDateString(),
         'valid_to' => today()->subMonth()->toDateString(),
@@ -79,7 +79,7 @@ it('no toca los alcances de otro departamento', function () {
 
     app(CloseRoleScopes::class)->handle('department_id', $this->department->id);
 
-    expect($otherJefe->roleScopes()->sole()->valid_to)->toBeNull();
+    expect($otherJefe->roleAssignments()->sole()->valid_to)->toBeNull();
 });
 
 it('cierra también los alcances de una carrera con career_id', function () {
@@ -88,8 +88,8 @@ it('cierra también los alcances de una carrera con career_id', function () {
 
     expect(app(CloseRoleScopes::class)->handle('career_id', $career->id))->toBe(1);
 
-    expect($coordinador->roleScopes()->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
-        ->and($this->jefe->roleScopes()->sole()->valid_to)->toBeNull();
+    expect($coordinador->roleAssignments()->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
+        ->and($this->jefe->roleAssignments()->sole()->valid_to)->toBeNull();
 });
 
 it('después de cerrar, el jefe ya no ejerce el rol', function () {

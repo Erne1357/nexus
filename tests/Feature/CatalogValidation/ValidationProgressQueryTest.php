@@ -16,7 +16,7 @@ use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
-use App\Modules\Core\Models\RoleScope;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -153,7 +153,7 @@ it('el jefe sale de quien recibe el aviso: alcance de rol vigente y usuario acti
 it('«Recordar» queda bloqueado si no falta nada, y la insignia cuenta jefes distintos', function () {
     $this->seed(RoleSeeder::class);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
-    RoleScope::factory()->for($jefe)->create(['role' => Role::JefeDepartamento, 'department_id' => $this->ele->id]);
+    RoleAssignment::factory()->for($jefe)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => $this->ele->id]);
 
     expect(($this->progress)()['remindable'])->toBe(['departments' => 2, 'heads' => 1]);
 

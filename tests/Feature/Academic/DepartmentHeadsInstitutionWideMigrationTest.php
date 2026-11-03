@@ -4,7 +4,6 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -14,11 +13,15 @@ use Spatie\Permission\Models\Role as SpatieRole;
 | La migración que vuelve al jefe de departamento uno por departamento para todo el Tec (confirmado el 30 de
 | octubre de 2026) convierte los datos que ya existen: el de la base de desarrollo con el masivo tiene un jefe por
 | departamento en Campus I y otro en Campus II, y una Subdirección por campus. La prueba regresa el esquema al de
-| antes con down(), siembra ese estado con DB::table y corre up().
+| antes con down() (primero el de la migración posterior que convirtió `role_scopes` en `role_assignments`), siembra
+| ese estado con DB::table y corre up(). Todo queda en la forma de entonces: lo que cubre cada alcance se revisa en
+| sus filas, porque ScopedContext ya lee `role_assignments`.
 */
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-10-30 12:00', 'America/Ciudad_Juarez'));
+
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_04_000001_create_role_assignments_from_role_scopes.php'))->down();
 
     $this->migration = require base_path('app/Modules/Academic/Database/Migrations/2026_10_30_000101_make_department_heads_institution_wide.php');
     $this->migration->down();
@@ -86,6 +89,24 @@ function scopeRow(string $id): ?object
     return DB::table('role_scopes')->where('id', $id)->first();
 }
 
+/**
+ * Campus y departamento de los alcances de `$role` que el usuario tiene vigentes hoy (30 de octubre de 2026). Con la
+ * regla de entonces, uno sin campus cubre su departamento (o todo, la Subdirección) en cualquier campus activo.
+ *
+ * @return list<array{campus_id: ?string, department_id: ?string}>
+ */
+function currentScopesOf(User $user, Role $role): array
+{
+    return DB::table('role_scopes')
+        ->where('user_id', $user->id)
+        ->where('role', $role->value)
+        ->where('valid_from', '<=', '2026-10-30')
+        ->where(fn ($query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', '2026-10-30'))
+        ->get(['campus_id', 'department_id'])
+        ->map(fn (object $row): array => (array) $row)
+        ->all();
+}
+
 it('deja un solo jefe vigente por departamento, sin campus: el más antiguo; los demás terminan ayer o se borran, con su alcance', function () {
     $sc = Department::factory()->create(['code' => 'SC']);
     $cb = Department::factory()->create(['code' => 'CB']);
@@ -123,13 +144,10 @@ it('deja un solo jefe vigente por departamento, sin campus: el más antiguo; los
 
     expect($current)->toHaveCount(3)->toMatchArray([$sc->id => $a->id, $cb->id => $g->id, $ii->id => $f->id]);
 
-    $context = fn (User $user): ScopedContext => app(ScopedContext::class)->forUser($user->fresh());
-
-    expect($context($a)->covers(Role::JefeDepartamento, $this->c1, $sc->id))->toBeTrue()
-        ->and($context($a)->covers(Role::JefeDepartamento, $this->c2, $sc->id))->toBeTrue()
-        ->and($context($b)->has(Role::JefeDepartamento))->toBeFalse()
-        ->and($context($c)->has(Role::JefeDepartamento))->toBeFalse()
-        ->and($context($f)->covers(Role::JefeDepartamento, $this->c1, $ii->id))->toBeTrue();
+    expect(currentScopesOf($a, Role::JefeDepartamento))->toBe([['campus_id' => null, 'department_id' => $sc->id]])
+        ->and(currentScopesOf($b, Role::JefeDepartamento))->toBe([])
+        ->and(currentScopesOf($c, Role::JefeDepartamento))->toBe([])
+        ->and(currentScopesOf($f, Role::JefeDepartamento))->toBe([['campus_id' => null, 'department_id' => $ii->id]]);
 });
 
 it('los jefes que ya terminaron pasan a no tener campus si no chocan con otro; si chocan, se quedan borrados', function () {
@@ -207,11 +225,7 @@ it('la Subdirección queda con un alcance de todo el Tec: el que vale hoy se con
         ->and(DB::table('role_scopes')->where('role', 'subdireccion')->whereNotNull('campus_id')->exists())->toBeFalse();
 
     foreach ([$s1, $s2, $s3, $s4] as $user) {
-        $context = app(ScopedContext::class)->forUser($user->fresh());
-
-        expect($context->covers(Role::Subdireccion, $this->c1))->toBeTrue()
-            ->and($context->covers(Role::Subdireccion, $this->c2))->toBeTrue()
-            ->and($context->scopes(Role::Subdireccion))->toHaveCount(1);
+        expect(currentScopesOf($user, Role::Subdireccion))->toBe([['campus_id' => null, 'department_id' => null]]);
     }
 });
 

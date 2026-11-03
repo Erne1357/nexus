@@ -22,6 +22,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // para las peticiones siguientes.
         $this->app->scoped(ScopedContext::class, fn (Application $app): ScopedContext => new ScopedContext(
             fn (): mixed => $app['auth']->user(),
+            $app->make(OrgTree::class),
             $app['session.store'],
         ));
 
