@@ -163,7 +163,7 @@ class DemoStaffSeeder extends Seeder
         return RoleAssignment::query()
             ->where('role', $role)
             ->where('org_unit_id', $unit)
-            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $today))
+            ->notEnded()
             ->where(fn (Builder $query) => $query
                 ->whereRelation('user', 'username', '<>', $username)
                 ->orWhere('valid_from', '>', $today))

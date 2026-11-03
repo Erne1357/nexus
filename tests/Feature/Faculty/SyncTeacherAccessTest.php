@@ -404,6 +404,19 @@ it('no liga un usuario con su número que tiene otro rol: conflict y no lo toca'
     'jefe de departamento' => Role::JefeDepartamento,
 ]);
 
+it('no liga la cuenta de quien fue personal aunque su nombramiento ya terminó', function () {
+    $user = User::factory()->withRole(Role::JefeDepartamento, [
+        'department_id' => $this->sis->id,
+        'valid_from' => today()->subYear()->toDateString(),
+        'valid_to' => today()->subMonth()->toDateString(),
+    ])->create(['username' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Conflict)
+        ->and($teacher->fresh()->user_id)->toBeNull()
+        ->and($user->fresh()->is_active)->toBeTrue();
+});
+
 it('liga un usuario activo con su número que solo tiene el rol docente', function () {
     $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create(['username' => '1234567']);
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);

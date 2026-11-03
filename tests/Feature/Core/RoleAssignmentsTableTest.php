@@ -107,6 +107,17 @@ it('rechaza una vigencia que termina antes de empezar y acepta una de un solo dÃ
         ->toThrow(QueryException::class, 'role_assignments_validity_check');
 });
 
+it('rechaza un nombramiento de admin con campus, unidad o carrera', function () {
+    $user = User::factory()->create();
+
+    expect(fn () => DB::table('role_assignments')->insert([
+        'user_id' => $user->id,
+        'role' => Role::Admin->value,
+        'campus_id' => Campus::factory()->create()->id,
+        'valid_from' => '2026-08-01',
+    ]))->toThrow(QueryException::class, 'role_assignments_admin_unscoped');
+});
+
 describe('puestos exclusivos (AZ-S7)', function () {
     it('rechaza un segundo jefe vigente de la misma unidad', function () {
         $unit = departmentKey(10);

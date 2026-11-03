@@ -134,14 +134,14 @@ final class SyncTeacherAccess
 
     /**
      * Si un usuario existente con el número del docente se puede ligar: activo, sin otro docente ligado (aunque esté
-     * borrado) y sin más puesto que `docente` (S15 y supuesto por confirmar).
+     * borrado) y sin más puesto que `docente`, ni vigente ni ya terminado ni por empezar: quien fue personal sigue siéndolo para
+     * esta regla, y la baja del docente no debe desactivar esa cuenta (S15 y supuesto por confirmar).
      */
     private function linkable(User $user): bool
     {
         return $user->is_active
             && ! $user->roleAssignments()
                 ->where('role', '<>', Role::Docente)
-                ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()->toDateString()))
                 ->exists()
             && ! Teacher::withTrashed()->where('user_id', $user->getKey())->exists();
     }
@@ -175,7 +175,7 @@ final class SyncTeacherAccess
 
         $scopes = $user->roleAssignments()
             ->where('role', Role::Docente)
-            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()->toDateString()))
+            ->notEnded()
             ->lockForUpdate()
             ->get();
         $closing = $scopes->filter(fn (RoleAssignment $scope): bool => $scope->campus_id !== null);

@@ -78,4 +78,17 @@ class RoleAssignment extends Model
         $query->where('valid_from', '<=', $day)
             ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $day));
     }
+
+    /**
+     * Vigentes hoy o por empezar, sin terminar: `valid_to` nulo o no anterior a hoy, sin mirar `valid_from`.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function notEnded(Builder $query): void
+    {
+        $day = today()->toDateString();
+
+        $query->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $day));
+    }
 }

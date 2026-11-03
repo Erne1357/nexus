@@ -27,7 +27,8 @@ use Illuminate\Support\Facades\Schema;
  *   `created_at` e `id`. Se conserva cada uno que no se traslapa con uno ya conservado; los demás se **eliminan**,
  *   porque terminarlos ayer no basta (la exclusión cuenta también los vencidos). Cada eliminado deja una entrada en la
  *   bitácora sobre su usuario, sin causante, con lo que tenía y el nombramiento que se quedó.
- * - Cada usuario con el rol `admin` de spatie recibe un nombramiento `admin` sin alcance desde hoy.
+ * - Cada usuario con el rol `admin` de spatie recibe un nombramiento `admin` sin alcance desde hoy; el CHECK
+ *   `role_assignments_admin_unscoped` impide que uno lleve campus, unidad o carrera.
  *
  * down() regresa el esquema y los datos que puede: quita los nombramientos `admin` y deja la Subdirección sin
  * unidad; los eliminados no vuelven. Falla si algún nombramiento quedó en una unidad que no es un departamento.
@@ -69,6 +70,10 @@ return new class extends Migration
         $this->appointAdmins(today()->toDateString());
 
         DB::unprepared(<<<'SQL'
+            alter table role_assignments add constraint role_assignments_admin_unscoped check (
+                role <> 'admin' or (campus_id is null and org_unit_id is null and career_id is null)
+            );
+
             alter table role_assignments add constraint role_assignments_one_jefe exclude using gist (
                 org_unit_id with =,
                 daterange(valid_from, valid_to, '[]') with &&
@@ -103,6 +108,7 @@ return new class extends Migration
         DB::unprepared(<<<'SQL'
             drop trigger if exists role_assignments_touch_user on role_assignments;
             drop function if exists role_assignments_touch_user();
+            alter table role_assignments drop constraint if exists role_assignments_admin_unscoped;
             alter table role_assignments drop constraint if exists role_assignments_one_jefe;
             alter table role_assignments drop constraint if exists role_assignments_one_subdireccion;
             delete from role_assignments where role = 'admin';

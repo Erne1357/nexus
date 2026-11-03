@@ -711,7 +711,7 @@ final class ScopedContext
         $this->terms = [];
 
         $snapshot = $user === null ? new AuthorizationSnapshot : $this->snapshots->for($user);
-        $this->admin = in_array(Role::Admin, $snapshot->roles(), true);
+        $this->admin = array_any($snapshot->scopes(Role::Admin), fn (AssignmentScope $scope): bool => $scope->campusId === null && $scope->unitId === null && $scope->careerId === null);
         $scoped = array_filter($snapshot->scopes(), fn (AssignmentScope $scope): bool => $scope->role !== Role::Admin);
         $this->holdsNonTeacherScope = array_any($scoped, fn (AssignmentScope $scope): bool => $scope->role !== Role::Docente);
         $this->assignments = array_values(array_filter($scoped, fn (AssignmentScope $scope): bool => $scope->campusId === null || $this->isActiveCampus($scope->campusId)));
