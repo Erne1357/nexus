@@ -3,16 +3,17 @@
 namespace App\Modules\CatalogValidation\Actions;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Actions\NotifyHolders;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\RecipientsQuery;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Notification;
 
 /**
  * Avisa a los jefes que tienen catálogos por validar (tarea 2.9; reglas-de-negocio.md, «Periodo y
@@ -27,6 +28,7 @@ final class NotifyPendingReviews
     public function __construct(
         private readonly CatalogReviewQuery $reviews,
         private readonly RecipientsQuery $recipients,
+        private readonly NotifyHolders $notifyHolders,
     ) {}
 
     /**
@@ -63,11 +65,9 @@ final class NotifyPendingReviews
                 continue;
             }
 
-            $heads = $this->recipients->for(Role::JefeDepartamento, $campus, $department->getKey());
+            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $department->getKey()));
 
-            Notification::send($heads, new CatalogReviewsPending($term, $campus, $department, $pending));
-
-            $notified = $notified->concat($heads);
+            $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $campus, $department, $pending)));
         }
 
         return $notified;

@@ -3,12 +3,13 @@
 namespace App\Modules\AcademicLoad\Actions\Proposals;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Notifications\ProposalSubmitted;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Actions\NotifyHolders;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Queries\RecipientsQuery;
-use Illuminate\Support\Facades\Notification;
 
 /**
  * Avisa que una carrera envió (o reenvió) su propuesta (tareas 2.7 y 2.9): al jefe de cada departamento cuya
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\Notification;
  */
 final class NotifyProposalSubmitted
 {
-    public function __construct(private readonly RecipientsQuery $recipients) {}
+    public function __construct(private readonly RecipientsQuery $recipients, private readonly NotifyHolders $notifyHolders) {}
 
     /**
      * @param  list<string>  $departmentIds
@@ -50,11 +51,9 @@ final class NotifyProposalSubmitted
                 continue;
             }
 
-            $heads = $this->recipients->for(Role::JefeDepartamento, $proposal->campus_id, $department->getKey());
+            $heads = $this->recipients->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $proposal->campus_id, unit: $department->getKey()));
 
-            Notification::send($heads, new ProposalSubmitted($proposal, $department, (int) $row->subjects, (int) $row->groups, $resubmitted));
-
-            $notified += $heads->count();
+            $notified += $this->notifyHolders->handle($heads, new ProposalSubmitted($proposal, $department, (int) $row->subjects, (int) $row->groups, $resubmitted))->count();
         }
 
         return $notified;

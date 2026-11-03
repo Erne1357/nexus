@@ -132,3 +132,11 @@ it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe'
 
     expect(ProposalSubmitted::unavailableReason(app(ScopedContext::class)->forUser($this->jefeCb), $message))->toBeNull();
 });
+
+it('guarda el puesto de jefe en el aviso', function () {
+    rowFor($this->cb, 2);
+
+    app(NotifyProposalSubmitted::class)->handle($this->proposal, [$this->cb->id]);
+
+    expect($this->jefeCb->notifications()->first()->data['role'])->toBe('jefe_departamento');
+});

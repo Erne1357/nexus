@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Notifications;
 
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Route;
@@ -16,11 +17,16 @@ use Illuminate\Support\Str;
  * lo abriría (unavailableReason) y, si no, se lo dice en lugar de llevarlo: cada clase agrega sus condiciones (que el
  * registro exista, que siga en su alcance) a la de omisión, que la ruta exista.
  *
+ * Un aviso puede ir a un puesto (`addressedTo()`): se guarda en `data.role` y, al abrirlo, la sesión actúa con ese puesto
+ * (OpenNotification). NotifyHolders manda una copia por destinatario, cada una con su puesto.
+ *
  * Laravel clona la notificación para cada destinatario y canal antes de darle llave; __clone le da a cada
  * copia un UUIDv7 propio (ADR-0014), en lugar del UUIDv4 que pondría Laravel.
  */
 abstract class NexusNotification extends Notification
 {
+    private ?Role $addressedRole = null;
+
     abstract public function message(object $notifiable): NotificationMessage;
 
     /**
@@ -53,12 +59,27 @@ abstract class NexusNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return $this->message($notifiable)->toArray();
+        return $this->message($notifiable)->withRole($this->addressedRole)->toArray();
+    }
+
+    /**
+     * El puesto al que va el aviso (`data.role`).
+     */
+    public function addressedTo(Role $role): static
+    {
+        $this->addressedRole = $role;
+
+        return $this;
+    }
+
+    public function addressedRole(): ?Role
+    {
+        return $this->addressedRole;
     }
 
     /**
      * Por qué el destino ya no se puede abrir para la persona de `$context`, con el perfil con que lo abriría
-     * (OpenNotification pasa el del puesto del aviso, ScopedContext::asRole()), o null si se puede. Recibe el
+     * (OpenNotification pasa el del puesto de `data.role`, ScopedContext::asRole()), o null si se puede. Recibe el
      * mensaje guardado, no la notificación, porque la campana solo tiene la fila de la base.
      */
     public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string

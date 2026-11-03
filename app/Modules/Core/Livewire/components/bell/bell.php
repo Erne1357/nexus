@@ -48,6 +48,7 @@ new class extends Component
             'badge' => $unread > 99 ? '99+' : (string) $unread,
             'total' => $total,
             'showCampus' => $showCampus,
+            'showRole' => count($context->heldRoles()) > 1,
             'items' => $user === null ? collect() : $notifications->recent($user, withCampus: $showCampus),
             'label' => match (true) {
                 $unread === 0 => 'Notificaciones: sin notificaciones nuevas',

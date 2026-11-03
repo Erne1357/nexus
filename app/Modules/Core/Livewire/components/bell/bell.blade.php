@@ -74,7 +74,7 @@
             </div>
 
             <ul role="list" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                @include('core::notifications.list', ['rows' => $items, 'showCampus' => $showCampus])
+                @include('core::notifications.list', ['rows' => $items, 'showCampus' => $showCampus, 'showRole' => $showRole])
             </ul>
 
             <div class="flex-none border-t border-base-300 p-1.5">

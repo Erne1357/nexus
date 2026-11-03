@@ -54,7 +54,7 @@ new #[Title('Notificaciones')] class extends Component
         $onlyUnread = $this->filter === 'sin-leer';
 
         if ($user === null) {
-            return ['items' => new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE), 'unread' => 0, 'total' => 0, 'onlyUnread' => $onlyUnread, 'types' => [], 'showCampus' => false];
+            return ['items' => new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE), 'unread' => 0, 'total' => 0, 'onlyUnread' => $onlyUnread, 'types' => [], 'showCampus' => false, 'showRole' => false];
         }
 
         // Los tipos se calculan una vez por pintado. Un `?tipo=` que ya no es de ninguno de sus avisos (o que
@@ -81,6 +81,7 @@ new #[Title('Notificaciones')] class extends Component
             'onlyUnread' => $onlyUnread,
             'types' => collect($typeMap)->map(fn (array $type, string $key): array => ['id' => $key, 'name' => $type['label']])->values()->all(),
             'showCampus' => $showCampus,
+            'showRole' => count($context->heldRoles()) > 1,
         ];
     }
 
