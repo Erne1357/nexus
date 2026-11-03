@@ -106,6 +106,7 @@ describe('autoaprobación (AZ-01)', function () {
             ->call('confirmAccept', $this->iscPart->id)
             ->assertSeeHtml('data-testid="self-approval-warning"')
             ->assertSee('Tú enviaste esta propuesta.')
+            ->assertSee('Puedes continuar; la bitácora lo registrará como autoaprobación.')
             ->call('accept');
 
         $entry = Activity::query()->where('event', 'accepted')->sole();

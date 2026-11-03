@@ -25,7 +25,8 @@ use Illuminate\Support\Str;
  */
 abstract class NexusNotification extends Notification
 {
-    private ?Role $addressedRole = null;
+    /** Protegida, no privada: SerializesModels omite las propiedades privadas de una clase padre si el aviso se encola. */
+    protected ?Role $addressedRole = null;
 
     abstract public function message(object $notifiable): NotificationMessage;
 
