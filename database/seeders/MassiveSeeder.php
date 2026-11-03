@@ -10,6 +10,7 @@ use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
+use App\Modules\Core\Database\Seeders\LoginScreenDemoSeeder;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Database\Seeders\TermCalendarDemoSeeder;
 use App\Modules\Core\Database\Seeders\TermHistorySeeder;
@@ -75,5 +76,7 @@ class MassiveSeeder extends Seeder
         $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
 
         $this->command?->info(sprintf('Propuestas de carrera y bandejas: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $this->call(LoginScreenDemoSeeder::class);
     }
 }
