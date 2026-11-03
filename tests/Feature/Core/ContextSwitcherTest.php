@@ -103,6 +103,28 @@ it('al volver a "Elige un campus" olvida el campus elegido', function () {
         ->and(app(ScopedContext::class)->activeCampus())->toBeNull();
 });
 
+it('ofrece los campus del perfil activo y rechaza el de otro de sus puestos', function () {
+    // Por omisión su perfil sería Jefatura de proyecto docente (C1), el primero en el orden del enum.
+    $user = User::factory()
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
+        ->create();
+    actingAsRole($user, Role::Coordinador);
+
+    $component = Livewire::test('core::components.context-switcher')
+        ->assertViewHas('campuses', fn ($campuses): bool => $campuses->pluck('code')->all() === ['C2'])
+        ->assertSet('campusId', $this->c2->id)
+        ->set('campusId', $this->c1->id)
+        ->call('apply')
+        ->assertNoRedirect()
+        ->assertSet('campusId', $this->c2->id);
+
+    expect(lastToastOf($component))
+        ->type->toBe('error')
+        ->description->toBe('No trabajas en ese campus.')
+        ->and(session(ScopedContext::ACTIVE_CAMPUS))->toBeNull();
+});
+
 describe('elección rechazada', function () {
     beforeEach(function () {
         $this->actingAs($this->jefe);

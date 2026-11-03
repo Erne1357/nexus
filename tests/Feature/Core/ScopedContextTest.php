@@ -332,28 +332,39 @@ describe('alcance de todo el Tec (sin campus)', function () {
             ->and($context->canAccessCampus($this->c1))->toBeTrue();
     });
 
-    it('la credencial de un coordinador de C2 que también es docente de todo el Tec ofrece solo C2, aunque da clase en cualquiera', function () {
-        $context = scopedContextOf(User::factory()
-            ->withRole(Role::Docente)
+    it('los campus de la credencial salen del puesto activo', function () {
+        Campus::factory()->create(['code' => 'EAD', 'is_active' => false]);
+        $user = User::factory()
             ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
-            ->create());
+            ->withRole(Role::Docente)
+            ->create();
+
+        actingAsRole($user, Role::Coordinador);
+        $context = app(ScopedContext::class);
 
         expect($context->campuses()->pluck('code')->all())->toBe(['C2'])
             ->and($context->activeCampus()?->is($this->c2))->toBeTrue()
+            ->and($context->canAccessCampus($this->c1))->toBeFalse();
+
+        actingAsRole($user, Role::Docente);
+
+        expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2'])
+            ->and($context->activeCampus())->toBeNull()
             ->and($context->canAccessCampus($this->c1))->toBeTrue();
     });
 
-    it('la credencial de un coordinador de un campus desactivado o borrado que también es docente de todo el Tec no ofrece ningún campus', function (string $retired) {
+    it('un coordinador de un campus desactivado o borrado que también es docente de todo el Tec solo actúa como docente: la credencial ofrece los campus activos', function (string $retired) {
         $user = User::factory()
             ->withRole(Role::Docente)
             ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
-            ->create();
+            ->create(['last_role' => Role::Coordinador]);
         $retired === 'borrado' ? $this->c2->delete() : $this->c2->update(['is_active' => false]);
 
         $context = scopedContextOf($user);
 
-        expect($context->campuses())->toBeEmpty()
-            ->and($context->activeCampus())->toBeNull()
+        expect($context->activeRole())->toBe(Role::Docente)
+            ->and($context->campuses()->pluck('code')->all())->toBe(['C1'])
+            ->and($context->activeCampus()?->is($this->c1))->toBeTrue()
             ->and($context->has(Role::Coordinador))->toBeFalse()
             ->and($context->has(Role::Docente))->toBeTrue()
             ->and($context->canAccessCampus($this->c1))->toBeTrue();
@@ -641,5 +652,130 @@ describe('ciclo de vida en el contenedor (Octane)', function () {
         $this->get('/_test/scoped-context')->assertExactJson(['campuses' => ['C1', 'C2'], 'active' => 'C1']);
 
         $this->actingAs($onlyC2)->get('/_test/scoped-context')->assertExactJson(['campuses' => ['C2'], 'active' => 'C2']);
+    });
+});
+
+describe('perfil activo', function () {
+    /*
+    | Con sesión, el contexto de quien entró responde solo con su perfil activo (spec 8.1, AZ-S4): el puesto que eligió
+    | y sus nombramientos. El de otro usuario (forUser), que no tiene sesión, cuenta todos sus puestos.
+    */
+
+    it('con sesión, solo cuentan el puesto activo y sus alcances', function () {
+        $user = User::factory()
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create();
+
+        actingAsRole($user, Role::JefeDepartamento);
+        $context = app(ScopedContext::class);
+
+        expect($context->activeRole())->toBe(Role::JefeDepartamento)
+            ->and($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse()
+            ->and($context->coversDepartment(Role::JefeDepartamento, fakeKey(10)))->toBeTrue()
+            ->and($context->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeTrue()
+            ->and($context->has(Role::JefeDepartamento))->toBeTrue()
+            ->and($context->has(Role::Coordinador))->toBeFalse()
+            ->and($context->scopes()->pluck('role')->all())->toBe([Role::JefeDepartamento])
+            ->and($context->scopes(Role::Coordinador))->toBeEmpty()
+            ->and($context->roles())->toBe([Role::JefeDepartamento, Role::Coordinador])
+            ->and($context->heldRoles())->toBe([Role::JefeDepartamento, Role::Coordinador]);
+
+        actingAsRole($user, Role::Coordinador);
+
+        expect($context->activeRole())->toBe(Role::Coordinador)
+            ->and($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue()
+            ->and($context->coversDepartment(Role::JefeDepartamento, fakeKey(10)))->toBeFalse()
+            ->and($context->canAccessCampus($this->c1))->toBeFalse()
+            ->and($context->campuses()->pluck('code')->all())->toBe(['C2']);
+    });
+
+    it('el perfil por omisión es el último usado y, si ya no lo tiene, el primero en el orden del enum; sin puestos, no hay perfil', function () {
+        // Un jefe por departamento (AZ-S7): cada uno con el suyo.
+        $holder = fn (?Role $last, int $department): User => User::factory()
+            ->withRole(Role::Docente)
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey($department)])
+            ->create(['last_role' => $last]);
+
+        expect(scopedContextOf($holder(Role::Coordinador, 10))->activeRole())->toBe(Role::Coordinador)
+            ->and(scopedContextOf($holder(Role::Subdireccion, 11))->activeRole())->toBe(Role::JefeDepartamento)
+            ->and(scopedContextOf($holder(null, 12))->activeRole())->toBe(Role::JefeDepartamento)
+            ->and(scopedContextOf(User::factory()->create(['last_role' => Role::Docente]))->activeRole())->toBeNull();
+
+        $user = $holder(Role::Docente, 13);
+        actingAsRole($user, Role::Coordinador);
+
+        expect(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador);
+
+        actingAsRole($user, Role::Admin);
+
+        expect(app(ScopedContext::class)->activeRole())->toBe(Role::Docente);
+
+        session([ScopedContext::ACTIVE_ROLE => 'no-es-un-puesto']);
+
+        expect(app(ScopedContext::class)->activeRole())->toBe(Role::Docente);
+    });
+
+    it('sin usuario autenticado no hay perfil activo', function () {
+        expect(app(ScopedContext::class)->activeRole())->toBeNull();
+    });
+
+    it('el contexto de otro usuario (forUser) cuenta todos sus puestos', function () {
+        $other = User::factory()
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create(['last_role' => Role::Coordinador]);
+
+        actingAsRole(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(21)])->create(), Role::Coordinador);
+        $context = app(ScopedContext::class)->forUser($other);
+
+        expect($context->activeRole())->toBeNull()
+            ->and($context->heldRoles())->toBe([Role::JefeDepartamento, Role::Coordinador])
+            ->and($context->has(Role::JefeDepartamento))->toBeTrue()
+            ->and($context->has(Role::Coordinador))->toBeTrue()
+            ->and($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue()
+            ->and($context->coversDepartment(Role::JefeDepartamento, fakeKey(10)))->toBeTrue()
+            ->and($context->scopes())->toHaveCount(2);
+    });
+
+    it('coversWithScope cuenta todos sus puestos aunque el activo sea otro', function () {
+        $user = User::factory()
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create();
+
+        actingAsRole($user, Role::JefeDepartamento);
+        $context = app(ScopedContext::class);
+
+        expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse()
+            ->and($context->coversWithScope(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue()
+            ->and($context->coversWithScope(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeTrue();
+    });
+
+    it('el admin activo cubre todo; con otro perfil activo, no', function () {
+        $user = User::factory()->admin()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
+
+        actingAsRole($user, Role::Admin);
+        $context = app(ScopedContext::class);
+
+        expect($context->isAdmin())->toBeTrue()
+            ->and($context->has(Role::Coordinador))->toBeTrue()
+            ->and($context->covers(Role::Coordinador, $this->c1, career: fakeKey(21)))->toBeTrue()
+            ->and($context->coversDepartment(Role::JefeDepartamento, fakeKey(11)))->toBeTrue()
+            ->and($context->canAccessCampus($this->c1))->toBeTrue()
+            ->and($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2'])
+            ->and($context->scopes())->toBeEmpty();
+
+        actingAsRole($user, Role::JefeDepartamento);
+
+        expect($context->isAdmin())->toBeFalse()
+            ->and($context->has(Role::Admin))->toBeFalse()
+            ->and($context->has(Role::Coordinador))->toBeFalse()
+            ->and($context->covers(Role::Coordinador, $this->c1, career: fakeKey(21)))->toBeFalse()
+            ->and($context->coversDepartment(Role::JefeDepartamento, fakeKey(10)))->toBeTrue()
+            ->and($context->coversDepartment(Role::JefeDepartamento, fakeKey(11)))->toBeFalse()
+            ->and($context->scopes()->pluck('role')->all())->toBe([Role::JefeDepartamento])
+            ->and($context->roles())->toBe([Role::Admin, Role::JefeDepartamento]);
     });
 });

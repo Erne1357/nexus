@@ -22,7 +22,8 @@ new #[Title('Inicio')] class extends Component
      */
     public function with(ScopedContext $context, TermCalendarQuery $calendar): array
     {
-        $term = $context->roles() === [] ? null : $context->activeTerm();
+        $roles = in_array(Role::Admin, $context->roles(), true) ? [Role::Admin] : $context->roles();
+        $term = $roles === [] ? null : $context->activeTerm();
         $campus = $context->activeCampus();
         $windows = $term === null ? [] : $calendar->upcoming($term, $campus);
 
@@ -36,7 +37,7 @@ new #[Title('Inicio')] class extends Component
             'blocks' => array_map(fn (Role $role): array => [
                 'title' => $role->label(),
                 'description' => $this->description($role),
-            ], $context->roles()),
+            ], $roles),
         ];
     }
 

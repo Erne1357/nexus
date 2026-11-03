@@ -17,6 +17,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NotificationMessage;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\Notification;
 
 /*
@@ -86,6 +87,24 @@ it('al reenviar, avisa «reenvió» solo a los departamentos que no habían acep
 
     Notification::assertSentTo($this->jefeCb, ProposalSubmitted::class, fn (ProposalSubmitted $notification) => $notification->message($this->jefeCb)->title === 'Ingeniería en Sistemas Computacionales reenvió su propuesta');
     Notification::assertNotSentTo($this->jefeSc, ProposalSubmitted::class);
+});
+
+// Los avisos van a todos los puestos de la persona (spec 8.4), no solo al perfil con que entró: quien envía como
+// coordinador recibe el aviso de su departamento como jefe.
+it('un jefe que también coordina recibe el aviso de propuesta aunque su último perfil sea Coordinación', function () {
+    Notification::fake();
+    $industrial = Department::factory()->create(['code' => 'IND', 'name' => 'Ingeniería Industrial']);
+    $jefeCoordinador = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => $industrial->id])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])
+        ->create(['last_role' => Role::Coordinador]);
+    rowFor($industrial, 2);
+
+    $this->actingAs($jefeCoordinador);
+    app(SubmitCareerProposal::class)->handle($this->proposal, $jefeCoordinador);
+
+    expect(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador);
+    Notification::assertSentTo($jefeCoordinador, ProposalSubmitted::class, fn (ProposalSubmitted $notification) => $notification->message($jefeCoordinador)->parameters['depto'] === 'IND');
 });
 
 it('sin departamentos pendientes no avisa a nadie', function () {
