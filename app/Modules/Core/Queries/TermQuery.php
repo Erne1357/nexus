@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -10,7 +11,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Gate;
 
 /**
  * Lecturas de periodos para las pantallas.
@@ -99,7 +99,7 @@ final class TermQuery
     {
         return Term::query()
             ->with(['openings.campus' => fn (BelongsTo $query) => $query->withTrashed()])
-            ->unless(Gate::forUser($context->user())->allows('viewAny', Term::class), fn (Builder $query) => $query->whereRaw('false'))
+            ->unless($context->allowsAny(CorePermission::TermView), fn (Builder $query) => $query->whereRaw('false'))
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->orderByDesc('starts_on')
             ->paginate($perPage);
