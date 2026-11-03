@@ -793,6 +793,31 @@ describe('perfil activo', function () {
             ->and($context->scopes())->toHaveCount(2);
     });
 
+    it('asRole responde con otro perfil sin tocar la sesión; sin ese puesto, no actúa con ninguno', function () {
+        $user = User::factory()
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10), 'campus_id' => $this->c1->id])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create();
+
+        actingAsRole($user, Role::Coordinador);
+        $context = app(ScopedContext::class);
+        $asJefe = $context->asRole(Role::JefeDepartamento);
+
+        expect($asJefe->activeRole())->toBe(Role::JefeDepartamento)
+            ->and($asJefe->coversDepartment(Role::JefeDepartamento, fakeKey(10)))->toBeTrue()
+            ->and($asJefe->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse()
+            ->and($asJefe->campuses()->pluck('code')->all())->toBe(['C1'])
+            ->and($context->activeRole())->toBe(Role::Coordinador)
+            ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::Coordinador->value);
+
+        $asSubdireccion = $context->asRole(Role::Subdireccion);
+
+        expect($asSubdireccion->activeRole())->toBeNull()
+            ->and($asSubdireccion->has(Role::JefeDepartamento))->toBeFalse()
+            ->and($asSubdireccion->has(Role::Coordinador))->toBeFalse()
+            ->and($asSubdireccion->campuses())->toBeEmpty();
+    });
+
     it('coversWithScope cuenta todos sus puestos aunque el activo sea otro', function () {
         $user = User::factory()
             ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])

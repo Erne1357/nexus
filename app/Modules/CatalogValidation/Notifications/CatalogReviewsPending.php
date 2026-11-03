@@ -7,7 +7,6 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
@@ -60,7 +59,7 @@ final class CatalogReviewsPending extends NexusNotification implements Addressed
         );
     }
 
-    public static function unavailableReason(User $user, NotificationMessage $message): ?string
+    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
     {
         $department = Department::query()->find($message->parameters['department'] ?? null);
 
@@ -68,11 +67,11 @@ final class CatalogReviewsPending extends NexusNotification implements Addressed
             return 'Ese departamento ya no existe.';
         }
 
-        if ($message->campusId !== null && ! app(ScopedContext::class)->forUser($user)->covers(Role::JefeDepartamento, $message->campusId, $department->getKey())) {
+        if ($message->campusId !== null && ! $context->covers(Role::JefeDepartamento, $message->campusId, $department->getKey())) {
             return "Ya no eres jefe de {$department->name}.";
         }
 
-        return parent::unavailableReason($user, $message);
+        return parent::unavailableReason($context, $message);
     }
 
     /**

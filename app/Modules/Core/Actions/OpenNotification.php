@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -21,9 +22,12 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * acepta sus parámetros), da el motivo en lugar de la dirección, para que la campana lo avise. Si el aviso es
  * de un periodo y un campus, deja la credencial en ellos (SetActiveContext), para que la pantalla muestre lo que
  * dice el aviso; si el usuario ya no trabaja en ese campus, tampoco lo lleva. Solo abre notificaciones del
- * usuario, que es el de la sesión: la credencial que cambia es la suya. Si el aviso es de un puesto
- * (AddressedToRole) que el usuario tiene y no es el activo, antes de todo cambia a ese perfil (SwitchRole), para que
- * el destino se vea con su alcance; si ya no lo tiene, lo abre como cualquiera.
+ * usuario, que es el de la sesión: la credencial que cambia es la suya.
+ *
+ * Si el aviso es de un puesto (AddressedToRole) que el usuario tiene y no es el activo, todo lo anterior se decide
+ * con ese puesto (ScopedContext::asRole(), sin tocar la sesión) y, solo si se puede abrir, cambia a ese perfil
+ * (SwitchRole) antes de mover la credencial, para que el destino se vea con su alcance; si no se puede, la sesión
+ * se queda como estaba. Si ya no tiene el puesto, lo abre como cualquiera.
  */
 final class OpenNotification
 {
@@ -52,16 +56,10 @@ final class OpenNotification
 
         $message = NotificationMessage::fromArray($notification->data);
         $type = is_subclass_of($notification->type, NexusNotification::class) ? $notification->type : NexusNotification::class;
+        $role = $this->roleToSwitchTo($type);
+        $context = $role === null ? $this->context : $this->context->asRole($role);
 
-        if (is_subclass_of($type, AddressedToRole::class)) {
-            $role = $type::addressedRole();
-
-            if ($this->context->activeRole() !== $role && in_array($role, $this->context->heldRoles(), true)) {
-                $this->switchRole->handle($role);
-            }
-        }
-
-        $problem = $type::unavailableReason($user, $message);
+        $problem = $type::unavailableReason($context, $message);
 
         if ($problem !== null) {
             return NotificationTarget::unavailable($problem);
@@ -73,38 +71,60 @@ final class OpenNotification
             return NotificationTarget::unavailable('Esa pantalla no está disponible.');
         }
 
-        $problem = $this->switchContext($message);
+        $campus = null;
+        $term = null;
 
-        return $problem === null ? NotificationTarget::to($url) : NotificationTarget::unavailable($problem);
+        if ($message->campusId !== null) {
+            $campus = KeyLookup::find(Campus::query(), $message->campusId);
+
+            if (! $campus instanceof Campus || ! $context->campuses()->contains($campus)) {
+                return NotificationTarget::unavailable('Ya no trabajas en el campus de ese aviso.');
+            }
+
+            $term = $message->termId === null ? $this->context->activeTerm() : KeyLookup::find(Term::query(), $message->termId);
+
+            if (! $term instanceof Term) {
+                return NotificationTarget::unavailable('El periodo de ese aviso ya no existe.');
+            }
+        }
+
+        if ($role !== null) {
+            $this->switchRole->handle($role);
+        }
+
+        if ($campus !== null && $term !== null) {
+            $this->moveCredential($campus, $term);
+        }
+
+        return NotificationTarget::to($url, switchedRole: $role !== null);
     }
 
     /**
-     * Deja la credencial en el periodo y el campus del aviso, o da por qué no se puede. El periodo actual se
-     * deja como el de omisión, igual que en el selector de la credencial. Si ya está ahí, no la toca (cambiarla
-     * olvida las últimas pantallas del menú).
+     * El perfil al que hay que cambiar para abrir un aviso de `$type`: el de un aviso de un puesto (AddressedToRole)
+     * si el usuario lo tiene y no es el activo; si no, ninguno.
+     *
+     * @param  class-string<NexusNotification>  $type
      */
-    private function switchContext(NotificationMessage $message): ?string
+    private function roleToSwitchTo(string $type): ?Role
     {
-        if ($message->campusId === null) {
+        if (! is_subclass_of($type, AddressedToRole::class)) {
             return null;
         }
 
-        $campus = KeyLookup::find(Campus::query(), $message->campusId);
+        $role = $type::addressedRole();
 
-        if (! $campus instanceof Campus || ! $this->context->campuses()->contains($campus)) {
-            return 'Ya no trabajas en el campus de ese aviso.';
-        }
+        return $this->context->activeRole() !== $role && in_array($role, $this->context->heldRoles(), true) ? $role : null;
+    }
 
-        $term = $message->termId === null ? $this->context->activeTerm() : KeyLookup::find(Term::query(), $message->termId);
-
-        if (! $term instanceof Term) {
-            return 'El periodo de ese aviso ya no existe.';
-        }
-
+    /**
+     * Deja la credencial en el periodo y el campus del aviso. El periodo actual se deja como el de omisión, igual
+     * que en el selector de la credencial. Si ya está ahí, no la toca (cambiarla olvida las últimas pantallas del
+     * menú).
+     */
+    private function moveCredential(Campus $campus, Term $term): void
+    {
         if (! $campus->is($this->context->activeCampus()) || ! $term->is($this->context->activeTerm())) {
             $this->setActiveContext->handle($campus, $term->is_current ? null : $term);
         }
-
-        return null;
     }
 }

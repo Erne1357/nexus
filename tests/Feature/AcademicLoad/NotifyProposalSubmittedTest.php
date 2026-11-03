@@ -120,8 +120,8 @@ it('deja de poder abrirse si el usuario ya no es jefe del departamento o la prop
     app(NotifyProposalSubmitted::class)->handle($this->proposal, [$this->cb->id]);
     $message = NotificationMessage::fromArray($this->jefeCb->notifications()->first()->data);
 
-    expect(ProposalSubmitted::unavailableReason($this->jefeSc, $message))->toBe('Ya no eres jefe de Ciencias Básicas.')
-        ->and(ProposalSubmitted::unavailableReason($this->jefeCb, NotificationMessage::fromArray([...$this->jefeCb->notifications()->first()->data, 'parameters' => ['depto' => 'CB', 'carrera' => fakeKey(77)]])))->toBe('Esa propuesta ya no existe.');
+    expect(ProposalSubmitted::unavailableReason(app(ScopedContext::class)->forUser($this->jefeSc), $message))->toBe('Ya no eres jefe de Ciencias Básicas.')
+        ->and(ProposalSubmitted::unavailableReason(app(ScopedContext::class)->forUser($this->jefeCb), NotificationMessage::fromArray([...$this->jefeCb->notifications()->first()->data, 'parameters' => ['depto' => 'CB', 'carrera' => fakeKey(77)]])))->toBe('Esa propuesta ya no existe.');
 });
 
 it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe', function () {
@@ -130,5 +130,5 @@ it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe'
     $message = NotificationMessage::fromArray($this->jefeCb->notifications()->first()->data);
     Career::query()->whereKey($this->proposal->career_id)->delete();
 
-    expect(ProposalSubmitted::unavailableReason($this->jefeCb, $message))->toBeNull();
+    expect(ProposalSubmitted::unavailableReason(app(ScopedContext::class)->forUser($this->jefeCb), $message))->toBeNull();
 });

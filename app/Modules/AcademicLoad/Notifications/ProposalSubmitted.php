@@ -6,7 +6,6 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
@@ -61,7 +60,7 @@ final class ProposalSubmitted extends NexusNotification implements AddressedToRo
         );
     }
 
-    public static function unavailableReason(User $user, NotificationMessage $message): ?string
+    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
     {
         $career = $message->parameters['carrera'] ?? null;
         $proposal = $message->termId === null || $message->campusId === null || ! is_string($career) ? null : CareerProposal::query()
@@ -75,10 +74,10 @@ final class ProposalSubmitted extends NexusNotification implements AddressedToRo
             return 'Esa propuesta ya no existe.';
         }
 
-        if (! app(ScopedContext::class)->forUser($user)->covers(Role::JefeDepartamento, $proposal->campus_id, $department->getKey())) {
+        if (! $context->covers(Role::JefeDepartamento, $proposal->campus_id, $department->getKey())) {
             return "Ya no eres jefe de {$department->name}.";
         }
 
-        return parent::unavailableReason($user, $message);
+        return parent::unavailableReason($context, $message);
     }
 }

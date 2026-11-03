@@ -20,6 +20,7 @@ use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
+use Livewire\Livewire;
 
 /*
 | Tarea 2.9: notificaciones en base de datos. Cada módulo define las suyas sobre NexusNotification, que
@@ -233,6 +234,55 @@ it('si ya no tiene el puesto del aviso, no cambia de perfil', function () {
     expect($target->url)->toBe(route('home'))
         ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador)
         ->and($ana->fresh()->last_role)->toBeNull();
+});
+
+it('un aviso que ya no se puede abrir no cambia el perfil', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $ana = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10), 'campus_id' => $c1->id])
+        ->withRole(Role::Coordinador, ['campus_id' => $c2->id, 'career_id' => careerKey(20)])
+        ->create();
+    // Un aviso de jefe en C2, donde Ana solo coordina: como jefa ya no lo puede abrir, aunque como coordinadora sí
+    // trabaje en C2.
+    $ana->notify(new TestJefeNotice(new NotificationMessage(title: 'Aviso de jefe', body: 'x', icon: 'o-bell', route: 'home', campusId: $c2->id)));
+    actingAsRole($ana, Role::Coordinador);
+    session(['core.recent_pages' => ['academico' => '/campus']]);
+
+    $component = Livewire::test('core::components.bell')
+        ->call('open', $ana->notifications()->value('id'))
+        ->assertNoRedirect();
+
+    expect(lastToastOf($component))->toMatchArray(['type' => 'warning', 'title' => 'Ya no trabajas en el campus de ese aviso.'])
+        ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::Coordinador->value)
+        ->and($ana->fresh()->last_role)->toBeNull()
+        ->and(session('core.recent_pages'))->toBe(['academico' => '/campus']);
+});
+
+it('un aviso que cambia de perfil abre su pantalla con una carga completa, sin refrescar los componentes de la página vieja', function () {
+    $ana = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(20)])
+        ->create();
+    $ana->notify(new TestJefeNotice(new NotificationMessage(title: 'Aviso de jefe', body: 'x', icon: 'o-bell', route: 'home')));
+    $ana->notify(notice('Aviso sin puesto'));
+    actingAsRole($ana, Role::Coordinador);
+
+    $switching = Livewire::test('core::components.bell')
+        ->call('open', $ana->notifications()->where('type', TestJefeNotice::class)->value('id'))
+        ->assertRedirect(route('home'))
+        ->assertNotDispatched('notifications-changed');
+
+    expect($switching->effects)->not->toHaveKey('redirectUsingNavigate')
+        ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
+
+    // Sin cambio de perfil sigue navegando con wire:navigate y avisa a la campana y a la página.
+    $plain = Livewire::test('core::components.bell')
+        ->call('open', $ana->notifications()->where('type', TestNotice::class)->value('id'))
+        ->assertRedirect(route('home'))
+        ->assertDispatched('notifications-changed');
+
+    expect($plain->effects['redirectUsingNavigate'] ?? false)->toBeTrue();
 });
 
 it('los avisos de jefe y de coordinación declaran su puesto', function () {

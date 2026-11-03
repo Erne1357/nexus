@@ -36,7 +36,7 @@ use LogicException;
  * nombramientos. activeRole() es la elección de la sesión (ACTIVE_ROLE) si todavía tiene ese puesto; si no, el último
  * que usó (`users.last_role`) si lo conserva; si no, el primero de heldRoles() en el orden del enum, y ese de omisión
  * queda fijo en la sesión la primera vez que se pregunta. Sin puestos no hay perfil. Elegir otro es del cambio de
- * perfil (SwitchRole). Sus puestos efectivos (effectiveRoles()) son
+ * perfil (SwitchRole); asRole() responde como si ya hubiera cambiado, sin tocar la sesión. Sus puestos efectivos (effectiveRoles()) son
  * solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, has, isAdmin, scopes, covers,
  * coversDepartment, canAccessCampus y campuses) responde con ellos. El contexto de otro usuario (forUser()) y uno sin
  * usuario autenticado no tienen perfil activo (el código de consola que fija el usuario del guard sí recibe el
@@ -135,6 +135,9 @@ final class ScopedContext
     /** @var array<int|string, self> contextos de otros usuarios, por id */
     private array $others = [];
 
+    /** El perfil de un contexto de asRole(), que no lee la sesión; null en los demás. */
+    private ?Role $pinnedRole = null;
+
     /**
      * @param  Closure(): mixed  $resolveUser  usuario de esta petición; sin sesión, el contexto
      *                                         activo es siempre el de omisión
@@ -164,6 +167,22 @@ final class ScopedContext
         }
 
         return $this->others[$user->getKey()];
+    }
+
+    /**
+     * El contexto de esta misma persona actuando con `$role`, sin tocar la sesión: responde lo que respondería esta
+     * sesión después de cambiar a ese perfil, para preguntar antes de cambiar (OpenNotification). Sus puestos
+     * efectivos son solo `$role` si lo tiene, y ninguno si no; no tiene campus, periodo ni perfil elegidos en sesión,
+     * así que campuses() son los de ese perfil. Comparte con este los campus activos.
+     */
+    public function asRole(Role $role): self
+    {
+        $user = $this->user();
+        $context = new self(fn (): ?User => $user, $this->orgTree, $this->snapshots, $this->permissions);
+        $context->campusSource = $this;
+        $context->pinnedRole = $role;
+
+        return $context;
     }
 
     /**
@@ -352,11 +371,16 @@ final class ScopedContext
      * ese puesto. Si la sesión no tiene una que valga, resuelve el de omisión, `users.last_role` si lo conserva o el
      * primero de heldRoles(), y lo fija en la sesión: así un cambio de perfil en otra sesión (otro dispositivo), que
      * cambia `last_role`, no le cambia el perfil a esta. Nulo sin puestos, y en el contexto de otro usuario
-     * (forUser()), que no tiene sesión y cuenta todos sus puestos. No escribe `last_role`: eso es del cambio de perfil.
+     * (forUser()), que no tiene sesión y cuenta todos sus puestos. En uno de asRole(), ese puesto si lo tiene. No
+     * escribe `last_role`: eso es del cambio de perfil.
      */
     public function activeRole(): ?Role
     {
         $held = $this->heldRoles();
+
+        if ($this->pinnedRole !== null) {
+            return in_array($this->pinnedRole, $held, true) ? $this->pinnedRole : null;
+        }
 
         if ($this->session === null || $held === []) {
             return null;
@@ -544,8 +568,9 @@ final class ScopedContext
     }
 
     /**
-     * Los puestos con los que actúa: el perfil activo, con sesión; si no, todos los que tiene. Todo permiso de
-     * gestión y toda la API de compatibilidad, salvo coversWithScope(), pasan por aquí.
+     * Los puestos con los que actúa: el perfil activo, con sesión; si no, todos los que tiene. En un contexto de
+     * asRole() sin ese puesto, ninguno. Todo permiso de gestión y toda la API de compatibilidad, salvo
+     * coversWithScope(), pasan por aquí.
      *
      * @return list<Role>
      */
@@ -553,7 +578,11 @@ final class ScopedContext
     {
         $active = $this->activeRole();
 
-        return $active === null ? $this->heldRoles() : [$active];
+        if ($active !== null) {
+            return [$active];
+        }
+
+        return $this->pinnedRole === null ? $this->heldRoles() : [];
     }
 
     /**
