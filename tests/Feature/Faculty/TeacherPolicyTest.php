@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -93,6 +94,20 @@ it('la Subdirección, una para todo el Tec, cubre a todos los docentes, también
         expect(teacherAbilitiesOf($subdireccion, $teacher))->toBe(allTeacherAbilities(true))
             ->and($subdireccion->can('deactivate', $teacher))->toBeTrue();
     }
+});
+
+it('Subdirección conserva al docente pero no los departamentos fuera de su subárbol', function () {
+    OrgUnit::findOrFail($this->cb->id)->update(['parent_id' => OrgUnit::where('code', 'DIRECCION')->value('id')]);
+    $inCb = Teacher::factory()->adscribedTo($this->cb)->create();
+    $subject = Subject::factory()->create(['department_id' => $this->cb->id]);
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+    expect($subdireccion->can('update', $inCb))->toBeTrue()
+        ->and($subdireccion->can('create', [Teacher::class, $this->cb]))->toBeFalse()
+        ->and($subdireccion->can('removeAdscription', [Teacher::class, $inCb->adscriptions()->sole()]))->toBeFalse()
+        ->and($subdireccion->can('setPrimaryAdscription', [Teacher::class, $inCb->adscriptions()->sole()]))->toBeFalse()
+        ->and($subdireccion->can('manageQualification', [$inCb, $subject]))->toBeFalse()
+        ->and($subdireccion->can('create', [Teacher::class, $this->sc]))->toBeTrue();
 });
 
 it('el jefe de SC, de todo el Tec, cubre a un adscrito a SC aunque su principal sea otra, pero no lo da de baja', function () {

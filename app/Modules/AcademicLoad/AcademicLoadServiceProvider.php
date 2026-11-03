@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Events\CareerProposalReturned;
 use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
@@ -52,9 +53,46 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     {
         return [
             new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::Academico,
-                visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador) || $context->has(Role::Subdireccion)),
+                visible: static fn (ScopedContext $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalView)),
             new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico,
-                visible: static fn (ScopedContext $context): bool => $context->has(Role::JefeDepartamento) || $context->has(Role::JefeProyectoDocente) || $context->has(Role::Subdireccion)),
+                visible: static fn (ScopedContext $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalReviewView)),
+        ];
+    }
+
+    public function permissions(): array
+    {
+        return [AcademicLoadPermission::class];
+    }
+
+    /**
+     * Subdirección y el jefe de proyecto docente ven la carga y la bandeja (Subdirección, además, la propuesta); el
+     * jefe de departamento, además, propone la carga y decide la parte de su departamento; el coordinador arma,
+     * corrige, envía y ve la propuesta de su carrera.
+     */
+    public function grants(): array
+    {
+        return [
+            Role::Subdireccion->value => [
+                AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::ProposalView,
+                AcademicLoadPermission::ProposalReviewView,
+            ],
+            Role::JefeDepartamento->value => [
+                AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::LoadPropose,
+                AcademicLoadPermission::ProposalReviewView,
+                AcademicLoadPermission::ProposalReviewDecide,
+            ],
+            Role::JefeProyectoDocente->value => [
+                AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::ProposalReviewView,
+            ],
+            Role::Coordinador->value => [
+                AcademicLoadPermission::ProposalCreate,
+                AcademicLoadPermission::ProposalUpdate,
+                AcademicLoadPermission::ProposalSubmit,
+                AcademicLoadPermission::ProposalView,
+            ],
         ];
     }
 }

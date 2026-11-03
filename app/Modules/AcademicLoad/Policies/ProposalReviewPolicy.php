@@ -3,8 +3,9 @@
 namespace App\Modules\AcademicLoad\Policies;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\ProposalReview;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
@@ -14,13 +15,13 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  * docs/dominio/reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Aceptar o regresar la parte del
  * departamento en una propuesta de carrera"):
  *
- * - Ven la bandeja de un departamento en un campus quienes ven su carga (AcademicLoadPolicy::VIEWERS): la
+ * - Ven la bandeja de un departamento en un campus con el permiso `academic_load.proposal_review.view`: la
  *   subdirección, el jefe de departamento y el jefe de proyecto docente de ese departamento (supuesto por
  *   confirmar).
  * - Acepta (AcceptProposalReview) o regresa (ReturnProposalReview) la parte el jefe de ese departamento en el
  *   campus de la propuesta, como quien propone la carga (supuesto por confirmar).
  *
- * covers() ya incluye al admin.
+ * El admin pasa por la concesión implícita del registro.
  */
 final class ProposalReviewPolicy
 {
@@ -28,13 +29,13 @@ final class ProposalReviewPolicy
 
     public function viewAny(User $user, Campus $campus, Department $department): bool
     {
-        return $this->scope($user)->covers(AcademicLoadPolicy::VIEWERS, $campus, department: $department->getKey());
+        return $this->scope($user)->allows(AcademicLoadPermission::ProposalReviewView, Target::of(campus: $campus->getKey(), unit: $department->getKey()));
     }
 
     public function decide(User $user, ProposalReview $review): bool
     {
         $review->loadMissing('proposal');
 
-        return $this->scope($user)->covers(Role::JefeDepartamento, $review->proposal->campus_id, department: $review->department_id);
+        return $this->scope($user)->allows(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $review->proposal->campus_id, unit: $review->department_id));
     }
 }

@@ -1,9 +1,17 @@
 {
     "grants": {
         "coordinador": [
+            "academic_load.proposal.create",
+            "academic_load.proposal.submit",
+            "academic_load.proposal.update",
+            "academic_load.proposal.view",
             "students.student.view"
         ],
         "jefe_departamento": [
+            "academic_load.load.propose",
+            "academic_load.load.view",
+            "academic_load.proposal_review.decide",
+            "academic_load.proposal_review.view",
             "catalog_validation.review.correct",
             "catalog_validation.review.flag",
             "catalog_validation.review.reopen",
@@ -22,6 +30,8 @@
             "students.student.view"
         ],
         "jefe_proyecto_docente": [
+            "academic_load.load.view",
+            "academic_load.proposal_review.view",
             "faculty.teacher.create",
             "faculty.teacher.manage_availability",
             "faculty.teacher.manage_external_loads",
@@ -33,6 +43,9 @@
             "faculty.teacher_qualification.manage"
         ],
         "subdireccion": [
+            "academic_load.load.view",
+            "academic_load.proposal.view",
+            "academic_load.proposal_review.view",
             "catalog_validation.progress.remind",
             "catalog_validation.progress.view",
             "catalog_validation.review.resolve_flag",

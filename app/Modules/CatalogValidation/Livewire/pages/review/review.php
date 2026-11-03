@@ -397,7 +397,7 @@ new #[Title('Validación de catálogos')] class extends Component
             $department = $departments->first(fn (Department $candidate): bool => $candidate->getKey() === $this->department);
             abort_if($department === null, 403);
         } else {
-            $department = $context->isAdmin() ? null : $departments->first(fn (Department $candidate): bool => app(CatalogReviewQuery::class)->coversDepartment($context, CatalogValidationPermission::ReviewFlag, $candidate->getKey()));
+            $department = $departments->first(fn (Department $candidate): bool => CatalogReviewQuery::allowsOnDepartment($context, CatalogValidationPermission::ReviewFlag, null, $candidate->getKey()));
         }
 
         $term = $context->activeTerm();

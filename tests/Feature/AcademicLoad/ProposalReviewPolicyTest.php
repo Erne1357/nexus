@@ -83,3 +83,16 @@ it('niega todo a un admin desactivado y a un jefe desactivado', function () {
     expect(inboxAbilitiesOf($admin))->toBe([false, false])
         ->and(inboxAbilitiesOf($jefe))->toBe([false, false]);
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $jefe = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(20)])
+        ->create();
+
+    actingAsRole($jefe, Role::JefeDepartamento);
+    expect(inboxAbilitiesOf($jefe))->toBe([true, true]);
+
+    actingAsRole($jefe, Role::Coordinador);
+    expect(inboxAbilitiesOf($jefe))->toBe([false, false]);
+});

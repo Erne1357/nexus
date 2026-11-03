@@ -90,9 +90,8 @@ final class StudentQuery
     }
 
     /**
-     * Los alumnos del campus que el usuario puede ver: si trabaja en el campus (ScopedContext::canAccessCampus()),
-     * con cada nombramiento que concede `students.student.view` (StudentsPermission) de ese campus o sin campus (de
-     * todo el Tec), los que ScopedContext::constrain() le daría: los de las carreras de un departamento de su unidad
+     * Los alumnos del campus que el usuario puede ver: con cada nombramiento que concede `students.student.view`
+     * (StudentsPermission) de ese campus o sin campus (de todo el Tec), los que ScopedContext::constrain() le daría: los de las carreras de un departamento de su unidad
      * o de su subárbol y de su carrera, cuando el nombramiento las trae. Uno sin unidad ni carrera cubre todo el campus.
      *
      * @return Builder<Student>
@@ -100,14 +99,6 @@ final class StudentQuery
     private function visible(ScopedContext $context, Campus $campus): Builder
     {
         $query = Student::query()->where('students.campus_id', $campus->id);
-
-        if ($context->isAdmin()) {
-            return $query;
-        }
-
-        if (! $context->canAccessCampus($campus)) {
-            return $query->whereRaw('false');
-        }
 
         return $context->constrain($query, StudentsPermission::StudentView, [
             'campus' => 'students.campus_id',

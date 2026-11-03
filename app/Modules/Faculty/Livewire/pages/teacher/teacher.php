@@ -804,7 +804,8 @@ new #[Title('Ficha del docente')] class extends Component
      */
     private function qualifiable(iterable $profile, Teacher $teacher, ScopedContext $context): array
     {
-        $coversTeacher = Gate::allows('update', $teacher);
+        $coversTeacher = $context->allows(FacultyPermission::TeacherViewAll)
+            || $context->allows(FacultyPermission::TeacherQualificationManage, Target::of(unit: $teacher->adscriptions->pluck('department_id')->unique()->values()->all()));
         $allowed = [];
 
         foreach ($profile as $qualification) {
