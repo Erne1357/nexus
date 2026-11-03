@@ -230,6 +230,15 @@ Retícula del plan: una materia está una sola vez en la retícula de un plan, y
 
 Seriación del plan: en el panel de una materia de la retícula se le agrega un requisito (seriación o correquisito), se cambia su tipo o se quita. Valen las reglas de la seriación importada (ver "Reglas de datos", confirmadas el 29 de octubre de 2026): las dos materias están en la retícula del plan, una materia no se pide a sí misma, una seriación que cierra un ciclo se rechaza y los correquisitos no forman ciclos, así que agregar un correquisito o volver correquisito una seriación no revisa el ciclo y volver seriación un correquisito sí; en el editor, el rechazo dice la cadena que cierra el ciclo. Una seriación está una vez por plan, materia y requisito (confirmado el 29 de octubre de 2026, "Reglas de datos"), y agregar una que se quitó restaura su fila con el tipo nuevo, como pide el modelo de datos (modelo-de-datos.md, Academic: volver a poner una fila quitada la restaura). Pedir de nuevo un requisito que la materia ya pide es error aunque sea con otro tipo: el tipo se cambia en su renglón (confirmado el 29 de octubre de 2026). Quitar un requisito es borrado lógico (confirmado el 29 de octubre de 2026, "Reglas de datos"). Agregar, cambiar o quitar un requisito cambia el avance de los alumnos del plan, y cada cambio queda en la bitácora con el tipo anterior y el nuevo.
 
+## Pantalla de acceso
+
+Tarea 1.17: el login G (DESIGN.md, "Pantalla de acceso"). Avisos y atajos se capturan en tablas propias (`login_notices`, `login_shortcuts`); sus pantallas de administración son otra tarea, mientras tanto llegan por el demo o a mano.
+
+| Id | Regla | Módulo | Entrega |
+|---|---|---|---|
+| LG-01 | La pantalla de acceso muestra en su carrusel los avisos activos, sin borrar y vigentes en ese momento (sin inicio o con inicio ya pasado, y sin fin o con fin todavía no alcanzado), por su orden y luego por antigüedad. Un aviso lleva título y, si se quiere, foto y enlace. Sin avisos vigentes queda la foto del edificio del ITCJ, sin carrusel (supuesto por confirmar). | Core | R1 |
+| LG-02 | El botón de atajos aparece sobre la foto mientras haya al menos un atajo activo y vigente, con la misma vigencia que LG-01; si no hay ninguno, no aparece (confirmado el 3 de noviembre de 2026). Un atajo es un enlace o una descarga y se consulta sin iniciar sesión. | Core | R1 |
+
 ## Parámetros por campus (perfil de flujo)
 
 | Clave | Presencial (C1, C2) | Notas para otras modalidades |
