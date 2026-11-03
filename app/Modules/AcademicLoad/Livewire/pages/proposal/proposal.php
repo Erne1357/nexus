@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\ProposalLock;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
@@ -15,7 +16,6 @@ use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
 use App\Modules\AcademicLoad\Queries\ProposalOverview;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Support\SemesterGrid;
 use Illuminate\Support\Facades\Gate;
@@ -115,7 +115,7 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     public function mount(ScopedContext $context, CareerProposalQuery $proposals): void
     {
-        abort_unless($context->has(Role::Coordinador) || $context->has(Role::Subdireccion), 403);
+        abort_unless($context->allowsAny(AcademicLoadPermission::ProposalView), 403);
 
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'reticula';
         $this->resolve($context, $proposals);

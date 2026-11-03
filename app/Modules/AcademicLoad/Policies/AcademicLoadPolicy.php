@@ -2,8 +2,9 @@
 
 namespace App\Modules\AcademicLoad\Policies;
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
 
@@ -23,20 +24,18 @@ final class AcademicLoadPolicy
 {
     use UsesScopedContext;
 
-    /**
-     * Los roles que ven la carga; ProposalReviewPolicy los usa también para la bandeja del departamento.
-     *
-     * @var list<Role>
-     */
-    public const array VIEWERS = [Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente];
-
     public function view(User $user, AcademicLoad $load): bool
     {
-        return $this->scope($user)->covers(self::VIEWERS, $load->campus_id, department: $load->department_id);
+        return $this->can($user, AcademicLoadPermission::LoadView, $load);
     }
 
     public function propose(User $user, AcademicLoad $load): bool
     {
-        return $this->scope($user)->covers(Role::JefeDepartamento, $load->campus_id, department: $load->department_id);
+        return $this->can($user, AcademicLoadPermission::LoadPropose, $load);
+    }
+
+    private function can(User $user, AcademicLoadPermission $permission, AcademicLoad $load): bool
+    {
+        return $this->scope($user)->allows($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
     }
 }

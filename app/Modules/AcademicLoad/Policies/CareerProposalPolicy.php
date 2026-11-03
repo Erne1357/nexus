@@ -3,8 +3,9 @@
 namespace App\Modules\AcademicLoad\Policies;
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
@@ -27,21 +28,26 @@ final class CareerProposalPolicy
 
     public function create(User $user, Campus $campus, Career $career): bool
     {
-        return $this->scope($user)->covers(Role::Coordinador, $campus, career: $career->getKey());
+        return $this->scope($user)->allows(AcademicLoadPermission::ProposalCreate, Target::of(campus: $campus->getKey(), career: $career->getKey()));
     }
 
     public function view(User $user, CareerProposal $proposal): bool
     {
-        return $this->scope($user)->covers([Role::Coordinador, Role::Subdireccion], $proposal->campus_id, career: $proposal->career_id);
+        return $this->can($user, AcademicLoadPermission::ProposalView, $proposal);
     }
 
     public function update(User $user, CareerProposal $proposal): bool
     {
-        return $this->scope($user)->covers(Role::Coordinador, $proposal->campus_id, career: $proposal->career_id);
+        return $this->can($user, AcademicLoadPermission::ProposalUpdate, $proposal);
     }
 
     public function submit(User $user, CareerProposal $proposal): bool
     {
-        return $this->update($user, $proposal);
+        return $this->can($user, AcademicLoadPermission::ProposalSubmit, $proposal);
+    }
+
+    private function can(User $user, AcademicLoadPermission $permission, CareerProposal $proposal): bool
+    {
+        return $this->scope($user)->allows($permission, Target::of(campus: $proposal->campus_id, career: $proposal->career_id));
     }
 }

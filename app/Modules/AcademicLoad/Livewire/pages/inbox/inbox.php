@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Proposals\AcceptProposalReview;
 use App\Modules\AcademicLoad\Actions\Proposals\ReturnProposalReview;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\InboxStatus;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
@@ -12,7 +13,6 @@ use App\Modules\AcademicLoad\Queries\DepartmentInbox;
 use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -100,7 +100,7 @@ new #[Title('Bandeja del departamento')] class extends Component
 
     public function mount(ScopedContext $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
-        abort_unless($context->has(Role::JefeDepartamento) || $context->has(Role::JefeProyectoDocente) || $context->has(Role::Subdireccion), 403);
+        abort_unless($context->allowsAny(AcademicLoadPermission::ProposalReviewView), 403);
 
         $this->mobileDetail = $this->careerId !== '';
         $this->updatedFilter();

@@ -82,3 +82,16 @@ it('niega todo a un admin desactivado y a un coordinador desactivado', function 
     expect(proposalAbilitiesOf($admin))->toBe([false, false, false, false])
         ->and(proposalAbilitiesOf($coordinador))->toBe([false, false, false, false]);
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $persona = User::factory()
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(20)])
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->create();
+
+    actingAsRole($persona, Role::Coordinador);
+    expect(proposalAbilitiesOf($persona))->toBe([true, true, true, true]);
+
+    actingAsRole($persona, Role::JefeDepartamento);
+    expect(proposalAbilitiesOf($persona))->toBe([false, false, false, false]);
+});

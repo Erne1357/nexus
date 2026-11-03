@@ -7,12 +7,13 @@ use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -63,7 +64,7 @@ final class CareerProposalQuery
             ->whereIn('id', CareerCampus::query()->where('campus_id', $campus->getKey())->where('is_active', true)->select('career_id'))
             ->orderBy('code')
             ->get()
-            ->filter(fn (Career $career): bool => $context->covers([Role::Coordinador, Role::Subdireccion], $campus, career: $career->getKey()))
+            ->filter(fn (Career $career): bool => $context->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $campus->getKey(), career: $career->getKey())))
             ->values();
     }
 

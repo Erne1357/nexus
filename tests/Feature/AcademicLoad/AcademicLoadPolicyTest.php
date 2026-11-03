@@ -57,3 +57,18 @@ it('niega todo a un admin desactivado', function () {
     expect($admin->can('view', $this->load))->toBeFalse()
         ->and($admin->can('propose', $this->load))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $jefe = User::factory()
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(20)])
+        ->create();
+
+    actingAsRole($jefe, Role::JefeDepartamento);
+    expect($jefe->can('view', $this->load))->toBeTrue()
+        ->and($jefe->can('propose', $this->load))->toBeTrue();
+
+    actingAsRole($jefe, Role::Coordinador);
+    expect($jefe->can('view', $this->load))->toBeFalse()
+        ->and($jefe->can('propose', $this->load))->toBeFalse();
+});

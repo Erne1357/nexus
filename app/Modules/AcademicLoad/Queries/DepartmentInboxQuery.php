@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\InboxStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
@@ -13,12 +14,12 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
-use App\Modules\AcademicLoad\Policies\AcademicLoadPolicy;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
@@ -134,7 +135,7 @@ final class DepartmentInboxQuery
             )
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => $context->covers(AcademicLoadPolicy::VIEWERS, $campus, department: $department->getKey()))
+            ->filter(fn (Department $department): bool => $context->allows(AcademicLoadPermission::ProposalReviewView, Target::of(campus: $campus->getKey(), unit: $department->getKey())))
             ->values();
     }
 
