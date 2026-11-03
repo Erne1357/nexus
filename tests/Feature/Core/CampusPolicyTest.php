@@ -84,3 +84,17 @@ it('no deja borrar campus a nadie, ni al admin: el catálogo se desactiva', func
         ->and($admin->can('delete', $this->c1))->toBeFalse()
         ->and($admin->can('forceDelete', $this->c1))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])
+        ->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Subdireccion);
+    expect($user->can('view', $this->c1))->toBeTrue()
+        ->and($user->can('updateProfile', $this->c1))->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect($user->can('viewAny', Campus::class))->toBeFalse()
+        ->and($user->can('view', $this->c1))->toBeFalse()
+        ->and($user->can('updateProfile', $this->c1))->toBeFalse();
+});

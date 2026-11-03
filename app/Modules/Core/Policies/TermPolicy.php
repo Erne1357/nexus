@@ -2,7 +2,7 @@
 
 namespace App\Modules\Core\Policies;
 
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
@@ -13,7 +13,7 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  * dé de alta y edite periodos, los marque actuales y maneje el calendario es (supuesto por confirmar, docs/dominio/reglas-de-negocio.md, Periodo y calendario). Los periodos son de toda la
  * institución: no hay alcance por campus. Nadie los borra (supuesto por confirmar, mismo apartado): no hay `delete`.
  *
- * has() ya da por cubierto al admin.
+ * Cada ability se resuelve con un permiso `core.term.*` (CorePermission); el admin los tiene todos.
  */
 final class TermPolicy
 {
@@ -21,22 +21,22 @@ final class TermPolicy
 
     public function viewAny(User $user): bool
     {
-        return $this->manages($user);
+        return $this->scope($user)->allowsAny(CorePermission::TermView);
     }
 
     public function view(User $user, Term $term): bool
     {
-        return $this->manages($user);
+        return $this->scope($user)->allows(CorePermission::TermView);
     }
 
     public function create(User $user): bool
     {
-        return $this->manages($user);
+        return $this->scope($user)->allows(CorePermission::TermCreate);
     }
 
     public function update(User $user, Term $term): bool
     {
-        return $this->manages($user);
+        return $this->scope($user)->allows(CorePermission::TermUpdate);
     }
 
     /**
@@ -44,7 +44,7 @@ final class TermPolicy
      */
     public function makeCurrent(User $user, Term $term): bool
     {
-        return $this->manages($user);
+        return $this->scope($user)->allows(CorePermission::TermMakeCurrent);
     }
 
     /**
@@ -52,7 +52,7 @@ final class TermPolicy
      */
     public function manageCalendar(User $user, Term $term): bool
     {
-        return $this->manages($user);
+        return $this->scope($user)->allows(CorePermission::TermManageCalendar);
     }
 
     /**
@@ -60,11 +60,6 @@ final class TermPolicy
      */
     public function open(User $user, Term $term): bool
     {
-        return $this->manages($user);
-    }
-
-    private function manages(User $user): bool
-    {
-        return $this->scope($user)->has(Role::Subdireccion);
+        return $this->scope($user)->allows(CorePermission::TermOpen);
     }
 }

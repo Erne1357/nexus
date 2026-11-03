@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Actions\CreateCampus;
 use App\Modules\Core\Actions\UpdateCampus;
+use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Enums\StaffingMode;
 use App\Modules\Core\Models\Campus;
@@ -83,7 +84,7 @@ new #[Title('Campus')] class extends Component
             'campuses' => $page,
             'profiles' => $this->profileSummaries($page),
             'canCreate' => Gate::allows('create', Campus::class),
-            'canSeeInactive' => $context->isAdmin(),
+            'canSeeInactive' => $context->allows(CorePermission::CampusViewInactive),
             // El perfil es la columna descriptiva larga: se oculta debajo de 1200 px (DESIGN.md, "Responsivo").
             'headers' => [
                 ['key' => 'code', 'label' => 'Código'],

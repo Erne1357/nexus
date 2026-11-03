@@ -2,7 +2,8 @@
 
 namespace App\Modules\Core\Policies;
 
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
@@ -15,7 +16,7 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  * - La subdirección ve los campus de su alcance y cambia solo su perfil de flujo (`settings`).
  * - Nadie más los administra, y nadie los borra: es un catálogo, se desactiva (no hay `delete`).
  *
- * covers() ya da por cubierto todo al admin, así que las abilities por campus no lo repiten.
+ * Cada ability se resuelve con un permiso `core.campus.*` (CorePermission); el admin los tiene todos.
  */
 final class CampusPolicy
 {
@@ -23,17 +24,17 @@ final class CampusPolicy
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->has(Role::Subdireccion);
+        return $this->scope($user)->allowsAny(CorePermission::CampusView);
     }
 
     public function view(User $user, Campus $campus): bool
     {
-        return $this->scope($user)->covers(Role::Subdireccion, $campus);
+        return $this->scope($user)->allows(CorePermission::CampusView, Target::of(campus: $campus->getKey()));
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(CorePermission::CampusCreate);
     }
 
     /**
@@ -41,7 +42,7 @@ final class CampusPolicy
      */
     public function update(User $user, Campus $campus): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(CorePermission::CampusUpdate);
     }
 
     /**
@@ -49,6 +50,6 @@ final class CampusPolicy
      */
     public function updateProfile(User $user, Campus $campus): bool
     {
-        return $this->scope($user)->covers(Role::Subdireccion, $campus);
+        return $this->scope($user)->allows(CorePermission::CampusUpdateProfile, Target::of(campus: $campus->getKey()));
     }
 }

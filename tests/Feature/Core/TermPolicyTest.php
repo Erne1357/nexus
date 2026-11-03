@@ -60,3 +60,14 @@ it('no deja borrar periodos a nadie, ni al admin', function () {
     expect(method_exists(TermPolicy::class, 'delete'))->toBeFalse()
         ->and($admin->can('delete', $this->term))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->campus->id])
+        ->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Subdireccion);
+    expect(termAbilities($user, $this->term))->each->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect(termAbilities($user, $this->term))->each->toBeFalse();
+});

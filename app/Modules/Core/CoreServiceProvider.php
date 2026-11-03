@@ -7,7 +7,9 @@ use App\Modules\Core\Authorization\DefaultScopeLabels;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\ScopeLabels;
+use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
@@ -84,6 +86,27 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 ability: 'viewAny', arguments: [Campus::class]),
             new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Term::class], childRoutes: ['core.terms.show']),
+        ];
+    }
+
+    public function permissions(): array
+    {
+        return [CorePermission::class];
+    }
+
+    public function grants(): array
+    {
+        return [
+            Role::Subdireccion->value => [
+                CorePermission::CampusView,
+                CorePermission::CampusUpdateProfile,
+                CorePermission::TermView,
+                CorePermission::TermCreate,
+                CorePermission::TermUpdate,
+                CorePermission::TermMakeCurrent,
+                CorePermission::TermManageCalendar,
+                CorePermission::TermOpen,
+            ],
         ];
     }
 }

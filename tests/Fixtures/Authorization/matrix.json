@@ -1,4 +1,15 @@
 {
-    "grants": {},
+    "grants": {
+        "subdireccion": [
+            "core.campus.update_profile",
+            "core.campus.view",
+            "core.term.create",
+            "core.term.make_current",
+            "core.term.manage_calendar",
+            "core.term.open",
+            "core.term.update",
+            "core.term.view"
+        ]
+    },
     "admin_denies": []
 }
