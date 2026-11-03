@@ -6,6 +6,7 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Imports\Console\ExportDemoFiles;
+use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
@@ -50,6 +51,11 @@ final class ImportsServiceProvider extends ModuleServiceProvider
     {
         // Singleton porque es inmutable: guarda clases, y cada get() crea una plantilla nueva.
         $this->app->singleton(TemplateRegistry::class, fn (): TemplateRegistry => new TemplateRegistry(self::TEMPLATES));
+    }
+
+    public function permissions(): array
+    {
+        return [ImportsPermission::class];
     }
 
     public function navigation(): array

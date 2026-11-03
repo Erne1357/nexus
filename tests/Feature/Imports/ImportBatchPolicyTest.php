@@ -54,3 +54,25 @@ it('no deja borrar lotes a nadie, ni al admin', function () {
     expect(method_exists(ImportBatchPolicy::class, 'delete'))->toBeFalse()
         ->and($admin->can('delete', $this->batch))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->admin()->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Admin);
+    expect([
+        $user->can('viewAny', ImportBatch::class),
+        $user->can('create', ImportBatch::class),
+        $user->can('view', $this->batch),
+        $user->can('apply', $this->batch),
+    ])
+        ->each->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect([
+        $user->can('viewAny', ImportBatch::class),
+        $user->can('create', ImportBatch::class),
+        $user->can('view', $this->batch),
+        $user->can('apply', $this->batch),
+    ])
+        ->each->toBeFalse();
+});

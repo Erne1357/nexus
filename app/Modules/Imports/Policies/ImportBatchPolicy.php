@@ -4,6 +4,7 @@ namespace App\Modules\Imports\Policies;
 
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 
 /**
@@ -17,21 +18,21 @@ final class ImportBatchPolicy
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allowsAny(ImportsPermission::BatchView);
     }
 
     public function view(User $user, ImportBatch $batch): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(ImportsPermission::BatchView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(ImportsPermission::BatchCreate);
     }
 
     public function apply(User $user, ImportBatch $batch): bool
     {
-        return $this->scope($user)->isAdmin();
+        return $this->scope($user)->allows(ImportsPermission::BatchApply);
     }
 }
