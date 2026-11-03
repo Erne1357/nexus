@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core;
 
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
@@ -23,6 +24,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
             fn (): mixed => $app['auth']->user(),
             $app['session.store'],
         ));
+
+        // `scoped` por lo mismo: guarda en la instancia la huella y el mapa de la petición en curso.
+        $this->app->scoped(OrgTree::class, fn (Application $app): OrgTree => new OrgTree($app['cache.store']));
 
         // Singleton porque es inmutable: las entradas de todos los módulos, sin nada del usuario.
         $this->app->singleton(Navigation::class, fn (Application $app): Navigation => Navigation::fromModules(
