@@ -13,6 +13,7 @@ use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\Constraints\CatalogsValidated;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\SelfApproval;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -33,6 +34,9 @@ use Throwable;
  * (load_transitions y bitácora de la carga); si ProposeLoad la bloquea, no se acepta nada. Deja bitácora de la
  * parte y, después del commit, avisa con ProposalReviewAccepted. Quién puede lo decide ProposalReviewPolicy::decide
  * antes de llamarla; quien acepta se recibe como parámetro.
+ *
+ * AZ-01: si quien acepta es quien envió la propuesta (`submitted_by`, la última vez), procede y la entrada de la
+ * bitácora lleva `self_approval: true` (Core\Rules\SelfApproval).
  */
 final class AcceptProposalReview
 {
@@ -105,6 +109,7 @@ final class AcceptProposalReview
                 ->withProperties([
                     'career_proposal_id' => $proposal->getKey(),
                     'proposal_status' => ['old' => $from->value, 'attributes' => $proposal->status->value],
+                    ...SelfApproval::mark($actor, $proposal->submitted_by),
                 ])
                 ->log("Aceptó la parte de {$department->code} en la propuesta de {$proposal->career->code} en {$proposal->campus->code} para el periodo {$proposal->term->code}");
 

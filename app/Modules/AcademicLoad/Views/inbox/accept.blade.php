@@ -13,6 +13,9 @@
         @endforeach
     </dl>
     <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft text-sm font-semibold" title="Lo aceptado ya no cambia." data-testid="accept-warning" />
+    @if ($selfApproval)
+        @include('core::self-approval', ['title' => 'Tú enviaste esta propuesta.'])
+    @endif
     <div class="flex justify-end gap-2">
         <x-button label="Cancelar" class="btn-ghost max-md:h-11 max-md:min-h-11" wire:click="$set('showAccept', false)" />
         <x-button label="Aceptar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11" wire:click="accept" spinner="accept" data-testid="confirm-accept" />

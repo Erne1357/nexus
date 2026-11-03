@@ -17,6 +17,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -24,6 +25,7 @@ use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | «Bandeja del departamento» (tarea 2.8): el jefe ve lo que piden las carreras de su campus al departamento en el
@@ -89,6 +91,64 @@ function inboxPageAs(User $user, array $query = []): Testable
 {
     return Livewire::withQueryParams($query)->actingAs($user)->test('academic-load::pages.inbox');
 }
+
+describe('autoaprobación (AZ-01)', function () {
+    beforeEach(function () {
+        $this->coordinator = $this->jefe;
+        RoleAssignment::factory()->for($this->jefe)->create(['role' => Role::Coordinador, 'campus_id' => $this->campus->id, 'career_id' => $this->isc->id]);
+    });
+
+    it('AZ-01: la confirmación de aceptar advierte cuando quien decide envió la propuesta y la bitácora lo marca', function () {
+        $this->iscProposal->update(['submitted_by' => $this->coordinator->id]);
+        actingAsRole($this->coordinator, Role::JefeDepartamento);
+
+        Livewire::test('academic-load::pages.inbox')
+            ->call('confirmAccept', $this->iscPart->id)
+            ->assertSeeHtml('data-testid="self-approval-warning"')
+            ->assertSee('Tú enviaste esta propuesta.')
+            ->call('accept');
+
+        $entry = Activity::query()->where('event', 'accepted')->sole();
+        expect($entry->properties['self_approval'])->toBeTrue()
+            ->and($entry->properties['acting_as'])->toBe('jefe_departamento');
+    });
+
+    it('AZ-01: regresar una parte no se marca ni advierte', function () {
+        $this->iscProposal->update(['submitted_by' => $this->coordinator->id]);
+        actingAsRole($this->coordinator, Role::JefeDepartamento);
+
+        Livewire::test('academic-load::pages.inbox')
+            ->call('confirmReturn', $this->iscPart->id)
+            ->assertDontSeeHtml('data-testid="self-approval-warning"')
+            ->set('comment', 'Corrige.')
+            ->call('returnPart');
+
+        expect(Activity::query()->where('event', 'returned')->sole()->properties->has('self_approval'))->toBeFalse();
+    });
+
+    it('AZ-01: otro jefe no ve la advertencia', function () {
+        $this->iscProposal->update(['submitted_by' => User::factory()->create()->id]);
+
+        inboxPageAs($this->jefe)
+            ->call('confirmAccept', $this->iscPart->id)
+            ->assertDontSeeHtml('data-testid="self-approval-warning"')
+            ->call('accept');
+
+        expect(Activity::query()->where('event', 'accepted')->sole()->properties->has('self_approval'))->toBeFalse();
+    });
+
+    it('AZ-01: tras un reenvío de otra persona ya no es autoaprobación', function () {
+        $this->iscProposal->update(['submitted_by' => User::factory()->create()->id]);
+        actingAsRole($this->coordinator, Role::JefeDepartamento);
+
+        Livewire::test('academic-load::pages.inbox')
+            ->call('confirmAccept', $this->iscPart->id)
+            ->assertDontSeeHtml('data-testid="self-approval-warning"')
+            ->call('accept');
+
+        expect(Activity::query()->where('event', 'accepted')->sole()->properties->has('self_approval'))->toBeFalse();
+    });
+});
 
 describe('jefe de departamento', function () {
     it('ve su departamento, el campus, el periodo por su nombre y el estado de su carga', function () {
