@@ -61,7 +61,7 @@ it('la base no deja un departamento sin unidad', function () {
     $department = Department::factory()->create();
 
     expect(fn () => DB::transaction(fn () => DB::table('org_units')->where('id', $department->id)->delete()))
-        ->toThrow(QueryException::class, 'departments_id_org_unit_foreign');
+        ->toThrow(QueryException::class, 'se borra desde el departamento');
 });
 
 it('importar departamentos crea sus unidades', function () {
@@ -111,4 +111,42 @@ it('volver a sembrar departamentos existentes no deja unidades huérfanas', func
 
     expect(OrgUnit::withTrashed()->where('kind', OrgUnitKind::DepartamentoAcademico)->count())->toBe(Department::withTrashed()->count())
         ->and(unitOf($department))->name->toBe('Sistemas Computacionales');
+});
+
+it('si Subdirección Académica está borrada, un departamento nuevo queda bajo la Dirección', function () {
+    OrgUnit::where('code', 'SUB-ACADEMICA')->firstOrFail()->delete();
+
+    $department = Department::factory()->create();
+
+    expect(unitOf($department)->parent_id)->toBe(OrgUnit::where('code', 'DIRECCION')->value('id'));
+});
+
+it('un departamento con la clave de una unidad estructural no confunde las búsquedas por clave', function () {
+    Department::factory()->create(['code' => 'SUB-ACADEMICA']);
+    $other = Department::factory()->create();
+
+    expect(unitOf($other)->parent_id)->toBe(OrgUnit::where('code', 'SUB-ACADEMICA')->where('kind', 'subdireccion')->value('id'));
+});
+
+it('la unidad de un departamento no se edita ni se borra directamente', function () {
+    $department = Department::factory()->create(['code' => 'SC']);
+    $unit = unitOf($department);
+
+    expect(fn () => DB::transaction(fn () => $unit->update(['code' => 'XX'])))->toThrow(QueryException::class, 'se edita desde el departamento')
+        ->and(fn () => DB::transaction(fn () => $unit->update(['is_active' => false])))->toThrow(QueryException::class, 'se edita desde el departamento')
+        ->and(fn () => DB::transaction(fn () => $unit->update(['kind' => 'oficina'])))->toThrow(QueryException::class)
+        ->and(fn () => DB::transaction(fn () => OrgUnit::where('id', $unit->id)->update(['kind' => 'oficina'])))->toThrow(QueryException::class)
+        ->and(fn () => DB::transaction(fn () => $unit->forceDelete()))->toThrow(QueryException::class);
+
+    $other = OrgUnit::factory()->create(['kind' => OrgUnitKind::Oficina]);
+    expect(fn () => DB::transaction(fn () => $other->update(['kind' => 'departamento_academico'])))->toThrow(QueryException::class);
+});
+
+it('sí se puede mover la unidad de un departamento', function () {
+    $department = Department::factory()->create();
+    $target = OrgUnit::factory()->create();
+
+    unitOf($department)->update(['parent_id' => $target->id, 'sort' => 5]);
+
+    expect(unitOf($department))->parent_id->toBe($target->id)->sort->toBe(5);
 });

@@ -14,7 +14,8 @@ use Illuminate\Database\Seeder;
  *
  * Solo crea las claves que faltan (también entre las borradas: una unidad que el admin quitó no se
  * resucita) y nunca actualiza una existente, así que volver a sembrar no mueve lo que el admin
- * reubicó. Escribe datos de referencia del catálogo, no datos de proceso: por eso corre en
+ * reubicó. Busca por clave solo entre las unidades estructurales y cuelga cada una de un padre
+ * vigente: si el padre falta o el admin lo borró, se salta esa unidad (y con ella sus hijas). Escribe datos de referencia del catálogo, no datos de proceso: por eso corre en
  * producción (sin RefusesProduction) y no deja entrada en la bitácora.
  */
 class OrgChartSeeder extends Seeder
@@ -39,11 +40,15 @@ class OrgChartSeeder extends Seeder
     public function run(): void
     {
         foreach (self::UNITS as $unit) {
-            if (OrgUnit::withTrashed()->where('code', $unit['code'])->exists()) {
+            if (OrgUnit::withTrashed()->where('code', $unit['code'])->where('kind', '<>', OrgUnitKind::DepartamentoAcademico)->exists()) {
                 continue;
             }
 
-            $parent = OrgUnit::withTrashed()->where('code', $unit['parent'])->firstOrFail();
+            $parent = OrgUnit::query()->where('code', $unit['parent'])->where('kind', '<>', OrgUnitKind::DepartamentoAcademico)->first();
+
+            if ($parent === null) {
+                continue;
+            }
 
             OrgUnit::create([
                 'parent_id' => $parent->id,

@@ -46,3 +46,18 @@ it('rechaza un tipo desconocido', function () {
         'updated_at' => now(),
     ]))->toThrow(QueryException::class, 'org_units_kind_check');
 });
+
+it('la base rechaza que una unidad sea su propia madre o cuelgue de su descendiente', function () {
+    $a = OrgUnit::factory()->create();
+    $b = OrgUnit::factory()->create(['parent_id' => $a->id]);
+    $c = OrgUnit::factory()->create(['parent_id' => $b->id]);
+
+    expect(fn () => DB::transaction(fn () => $a->update(['parent_id' => $a->id])))
+        ->toThrow(QueryException::class, 'ciclo')
+        ->and(fn () => DB::transaction(fn () => $a->update(['parent_id' => $c->id])))
+        ->toThrow(QueryException::class, 'ciclo');
+
+    $c->update(['parent_id' => $a->id]);
+
+    expect($c->fresh()->parent_id)->toBe($a->id);
+});

@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Organigrama como árbol (ADR-0018, AZ-S1). Una sola raíz (la Dirección, sin contar borradas) y
  * clave única que cuenta también las borradas; los departamentos académicos quedan fuera del
- * índice porque cuidan su clave en `departments`. Siembra la Dirección y la Subdirección Académica.
+ * índice porque cuidan su clave en `departments`. Un trigger impide los ciclos de `parent_id`.
+ * Siembra la Dirección y la Subdirección Académica.
  */
 return new class extends Migration
 {
@@ -35,6 +36,34 @@ return new class extends Migration
         DB::statement("alter table org_units add constraint org_units_kind_check check (kind in ('direccion','subdireccion','division','departamento_academico','departamento','oficina'))");
         DB::statement('create unique index org_units_one_root on org_units ((parent_id is null)) where parent_id is null and deleted_at is null');
         DB::statement("create unique index org_units_code_unique on org_units (code) where kind <> 'departamento_academico'");
+
+        DB::unprepared(<<<'SQL'
+            create or replace function org_units_no_cycle() returns trigger
+            language plpgsql as $$
+            begin
+                if new.parent_id is null then
+                    return new;
+                end if;
+
+                if new.parent_id = new.id or exists (
+                    with recursive up (id, parent_id) as (
+                        select id, parent_id from org_units where id = new.parent_id
+                        union
+                        select o.id, o.parent_id from org_units o join up on o.id = up.parent_id
+                    )
+                    select 1 from up where id = new.id
+                ) then
+                    raise exception 'Una unidad no puede ser su propia madre ni colgar de su descendiente: se formaría un ciclo.';
+                end if;
+
+                return new;
+            end;
+            $$;
+
+            create trigger org_units_no_cycle
+                before insert or update of parent_id on org_units
+                for each row execute function org_units_no_cycle();
+            SQL);
 
         DB::table('org_units')->insert([
             'code' => 'DIRECCION',
@@ -63,5 +92,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('org_units');
+        DB::statement('drop function if exists org_units_no_cycle()');
     }
 };

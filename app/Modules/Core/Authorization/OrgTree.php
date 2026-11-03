@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\DB;
  * alta, baja física o movimiento cambia los pares, y la siguiente petición arma un mapa nuevo.
  * No depende de la precisión de `updated_at` (dos movimientos en el mismo segundo se ven) y la
  * tabla tiene decenas de filas, así que recorrerla en cada petición es trivial. El mapa incluye
- * unidades borradas porque la jerarquía es estructural; solo `idOf()` las ignora.
+ * unidades borradas porque la jerarquía es estructural; solo `idOf()` las ignora. El mapa vence al
+ * día para que las formas viejas del árbol no se acumulen; el armado salta unidades ya vistas, así
+ * que un ciclo que se colara (trigger apagado) no cuelga la petición.
  *
  * Se registra como `scoped`: la huella y el mapa se memorizan en la instancia para que una
  * petición consulte la base una sola vez, y Octane no los comparte con la siguiente.
@@ -46,11 +48,12 @@ final class OrgTree
     }
 
     /**
-     * Id de la unidad sin borrar con esa clave.
+     * Id de la unidad estructural (no departamento académico) sin borrar con esa clave: un
+     * departamento puede repetir la clave de una unidad estructural y no cuenta aquí.
      */
     public function idOf(string $code): ?string
     {
-        $id = DB::table('org_units')->where('code', $code)->whereNull('deleted_at')->value('id');
+        $id = DB::table('org_units')->where('code', $code)->where('kind', '<>', 'departamento_academico')->whereNull('deleted_at')->value('id');
 
         return is_string($id) ? $id : null;
     }
@@ -60,8 +63,9 @@ final class OrgTree
      */
     private function map(): array
     {
-        return $this->map ??= $this->cache->rememberForever(
+        return $this->map ??= $this->cache->remember(
             'authz:org-tree:'.$this->fingerprint(),
+            now()->addDay(),
             fn (): array => $this->build(),
         );
     }
@@ -96,10 +100,17 @@ final class OrgTree
 
         foreach ($ids as $id) {
             $found = [];
+            $seen = [];
             $pending = [$id];
 
             while ($pending !== []) {
                 $current = array_pop($pending);
+
+                if (isset($seen[$current])) {
+                    continue;
+                }
+
+                $seen[$current] = true;
                 $found[] = $current;
 
                 foreach ($children[$current] ?? [] as $child) {

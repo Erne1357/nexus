@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Models\OrgUnit;
 use Illuminate\Support\Facades\Cache;
@@ -120,4 +121,27 @@ it('idOf ignora las unidades borradas', function () {
     app()->forgetScopedInstances();
 
     expect(app(OrgTree::class)->idOf('XYZ'))->toBeNull();
+});
+
+it('el árbol termina aunque haya un ciclo', function () {
+    $a = OrgUnit::factory()->create();
+    $b = OrgUnit::factory()->create(['parent_id' => $a->id]);
+
+    DB::statement('alter table org_units disable trigger org_units_no_cycle');
+    $a->update(['parent_id' => $b->id]);
+    DB::statement('alter table org_units enable trigger org_units_no_cycle');
+    Cache::flush();
+    app()->forgetScopedInstances();
+
+    $tree = app(OrgTree::class);
+
+    expect($tree->covers($a->id, $b->id))->toBeBool()
+        ->and($tree->descendantsOrSelf($a->id))->toEqualCanonicalizing(array_unique($tree->descendantsOrSelf($a->id)));
+});
+
+it('idOf busca solo unidades estructurales aunque un departamento comparta la clave', function () {
+    $structural = OrgUnit::query()->where('code', 'SUB-ACADEMICA')->sole();
+    Department::factory()->create(['code' => 'SUB-ACADEMICA']);
+
+    expect(app(OrgTree::class)->idOf('SUB-ACADEMICA'))->toBe($structural->id);
 });

@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Models\OrgUnit;
@@ -40,4 +41,27 @@ it('correrlo dos veces no duplica ni mueve lo que el admin reubicó', function (
     expect(OrgUnit::withTrashed()->count())->toBe($count)
         ->and(OrgUnit::where('code', 'VINCULACION')->first()->parent->code)->toBe('DIRECCION')
         ->and(OrgUnit::where('code', 'EXTRAESCOLARES')->exists())->toBeFalse();
+});
+
+it('si el admin borró una rama, sembrar no crea sus hijos', function () {
+    $branch = OrgUnit::factory()->create([
+        'parent_id' => OrgUnit::where('code', 'DIRECCION')->value('id'),
+        'code' => 'SUB-PLANEACION',
+        'kind' => OrgUnitKind::Subdireccion,
+    ]);
+    $branch->delete();
+
+    $this->seed(OrgChartSeeder::class);
+
+    expect(OrgUnit::whereIn('code', ['SERVICIOS-ESCOLARES', 'VINCULACION', 'EXTRAESCOLARES'])->exists())->toBeFalse()
+        ->and(OrgUnit::withTrashed()->where('code', 'SUB-PLANEACION')->sole()->trashed())->toBeTrue()
+        ->and(OrgUnit::where('code', 'DIV-PROFESIONAL')->exists())->toBeTrue();
+});
+
+it('el sembrador ignora un departamento académico con la clave de una unidad estructural', function () {
+    Department::factory()->create(['code' => 'VINCULACION']);
+
+    $this->seed(OrgChartSeeder::class);
+
+    expect(OrgUnit::where('code', 'VINCULACION')->where('kind', OrgUnitKind::Departamento)->exists())->toBeTrue();
 });
