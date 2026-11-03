@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
@@ -161,4 +162,17 @@ it('Quitar de mi departamento también inicia la revisión, aunque el docente ya
     app(RemoveAdscription::class)->handle(TeacherDepartment::query()->where('teacher_id', $this->teacher->id)->where('department_id', $this->sis->id)->sole());
 
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
+});
+
+it('el jefe con Coordinación activa no la mueve', function () {
+    vacate(Role::JefeDepartamento, $this->sis->id);
+    $jefe = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'valid_from' => today()->toDateString()])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])
+        ->create();
+
+    actingAsRole($jefe, Role::Coordinador);
+    app(SetQualification::class)->handle($this->teacher, $this->subject, QualificationLevel::Apto, $jefe);
+
+    expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::Pending);
 });

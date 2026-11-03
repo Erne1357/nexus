@@ -4,8 +4,10 @@ namespace App\Modules\CatalogValidation\Listeners;
 
 use App\Modules\CatalogValidation\Actions\StartReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Events\AdscriptionChanged;
@@ -28,7 +30,8 @@ use Illuminate\Support\Collection;
  * Subdirección y el jefe de proyecto docente no la mueven, ni una revisión ya en revisión o validada.
  *
  * Si el actor es quien está en sesión, cuenta su perfil activo (ScopedContext): la mueve si actúa como jefe del
- * departamento. Si el actor es otro usuario (forUser()) o no hay usuario autenticado (un job), basta con que sea jefe aunque tenga otros
+ * departamento y su perfil concede corregir esa revisión (`catalog_validation.review.correct`, la regla de
+ * CatalogReviewPolicy::correct), así que el jefe que entró como coordinador no la mueve. Si el actor es otro usuario (forUser()) o no hay usuario autenticado (un job), basta con que sea jefe aunque tenga otros
  * puestos; el código de consola que fija el usuario del guard recibe el perfil predeterminado. Sale después del
  * commit de la Action de Faculty.
  */
@@ -67,6 +70,7 @@ final class StartTeachersReviewOnFacultyCapture
             ->where('catalog', Catalog::Teachers)
             ->where('status', ReviewStatus::Pending)
             ->get()
+            ->filter(fn (CatalogReview $review): bool => CatalogReviewQuery::allowsOnDepartment($context, CatalogValidationPermission::ReviewCorrect, $review->campus_id, $review->department_id))
             ->each(fn (CatalogReview $review) => $this->startReview->handle($review, $actor));
     }
 

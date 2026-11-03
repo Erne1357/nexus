@@ -11,13 +11,14 @@ use App\Modules\CatalogValidation\Actions\ResolveFlag;
 use App\Modules\CatalogValidation\Actions\StartReview;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -433,7 +434,7 @@ class CatalogValidationDemoSeeder extends Seeder
         $campuses = $review->campus_id === null ? $this->openedCampuses($review->term) : collect([$review->campus]);
 
         foreach ($campuses as $campus) {
-            $head = $this->recipients->for(Role::JefeDepartamento, $campus, $review->department_id)->first();
+            $head = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $review->department_id))[0]['user'] ?? null;
 
             if ($head !== null) {
                 return $head;
