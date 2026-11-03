@@ -18,8 +18,8 @@ use Spatie\Activitylog\Models\Activity;
  * La ficha de una persona en «Personas y puestos» (PersonRecord). Los nombramientos salen ordenados (vigentes por
  * inicio descendente, programados por inicio ascendente y terminados por fin descendente) y cada uno con su estado
  * de hoy, los días que le faltan, quién lo terminó (la entrada de bitácora con su `role_assignment_id`) y, si aquí no
- * se puede terminar, por qué: el docente y las jefaturas se manejan en la ficha del docente (AZ-S11) y quien es admin
- * no termina su propio puesto desde esta pantalla (AZ-S12, el motor sí lo permite si queda otro).
+ * se puede terminar, por qué: el docente y las jefaturas se manejan en la ficha del docente (AZ-S11) y el último
+ * nombramiento de Administración vigente tampoco (AZ-S12: el admin puede terminar el suyo si queda otro).
  *
  * La bitácora trae solo las entradas que llevan `role_assignment_id` o `department_head_id`, así que el cambio de
  * perfil no entra.
@@ -98,15 +98,30 @@ final class PersonRecordQuery
     /**
      * Por qué el nombramiento no se termina desde esta pantalla; nulo si sí.
      */
-    public function endBlocker(RoleAssignment $assignment, User $viewer): ?string
+    public function endBlocker(RoleAssignment $assignment, ?User $viewer = null): ?string
     {
         if (($elsewhere = $this->rules->managedElsewhere($assignment->role)) !== null) {
             return $elsewhere;
         }
 
-        return $assignment->role === Role::Admin && $assignment->user_id === $viewer->getKey()
-            ? 'No terminas tu propio puesto de Administración.'
-            : null;
+        if ($assignment->role === Role::Admin && ! $this->otherAdminRemains($assignment)) {
+            return 'Es el único nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Si queda otro nombramiento `admin` vigente hoy de un usuario activo (AZ-S12); el último no se termina.
+     */
+    private function otherAdminRemains(RoleAssignment $assignment): bool
+    {
+        return RoleAssignment::query()
+            ->current()
+            ->where('role', Role::Admin)
+            ->whereKeyNot($assignment->getKey())
+            ->whereHas('user', fn (Builder $query) => $query->where('is_active', true))
+            ->exists();
     }
 
     /**

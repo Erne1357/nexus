@@ -95,7 +95,7 @@ it('sabe quién terminó un nombramiento por su entrada de bitácora', function 
         ]);
 });
 
-it('AZ-S11 y AZ-S12: el docente, las jefaturas y el propio puesto de Administración no se terminan aquí', function () {
+it('AZ-S11 y AZ-S12: el docente, las jefaturas y el último admin vigente no se terminan aquí', function () {
     giveRole($this->rosa, Role::Docente, '2015-08-17');
     giveRole($this->rosa, Role::JefeDepartamento, '2026-01-01', null, ['org_unit_id' => $this->systems->id]);
     giveRole($this->rosa, Role::JefeProyectoDocente, '2026-01-01', null, ['campus_id' => $this->c2->id, 'org_unit_id' => $this->systems->id]);
@@ -111,9 +111,13 @@ it('AZ-S11 y AZ-S12: el docente, las jefaturas y el propio puesto de Administrac
         ->and($blockers['coordinador'])->toBeNull()
         ->and($blockers['admin'])->toBeNull();
 
-    $own = collect(app(PersonRecordQuery::class)->for($this->admin, $this->admin)->assignments)->firstWhere('assignment.role', Role::Admin);
+    $own = fn () => collect(app(PersonRecordQuery::class)->for($this->admin, $this->admin)->assignments)->firstWhere('assignment.role', Role::Admin);
 
-    expect($own['endBlocker'])->toBe('No terminas tu propio puesto de Administración.');
+    expect($own()['endBlocker'])->toBeNull();
+
+    $this->rosa->roleAssignments()->where('role', Role::Admin)->delete();
+
+    expect($own()['endBlocker'])->toContain('único nombramiento de Administración');
 });
 
 it('la bitácora solo trae entradas de nombramientos', function () {

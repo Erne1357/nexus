@@ -27,7 +27,7 @@ use Mary\Traits\Toast;
  *
  * Aquí solo se nombran y terminan Administración, Subdirección Académica y Coordinador (AZ-S11): el docente y las
  * jefaturas se ven de solo lectura, con el aviso de dónde se manejan, aunque la llamada llegue forzada desde el
- * navegador. Tampoco termina el admin su propio puesto de Administración (AZ-S12). Solo la ve el admin con ese perfil
+ * navegador. El admin sí puede terminar su propio puesto de Administración si queda otro vigente; el último queda deshabilitado con su motivo (AZ-S12). Solo la ve el admin con ese perfil
  * activo (RoleAssignmentPolicy); el componente autoriza en mount(), al renderizar y en cada método público.
  */
 new #[Title('Ficha de la persona')] class extends Component

@@ -14,7 +14,7 @@ use Carbon\CarbonImmutable;
 final readonly class AssignmentTimeline
 {
     /**
-     * @param  list<array{label: string, left: float}>  $years  el rótulo y la posición de cada año del rango
+     * @param  list<array{label: string, left: float}>  $years  los años rotulados (a lo más 6: cada 1, 2, 5, 10 o 20 años, según el rango) y su posición
      * @param  float|null  $today  la marca de hoy, como porcentaje del rango; null si no hay rango
      * @param  list<array{label: string, status: AssignmentStatus, left: float, width: float, open: bool}>  $rows
      */
@@ -39,8 +39,9 @@ final readonly class AssignmentTimeline
         $days = (int) $start->diffInDays(CarbonImmutable::create($lastYear, 12, 31)->startOfDay()) + 1;
 
         $years = [];
+        $step = collect([1, 2, 5, 10, 20])->first(fn (int $step): bool => (int) ceil(($lastYear - $firstYear + 1) / $step) <= 6) ?? 20;
 
-        for ($year = $firstYear; $year <= $lastYear; $year++) {
+        for ($year = $firstYear; $year <= $lastYear; $year += $step) {
             $years[] = ['label' => (string) $year, 'left' => (int) $start->diffInDays(CarbonImmutable::create($year, 1, 1)->startOfDay()) / $days * 100.0];
         }
 

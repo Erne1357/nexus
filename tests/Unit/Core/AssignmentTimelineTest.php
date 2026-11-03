@@ -35,3 +35,15 @@ it('sin nombramientos no hay rango', function () {
         ->and($timeline->years)->toBe([])
         ->and($timeline->today)->toBeNull();
 });
+
+it('rotula a lo más seis años, de 1, 2 o 5 en 5 según el rango', function () {
+    $span = fn (int $from, int $to) => AssignmentTimeline::build([
+        ['label' => 'X', 'from' => CarbonImmutable::create($from, 3, 1), 'to' => CarbonImmutable::create($to, 3, 1), 'status' => AssignmentStatus::Current],
+    ], CarbonImmutable::create($to, 6, 1));
+
+    expect(array_column($span(2024, 2026)->years, 'label'))->toBe(['2024', '2025', '2026'])
+        ->and(array_column($span(2015, 2027)->years, 'label'))->toBe(['2015', '2020', '2025'])
+        ->and(array_column($span(2019, 2027)->years, 'label'))->toBe(['2019', '2021', '2023', '2025', '2027'])
+        ->and(count($span(2015, 2027)->years))->toBeLessThanOrEqual(6)
+        ->and(count($span(2000, 2027)->years))->toBeLessThanOrEqual(6);
+});

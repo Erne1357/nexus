@@ -15,7 +15,7 @@ use Spatie\Activitylog\Models\Activity;
 | La ficha de una persona en «Personas y puestos» (`/people/{user}`, core::pages.person, maqueta C): cifras, línea de
 | vigencias, nombramientos con «Terminar…», «¿Quién ocupa un puesto?» y la bitácora. Nombrar y terminar los hacen
 | AppointRole y EndRoleAssignment; la pantalla solo ofrece Administración, Subdirección Académica y Coordinador
-| (AZ-S11) y el admin no termina su propio puesto de Administración (AZ-S12). Solo la ve el admin con ese perfil activo.
+| (AZ-S11) y el último nombramiento de Administración vigente no se termina (AZ-S12). Solo la ve el admin con ese perfil activo.
 */
 
 beforeEach(function () {
@@ -184,20 +184,44 @@ it('AZ-S11: el docente y las jefaturas se ven de solo lectura, con el aviso de d
         ->not->toContain('confirmEnd(\''.$jefe->id.'\')');
 });
 
-it('AZ-S11 y AZ-S12: no termina el docente, una jefatura ni el propio puesto de Administración aunque se fuerce la llamada', function () {
+it('AZ-S11 y AZ-S12: no termina el docente ni una jefatura aunque se fuerce la llamada', function () {
     $docente = assign($this->rosa, Role::Docente);
     $jefe = assign($this->rosa, Role::JefeDepartamento, ['org_unit_id' => $this->systems->id]);
-    $own = $this->admin->roleAssignments()->sole();
-    assign($this->beto, Role::Admin);
 
-    foreach ([[$this->rosa, $docente, 'ficha del docente'], [$this->rosa, $jefe, 'ficha del docente'], [$this->admin, $own, 'No terminas tu propio puesto de Administración.']] as [$person, $assignment, $reason]) {
+    foreach ([[$this->rosa, $docente, 'ficha del docente'], [$this->rosa, $jefe, 'ficha del docente']] as [$person, $assignment, $reason]) {
         personPage($person)->call('confirmEnd', $assignment->id)->call('end')->assertHasErrors(['lastDay'])->assertSee($reason);
     }
 
     expect($docente->fresh()->valid_to)->toBeNull()
         ->and($jefe->fresh()->valid_to)->toBeNull()
-        ->and($own->fresh()->valid_to)->toBeNull()
         ->and(activitySince()->count())->toBe(0);
+});
+
+it('AZ-S12: el admin puede terminar su propio puesto desde la ficha si queda otro admin', function () {
+    $own = $this->admin->roleAssignments()->sole();
+    assign($this->beto, Role::Admin);
+
+    personPage($this->admin)
+        ->assertSeeHtml('wire:click="confirmEnd(\''.$own->id.'\')"')
+        ->call('confirmEnd', $own->id)
+        ->set('lastDay', '2026-11-30')
+        ->call('end')
+        ->assertHasNoErrors();
+
+    expect($own->fresh()->valid_to->toDateString())->toBe('2026-11-30');
+});
+
+it('AZ-S12: no puede terminar al último admin vigente (botón deshabilitado con su motivo)', function () {
+    $own = $this->admin->roleAssignments()->sole();
+
+    personPage($this->admin)
+        ->assertDontSeeHtml('wire:click="confirmEnd(\''.$own->id.'\')"')
+        ->assertSee('Es el único nombramiento de Administración vigente')
+        ->call('confirmEnd', $own->id)
+        ->call('end')
+        ->assertHasErrors(['lastDay']);
+
+    expect($own->fresh()->valid_to)->toBeNull();
 });
 
 it('termina con la fecha elegida y avisa según el resultado', function () {

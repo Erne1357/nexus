@@ -1,18 +1,20 @@
 {{--
     La «Línea de vigencias» de la ficha de una persona (DESIGN.md, «Personas y puestos»), de core::pages.person:
-    el eje de años, la marca «Hoy» y una barra por nombramiento (AssignmentTimeline). La barra es `bg-primary` si
-    está vigente, `bg-primary/30` si terminó y de borde punteado si está programada; con la caja angosta se desplaza
-    de lado. Espera `$record`.
+    el eje de años (a lo más 6 rótulos; uno que chocaría con «Hoy» se omite), la marca «Hoy» y una barra por nombramiento (AssignmentTimeline). La barra es `bg-primary` si
+    está vigente, `bg-primary/30` si terminó y de borde punteado si está programada; en celular el nombre va encima de su barra. Espera `$record`.
 --}}
 @php($timeline = $record->timeline)
 
 @if ($timeline->hasRange())
-    <div class="overflow-x-auto" data-testid="vigencias">
-        <div class="grid min-w-[34rem] grid-cols-[10rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-            <span></span>
+    <div data-testid="vigencias">
+        <div class="grid grid-cols-1 items-center gap-x-3 gap-y-1 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-y-2">
+            <span class="max-sm:hidden"></span>
             <div class="relative h-6" aria-hidden="true">
                 @foreach ($timeline->years as $year)
-                    <span class="absolute top-0 font-mono text-xs font-medium tabular-nums text-neutral" style="left: {{ $year['left'] }}%">{{ $year['label'] }}</span>
+                    @php($gap = $timeline->today === null ? 100 : abs($year['left'] - $timeline->today))
+                    @if ($gap >= 6)
+                        <span @class(['absolute top-0 font-mono text-xs font-medium tabular-nums text-neutral', 'max-sm:hidden' => $gap < 24 || ($loop->count > 4 && $loop->index % 2 === 1)]) style="left: {{ $year['left'] }}%">{{ $year['label'] }}</span>
+                    @endif
                 @endforeach
 
                 @if ($timeline->today !== null)
@@ -21,8 +23,8 @@
             </div>
 
             @foreach ($timeline->rows as $row)
-                <span class="text-sm leading-snug">{{ $row['label'] }}</span>
-                <div class="relative h-6 rounded bg-base-200">
+                <span class="mt-1 text-sm leading-snug sm:mt-0">{{ $row['label'] }}</span>
+                <div class="relative h-7 rounded bg-base-200">
                     @foreach ($timeline->years as $year)
                         <span class="absolute inset-y-0 border-s border-base-300" style="left: {{ $year['left'] }}%"></span>
                     @endforeach
@@ -31,7 +33,7 @@
                         role="img"
                         aria-label="{{ $row['label'] }}: {{ mb_strtolower($row['status']->label()) }}{{ $row['open'] ? ', sin fecha de fin' : '' }}"
                         @class([
-                            'absolute inset-y-1 rounded-sm',
+                            'absolute inset-y-1 min-w-1.5 rounded-sm',
                             'bg-primary' => $row['status'] === \App\Modules\Core\Enums\AssignmentStatus::Current,
                             'bg-primary/30' => $row['status'] === \App\Modules\Core\Enums\AssignmentStatus::Ended,
                             'border border-dashed border-primary bg-primary/10' => $row['status'] === \App\Modules\Core\Enums\AssignmentStatus::Scheduled,
