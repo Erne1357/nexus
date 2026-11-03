@@ -101,3 +101,14 @@ it('la migración da unidad a los departamentos que ya existían, también a los
     $created = Department::factory()->create();
     expect(unitOf($created))->not->toBeNull();
 });
+
+it('volver a sembrar departamentos existentes no deja unidades huérfanas', function () {
+    $department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas']);
+
+    foreach (['Sistemas y Computación', 'Sistemas Computacionales'] as $name) {
+        Department::upsert([['code' => 'SC', 'name' => $name, 'is_active' => true]], ['code'], ['name', 'is_active']);
+    }
+
+    expect(OrgUnit::withTrashed()->where('kind', OrgUnitKind::DepartamentoAcademico)->count())->toBe(Department::withTrashed()->count())
+        ->and(unitOf($department))->name->toBe('Sistemas Computacionales');
+});

@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\DB;
  * Cada departamento académico es también una unidad del organigrama con la misma llave
  * (ADR-0018, AZ-S2): así las nueve tablas con `department_id` siguen apuntando a `departments`.
  * Tres triggers mantienen la unidad igual al departamento; los nuevos nacen bajo la Subdirección
- * Académica (supuesto por confirmar). Se da unidad también a los departamentos borrados.
+ * Académica (supuesto por confirmar). El trigger de alta no hace nada si la clave ya existe: un
+ * `INSERT … ON CONFLICT (code) DO UPDATE` dispara el BEFORE INSERT con un id nuevo y dejaría una unidad huérfana. Se da unidad también a los departamentos borrados.
  *
  * `create or replace` porque `migrate:fresh` borra las tablas (y con ellas los triggers) pero no
  * las funciones.
@@ -29,6 +30,10 @@ return new class extends Migration
             create or replace function departments_create_org_unit() returns trigger
             language plpgsql as $$
             begin
+                if exists (select 1 from departments where code = new.code) then
+                    return new;
+                end if;
+
                 insert into org_units (id, parent_id, code, name, kind, sort, is_active, deleted_at, created_at, updated_at)
                 values (new.id, (select id from org_units where code = 'SUB-ACADEMICA' and deleted_at is null),
                         new.code, new.name, 'departamento_academico', 0, new.is_active, new.deleted_at, now(), now())
