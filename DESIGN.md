@@ -500,6 +500,16 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 - **Animación:** se mueve completa. Las orejas se animarían por separado solo con un SVG que las tenga como piezas aparte.
 - Es la única marca: no hay otro logo en la banda.
 
+### Pantalla de acceso
+El login G (tarea 1.17), elegido con maquetas de impeccable. Es la única pantalla con identidad propia fuera del shell; las demás siguen el resto de este documento.
+- **Composición:** en escritorio (desde 1024 px), la foto con los avisos a la izquierda, fija, y a la derecha un panel blanco de `clamp(460px, 42vw, 720px)` con los logos del TecNM y del ITCJ pegados arriba, la marca Nexus centrada entre los logos y el formulario, y el formulario. En celular, primero el panel y debajo una tarjeta «Avisos» con la foto arriba y el título del aviso abajo.
+- **Solo claro:** el layout de invitado con `bare` fija `data-theme="nexus"`; no hay versión oscura del login.
+- **Colores:** los de este documento. El botón Entrar es rojo Tec (`btn-accent`): es la excepción a «el rojo es firma», solo en el login. Los logos son máscaras de una tinta (`resources/images/login/tecnm.webp` e `itcj.webp`): el del TecNM en azul espacio y el del ITCJ en rojo Tec.
+- **Marca:** «Nexus» con la letra Agbalumo (licencia OFL) pasada a vector en `core::login.mark`, con relleno rojo Tec y contorno blanco y azul espacio, como el logo de Liebres. No se carga la fuente.
+- **Avisos (LG-01):** tarjeta semitransparente (`rgb(236 241 246 / 0.5)` con desenfoque) arriba a la derecha de la foto, solo con el título; debajo, la cápsula de puntos, donde el del aviso actual se llena en 7 s. Un aviso sin foto va sobre azul espacio con la cola de la marca en rojo, y su texto en blanco. El carrusel se detiene con el mouse encima o con el foco dentro.
+- **Atajos (LG-02):** botón blanco translúcido «Atajos» abajo a la izquierda de la foto (en celular, sobre la orilla de abajo de la foto). Abre la lista en el lugar del formulario; las opciones caen de arriba hacia abajo una tras otra con un rebote corto, y «Iniciar sesión» al final regresa.
+- **Bienvenida:** la primera vez en el equipo la foto se abre desde la orilla, los logos suben y la marca se escribe de izquierda a derecha con un barrido inclinado (1.7 s en total); después, solo la marca, en 0.46 s. Cualquier tecla o toque la termina. Vive en `nexusLogin` (`resources/js/login.js`), que solo carga el login.
+
 ## Do's and Don'ts
 
 ### Do:
