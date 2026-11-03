@@ -7,6 +7,7 @@ use App\Modules\Core\Actions\RequirePasswordChange;
 use App\Modules\Core\Actions\UpdateUserPassword;
 use App\Modules\Core\Http\Responses\PasswordUpdateResponse;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\LoginScreenQuery;
 use App\Modules\Core\Support\DefaultPassword;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -60,7 +61,12 @@ final class FortifyServiceProvider extends ServiceProvider
     {
         Password::defaults(fn (): Password => Password::min(8)->letters()->numbers());
 
-        Fortify::loginView(fn () => view('core::auth.login'));
+        // La pantalla de acceso G (tarea 1.17): avisos del carrusel (LG-01) y atajos (LG-02).
+        Fortify::loginView(function () {
+            $screen = app(LoginScreenQuery::class);
+
+            return view('core::auth.login', ['notices' => $screen->notices(), 'shortcuts' => $screen->shortcuts()]);
+        });
         Fortify::confirmPasswordView(fn () => view('core::auth.confirm-password'));
         Fortify::authenticateUsing($this->authenticate(...));
         Fortify::updateUserPasswordsUsing(UpdateUserPassword::class);
