@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Actions\Proposals\ReturnProposalReview;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -17,8 +18,8 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -223,12 +224,12 @@ final class AcademicLoadDemoSeeder extends Seeder
 
     private function coordinatorOf(Campus $campus, Career $career): ?User
     {
-        return app(RecipientsQuery::class)->for(Role::Coordinador, $campus, career: $career->id)->first();
+        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(campus: $campus->getKey(), career: $career->getKey()))[0]['user'] ?? null;
     }
 
     private function headOf(Campus $campus, Department $department): ?User
     {
-        return app(RecipientsQuery::class)->for(Role::JefeDepartamento, $campus, $department->id)->first();
+        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $campus->getKey(), unit: $department->getKey()))[0]['user'] ?? null;
     }
 
     /**

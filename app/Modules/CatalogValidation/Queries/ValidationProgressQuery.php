@@ -4,11 +4,12 @@ namespace App\Modules\CatalogValidation\Queries;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -52,7 +53,7 @@ final class ValidationProgressQuery
      * departamento activo, con sus revisiones por columna (nula si falta), cuántas lleva validadas del total, sus
      * pendientes y en revisión, las observaciones abiertas, el jefe vigente, el estado de su carga por campus
      * (evento LoadStatusesRequested) y el último recordatorio en los campus del alcance. El jefe sale de lo mismo que
-     * recibe el aviso (RecipientsQuery: alcance de rol vigente y usuario activo), `heads` y `head` (el primero), y de
+     * recibe el aviso (RecipientsQuery::holders: permiso de validar la revisión sobre el departamento, usuario activo), `heads` y `head` (el primero), y de
      * ahí `remind_blocked_reason`, el motivo por el que «Recordar» no aplica (nada pendiente o sin jefe), nulo si
      * aplica; `remindable` cuenta los departamentos visibles a los que sí y sus jefes distintos. `totals`: por columna. `global` y `flags` cuentan
      * todos los departamentos; `search` (departamento o jefe) y `status` (`pending`: con algo sin validar;
@@ -106,7 +107,7 @@ final class ValidationProgressQuery
 
         $campus = $campuses->first();
         $heads = $departments->mapWithKeys(fn (Department $department): array => [
-            $department->getKey() => $campus === null ? collect() : $this->recipients->for(Role::JefeDepartamento, $campus, $department->getKey()),
+            $department->getKey() => $campus === null ? collect() : collect($this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $department->getKey())))->pluck('user'),
         ]);
 
         $statuses = new LoadStatusesRequested($term, $campuses->pluck('id')->all());
