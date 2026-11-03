@@ -4,14 +4,12 @@ namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
-use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Models\Student;
-use App\Modules\Students\Policies\StudentPolicy;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -29,8 +27,6 @@ final class StudentQuery
 {
     /** Valor del filtro de estatus para los alumnos que quedaron sin estatus. */
     public const string WITHOUT_STATUS = 'sin_estatus';
-
-    public function __construct(private readonly OrgTree $orgTree) {}
 
     /**
      * La tabla de alumnos del campus, por número de control y sin los borrados, con su avance para la columna de
@@ -95,9 +91,9 @@ final class StudentQuery
 
     /**
      * Los alumnos del campus que el usuario puede ver: si trabaja en el campus (ScopedContext::canAccessCampus()),
-     * con cada nombramiento de StudentPolicy::VIEWERS de ese campus o sin campus (de todo el Tec), los que covers()
-     * le daría: los de las carreras de un departamento de su unidad o de su subárbol (OrgTree) y de su carrera,
-     * cuando el nombramiento las trae. Uno sin unidad ni carrera cubre todo el campus.
+     * con cada nombramiento que concede `students.student.view` (StudentsPermission) de ese campus o sin campus (de
+     * todo el Tec), los que ScopedContext::constrain() le daría: los de las carreras de un departamento de su unidad
+     * o de su subárbol y de su carrera, cuando el nombramiento las trae. Uno sin unidad ni carrera cubre todo el campus.
      *
      * @return Builder<Student>
      */
@@ -113,20 +109,11 @@ final class StudentQuery
             return $query->whereRaw('false');
         }
 
-        $scopes = $context->scopes()->filter(fn (RoleAssignment $scope): bool => in_array($scope->role, StudentPolicy::VIEWERS, true)
-            && ($scope->campus_id === null || $scope->campus_id === $campus->id));
-
-        return $query->where(function (Builder $query) use ($scopes): void {
-            $query->whereRaw('false');
-
-            foreach ($scopes as $scope) {
-                $query->orWhere(fn (Builder $covered) => $covered
-                    ->whereRaw('true')
-                    ->when($scope->org_unit_id, fn (Builder $covered, string $unit) => $covered
-                        ->whereIn('career_id', Career::withTrashed()->whereIn('department_id', $this->orgTree->descendantsOrSelf($unit))->select('id')))
-                    ->when($scope->career_id, fn (Builder $covered, string $career) => $covered->where('career_id', $career)));
-            }
-        });
+        return $context->constrain($query, StudentsPermission::StudentView, [
+            'campus' => 'students.campus_id',
+            'unit' => fn (Builder $students, array $units) => $students->whereIn('students.career_id', Career::withTrashed()->whereIn('department_id', $units)->select('id')),
+            'career' => 'students.career_id',
+        ]);
     }
 
     /**

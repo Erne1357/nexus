@@ -68,3 +68,16 @@ it('nadie edita ni borra alumnos: vienen del SII', function () {
     expect($admin->can('update', $this->student))->toBeFalse()
         ->and($admin->can('delete', $this->student))->toBeFalse();
 });
+
+it('la misma persona con otro perfil activo es rechazada', function () {
+    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])
+        ->withRole(Role::Docente)->create();
+
+    actingAsRole($user, Role::Coordinador);
+    expect($user->can('viewAny', Student::class))->toBeTrue()
+        ->and($user->can('view', $this->student))->toBeTrue();
+
+    actingAsRole($user, Role::Docente);
+    expect($user->can('viewAny', Student::class))->toBeFalse()
+        ->and($user->can('view', $this->student))->toBeFalse();
+});
