@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -15,7 +14,6 @@ use Carbon\CarbonImmutable;
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-02 12:00', 'America/Ciudad_Juarez'));
-    $this->seed(RoleSeeder::class);
 
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);

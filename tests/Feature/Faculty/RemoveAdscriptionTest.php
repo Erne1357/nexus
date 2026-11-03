@@ -113,7 +113,7 @@ it('quitar la única deja al docente activo y sin departamento, con su usuario, 
         ->and($teacher->adscriptions()->exists())->toBeFalse()
         ->and($teacher->primaryAdscription)->toBeNull()
         ->and($user->fresh()->is_active)->toBeTrue()
-        ->and($user->fresh()->hasRole(Role::Docente->value))->toBeTrue()
+        ->and($user->fresh()->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue()
         ->and(app(ScopedContext::class)->forUser($user->fresh())->has(Role::Docente))->toBeTrue()
         ->and($entry->description)->toBe('Quitó al docente 1234567 del departamento SIS; queda sin departamento')
         ->and($entry->properties->all())->toBe(['teacher_id' => $teacher->id, 'primary_adscription_id' => null]);

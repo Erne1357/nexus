@@ -18,10 +18,9 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 use RuntimeException;
-use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
- * Usuarios de prueba del demo, con su rol y su nombramiento (`role_assignments`) vigentes desde hoy:
+ * Usuarios de prueba del demo, con su nombramiento (`role_assignments`) vigente desde hoy:
  *
  * - `subdir`: Subdirección Académica, una para todo el Tec (sin campus), sobre la unidad Subdirección Académica.
  * - `jefe.<depto>`: jefe de cada departamento activo de los campus de `$campuses`, de todo el Tec (sin campus).
@@ -32,7 +31,7 @@ use Spatie\Permission\Models\Role as SpatieRole;
  * sus planes vigentes. Jefes y jefes de proyecto docente llevan su fila en `department_heads`.
  *
  * Entran con la contraseña `password` sin tener que cambiarla (supuesto S5, por confirmar). Requiere el catálogo
- * (AcademicDemoSeeder), los roles (RoleSeeder) y la unidad Subdirección Académica. A un usuario que ya existe solo
+ * (AcademicDemoSeeder), y la unidad Subdirección Académica. A un usuario que ya existe solo
  * se le completan el rol y el nombramiento si le faltan, y un departamento que ya tiene jefe vigente lo conserva.
  * Los puestos exclusivos son uno por unidad (AZ-S7): si la Subdirección Académica o un departamento ya tienen, de
  * otro usuario, un nombramiento de Subdirección o de jefe vigente o por empezar, no se crea `subdir` o
@@ -123,8 +122,8 @@ class DemoStaffSeeder extends Seeder
     }
 
     /**
-     * El usuario con ese username, nuevo si no existe, con el rol y un nombramiento vigente sobre exactamente
-     * `$scope`: si una corrida anterior lo dejó sin rol o sin nombramiento, se los da (desde hoy) sin duplicar los que
+     * El usuario con ese username, nuevo si no existe, con un nombramiento vigente sobre exactamente
+     * `$scope`: si una corrida anterior lo dejó sin nombramiento, se lo da (desde hoy) sin duplicar los que
      * ya tiene. En un puesto exclusivo basta uno vigente en la misma unidad, con el campus que sea.
      *
      * @param  array<string, string>  $scope
@@ -139,8 +138,6 @@ class DemoStaffSeeder extends Seeder
                 ->withRole($role, [...$scope, 'valid_from' => today()->toDateString()])
                 ->create(['username' => $username, 'name' => $name, 'email' => null, 'email_verified_at' => null]);
         }
-
-        $user->assignRole(SpatieRole::findOrCreate($role->value));
 
         $held = $user->roleAssignments()
             ->current()

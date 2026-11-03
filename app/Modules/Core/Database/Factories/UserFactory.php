@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use RuntimeException;
-use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
  * Usuario activo que ya cambió su contraseña inicial.
@@ -45,7 +44,7 @@ class UserFactory extends Factory
     }
 
     /**
-     * Admin: el rol de spatie, mientras exista, y un nombramiento `admin` sin alcance.
+     * Admin: un nombramiento `admin` sin alcance.
      */
     public function admin(): static
     {
@@ -53,7 +52,7 @@ class UserFactory extends Factory
     }
 
     /**
-     * Con el rol de spatie y un nombramiento vigente con las columnas de `$scope` (`campus_id`, `org_unit_id`,
+     * Con un nombramiento vigente con las columnas de `$scope` (`campus_id`, `org_unit_id`,
      * `career_id`, `valid_from`, `valid_to`); el de admin, sin alcance. `department_id` es otro nombre de
      * `org_unit_id`: el id de un departamento es el de su unidad. Sin `org_unit_id`, la Subdirección va sobre la unidad
      * Subdirección Académica (AZ-S3). Sin `campus_id`, el nombramiento es de todo el Tec, lo que solo vale para los
@@ -79,8 +78,6 @@ class UserFactory extends Factory
         }
 
         return $this->afterCreating(function (User $user) use ($role, $scope, $academicDefault): void {
-            $user->assignRole(SpatieRole::findOrCreate($role->value));
-
             if ($academicDefault) {
                 $scope['org_unit_id'] = app(OrgTree::class)->idOf(OrgTree::ACADEMIC)
                     ?? throw new RuntimeException('Falta la unidad '.OrgTree::ACADEMIC.' para el nombramiento de Subdirección.');

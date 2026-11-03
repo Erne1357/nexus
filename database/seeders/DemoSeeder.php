@@ -11,7 +11,6 @@ use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
@@ -38,7 +37,6 @@ class DemoSeeder extends Seeder
         $this->refuseProduction();
 
         $this->call([
-            RoleSeeder::class,
             CampusSeeder::class,
             OrgChartSeeder::class,
             AdminUserSeeder::class,

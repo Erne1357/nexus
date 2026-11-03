@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Nombramiento de docente, de todo el Tec (sin campus ni unidad), vigente desde hace un mes y sin fecha de fin. No
- * asigna el rol de spatie: para un usuario con rol y nombramiento usa UserFactory::withRole().
+ * Nombramiento de docente, de todo el Tec (sin campus ni unidad), vigente desde hace un mes y sin fecha de fin. Para un
+ * usuario con nombramiento de otro puesto usa UserFactory::withRole().
  *
  * @extends Factory<RoleAssignment>
  */

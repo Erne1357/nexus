@@ -10,7 +10,6 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Activitylog\Models\Activity;
-use Spatie\Permission\Models\Role as SpatieRole;
 
 /*
 | La tabla de nombramientos (ADR-0018): quién tiene qué puesto, sobre qué campus, unidad o carrera y desde cuándo.
@@ -180,6 +179,9 @@ describe('migración desde role_scopes', function () {
         $this->travelTo(CarbonImmutable::parse('2026-11-04 12:00', 'America/Ciudad_Juarez'));
         $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_04_000001_create_role_assignments_from_role_scopes.php');
         $this->migration->down();
+
+        // Las tablas de spatie ya no existen: se recrean con la migración histórica, como estaban al migrar.
+        (require base_path('app/Modules/Core/Database/Migrations/2026_10_27_000006_create_permission_tables.php'))->up();
     });
 
     it('la migración pasa Subdirección a Subdirección Académica y da nombramiento sin alcance a cada admin', function () {
@@ -187,7 +189,8 @@ describe('migración desde role_scopes', function () {
             ->and(Schema::hasColumns('users', ['authz_version', 'last_role']))->toBeFalse();
 
         $admin = User::factory()->create();
-        $admin->assignRole(SpatieRole::findOrCreate(Role::Admin->value));
+        $roleId = DB::table('roles')->insertGetId(['name' => 'admin', 'guard_name' => 'web']);
+        DB::table('model_has_roles')->insert(['role_id' => $roleId, 'model_type' => $admin->getMorphClass(), 'model_id' => $admin->id]);
         $subdireccion = User::factory()->create();
         $jefe = User::factory()->create();
         $subdireccionScope = oldShapeRoleScope($subdireccion, Role::Subdireccion);

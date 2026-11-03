@@ -23,7 +23,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * y la bitácora lo dice.
  *
  * Nunca alarga: una jefatura borrada o que ya termina para `$lastDay` se queda como está, sin bitácora ni aviso.
- * El rol de spatie se queda, porque sin alcance vigente no cuenta en ScopedContext. Deja la bitácora sobre el
+ * Deja la bitácora sobre el
  * usuario, recarga ScopedContext y avisa con DepartmentHeadEnded después del commit.
  */
 final class EndDepartmentHead

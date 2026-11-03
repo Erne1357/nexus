@@ -4,7 +4,6 @@ use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +24,7 @@ function seedDemoTeachers(array $perCampus = ['C2' => 40], int $seed = 2027): vo
 {
     $seeder = (new DatabaseSeeder)->setContainer(app());
 
-    $seeder->call([RoleSeeder::class, CampusSeeder::class, AdminUserSeeder::class, DemoTermSeeder::class]);
+    $seeder->call([CampusSeeder::class, AdminUserSeeder::class, DemoTermSeeder::class]);
     $seeder->callWith(AcademicDemoSeeder::class, ['campuses' => array_keys($perCampus)]);
     $seeder->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => $perCampus, 'seed' => $seed]);
 }

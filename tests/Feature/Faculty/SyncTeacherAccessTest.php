@@ -78,7 +78,7 @@ it('da usuario a un docente activo sin usuario: su número, la contraseña por d
         ->is_active->toBeTrue()
         ->must_change_password->toBeTrue()
         ->and(Hash::check(app(DefaultPassword::class)->value(), $user->password))->toBeTrue()
-        ->and($user->hasRole(Role::Docente->value))->toBeTrue()
+        ->and($user->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue()
         ->and($scope)
         ->role->toBe(Role::Docente)
         ->campus_id->toBeNull()
@@ -107,10 +107,10 @@ it('deja en la bitácora el alta del usuario, la liga con el docente y su acceso
         ->and($linked->event)->toBe('updated')
         ->and($linked->description)->toBe('Ligó al docente 1234567 con el usuario 1234567')
         ->and($linked->attribute_changes->all())->toBe(['attributes' => ['user_id' => $user->id], 'old' => ['user_id' => null]])
-        ->and($access->description)->toBe('Sincronizó el acceso del docente 1234567: le dio el rol Docente y abrió su alcance de Docente en todo el Tec')
+        ->and($access->description)->toBe('Sincronizó el acceso del docente 1234567: abrió su alcance de Docente en todo el Tec')
         ->and($access->attribute_changes->all())->toBe([
-            'attributes' => ['roles' => ['docente'], 'docente_general' => true],
-            'old' => ['roles' => [], 'docente_general' => false],
+            'attributes' => ['docente_general' => true],
+            'old' => ['docente_general' => false],
         ])
         ->and($everything)->not->toContain(app(DefaultPassword::class)->value())
         ->and($everything)->not->toContain($user->password);
@@ -146,7 +146,7 @@ it('liga un usuario existente con su número sin cambiar su contraseña', functi
     expect($teacher->fresh()->user_id)->toBe($user->id)
         ->and($user->fresh()->password)->toBe($password)
         ->and($user->fresh()->must_change_password)->toBeFalse()
-        ->and($user->fresh()->hasRole(Role::Docente->value))->toBeTrue()
+        ->and($user->fresh()->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue()
         ->and(teachingScopes($user))->toBe(['todo el Tec'])
         ->and(User::count())->toBe(1);
 });
@@ -253,7 +253,7 @@ it('un docente activo sin departamento conserva su usuario, su rol y su alcance'
 
     expect(syncAccess($teacher->fresh()))->toBe(AccessSync::Unchanged)
         ->and($user->fresh()->is_active)->toBeTrue()
-        ->and($user->fresh()->hasRole(Role::Docente->value))->toBeTrue()
+        ->and($user->fresh()->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue()
         ->and(teachingScopes($user))->toBe(['todo el Tec'])
         ->and(app(ScopedContext::class)->forUser($user->fresh())->has(Role::Docente))->toBeTrue()
         ->and(Activity::count())->toBe($entries);
@@ -317,7 +317,7 @@ it('un docente que también es admin queda activo al darlo de baja, pero su jefa
     expect(syncAccess($teacher))->toBe(AccessSync::Updated);
 
     expect($user->fresh()->is_active)->toBeTrue()
-        ->and($user->fresh()->hasRole(Role::Admin->value))->toBeTrue()
+        ->and($user->fresh()->roleAssignments()->current()->where('role', Role::Admin)->exists())->toBeTrue()
         ->and($head->fresh()->valid_to->toDateString())->toBe(today()->subDay()->toDateString());
 
     expect(syncAccess($teacher->fresh()))->toBe(AccessSync::Unchanged);
@@ -395,7 +395,7 @@ it('no liga un usuario con su número que tiene otro rol: conflict y no lo toca'
 
     expect($teacher->fresh()->user_id)->toBeNull()
         ->and($user->fresh()->is_active)->toBeTrue()
-        ->and($user->fresh()->getRoleNames()->all())->toBe([$role->value])
+        ->and($user->fresh()->roleAssignments()->pluck('role')->unique()->values()->all())->toBe([$role])
         ->and(RoleAssignment::count())->toBe($scopes)
         ->and(Activity::count())->toBe(0);
 })->with([

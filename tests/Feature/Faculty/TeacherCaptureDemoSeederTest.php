@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Core\Actions\OpenTerm;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -20,7 +19,6 @@ use Illuminate\Support\Facades\DB;
 
 function seedCaptureScenario(bool $open = true): Term
 {
-    test()->seed(RoleSeeder::class);
     test()->actingAs(User::factory()->admin()->create());
     $term = Term::factory()->create(['code' => '20271']);
 

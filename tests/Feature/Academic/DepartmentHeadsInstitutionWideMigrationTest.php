@@ -7,7 +7,6 @@ use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Spatie\Permission\Models\Role as SpatieRole;
 
 /*
 | La migración que vuelve al jefe de departamento uno por departamento para todo el Tec (confirmado el 30 de
@@ -53,7 +52,6 @@ function oldShapeHead(User $user, Department $department, Campus $campus, string
     ]);
 
     $role = $kind === 'jefe' ? Role::JefeDepartamento : Role::JefeProyectoDocente;
-    $user->assignRole(SpatieRole::findOrCreate($role->value));
 
     $scope = $withScope ? oldShapeScope($user, $role, $campus, $department, $from, $to, $createdAt) : null;
 
@@ -62,7 +60,6 @@ function oldShapeHead(User $user, Department $department, Campus $campus, string
 
 function oldShapeScope(User $user, Role $role, Campus $campus, ?Department $department, string $from, ?string $to, string $createdAt): string
 {
-    $user->assignRole(SpatieRole::findOrCreate($role->value));
 
     return DB::table('role_scopes')->insertGetId([
         'user_id' => $user->id,

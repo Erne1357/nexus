@@ -15,13 +15,13 @@ it('withRole() rechaza un alcance que no llena lo que exige el rol', function (R
     'jefe de proyecto docente con campus nulo' => [Role::JefeProyectoDocente, ['campus_id' => null, 'department_id' => fakeKey(10)]],
 ]);
 
-it('withRole() da el rol y el alcance cuando el alcance está completo', function () {
+it('withRole() da el nombramiento cuando el alcance está completo', function () {
     $campus = Campus::factory()->create();
 
     $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(20)])->create();
 
-    expect($user->hasRole(Role::Coordinador))->toBeTrue()
-        ->and($user->roleAssignments()->sole())
+    expect($user->roleAssignments()->sole())
+        ->role->toBe(Role::Coordinador)
         ->campus_id->toBe($campus->id)
         ->career_id->toBe(fakeKey(20));
 });
@@ -31,8 +31,8 @@ it('withRole() da a los roles de todo el Tec un alcance sin campus, sin crear ni
 
     $user = User::factory()->withRole($role, $scope)->create();
 
-    expect($user->hasRole($role))->toBeTrue()
-        ->and($user->roleAssignments()->sole())
+    expect($user->roleAssignments()->sole())
+        ->role->toBe($role)
         ->campus_id->toBeNull()
         ->org_unit_id->toBe($unit?->__invoke())
         ->and(Campus::count())->toBe(0);
@@ -43,11 +43,10 @@ it('withRole() da a los roles de todo el Tec un alcance sin campus, sin crear ni
     'jefe de departamento con org_unit_id' => [Role::JefeDepartamento, ['org_unit_id' => fn () => departmentKey(10)], fn () => fakeKey(10)],
 ]);
 
-it('admin() da el rol de spatie y un nombramiento admin sin alcance', function () {
+it('admin() da un nombramiento admin sin alcance', function () {
     $user = User::factory()->admin()->create();
 
-    expect($user->hasRole(Role::Admin))->toBeTrue()
-        ->and($user->roleAssignments()->sole())
+    expect($user->roleAssignments()->sole())
         ->role->toBe(Role::Admin)
         ->campus_id->toBeNull()
         ->org_unit_id->toBeNull()

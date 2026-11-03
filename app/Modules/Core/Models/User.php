@@ -12,13 +12,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Spatie\Permission\Traits\HasRoles;
 
 /**
  * Usuario de Nexus. Entra con `username` (número de empleado o de control del SII); el correo
  * es opcional. Un usuario nuevo debe cambiar su contraseña en el primer acceso (supuesto 2 de
- * PROJECT.md). Sus puestos son sus nombramientos (`role_assignments`, ADR-0018); mientras exista
- * spatie/permission, un puesto distinto de admin cuenta solo con su rol de spatie y un nombramiento vigente.
+ * PROJECT.md). Sus puestos son sus nombramientos (`role_assignments`, ADR-0018).
  * Qué puede ver o hacer se pregunta a ScopedContext, nunca a los roles directamente. `authz_version` la sube un
  * trigger en cada cambio de sus nombramientos; `last_role` es el último perfil que usó (AZ-S4).
  */
@@ -28,7 +26,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasRoles, HasUuids, Notifiable;
+    use HasFactory, HasUuids, Notifiable;
 
     /**
      * @return array<string, string>

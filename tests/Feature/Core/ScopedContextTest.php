@@ -2,7 +2,6 @@
 
 use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Authorization\OrgTree;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -22,7 +21,6 @@ use Illuminate\Support\Facades\Route;
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-10-27 12:00', 'America/Ciudad_Juarez'));
-    $this->seed(RoleSeeder::class);
 
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
@@ -145,7 +143,7 @@ describe('alcance por rol', function () {
 
 describe('vigencia y coherencia del alcance', function () {
     it('un alcance vencido o futuro no cuenta', function (string $from, ?string $to) {
-        $user = User::factory()->create()->assignRole(Role::JefeDepartamento);
+        $user = User::factory()->create();
         RoleAssignment::factory()->for($user)->create([
             'role' => Role::JefeDepartamento, 'campus_id' => $this->c2->id, 'org_unit_id' => departmentKey(10),
             'valid_from' => $from, 'valid_to' => $to,
@@ -163,7 +161,7 @@ describe('vigencia y coherencia del alcance', function () {
     ]);
 
     it('cuenta el alcance que empieza o termina hoy', function (string $from, ?string $to) {
-        $user = User::factory()->create()->assignRole(Role::JefeDepartamento);
+        $user = User::factory()->create();
         RoleAssignment::factory()->for($user)->create([
             'role' => Role::JefeDepartamento, 'campus_id' => $this->c2->id, 'org_unit_id' => departmentKey(10),
             'valid_from' => $from, 'valid_to' => $to,
@@ -177,8 +175,8 @@ describe('vigencia y coherencia del alcance', function () {
 
     it('decide la vigencia con la fecha de Ciudad Juárez, no con la de UTC', function () {
         $this->travelTo(CarbonImmutable::parse('2026-10-28 03:00', 'UTC'));
-        $endsToday = User::factory()->create()->assignRole(Role::Docente);
-        $startsTomorrow = User::factory()->create()->assignRole(Role::Docente);
+        $endsToday = User::factory()->create();
+        $startsTomorrow = User::factory()->create();
         RoleAssignment::factory()->for($endsToday)->create(['role' => Role::Docente, 'campus_id' => $this->c2->id, 'valid_from' => '2026-01-01', 'valid_to' => '2026-10-27']);
         RoleAssignment::factory()->for($startsTomorrow)->create(['role' => Role::Docente, 'campus_id' => $this->c2->id, 'valid_from' => '2026-10-28']);
 
@@ -214,7 +212,6 @@ describe('vigencia y coherencia del alcance', function () {
 
         expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse();
 
-        User::find($user->id)->assignRole(Role::Coordinador);
         RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
 
         expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse();
@@ -224,28 +221,8 @@ describe('vigencia y coherencia del alcance', function () {
         expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue();
     });
 
-    it('un rol de spatie sin alcance vigente no da acceso', function () {
-        $context = scopedContextOf(User::factory()->create()->assignRole(Role::JefeDepartamento));
-
-        expect($context->has(Role::JefeDepartamento))->toBeFalse()
-            ->and($context->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeFalse()
-            ->and($context->canAccessCampus($this->c2))->toBeFalse()
-            ->and($context->campuses())->toBeEmpty();
-    });
-
-    it('un alcance sin el rol de spatie no da acceso', function () {
-        $user = User::factory()->create();
-        RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
-
-        $context = scopedContextOf($user);
-
-        expect($context->has(Role::Coordinador))->toBeFalse()
-            ->and($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse()
-            ->and($context->canAccessCampus($this->c2))->toBeFalse();
-    });
-
     it('un alcance al que le falta lo que exige su rol no cuenta', function (Role $role, array $scope) {
-        $user = User::factory()->create()->assignRole($role);
+        $user = User::factory()->create();
         RoleAssignment::factory()->for($user)->create(['role' => $role, ...$scope]);
 
         $context = scopedContextOf($user);
@@ -269,6 +246,13 @@ describe('vigencia y coherencia del alcance', function () {
         expect(scopedContextOf($admin)->isAdmin())->toBeFalse()
             ->and(scopedContextOf($admin)->canAccessCampus($this->c2))->toBeFalse()
             ->and(scopedContextOf($jefe)->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeFalse();
+    });
+
+    it('el admin es un nombramiento: sin él, el usuario no es admin aunque alguna vez lo fue', function () {
+        $admin = User::factory()->admin()->create();
+        $admin->roleAssignments()->where('role', Role::Admin)->update(['valid_to' => today()->subDay()->toDateString()]);
+
+        expect(scopedContextOf($admin->fresh())->isAdmin())->toBeFalse();
     });
 
     it('sin usuario autenticado no hay roles, campus ni periodo', function () {
@@ -408,7 +392,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
     });
 
     it('no toma los alcances de otro usuario: los alcances sin campus o de campus activo son solo los suyos', function () {
-        $withoutScopes = User::factory()->create()->assignRole([Role::Subdireccion, Role::JefeDepartamento]);
+        $withoutScopes = User::factory()->create();
         User::factory()
             ->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])
             ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])

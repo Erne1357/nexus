@@ -20,7 +20,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Jefaturas (confirmado el 30 de octubre de 2026): nombrar a un jefe o a un jefe de proyecto docente de un
-| departamento escribe, en la misma transacción, la fila de `department_heads`, el rol de spatie y un alcance con
+| departamento escribe, en la misma transacción, la fila de `department_heads`, el nombramiento y un alcance con
 | el mismo campus, departamento y fechas. Terminarla cierra las dos con la regla de CloseRoleScopes: la que ya
 | empezó termina en el último día; la que empieza después, se borra. El jefe es de todo el Tec, sin campus
 | (confirmado el 30 de octubre de 2026). El jefe de proyecto docente es de un campus (supuesto por confirmar).
@@ -62,7 +62,7 @@ it('nombrar a un jefe le da la fila, el rol y un alcance de todo el Tec con las 
         ->kind->toBe(DepartmentHeadKind::Jefe)
         ->and($head->fresh()->valid_from->toDateString())->toBe($from->toDateString())
         ->and($head->fresh()->valid_to->toDateString())->toBe($to->toDateString())
-        ->and($this->user->fresh()->hasRole(Role::JefeDepartamento->value))->toBeTrue()
+        ->and($this->user->fresh()->roleAssignments()->current()->where('role', Role::JefeDepartamento)->exists())->toBeTrue()
         ->and($scope)
         ->user_id->toBe($this->user->id)
         ->role->toBe(Role::JefeDepartamento)

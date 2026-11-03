@@ -3,8 +3,7 @@
 namespace App\Modules\Core\Enums;
 
 /**
- * Puestos de R1 (PROJECT.md, "Actores y roles"). El valor es el de `role_assignments.role` y, mientras exista
- * spatie/permission, el nombre del rol de spatie. R3 añade `alumno` y `servicios_escolares`.
+ * Puestos de R1 (PROJECT.md, "Actores y roles"). El valor es el de `role_assignments.role`. R3 añade `alumno` y `servicios_escolares`.
  */
 enum Role: string
 {

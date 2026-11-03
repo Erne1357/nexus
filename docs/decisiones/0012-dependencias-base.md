@@ -10,7 +10,7 @@ La tarea 0.1 instala las dependencias de la fundación. La regla del proyecto es
 |---|---|---|
 | `robsontenorio/mary` ^2.9 y `daisyui` ^5 (npm) | Componentes de UI sobre Tailwind 4 | [ADR-0003](0003-livewire-maryui.md) |
 | `laravel/fortify` ^1.41 | Login por username, cambio de contraseña, sin registro público | [ADR-0004](0004-fortify-username-y-alcances.md) |
-| `spatie/laravel-permission` ^8 | Roles y permisos; el alcance va en `role_scopes`. **Se retira** ([ADR-0018](0018-permisos-por-puesto-y-perfil-activo.md)): los puestos son un enum y los nombramientos, `role_assignments` | [ADR-0004](0004-fortify-username-y-alcances.md), [ADR-0018](0018-permisos-por-puesto-y-perfil-activo.md) |
+| `spatie/laravel-permission` ^8 | Roles y permisos; el alcance va en `role_scopes`. **Retirada** (Task 7 de [ADR-0018](0018-permisos-por-puesto-y-perfil-activo.md); `config/permission.php` queda solo para la migración histórica): los puestos son un enum y los nombramientos, `role_assignments` | [ADR-0004](0004-fortify-username-y-alcances.md), [ADR-0018](0018-permisos-por-puesto-y-perfil-activo.md) |
 | Pest 5 y sus plugins `laravel`, `livewire`, `browser` y `arch` | Pruebas unit, feature, browser y de arquitectura | [ADR-0002](0002-pest-4-y-postgres-de-pruebas.md), [ADR-0011](0011-pest-5.md) |
 | `spatie/laravel-activitylog` ^5 | Bitácora inmutable de toda escritura hecha por Actions | Esta nota |
 | `openspout/openspout` ^5 | Leer y escribir Excel/CSV en streaming | Esta nota; contexto en [ADR-0005](0005-importacion-por-archivos.md) |

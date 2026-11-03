@@ -310,9 +310,9 @@ describe('admin', function () {
         $this->get(route('academic.plans.show', $this->plan))->assertOk();
         $queries = count(DB::getQueryLog());
 
-        // 12 medidas, constantes con el número de materias: el plan (en mount y al pintar) con su carrera,
+        // 10 medidas, constantes con el número de materias: el plan (en mount y al pintar) con su carrera,
         // permisos y alcances, la retícula (3: materias, seriación y especialidades) y la credencial.
-        expect($queries)->toBe(12);
+        expect($queries)->toBe(10);
     });
 });
 

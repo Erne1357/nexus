@@ -14,14 +14,13 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
-use Spatie\Permission\Models\Role as SpatieRole;
 use Throwable;
 
 /**
  * Nombra a un usuario jefe de un departamento o jefe de proyecto docente de un departamento en un campus, del día
- * `$from` al `$to` (sin fin si es nulo). Jefaturas (confirmado el 30 de octubre de 2026): al guardar recibe rol y
- * alcance. En una transacción escribe la fila de `department_heads`, le da el rol de spatie
- * (`DepartmentHeadKind::role()`) y un nombramiento (`role_assignments`) con el mismo campus, fechas y, como unidad,
+ * `$from` al `$to` (sin fin si es nulo). Jefaturas (confirmado el 30 de octubre de 2026): al guardar recibe su
+ * nombramiento. En una transacción escribe la fila de `department_heads` y un nombramiento (`role_assignments`) del puesto
+ * (`DepartmentHeadKind::role()`) con el mismo campus, fechas y, como unidad,
  * el departamento, que es lo que cuenta ScopedContext. Quién puede nombrar lo decide la policy antes de llamarla.
  *
  * El jefe es uno por departamento para todo el Tec (confirmado el 30 de octubre de 2026): no lleva campus, y su
@@ -84,8 +83,6 @@ final class AppointDepartmentHead
 
             $role = $kind->role();
 
-            $user->unsetRelation('roles');
-            $user->assignRole(SpatieRole::findOrCreate($role->value));
             try {
                 $user->roleAssignments()->create([
                     'role' => $role,

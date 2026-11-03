@@ -19,9 +19,9 @@ use Illuminate\Support\Collection;
  * UsesScopedContext) y toda pantalla filtrada por alcance le preguntan a esta clase.
  *
  * - Un usuario inactivo, o ninguno, no tiene ningún rol.
- * - `admin` (rol de spatie) tiene todos los roles y lo cubre todo, sin alcance. Su nombramiento `admin` no es un
+ * - `admin` (un nombramiento `admin` vigente) tiene todos los roles y lo cubre todo, sin alcance. No es un
  *   alcance: no sale en scopes().
- * - Cualquier otro rol cuenta solo si el usuario tiene el rol de spatie **y** un nombramiento vigente de ese rol
+ * - Cualquier otro rol cuenta solo si el usuario tiene un nombramiento vigente de ese rol
  *   (RoleAssignment::current), sin campus o en un campus activo y no borrado, que llene las columnas que el rol
  *   exige (Role::scopeColumns).
  * - Un nombramiento sin campus es de todo el Tec: vale en cada campus activo y no borrado (los desactivados o
@@ -377,17 +377,18 @@ final class ScopedContext
         $this->activeCampuses = null;
         $this->campuses = null;
         $this->terms = [];
-        $this->admin = $user?->hasRole(Role::Admin) ?? false;
-
-        $complete = $user === null ? new Collection : $user->roleAssignments()
+        $assignments = $user === null ? new Collection : $user->roleAssignments()
             ->current()
-            ->where('role', '<>', Role::Admin)
-            ->whereIn('role', $user->getRoleNames()->all())
             ->withExists([
                 'campus as campus_is_active' => fn (Builder $query) => $query->where('is_active', true),
                 'orgUnit as unit_is_department' => fn (Builder $query) => $query->withTrashed()->where('kind', OrgUnitKind::DepartamentoAcademico),
             ])
-            ->get()
+            ->get();
+
+        $this->admin = $assignments->contains(fn (RoleAssignment $scope): bool => $scope->role === Role::Admin);
+
+        $complete = $assignments
+            ->reject(fn (RoleAssignment $scope): bool => $scope->role === Role::Admin)
             ->filter(fn (RoleAssignment $scope): bool => collect($scope->role->scopeColumns())
                 ->every(fn (string $column): bool => $scope->{$column} !== null));
 

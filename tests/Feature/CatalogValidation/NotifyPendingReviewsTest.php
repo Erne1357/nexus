@@ -7,7 +7,6 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Actions\OpenTerm;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
@@ -27,7 +26,6 @@ use Illuminate\Validation\ValidationException;
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-02 12:00', 'America/Ciudad_Juarez'));
-    $this->seed(RoleSeeder::class);
 
     $this->term = Term::factory()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);

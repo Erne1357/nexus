@@ -5,7 +5,6 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -20,7 +19,7 @@ use Illuminate\Support\Facades\Auth;
 
 beforeEach(function () {
     $seeder = (new DatabaseSeeder)->setContainer(app());
-    $seeder->call([RoleSeeder::class, CampusSeeder::class, AdminUserSeeder::class]);
+    $seeder->call([CampusSeeder::class, AdminUserSeeder::class]);
     $seeder->callWith(AcademicDemoSeeder::class, ['campuses' => ['C2']]);
     Term::factory()->create(['code' => '20271']);
     Term::factory()->create(['code' => '20263']);

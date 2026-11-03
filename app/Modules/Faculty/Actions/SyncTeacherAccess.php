@@ -20,23 +20,22 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
-use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
- * Pone el usuario, el rol y los alcances (nombramientos, `role_assignments`) de un docente de acuerdo con su estado
+ * Pone el usuario y los nombramientos (`role_assignments`) de un docente de acuerdo con su estado
  * (docs/arquitectura/arquitectura.md, "Acceso de docentes"). Es idempotente: correrla otra vez sin cambios en el
  * docente no escribe nada.
  *
  * - Docente activo: su usuario es el ligado o, si no tiene, el de username = número de empleado, que se liga sin
  *   tocar su contraseña (S15, supuesto por confirmar), solo si está activo, no es de otro docente (aunque esté
- *   borrado) y no tiene más rol que `docente` (supuesto por confirmar): si no, devuelve `conflict` y no toca nada,
+ *   borrado) y no tiene más puesto que `docente` (supuesto por confirmar): si no, devuelve `conflict` y no toca nada,
  *   porque quien da de alta un docente no debe poder reactivar ni, con la baja, desactivar una cuenta de personal;
  *   eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser con la contraseña por defecto (o
  *   `$passwordHash`, para reutilizar el hash de una corrida) y cambio obligatorio, con el correo del docente si
  *   ningún otro usuario lo usa (supuesto por confirmar). Luego activa el usuario ya ligado (reactivar al docente
- *   lo devuelve) y le da el rol `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
+ *   lo devuelve) y le da su nombramiento de `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
  *   ahí sale que su alcance de `docente` sea uno solo, sin campus, y que no dependa de sus adscripciones: un docente
- *   sin departamento conserva usuario, rol y alcance. Uno sin campus que todavía no empieza cuenta como el suyo y no
+ *   sin departamento conserva usuario y nombramiento. Uno sin campus que todavía no empieza cuenta como el suyo y no
  *   se abre otro (supuesto por confirmar). Cierra los alcances de `docente` con campus que quedaron de antes, con la
  *   regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
  * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026):
@@ -44,7 +43,7 @@ use Spatie\Permission\Models\Role as SpatieRole;
  *   empezar (supuesto por confirmar; EndDepartmentHead borra las que empiezan hoy o después). Sin usuario no hace
  *   nada: un docente inactivo no recibe usuario. Sus alcances de `docente` se quedan, para cuando se reactive.
  *
- * Cada cambio deja su bitácora: la liga sobre el docente, el alta (CreateStaffUser), el acceso (activo, roles, el
+ * Cada cambio deja su bitácora: la liga sobre el docente, el alta (CreateStaffUser), el acceso (activo, el
  * alcance de `docente` de todo el Tec y los campus de `docente` cerrados, valor anterior y nuevo) sobre el usuario
  * y cada jefatura terminada (EndDepartmentHead). Nunca registra contraseñas. Si cambió algo, avisa con
  * TeacherAccessChanged después del commit. Quién puede lo deciden las Actions y pantallas que la llaman.
@@ -112,7 +111,7 @@ final class SyncTeacherAccess
         $user = User::query()->lockForUpdate()->findOrFail($teacher->user_id);
         $changed = false;
 
-        if ($user->is_active && ! $user->hasRole(Role::Admin->value)) {
+        if ($user->is_active && ! $user->roleAssignments()->current()->where('role', Role::Admin)->exists()) {
             $user->forceFill(['is_active' => false])->save();
 
             $this->logAccess($teacher, $user, ['is_active' => true], ['is_active' => false], ['desactivó su usuario']);
@@ -135,12 +134,15 @@ final class SyncTeacherAccess
 
     /**
      * Si un usuario existente con el número del docente se puede ligar: activo, sin otro docente ligado (aunque esté
-     * borrado) y sin más rol de spatie que `docente` (S15 y supuesto por confirmar).
+     * borrado) y sin más puesto que `docente` (S15 y supuesto por confirmar).
      */
     private function linkable(User $user): bool
     {
         return $user->is_active
-            && $user->getRoleNames()->diff([Role::Docente->value])->isEmpty()
+            && ! $user->roleAssignments()
+                ->where('role', '<>', Role::Docente)
+                ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()->toDateString()))
+                ->exists()
             && ! Teacher::withTrashed()->where('user_id', $user->getKey())->exists();
     }
 
@@ -156,7 +158,7 @@ final class SyncTeacherAccess
     }
 
     /**
-     * Activa el usuario, le da el rol `docente`, le deja un alcance de `docente` sin campus y cierra los que tienen
+     * Activa el usuario, le deja un alcance de `docente` sin campus y cierra los que tienen
      * campus. Devuelve si cambió algo.
      */
     private function grantAccess(Teacher $teacher, User $user): bool
@@ -169,15 +171,6 @@ final class SyncTeacherAccess
             $user->forceFill(['is_active' => true])->save();
             [$old['is_active'], $new['is_active']] = [false, true];
             $done[] = 'activó su usuario';
-        }
-
-        $user->unsetRelation('roles');
-        $roles = $user->getRoleNames()->sort()->values()->all();
-
-        if (! in_array(Role::Docente->value, $roles, true)) {
-            $user->assignRole(SpatieRole::findOrCreate(Role::Docente->value));
-            [$old['roles'], $new['roles']] = [$roles, collect([...$roles, Role::Docente->value])->sort()->values()->all()];
-            $done[] = 'le dio el rol '.Role::Docente->label();
         }
 
         $scopes = $user->roleAssignments()

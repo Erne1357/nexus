@@ -28,7 +28,6 @@ use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
-use Spatie\Permission\Models\Role as SpatieRole;
 
 /*
 | Validación de catálogos (`/catalog-validation`, catalog-validation::pages.review), variante C «tablero de
@@ -162,14 +161,13 @@ describe('tablero', function () {
 
     it('la revisión de salones de un campus donde el alcance del jefe no vale no se muestra (CatalogReviewPolicy::view)', function () {
         /*
-        | El jefe es de SIS solo en C1 y además coordina en C2 (otro rol, con su rol de spatie), así que C2 está en su
+        | El jefe es de SIS solo en C1 y además coordina en C2 (otro rol), así que C2 está en su
         | credencial y puede ser su campus activo. En C2 su alcance de jefe no vale: las revisiones generales siguen
         | visibles (son de todo el Tec) y la de salones de C2, no.
         */
         $c1 = Campus::factory()->create(['code' => 'C1']);
         vacate(Role::JefeDepartamento, $this->sis->id);
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'campus_id' => $c1->id, 'valid_from' => today()->toDateString()])->create();
-        $jefe->assignRole(SpatieRole::findOrCreate(Role::Coordinador->value));
         RoleAssignment::factory()->for($jefe)->create(['role' => Role::Coordinador, 'campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id]);
         session([ScopedContext::ACTIVE_CAMPUS => $this->campus->id]);
 

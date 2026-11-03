@@ -12,7 +12,6 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
-use App\Modules\Core\Database\Seeders\RoleSeeder;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
@@ -134,7 +133,6 @@ it('cuenta las observaciones abiertas y en cuántos departamentos, y las resuelt
 });
 
 it('el jefe sale de quien recibe el aviso: alcance de rol vigente y usuario activo, aunque no tenga fila en department_heads', function () {
-    $this->seed(RoleSeeder::class);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Dra. Ana Soto']);
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Baja', 'is_active' => false]);
     DepartmentHead::factory()->create(['department_id' => $this->ele->id, 'user_id' => User::factory()->create(['name' => 'Solo en la tabla'])->id]);
@@ -151,7 +149,6 @@ it('el jefe sale de quien recibe el aviso: alcance de rol vigente y usuario acti
 });
 
 it('«Recordar» queda bloqueado si no falta nada, y la insignia cuenta jefes distintos', function () {
-    $this->seed(RoleSeeder::class);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
     RoleAssignment::factory()->for($jefe)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => $this->ele->id]);
 
@@ -190,7 +187,6 @@ it('el último recordatorio solo cuenta los campus del alcance', function () {
 });
 
 it('filtra por departamento o jefe y por estado', function () {
-    $this->seed(RoleSeeder::class);
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Raúl Terrazas']);
     foreach (Catalog::cases() as $catalog) {
         progressValidate($this->sis, $catalog, $this->c2);
