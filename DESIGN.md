@@ -255,6 +255,7 @@ El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados
 | Listado con filtros, tabla y acción principal | Todos los catálogos | **Decidido:** la anatomía de arriba |
 | Formulario en modal | Catálogos | **Decidido:** modal para crear y editar; página completa si no cabe o tiene pasos |
 | Asistente de pasos | Importación | **Decidido (tarea 1.2):** `x-steps` de MaryUI como indicador, con los pasos hechos en `primary`; el contenido de cada paso en una `x-card` debajo. Lo que corre en la cola se muestra en la misma tarjeta con `x-progress` (indeterminado si no se sabe el total) y su texto, y la URL guarda en qué va (`?lote=`) para retomarlo |
+| Personas y puestos | Académico › Personas y puestos (solo admin) | **Decidido por el usuario el 3 de noviembre de 2026:** variante C, la ficha de la persona; ver "Personas y puestos", abajo |
 | Ficha del docente | Docentes › Ficha | **Decidido por el usuario el 30 de octubre de 2026 (tarea 1.13):** variante A, pestañas; ver "Ficha del docente", abajo |
 | Retícula del alumno | Ficha del alumno; propuesta del coordinador (fase 2) | **Decidido (tarea 1.6):** ver "Retícula del alumno", abajo |
 | Editor de retícula del plan | Retícula de cada plan de estudios (Académico › Planes de estudio) | **Decidido (tarea 1.8):** variante A, columnas por semestre y panel lateral; ver "Retícula del plan (editor)", abajo |
@@ -273,6 +274,15 @@ Forma de la ficha del alumno, decidida el 30 de octubre de 2026 (variante A, pes
 - **Datos:** dos columnas desde 1200 px (datos | adscripciones). La tarjeta de datos no repite «Editar» (ya está «Editar datos» en el encabezado) y es un contenedor (`@container`): cada dato va con su etiqueta encima mientras la tarjeta mide menos de 32rem, y en dos columnas (etiqueta de 10rem | valor) desde ahí, así las insignias del usuario caben a 1200–1440 px y en celular. Una adscripción es solo un departamento (código en Mono y nombre; sin campus), con la insignia «Principal» o «Hacer principal», y «Quitar de <depto>» por renglón, deshabilitado con su motivo si el rol no cubre ese departamento o es el propio docente. **Plazas:** una lista de renglones en cuadrícula (tipo, horas, desde, hasta, estado, acciones) que se apila debajo de 768 px, con las horas base del periodo al pie. Fechas `dd/mm/aaaa`.
 - Agregar o editar una plaza y quitar una adscripción (el aviso dice qué principal queda) o una plaza se hacen en un `x-modal`; lo que no se puede quitar queda deshabilitado con su motivo.
 - **Disponibilidad:** el resumen del periodo activo en un renglón, la cuadrícula de solo lectura con los rangos por día y «Editar disponibilidad», que abre el editor; ver "Cuadrícula día x hora".
+
+### Personas y puestos
+Decidido el 3 de noviembre de 2026 (variante C), en [`person.blade.php`](app/Modules/Core/Livewire/pages/person/person.blade.php); solo la ve el admin.
+- **Lista** (`people`): anatomía de catálogo, sin acción principal. Barra con «Número o nombre» y el filtro «Puesto»; columnas Usuario (Mono), Persona, Puestos vigentes (un chip por resumen) y Estado («Con puesto», «Sin puesto vigente», «Usuario inactivo»); «Ver puestos» por renglón; renglones apilados debajo de 768 px.
+- **Ficha** (`person`): enlace «Personas y puestos», iniciales, nombre, usuario en Mono e insignia «Con N puestos vigentes»; «Nombrar» a la derecha (deshabilitado con «El usuario está inactivo.»); buscador de otra persona y «Último nombramiento». Cuatro cifras (vigentes, anteriores, desde, próximo vencimiento).
+- **Línea de vigencias:** eje de años, marca «Hoy» y una barra por nombramiento: `bg-primary` vigente, `bg-primary/30` terminado, borde punteado programado; se desplaza de lado en cajas angostas.
+- **Nombramientos:** una tarjeta por nombramiento (puesto, insignia, chips, fechas, días que faltan, quién lo terminó). «Terminar…» abre el recuadro con la fecha de fin en la tarjeta; el docente, las jefaturas y el propio puesto de Administración lo llevan deshabilitado con su motivo (AZ-S11, AZ-S12).
+- **Lateral:** «¿Quién ocupa un puesto?» y «Bitácora de sus puestos». Dos columnas (`minmax(0,1fr) | 22rem`) desde 1200 px; debajo, una, con el lateral al final.
+- **Modal «Nombrar»:** solo los puestos que se manejan aquí y solo los campos que el puesto pide; los errores de la Action salen junto a su campo.
 
 ### Línea de tiempo de etapas
 
