@@ -180,6 +180,30 @@ describe('tablero', function () {
             ->assertDontSeeHtml('data-testid="card-rooms"');
     });
 
+    it('con varios puestos responde al perfil activo: como jefe no trae el campus de su coordinación, y como coordinador no entra', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus Norte']);
+        vacate(Role::JefeDepartamento, $this->sis->id);
+        $jefe = User::factory()
+            ->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'campus_id' => $c1->id, 'valid_from' => today()->toDateString()])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])
+            ->create();
+
+        // C2 quedó en la sesión, pero solo lo trae la Coordinación: con Jefatura activa, su campus es C1.
+        actingAsRole($jefe, Role::JefeDepartamento);
+        session([ScopedContext::ACTIVE_CAMPUS => $this->campus->id]);
+
+        reviewPage($jefe)
+            ->assertOk()
+            ->assertSee('Campus Norte')
+            ->assertDontSee($this->campus->name)
+            ->assertSeeHtml('data-testid="card-subjects"')
+            ->assertDontSeeHtml('data-testid="card-rooms"');
+
+        actingAsRole($jefe, Role::Coordinador);
+
+        reviewPage($jefe)->assertForbidden();
+    });
+
     it('en el primer periodo en Nexus lo dice y no muestra altas ni bajas', function () {
         $html = reviewPage()->assertSee('Primer periodo en Nexus')->assertDontSee('altas')->html();
 

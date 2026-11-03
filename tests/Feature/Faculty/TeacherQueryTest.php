@@ -86,6 +86,23 @@ it('con varios alcances ve la unión, y al coordinador y al docente no les trae 
         ->and(teacherNumbersFor($docente))->toBe([]);
 });
 
+it('con varios puestos ve solo lo del perfil activo', function () {
+    $both = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
+        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->ii->id])
+        ->create();
+
+    actingAsRole($both, Role::JefeDepartamento);
+    $asJefe = app(TeacherQuery::class)->forTable(app(ScopedContext::class))->pluck('employee_number')->all();
+
+    actingAsRole($both, Role::JefeProyectoDocente);
+    $asJefeProyecto = app(TeacherQuery::class)->forTable(app(ScopedContext::class))->pluck('employee_number')->all();
+
+    // Ana está adscrita a SC y a II: sale con los dos perfiles. Beto solo es de SC; Carla y Elena, solo de II.
+    expect($asJefe)->toBe(['1000001', '1000002'])
+        ->and($asJefeProyecto)->toBe(['1000001', '1000003', '1000006']);
+});
+
 it('lo que lista a cada rol coincide con lo que TeacherPolicy le deja ver', function () {
     $users = [
         User::factory()->admin()->create(),
