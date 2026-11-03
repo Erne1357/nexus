@@ -10,6 +10,7 @@ use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
+use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Navigation\Navigation;
@@ -17,11 +18,16 @@ use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
+use Livewire\ComponentHookRegistry;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
     public function register(): void
     {
+        // Estático y en register(): Livewire cablea sus hooks al arrancar (ComponentHookRegistry::boot()), y un hook
+        // registrado después, con Livewire::componentHook() desde boot(), ya no se engancha.
+        ComponentHookRegistry::register(ActiveRoleHook::class);
+
         // `scoped`, nunca singleton: con Octane un singleton guardaría el alcance de un usuario
         // para las peticiones siguientes.
         $this->app->scoped(ScopedContext::class, fn (Application $app): ScopedContext => new ScopedContext(

@@ -1023,3 +1023,34 @@ document.addEventListener('alpine:init', () => {
         };
     });
 });
+
+/*
+| AZ-S5: si la sesión cambió de perfil en otra pestaña, el servidor responde 419 con X-Nexus-Role-Changed
+| (Core\Livewire\ActiveRoleHook). Aquí se ofrece recargar en español; cualquier otro 419 (sesión o CSRF vencidos)
+| sigue con el manejo de Livewire.
+*/
+document.addEventListener('livewire:init', () => {
+    let asked = false;
+
+    window.Livewire.interceptRequest(({ onError }) => {
+        onError(({ response, preventDefault }) => {
+            if (response.status !== 419 || response.headers?.get('X-Nexus-Role-Changed') !== '1') {
+                return;
+            }
+
+            preventDefault();
+
+            if (asked) {
+                return;
+            }
+
+            asked = true;
+
+            if (confirm('Cambiaste de perfil en otra pestaña. ¿Recargar la página?')) {
+                window.location.reload();
+            } else {
+                asked = false;
+            }
+        });
+    });
+});
