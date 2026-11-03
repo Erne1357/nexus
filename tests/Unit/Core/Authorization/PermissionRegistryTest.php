@@ -1,51 +1,12 @@
 <?php
 
 use App\Modules\Core\Authorization\Dimension;
-use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\Role;
+use Tests\Fixtures\Authorization\DuplicateKeyPermission;
 use Tests\Fixtures\Authorization\FakePermission;
-
-enum DuplicateKeyPermission: string implements Permission
-{
-    case Clash = 'fake.thing.view_campus';
-
-    public function label(): string
-    {
-        return $this->value;
-    }
-
-    public function dimensions(): array
-    {
-        return [];
-    }
-
-    public function isPersonal(): bool
-    {
-        return false;
-    }
-}
-
-enum MalformedKeyPermission: string implements Permission
-{
-    case Bad = 'viewthing';
-
-    public function label(): string
-    {
-        return $this->value;
-    }
-
-    public function dimensions(): array
-    {
-        return [];
-    }
-
-    public function isPersonal(): bool
-    {
-        return false;
-    }
-}
+use Tests\Fixtures\Authorization\MalformedKeyPermission;
 
 test('concede a cada puesto lo que los módulos declaran y nada más', function () {
     $registry = PermissionRegistry::fromDeclarations(
@@ -106,4 +67,37 @@ test('Target guarda los valores por dimensión y el dueño', function () {
         ->and($target->values(Dimension::Career))->toBeNull()
         ->and(Target::ownedBy('user-1')->ownerId)->toBe('user-1')
         ->and(Dimension::Unit->column())->toBe('org_unit_id');
+});
+
+test('rechaza un permiso de un enum no declarado aunque repita una clave declarada', function () {
+    expect(fn () => PermissionRegistry::fromDeclarations(
+        [FakePermission::class],
+        [Role::Docente->value => [DuplicateKeyPermission::Clash]],
+        [],
+    ))->toThrow(LogicException::class, 'fake.thing.view_campus')
+        ->and(fn () => PermissionRegistry::fromDeclarations([FakePermission::class], [], [DuplicateKeyPermission::Clash]))
+        ->toThrow(LogicException::class);
+
+    $registry = PermissionRegistry::fromDeclarations(
+        [FakePermission::class],
+        [Role::Docente->value => [FakePermission::ViewCampus]],
+        [],
+    );
+
+    expect(fn () => $registry->grants(Role::Docente, DuplicateKeyPermission::Clash))->toThrow(LogicException::class)
+        ->and(fn () => $registry->rolesGranting(DuplicateKeyPermission::Clash))->toThrow(LogicException::class);
+});
+
+test('rechaza conceder permisos a un puesto que no existe', function () {
+    PermissionRegistry::fromDeclarations([FakePermission::class], ['rector' => [FakePermission::ViewAny]], []);
+})->throws(LogicException::class, 'rector');
+
+test('rechaza una excepción del admin que ningún módulo declaró', function () {
+    PermissionRegistry::fromDeclarations([DuplicateKeyPermission::class], [], [FakePermission::ViewAny]);
+})->throws(LogicException::class, 'fake.thing.view_any');
+
+test('Target trata la lista vacía como sin valor y rechaza cadenas vacías', function () {
+    expect(Target::of(unit: [])->values(Dimension::Unit))->toBeNull()
+        ->and(fn () => Target::of(unit: ''))->toThrow(LogicException::class)
+        ->and(fn () => Target::of(campus: ['']))->toThrow(LogicException::class);
 });

@@ -2,10 +2,13 @@
 
 namespace App\Modules\Core\Authorization;
 
+use LogicException;
+
 /**
  * Sobre qué se pide un permiso: los valores por dimensión (campus, unidad, carrera) del registro
  * evaluado, o el dueño si el permiso es personal. Un valor nulo es «sin valor»: lo general.
- * Inmutable.
+ * Una lista vacía es lo mismo que no tener valor: solo lo cubre un nombramiento sin límite en esa
+ * dimensión. Inmutable.
  */
 final readonly class Target
 {
@@ -24,8 +27,14 @@ final readonly class Target
         $dimensions = [];
 
         foreach ([Dimension::Campus->value => $campus, Dimension::Unit->value => $unit, Dimension::Career->value => $career] as $name => $value) {
-            if ($value !== null) {
-                $dimensions[$name] = array_values((array) $value);
+            $values = array_values((array) $value);
+
+            if (in_array('', $values, true)) {
+                throw new LogicException("El valor de la dimensión «{$name}» no puede ser una cadena vacía.");
+            }
+
+            if ($values !== []) {
+                $dimensions[$name] = $values;
             }
         }
 

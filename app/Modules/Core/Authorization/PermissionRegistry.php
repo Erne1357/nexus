@@ -96,6 +96,7 @@ final class PermissionRegistry
 
     /**
      * Si el puesto tiene concedido el permiso; el admin, todo menos adminDenies.
+     * Lanza LogicException (cierra) si el permiso no está declarado.
      */
     public function grants(Role $role, Permission $permission): bool
     {
@@ -109,7 +110,8 @@ final class PermissionRegistry
     }
 
     /**
-     * Los puestos con el permiso concedido de forma explícita, sin el admin implícito.
+     * Los puestos con el permiso concedido de forma explícita, sin el admin implícito. Lanza
+     * LogicException (cierra) si el permiso no está declarado.
      *
      * @return list<Role>
      */
@@ -164,9 +166,19 @@ final class PermissionRegistry
         return $keys;
     }
 
+    /**
+     * El permiso declarado que corresponde al dado. Falla (cierra) si ningún módulo lo declaró, o si
+     * es un caso de otro enum que solo repite una clave declarada.
+     */
     private function declared(Permission $permission): Permission
     {
-        return $this->byKey[$permission->value]
+        $declared = $this->byKey[$permission->value]
             ?? throw new LogicException("El permiso «{$permission->value}» no lo declaró ningún módulo.");
+
+        if ($declared !== $permission) {
+            throw new LogicException("El permiso «{$permission->value}» es de ".$permission::class.', que ningún módulo declaró; la clave la declara '.$declared::class.'.');
+        }
+
+        return $declared;
     }
 }
