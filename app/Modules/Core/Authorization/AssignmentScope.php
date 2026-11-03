@@ -46,20 +46,25 @@ final readonly class AssignmentScope
     }
 
     /**
-     * Null si el puesto ya no existe (un snapshot cacheado antes de un despliegue que lo quitó): no cuenta.
+     * El nombramiento de un arreglo de toArray(), o null si no lo es: falta un campo, uno es de otro tipo o el puesto
+     * ya no existe. Nunca completa un campo faltante, porque un alcance nulo es «sin límite» y ampliaría el acceso.
      *
-     * @param  array{role: string, campus_id?: ?string, org_unit_id?: ?string, career_id?: ?string, unit_is_department?: bool}  $data
+     * @param  array<array-key, mixed>  $data
      */
-    public static function fromArray(array $data): ?self
+    public static function tryFromArray(array $data): ?self
     {
-        $role = Role::tryFrom($data['role']);
+        $role = is_string($data['role'] ?? null) ? Role::tryFrom($data['role']) : null;
 
-        return $role === null ? null : new self(
-            $role,
-            $data['campus_id'] ?? null,
-            $data['org_unit_id'] ?? null,
-            $data['career_id'] ?? null,
-            $data['unit_is_department'] ?? false,
-        );
+        if ($role === null || ! is_bool($data['unit_is_department'] ?? null)) {
+            return null;
+        }
+
+        foreach (['campus_id', 'org_unit_id', 'career_id'] as $field) {
+            if (! array_key_exists($field, $data) || ! ($data[$field] === null || is_string($data[$field]))) {
+                return null;
+            }
+        }
+
+        return new self($role, $data['campus_id'], $data['org_unit_id'], $data['career_id'], $data['unit_is_department']);
     }
 }

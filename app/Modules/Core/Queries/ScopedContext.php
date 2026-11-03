@@ -241,7 +241,11 @@ final class ScopedContext
      * - `owner` es una columna o una Closure que recibe [id del usuario].
      *
      * Sin un puesto que conceda el permiso no deja nada; con el admin entre ellos, deja la consulta igual. Si no, es
-     * un OR con una cláusula por nombramiento.
+     * un OR con una cláusula por nombramiento, en un solo grupo.
+     *
+     * El filtro se agrega con AND a lo que la consulta ya tiene, así que un OR suelto lo saltaría (`a OR (b AND
+     * filtro)`): con un `orWhere` en el primer nivel falla con LogicException, y las condiciones con OR van agrupadas
+     * en un `where(function …)`. Por lo mismo, después de constrain() no se agrega ningún `orWhere` suelto.
      *
      * @template TModel of Model
      *
@@ -251,6 +255,10 @@ final class ScopedContext
      */
     public function constrain(Builder $query, Permission $permission, array $columns): Builder
     {
+        if (array_any($query->getQuery()->wheres, fn (array $where): bool => ($where['boolean'] ?? 'and') === 'or')) {
+            throw new LogicException('constrain() no acepta un OR suelto en la consulta. Agrupa tus condiciones con OR en un where(function …) antes de llamar a constrain().');
+        }
+
         if ($permission->isPersonal()) {
             $owner = $columns['owner']
                 ?? throw new LogicException("constrain() necesita la columna del dueño («owner») para el permiso personal «{$permission->value}».");

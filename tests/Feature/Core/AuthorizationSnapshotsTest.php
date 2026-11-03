@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /*
-| Snapshot cacheado de los nombramientos (spec 9): llave `authz:user:{id}:{authz_version}`, vence a la siguiente
+| Snapshot cacheado de los nombramientos (spec 9): llave `authz:user:v1:{id}:{authz_version}` (v1 es la versión del
+| formato), vence a la siguiente
 | medianoche de Ciudad Juárez. Cada «petición» lee al usuario de la base, como el guard de sesión, para que su
 | authz_version sea la vigente; un usuario recién creado por la factory no la trae y no usa la caché.
 | "Hoy" es el 3 de noviembre de 2026.
@@ -35,6 +36,14 @@ function nextRequestOf(User $user): ScopedContext
     test()->actingAs(User::find($user->id));
 
     return app(ScopedContext::class);
+}
+
+/**
+ * La llave de caché del snapshot del usuario, con la versión del formato y su authz_version de la base.
+ */
+function snapshotKeyOf(User $user): string
+{
+    return "authz:user:v1:{$user->id}:".User::find($user->id)->authz_version;
 }
 
 /**
@@ -60,14 +69,15 @@ it('guarda los nombramientos vigentes y completos, por puesto, y vuelve igual de
         ->and($snapshot->scopes(Role::JefeDepartamento))->toEqual([new AssignmentScope(Role::JefeDepartamento, null, fakeKey(10), null, true)])
         ->and($snapshot->scopes(Role::Coordinador))->toEqual([new AssignmentScope(Role::Coordinador, $this->c2->id, null, fakeKey(20), false)])
         ->and($snapshot->scopes())->toHaveCount(3)
-        ->and(AuthorizationSnapshot::fromArray($snapshot->toArray()))->toEqual($snapshot);
+        ->and(AuthorizationSnapshot::fromArray($snapshot->toArray()))->toEqual($snapshot)
+        ->and(fn () => AuthorizationSnapshot::fromArray(['scopes' => [['role' => 'coordinador']]]))->toThrow(UnexpectedValueException::class);
 });
 
 it('el snapshot se lee de la caché en la segunda petición', function () {
     $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
 
     expect(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue()
-        ->and(Cache::has("authz:user:{$user->id}:".User::find($user->id)->authz_version))->toBeTrue();
+        ->and(Cache::has(snapshotKeyOf($user)))->toBeTrue();
 
     DB::enableQueryLog();
 
@@ -108,7 +118,7 @@ it('sin authz_version cargada lee los nombramientos de la base y no los guarda e
     $user = User::factory()->withRole(Role::Docente)->create();
 
     expect(app(AuthorizationSnapshots::class)->for($user)->roles())->toBe([Role::Docente])
-        ->and(Cache::has("authz:user:{$user->id}:".User::find($user->id)->authz_version))->toBeFalse();
+        ->and(Cache::has(snapshotKeyOf($user)))->toBeFalse();
 
     RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
 
@@ -131,3 +141,62 @@ it('refresh() vuelve a leer authz_version y ve un nombramiento nuevo en la misma
         ->and($context->user()->authz_version)->toBe(User::find($user->id)->authz_version)
         ->and($context->user()->isDirty())->toBeFalse();
 });
+
+it('una transacción revertida no deja un snapshot con lo que se deshizo', function () {
+    $user = User::factory()->withRole(Role::Docente)->create();
+
+    try {
+        DB::transaction(function () use ($user): void {
+            RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
+
+            expect(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue();
+
+            throw new RuntimeException('se revierte');
+        });
+    } catch (RuntimeException) {
+    }
+
+    expect(Cache::has('authz:user:v1:'.$user->id.':'.(User::find($user->id)->authz_version + 1)))->toBeFalse();
+
+    // Un cambio confirmado vuelve a la misma authz_version que tuvo la transacción revertida.
+    RoleAssignment::factory()->for($user)->create(['role' => Role::JefeProyectoDocente, 'campus_id' => $this->c2->id, 'org_unit_id' => departmentKey(10)]);
+    $context = nextRequestOf($user);
+
+    expect($context->has(Role::JefeProyectoDocente))->toBeTrue()
+        ->and($context->has(Role::Coordinador))->toBeFalse();
+});
+
+it('un snapshot en caché con un campo faltante o de otro tipo se descarta y se recarga', function (array $changes) {
+    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
+    $key = snapshotKeyOf($user);
+    $broken = array_filter(
+        [...['role' => 'coordinador', 'campus_id' => $this->c2->id, 'org_unit_id' => null, 'career_id' => careerKey(20), 'unit_is_department' => false], ...$changes],
+        fn (mixed $value): bool => $value !== '__drop__',
+    );
+    Cache::put($key, ['scopes' => [$broken]], now()->addHour());
+
+    $context = nextRequestOf($user);
+
+    expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue()
+        ->and($context->covers(Role::Coordinador, $this->c2, career: careerKey(21)))->toBeFalse()
+        ->and(Cache::get($key))->toBe(['scopes' => [[
+            'role' => 'coordinador', 'campus_id' => $this->c2->id, 'org_unit_id' => null, 'career_id' => fakeKey(20), 'unit_is_department' => false,
+        ]]]);
+})->with([
+    'sin carrera' => [['career_id' => '__drop__']],
+    'campus de otro tipo' => [['campus_id' => 7]],
+    'sin el tipo de unidad' => [['unit_is_department' => '__drop__']],
+    'puesto que ya no existe' => [['role' => 'decano']],
+]);
+
+it('un snapshot en caché que no es una lista de nombramientos se descarta y se recarga', function (mixed $cached) {
+    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
+    Cache::put(snapshotKeyOf($user), $cached, now()->addHour());
+
+    expect(nextRequestOf($user)->covers(Role::Coordinador, $this->c2, career: careerKey(21)))->toBeFalse()
+        ->and(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue();
+})->with([
+    'sin scopes' => [[]],
+    'scopes que no es lista' => [['scopes' => 'coordinador']],
+    'un texto' => ['coordinador'],
+]);

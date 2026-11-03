@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Authorization;
 
 use App\Modules\Core\Enums\Role;
+use UnexpectedValueException;
 
 /**
  * Lo que una persona tiene (spec 7 y 9): sus nombramientos vigentes hoy que llenan lo que su puesto pide
@@ -50,13 +51,42 @@ final readonly class AuthorizationSnapshot
     }
 
     /**
-     * @param  array{scopes?: list<array{role: string, campus_id?: ?string, org_unit_id?: ?string, career_id?: ?string, unit_is_department?: bool}>}  $data
+     * El snapshot de un arreglo de toArray(); lanza UnexpectedValueException si no lo es (ver tryFromArray()).
+     *
+     * @param  array<array-key, mixed>  $data
      */
     public static function fromArray(array $data): self
     {
-        return new self(array_values(array_filter(array_map(
-            fn (array $scope): ?AssignmentScope => AssignmentScope::fromArray($scope),
-            $data['scopes'] ?? [],
-        ))));
+        return self::tryFromArray($data)
+            ?? throw new UnexpectedValueException('El arreglo no es un snapshot de nombramientos: le falta un campo o uno es de otro tipo.');
+    }
+
+    /**
+     * El snapshot de un arreglo de toArray(), o null si cualquier parte no lo es: un dato cacheado incompleto se
+     * descarta entero y se vuelve a leer de la base, nunca se completa.
+     *
+     * @param  array<array-key, mixed>  $data
+     */
+    public static function tryFromArray(array $data): ?self
+    {
+        $rows = $data['scopes'] ?? null;
+
+        if (! is_array($rows) || ! array_is_list($rows)) {
+            return null;
+        }
+
+        $scopes = [];
+
+        foreach ($rows as $row) {
+            $scope = is_array($row) ? AssignmentScope::tryFromArray($row) : null;
+
+            if ($scope === null) {
+                return null;
+            }
+
+            $scopes[] = $scope;
+        }
+
+        return new self($scopes);
     }
 }

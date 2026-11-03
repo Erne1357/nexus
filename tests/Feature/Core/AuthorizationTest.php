@@ -352,6 +352,22 @@ describe('constrain()', function () {
             ->and($received)->toBe([[$this->f['d2']]]);
     });
 
+    it('constrain rechaza una consulta con un OR suelto, y con el OR agrupado la sigue filtrando', function (string $kind, int $expected) {
+        $user = authorizationUser($kind, $this->f);
+        $probe = authorizationProbe($this->f, $user->id);
+        $actor = actorOf($user);
+        $loose = $probe->newQuery()->where('campus_id', $this->f['c1'])->orWhere('campus_id', $this->f['c3']);
+        $grouped = $probe->newQuery()->where(fn (Builder $query) => $query->where('campus_id', $this->f['c1'])->orWhere('campus_id', $this->f['c3']));
+
+        expect(fn () => $actor->constrain($loose, FakePermission::ViewCampus, probeColumns()))
+            ->toThrow(LogicException::class, 'Agrupa tus condiciones con OR en un where(function …) antes de llamar a constrain()')
+            ->and($actor->constrain($grouped, FakePermission::ViewCampus, probeColumns())->count())->toBe($expected);
+    })->with([
+        'un nombramiento sin campus: solo C1, no C3 (desactivado)' => ['jefe', 45],
+        'sin el permiso: nada' => ['docente', 0],
+        'el admin: C1 y C3' => ['admin', 90],
+    ]);
+
     it('falla si falta la columna de una dimensión que el permiso declara, o si el campus viene como Closure', function (FakePermission $permission, array $columns) {
         $user = authorizationUser('admin', $this->f);
 
