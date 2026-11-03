@@ -23,12 +23,14 @@ it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos',
         ->withRole(Role::Coordinador, ['campus_id' => $c2->id, 'career_id' => $career->id])
         ->create(['username' => 'doble', 'name' => 'Dora Doble', 'last_role' => Role::JefeDepartamento]);
 
+    // La espera es la primera aserción tras cada navegación: el plugin reintenta cada aserción hasta su
+    // timeout (AwaitableWebpage). waitForEvent() no sirve: Page::waitForLoadState no envía nada a Playwright.
     $page = visit('/login')
         ->fill('username', 'doble')
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->waitForText('Validas los catálogos de tu departamento, asignas docentes y salones a los grupos de sus materias y cierras su carga.')
+        ->assertSeeIn('[data-testid="role-block"]', 'Validas los catálogos de tu departamento, asignas docentes y salones a los grupos de sus materias y cierras su carga.')
         ->assertSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')
         ->assertDontSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
         ->assertVisible('a[data-label="Bandeja del departamento"]')
@@ -41,7 +43,7 @@ it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos',
     $page->resize(1440, 900)->screenshot(filename: 'active-role-1440');
 
     $page->click('[data-testid="role-switcher"] input[value="coordinador"]')
-        ->waitForText('Analizas el avance de los alumnos de tu carrera, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre.')
+        ->assertSeeIn('[data-testid="role-block"]', 'Analizas el avance de los alumnos de tu carrera, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre.')
         ->assertPathIs('/')
         ->assertSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
         ->assertDontSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')
