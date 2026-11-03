@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core;
 
+use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\NavigationArea;
@@ -24,11 +25,16 @@ final class CoreServiceProvider extends ModuleServiceProvider
         $this->app->scoped(ScopedContext::class, fn (Application $app): ScopedContext => new ScopedContext(
             fn (): mixed => $app['auth']->user(),
             $app->make(OrgTree::class),
+            $app->make(AuthorizationSnapshots::class),
+            $app->make(PermissionRegistry::class),
             $app['session.store'],
         ));
 
         // `scoped` por lo mismo: guarda en la instancia la huella y el mapa de la petición en curso.
         $this->app->scoped(OrgTree::class, fn (Application $app): OrgTree => new OrgTree($app['cache.store']));
+
+        // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
+        $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));
 
         // Singleton porque es inmutable: las entradas de todos los módulos, sin nada del usuario.
         $this->app->singleton(Navigation::class, fn (Application $app): Navigation => Navigation::fromModules(
