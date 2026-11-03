@@ -7,12 +7,13 @@ use App\Modules\Core\Navigation\RecentPages;
 use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Session\Session;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Cambia el perfil con que actúa la sesión (spec 8.1, AZ-S4): fija el puesto en la sesión y en `users.last_role`
- * (el que se usa al entrar la próxima vez). Si el campus activo no es de los que ofrece el nuevo perfil, lo olvida,
- * y olvida las páginas recientes del menú (RecentPages), que eran de otro alcance. Es una preferencia más la sesión,
- * así que no abre transacción; deja en la bitácora «Cambió al perfil …» con el de antes y el de ahora.
+ * Cambia el perfil con que actúa la sesión (spec 8.1, AZ-S4): fija el puesto en `users.last_role` (el que se usa al
+ * entrar la próxima vez) y deja en la bitácora «Cambió al perfil …» con el de antes y el de ahora, en una
+ * transacción. Solo si se guardó, lo fija en la sesión; si el campus activo no es de los que ofrece el nuevo perfil,
+ * lo olvida, y olvida las páginas recientes del menú (RecentPages), que eran de otro alcance.
  */
 final class SwitchRole
 {
@@ -35,8 +36,16 @@ final class SwitchRole
 
         $from = $this->context->activeRole();
 
+        DB::transaction(function () use ($user, $role, $from): void {
+            $user->forceFill(['last_role' => $role])->save();
+
+            activity()
+                ->performedOn($user)
+                ->withProperties(['from' => $from?->value, 'to' => $role->value])
+                ->log("Cambió al perfil {$role->label()}");
+        });
+
         $this->session->put(ScopedContext::ACTIVE_ROLE, $role->value);
-        $user->forceFill(['last_role' => $role])->save();
 
         $campusId = $this->session->get(ScopedContext::ACTIVE_CAMPUS);
 
@@ -45,10 +54,5 @@ final class SwitchRole
         }
 
         $this->recentPages->forget();
-
-        activity()
-            ->performedOn($user)
-            ->withProperties(['from' => $from?->value, 'to' => $role->value])
-            ->log("Cambió al perfil {$role->label()}");
     }
 }

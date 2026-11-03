@@ -67,3 +67,16 @@ it('olvida las páginas recientes', function () {
 
     expect(session()->has('core.recent_pages'))->toBeFalse();
 });
+
+it('si la bitácora falla, no cambia el perfil de la sesión, ni last_role, ni olvida las páginas recientes', function () {
+    actingAsRole($this->user, Role::JefeDepartamento);
+    session(['core.recent_pages' => ['academico' => '/campus']]);
+    Activity::creating(function (): void {
+        throw new RuntimeException('No se pudo escribir la bitácora.');
+    });
+
+    expect(fn () => app(SwitchRole::class)->handle(Role::Coordinador))->toThrow(RuntimeException::class, 'No se pudo escribir la bitácora.')
+        ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value)
+        ->and($this->user->fresh()->last_role)->toBeNull()
+        ->and(session('core.recent_pages'))->toBe(['academico' => '/campus']);
+});
