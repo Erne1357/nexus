@@ -1,0 +1,14 @@
+<?php
+
+namespace App\Modules\Core\Authorization;
+
+/**
+ * Sin ningún módulo que nombre las carreras, no las nombra: el resumen cuenta «N carreras».
+ */
+final class DefaultScopeLabels implements ScopeLabels
+{
+    public function careers(array $careerIds): array
+    {
+        return [];
+    }
+}

@@ -8,6 +8,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\ScopedContext;
@@ -18,8 +19,13 @@ use App\Modules\Core\Queries\ScopedContext;
  * credencial queda en el periodo y el campus del aviso. Deja de poder abrirse si el departamento se borró o
  * el usuario ya no es su jefe.
  */
-final class CatalogReviewsPending extends NexusNotification
+final class CatalogReviewsPending extends NexusNotification implements AddressedToRole
 {
+    public static function addressedRole(): Role
+    {
+        return Role::JefeDepartamento;
+    }
+
     public static function typeKey(): string
     {
         return 'catalog-reviews-pending';

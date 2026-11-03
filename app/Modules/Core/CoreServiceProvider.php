@@ -3,8 +3,10 @@
 namespace App\Modules\Core;
 
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
+use App\Modules\Core\Authorization\DefaultScopeLabels;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
+use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
@@ -40,6 +42,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
         $this->app->singleton(Navigation::class, fn (Application $app): Navigation => Navigation::fromModules(
             $app->getProviders(ModuleServiceProvider::class),
         ));
+
+        // Sin estado: nombra lo que Core no conoce. Un módulo con esos datos lo reemplaza en su register().
+        $this->app->bindIf(ScopeLabels::class, DefaultScopeLabels::class);
 
         // Singleton porque es inmutable: el catálogo de permisos y las concesiones por puesto de todos
         // los módulos, sin nada del usuario ni de la petición.

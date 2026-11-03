@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
@@ -19,8 +20,13 @@ use Illuminate\Support\Str;
  * campus de la propuesta. Deja de poder abrirse si la propuesta ya no existe o el usuario ya no coordina esa
  * carrera en ese campus.
  */
-final class ProposalReturned extends NexusNotification
+final class ProposalReturned extends NexusNotification implements AddressedToRole
 {
+    public static function addressedRole(): Role
+    {
+        return Role::Coordinador;
+    }
+
     public static function typeKey(): string
     {
         return 'proposal-returned';

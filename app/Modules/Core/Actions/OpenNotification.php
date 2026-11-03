@@ -5,6 +5,7 @@ namespace App\Modules\Core\Actions;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Notifications\NotificationTarget;
@@ -20,13 +21,16 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * acepta sus parámetros), da el motivo en lugar de la dirección, para que la campana lo avise. Si el aviso es
  * de un periodo y un campus, deja la credencial en ellos (SetActiveContext), para que la pantalla muestre lo que
  * dice el aviso; si el usuario ya no trabaja en ese campus, tampoco lo lleva. Solo abre notificaciones del
- * usuario, que es el de la sesión: la credencial que cambia es la suya.
+ * usuario, que es el de la sesión: la credencial que cambia es la suya. Si el aviso es de un puesto
+ * (AddressedToRole) que el usuario tiene y no es el activo, antes de todo cambia a ese perfil (SwitchRole), para que
+ * el destino se vea con su alcance; si ya no lo tiene, lo abre como cualquiera.
  */
 final class OpenNotification
 {
     public function __construct(
         private readonly ScopedContext $context,
         private readonly SetActiveContext $setActiveContext,
+        private readonly SwitchRole $switchRole,
     ) {}
 
     /**
@@ -48,6 +52,15 @@ final class OpenNotification
 
         $message = NotificationMessage::fromArray($notification->data);
         $type = is_subclass_of($notification->type, NexusNotification::class) ? $notification->type : NexusNotification::class;
+
+        if (is_subclass_of($type, AddressedToRole::class)) {
+            $role = $type::addressedRole();
+
+            if ($this->context->activeRole() !== $role && in_array($role, $this->context->heldRoles(), true)) {
+                $this->switchRole->handle($role);
+            }
+        }
+
         $problem = $type::unavailableReason($user, $message);
 
         if ($problem !== null) {

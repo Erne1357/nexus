@@ -1,5 +1,8 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
+use App\Modules\Core\Authorization\DefaultScopeLabels;
+use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -204,4 +207,86 @@ it('sin sesión no ofrece campus ni periodos', function () {
     Livewire::test('core::components.context-switcher')
         ->assertDontSee('Campus I')
         ->assertDontSee('Ene-Jun 2027');
+});
+
+/*
+| Perfil activo (spec 8.1, AZ-S4): «Actuando como», un renglón por puesto con su alcance, arriba de campus y periodo.
+*/
+
+function multiRoleUser(Campus $campus): User
+{
+    return User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(20)])
+        ->withRole(Role::Docente)
+        ->create();
+}
+
+it('ofrece un renglón por puesto con su alcance', function () {
+    $user = multiRoleUser($this->c2);
+    actingAsRole($user, Role::JefeDepartamento);
+
+    Livewire::test('core::components.context-switcher')
+        ->assertSee('Actuando como')
+        ->assertSeeInOrder(['Jefe de departamento académico', 'Coordinador de carrera · ', '(C2)', 'Docente'])
+        ->assertSet('roleValue', 'jefe_departamento');
+});
+
+it('con las carreras nombradas por Academic muestra sus códigos', function () {
+    $career = Career::factory()->create(['code' => 'ISC']);
+    $other = Career::factory()->create(['code' => 'IGE']);
+    $user = User::factory()
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $career->id])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $other->id])
+        ->withRole(Role::Docente)
+        ->create();
+    actingAsRole($user, Role::Docente);
+
+    Livewire::test('core::components.context-switcher')->assertSee('Coordinador de carrera · IGE, ISC (C2)');
+});
+
+it('con un solo puesto no muestra selector de perfil', function () {
+    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
+
+    Livewire::test('core::components.context-switcher')
+        ->assertDontSee('Actuando como')
+        ->assertDontSeeHtml('wire:model="roleValue"');
+});
+
+it('al cambiar de perfil regresa a Inicio', function () {
+    $user = multiRoleUser($this->c2);
+    actingAsRole($user, Role::JefeDepartamento);
+
+    Livewire::test('core::components.context-switcher')
+        ->set('roleValue', 'coordinador')
+        ->call('apply')
+        ->assertRedirect(route('home'));
+
+    expect($user->fresh()->last_role)->toBe(Role::Coordinador)
+        ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::Coordinador->value);
+});
+
+it('rechaza un puesto que no tiene y deja el perfil como estaba', function () {
+    $user = multiRoleUser($this->c2);
+    actingAsRole($user, Role::JefeDepartamento);
+
+    Livewire::test('core::components.context-switcher')
+        ->set('roleValue', 'subdireccion')
+        ->call('apply')
+        ->assertNoRedirect()
+        ->assertSet('roleValue', 'jefe_departamento');
+
+    expect(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
+});
+
+it('sin quien nombre las carreras, el resumen cuenta cuántas son', function () {
+    app()->bind(ScopeLabels::class, DefaultScopeLabels::class);
+    $user = User::factory()
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(21)])
+        ->withRole(Role::Docente)
+        ->create();
+    actingAsRole($user, Role::Docente);
+
+    Livewire::test('core::components.context-switcher')->assertSee('Coordinador de carrera · 2 carreras (C2)');
 });

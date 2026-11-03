@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
@@ -18,8 +19,13 @@ use App\Modules\Core\Queries\ScopedContext;
  * bandeja de su departamento con esa carrera elegida (tarea 2.8), en el periodo y el campus de la propuesta.
  * Deja de poder abrirse si la propuesta o el departamento ya no existen, o el usuario ya no es su jefe.
  */
-final class ProposalSubmitted extends NexusNotification
+final class ProposalSubmitted extends NexusNotification implements AddressedToRole
 {
+    public static function addressedRole(): Role
+    {
+        return Role::JefeDepartamento;
+    }
+
     public static function typeKey(): string
     {
         return 'proposal-submitted';

@@ -718,6 +718,29 @@ describe('perfil activo', function () {
         expect(app(ScopedContext::class)->activeRole())->toBe(Role::Docente);
     });
 
+    it('un last_role desconocido no rompe el perfil activo', function () {
+        $user = User::factory()->withRole(Role::Docente)->create();
+        DB::table('users')->where('id', $user->id)->update(['last_role' => 'puesto_que_ya_no_existe']);
+
+        $this->actingAs($user->fresh());
+
+        expect(app(ScopedContext::class)->activeRole())->toBe(Role::Docente);
+    });
+
+    it('heldScopes da los nombramientos de todos los puestos aunque el activo sea otro', function () {
+        $user = User::factory()
+            ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+            ->create();
+
+        actingAsRole($user, Role::JefeDepartamento);
+        $context = app(ScopedContext::class);
+
+        expect($context->scopes()->pluck('role')->all())->toBe([Role::JefeDepartamento])
+            ->and($context->heldScopes()->pluck('role')->all())->toBe([Role::JefeDepartamento, Role::Coordinador])
+            ->and($context->heldScopes(Role::Coordinador)->pluck('career_id')->all())->toBe([fakeKey(20)]);
+    });
+
     it('sin usuario autenticado no hay perfil activo', function () {
         expect(app(ScopedContext::class)->activeRole())->toBeNull();
     });

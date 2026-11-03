@@ -1,11 +1,15 @@
 <?php
 
+use App\Modules\AcademicLoad\Notifications\ProposalReturned;
+use App\Modules\AcademicLoad\Notifications\ProposalSubmitted;
+use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Actions\MarkAllNotificationsRead;
 use App\Modules\Core\Actions\OpenNotification;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\NotificationQuery;
@@ -26,6 +30,21 @@ use Illuminate\Support\Str;
 final class TestNotice extends NexusNotification
 {
     public function __construct(private readonly NotificationMessage $message) {}
+
+    public function message(object $notifiable): NotificationMessage
+    {
+        return $this->message;
+    }
+}
+
+final class TestJefeNotice extends NexusNotification implements AddressedToRole
+{
+    public function __construct(private readonly NotificationMessage $message) {}
+
+    public static function addressedRole(): Role
+    {
+        return Role::JefeDepartamento;
+    }
 
     public function message(object $notifiable): NotificationMessage
     {
@@ -185,4 +204,39 @@ it('marcar todas como leídas solo toca las del usuario', function () {
     expect(app(MarkAllNotificationsRead::class)->handle($ana))->toBe(2)
         ->and($ana->unreadNotifications()->count())->toBe(0)
         ->and($beto->unreadNotifications()->count())->toBe(1);
+});
+
+it('abrir un aviso de jefe con Coordinación activa cambia a Jefatura y abre el destino', function () {
+    $ana = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(20)])
+        ->create();
+    $ana->notify(new TestJefeNotice(new NotificationMessage(title: 'Aviso de jefe', body: 'x', icon: 'o-bell', route: 'home')));
+    actingAsRole($ana, Role::Coordinador);
+
+    $target = app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id'));
+
+    expect($target->url)->toBe(route('home'))
+        ->and(app(ScopedContext::class)->activeRole())->toBe(Role::JefeDepartamento)
+        ->and($ana->fresh()->last_role)->toBe(Role::JefeDepartamento);
+});
+
+it('si ya no tiene el puesto del aviso, no cambia de perfil', function () {
+    $ana = User::factory()
+        ->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(20)])
+        ->create();
+    $ana->notify(new TestJefeNotice(new NotificationMessage(title: 'Aviso de jefe', body: 'x', icon: 'o-bell', route: 'home')));
+    actingAsRole($ana, Role::Coordinador);
+
+    $target = app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id'));
+
+    expect($target->url)->toBe(route('home'))
+        ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador)
+        ->and($ana->fresh()->last_role)->toBeNull();
+});
+
+it('los avisos de jefe y de coordinación declaran su puesto', function () {
+    expect(ProposalSubmitted::addressedRole())->toBe(Role::JefeDepartamento)
+        ->and(ProposalReturned::addressedRole())->toBe(Role::Coordinador)
+        ->and(CatalogReviewsPending::addressedRole())->toBe(Role::JefeDepartamento);
 });

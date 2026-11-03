@@ -38,7 +38,8 @@ use LogicException;
  * hay perfil. Esta clase solo lo lee: lo escribe el cambio de perfil. Sus puestos efectivos (effectiveRoles()) son
  * solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, has, isAdmin, scopes, covers,
  * coversDepartment, canAccessCampus y campuses) responde con ellos. El contexto de otro usuario (forUser()) y uno sin
- * sesión no tienen perfil activo: sus puestos efectivos son todos los que tiene, porque responden «quién podría», que
+ * usuario autenticado no tienen perfil activo (el código de consola que fija el usuario del guard sí recibe el
+ * predeterminado): sus puestos efectivos son todos los que tiene, porque responden «quién podría», que
  * es lo que preguntan los avisos y las policies sobre otra persona.
  *
  * API de permisos (spec 7.1; el registro de permisos dice qué puesto concede qué):
@@ -373,7 +374,10 @@ final class ScopedContext
         $selected = $this->session->get(self::ACTIVE_ROLE);
         $selected = $selected instanceof Role ? $selected : (is_string($selected) ? Role::tryFrom($selected) : null);
 
-        foreach ([$selected, $this->user()?->last_role] as $candidate) {
+        $stored = $this->user()?->getAttributes()['last_role'] ?? null;
+        $last = is_string($stored) ? Role::tryFrom($stored) : null;
+
+        foreach ([$selected, $last] as $candidate) {
             if ($candidate !== null && in_array($candidate, $held, true)) {
                 return $candidate;
             }
@@ -445,10 +449,34 @@ final class ScopedContext
      */
     public function scopes(?Role $role = null): Collection
     {
-        $user = $this->user();
         $effective = $this->effectiveRoles();
 
-        $this->scopeModels ??= (new Collection($this->assignments))->map(fn (AssignmentScope $scope): RoleAssignment => (new RoleAssignment)->forceFill([
+        return $this->allScopeModels()
+            ->filter(fn (RoleAssignment $scope): bool => in_array($scope->role, $effective, true) && ($role === null || $scope->role === $role))
+            ->values();
+    }
+
+    /**
+     * Los nombramientos de todos sus puestos (o solo de `$role`), sin importar el perfil activo: lo que la credencial
+     * muestra por cada puesto. Mismo formato y filtros de vigencia que scopes(), que sí responde con el perfil activo.
+     *
+     * @return Collection<int, RoleAssignment>
+     */
+    public function heldScopes(?Role $role = null): Collection
+    {
+        return $this->allScopeModels()
+            ->filter(fn (RoleAssignment $scope): bool => $scope->role !== Role::Admin && ($role === null || $scope->role === $role))
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, RoleAssignment>
+     */
+    private function allScopeModels(): Collection
+    {
+        $user = $this->user();
+
+        return $this->scopeModels ??= (new Collection($this->assignments))->map(fn (AssignmentScope $scope): RoleAssignment => (new RoleAssignment)->forceFill([
             'user_id' => $user?->getKey(),
             'role' => $scope->role,
             'campus_id' => $scope->campusId,
@@ -456,10 +484,6 @@ final class ScopedContext
             'career_id' => $scope->careerId,
             'unit_is_department' => $scope->unitIsDepartment,
         ]));
-
-        return $this->scopeModels
-            ->filter(fn (RoleAssignment $scope): bool => in_array($scope->role, $effective, true) && ($role === null || $scope->role === $role))
-            ->values();
     }
 
     /**
