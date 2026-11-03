@@ -103,6 +103,16 @@ it('acepta la parte con los catálogos validados: queda aceptada, con quién y c
         ->and($activity->description)->toBe('Aceptó la parte de CB en la propuesta de ISC en C2 para el periodo 20271');
 });
 
+it('AZ-01: quien envió la propuesta acepta su parte y la bitácora lo marca', function () {
+    $this->proposal->update(['submitted_by' => $this->actor->id]);
+
+    acceptPart();
+
+    $activity = Activity::query()->where('event', 'accepted')->sole();
+    expect($this->part->fresh()->status)->toBe(ProposalReviewStatus::Accepted)
+        ->and($activity->properties['self_approval'])->toBeTrue();
+});
+
 it('con la primera parte aceptada la carga del departamento pasa de borrador a propuesta, con su historial', function () {
     $scLoad = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->sc->id]);
 

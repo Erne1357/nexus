@@ -14,6 +14,7 @@ use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Rules\SelfApproval;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
@@ -286,6 +287,7 @@ new #[Title('Bandeja del departamento')] class extends Component
             'chips' => $this->chips($inbox),
             'anomalyCounts' => array_combine(array_map(fn (array $row): string => $row['career']->getKey(), $rows), array_column($rows, 'anomalies')),
             'target' => $target,
+            'selfApproval' => $target !== null && SelfApproval::applies(auth()->user(), $target['proposal']?->submitted_by),
             'targetAnomalies' => $target === null ? [] : $this->anomalousRows($inbox->rowsFor($target['career']->getKey())),
             'parallelsTarget' => $this->parallelsTarget($inbox),
         ];
