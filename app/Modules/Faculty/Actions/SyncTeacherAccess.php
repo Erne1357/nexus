@@ -28,9 +28,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * - Docente activo: su usuario es el ligado o, si no tiene, el de username = número de empleado, que se liga sin
  *   tocar su contraseña (S15, supuesto por confirmar), solo si está activo, no es de otro docente (aunque esté
- *   borrado) y no tiene más puesto que `docente` (supuesto por confirmar): si no, devuelve `conflict` y no toca nada,
- *   porque quien da de alta un docente no debe poder reactivar ni, con la baja, desactivar una cuenta de personal;
- *   eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser con la contraseña por defecto (o
+ *   borrado) y no tiene más puesto que `docente` (supuesto por confirmar): si no, devuelve `conflict` y no toca
+ *   nada, porque quien da de alta un docente no debe poder reactivar ni, con la baja, desactivar una cuenta de
+ *   personal; eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser con la contraseña por defecto (o
  *   `$passwordHash`, para reutilizar el hash de una corrida) y cambio obligatorio, con el correo del docente si
  *   ningún otro usuario lo usa (supuesto por confirmar). Luego activa el usuario ya ligado (reactivar al docente
  *   lo devuelve) y le da su nombramiento de `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
