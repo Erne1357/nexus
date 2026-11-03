@@ -1,5 +1,11 @@
 {
     "grants": {
+        "coordinador": [
+            "students.student.view"
+        ],
+        "jefe_departamento": [
+            "students.student.view"
+        ],
         "subdireccion": [
             "core.campus.update_profile",
             "core.campus.view",
@@ -14,7 +20,8 @@
             "facilities.building.view",
             "facilities.room.create",
             "facilities.room.update",
-            "facilities.room.view"
+            "facilities.room.view",
+            "students.student.view"
         ]
     },
     "admin_denies": []

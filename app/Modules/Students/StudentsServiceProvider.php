@@ -6,8 +6,10 @@ use App\Modules\Academic\Events\CurriculumChanged;
 use App\Modules\Academic\Events\PlanCareerChanging;
 use App\Modules\Academic\Events\SubjectDeactivating;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Listeners\BlockPlanCareerChangeWithStudents;
 use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
@@ -37,6 +39,20 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         return [
             new NavigationItem('Alumnos', 'students.index', 'o-academic-cap', NavigationArea::ServiciosEscolares,
                 ability: 'viewAny', arguments: [Student::class], childRoutes: ['students.show']),
+        ];
+    }
+
+    public function permissions(): array
+    {
+        return [StudentsPermission::class];
+    }
+
+    public function grants(): array
+    {
+        return [
+            Role::Subdireccion->value => [StudentsPermission::StudentView],
+            Role::JefeDepartamento->value => [StudentsPermission::StudentView],
+            Role::Coordinador->value => [StudentsPermission::StudentView],
         ];
     }
 }

@@ -173,3 +173,25 @@ it('carga al alumno de la ficha por su id; uno que no es uuid o un alumno borrad
         ->and(fn () => app(StudentQuery::class)->findOrFail('no-es-un-uuid'))->toThrow(ModelNotFoundException::class)
         ->and(fn () => app(StudentQuery::class)->findOrFail($deleted->id))->toThrow(ModelNotFoundException::class);
 });
+
+it('el filtro de alumnos da las mismas filas que antes por puesto', function () {
+    $all = ['21000001', '21000002', '21000003', '21000004'];
+    $subdireccion = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->campus->id])->create();
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->department->id])->create();
+    $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->iti->id])->create();
+    $both = User::factory()
+        ->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->ind->department_id])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->iti->id])->create();
+
+    expect(listedControlNumbers($subdireccion, $this->campus))->toBe($all)
+        ->and(listedControlNumbers($head, $this->campus))->toBe(['21000001', '21000002', '21000003'])
+        ->and(listedControlNumbers($coordinator, $this->campus))->toBe(['21000003']);
+
+    actingAsRole($both, Role::JefeDepartamento);
+    expect(app(StudentQuery::class)->forTable(app(ScopedContext::class), $this->campus)->pluck('control_number')->all())
+        ->toBe(['21000004']);
+
+    actingAsRole($both, Role::Coordinador);
+    expect(app(StudentQuery::class)->forTable(app(ScopedContext::class), $this->campus)->pluck('control_number')->all())
+        ->toBe(['21000003']);
+});
