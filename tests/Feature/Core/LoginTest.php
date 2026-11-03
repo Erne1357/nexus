@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -213,3 +215,12 @@ it('no expone registro, recuperación por correo, verificación de correo, perfi
     'two-factor.login',
     'passkey.login',
 ]);
+
+it('al iniciar sesión olvida el perfil activo de una sesión anterior', function () {
+    User::factory()->create(['username' => '19110002', 'password' => 'password']);
+    $this->withSession([ScopedContext::ACTIVE_ROLE => Role::Coordinador->value]);
+
+    $this->post('/login', ['username' => '19110002', 'password' => 'password'])->assertRedirect();
+
+    expect(session()->has(ScopedContext::ACTIVE_ROLE))->toBeFalse();
+});

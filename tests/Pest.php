@@ -11,6 +11,8 @@ use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\ScopedContext;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Builder;
@@ -64,6 +66,16 @@ function lastToastOf(Testable $component): ?array
         ->last(fn (string $expression): bool => str_starts_with($expression, 'toast('));
 
     return $expression === null ? null : json_decode(substr($expression, 6, -1), true)['toast'];
+}
+
+/**
+ * Entra como `$user` con `$role` como perfil activo (ScopedContext::ACTIVE_ROLE en la sesión, como lo deja el cambio
+ * de perfil): en esta sesión solo cuentan ese puesto y sus nombramientos. Para quien tiene varios puestos; con uno
+ * solo, `actingAs()` basta. Lo ven también las peticiones de Livewire::test().
+ */
+function actingAsRole(User $user, Role $role): TestCase
+{
+    return test()->actingAs($user)->withSession([ScopedContext::ACTIVE_ROLE => $role->value]);
 }
 
 /**

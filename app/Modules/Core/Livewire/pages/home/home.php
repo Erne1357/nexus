@@ -9,9 +9,8 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 /**
- * Página de inicio: saludo y un bloque por cada rol que el usuario ejerce (ScopedContext::roles()),
- * con su nombre (Role::label()) y lo que ese rol hace en Nexus según el glosario. El admin, que
- * tiene todos los roles, ve solo el suyo. A quien tiene al menos un rol le muestra además el bloque «Calendario»
+ * Página de inicio: saludo y el bloque del perfil activo (ScopedContext::activeRole()), con su nombre
+ * (Role::label()) y lo que ese puesto hace en Nexus según el glosario. A quien tiene al menos un rol le muestra además el bloque «Calendario»
  * (core::terms.mini-timeline): las etapas en curso y las dos que siguen del periodo y el campus activos, según
  * TermCalendarQuery; sin periodo activo o sin etapas por ver, no aparece. A quien puede ver el periodo (TermPolicy) le enlaza su ficha.
  */
@@ -22,7 +21,9 @@ new #[Title('Inicio')] class extends Component
      */
     public function with(ScopedContext $context, TermCalendarQuery $calendar): array
     {
-        $term = $context->roles() === [] ? null : $context->activeTerm();
+        $active = $context->activeRole();
+        $roles = $active === null ? [] : [$active];
+        $term = $roles === [] ? null : $context->activeTerm();
         $campus = $context->activeCampus();
         $windows = $term === null ? [] : $calendar->upcoming($term, $campus);
 
@@ -36,7 +37,7 @@ new #[Title('Inicio')] class extends Component
             'blocks' => array_map(fn (Role $role): array => [
                 'title' => $role->label(),
                 'description' => $this->description($role),
-            ], $context->roles()),
+            ], $roles),
         ];
     }
 

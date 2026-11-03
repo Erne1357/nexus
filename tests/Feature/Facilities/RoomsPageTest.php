@@ -274,8 +274,9 @@ describe('robustez y perfil del campus', function () {
     });
 
     it('si el usuario pierde el alcance del salón del panel, lo cierra sin 403', function () {
-        $component = Livewire::actingAs($this->sub)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id);
-        $this->sub->roleAssignments()->update(['valid_to' => today()->subDay()]);
+        $component = Livewire::actingAs($this->sub)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id)->assertSet('showDrawer', true);
+        // Sigue en Subdirección, ahora de C1. Perder el puesto activo es otro caso: ActiveRoleHook responde 419.
+        $this->sub->roleAssignments()->update(['campus_id' => $this->c1->id]);
         app(ScopedContext::class)->refresh();
 
         $component->call('$refresh')->assertOk()->assertSet('showDrawer', false);
@@ -340,13 +341,19 @@ describe('subdirección', function () {
         expect($this->a101->fresh()->is_active)->toBeTrue();
     });
 
-    it('con un campus activo que no administra no ve nada ni puede crear', function () {
+    it('con Coordinación activa (la que trae C1 a su credencial) no entra; con Subdirección activa, C1 guardado en la sesión no cuenta', function () {
         vacate(Role::Subdireccion);
         $multi = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id, 'valid_from' => today()->toDateString()])
             ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(1)])->create();
+
+        actingAsRole($multi, Role::Coordinador);
         session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id]);
 
-        Livewire::actingAs($multi)->test('facilities::pages.rooms')->assertViewHas('rooms', listsRooms([]))->call('create')->assertForbidden();
+        Livewire::test('facilities::pages.rooms')->assertForbidden();
+
+        actingAsRole($multi, Role::Subdireccion);
+
+        Livewire::test('facilities::pages.rooms')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1']));
     });
 });
 

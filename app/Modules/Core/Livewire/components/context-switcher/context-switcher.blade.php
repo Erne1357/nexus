@@ -1,5 +1,14 @@
-{{-- Campus y periodo activos, en la tarjeta de la credencial (DESIGN.md, "Estructura"): campos de 44 px con su etiqueta arriba. --}}
+{{-- Perfil, campus y periodo activos, en la tarjeta de la credencial (DESIGN.md, "Estructura"): campos de 44 px con su etiqueta arriba. --}}
 <div class="grid gap-2.5">
+    @if (count($roles) > 1)
+        <div class="grid gap-1.5">
+            <span id="nexus-role-label" class="text-[11.5px] font-medium tracking-[.09em] text-neutral uppercase">Actuando como</span>
+            <div role="radiogroup" aria-labelledby="nexus-role-label" data-testid="role-switcher">
+                <x-radio :options="$roles" wire:model="roleValue" wire:change="switchRole" class="radio-sm radio-primary" />
+            </div>
+        </div>
+    @endif
+
     @if ($campuses->count() === 1)
         <div class="grid gap-1">
             <span class="text-[11.5px] font-medium tracking-[.09em] text-neutral uppercase">Campus</span>

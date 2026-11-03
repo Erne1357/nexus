@@ -2,7 +2,7 @@
 
 namespace App\Modules\Core\Notifications;
 
-use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -12,8 +12,8 @@ use Illuminate\Support\Str;
  * NotificationMessage, que la campana de la banda lee sin conocer la clase. Cada módulo define las suyas en
  * `<Modulo>/Notifications` (el correo queda para después).
  *
- * Al abrirla, la campana pregunta a la clase si su destino sigue disponible para el usuario
- * (unavailableReason) y, si no, se lo dice en lugar de llevarlo: cada clase agrega sus condiciones (que el
+ * Al abrirla, la campana pregunta a la clase si su destino sigue disponible para el usuario, con el perfil con que
+ * lo abriría (unavailableReason) y, si no, se lo dice en lugar de llevarlo: cada clase agrega sus condiciones (que el
  * registro exista, que siga en su alcance) a la de omisión, que la ruta exista.
  *
  * Laravel clona la notificación para cada destinatario y canal antes de darle llave; __clone le da a cada
@@ -57,10 +57,11 @@ abstract class NexusNotification extends Notification
     }
 
     /**
-     * Por qué el destino ya no se puede abrir para `$user`, o null si se puede. Recibe el mensaje guardado,
-     * no la notificación, porque la campana solo tiene la fila de la base.
+     * Por qué el destino ya no se puede abrir para la persona de `$context`, con el perfil con que lo abriría
+     * (OpenNotification pasa el del puesto del aviso, ScopedContext::asRole()), o null si se puede. Recibe el
+     * mensaje guardado, no la notificación, porque la campana solo tiene la fila de la base.
      */
-    public static function unavailableReason(User $user, NotificationMessage $message): ?string
+    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
     {
         if ($message->route === null || ! Route::has($message->route)) {
             return 'Esa pantalla no está disponible.';

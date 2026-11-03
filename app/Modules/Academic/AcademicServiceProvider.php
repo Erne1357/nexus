@@ -2,10 +2,12 @@
 
 namespace App\Modules\Academic;
 
+use App\Modules\Academic\Authorization\AcademicScopeLabels;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
@@ -16,6 +18,14 @@ use App\Modules\Core\Navigation\NavigationItem;
  */
 final class AcademicServiceProvider extends ModuleServiceProvider
 {
+    public function register(): void
+    {
+        parent::register();
+
+        // Los códigos de carrera para el resumen de puestos de la credencial (reemplaza el de Core).
+        $this->app->bind(ScopeLabels::class, AcademicScopeLabels::class);
+    }
+
     public function navigation(): array
     {
         return [

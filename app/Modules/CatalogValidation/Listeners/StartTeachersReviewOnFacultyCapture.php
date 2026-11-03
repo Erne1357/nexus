@@ -27,8 +27,10 @@ use Illuminate\Support\Collection;
  * de los del docente que el actor cubre como jefe, incluido el de la adscripción que se acaba de quitar. El admin,
  * Subdirección y el jefe de proyecto docente no la mueven, ni una revisión ya en revisión o validada.
  *
- * Limitación: Nexus no tiene un rol activo que el usuario elija, solo campus y periodo; basta con que el actor sea
- * jefe del departamento aunque tenga otros roles. Sale después del commit de la Action de Faculty.
+ * Si el actor es quien está en sesión, cuenta su perfil activo (ScopedContext): la mueve si actúa como jefe del
+ * departamento. Si el actor es otro usuario (forUser()) o no hay usuario autenticado (un job), basta con que sea jefe aunque tenga otros
+ * puestos; el código de consola que fija el usuario del guard recibe el perfil predeterminado. Sale después del
+ * commit de la Action de Faculty.
  */
 final class StartTeachersReviewOnFacultyCapture
 {

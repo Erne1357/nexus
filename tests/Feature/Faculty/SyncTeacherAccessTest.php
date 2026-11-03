@@ -290,7 +290,7 @@ it('dar de baja desactiva su usuario y termina su jefatura vigente', function ()
         ->and($head->fresh()->valid_to->toDateString())->toBe($yesterday)
         ->and(RoleAssignment::where('role', Role::JefeDepartamento)->sole()->valid_to->toDateString())->toBe($yesterday)
         ->and($past->fresh()->valid_to->toDateString())->toBe(today()->subMonths(6)->toDateString())
-        ->and(app(ScopedContext::class)->forUser($user->fresh())->roles())->toBe([])
+        ->and(app(ScopedContext::class)->forUser($user->fresh())->heldRoles())->toBe([])
         ->and($deactivated->description)->toBe('Sincronizó el acceso del docente 1234567: desactivó su usuario')
         ->and($deactivated->attribute_changes->all())->toBe(['attributes' => ['is_active' => false], 'old' => ['is_active' => true]]);
 

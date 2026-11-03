@@ -216,3 +216,16 @@ it('conserva el estado true de la barra lateral', function () {
 
     expect(session('mary-sidebar-collapsed'))->toBe('true');
 });
+
+it('la credencial de la banda nombra el perfil activo y no el primero que tiene', function () {
+    $campus = Campus::factory()->create();
+    $user = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
+        ->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(20)])
+        ->create();
+    actingAsRole($user, Role::Coordinador);
+
+    $credential = domOf($this->get('/'))->querySelector('[data-testid="credential"]');
+
+    expect(textOf($credential))->toContain('Coordinador de carrera')->not->toContain('Jefe de departamento');
+});

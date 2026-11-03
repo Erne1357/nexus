@@ -13,7 +13,8 @@ use Livewire\Attributes\On;
  * Abrir una notificación y marcarlas todas como leídas, igual en la campana y en «Todas las notificaciones»:
  * OpenNotification la marca leída y lleva a su pantalla o, si ya no está disponible, se avisa con un toast y no
  * se lleva. Cada cambio avisa con `notifications-changed` para que el otro componente de la misma pantalla (la
- * campana en la banda y la página) se vuelva a pintar. Pide el trait Toast de MaryUI.
+ * campana en la banda y la página) se vuelva a pintar, salvo si abrir el aviso cambió el perfil: entonces la
+ * pantalla del aviso se carga completa, sin wire:navigate. Pide el trait Toast de MaryUI.
  */
 trait OpensNotifications
 {
@@ -33,13 +34,20 @@ trait OpensNotifications
             return null;
         }
 
-        $this->dispatch('notifications-changed');
-
         if ($target->url === null) {
+            $this->dispatch('notifications-changed');
             $this->warning($target->problem ?? 'Esa pantalla no está disponible.');
 
             return null;
         }
+
+        // Con otro perfil, los componentes de esta página ya no pueden actuar (ActiveRoleHook): no se les avisa y la
+        // pantalla del aviso se carga completa, pintada con el perfil nuevo.
+        if ($target->switchedRole) {
+            return $this->redirect($target->url);
+        }
+
+        $this->dispatch('notifications-changed');
 
         return $this->redirect($target->url, navigate: true);
     }

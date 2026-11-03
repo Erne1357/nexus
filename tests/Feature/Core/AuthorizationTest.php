@@ -234,7 +234,8 @@ describe('allows()', function () {
     });
 
     it('con dos puestos basta que uno cubra, cada uno con su alcance', function () {
-        $user = actorOf(authorizationUser('dos puestos', $this->f));
+        // Sin perfil activo: el contexto de otro usuario (forUser) cuenta todos sus puestos.
+        $user = app(ScopedContext::class)->forUser(authorizationUser('dos puestos', $this->f));
 
         expect($user->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['d2'])))->toBeTrue()
             ->and($user->allows(FakePermission::ViewCampusCareer, Target::of(campus: $this->f['c1'], career: $this->f['y'])))->toBeTrue()

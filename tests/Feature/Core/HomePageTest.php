@@ -19,19 +19,26 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
 });
 
-it('saluda al usuario y muestra el bloque de cada rol que ejerce', function () {
+it('saluda al usuario y muestra solo el bloque del perfil activo', function () {
     $user = User::factory()
         ->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => departmentKey(10)])
         ->withRole(Role::Docente, ['campus_id' => $this->campus->id])
         ->create(['name' => 'Ana López']);
 
-    $this->actingAs($user);
+    actingAsRole($user, Role::JefeDepartamento);
 
     Livewire::test('core::pages.home')
         ->assertSee('Hola, Ana López')
-        ->assertSeeInOrder(['Jefe de departamento académico', 'Validas los catálogos', 'Docente', 'Consultas tu propia carga'])
+        ->assertSeeInOrder(['Jefe de departamento académico', 'Validas los catálogos'])
+        ->assertDontSee('Consultas tu propia carga')
         ->assertDontSee('Coordinador de carrera')
         ->assertDontSee('Administración');
+
+    actingAsRole($user, Role::Docente);
+
+    Livewire::test('core::pages.home')
+        ->assertSee('Consultas tu propia carga')
+        ->assertDontSee('Validas los catálogos');
 });
 
 it('al coordinador le muestra solo el bloque de coordinación de carrera', function () {

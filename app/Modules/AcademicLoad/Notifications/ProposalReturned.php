@@ -6,7 +6,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AddressedToRole;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
@@ -19,8 +19,13 @@ use Illuminate\Support\Str;
  * campus de la propuesta. Deja de poder abrirse si la propuesta ya no existe o el usuario ya no coordina esa
  * carrera en ese campus.
  */
-final class ProposalReturned extends NexusNotification
+final class ProposalReturned extends NexusNotification implements AddressedToRole
 {
+    public static function addressedRole(): Role
+    {
+        return Role::Coordinador;
+    }
+
     public static function typeKey(): string
     {
         return 'proposal-returned';
@@ -51,7 +56,7 @@ final class ProposalReturned extends NexusNotification
         );
     }
 
-    public static function unavailableReason(User $user, NotificationMessage $message): ?string
+    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
     {
         $career = KeyLookup::find(Career::query()->withTrashed(), $message->parameters['carrera'] ?? null);
         $exists = $career !== null && $message->termId !== null && $message->campusId !== null && CareerProposal::query()
@@ -64,10 +69,10 @@ final class ProposalReturned extends NexusNotification
             return 'Esa propuesta ya no existe.';
         }
 
-        if (! app(ScopedContext::class)->forUser($user)->covers(Role::Coordinador, $message->campusId, career: $career->getKey())) {
+        if (! $context->covers(Role::Coordinador, $message->campusId, career: $career->getKey())) {
             return "Ya no coordinas {$career->name} en ese campus.";
         }
 
-        return parent::unavailableReason($user, $message);
+        return parent::unavailableReason($context, $message);
     }
 }

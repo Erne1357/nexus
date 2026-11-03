@@ -12,8 +12,8 @@ use Livewire\Component;
  * sesión. Abrir y cerrar lo hace el componente Alpine `nexusShell` (resources/js/app.js).
  *
  * El área de la ruta es la de la entrada del menú de la pantalla (Navigation::forRoute). La
- * credencial muestra el primer rol que el usuario ejerce (ScopedContext::roles(), en el orden del
- * enum) con su nombre de Role::label(), y el campus y el periodo activos.
+ * credencial muestra el perfil activo (ScopedContext::activeRole()) con su nombre de Role::label(), y el campus y el
+ * periodo activos.
  */
 new class extends Component
 {
@@ -41,7 +41,7 @@ new class extends Component
     public function with(ScopedContext $context, Navigation $navigation): array
     {
         $user = $context->user();
-        $role = $context->roles()[0] ?? null;
+        $role = $context->activeRole();
         $item = $this->route === null ? null : $navigation->forRoute($this->route);
 
         return [
