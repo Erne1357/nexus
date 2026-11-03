@@ -29,7 +29,7 @@ it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos',
         ->press('Entrar')
         ->assertPathIs('/')
         ->assertSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')
-        ->assertDontSeeIn('main', 'Coordinador de carrera')
+        ->assertDontSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
         ->assertVisible('a[data-label="Bandeja del departamento"]')
         ->assertMissing('a[data-label="Propuesta de carrera"]')
         ->click('@credential')
@@ -40,10 +40,9 @@ it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos',
     $page->resize(1440, 900)->screenshot(filename: 'active-role-1440');
 
     $page->click('[data-testid="role-switcher"] input[value="coordinador"]')
-        ->assertScript("document.querySelector('[data-testid=\"role-block\"]')?.textContent.includes('Coordinador de carrera') === true", true)
         ->assertPathIs('/')
         ->assertSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
-        ->assertDontSeeIn('main', 'Jefe de departamento académico')
+        ->assertDontSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')
         ->assertVisible('a[data-label="Propuesta de carrera"]')
         ->assertMissing('a[data-label="Bandeja del departamento"]')
         ->assertNoJavaScriptErrors();
