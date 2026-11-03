@@ -6,10 +6,11 @@ use App\Modules\Core\Queries\ScopedContext;
 use Livewire\ComponentHook;
 
 /**
- * AZ-S5: una pestaña pintada con un perfil no puede mandar acciones después de que la sesión cambió de perfil en
- * otra pestaña. Al deshidratar guarda en el memo `nexus_role` el perfil activo; al hidratar, si el memo no coincide
- * con el perfil activo de la sesión, responde 419 con el encabezado `X-Nexus-Role-Changed: 1`, que resources/js/app.js
- * usa para ofrecer recargar. Sin usuario autenticado, con un memo pintado sin usuario o con otro usuario (`nexus_user`), no hace nada. La petición
+ * AZ-S5: una pestaña pintada con un perfil no puede mandar acciones con otro. Al deshidratar guarda en el memo
+ * `nexus_role` el perfil activo; al hidratar, si el memo no coincide con el perfil activo de la sesión, responde 419
+ * con el encabezado `X-Nexus-Role-Changed: 1`, que resources/js/app.js usa para ofrecer recargar con un mensaje
+ * neutro. No distingue por qué cambió: la sesión cambió de perfil en otra pestaña, o cambiaron sus puestos (perdió
+ * el activo, se desactivó el campus de su único nombramiento o recibió el primero). Sin usuario autenticado, con un memo pintado sin usuario o con otro usuario (`nexus_user`), no hace nada. La petición
  * que cambia el perfil no se rechaza: el cambio ocurre en su acción, después de hidratar.
  *
  * API confirmada en livewire/livewire v4.4.8: ComponentHook::hydrate($memo, $context) y dehydrate($context);

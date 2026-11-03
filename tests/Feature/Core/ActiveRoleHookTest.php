@@ -43,3 +43,15 @@ it('un componente sin usuario autenticado no se ve afectado', function () {
         ->call('$refresh')
         ->assertOk();
 });
+
+it('perder el puesto activo también responde 419: la página se pintó con otro perfil', function () {
+    $persona = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(21)])->create();
+    $this->actingAs($persona);
+
+    $component = Livewire::test('core::components.context-switcher');
+
+    $persona->roleAssignments()->update(['valid_to' => today()->subDay()]);
+    app(ScopedContext::class)->refresh();
+
+    $component->call('$refresh')->assertStatus(419)->assertHeader('X-Nexus-Role-Changed', '1');
+});

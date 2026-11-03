@@ -1025,9 +1025,10 @@ document.addEventListener('alpine:init', () => {
 });
 
 /*
-| AZ-S5: si la sesión cambió de perfil en otra pestaña, el servidor responde 419 con X-Nexus-Role-Changed
-| (Core\Livewire\ActiveRoleHook). Aquí se ofrece recargar en español; cualquier otro 419 (sesión o CSRF vencidos)
-| sigue con el manejo de Livewire.
+| AZ-S5: si el perfil activo de la sesión ya no es con el que se pintó la página (cambió en otra pestaña, o cambiaron
+| sus puestos: perdió el activo, se desactivó su campus o recibió el primero), el servidor responde 419 con
+| X-Nexus-Role-Changed (Core\Livewire\ActiveRoleHook). Aquí se ofrece recargar en español; cualquier otro 419 (sesión
+| o CSRF vencidos) sigue con el manejo de Livewire.
 */
 document.addEventListener('livewire:init', () => {
     let asked = false;
@@ -1046,7 +1047,7 @@ document.addEventListener('livewire:init', () => {
 
             asked = true;
 
-            if (confirm('Cambiaste de perfil en otra pestaña. ¿Recargar la página?')) {
+            if (confirm('Tu perfil cambió (en otra pestaña o por un cambio en tus puestos). ¿Recargar la página?')) {
                 window.location.reload();
             } else {
                 asked = false;
