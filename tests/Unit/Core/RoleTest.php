@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 
 it('exige a cada rol las columnas de alcance de PROJECT.md (Actores y roles)', function (Role $role, array $columns) {
@@ -27,4 +28,15 @@ it('nombra cada rol como lo nombran PROJECT.md y el glosario, para la credencial
     [Role::JefeProyectoDocente, 'Jefe de proyecto docente'],
     [Role::Coordinador, 'Coordinador de carrera'],
     [Role::Docente, 'Docente'],
+]);
+
+it('unitKind: la Subdirección pide una subdirección; el jefe y el jefe de proyecto docente, un departamento académico; los demás, ninguna', function (Role $role, ?OrgUnitKind $kind) {
+    expect($role->unitKind())->toBe($kind);
+})->with([
+    [Role::Subdireccion, OrgUnitKind::Subdireccion],
+    [Role::JefeDepartamento, OrgUnitKind::DepartamentoAcademico],
+    [Role::JefeProyectoDocente, OrgUnitKind::DepartamentoAcademico],
+    [Role::Coordinador, null],
+    [Role::Docente, null],
+    [Role::Admin, null],
 ]);
