@@ -177,7 +177,7 @@ Contexto en [ADR-0018](../decisiones/0018-permisos-por-puesto-y-perfil-activo.md
 - **AZ-S8.** Un aviso de un puesto que la persona ya no tiene se puede leer, pero no cambia el perfil ni abre la pantalla de destino (supuesto por confirmar).
 - **AZ-S9.** Las excepciones del admin son las de CV-S1 (validar, corregir, reabrir y observar catálogos); cualquier otra se agrega en la matriz con su regla (supuesto por confirmar).
 
-Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la matriz puesto→permisos vive en código y se cambia por PR; el admin lo puede todo salvo sus excepciones; solo el admin nombra puestos; la campana muestra todos los avisos, etiquetados por puesto, y abrir uno cambia al puesto que le corresponde; lo personal («Mi espacio») es visible en cualquier perfil. La tabla «Aprobaciones y permisos» de abajo se queda como está hasta que las tareas 3.P5 la migren a permisos.
+Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la matriz puesto→permisos vive en código y se cambia por PR; el admin lo puede todo salvo sus excepciones; solo el admin nombra puestos; la campana muestra todos los avisos, etiquetados por puesto, y abrir uno cambia al puesto que le corresponde; lo personal («Mi espacio») es visible en cualquier perfil; no se crea un puesto «Apoyo de coordinación» (era solo un ejemplo) y los puestos nuevos se agregan en código cuando aparezca un caso real. La tabla «Aprobaciones y permisos» de abajo se queda como está hasta que las tareas 3.P5 la migren a permisos.
 
 ## Aprobaciones y permisos
 

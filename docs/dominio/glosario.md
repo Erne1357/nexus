@@ -55,5 +55,5 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Puesto** | `Role` (enum; «puesto» en la interfaz) | Conjunto de permisos. Cada puesto declara qué pide su nombramiento (tipo de unidad, campus, carrera) y si es exclusivo. La matriz puesto→permisos vive en código (ADR-0018). |
 | **Nombramiento** | `RoleAssignment` (`role_assignments`) | Una persona en un puesto, con su alcance (unidad, campus, carrera; nulo = sin límite en esa dimensión) y su vigencia. Es la única fuente de quién tiene qué puesto. |
 | **Unidad organizacional** | `OrgUnit` (`org_units`) | Nodo del árbol del ITCJ (Dirección, Subdirecciones, Divisiones, Departamentos). Un departamento académico es una unidad; el alcance sobre una unidad cubre todo lo de abajo. |
-| **Perfil activo** | `Actor` (puesto activo en la sesión) | El puesto con el que la persona actúa en la sesión: solo valen los permisos y alcances de ese puesto. Gobierna las funciones de gestión, no las personales. |
+| **Perfil activo** | sesión `core.active_role`; `users.last_role` | El puesto con el que la persona actúa en la sesión (lo resuelve `Actor`, hoy `ScopedContext`): solo valen los permisos y alcances de ese puesto. Gobierna las funciones de gestión, no las personales. |
 | **Mi espacio** | — | Lo personal (mi horario, mi disponibilidad, mis solicitudes), visible en cualquier perfil. |
