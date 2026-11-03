@@ -196,6 +196,22 @@ Todo modelo de Nexus usa UUIDv7 como llave primaria ([ADR-0014](../decisiones/00
 
 ## Autorización y alcance
 
+> **Transición ([ADR-0018](../decisiones/0018-permisos-por-puesto-y-perfil-activo.md)).** Esta sección describe el sistema vigente (roles de spatie, `role_scopes`, `ScopedContext`). Se reemplaza por etapas (tareas 3.P1 a 3.P9 de `docs/plan/fase-3-captura-de-carga.md`) y se reescribe al cerrar 3.P9. Mientras tanto, `ScopedContext` sigue respondiendo; desde el PR del perfil activo (3.P4) responde solo con el perfil activo y delega en el snapshot.
+
+### Modelo nuevo (ADR-0018)
+
+El motor vive en `app/Modules/Core/Authorization/`, un subsistema de Core como `Navigation/`:
+
+- **Permisos** `modulo.recurso.accion`, declarados por cada módulo en un enum que implementa `Permission` (etiqueta, dimensiones, si es personal). El provider del módulo declara `permissions()` y `grants()` (como `navigation()`); `PermissionRegistry` los junta, es inmutable y se arma al arrancar el worker.
+- **Puestos** (enum `Role`) y **nombramientos** (`role_assignments`: puesto, unidad, campus, carrera, vigencia) son la única fuente de quién puede qué; el admin es un nombramiento. Las unidades están en el árbol `org_units`, y `OrgTree` cachea el mapa de descendientes.
+- **`Dimension`** (unidad, campus, carrera) dice cómo compara un nombramiento contra un `Target`, los atributos del recurso que arma la Policy a partir del modelo.
+- **`AuthorizationSnapshot`** son los nombramientos vigentes de una persona como datos planos y cacheables; **`Actor`** (evolución de `ScopedContext`, registrado con `scoped`) suma el perfil activo, el campus y el periodo.
+- Interfaces estables para los módulos: `allows(Permission, Target)`, `allowsAny(Permission)`, `constrain(Builder, Permission, mapa dimensión→columna)` (la misma regla en SQL) y `RecipientsQuery::holders(Permission, Target)`. Las Policies usan el trait `AuthorizesActor` (`$this->actor($user)`).
+- **Regla de decisión:** un permiso personal lo concede cualquier nombramiento vigente sobre lo suyo, sin importar el perfil; uno de gestión exige que el **perfil activo** lo conceda y que alguno de sus nombramientos cubra el objetivo en cada dimensión que el permiso declara (nulo cubre; si el objetivo no tiene valor, solo cubre un nombramiento que no fija la dimensión). Las condiciones del recurso y del entorno (estado, etapa, perfil de campus) siguen en la Policy.
+- **Caché:** el registro vive en memoria del worker; el snapshot, en Valkey con `authz:user:{id}:{authz_version}` (un trigger de `role_assignments` sube `users.authz_version`); el árbol, con una huella de `org_units`. Los triggers de `departments` y `role_assignments` son la excepción documentada a «las escrituras pasan por Actions» (ADR-0018).
+
+### Sistema vigente (hasta 3.P9)
+
 - Los **roles** (spatie, enum `Role`) dicen qué puede hacer alguien; los **alcances** (`role_scopes`, modelo `RoleScope`) dicen sobre qué campus, departamento o carrera. Un rol cuenta solo con el rol de spatie **y** un alcance vigente hoy en Ciudad Juárez (`RoleScope::current()`), sin campus o en un campus activo y no borrado, que llene lo que exige `Role::scopeColumns()`: nada para `subdireccion` y `docente`, que son de todo el Tec; departamento para `jefe_departamento`, que lo es en todo el Tec; departamento en un campus para `jefe_proyecto_docente`, y carrera en un campus para `coordinador`. Un usuario inactivo no tiene ningún rol.
 - **Alcance de todo el Tec:** un alcance sin campus vale en cada campus activo y no borrado; los desactivados o borrados quedan para el admin. Un alcance con campus vale solo en ese campus (salvo `coversDepartment()`, que no pregunta por campus), aunque su rol no pida campus: así siguen funcionando los alcances escritos antes de que la subdirección, los jefes y los docentes fueran de todo el Tec.
 - `admin` tiene todos los roles y lo cubre todo sin alcance, también los campus desactivados o borrados (reactiva los desactivados en el CRUD de Campus), pero sus acciones quedan en bitácora como las de cualquiera.

@@ -162,6 +162,23 @@ Etapa 3 de `docs/proceso/proceso-propuesto.md`: el coordinador pide, por cada ma
 - La bandeja del departamento muestra cada carrera ofrecida en el campus con el estado de lo que le pide: Sin enviar (sin propuesta, en borrador o sin parte para el departamento), Pendiente, Aceptada o Regresada con su comentario, y sus totales de materias, grupos y alumnos esperados; primero las pendientes, luego las regresadas, las aceptadas y las sin enviar (supuesto por confirmar).
 - En la bandeja, una parte pendiente de una propuesta que otro departamento regresó se ve Pendiente y se decide como cualquier otra (confirmado el 2 de noviembre de 2026). Cuenta en el filtro y el contador «Pendientes», puede ser la carrera que se abre por omisión, y su detalle avisa que el coordinador está corrigiendo la propuesta y que lo que se acepte ya no cambia (supuesto por confirmar). Una carrera que ya no se ofrece en el campus sigue en la bandeja si tiene una parte del departamento. Sin parte, la carrera no muestra filas y sus totales van en cero. El total de una materia, en todas las carreras, suma las mismas partes que la sugerencia de paralelos (supuestos por confirmar).
 
+## Autorización
+
+Contexto en [ADR-0018](../decisiones/0018-permisos-por-puesto-y-perfil-activo.md); glosario: puesto, nombramiento, unidad organizacional, perfil activo.
+
+- **AZ-01. Autoaprobación marcada** (confirmado el 2 de noviembre de 2026). Cuando quien aprueba es la misma persona que creó o solicitó lo aprobado (con otro puesto), la acción procede, la pantalla lo advierte antes de confirmar y la bitácora lleva `self_approval: true`. Lo detecta la Action (es dato del dominio: `submitted_by`, `requested_by`), no la Policy. Casos hoy: decidir en la bandeja una propuesta que la misma persona envió como coordinadora; la fase 3 suma la aprobación de solicitudes de cambio y la fase 4 el visto bueno de una carga que la misma persona cerró.
+- **AZ-S1.** Árbol sembrado (supuesto por confirmar): Dirección; Subdirección Académica (con División de Estudios Profesionales, División de Estudios de Posgrado e Investigación, Desarrollo Académico, Educación a Distancia y los departamentos académicos del SII), Subdirección de Planeación y Vinculación (Servicios Escolares, Gestión Tecnológica y Vinculación, Actividades Extraescolares) y Subdirección de Servicios Administrativos (sin hijos hasta confirmar). Fuente: directorio de cdjuarez.tecnm.mx/nosotros; la imagen del organigrama no se leyó.
+- **AZ-S2.** Todo departamento importado del SII o creado en Academic es una unidad de tipo `departamento_academico`, hija de Subdirección Académica por omisión (supuesto por confirmar).
+- **AZ-S3.** El nombramiento de Subdirección apunta a la unidad Subdirección Académica y no lleva campus: sobre lo de una unidad cubre su subárbol; sobre lo físico (edificios, salones, periodos) cubre todos los campus activos. Su comportamiento actual no cambia (supuesto por confirmar).
+- **AZ-S4.** Al entrar, el perfil activo es el último que usó (guardado en el usuario); si ya no lo tiene, el primero en el orden del enum. Quien tiene un solo puesto no ve selector (supuesto por confirmar).
+- **AZ-S5.** Cambiar de perfil en una pestaña invalida las acciones de las otras pestañas abiertas con otro perfil: la acción se rechaza con «Cambiaste de perfil en otra pestaña; recarga la página» (supuesto por confirmar).
+- **AZ-S6.** Cambiar de perfil regresa a Inicio, olvida las páginas recientes del menú y conserva el campus solo si el nuevo perfil trabaja en él (supuesto por confirmar).
+- **AZ-S7.** Puestos exclusivos: un solo `jefe_departamento` vigente por unidad y una sola `subdireccion` vigente por unidad (la regla de `department_heads_one_jefe` pasa a los nombramientos). `jefe_proyecto_docente` y `coordinador` admiten varios (supuesto por confirmar).
+- **AZ-S8.** Un aviso de un puesto que la persona ya no tiene se puede leer, pero no cambia el perfil ni abre la pantalla de destino (supuesto por confirmar).
+- **AZ-S9.** Las excepciones del admin son las de CV-S1 (validar, corregir, reabrir y observar catálogos); cualquier otra se agrega en la matriz con su regla (supuesto por confirmar).
+
+Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la matriz puesto→permisos vive en código y se cambia por PR; el admin lo puede todo salvo sus excepciones; solo el admin nombra puestos; la campana muestra todos los avisos, etiquetados por puesto, y abrir uno cambia al puesto que le corresponde; lo personal («Mi espacio») es visible en cualquier perfil. La tabla «Aprobaciones y permisos» de abajo se queda como está hasta que las tareas 3.P5 la migren a permisos.
+
 ## Aprobaciones y permisos
 
 | Acción | Quién | Condición |

@@ -50,3 +50,10 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Importación / lote** | `ImportBatch` | Archivo exportado del SII (Excel/CSV) cargado a Nexus, validado fila por fila y aplicado a un catálogo. |
 | **Validación de catálogos** | `CatalogReview` | Paso del flujo en el que cada jefe revisa, corrige y marca como validados los catálogos de su departamento antes de que inicie la carga. |
 | **Bitácora** | `activity_log` | Registro inmutable de quién cambió qué y cuándo. Nunca se borra. |
+| **Permiso** | `Permission` (interfaz; un enum por módulo) | Una acción sobre un recurso de un módulo (`faculty.teacher.update`). Lo declara el módulo dueño, con su etiqueta en español, las dimensiones de alcance que revisa y si es personal. |
+| **Dimensión de alcance** | `Dimension` (enum) | Atributo por el que se limita un permiso. Hoy tres: unidad (jerárquica), campus y carrera. Se agregan más cuando un módulo las necesite. |
+| **Puesto** | `Role` (enum; «puesto» en la interfaz) | Conjunto de permisos. Cada puesto declara qué pide su nombramiento (tipo de unidad, campus, carrera) y si es exclusivo. La matriz puesto→permisos vive en código (ADR-0018). |
+| **Nombramiento** | `RoleAssignment` (`role_assignments`) | Una persona en un puesto, con su alcance (unidad, campus, carrera; nulo = sin límite en esa dimensión) y su vigencia. Es la única fuente de quién tiene qué puesto. |
+| **Unidad organizacional** | `OrgUnit` (`org_units`) | Nodo del árbol del ITCJ (Dirección, Subdirecciones, Divisiones, Departamentos). Un departamento académico es una unidad; el alcance sobre una unidad cubre todo lo de abajo. |
+| **Perfil activo** | `Actor` (puesto activo en la sesión) | El puesto con el que la persona actúa en la sesión: solo valen los permisos y alcances de ese puesto. Gobierna las funciones de gestión, no las personales. |
+| **Mi espacio** | — | Lo personal (mi horario, mi disponibilidad, mis solicitudes), visible en cualquier perfil. |

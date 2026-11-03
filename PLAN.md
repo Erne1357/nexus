@@ -4,6 +4,8 @@
 
 **Última actualización:** 2026-11-02 · **Fase activa:** 1 (falta la 1.16, con datos reales del SII); la fase 2 se cerró el 2 de noviembre (2.1 a 2.9) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
 
+> La fase 3 tiene un prerrequisito: las tareas 3.P1 a 3.P4 (permisos por puesto y perfil activo, 3 a 7 de noviembre; [ADR-0018](docs/decisiones/0018-permisos-por-puesto-y-perfil-activo.md)). Las 3.P5 a 3.P9 migran los módulos en paralelo con la fase. Detalle en [fase-3-captura-de-carga.md](docs/plan/fase-3-captura-de-carga.md).
+
 ## Estados
 
 | Símbolo | Significado |

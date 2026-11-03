@@ -7,7 +7,7 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0001](0001-monolito-modular.md) | Monolito modular sin hexagonal ni DDD | Aceptada | 2026-10-26 |
 | [0002](0002-pest-4-y-postgres-de-pruebas.md) | Pest en tres niveles y PostgreSQL para pruebas | Aceptada; versión de Pest reemplazada por [0011](0011-pest-5.md) | 2026-10-26 |
 | [0003](0003-livewire-maryui.md) | Livewire 4 MFC con MaryUI y daisyUI | Aceptada | 2026-10-26 |
-| [0004](0004-fortify-username-y-alcances.md) | Fortify con username; roles de spatie más alcances propios | Aceptada | 2026-10-26 |
+| [0004](0004-fortify-username-y-alcances.md) | Fortify con username; roles de spatie más alcances propios | Aceptada; roles y alcances reemplazados por [0018](0018-permisos-por-puesto-y-perfil-activo.md) | 2026-10-26 |
 | [0005](0005-importacion-por-archivos.md) | Carga inicial por importación de archivos del SII | Aceptada | 2026-10-26 |
 | [0006](0006-cupos-por-carrera.md) | Cupos por carrera en lugar de paralelos | Aceptada | 2026-10-26 |
 | [0007](0007-motor-en-dos-pasos.md) | Motor de horarios: heurística PHP y luego OR-Tools CP-SAT en Python | Aceptada | 2026-10-26 |
@@ -21,5 +21,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0015](0015-identidad-visual.md) | Identidad visual: credencial con áreas, menú que se transforma, paleta institucional, Atkinson Hyperlegible y la liebre como marca | Aceptada | 2026-10-29 |
 | [0016](0016-btree-gist-para-exclusiones-por-fecha.md) | Extensión `btree_gist` para restricciones de exclusión por rango de fechas (un jefe a la vez) | Aceptada | 2026-10-29 |
 | [0017](0017-catalog-validation-antes-de-academic-load.md) | CatalogValidation a la izquierda de AcademicLoad: la carga lee el estado de las revisiones de catálogo (HC-14) | Aceptada | 2026-11-01 |
+| [0018](0018-permisos-por-puesto-y-perfil-activo.md) | Permisos por módulo, puestos en código, nombramientos, árbol de unidades y perfil activo; sale spatie/permission | Aceptada | 2026-11-02 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.
