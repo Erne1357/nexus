@@ -1,6 +1,6 @@
 # ADR-0004 — Fortify con username; roles de spatie más alcances propios
 
-**Estado:** Aceptada · **Fecha:** 2026-10-26
+**Estado:** Aceptada; reemplazada en parte por [ADR-0018](0018-permisos-por-puesto-y-perfil-activo.md): roles y alcances · **Fecha:** 2026-10-26
 
 ## Contexto
 Los usuarios vienen del SII identificados por número de empleado o de control; no hay SSO disponible. Un coordinador lo es de una carrera en un campus; un jefe, de un departamento en un campus.
