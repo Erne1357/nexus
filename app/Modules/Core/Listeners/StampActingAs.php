@@ -36,6 +36,12 @@ final class StampActingAs
             return;
         }
 
-        $activity->properties = $activity->properties->put('acting_as', $role->value);
+        $properties = $activity->properties ?? collect();
+
+        if ($properties->has('acting_as')) {
+            return;
+        }
+
+        $activity->properties = $properties->put('acting_as', $role->value);
     }
 }

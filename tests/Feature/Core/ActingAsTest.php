@@ -66,3 +66,28 @@ it('una entrada causada por otra persona, sin sesión o sin causante no lleva ac
         ->and($sinSesion->properties->has('acting_as'))->toBeFalse()
         ->and($sinCausante->properties->has('acting_as'))->toBeFalse();
 });
+
+it('registra acting_as aunque la entrada no traiga propiedades', function () {
+    actingAsRole($this->ana, Role::Coordinador);
+
+    Activity::create(['log_name' => 'default', 'description' => 'x', 'causer_type' => $this->ana->getMorphClass(), 'causer_id' => $this->ana->getKey()]);
+
+    expect(Activity::sole()->properties->all())->toBe(['acting_as' => 'coordinador']);
+});
+
+it('no pisa un acting_as que la entrada ya trae', function () {
+    actingAsRole($this->ana, Role::Coordinador);
+
+    activity()->withProperties(['acting_as' => 'admin'])->log('x');
+
+    expect(Activity::sole()->properties['acting_as'])->toBe('admin');
+});
+
+it('un usuario sin puesto activo no recibe acting_as', function () {
+    $sinPuesto = User::factory()->create();
+    $this->actingAs($sinPuesto);
+
+    activity()->log('x');
+
+    expect(Activity::sole()->properties->has('acting_as'))->toBeFalse();
+});
