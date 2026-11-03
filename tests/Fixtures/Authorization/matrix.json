@@ -4,6 +4,12 @@
             "students.student.view"
         ],
         "jefe_departamento": [
+            "catalog_validation.review.correct",
+            "catalog_validation.review.flag",
+            "catalog_validation.review.reopen",
+            "catalog_validation.review.resolve_flag",
+            "catalog_validation.review.validate",
+            "catalog_validation.review.view",
             "faculty.teacher.create",
             "faculty.teacher.manage_availability",
             "faculty.teacher.manage_external_loads",
@@ -27,6 +33,10 @@
             "faculty.teacher_qualification.manage"
         ],
         "subdireccion": [
+            "catalog_validation.progress.remind",
+            "catalog_validation.progress.view",
+            "catalog_validation.review.resolve_flag",
+            "catalog_validation.review.view",
             "core.campus.update_profile",
             "core.campus.view",
             "core.term.create",
@@ -56,5 +66,10 @@
             "students.student.view"
         ]
     },
-    "admin_denies": []
+    "admin_denies": [
+        "catalog_validation.review.correct",
+        "catalog_validation.review.flag",
+        "catalog_validation.review.reopen",
+        "catalog_validation.review.validate"
+    ]
 }
