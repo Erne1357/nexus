@@ -355,7 +355,7 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
         $campus = in_array($role, [Role::Subdireccion, Role::JefeDepartamento], true) ? null : $campusIds[strtoupper(substr($user->username, -2))];
         $context = app(ScopedContext::class)->forUser($user);
 
-        expect($context->roles())->toBe([$role], "{$user->username} no ejerce su rol.")
+        expect($context->heldRoles())->toBe([$role], "{$user->username} no ejerce su rol.")
             ->and($context->scopes()->pluck('campus_id')->all())->toBe([$campus], "{$user->username} no tiene un solo alcance donde le toca.");
     }
 

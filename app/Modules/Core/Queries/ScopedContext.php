@@ -334,17 +334,6 @@ final class ScopedContext
     }
 
     /**
-     * Alias de heldRoles(): todos sus puestos, el admin incluido, aunque no sean el activo. Lo usan la banda e
-     * Inicio hasta que muestren el perfil activo.
-     *
-     * @return list<Role>
-     */
-    public function roles(): array
-    {
-        return $this->heldRoles();
-    }
-
-    /**
      * Los puestos que tiene, el admin incluido, en el orden del enum: los que tienen un nombramiento que vale (ver el
      * docblock de la clase). Ninguno sin usuario activo ni nombramiento vigente. No depende del perfil activo.
      *
@@ -458,14 +447,15 @@ final class ScopedContext
 
     /**
      * Los nombramientos de todos sus puestos (o solo de `$role`), sin importar el perfil activo: lo que la credencial
-     * muestra por cada puesto. Mismo formato y filtros de vigencia que scopes(), que sí responde con el perfil activo.
+     * muestra por cada puesto. Mismo formato y filtros de vigencia que scopes(), que sí responde con el perfil activo;
+     * el admin tampoco sale, porque no es un alcance.
      *
      * @return Collection<int, RoleAssignment>
      */
     public function heldScopes(?Role $role = null): Collection
     {
         return $this->allScopeModels()
-            ->filter(fn (RoleAssignment $scope): bool => $scope->role !== Role::Admin && ($role === null || $scope->role === $role))
+            ->filter(fn (RoleAssignment $scope): bool => $role === null || $scope->role === $role)
             ->values();
     }
 
