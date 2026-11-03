@@ -13,6 +13,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
+use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -23,6 +24,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Livewire\ComponentHookRegistry;
+use Spatie\Activitylog\Models\Activity;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
@@ -69,6 +71,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen(Login::class, ForgetActiveRole::class);
+        Activity::creating(StampActingAs::class);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.

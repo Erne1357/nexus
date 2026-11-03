@@ -33,7 +33,7 @@ it('cambia el perfil, lo recuerda para la siguiente sesión y deja bitácora', f
         ->and($this->user->fresh()->last_role)->toBe(Role::Coordinador)
         ->and($log->description)->toBe('Cambió al perfil Coordinador de carrera')
         ->and($log->subject->is($this->user))->toBeTrue()
-        ->and($log->properties->all())->toBe(['from' => 'jefe_departamento', 'to' => 'coordinador']);
+        ->and($log->properties->all())->toBe(['from' => 'jefe_departamento', 'to' => 'coordinador', 'acting_as' => 'jefe_departamento']);
 });
 
 it('rechaza un puesto que no tiene', function () {
