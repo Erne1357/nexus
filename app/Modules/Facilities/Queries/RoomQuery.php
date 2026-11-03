@@ -3,12 +3,12 @@
 namespace App\Modules\Facilities\Queries;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
@@ -47,7 +47,7 @@ final class RoomQuery
     ): LengthAwarePaginator {
         return Room::query()
             ->where('campus_id', $campus->getKey())
-            ->unless($context->covers(Role::Subdireccion, $campus), fn (Builder $query) => $query->whereRaw('false'))
+            ->tap(fn (Builder $query) => $context->constrain($query, FacilitiesPermission::RoomView, ['campus' => 'rooms.campus_id']))
             ->with(['building:id,code,name', 'department:id,code,name'])
             ->withCount('blocks')
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))

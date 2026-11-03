@@ -4,8 +4,10 @@ namespace App\Modules\Facilities;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Listeners\BlockDepartmentDeletionWithRooms;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -26,6 +28,18 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
                 ability: 'viewAny', arguments: [Building::class]),
             new NavigationItem('Salones', 'facilities.rooms', 'o-rectangle-stack', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Room::class]),
+        ];
+    }
+
+    public function permissions(): array
+    {
+        return [FacilitiesPermission::class];
+    }
+
+    public function grants(): array
+    {
+        return [
+            Role::Subdireccion->value => FacilitiesPermission::cases(),
         ];
     }
 

@@ -2,15 +2,16 @@
 
 namespace App\Modules\Facilities\Policies;
 
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Models\Room;
 
 /**
  * Quién administra salones: el admin y la Subdirección del campus del salón (confirmado el 27 de
- * octubre de 2026; spec del carril C, "Acceso"). Los demás roles no ven ni editan. Sin `delete`: un
+ * octubre de 2026; spec del carril C, "Acceso"). Los demás roles no ven ni editan. Cada ability se resuelve con un permiso `facilities.*` (FacilitiesPermission). Sin `delete`: un
  * salón se desactiva.
  */
 final class RoomPolicy
@@ -22,17 +23,17 @@ final class RoomPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->has(Role::Subdireccion);
+        return $this->scope($user)->allowsAny(FacilitiesPermission::RoomView);
     }
 
     public function view(User $user, Room $room): bool
     {
-        return $this->covers($user, $room->campus_id);
+        return $this->allowsOn($user, FacilitiesPermission::RoomView, $room->campus_id);
     }
 
     public function create(User $user, Campus $campus): bool
     {
-        return $this->covers($user, $campus->getKey());
+        return $this->allowsOn($user, FacilitiesPermission::RoomCreate, $campus->getKey());
     }
 
     /**
@@ -40,11 +41,11 @@ final class RoomPolicy
      */
     public function update(User $user, Room $room): bool
     {
-        return $this->covers($user, $room->campus_id);
+        return $this->allowsOn($user, FacilitiesPermission::RoomUpdate, $room->campus_id);
     }
 
-    private function covers(User $user, string $campusId): bool
+    private function allowsOn(User $user, FacilitiesPermission $permission, string $campusId): bool
     {
-        return $this->scope($user)->covers(Role::Subdireccion, $campusId);
+        return $this->scope($user)->allows($permission, Target::of(campus: $campusId));
     }
 }

@@ -2,15 +2,16 @@
 
 namespace App\Modules\Facilities\Policies;
 
-use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Models\Building;
 
 /**
  * Quién administra edificios: el admin y la Subdirección del campus del edificio (confirmado el 27 de
- * octubre de 2026; spec del carril C, "Acceso"). Los demás roles no ven ni editan. Sin `delete`: un
+ * octubre de 2026; spec del carril C, "Acceso"). Los demás roles no ven ni editan. Cada ability se resuelve con un permiso `facilities.*` (FacilitiesPermission). Sin `delete`: un
  * edificio se desactiva.
  */
 final class BuildingPolicy
@@ -22,17 +23,17 @@ final class BuildingPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->has(Role::Subdireccion);
+        return $this->scope($user)->allowsAny(FacilitiesPermission::BuildingView);
     }
 
     public function view(User $user, Building $building): bool
     {
-        return $this->covers($user, $building->campus_id);
+        return $this->allowsOn($user, FacilitiesPermission::BuildingView, $building->campus_id);
     }
 
     public function create(User $user, Campus $campus): bool
     {
-        return $this->covers($user, $campus->getKey());
+        return $this->allowsOn($user, FacilitiesPermission::BuildingCreate, $campus->getKey());
     }
 
     /**
@@ -40,11 +41,11 @@ final class BuildingPolicy
      */
     public function update(User $user, Building $building): bool
     {
-        return $this->covers($user, $building->campus_id);
+        return $this->allowsOn($user, FacilitiesPermission::BuildingUpdate, $building->campus_id);
     }
 
-    private function covers(User $user, string $campusId): bool
+    private function allowsOn(User $user, FacilitiesPermission $permission, string $campusId): bool
     {
-        return $this->scope($user)->covers(Role::Subdireccion, $campusId);
+        return $this->scope($user)->allows($permission, Target::of(campus: $campusId));
     }
 }
