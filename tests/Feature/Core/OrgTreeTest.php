@@ -51,7 +51,6 @@ it('mover una unidad cambia lo que cubre en la siguiente petición', function ()
     ['a' => $a, 'a1' => $a1, 'a1a' => $a1a, 'b' => $b] = sampleOrgTree();
     expect(app(OrgTree::class)->covers($a->id, $a1a->id))->toBeTrue();
 
-    $this->travel(2)->seconds();
     $a1->update(['parent_id' => $b->id]);
     app()->forgetScopedInstances();
 
@@ -60,9 +59,23 @@ it('mover una unidad cambia lo que cubre en la siguiente petición', function ()
         ->and($tree->covers($a->id, $a1a->id))->toBeFalse();
 });
 
+it('dos movimientos en el mismo segundo se ven en la siguiente petición', function () {
+    ['a' => $a, 'a1' => $a1, 'a1a' => $a1a, 'b' => $b] = sampleOrgTree();
+    expect(app(OrgTree::class)->covers($a->id, $a1a->id))->toBeTrue();
+
+    $a1->update(['parent_id' => $b->id]);
+    app()->forgetScopedInstances();
+    expect(app(OrgTree::class)->covers($b->id, $a1a->id))->toBeTrue();
+
+    $a1->update(['parent_id' => $a->id]);
+    app()->forgetScopedInstances();
+    $tree = app(OrgTree::class);
+    expect($tree->covers($a->id, $a1a->id))->toBeTrue()
+        ->and($tree->covers($b->id, $a1a->id))->toBeFalse();
+});
+
 it('conserva en el mapa a las unidades borradas porque la jerarquía es estructural', function () {
     ['a' => $a, 'a1' => $a1, 'a1a' => $a1a] = sampleOrgTree();
-    $this->travel(2)->seconds();
     $a1->delete();
     app()->forgetScopedInstances();
 

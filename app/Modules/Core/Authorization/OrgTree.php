@@ -9,11 +9,12 @@ use Illuminate\Support\Facades\DB;
  * Consulta del organigrama: si una unidad cubre a otra (ella misma o un descendiente).
  *
  * Se resuelve desde un mapa `unidad => [ella y todos sus descendientes]` guardado en caché.
- * La llave lleva una huella de la tabla (`count(*)` y `max(updated_at)` sobre todas las filas,
- * borradas incluidas), así que no hay invalidación manual: cualquier alta, movimiento, cambio de
- * nombre o borrado cambia la huella y la siguiente petición arma un mapa nuevo; los triggers de
- * departamentos también tocan `updated_at`. El mapa incluye unidades borradas porque la
- * jerarquía es estructural; solo `idOf()` las ignora.
+ * La llave lleva una huella de los enlaces que definen el mapa: el md5 de los pares
+ * `id>parent_id` de todas las filas, borradas incluidas. No hay invalidación manual: cualquier
+ * alta, baja física o movimiento cambia los pares, y la siguiente petición arma un mapa nuevo.
+ * No depende de la precisión de `updated_at` (dos movimientos en el mismo segundo se ven) y la
+ * tabla tiene decenas de filas, así que recorrerla en cada petición es trivial. El mapa incluye
+ * unidades borradas porque la jerarquía es estructural; solo `idOf()` las ignora.
  *
  * Se registra como `scoped`: la huella y el mapa se memorizan en la instancia para que una
  * petición consulte la base una sola vez, y Octane no los comparte con la siguiente.
@@ -67,9 +68,11 @@ final class OrgTree
 
     private function fingerprint(): string
     {
-        $row = DB::table('org_units')->selectRaw('count(*) as total, max(updated_at) as latest')->first();
+        $row = DB::selectOne(
+            "select md5(coalesce(string_agg(id::text || '>' || coalesce(parent_id::text, ''), ',' order by id), '')) as hash from org_units",
+        );
 
-        return $row->total.':'.$row->latest;
+        return $row->hash;
     }
 
     /**
