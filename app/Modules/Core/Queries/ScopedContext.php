@@ -53,6 +53,8 @@ use LogicException;
  * - allowsAny(): si puede sobre algo: algún puesto efectivo (cualquiera que tenga, si es personal) lo concede. Todo
  *   puesto que tiene cuenta con al menos un nombramiento que vale, o es el admin.
  * - constrain(): la misma regla en SQL, para las listas.
+ * - rolesAllowing(): los puestos (todos los que tiene, sin el admin) con que allows() daría que sí sobre un objetivo; de ahí salen los
+ *   destinatarios de un aviso (RecipientsQuery::holders()).
  *
  * API de compatibilidad (has, covers, coversWithScope, coversDepartment, canAccessCampus, scopes), que se va en 3.P9.
  * Responde con los puestos efectivos, salvo coversWithScope(), que cuenta todos (ver abajo):
@@ -242,6 +244,30 @@ final class ScopedContext
         }
 
         return array_any($this->assignmentsOf($roles), fn (AssignmentScope $scope): bool => $this->coversTarget($scope, $permission, $target));
+    }
+
+    /**
+     * Los puestos que tiene (todos, no solo el activo; sin el admin) que conceden `$permission` y tienen algún
+     * nombramiento que cubre `$target` en cada dimensión que el permiso declara: la regla de allows() sin el atajo
+     * del admin, para saber a quién y con qué puesto le toca un aviso. En el orden del enum. Solo permisos de gestión.
+     *
+     * @return list<Role>
+     */
+    public function rolesAllowing(Permission $permission, Target $target): array
+    {
+        if ($permission->isPersonal()) {
+            throw new LogicException("rolesAllowing() solo aplica a permisos de gestión; «{$permission->value}» es personal.");
+        }
+
+        $roles = array_values(array_filter(
+            $this->rolesGranting($permission, $this->heldRoles()),
+            fn (Role $role): bool => $role !== Role::Admin,
+        ));
+
+        return array_values(array_filter($roles, fn (Role $role): bool => array_any(
+            $this->assignmentsOf([$role]),
+            fn (AssignmentScope $scope): bool => $this->coversTarget($scope, $permission, $target),
+        )));
     }
 
     /**
