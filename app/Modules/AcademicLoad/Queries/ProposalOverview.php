@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\Core\Support\SeriationChains;
 
 /**
  * Lo que muestra la página de la propuesta de carrera (CareerProposalQuery::overview): la propuesta con su
@@ -26,6 +27,7 @@ final readonly class ProposalOverview
      * @param  list<array{department: Department, catalogs: list<Catalog>}>  $pendingCatalogs  departamentos con grupos pedidos y catálogos sin validar, por clave
      * @param  array<string, string>  $specialtyOf  materia → la especialidad de su plan; las del tronco común no aparecen
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la propuesta, por clave, con cuántas
+     * @param  array<string, list<string>>  $seriation  materia → las materias de la propuesta que pide por seriación en el plan de su fila
      */
     public function __construct(
         public CareerProposal $proposal,
@@ -36,6 +38,7 @@ final readonly class ProposalOverview
         public ProposalAnomalies $anomalies = new ProposalAnomalies,
         public array $specialtyOf = [],
         public array $specialties = [],
+        public array $seriation = [],
     ) {}
 
     /**
@@ -55,6 +58,28 @@ final readonly class ProposalOverview
 
             return array_column($indexed, 0);
         }, $this->semesters);
+    }
+
+    /**
+     * Las cadenas de seriación de la retícula (SeriationChains, las mismas de la retícula del alumno): la de cada
+     * materia que está en una (`of`, por id de materia) y cada cadena en el orden de su primera materia en la
+     * retícula, nombrada por ella y con cuántas tiene.
+     *
+     * @return array{of: array<string, int>, chains: list<array{index: int, name: string, size: int}>}
+     */
+    public function chains(): array
+    {
+        $items = array_merge(...array_values($this->gridSemesters()));
+        $names = array_column(array_map(fn (ProposalItem $item): array => ['id' => $item->subject_id, 'name' => $item->subject->name], $items), 'name', 'id');
+        $of = [];
+        $chains = [];
+
+        foreach (SeriationChains::of(array_keys($names), $this->seriation) as $index => $members) {
+            $of += array_fill_keys($members, $index);
+            $chains[] = ['index' => $index, 'name' => $names[$members[0]], 'size' => count($members)];
+        }
+
+        return ['of' => $of, 'chains' => $chains];
     }
 
     /**

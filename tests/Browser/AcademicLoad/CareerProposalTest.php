@@ -15,7 +15,8 @@ use App\Modules\Core\Models\User;
 
 /*
 | Propuesta de carrera en el navegador (tarea 2.7): el coordinador entra desde el menú, cambia los grupos de una
-| materia en la tabla y envía la propuesta; después la ve «Enviada».
+| materia en la tabla y envía la propuesta; después la ve «Enviada». En la retícula marca las materias sin grupos
+| (maqueta C) y quita el resaltado.
 */
 
 beforeEach(function () {
@@ -32,6 +33,7 @@ beforeEach(function () {
         'requested_groups' => 2,
     ]);
     $this->proposal = $proposal;
+    $this->department = $department;
 
     User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => $career->id])->create(['username' => '19110003']);
 });
@@ -58,4 +60,33 @@ it('el coordinador cambia los grupos de una materia en la tabla y envía la prop
         ->assertNoJavaScriptErrors();
 
     expect($this->proposal->fresh()->status)->toBe(ProposalStatus::Submitted);
+});
+
+it('el coordinador marca en la retícula las materias sin grupos y quita el resaltado', function () {
+    ProposalItem::factory()->create([
+        'career_proposal_id' => $this->proposal->id,
+        'subject_id' => Subject::factory()->create(['code' => 'ACF-0902', 'name' => 'Cálculo Integral', 'department_id' => $this->department->id])->id,
+        'semester' => 2,
+        'requested_groups' => 0,
+    ]);
+
+    visit('/login')
+        ->fill('username', '19110003')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/academic-load/proposal')
+        ->assertPresent('@proposal-grid')
+        ->assertMissing('[data-testid=selection-bar][data-shown]')
+        ->click('@filter-sin')
+        ->assertPresent('[data-testid=proposal-grid][data-focus]')
+        ->assertPresent('[data-testid=tile-ACF-0902][data-on-chain]')
+        ->assertMissing('[data-testid=tile-ACF-0901][data-on-chain]')
+        ->assertSeeIn('@chain-info', 'Sin grupos: 1 materia.')
+        ->assertQueryStringHas('grupos', 'sin')
+        ->click('@clear-highlight')
+        ->assertMissing('[data-testid=proposal-grid][data-focus]')
+        ->assertMissing('[data-testid=selection-bar][data-shown]')
+        ->assertQueryStringMissing('grupos')
+        ->assertNoJavaScriptErrors();
 });

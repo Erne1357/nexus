@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
@@ -262,4 +263,43 @@ it('conserva la banda de una materia cuya colocación se quitó después', funct
     placeInPlan($plan, $item->subject, 3, $redes)->delete();
 
     expect(proposalOverview()->specialtyFor($item->fresh()))->toBe($redes->id);
+});
+
+it('arma las cadenas de seriación de la propuesta con la seriación del plan de cada fila, en el orden de la retícula', function () {
+    $plan = StudyPlan::factory()->create();
+    $other = StudyPlan::factory()->create();
+    $calculo = overviewRow($this->cb, 'ACF-0901', 1, 1, subject: ['name' => 'Cálculo Diferencial']);
+    $integral = overviewRow($this->cb, 'ACF-0902', 2, 1);
+    $vectorial = overviewRow($this->cb, 'ACF-0904', 3, 0);
+    $etica = overviewRow($this->sc, 'ACA-0907', 1, 1, subject: ['name' => 'Taller de Ética']);
+    $investigacion = overviewRow($this->sc, 'ACA-0909', 7, 1);
+    $sola = overviewRow($this->sc, 'SCD-1015', 5, 1);
+    $outside = Subject::factory()->create();
+    foreach ([$calculo, $integral, $vectorial, $etica, $investigacion, $sola] as $item) {
+        placeInPlan($plan, $item->subject, $item->semester);
+        $item->update(['study_plan_id' => $plan->id]);
+    }
+    placeInPlan($plan, $outside, 4);
+    seriate($plan, $integral->subject, $calculo->subject);
+    seriate($plan, $vectorial->subject, $integral->subject);
+    seriate($plan, $investigacion->subject, $etica->subject);
+    seriate($plan, $sola->subject, $outside);
+    seriate($plan, $sola->subject, $etica->subject, PrerequisiteKind::Correquisito);
+    placeInPlan($other, $sola->subject, 5);
+    placeInPlan($other, $calculo->subject, 1);
+    seriate($other, $sola->subject, $calculo->subject);
+
+    $chains = proposalOverview()->chains();
+
+    expect($chains['chains'])->toBe([
+        ['index' => 0, 'name' => 'Taller de Ética', 'size' => 2],
+        ['index' => 1, 'name' => 'Cálculo Diferencial', 'size' => 3],
+    ])
+        ->and($chains['of'])->toBe([
+            $etica->subject_id => 0,
+            $investigacion->subject_id => 0,
+            $calculo->subject_id => 1,
+            $integral->subject_id => 1,
+            $vectorial->subject_id => 1,
+        ]);
 });

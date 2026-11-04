@@ -2,11 +2,13 @@
 
 namespace App\Modules\AcademicLoad\Queries;
 
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
@@ -91,7 +93,8 @@ final class CareerProposalQuery
     /**
      * Todo lo que muestra la página (ProposalOverview). Un número fijo de consultas, sin importar cuántas filas
      * tenga: la propuesta con su periodo, campus y carrera; las filas, sus materias y los departamentos de las
-     * materias; las partes y sus departamentos; las especialidades de las materias en su plan; y una por departamento involucrado para sus catálogos sin
+     * materias; las partes y sus departamentos; las especialidades de las materias en su plan; la seriación entre las
+     * materias de la propuesta, la del plan de cada fila; y una por departamento involucrado para sus catálogos sin
      * validar (CatalogReviewQuery::pendingFor, HC-14). Esa última solo se arma con `$withPendingCatalogs`, que
      * es lo que pide el diálogo de enviar: sin él, `pendingCatalogs` queda vacío.
      */
@@ -135,6 +138,19 @@ final class CareerProposalQuery
             ->map(fn (Specialty $specialty): array => ['id' => $specialty->id, 'name' => $specialty->name, 'subjects' => $inProposal[$specialty->id]])
             ->all();
 
+        $planOf = $items->pluck('study_plan_id', 'subject_id')->all();
+        $seriation = SubjectPrerequisite::query()
+            ->whereIn('study_plan_id', array_values(array_unique($planOf)))
+            ->whereIn('subject_id', array_keys($planOf))
+            ->whereIn('prerequisite_subject_id', array_keys($planOf))
+            ->where('kind', PrerequisiteKind::Seriacion)
+            ->orderBy('prerequisite_subject_id')
+            ->get(['study_plan_id', 'subject_id', 'prerequisite_subject_id'])
+            ->filter(fn (SubjectPrerequisite $row): bool => $planOf[$row->subject_id] === $row->study_plan_id)
+            ->groupBy('subject_id')
+            ->map(fn ($rows): array => $rows->pluck('prerequisite_subject_id')->all())
+            ->all();
+
         $requested = $items->filter(fn (ProposalItem $item): bool => $item->requested_groups > 0);
 
         $pendingCatalogs = ! $withPendingCatalogs ? [] : $requested
@@ -163,6 +179,7 @@ final class CareerProposalQuery
             anomalies: ProposalAnomalies::fromSettings(),
             specialtyOf: $specialtyOf,
             specialties: $specialties,
+            seriation: $seriation,
         );
     }
 }
