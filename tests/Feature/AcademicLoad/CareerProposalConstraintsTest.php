@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 
 /*
 | Integridad de la propuesta de carrera (docs/dominio/modelo-de-datos.md, "AcademicLoad"): una por periodo,
-| campus y carrera, que nace en borrador; una fila por materia, con semestre desde 1 y conteos no negativos; y
+| campus y carrera, que nace en borrador y no guarda alumnos posibles negativos; una fila por materia, con semestre desde 1 y conteos no negativos; y
 | una parte por departamento, que solo se regresa con comentario.
 */
 
@@ -56,6 +56,13 @@ it('la propuesta acepta sus cuatro estados y rechaza otro', function () {
     expect(CareerProposal::query()->pluck('status')->all())->toEqualCanonicalizing(ProposalStatus::cases())
         ->and(fn () => DB::table('career_proposals')->update(['status' => 'cancelled']))
         ->toThrow(QueryException::class, 'career_proposals_status_check');
+});
+
+it('la propuesta rechaza alumnos posibles negativos', function () {
+    $proposal = CareerProposal::factory()->create();
+
+    expect(fn () => DB::table('career_proposals')->where('id', $proposal->id)->update(['eligible_students' => -1]))
+        ->toThrow(QueryException::class, 'career_proposals_eligible_students_check');
 });
 
 it('la propuesta enviada guarda quién y cuándo', function () {

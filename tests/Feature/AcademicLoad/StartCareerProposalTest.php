@@ -220,9 +220,11 @@ it('rechaza una carrera que no se ofrece en el campus y no escribe nada', functi
     'ofrecida en otro campus' => [fn () => fn (Career $career, Campus $campus) => CareerCampus::factory()->create(['career_id' => $career->id])],
 ]);
 
-it('deja bitácora de la propuesta armada con quién la armó', function () {
+it('deja bitácora de la propuesta armada con quién la armó y sus alumnos posibles', function () {
+    $calculo = Subject::factory()->create();
+    placeInPlan($this->plan, $calculo);
     placeInPlan($this->plan, Subject::factory()->create());
-    placeInPlan($this->plan, Subject::factory()->create());
+    eligibleInProposal($this->plan, $this->campus, [$calculo], 3);
 
     $proposal = startProposal();
 
@@ -235,6 +237,7 @@ it('deja bitácora de la propuesta armada con quién la armó', function () {
             'campus_id' => $this->campus->id,
             'career_id' => $this->career->id,
             'status' => 'draft',
+            'eligible_students' => 3,
         ])
         ->and($activity->properties['items'])->toBe(2)
         ->and($activity->description)->toBe('Armó la propuesta de ISC en C2 para el periodo 20271');

@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\Schema;
  * «Alumnos posibles» de la propuesta (docs/dominio/modelo-de-datos.md, "AcademicLoad"): los alumnos activos
  * distintos de la carrera y el campus que son elegibles para al menos una materia de la propuesta, congelados
  * al armarla (confirmado el 4 de noviembre de 2026). Las propuestas que ya existen lo calculan aquí, una vez,
- * con los mismos filtros de EligibleStudentsQuery sobre sus propias filas.
+ * sobre sus propias filas y con los filtros de EligibleStudentsQuery::distinctFor escritos en SQL: el avance con su
+ * plan actual, la carrera y el campus, activo y con estatus «activo», y sin los alumnos borrados, que el modelo
+ * Student deja fuera con SoftDeletes y este SQL tiene que dejar fuera a mano.
  */
 return new class extends Migration
 {
@@ -32,6 +34,7 @@ return new class extends Migration
                     and students.campus_id = career_proposals.campus_id
                     and students.is_active = true
                     and students.status = 'activo'
+                    and students.deleted_at is null
                     and available.subject_id in (
                         select proposal_items.subject_id::text from proposal_items
                         where proposal_items.career_proposal_id = career_proposals.id
