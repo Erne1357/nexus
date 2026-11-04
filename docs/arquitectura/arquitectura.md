@@ -223,7 +223,7 @@ Quién puede qué lo decide el motor de `app/Modules/Core/Authorization/` ([ADR-
 
 ### Dimensiones por recurso
 
-Lo que es de un campus declara campus, lo de un departamento declara unidad y lo de una carrera declara carrera. `PermissionDimensionsTest` lo revisa sobre las tablas con `campus_id`, con sus excepciones: solo del admin (`core.assignment.*` e `imports.batch.*`, que cubre todo), o solo de puestos de todo el Tec (`core.term.manage_calendar` y `catalog_validation.progress.*`, hoy de la Subdirección). La prueba también exige que todo permiso concedido a un puesto que no sea el admin ni la Subdirección declare una dimensión que ese puesto acota. Una dimensión vacía en un nombramiento cubre cualquier valor, así que sin esta guardia un permiso sin campus se concedería «en todos los campus» a un puesto de uno. Un nombramiento con una columna que su puesto no pide (por ejemplo, un jefe con campus) solo acota: vale en ese campus y no en los demás.
+Lo que es de un campus declara campus, lo de un departamento declara unidad y lo de una carrera declara carrera. `PermissionDimensionsTest` lo revisa sobre las tablas con `campus_id`, con sus excepciones: solo del admin (`core.assignment.*` e `imports.batch.*`, que cubre todo), o solo de puestos de todo el Tec (`core.term.manage_calendar` y `catalog_validation.progress.*`, hoy de la Subdirección). La prueba también exige que todo permiso de gestión concedido a un puesto que no sea el admin ni la Subdirección declare una dimensión que ese puesto acota. Una dimensión vacía en un nombramiento cubre cualquier valor, así que, sin esta guardia, un permiso que no declara ninguna de las dimensiones que el puesto fija lo cubriría todo. Un nombramiento con una columna que su puesto no pide (por ejemplo, un jefe con campus) solo acota: vale en ese campus y no en los demás.
 
 ### Nombramientos
 
@@ -246,7 +246,7 @@ Lo que es de un campus declara campus, lo de un departamento declara unidad y lo
 | Método | Responde |
 |---|---|
 | `forUser(User $user)` | El contexto de otro usuario, sin su elección de sesión: la unión de todos sus puestos («quién podría»); se recuerda por id en la instancia. Si es el autenticado, devuelve este mismo. |
-| `asRole(Role $role)` | El contexto de la misma persona con `$role` como perfil, sin tocar la sesión; un puesto que no tiene da un contexto sin puestos. Para preguntar antes de cambiar de perfil (`OpenNotification`). |
+| `asRole(Role $role)` | El contexto de la misma persona con `$role` como perfil, sin tocar la sesión; un puesto que no tiene da un contexto sin puestos efectivos: `allows()`, `allowsAny()` y `constrain()` dicen que no y `campuses()` queda vacío. Para preguntar antes de cambiar de perfil (`OpenNotification`). |
 | `user()` | El usuario del contexto, solo si está activo. |
 | `refresh()` | Vuelve a leer los nombramientos en la siguiente pregunta, con la `authz_version` de la base; la llama la Action que los cambie. |
 | `allows(Permission $permission, ?Target $target = null)` | Si puede el permiso sobre el objetivo (regla de decisión). Sin objetivo, uno de gestión es `allowsAny()` y uno personal, falso. |

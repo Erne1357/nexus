@@ -204,7 +204,7 @@ describe('columnas de alcance por puesto (role_assignments_scope_complete)', fun
         expect(DB::table('role_assignments')->count())->toBe(1);
     });
 
-    it('la expresión del CHECK pide lo mismo que Role::scopeColumns()', function () {
+    it('Role::scopeColumns() sigue siendo lo que congeló la migración del CHECK (si cambia, va otra migración)', function () {
         // Cada puesto, con exactamente sus columnas, pasa; con una menos, no (arriba). Aquí, las columnas que pide el
         // enum contra las que la migración congeló.
         expect(collect(Role::cases())->mapWithKeys(fn (Role $role): array => [$role->value => $role->scopeColumns()])->all())->toBe([

@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Queries\TermCalendarQuery;
 use App\Modules\Core\Support\StageTimeline;
 use Illuminate\Support\Facades\Gate;
@@ -33,7 +34,7 @@ new #[Title('Inicio')] class extends Component
                 'termUrl' => Gate::allows('view', $term) ? route('core.terms.show', $term) : null,
             ],
             'name' => $context->user()?->name ?? '',
-            'blocks' => array_map(fn ($role): array => [
+            'blocks' => array_map(fn (Role $role): array => [
                 'title' => $role->label(),
                 'description' => $role->description(),
             ], $roles),

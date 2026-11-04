@@ -121,8 +121,9 @@ function roleReferences(): array
                 ? $ns[1].'\\'.$name[1]
                 : null;
 
-            if ($class !== null && method_exists($class, 'grants')) {
-                $method = new ReflectionMethod($class, 'grants');
+            $method = $class !== null && method_exists($class, 'grants') ? new ReflectionMethod($class, 'grants') : null;
+
+            if ($method !== null && realpath($method->getFileName()) === $file->getRealPath()) {
                 $lines = array_values(array_filter(
                     $lines,
                     fn (int $line): bool => $line < $method->getStartLine() || $line > $method->getEndLine(),

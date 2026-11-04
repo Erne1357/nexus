@@ -10,8 +10,8 @@ use App\Modules\Core\Models\User;
 use Livewire\Livewire;
 
 /*
-| Página de inicio (`/`, core::pages.home): saludo y un bloque por cada rol que el usuario ejerce
-| según Actor::roles(). El admin, que tiene todos los roles, ve solo el suyo. Los bloques se
+| Página de inicio (`/`, core::pages.home): saludo y un bloque para el perfil activo
+| (Actor::activeRole()); el admin ve solo el suyo. Los bloques se
 | prueban con el componente solo, porque la credencial de la banda también nombra el rol.
 */
 
