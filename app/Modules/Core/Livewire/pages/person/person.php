@@ -27,8 +27,10 @@ use Mary\Traits\Toast;
  * (RoleAssignmentRules): sus errores salen junto al campo.
  *
  * Aquí se nombran y terminan todos los puestos salvo el de docente (AZ-S11), que se ve de solo lectura con el aviso de
- * dónde se maneja, aunque la llamada llegue forzada desde el navegador. El admin sí puede terminar su propio puesto de Administración si otro cubre los días que siguen; si no, queda deshabilitado con su motivo (AZ-S12), y quien pierde así su puesto vuelve a Inicio. Solo la ve el admin con ese perfil
- * activo (RoleAssignmentPolicy); el componente autoriza en mount(), al renderizar y en cada método público.
+ * dónde se maneja, aunque la llamada llegue forzada desde el navegador. El admin sí puede terminar su propio puesto de
+ * Administración si otro cubre los días que siguen; si no, queda deshabilitado con su motivo (AZ-S12), y quien pierde
+ * así su puesto vuelve a Inicio. Solo la ve el admin con ese perfil activo (RoleAssignmentPolicy); el componente
+ * autoriza en mount(), al renderizar y en cada método público.
  */
 new #[Title('Ficha de la persona')] class extends Component
 {

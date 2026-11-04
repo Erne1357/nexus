@@ -205,6 +205,28 @@ it('P1: termina una jefatura desde la ficha de la persona', function () {
         ->and($jefe->fresh()->valid_to->toDateString())->toBe('2026-11-30');
 });
 
+it('AZ-S7: un departamento con jefe vigente rechaza a otro y el error sale junto a la unidad', function () {
+    assign($this->rosa, Role::JefeDepartamento, ['org_unit_id' => $this->systems->id, 'valid_from' => '2026-01-01']);
+    $before = RoleAssignment::count();
+
+    personPage($this->beto)->call('openAppoint')
+        ->set('role', 'jefe_departamento')
+        ->set('unit', $this->systems->id)
+        ->call('appoint')
+        ->assertHasErrors(['unit'])
+        ->assertSee('Rosa Ruiz Almanza');
+
+    expect(RoleAssignment::count())->toBe($before);
+});
+
+it('no termina el nombramiento de otra persona desde esta ficha', function () {
+    $ajeno = assign($this->rosa, Role::JefeDepartamento, ['org_unit_id' => $this->systems->id]);
+
+    personPage($this->beto)->call('confirmEnd', $ajeno->id)->assertNotFound()->assertSet('endingId', null);
+
+    expect($ajeno->fresh()->valid_to)->toBeNull();
+});
+
 it('AZ-S11: no nombra ni termina el puesto de docente aunque se fuerce la llamada', function () {
     $page = personPage($this->beto)->call('openAppoint')->set('role', 'docente')->call('appoint');
 
