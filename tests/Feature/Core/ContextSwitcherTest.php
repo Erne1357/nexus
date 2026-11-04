@@ -309,6 +309,11 @@ it('arma los renglones de perfil una vez al montar, no en cada pintado', functio
 
             return [];
         }
+
+        public function careerOptions(string $campusId): array
+        {
+            return [];
+        }
     };
     app()->instance(ScopeLabels::class, $labels);
     actingAsRole(multiRoleUser($this->c2), Role::JefeDepartamento);

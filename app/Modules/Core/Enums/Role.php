@@ -61,4 +61,18 @@ enum Role: string
             default => false,
         };
     }
+
+    /**
+     * El tipo de unidad del organigrama sobre la que se nombra el puesto: la Subdirección, sobre una subdirección (y
+     * solo sobre Subdirección Académica, AZ-S10); el jefe y el jefe de proyecto docente, sobre un departamento
+     * académico. Los demás puestos no llevan unidad.
+     */
+    public function unitKind(): ?OrgUnitKind
+    {
+        return match ($this) {
+            self::Subdireccion => OrgUnitKind::Subdireccion,
+            self::JefeDepartamento, self::JefeProyectoDocente => OrgUnitKind::DepartamentoAcademico,
+            default => null,
+        };
+    }
 }

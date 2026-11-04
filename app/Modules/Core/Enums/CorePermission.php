@@ -6,7 +6,7 @@ use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
 
 /**
- * Permisos del módulo Core: campus y periodos. La clave es `core.<recurso>.<accion>`.
+ * Permisos del módulo Core: campus, periodos, nombramientos y organigrama (los de nombramientos y organigrama son solo del admin). La clave es `core.<recurso>.<accion>`.
  */
 enum CorePermission: string implements Permission
 {
@@ -21,6 +21,14 @@ enum CorePermission: string implements Permission
     case TermMakeCurrent = 'core.term.make_current';
     case TermManageCalendar = 'core.term.manage_calendar';
     case TermOpen = 'core.term.open';
+    case AssignmentView = 'core.assignment.view';
+    case AssignmentAppoint = 'core.assignment.appoint';
+    case AssignmentEnd = 'core.assignment.end';
+    case OrgUnitView = 'core.org_unit.view';
+    case OrgUnitCreate = 'core.org_unit.create';
+    case OrgUnitUpdate = 'core.org_unit.update';
+    case OrgUnitMove = 'core.org_unit.move';
+    case OrgUnitDeactivate = 'core.org_unit.deactivate';
 
     public function label(): string
     {
@@ -36,6 +44,14 @@ enum CorePermission: string implements Permission
             self::TermMakeCurrent => 'Marcar el periodo actual',
             self::TermManageCalendar => 'Manejar el calendario del periodo',
             self::TermOpen => 'Abrir el periodo en un campus',
+            self::AssignmentView => 'Ver personas y sus puestos',
+            self::AssignmentAppoint => 'Nombrar puestos',
+            self::AssignmentEnd => 'Terminar nombramientos',
+            self::OrgUnitView => 'Ver el organigrama',
+            self::OrgUnitCreate => 'Dar de alta unidades del organigrama',
+            self::OrgUnitUpdate => 'Editar unidades del organigrama',
+            self::OrgUnitMove => 'Mover unidades del organigrama',
+            self::OrgUnitDeactivate => 'Desactivar y activar unidades del organigrama',
         };
     }
 
