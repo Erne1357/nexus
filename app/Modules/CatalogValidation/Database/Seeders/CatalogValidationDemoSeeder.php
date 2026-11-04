@@ -19,7 +19,9 @@ use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
@@ -31,7 +33,7 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Actions\CreateTeacher;
 use App\Modules\Faculty\Actions\SetTeacherActive;
 use App\Modules\Faculty\Models\Teacher;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -267,15 +269,15 @@ class CatalogValidationDemoSeeder extends Seeder
     }
 
     /**
-     * Los usuarios con una jefatura de departamento vigente hoy.
+     * Los usuarios con una jefatura (de departamento o de proyecto docente) vigente hoy.
      *
-     * @return Builder
+     * @return Builder<RoleAssignment>
      */
     private function currentHeadUsers()
     {
-        return DB::table('department_heads')
-            ->where('valid_from', '<=', today())
-            ->where(fn ($query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()))
+        return RoleAssignment::query()
+            ->whereIn('role', Role::HEADSHIPS)
+            ->current()
             ->select('user_id');
     }
 

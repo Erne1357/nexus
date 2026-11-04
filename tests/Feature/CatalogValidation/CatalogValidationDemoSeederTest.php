@@ -2,7 +2,6 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\CatalogValidation\Enums\Catalog;
@@ -14,6 +13,7 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -224,9 +224,16 @@ it('no desactiva a los jefes ni a los jefes de proyecto docente', function () {
 
     foreach (Department::query()->orderBy('code')->get() as $department) {
         foreach ([null, 'project'] as $kind) {
-            $user = User::factory()->create();
+            // El escenario ya nombra un jefe por departamento (uno solo vigente, AZ-S7): el docente es ese usuario.
+            $user = $kind === null
+                ? User::query()->whereIn('id', RoleAssignment::query()->where(['role' => Role::JefeDepartamento, 'org_unit_id' => $department->id])->select('user_id'))->sole()
+                : User::factory()->create();
             $teacher = Teacher::factory()->adscribedTo($department)->create(['employee_number' => 'A'.count($kept).'000', 'user_id' => $user->id]);
-            DepartmentHead::factory()->create(['department_id' => $department->id, 'user_id' => $user->id, 'campus_id' => $kind === null ? null : Campus::query()->where('code', 'C2')->value('id'), 'kind' => $kind === null ? 'jefe' : 'jefe_proyecto_docente']);
+
+            if ($kind !== null) {
+                RoleAssignment::factory()->create(['user_id' => $user->id, 'org_unit_id' => $department->id, 'campus_id' => Campus::query()->where('code', 'C2')->value('id'), 'role' => Role::JefeProyectoDocente, 'valid_from' => today()->subMonth()->toDateString(), 'valid_to' => null]);
+            }
+
             $kept[] = $teacher->id;
         }
     }
@@ -234,7 +241,7 @@ it('no desactiva a los jefes ni a los jefes de proyecto docente', function () {
     runCatalogDemoSeeder('massive');
 
     expect(Teacher::query()->whereIn('id', $kept)->where('is_active', true)->count())->toBe(count($kept))
-        ->and(DepartmentHead::query()->whereNull('valid_to')->count())->toBe(count($kept))
+        ->and(RoleAssignment::query()->whereIn('role', Role::HEADSHIPS)->whereNull('valid_to')->count())->toBe(count($kept))
         ->and(User::query()->whereIn('id', Teacher::query()->whereIn('id', $kept)->select('user_id'))->where('is_active', true)->count())->toBe(count($kept));
 });
 

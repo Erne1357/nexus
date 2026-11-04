@@ -2,13 +2,11 @@
 
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
-use App\Modules\Academic\Enums\DepartmentHeadKind;
 use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
@@ -26,6 +24,7 @@ use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoSeeder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 /*
@@ -55,7 +54,7 @@ function seedDemoCatalog(array $campuses): void
 function demoCounts(): array
 {
     return [
-        ...collect([Department::class, Career::class, CareerCampus::class, StudyPlan::class, Subject::class, Specialty::class, StudyPlanSubject::class, SubjectPrerequisite::class, DepartmentHead::class])
+        ...collect([Department::class, Career::class, CareerCampus::class, StudyPlan::class, Subject::class, Specialty::class, StudyPlanSubject::class, SubjectPrerequisite::class])
             ->mapWithKeys(fn (string $model): array => [$model => $model::withTrashed()->count()])
             ->all(),
         'users' => User::query()->count(),
@@ -284,10 +283,11 @@ it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el
         ->and($context('subdir')->covers(Role::Subdireccion, $c2))->toBeTrue()
         ->and($context('subdir')->covers(Role::Subdireccion, $c1))->toBeTrue()
         ->and($context('subdir')->scopes()->sole()->campus_id)->toBeNull()
-        ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'kind' => DepartmentHeadKind::Jefe])->sole())
+        ->and(RoleAssignment::query()->current()->where(['org_unit_id' => $sc->id, 'role' => Role::JefeDepartamento])->sole())
         ->campus_id->toBeNull()
         ->user->username->toBe('jefe.sc')
-        ->and(DepartmentHead::query()->currentOn(now())->where(['department_id' => $sc->id, 'campus_id' => $c2->id, 'kind' => DepartmentHeadKind::JefeProyectoDocente])->whereHas('user', fn ($query) => $query->where('username', 'jpd.sc.c2'))->exists())->toBeTrue()
+        ->and(RoleAssignment::query()->current()->where(['org_unit_id' => $sc->id, 'campus_id' => $c2->id, 'role' => Role::JefeProyectoDocente])->whereHas('user', fn ($query) => $query->where('username', 'jpd.sc.c2'))->exists())->toBeTrue()
+        ->and(DB::table('department_heads')->count())->toBe(0)
         ->and(Hash::check('password', $coordinator->password))->toBeTrue()
         ->and($coordinator->must_change_password)->toBeFalse();
 });
@@ -334,7 +334,7 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
     $roleOf = ['subdir' => Role::Subdireccion, 'jefe' => Role::JefeDepartamento, 'jpd' => Role::JefeProyectoDocente, 'coord' => Role::Coordinador];
     $campusIds = Campus::query()->pluck('id', 'code');
     $named = fn (string $pattern): Collection => $staff->filter(fn (User $user): bool => preg_match($pattern, $user->username) === 1);
-    $headed = fn (DepartmentHeadKind $kind): array => DepartmentHead::query()->currentOn(now())->where('kind', $kind)->whereIn('user_id', $staff->modelKeys())->with('user')->get()->map(fn (DepartmentHead $head): string => $head->user->username)->all();
+    $headed = fn (Role $role): array => RoleAssignment::query()->current()->where('role', $role)->whereIn('user_id', $staff->modelKeys())->with('user')->get()->map(fn (RoleAssignment $head): string => $head->user->username)->all();
 
     expect(demoCounts())->toBe($first)
         ->and($offered('C1'))->toBe(12)
@@ -347,8 +347,8 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
         ->and($named('/^coord\.[a-z]+\.c2$/'))->toHaveCount(6)
         ->and($named('/^jefe\.[a-z]+$/')->pluck('username')->map(fn (string $username): string => substr($username, 5))->sort()->values()->all())
         ->toBe($named('/^jpd\./')->pluck('username')->map(fn (string $username): string => explode('.', $username)[1])->unique()->sort()->values()->all())
-        ->and($headed(DepartmentHeadKind::Jefe))->toEqualCanonicalizing($named('/^jefe\./')->pluck('username')->all())
-        ->and($headed(DepartmentHeadKind::JefeProyectoDocente))->toEqualCanonicalizing($named('/^jpd\./')->pluck('username')->all());
+        ->and($headed(Role::JefeDepartamento))->toEqualCanonicalizing($named('/^jefe\./')->pluck('username')->all())
+        ->and($headed(Role::JefeProyectoDocente))->toEqualCanonicalizing($named('/^jpd\./')->pluck('username')->all());
 
     foreach ($staff as $user) {
         $role = $roleOf[strtok($user->username, '.')];

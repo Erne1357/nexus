@@ -122,6 +122,14 @@ it('nunca alarga: uno que ya termina antes no cambia ni deja bitácora', functio
     Event::assertNotDispatched(RoleAssignmentEnded::class);
 });
 
+it('quita uno que empieza hoy si el último día es anterior a su inicio (regla de CloseRoleScopes)', function () {
+    $assignment = coordinatorAssignment($this->rosa, ['valid_from' => '2026-11-03']);
+
+    expect(endOn($assignment, '2026-11-02'))->toBe(AssignmentEnding::Removed)
+        ->and(RoleAssignment::query()->whereKey($assignment->id)->exists())->toBeFalse()
+        ->and(activitySince()->where('event', 'deleted')->sole()->description)->toBe('Quitó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · C2, que todavía no empezaba');
+});
+
 it('rechaza un último día anterior al inicio de uno que ya empezó', function () {
     $assignment = coordinatorAssignment($this->rosa, ['valid_from' => '2026-08-01']);
 

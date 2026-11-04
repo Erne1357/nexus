@@ -17,8 +17,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Termina un nombramiento con `$lastDay` como último día, con la regla de CloseRoleScopes (confirmado el 29 de
  * octubre de 2026): si ya empezó, `valid_to` pasa a ser `$lastDay`; si empieza después de `$lastDay`, se quita,
- * porque `valid_to` no puede ser anterior a `valid_from`; si ya había empezado y `$lastDay` cae antes de su inicio,
- * es un error. Nunca alarga: uno que ya termina ese día o antes se queda como está, sin bitácora ni aviso.
+ * porque `valid_to` no puede ser anterior a `valid_from`; la frontera de «quitar» es hoy: uno que empieza hoy o
+ * después se quita, y uno que empezó antes de hoy con `$lastDay` anterior a su inicio es un error (P4, supuesto por
+ * confirmar). Nunca alarga: uno que ya termina ese día o antes se queda como está, sin bitácora ni aviso.
  *
  * Relee el nombramiento con `lockForUpdate`; si otra sesión lo borró, es un error de validación. Antes de escribir
  * pide a RoleAssignmentRules::adminGap() que ningún día se quede sin admin vigente (AZ-S12): el admin puede terminar
@@ -63,7 +64,7 @@ final class EndRoleAssignment
             $removing = false;
 
             if ($from > $last) {
-                if ($from <= today()->toDateString()) {
+                if ($from < today()->toDateString()) {
                     throw ValidationException::withMessages([
                         'lastDay' => "La fecha de fin no puede ser anterior al inicio ({$locked->valid_from->format('d/m/Y')}).",
                     ]);

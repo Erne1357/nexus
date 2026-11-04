@@ -2,12 +2,12 @@
 
 namespace App\Modules\Faculty\Database\Seeders;
 
-use App\Modules\Academic\Actions\AppointDepartmentHead;
-use App\Modules\Academic\Enums\DepartmentHeadKind;
-use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\ProvisionTeacherUsers;
 use Illuminate\Database\Seeder;
@@ -27,7 +27,7 @@ use RuntimeException;
  * historial.
  *
  * Al final ProvisionTeacherUsers les da usuario (contraseña por defecto, cambio obligatorio) a los activos, y unos
- * cuantos por departamento se nombran jefe de proyecto docente con AppointDepartmentHead (el departamento puede
+ * cuantos por departamento se nombran jefe de proyecto docente con AppointRole (el departamento puede
  * tener varios; los jefes ya los puso DemoStaffSeeder). Requiere el catálogo (AcademicDemoSeeder) y los periodos.
  * Sin NEXUS_DEFAULT_PASSWORD, la provisión falla.
  *
@@ -239,13 +239,16 @@ class FacultyDemoSeeder extends Seeder
             $campus = Campus::query()->findOrFail($campuses[$code]);
 
             foreach ($byDepartment as $departmentId => $numbers) {
-                $department = Department::query()->findOrFail($departmentId);
+                $department = OrgUnit::query()->findOrFail($departmentId);
 
                 foreach (User::query()->whereIn('id', DB::table('teachers')->whereIn('employee_number', $numbers)->whereNotNull('user_id')->select('user_id'))->orderBy('username')->get() as $user) {
-                    $already = DB::table('department_heads')->where(['user_id' => $user->id, 'department_id' => $departmentId, 'campus_id' => $campus->id, 'kind' => DepartmentHeadKind::JefeProyectoDocente->value])->exists();
+                    $already = $user->roleAssignments()
+                        ->where(['role' => Role::JefeProyectoDocente, 'org_unit_id' => $departmentId, 'campus_id' => $campus->id])
+                        ->notEnded()
+                        ->exists();
 
                     if (! $already) {
-                        app(AppointDepartmentHead::class)->handle($department, $campus, $user, DepartmentHeadKind::JefeProyectoDocente, today()->toImmutable());
+                        app(AppointRole::class)->handle($user, Role::JefeProyectoDocente, $campus, $department, null, today()->toImmutable());
                         $appointed++;
                     }
                 }
