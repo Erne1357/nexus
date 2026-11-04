@@ -10,9 +10,11 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
+use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Navigation\Navigation;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,6 +26,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
 use Spatie\Activitylog\Models\Activity;
+use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 use Tests\TestCase;
 
 /*
@@ -76,6 +79,20 @@ function lastToastOf(Testable $component): ?array
 function actingAsRole(User $user, Role $role): TestCase
 {
     return test()->actingAs($user)->withSession([Actor::ACTIVE_ROLE => $role->value]);
+}
+
+/**
+ * Registra el módulo de ejemplo DemoCatalog (tests/Fixtures/Modules) como si hubiera arrancado con la app: indexa los
+ * nombres de sus rutas y olvida el menú, el registro de permisos y los servicios de la petición para que se armen otra
+ * vez con sus permisos y sus entradas.
+ */
+function registerDemoCatalog(): void
+{
+    app()->register(DemoCatalogServiceProvider::class);
+    app('router')->getRoutes()->refreshNameLookups();
+    app()->forgetInstance(Navigation::class);
+    app()->forgetInstance(PermissionRegistry::class);
+    app()->forgetScopedInstances();
 }
 
 /**

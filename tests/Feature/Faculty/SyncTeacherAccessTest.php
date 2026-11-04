@@ -104,9 +104,9 @@ it('da usuario a un docente activo sin usuario: su número, la contraseña por d
         ->career_id->toBeNull()
         ->valid_to->toBeNull()
         ->and($scope->valid_from->toDateString())->toBe(today()->toDateString())
-        ->and($context->has(Role::Docente))->toBeTrue()
-        ->and($context->canAccessCampus($this->c1))->toBeTrue()
-        ->and($context->canAccessCampus($this->c2))->toBeTrue();
+        ->and($context->heldRoles())->toContain(Role::Docente)
+        ->and($context->campuses()->modelKeys())->toContain($this->c1->id)
+        ->and($context->campuses()->modelKeys())->toContain($this->c2->id);
 });
 
 it('deja en la bitácora el alta del usuario, la liga con el docente y su acceso, sin la contraseña', function () {
@@ -208,8 +208,8 @@ it('cierra los alcances de docente por campus que quedaron de antes y abre el de
 
     expect(RoleAssignment::whereNotNull('campus_id')->pluck('valid_to')->map->toDateString()->all())->toBe([$yesterday, $yesterday])
         ->and(teachingScopes($user))->toBe(['todo el Tec'])
-        ->and($context->canAccessCampus($this->c1))->toBeTrue()
-        ->and($context->canAccessCampus($this->c2))->toBeTrue()
+        ->and($context->campuses()->modelKeys())->toContain($this->c1->id)
+        ->and($context->campuses()->modelKeys())->toContain($this->c2->id)
         ->and($access->description)->toBe('Sincronizó el acceso del docente 1234567: abrió su alcance de Docente en todo el Tec y cerró su alcance de Docente en C1 y C2')
         ->and($access->attribute_changes->all())->toBe([
             'attributes' => ['docente_general' => true, 'docente_campus_ids' => []],
@@ -273,7 +273,7 @@ it('un docente activo sin departamento conserva su usuario, su rol y su alcance'
         ->and($user->fresh()->is_active)->toBeTrue()
         ->and($user->fresh()->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue()
         ->and(teachingScopes($user))->toBe(['todo el Tec'])
-        ->and(app(Actor::class)->forUser($user->fresh())->has(Role::Docente))->toBeTrue()
+        ->and(app(Actor::class)->forUser($user->fresh())->heldRoles())->toContain(Role::Docente)
         ->and(Activity::count())->toBe($entries);
 });
 
@@ -542,8 +542,8 @@ it('la baja borra también la jefatura que todavía no empieza, y al reactivarlo
 
     $context = app(Actor::class)->forUser($user->fresh());
 
-    expect($context->has(Role::JefeDepartamento))->toBeFalse()
-        ->and($context->has(Role::Docente))->toBeTrue();
+    expect($context->heldRoles())->not->toContain(Role::JefeDepartamento)
+        ->and($context->heldRoles())->toContain(Role::Docente);
 });
 
 it('avisa con TeacherAccessChanged después del commit solo cuando cambia algo', function () {

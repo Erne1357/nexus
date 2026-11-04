@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\Fixtures\Modules\Bare\BareServiceProvider;
-use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 use Tests\Fixtures\Modules\DemoCatalog\Models\Item;
 use Tests\Fixtures\Modules\DemoCatalog\Policies\ItemPolicy;
 use Tests\Fixtures\Modules\DemoCatalog\Policies\NotificationPolicy;
@@ -17,7 +16,7 @@ use Tests\Fixtures\Modules\DemoCatalog\Policies\NotificationPolicy;
 */
 
 beforeEach(function () {
-    $this->app->register(DemoCatalogServiceProvider::class);
+    registerDemoCatalog();
 });
 
 it('registra las rutas de Routes/web.php con el middleware web', function () {

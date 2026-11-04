@@ -227,7 +227,7 @@ it('carga 40 docentes con 3 adscripciones cada uno y sus horas base sin N+1', fu
 
     $this->actingAs(User::factory()->admin()->create());
     $context = app(Actor::class);
-    $context->isAdmin();
+    $context->heldRoles();
 
     DB::enableQueryLog();
     $page = app(TeacherQuery::class)->forTable($context, perPage: 50);

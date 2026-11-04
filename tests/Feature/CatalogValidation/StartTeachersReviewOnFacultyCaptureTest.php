@@ -176,3 +176,34 @@ it('el jefe con Coordinación activa no la mueve', function () {
 
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::Pending);
 });
+
+function adminAndJefeOfSistemas(): User
+{
+    vacate(Role::JefeDepartamento, test()->sis->id);
+
+    return User::factory()
+        ->admin()
+        ->withRole(Role::JefeDepartamento, ['department_id' => test()->sis->id, 'valid_from' => today()->toDateString()])
+        ->create();
+}
+
+it('la persona que es admin y jefe la inicia con Jefatura activa y no con Administración activa', function () {
+    $adminJefe = adminAndJefeOfSistemas();
+
+    actingAsRole($adminJefe, Role::Admin);
+    app(SetQualification::class)->handle($this->teacher, $this->subject, QualificationLevel::Apto, $adminJefe);
+    expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::Pending);
+
+    app()->forgetScopedInstances();
+    actingAsRole($adminJefe, Role::JefeDepartamento);
+    app(SetQualification::class)->handle($this->teacher, $this->subject, QualificationLevel::Preferente, $adminJefe);
+    expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
+});
+
+it('D8: sin sesión, la persona que es admin y jefe la inicia como jefe', function () {
+    $adminJefe = adminAndJefeOfSistemas();
+
+    app(SetQualification::class)->handle($this->teacher, $this->subject, QualificationLevel::Apto, $adminJefe);
+
+    expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
+});

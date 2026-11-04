@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
@@ -13,7 +14,6 @@ use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
-use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 
 /*
 | Navegación por rol. Cada módulo declara sus entradas en navigation() de su provider y Core las
@@ -28,12 +28,9 @@ beforeEach(function () {
 
 function withDemoCatalogNavigation(): void
 {
-    app()->register(DemoCatalogServiceProvider::class);
-
     // Al arrancar, Laravel indexa los nombres de las rutas y Core arma el registro; un módulo
-    // registrado después obliga a hacer las dos cosas otra vez.
-    app('router')->getRoutes()->refreshNameLookups();
-    app()->forgetInstance(Navigation::class);
+    // registrado después obliga a hacer todo otra vez.
+    registerDemoCatalog();
 }
 
 /**
@@ -46,7 +43,7 @@ function handBuiltNavigation(): Navigation
     return new Navigation([
         new NavigationItem('Cargas', 'home', 'o-table-cells', NavigationArea::Datos),
         new NavigationItem('Propuestas', 'home', 'o-document-text', NavigationArea::Academico,
-            visible: static fn (Actor $context): bool => $context->has(Role::Coordinador)),
+            visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalCreate)),
         new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
         new NavigationItem('Plantilla', 'core.campuses', 'o-users', NavigationArea::RecursosHumanos,
             ability: 'viewAny', arguments: [Campus::class]),

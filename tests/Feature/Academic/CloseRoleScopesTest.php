@@ -93,11 +93,11 @@ it('cierra también los alcances de una carrera con career_id', function () {
 });
 
 it('después de cerrar, el jefe ya no ejerce el rol', function () {
-    expect(app(Actor::class)->forUser($this->jefe)->has(Role::JefeDepartamento))->toBeTrue();
+    expect(app(Actor::class)->forUser($this->jefe)->heldRoles())->toContain(Role::JefeDepartamento);
 
     app(CloseRoleScopes::class)->handle('org_unit_id', $this->department->id);
 
-    expect(app(Actor::class)->forUser($this->jefe->fresh())->has(Role::JefeDepartamento))->toBeFalse();
+    expect(app(Actor::class)->forUser($this->jefe->fresh())->heldRoles())->not->toContain(Role::JefeDepartamento);
 });
 
 it('deja en la bitácora, sobre el usuario del alcance, qué cerró y por qué', function () {

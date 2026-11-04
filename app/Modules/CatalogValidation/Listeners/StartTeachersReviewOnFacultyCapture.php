@@ -9,7 +9,6 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
@@ -29,11 +28,10 @@ use Illuminate\Support\Collection;
  * de los del docente que el actor cubre como jefe, incluido el de la adscripción que se acaba de quitar. El admin,
  * Subdirección y el jefe de proyecto docente no la mueven, ni una revisión ya en revisión o validada.
  *
- * Si el actor es quien está en sesión, cuenta su perfil activo (Actor): la mueve si actúa como jefe del
- * departamento y su perfil concede corregir esa revisión (`catalog_validation.review.correct`, la regla de
- * CatalogReviewPolicy::correct), así que el jefe que entró como coordinador no la mueve. Si el actor es otro usuario (forUser()) o no hay usuario autenticado (un job), basta con que sea jefe aunque tenga otros
- * puestos; el código de consola que fija el usuario del guard recibe el perfil predeterminado. Sale después del
- * commit de la Action de Faculty.
+ * Con sesión cuenta el perfil activo: la mueve quien actúa con un puesto que concede
+ * `catalog_validation.review.correct` sobre esa revisión (hoy solo el jefe del departamento; el admin no lo tiene,
+ * CV-S1). Sin sesión, el capturista cuenta con todos sus puestos: basta con que sea jefe aunque tenga otros (D8).
+ * Sale después del commit de la Action de Faculty.
  */
 final class StartTeachersReviewOnFacultyCapture
 {
@@ -52,12 +50,11 @@ final class StartTeachersReviewOnFacultyCapture
 
         $context = $this->context->forUser($actor);
 
-        if ($context->user() === null || $context->isAdmin() || ! $context->has(Role::JefeDepartamento)) {
+        if (! $context->allowsAny(CatalogValidationPermission::ReviewCorrect)) {
             return;
         }
 
-        $departments = $this->departmentsOf($event)
-            ->filter(fn (string $department): bool => $context->coversDepartment(Role::JefeDepartamento, $department));
+        $departments = $this->departmentsOf($event);
         $term = $this->termOf($event) ?? $context->activeTerm()?->getKey();
 
         if ($departments->isEmpty() || $term === null) {
