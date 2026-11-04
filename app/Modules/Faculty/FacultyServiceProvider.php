@@ -7,9 +7,11 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Listeners\BlockDepartmentDeletionWithTeachers;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Queries\TeacherUnitAdscriptions;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -18,6 +20,14 @@ use Illuminate\Support\Facades\Event;
  */
 final class FacultyServiceProvider extends ModuleServiceProvider
 {
+    public function register(): void
+    {
+        parent::register();
+
+        // Las adscripciones de los docentes, para contar las personas de cada unidad del Organigrama (reemplaza el de Core).
+        $this->app->bind(UnitAdscriptions::class, TeacherUnitAdscriptions::class);
+    }
+
     public function boot(): void
     {
         parent::boot();

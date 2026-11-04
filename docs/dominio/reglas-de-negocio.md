@@ -180,10 +180,10 @@ Contexto en [ADR-0018](../decisiones/0018-permisos-por-puesto-y-perfil-activo.md
 - **AZ-S11.** En «Personas y puestos» se nombran y terminan Administración, Subdirección Académica y Coordinador de carrera (supuesto por confirmar).
   - El puesto de docente lo dan y lo quitan los docentes (regla confirmada el 30 de octubre de 2026).
   - Las jefaturas siguen en la ficha del docente hasta 3.P8.
-- **AZ-S12.** Siempre queda un nombramiento de Administración vigente: el último no se termina nunca. El admin puede terminar su propio puesto de Administración mientras quede otro admin vigente (confirmado el 3 de noviembre de 2026).
+- **AZ-S12.** Ningún día sin admin vigente: el último nombramiento de Administración no se termina nunca. El admin puede terminar su propio puesto de Administración mientras quede otro admin vigente (confirmado el 3 de noviembre de 2026). Se lee así: al terminar o quitar un nombramiento de Administración, los de los demás usuarios activos deben cubrir cada día desde el primero que deja sin cubrir, en adelante y sin fin, así que dos terminaciones con fecha futura o quitar a un sucesor programado tampoco dejan días sin admin, y si no, la pantalla deja «Terminar…» deshabilitado con el primer día que quedaría sin admin (supuesto por confirmar).
 - **AZ-S13.** Organigrama:
   - la Dirección no se mueve ni se desactiva (supuesto por confirmar);
-  - las claves `DIRECCION` y `SUB-ACADEMICA` no cambian, porque Nexus las usa (supuesto por confirmar);
+  - las claves `DIRECCION` y `SUB-ACADEMICA` no cambian, porque Nexus las usa (supuesto por confirmar); por lo mismo, la Subdirección Académica tampoco cambia de tipo ni se desactiva, porque AZ-S10 y el alta de departamentos se apoyan en ella (supuesto por confirmar);
   - un departamento académico se edita en Académico, no se mueve desde el Organigrama y se queda bajo la Subdirección Académica (confirmado el 3 de noviembre de 2026); tampoco recibe unidades hijas (supuesto por confirmar);
   - una unidad con hijas activas o con nombramientos vigentes o por empezar no se desactiva, spec §6.1 (supuesto por confirmar);
   - una unidad se activa solo si su madre está activa (supuesto por confirmar);

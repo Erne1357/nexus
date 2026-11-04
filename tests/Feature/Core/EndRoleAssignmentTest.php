@@ -181,10 +181,52 @@ it('nadie termina al último admin vigente', function () {
 
     $theirs = $outsider->roleAssignments()->sole();
     $future->roleAssignments()->update(['valid_to' => '2026-12-20']);
-    $theirsOnly = fn () => endOn($future->roleAssignments()->sole(), '2026-12-17');
 
-    expect(endOn($theirs, '2026-12-17'))->toBe(AssignmentEnding::Ended)
-        ->and($theirsOnly)->toThrow(ValidationException::class);
+    expect(fn () => endOn($theirs, '2026-12-17'))->toThrow(function (ValidationException $exception): void {
+        expect($exception->errors()['lastDay'])->toBe(['El 21/12/2026 nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.']);
+    })->and(endOn($future->roleAssignments()->sole(), '2026-12-17'))->toBe(AssignmentEnding::Ended)
+        ->and($theirs->fresh()->valid_to)->toBeNull();
+});
+
+it('AZ-S12: dos terminaciones con fecha futura no dejan ningún día sin admin', function () {
+    $ana = $this->admin->roleAssignments()->where('role', Role::Admin)->sole();
+    $beto = User::factory()->admin()->create(['name' => 'Beto Bravo'])->roleAssignments()->sole();
+
+    expect(endOn($beto, '2026-11-30'))->toBe(AssignmentEnding::Ended)
+        ->and(fn () => endOn($ana, '2026-11-15'))->toThrow(function (ValidationException $exception): void {
+            expect($exception->errors()['lastDay'])->toBe(['El 01/12/2026 nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.']);
+        })
+        ->and($ana->fresh()->valid_to)->toBeNull();
+});
+
+it('AZ-S12: no quita al sucesor programado si deja días sin admin', function () {
+    $ana = $this->admin->roleAssignments()->where('role', Role::Admin)->sole();
+    $ana->update(['valid_to' => '2026-12-31']);
+    $successor = RoleAssignment::factory()->for(User::factory()->create(['name' => 'Beto Bravo']))->create(['role' => Role::Admin, 'valid_from' => '2027-01-01']);
+
+    expect(fn () => endOn($successor, '2026-11-03'))->toThrow(function (ValidationException $exception): void {
+        expect($exception->errors()['lastDay'])->toBe(['Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.']);
+    })->and(RoleAssignment::find($successor->id))->not->toBeNull();
+
+    User::factory()->admin()->create();
+
+    expect(endOn($successor, '2026-11-03'))->toBe(AssignmentEnding::Removed);
+});
+
+it('AZ-S12: toma el candado de los puestos de Administración antes que el del renglón, para que dos terminaciones se esperen', function () {
+    $mine = $this->admin->roleAssignments()->where('role', Role::Admin)->sole();
+    User::factory()->admin()->create();
+    $statements = [];
+    DB::listen(function ($query) use (&$statements): void {
+        $statements[] = strtolower($query->sql);
+    });
+
+    endOn($mine, '2026-12-15');
+
+    $advisory = collect($statements)->search(fn (string $sql): bool => str_contains($sql, 'pg_advisory_xact_lock'));
+    $row = collect($statements)->search(fn (string $sql): bool => str_contains($sql, 'for update'));
+
+    expect($advisory)->toBeInt()->and($row)->toBeInt()->and($advisory)->toBeLessThan($row);
 });
 
 it('un nombramiento borrado en otra sesión es un error de validación, no un 500', function () {

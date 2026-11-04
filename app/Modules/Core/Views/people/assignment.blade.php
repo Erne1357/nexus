@@ -1,7 +1,7 @@
 {{--
     La tarjeta de un nombramiento en la ficha de una persona (core::pages.person): el puesto, su estado, el alcance en
     chips (o «Sin alcance»), las fechas y los días que faltan, y quién lo terminó. «Terminar…» solo está en los que no
-    han terminado; si el puesto no se termina aquí (el docente, las jefaturas, el último nombramiento de Administración vigente)
+    han terminado; si el puesto no se termina aquí (el docente, las jefaturas, un nombramiento de Administración que dejaría días sin admin)
     queda deshabilitado con su motivo en un segundo renglón (DESIGN.md, «Nada oculto»). Abre el recuadro con la fecha
     de fin en la misma tarjeta. Espera `$row` (un elemento de PersonRecord::$assignments).
 --}}

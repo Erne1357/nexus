@@ -13,6 +13,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\AssignmentLabels;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -25,7 +26,7 @@ use Illuminate\Validation\ValidationException;
  * - AZ-S11: Administración, Subdirección Académica y Coordinador de carrera se nombran en «Personas y puestos»; el
  *   docente lo da la ficha del docente y las jefaturas se nombran allí hasta 3.P8 (`managedElsewhere()`).
  * - AZ-S12 (confirmado el 3 de noviembre de 2026): el admin puede terminar su propio puesto de Administración si
- *   queda otro vigente; el último nunca se termina (`ensureAdminRemains()`).
+ *   queda otro vigente; el último nunca se termina, y ningún día se queda sin admin vigente (`adminGap()`).
  * - AZ-S7: el titular de una unidad es quien ocupa su puesto exclusivo (`titularRoleOf()`).
  *
  * El campus y la unidad se releen de la base, borrados incluidos, para que un modal abierto con opciones viejas
@@ -35,7 +36,6 @@ final class RoleAssignmentRules
 {
     public function __construct(
         private readonly ScopeLabels $labels,
-        private readonly OrgTree $tree,
         private readonly AssignmentLabels $assignmentLabels,
     ) {}
 
@@ -96,7 +96,9 @@ final class RoleAssignmentRules
 
     /**
      * Si el puesto se nombra sobre esa unidad: el tipo es `Role::unitKind()` y, para la Subdirección, además es
-     * Subdirección Académica (AZ-S10).
+     * Subdirección Académica (AZ-S10), sin borrar. Se decide con la unidad, sin consultar la base: la clave de una
+     * unidad estructural es única aun entre las borradas y la de Subdirección Académica no cambia (AZ-S13), así que es
+     * la misma que daría `OrgTree::idOf(OrgTree::ACADEMIC)`, y el Organigrama la pregunta por cada caja.
      */
     public function allowsUnit(Role $role, OrgUnit $unit): bool
     {
@@ -104,7 +106,7 @@ final class RoleAssignmentRules
             return false;
         }
 
-        return $role !== Role::Subdireccion || $unit->getKey() === $this->tree->idOf(OrgTree::ACADEMIC);
+        return $role !== Role::Subdireccion || ($unit->code === OrgTree::ACADEMIC && ! $unit->trashed());
     }
 
     /**
@@ -123,34 +125,51 @@ final class RoleAssignmentRules
     }
 
     /**
-     * AZ-S12: terminar un nombramiento `admin` deja al menos otro de un usuario activo que valga el día siguiente a
-     * `$lastDay` (empieza ese día o antes, y su fin es nulo o no anterior a ese día). Los otros se bloquean para que
-     * dos terminaciones simultáneas no dejen a nadie. Otros puestos no se revisan.
-     *
-     * @throws ValidationException sobre `lastDay`
+     * La llave del candado consultivo que serializa las escrituras sobre los puestos de Administración (AZ-S12):
+     * EndRoleAssignment lo toma antes del candado del renglón, así dos terminaciones simultáneas se esperan y la
+     * segunda revisa la cobertura con lo que la primera ya confirmó.
      */
-    public function ensureAdminRemains(RoleAssignment $assignment, CarbonImmutable $lastDay): void
+    public const string ADMIN_SEATS_LOCK = 'role_assignments.admin';
+
+    /**
+     * AZ-S12, ningún día sin admin vigente (supuesto por confirmar): si `$assignment` es de Administración y terminarlo
+     * con `$lastDay` como último día (o quitarlo, si empieza después) deja algún día sin admin, dice cuál; nulo si no.
+     *
+     * El primer día que deja de cubrir es el siguiente a `$lastDay` o, si se quita, su inicio, y nunca antes de hoy:
+     * desde ahí, la unión de los demás nombramientos `admin` de usuarios activos (`range_agg`) debe cubrir todos los
+     * días, sin fin. El que se termina cuenta solo hasta `$lastDay`, que ya quedó atrás de ese día. Uno que ya termina
+     * ese día o antes no cambia. Lo usan EndRoleAssignment, bajo ADMIN_SEATS_LOCK, y la ficha de la persona, sin
+     * candado y con hoy como último día, para dejar «Terminar…» deshabilitado con el mismo motivo.
+     */
+    public function adminGap(RoleAssignment $assignment, CarbonImmutable $lastDay): ?string
     {
         if ($assignment->role !== Role::Admin) {
-            return;
+            return null;
         }
 
-        $day = $lastDay->addDay()->toDateString();
+        $last = $lastDay->toDateString();
 
-        $remains = RoleAssignment::query()
-            ->where('role', Role::Admin)
-            ->whereKeyNot($assignment->getKey())
-            ->where('valid_from', '<=', $day)
-            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $day))
-            ->whereHas('user', fn (Builder $query) => $query->where('is_active', true))
-            ->lockForUpdate()
-            ->exists();
-
-        if (! $remains) {
-            throw ValidationException::withMessages([
-                'lastDay' => 'Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.',
-            ]);
+        if ($assignment->valid_to !== null && $assignment->valid_to->toDateString() <= $last) {
+            return null;
         }
+
+        $from = $assignment->valid_from->toDateString();
+        $start = max($from > $last ? $from : $lastDay->addDay()->toDateString(), today()->toDateString());
+
+        $gap = DB::selectOne(<<<'SQL'
+            select lower(datemultirange(daterange(cast(? as date), null, '[)')) - coalesce(range_agg(daterange(ra.valid_from, ra.valid_to, '[]')), '{}'::datemultirange)) as day
+            from role_assignments ra
+            join users u on u.id = ra.user_id
+            where ra.role = 'admin' and ra.id <> ? and u.is_active
+            SQL, [$start, $assignment->getKey()])->day;
+
+        if ($gap === null) {
+            return null;
+        }
+
+        return $gap === $start
+            ? 'Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.'
+            : 'El '.CarbonImmutable::parse($gap)->format('d/m/Y').' nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.';
     }
 
     /**

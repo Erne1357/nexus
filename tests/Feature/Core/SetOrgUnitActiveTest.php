@@ -9,6 +9,7 @@ use App\Modules\Core\Events\OrgUnitUpdated;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -93,6 +94,28 @@ it('AZ-S13: la Dirección no se desactiva; un departamento académico se desacti
     activeInvalid(fn () => app(SetOrgUnitActive::class)->handle($department, false), 'unit', [
         'Es un departamento académico: su nombre, su clave y su estado se editan en Académico › Departamentos.',
     ]);
+});
+
+it('AZ-S13: Subdirección Académica no se desactiva, porque Nexus la usa', function () {
+    $academic = OrgUnit::where('code', 'SUB-ACADEMICA')->sole();
+
+    activeInvalid(fn () => app(SetOrgUnitActive::class)->handle($academic, false), 'unit', ['Nexus usa la Subdirección Académica: no se desactiva.']);
+
+    expect($academic->fresh()->is_active)->toBeTrue()
+        ->and(activitySince()->count())->toBe(0);
+});
+
+it('al activar bloquea la madre, para que una desactivación al mismo tiempo no la deje inactiva con una hija activa', function () {
+    app(SetOrgUnitActive::class)->handle($this->leaf, false);
+    $statements = [];
+    DB::listen(function ($query) use (&$statements): void {
+        $statements[] = ['sql' => strtolower($query->sql), 'bindings' => $query->bindings];
+    });
+
+    app(SetOrgUnitActive::class)->handle($this->leaf, true);
+
+    expect(collect($statements)->contains(fn (array $query): bool => str_contains($query['sql'], 'for update') && in_array($this->parent->id, $query['bindings'], true)))->toBeTrue()
+        ->and($this->leaf->fresh()->is_active)->toBeTrue();
 });
 
 it('no activa una unidad cuya madre está inactiva', function () {

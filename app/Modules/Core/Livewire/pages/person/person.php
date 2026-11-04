@@ -11,6 +11,7 @@ use App\Modules\Core\Queries\PersonRecordQuery;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -27,7 +28,7 @@ use Mary\Traits\Toast;
  *
  * Aquí solo se nombran y terminan Administración, Subdirección Académica y Coordinador (AZ-S11): el docente y las
  * jefaturas se ven de solo lectura, con el aviso de dónde se manejan, aunque la llamada llegue forzada desde el
- * navegador. El admin sí puede terminar su propio puesto de Administración si queda otro vigente; el último queda deshabilitado con su motivo (AZ-S12). Solo la ve el admin con ese perfil
+ * navegador. El admin sí puede terminar su propio puesto de Administración si otro cubre los días que siguen; si no, queda deshabilitado con su motivo (AZ-S12), y quien pierde así su puesto vuelve a Inicio. Solo la ve el admin con ese perfil
  * activo (RoleAssignmentPolicy); el componente autoriza en mount(), al renderizar y en cada método público.
  */
 new #[Title('Ficha de la persona')] class extends Component
@@ -90,7 +91,7 @@ new #[Title('Ficha de la persona')] class extends Component
         $whoRole = Role::tryFrom($this->whoRole);
 
         return [
-            'record' => $records->for($person, auth()->user()),
+            'record' => $records->for($person),
             'canAppoint' => $person->is_active,
             'offered' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], $this->offered($rules)),
             'roleCase' => $role,
@@ -205,7 +206,7 @@ new #[Title('Ficha de la persona')] class extends Component
             'lastDay.date' => 'La fecha de fin no es válida.',
         ]);
 
-        if (($blocker = $records->endBlocker($assignment, auth()->user())) !== null) {
+        if (($blocker = $records->endBlocker($assignment)) !== null) {
             throw ValidationException::withMessages(['lastDay' => $blocker]);
         }
 
@@ -219,6 +220,14 @@ new #[Title('Ficha de la persona')] class extends Component
             }
 
             throw $exception;
+        }
+
+        // Quien terminó su propio puesto de Administración desde hoy ya no ve esta pantalla: vuelve a Inicio en lugar
+        // de un 403 al volver a pintarla.
+        if ($assignment->user_id === auth()->id() && Gate::denies('viewAny', RoleAssignment::class)) {
+            $this->success('Terminaste tu puesto de Administración.', e('Último día: '.$day->format('d/m/Y')), redirectTo: route('home'));
+
+            return;
         }
 
         match ($ending) {

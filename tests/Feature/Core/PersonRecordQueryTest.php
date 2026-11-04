@@ -43,7 +43,7 @@ it('ordena vigentes, programados y terminados, y calcula las cifras', function (
     $viejo = giveRole($this->rosa, Role::Coordinador, '2023-01-01', '2024-06-30', ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id]);
     $masViejo = giveRole($this->rosa, Role::Coordinador, '2020-01-01', '2021-06-30', ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id]);
 
-    $record = app(PersonRecordQuery::class)->for($this->rosa, $this->admin);
+    $record = app(PersonRecordQuery::class)->for($this->rosa);
 
     expect(array_map(fn (array $row): string => $row['assignment']->id, $record->assignments))
         ->toBe([$coordinador->id, $docente->id, $futuro->id, $viejo->id, $masViejo->id])
@@ -63,7 +63,7 @@ it('ordena vigentes, programados y terminados, y calcula las cifras', function (
 });
 
 it('una persona sin nombramientos no tiene cifras', function () {
-    $record = app(PersonRecordQuery::class)->for($this->rosa, $this->admin);
+    $record = app(PersonRecordQuery::class)->for($this->rosa);
 
     expect($record->assignments)->toBe([])
         ->and($record->current)->toBe(0)
@@ -80,12 +80,12 @@ it('sabe quién terminó un nombramiento por su entrada de bitácora', function 
     app(EndRoleAssignment::class)->handle($assignment, CarbonImmutable::parse('2026-11-12'));
     $this->travelTo('2026-11-20 10:00:00');
 
-    $row = app(PersonRecordQuery::class)->for($this->rosa, $this->admin)->assignments[0];
+    $row = app(PersonRecordQuery::class)->for($this->rosa)->assignments[0];
 
     expect($row['endedBy']['name'])->toBe('Ada Admin')
         ->and($row['endedBy']['on']->toDateString())->toBe('2026-11-10');
 
-    $record = app(PersonRecordQuery::class)->for($this->rosa, $this->admin);
+    $record = app(PersonRecordQuery::class)->for($this->rosa);
 
     expect($record->lastAppointment['by'])->toBe('Ada Admin')
         ->and($record->lastAppointment['on']->toDateString())->toBe('2026-11-03')
@@ -102,7 +102,7 @@ it('AZ-S11 y AZ-S12: el docente, las jefaturas y el último admin vigente no se 
     giveRole($this->rosa, Role::Coordinador, '2026-01-01', null, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id]);
     giveRole($this->rosa, Role::Admin, '2026-01-01');
 
-    $blockers = collect(app(PersonRecordQuery::class)->for($this->rosa, $this->admin)->assignments)
+    $blockers = collect(app(PersonRecordQuery::class)->for($this->rosa)->assignments)
         ->mapWithKeys(fn (array $row): array => [$row['assignment']->role->value => $row['endBlocker']]);
 
     expect($blockers['docente'])->toContain('ficha del docente')
@@ -111,7 +111,7 @@ it('AZ-S11 y AZ-S12: el docente, las jefaturas y el último admin vigente no se 
         ->and($blockers['coordinador'])->toBeNull()
         ->and($blockers['admin'])->toBeNull();
 
-    $own = fn () => collect(app(PersonRecordQuery::class)->for($this->admin, $this->admin)->assignments)->firstWhere('assignment.role', Role::Admin);
+    $own = fn () => collect(app(PersonRecordQuery::class)->for($this->admin)->assignments)->firstWhere('assignment.role', Role::Admin);
 
     expect($own()['endBlocker'])->toBeNull();
 
@@ -124,7 +124,7 @@ it('la bitácora solo trae entradas de nombramientos', function () {
     app(AppointRole::class)->handle($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-11-03'));
     activity()->performedOn($this->rosa)->event('updated')->withProperties(['switch' => true])->log('Cambió de perfil');
 
-    $log = app(PersonRecordQuery::class)->for($this->rosa, $this->admin)->log;
+    $log = app(PersonRecordQuery::class)->for($this->rosa)->log;
 
     expect(array_column($log, 'description'))->toBe(['Nombró a Rosa Ruiz como Coordinador de carrera · ISC · C2']);
 });
@@ -134,7 +134,7 @@ it('la bitácora trae las 10 últimas', function () {
         activity()->performedOn($this->rosa)->event('updated')->withProperties(['role_assignment_id' => fakeKey($number)])->log("Entrada {$number}");
     }
 
-    $log = app(PersonRecordQuery::class)->for($this->rosa, $this->admin)->log;
+    $log = app(PersonRecordQuery::class)->for($this->rosa)->log;
 
     expect($log)->toHaveCount(10)->and($log[0]['description'])->toBe('Entrada 12');
 });
