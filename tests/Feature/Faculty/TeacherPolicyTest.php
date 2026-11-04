@@ -69,7 +69,6 @@ it('al admin le permite todo, también sobre un docente sin departamento', funct
     expect($admin->can('viewAny', Teacher::class))->toBeTrue()
         ->and($admin->can('create', Teacher::class))->toBeTrue()
         ->and($admin->can('create', [Teacher::class, $this->cb]))->toBeTrue()
-        ->and($admin->can('appointHeads', Teacher::class))->toBeTrue()
         ->and($admin->can('provisionUsers', Teacher::class))->toBeTrue()
         ->and($admin->can('resetPassword', $this->loose))->toBeTrue()
         ->and($admin->can('manageQualification', [$this->onlyIi, $subject]))->toBeTrue()
@@ -211,11 +210,10 @@ it('adscribir a un docente que ya existe es solo del admin y la Subdirección (S
         ->and($coordinador->can('adscribe', Teacher::class))->toBeFalse();
 });
 
-it('appointHeads, provisionUsers y resetPassword son solo del admin', function (Role $role, array $scope) {
+it('provisionUsers y resetPassword son solo del admin', function (Role $role, array $scope) {
     $user = User::factory()->withRole($role, $scope)->create();
 
-    expect($user->can('appointHeads', Teacher::class))->toBeFalse()
-        ->and($user->can('provisionUsers', Teacher::class))->toBeFalse()
+    expect($user->can('provisionUsers', Teacher::class))->toBeFalse()
         ->and($user->can('resetPassword', $this->inSc))->toBeFalse();
 })->with([
     'Subdirección' => [Role::Subdireccion, []],

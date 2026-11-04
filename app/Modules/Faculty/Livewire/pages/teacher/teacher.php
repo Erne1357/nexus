@@ -1,16 +1,18 @@
 <?php
 
-use App\Modules\Academic\Actions\AppointDepartmentHead;
-use App\Modules\Academic\Actions\EndDepartmentHead;
-use App\Modules\Academic\Enums\DepartmentHeadKind;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
-use App\Modules\Academic\Queries\DepartmentQuery;
+use App\Modules\Core\Actions\AppointRole;
+use App\Modules\Core\Actions\EndRoleAssignment;
 use App\Modules\Core\Actions\ResetUserPassword;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Enums\AssignmentEnding;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Queries\CampusQuery;
+use App\Modules\Core\Queries\AssignmentLabels;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Actions\AddExternalLoad;
 use App\Modules\Faculty\Actions\AddPosition;
@@ -38,7 +40,6 @@ use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
 use App\Modules\Faculty\Queries\TeacherRecordQuery;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -146,7 +147,7 @@ new #[Title('Ficha del docente')] class extends Component
 
     public bool $showHeadshipModal = false;
 
-    /** Valor de DepartmentHeadKind. */
+    /** Valor de un puesto de Role::HEADSHIPS. */
     public string $headKind = '';
 
     public string $headDepartmentId = '';
@@ -199,7 +200,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context, DepartmentQuery $departments, CampusQuery $campuses, AvailabilityGridQuery $grids): array
+    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context, PeopleQuery $people, AvailabilityGridQuery $grids): array
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -233,7 +234,8 @@ new #[Title('Ficha del docente')] class extends Component
             default => [],
         };
 
-        $canAppoint = Gate::allows('appointHeads', Teacher::class);
+        $canAppoint = Gate::allows('viewAny', RoleAssignment::class);
+        $headOptions = $canAppoint && $this->showHeadshipModal ? $people->scopeOptions(Role::JefeProyectoDocente, null) : ['campuses' => [], 'units' => []];
 
         $removing = $this->removingAdscriptionId === null ? null : $record->adscriptions->firstWhere('id', $this->removingAdscriptionId);
 
@@ -243,9 +245,9 @@ new #[Title('Ficha del docente')] class extends Component
             'canAppoint' => $canAppoint,
             'headships' => $canAppoint && $this->tab === 'datos' ? $records->headships($teacher) : collect(),
             'endingHeadship' => $canAppoint && $this->endingHeadshipId !== null ? $records->findHeadship($teacher, $this->endingHeadshipId) : null,
-            'headKinds' => array_map(fn (DepartmentHeadKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], DepartmentHeadKind::cases()),
-            'departmentOptions' => $canAppoint && $this->showHeadshipModal ? $departments->options() : [],
-            'campusOptions' => $canAppoint && $this->showHeadshipModal ? $campuses->activeOptions() : [],
+            'headKinds' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], Role::HEADSHIPS),
+            'departmentOptions' => $headOptions['units'],
+            'campusOptions' => $headOptions['campuses'],
             'record' => $record,
             'removal' => $removal,
             'primaryReasons' => $primaryReasons,
@@ -354,11 +356,11 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Abre el formulario de «Nombrar jefatura». Solo el administrador (S7).
+     * Abre el formulario de «Nombrar jefatura». Solo quien nombra puestos (el administrador).
      */
     public function createHeadship(TeacherQuery $teachers): void
     {
-        $this->authorize('appointHeads', Teacher::class);
+        $this->authorize('create', RoleAssignment::class);
         $teachers->findOrFail($this->teacherId);
 
         $this->resetValidation();
@@ -368,37 +370,26 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Nombra al docente jefe de departamento (de todo el Tec) o jefe de proyecto docente (de un campus). Si no tiene
-     * usuario, se le crea antes con SyncTeacherAccess; un inactivo no se nombra. Los rechazos de AppointDepartmentHead
-     * salen en el campo que corresponde.
+     * Nombra al docente jefe de departamento (de todo el Tec) o jefe de proyecto docente (de un campus) con
+     * AppointRole. Si no tiene usuario, se le crea antes con SyncTeacherAccess; un inactivo no se nombra. Los rechazos
+     * de la Action salen en el campo que corresponde.
      */
-    public function saveHeadship(TeacherQuery $teachers, DepartmentQuery $departments, CampusQuery $campuses, SyncTeacherAccess $syncTeacherAccess, AppointDepartmentHead $appointDepartmentHead): void
+    public function saveHeadship(TeacherQuery $teachers, PeopleQuery $people, AssignmentLabels $labels, SyncTeacherAccess $syncTeacherAccess, AppointRole $appointRole): void
     {
-        $this->authorize('appointHeads', Teacher::class);
+        $this->authorize('create', RoleAssignment::class);
         $teacher = $teachers->findOrFail($this->teacherId);
 
         $data = $this->validate([
-            'headKind' => ['required', Rule::enum(DepartmentHeadKind::class)],
+            'headKind' => ['required', Rule::in(array_map(fn (Role $role): string => $role->value, Role::HEADSHIPS))],
             'headDepartmentId' => ['required', 'string'],
             'headCampusId' => ['nullable', 'string'],
             'headFrom' => ['required', 'date_format:Y-m-d'],
             'headTo' => ['nullable', 'date_format:Y-m-d'],
-        ]);
-        $kind = DepartmentHeadKind::from($data['headKind']);
+        ], ['headKind.in' => 'Elige un cargo de la lista.']);
+        $role = Role::from($data['headKind']);
 
         if (! $teacher->is_active) {
             $this->addError('headKind', 'El docente está inactivo: reactívalo antes de nombrarlo.');
-
-            return;
-        }
-
-        try {
-            $department = $departments->findOrFail($data['headDepartmentId']);
-            $campus = $kind === DepartmentHeadKind::JefeProyectoDocente && $data['headCampusId'] !== ''
-                ? $campuses->findOrFail($data['headCampusId'])
-                : null;
-        } catch (ModelNotFoundException) {
-            $this->addError('headDepartmentId', 'Elige un departamento o un campus que existan.');
 
             return;
         }
@@ -417,20 +408,20 @@ new #[Title('Ficha del docente')] class extends Component
                 return;
             }
 
-            $appointDepartmentHead->handle(
-                $department,
-                $campus,
+            $assignment = $appointRole->handle(
                 $user,
-                $kind,
+                $role,
+                $role === Role::JefeProyectoDocente ? $people->campus($data['headCampusId']) : null,
+                $people->unit($data['headDepartmentId']),
+                null,
                 CarbonImmutable::parse($data['headFrom']),
                 $data['headTo'] === '' ? null : CarbonImmutable::parse($data['headTo']),
             );
         } catch (ValidationException $exception) {
+            $fields = ['user' => 'headKind', 'role' => 'headDepartmentId', 'unit' => 'headDepartmentId', 'campus' => 'headCampusId', 'to' => 'headTo'];
+
             foreach ($exception->errors() as $field => $messages) {
-                $target = $field === 'user' && str_contains((string) $messages[0], 'inactivo')
-                    ? 'headKind'
-                    : ['user' => 'headDepartmentId', 'campus' => 'headCampusId', 'valid_to' => 'headTo', 'valid_from' => 'headFrom'][$field] ?? 'headKind';
-                $this->addError($target, (string) $messages[0]);
+                $this->addError($fields[$field] ?? 'headKind', (string) $messages[0]);
             }
 
             return;
@@ -441,12 +432,12 @@ new #[Title('Ficha del docente')] class extends Component
         }
 
         $this->showHeadshipModal = false;
-        $this->success('Jefatura nombrada', e($kind->position($department->name, $campus?->name).' · '.$teacher->employee_number));
+        $this->success('Jefatura nombrada', e($labels->one($assignment)->summary.' · '.$teacher->employee_number));
     }
 
     public function confirmEndHeadship(string $id, TeacherQuery $teachers, TeacherRecordQuery $records): void
     {
-        $this->authorize('appointHeads', Teacher::class);
+        $this->authorize('end', new RoleAssignment);
 
         $head = $records->findHeadship($teachers->findOrFail($this->teacherId), $id);
         $this->endingHeadshipId = $head->id;
@@ -456,12 +447,12 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Termina la jefatura en su último día: la que ya empezó termina ese día; la que empieza después se borra
-     * (EndDepartmentHead).
+     * Termina la jefatura en su último día con EndRoleAssignment: la que ya empezó termina ese día; la que empieza
+     * después se quita; la que ya termina antes se queda como está.
      */
-    public function endHeadship(TeacherQuery $teachers, TeacherRecordQuery $records, EndDepartmentHead $endDepartmentHead): void
+    public function endHeadship(TeacherQuery $teachers, TeacherRecordQuery $records, EndRoleAssignment $endRoleAssignment): void
     {
-        $this->authorize('appointHeads', Teacher::class);
+        $this->authorize('end', new RoleAssignment);
 
         if ($this->endingHeadshipId === null) {
             return;
@@ -469,9 +460,10 @@ new #[Title('Ficha del docente')] class extends Component
 
         $data = $this->validate(['endLastDay' => ['required', 'date_format:Y-m-d']]);
         $head = $records->findHeadship($teachers->findOrFail($this->teacherId), $this->endingHeadshipId);
+        $day = CarbonImmutable::parse($data['endLastDay']);
 
         try {
-            $endDepartmentHead->handle($head, CarbonImmutable::parse($data['endLastDay']));
+            $ending = $endRoleAssignment->handle($head, $day);
         } catch (ValidationException $exception) {
             $this->addError('endLastDay', (string) collect($exception->errors())->flatten()->first());
 
@@ -484,7 +476,12 @@ new #[Title('Ficha del docente')] class extends Component
 
         $this->showEndHeadshipModal = false;
         $this->endingHeadshipId = null;
-        $this->success('Jefatura terminada', 'Su alcance termina con ella. Queda en la bitácora.');
+
+        match ($ending) {
+            AssignmentEnding::Ended => $this->success('Jefatura terminada', e('Último día: '.$day->format('d/m/Y'))),
+            AssignmentEnding::Removed => $this->success('Jefatura quitada', 'Todavía no empezaba.'),
+            AssignmentEnding::Unchanged => $this->info('Sin cambios', e('Esa jefatura ya termina el '.$head->valid_to->format('d/m/Y').'.')),
+        };
     }
 
     public function confirmRemoveAdscription(string $id, TeacherQuery $teachers, TeacherRecordQuery $records): void

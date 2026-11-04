@@ -25,7 +25,6 @@ enum FacultyPermission: string implements Permission
     case TeacherQualificationManage = 'faculty.teacher_qualification.manage';
     case TeacherDepartmentRemove = 'faculty.teacher_department.remove';
     case TeacherDepartmentSetPrimary = 'faculty.teacher_department.set_primary';
-    case DepartmentHeadAppoint = 'faculty.department_head.appoint';
     case TeacherUserProvision = 'faculty.teacher_user.provision';
     case TeacherUserResetPassword = 'faculty.teacher_user.reset_password';
 
@@ -44,7 +43,6 @@ enum FacultyPermission: string implements Permission
             self::TeacherQualificationManage => 'Administrar el perfil de materias de un docente',
             self::TeacherDepartmentRemove => 'Quitar a un docente de un departamento',
             self::TeacherDepartmentSetPrimary => 'Hacer principal una adscripción',
-            self::DepartmentHeadAppoint => 'Nombrar jefes de departamento',
             self::TeacherUserProvision => 'Dar de alta los usuarios de los docentes',
             self::TeacherUserResetPassword => 'Restablecer la contraseña de un docente',
         };
