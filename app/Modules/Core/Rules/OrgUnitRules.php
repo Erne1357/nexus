@@ -16,7 +16,9 @@ use Illuminate\Validation\ValidationException;
  * - AZ-S13 (confirmado el 3 de noviembre de 2026): los departamentos académicos siguen bajo la Subdirección Académica;
  *   su nombre, clave y estado se editan en Académico (lo exige también un trigger de la base) y no se mueven aquí.
  * - La Dirección es la raíz única: no se mueve, no se desactiva ni cambia de tipo. Sus claves y la de la Subdirección
- *   Académica (OrgTree::ROOT y OrgTree::ACADEMIC) son las que Nexus busca, así que no cambian.
+ *   Académica (OrgTree::ROOT y OrgTree::ACADEMIC) son las que Nexus busca, así que no cambian; la Subdirección
+ *   Académica tampoco cambia de tipo ni se desactiva, porque AZ-S10 y AZ-S13 se apoyan en ella (supuesto por
+ *   confirmar).
  * - La clave es única entre las unidades que no son departamentos académicos, también las borradas.
  * - Un ciclo se revisa leyendo la base al momento (no OrgTree, que se memoriza por petición); el trigger
  *   `org_units_no_cycle` es la última defensa.
@@ -63,6 +65,10 @@ final class OrgUnitRules
             $blockers[] = 'La Dirección es la raíz: no se desactiva.';
         }
 
+        if ($this->isAcademic($unit)) {
+            $blockers[] = 'Nexus usa la Subdirección Académica: no se desactiva.';
+        }
+
         $children = OrgUnit::query()->where('parent_id', $unit->getKey())->where('is_active', true)->count();
 
         if ($children > 0) {
@@ -106,8 +112,8 @@ final class OrgUnitRules
             return null;
         }
 
-        if ($unit->kind === OrgUnitKind::Direccion) {
-            return 'La Dirección no cambia de tipo.';
+        if (($fixed = $this->fixedKindReason($unit)) !== null) {
+            return $fixed;
         }
 
         $assignments = RoleAssignment::query()->notEnded()->where('org_unit_id', $unit->getKey())->get();
@@ -121,6 +127,19 @@ final class OrgUnitRules
         }
 
         return null;
+    }
+
+    /**
+     * Por qué la unidad no cambia de tipo, sea cual sea el nuevo: la Dirección es la raíz y Nexus usa Subdirección
+     * Académica como subdirección (AZ-S10, AZ-S13); nulo si puede cambiar.
+     */
+    public function fixedKindReason(OrgUnit $unit): ?string
+    {
+        return match (true) {
+            $unit->kind === OrgUnitKind::Direccion => 'La Dirección no cambia de tipo.',
+            $this->isAcademic($unit) => 'Nexus usa Subdirección Académica como subdirección; no cambia de tipo.',
+            default => null,
+        };
     }
 
     /**
@@ -152,6 +171,14 @@ final class OrgUnitRules
         $fixed = in_array($unit->code, [OrgTree::ROOT, OrgTree::ACADEMIC], true) && $unit->kind !== OrgUnitKind::DepartamentoAcademico;
 
         return $fixed && $code !== $unit->code ? "Nexus usa la clave {$unit->code}; no se cambia." : null;
+    }
+
+    /**
+     * Si es la unidad estructural Subdirección Académica (OrgTree::ACADEMIC), y no un departamento que repite su clave.
+     */
+    private function isAcademic(OrgUnit $unit): bool
+    {
+        return $unit->code === OrgTree::ACADEMIC && $unit->kind !== OrgUnitKind::DepartamentoAcademico;
     }
 
     /**

@@ -2,7 +2,7 @@
     El formulario del panel del Organigrama (core::components.org-unit-panel), en un `x-modal`:
     - «Nueva unidad»: nombre, clave, tipo (sin Dirección ni Departamento académico) y «Depende de», con la madre ya
       elegida;
-    - «Renombrar unidad»: nombre, clave y tipo; el tipo de la Dirección no cambia;
+    - «Renombrar unidad»: nombre, clave y tipo; el de la Dirección y el de Subdirección Académica no cambian;
     - «Mover unidad»: «Depende de», sin la unidad ni las que cuelgan de ella.
     Los errores de las Actions salen junto a su campo; los de la unidad, arriba.
 --}}
@@ -13,7 +13,6 @@
         'edit' => 'Cambia el nombre, la clave o el tipo; el lugar se cambia con «Mover».',
         'move' => $detail->unit->name,
     ];
-    $rootKind = $mode === 'edit' && $detail->unit->kind === \App\Modules\Core\Enums\OrgUnitKind::Direccion;
 @endphp
 
 <x-modal wire:model="showForm" :title="$titles[$mode] ?? ''" :subtitle="$subtitles[$mode] ?? ''" box-class="max-w-xl" separator>
@@ -28,9 +27,9 @@
             <div class="grid gap-4 sm:grid-cols-2">
                 <x-input label="Clave" name="code" wire:model="code" class="font-mono" />
                 <div>
-                    <x-select label="Tipo" name="kind" wire:model="kind" :options="$kinds" :disabled="$rootKind" />
-                    @if ($rootKind)
-                        <p class="mt-1 text-sm text-neutral">La Dirección no cambia de tipo.</p>
+                    <x-select label="Tipo" name="kind" wire:model="kind" :options="$kinds" :disabled="$fixedKind !== null" />
+                    @if ($fixedKind !== null)
+                        <p class="mt-1 text-sm text-neutral" data-testid="unit-kind-fixed">{{ $fixedKind }}</p>
                     @endif
                 </div>
             </div>

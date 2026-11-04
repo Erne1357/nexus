@@ -24,7 +24,8 @@ use Mary\Traits\Toast;
  * hacer queda deshabilitado con su motivo escrito, y abrir el formulario de lo bloqueado lo rechaza con ese motivo.
  *
  * Arranca en la raíz; la página le pide otra unidad con `org-unit-picked` y el alta con `org-unit-create`. Después de
- * cada escritura avisa al diagrama con `org-chart-changed` (y la unidad que queda elegida). Solo lo usa el admin con
+ * cada escritura avisa al diagrama con `org-chart-changed` (y la unidad que queda elegida); mover a la misma madre o
+ * guardar sin cambios solo dice «Sin cambios». Solo lo usa el admin con
  * ese perfil activo (OrgUnitPolicy): autoriza al pintar y en cada método, cada escritura con su ability.
  */
 new class extends Component
@@ -60,7 +61,7 @@ new class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(OrgChartQuery $query): array
+    public function with(OrgChartQuery $query, OrgUnitRules $rules): array
     {
         $this->authorize('viewAny', OrgUnit::class);
 
@@ -79,7 +80,8 @@ new class extends Component
                 'move' => $query->parentOptions($detail->unit),
                 default => [],
             },
-            'kinds' => $this->kinds($detail->unit),
+            'kinds' => $this->kinds($detail->unit, $rules),
+            'fixedKind' => $this->mode === 'edit' ? $rules->fixedKindReason($detail->unit) : null,
         ];
     }
 
@@ -194,8 +196,16 @@ new class extends Component
         } elseif ($this->mode === 'edit') {
             $unit = $query->findOrFail((string) $this->unitId);
             $this->authorize('update', $unit);
+            $data = $this->validatedUnit(withParent: false);
 
-            $unit = $updateOrgUnit->handle($unit, $this->validatedUnit(withParent: false));
+            if ($data['code'] === $unit->code && $data['name'] === $unit->name && $data['kind'] === $unit->kind) {
+                $this->info('Sin cambios', e("{$unit->code} · {$unit->name}"));
+                $this->closeForm();
+
+                return;
+            }
+
+            $unit = $updateOrgUnit->handle($unit, $data);
             $this->success('Cambio guardado', e("{$unit->code} · {$unit->name}"));
         } else {
             return;
@@ -217,6 +227,13 @@ new class extends Component
 
         if ($parent === null) {
             $this->addError('parent', 'Elige de qué unidad depende.');
+
+            return;
+        }
+
+        if ($parent->id === $unit->parent_id) {
+            $this->info('Sin cambios', e("{$unit->name} ya depende de {$parent->name}"));
+            $this->closeForm();
 
             return;
         }
@@ -309,15 +326,15 @@ new class extends Component
     }
 
     /**
-     * Los tipos que se eligen: sin Dirección ni Departamento académico (AZ-S13). Al renombrar la Dirección, solo el
-     * suyo, que no cambia.
+     * Los tipos que se eligen: sin Dirección ni Departamento académico (AZ-S13). Al renombrar una unidad cuyo tipo no
+     * cambia (la Dirección y Subdirección Académica), solo el suyo.
      *
      * @return list<array{id: string, name: string}>
      */
-    private function kinds(OrgUnit $unit): array
+    private function kinds(OrgUnit $unit, OrgUnitRules $rules): array
     {
-        $kinds = $this->mode === 'edit' && $unit->kind === OrgUnitKind::Direccion
-            ? [OrgUnitKind::Direccion]
+        $kinds = $this->mode === 'edit' && $rules->fixedKindReason($unit) !== null
+            ? [$unit->kind]
             : array_filter(OrgUnitKind::cases(), fn (OrgUnitKind $kind): bool => ! in_array($kind, [OrgUnitKind::Direccion, OrgUnitKind::DepartamentoAcademico], true));
 
         return array_values(array_map(fn (OrgUnitKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], $kinds));

@@ -16,7 +16,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Relee la unidad con `lockForUpdate`. Al desactivar, todos los impedimentos de OrgUnitRules::deactivationBlockers()
  * (la raíz, un departamento académico, hijas activas y nombramientos vigentes o por empezar) salen juntos sobre `unit`,
  * y luego OrgUnitDeactivating, con veto, deja que un módulo de la derecha la bloquee dentro de la transacción. Al
- * activar, la madre debe estar activa. Si no cambia el estado, no escribe ni registra.
+ * activar, la madre, releída con `lockForUpdate`, debe estar activa. Si no cambia el estado, no escribe ni registra.
  *
  * Deja la bitácora de `is_active` y avisa con OrgUnitUpdated después del commit.
  */
@@ -37,6 +37,12 @@ final class SetOrgUnitActive
             }
 
             if ($active) {
+                // La madre se bloquea antes de revisarla: una desactivación simultánea de la madre la bloquea primero
+                // y cuenta sus hijas activas, así que una de las dos espera a la otra y ve lo que confirmó.
+                if ($unit->parent_id !== null) {
+                    OrgUnit::withTrashed()->whereKey($unit->parent_id)->lockForUpdate()->first();
+                }
+
                 if (($problem = $this->rules->activationBlocker($unit)) !== null) {
                     throw ValidationException::withMessages(['unit' => $problem]);
                 }

@@ -67,8 +67,7 @@ it('pinta el diagrama con la Dirección arriba y una caja por unidad', function 
         ->assertSee('La estructura del Instituto de un vistazo. Toca una unidad para ver su titular, sus puestos y sus acciones. Los departamentos académicos (con candado) se editan en Académico.')
         ->assertSee('Mostrar inactivas (1)')
         ->assertSee('1 departamento académico sin jefe')
-        ->assertSee('Nueva unidad')
-        ->assertSee('Se edita en Académico');
+        ->assertSee('Nueva unidad');
 
     $boxes = array_map(
         fn ($box): string => substr($box->getAttribute('data-testid'), strlen('org-unit-')),
@@ -78,7 +77,8 @@ it('pinta el diagrama con la Dirección arriba y una caja por unidad', function 
     expect($boxes[0])->toBe('DIRECCION')
         ->and($boxes)->toEqualCanonicalizing(OrgUnit::query()->where('is_active', true)->pluck('code')->all())
         ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-SC"]')))->toContain('Departamento académico')->toContain('Sistemas y Computación')->toContain('Sin jefe vigente')
-        ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-DIRECCION"]')))->toContain('Sin titular en Nexus');
+        ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-DIRECCION"]')))->toContain('Sin titular en Nexus')
+        ->and(textOf(domOf($response)->querySelector('[data-testid="org-legend"]')))->toBe('Se edita en Académico · n personas en la unidad y en las que cuelgan de ella');
 });
 
 it('el panel muestra la unidad elegida', function () {
@@ -86,7 +86,8 @@ it('el panel muestra la unidad elegida', function () {
 
     $panel = orgUnitPanel($this->admin)
         ->assertSet('unitId', $this->root->id)
-        ->assertSee('La Dirección no tiene un puesto en Nexus.');
+        ->assertSee('La Dirección no tiene un puesto en Nexus.')
+        ->assertDontSeeHtml('data-testid="unit-path"');
 
     $panel->dispatch('org-unit-picked', id: $this->planning->id)
         ->assertSet('unitId', $this->planning->id)
@@ -169,6 +170,25 @@ it('da de alta, renombra, mueve, desactiva y activa desde el panel, y avisa al d
         ->assertSee('data-testid="org-unit-BECAS"', false);
 });
 
+it('mover a la misma madre o guardar sin cambios no avisa al diagrama', function () {
+    $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $this->services->id);
+
+    $panel->call('openMove')->assertSet('parent', $this->planning->id)->call('move')
+        ->assertHasNoErrors()
+        ->assertNotDispatched('org-chart-changed')
+        ->assertSet('showForm', false);
+
+    expect(lastToastOf($panel))->title->toBe('Sin cambios')->description->toBe('Departamento de Servicios Escolares ya depende de Subdirección de Planeación y Vinculación');
+
+    $panel->call('openEdit')->call('save')
+        ->assertHasNoErrors()
+        ->assertNotDispatched('org-chart-changed')
+        ->assertSet('showForm', false);
+
+    expect(lastToastOf($panel))->title->toBe('Sin cambios')
+        ->and(activitySince()->count())->toBe(0);
+});
+
 it('lo bloqueado se queda deshabilitado con su motivo escrito', function () {
     $panel = orgUnitPanel($this->admin);
     $dom = domOf($panel);
@@ -198,6 +218,11 @@ it('lo bloqueado se queda deshabilitado con su motivo escrito', function () {
     $panel->call('openEdit')->assertHasErrors(['unit'])->assertSet('showForm', false);
     $panel->call('openMove')->assertHasErrors(['unit'])->assertSet('showForm', false);
     $panel->call('setActive', false)->assertHasErrors(['unit']);
+
+    $panel->dispatch('org-unit-picked', id: $this->academic->id)->call('openEdit')->assertSet('showForm', true);
+
+    expect(domOf($panel)->querySelector('select[name="kind"]')->hasAttribute('disabled'))->toBeTrue()
+        ->and(textOf(domOf($panel)->querySelector('[data-testid="unit-kind-fixed"]')))->toBe('Nexus usa Subdirección Académica como subdirección; no cambia de tipo.');
 
     expect($this->systems->fresh()->is_active)->toBeTrue()
         ->and(activitySince()->count())->toBe(0);

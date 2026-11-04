@@ -88,13 +88,26 @@ it('la clave nueva no puede ser de otra unidad', function () {
     updateUnitInvalid(fn () => app(UpdateOrgUnit::class)->handle($this->unit, ['code' => 'OTRA']), 'code', 'Ya hay una unidad con la clave OTRA.');
 });
 
-it('no cambia a un tipo que deja sin lugar sus nombramientos', function () {
+it('AZ-S13: Subdirección Académica no cambia de tipo, porque Nexus la usa como subdirección', function () {
     $academic = OrgUnit::where('code', 'SUB-ACADEMICA')->sole();
-    $holder = User::factory()->create();
-    RoleAssignment::factory()->create(['user_id' => $holder->id, 'role' => Role::Subdireccion, 'org_unit_id' => $academic->id]);
 
     updateUnitInvalid(
         fn () => app(UpdateOrgUnit::class)->handle($academic, ['kind' => OrgUnitKind::Division]),
+        'kind',
+        'Nexus usa Subdirección Académica como subdirección; no cambia de tipo.',
+    );
+
+    expect($academic->fresh()->kind)->toBe(OrgUnitKind::Subdireccion)
+        ->and(activitySince()->count())->toBe(0);
+});
+
+it('no cambia a un tipo que deja sin lugar sus nombramientos', function () {
+    $legacy = OrgUnit::factory()->create(['code' => 'SUB-OTRA', 'name' => 'Otra subdirección', 'kind' => OrgUnitKind::Subdireccion]);
+    $holder = User::factory()->create();
+    RoleAssignment::factory()->create(['user_id' => $holder->id, 'role' => Role::Subdireccion, 'org_unit_id' => $legacy->id]);
+
+    updateUnitInvalid(
+        fn () => app(UpdateOrgUnit::class)->handle($legacy, ['kind' => OrgUnitKind::Division]),
         'kind',
         'Tiene nombramientos de Subdirección Académica; ese puesto pide una unidad de tipo Subdirección.',
     );

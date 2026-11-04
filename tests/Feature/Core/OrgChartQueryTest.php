@@ -213,6 +213,7 @@ it('detail trae la ruta, los puestos de la unidad, sus hijas y los motivos de bl
         ->and($detail->lockedReason)->toBeNull()
         ->and($detail->moveBlocker)->toBeNull()
         ->and($detail->deactivationBlockers)->toBe([
+            'Nexus usa la Subdirección Académica: no se desactiva.',
             'Tiene 2 unidades hijas activas; muévelas o desactívalas primero.',
             'Tiene 2 nombramientos vigentes o por empezar; termínalos en Personas y puestos.',
         ])

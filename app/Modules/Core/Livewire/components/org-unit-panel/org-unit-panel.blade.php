@@ -34,7 +34,9 @@
                 </div>
             </div>
 
-            <p class="-mt-1 text-sm text-neutral" data-testid="unit-path">{{ implode(' › ', [...$detail->path, $unit->name]) }}</p>
+            @if ($detail->path !== [])
+                <p class="-mt-1 text-sm text-neutral" data-testid="unit-path">{{ implode(' › ', [...$detail->path, $unit->name]) }}</p>
+            @endif
 
             <section aria-labelledby="unit-titular-title">
                 <h3 id="unit-titular-title" class="{{ $label }} mb-2">Titular</h3>

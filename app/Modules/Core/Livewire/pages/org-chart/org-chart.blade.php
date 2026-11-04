@@ -72,7 +72,7 @@
                 @foreach ($chart->roots as $node)
                     <div @class([
                         'relative md:flex md:justify-center',
-                        'md:pb-6 md:after:absolute md:after:bottom-0 md:after:left-1/2 md:after:h-6 md:after:border-s-2 md:after:border-base-300' => $node->children !== [],
+                        'md:pb-6 md:after:absolute md:after:bottom-0 md:after:left-1/2 md:after:h-6 md:after:border-s-2 md:after:border-primary/40' => $node->children !== [],
                     ])>
                         <div class="md:w-60">
                             @include('core::org-chart.box', ['node' => $node, 'level' => 0])
@@ -82,12 +82,12 @@
                     @if ($node->children !== [])
                         <ul
                             data-testid="org-level-1"
-                            class="max-md:ms-2 max-md:mt-2 max-md:grid max-md:gap-2 max-md:border-s-2 max-md:border-base-300 max-md:ps-4 md:flex md:justify-center md:gap-4"
+                            class="max-md:ms-2 max-md:mt-2 max-md:grid max-md:gap-2 max-md:border-s-2 max-md:border-primary/40 max-md:ps-4 md:flex md:justify-center md:gap-4"
                         >
                             @foreach ($node->children as $child)
                                 <li
                                     wire:key="org-{{ $child->id }}"
-                                    class="relative min-w-0 max-md:before:absolute max-md:before:-left-4 max-md:before:top-6 max-md:before:w-3.5 max-md:before:border-t-2 max-md:before:border-base-300 max-md:last:after:absolute max-md:last:after:-left-[1.125rem] max-md:last:after:top-[1.625rem] max-md:last:after:-bottom-px max-md:last:after:w-0.5 max-md:last:after:bg-base-100 md:w-60 md:min-w-44 md:pt-6 md:before:absolute md:before:top-0 md:before:left-1/2 md:before:h-6 md:before:border-s-2 md:before:border-base-300 md:after:absolute md:after:top-0 md:after:-left-2 md:after:-right-2 md:after:border-t-2 md:after:border-base-300 md:first:after:left-1/2 md:last:after:right-1/2 md:only:after:hidden"
+                                    class="relative min-w-0 max-md:before:absolute max-md:before:-left-4 max-md:before:top-6 max-md:before:w-3.5 max-md:before:border-t-2 max-md:before:border-primary/40 max-md:last:after:absolute max-md:last:after:-left-[1.125rem] max-md:last:after:top-[1.625rem] max-md:last:after:-bottom-px max-md:last:after:w-0.5 max-md:last:after:bg-base-100 md:w-60 md:min-w-44 md:pt-6 md:before:absolute md:before:top-0 md:before:left-1/2 md:before:h-6 md:before:border-s-2 md:before:border-primary/40 md:after:absolute md:after:top-0 md:after:-left-2 md:after:-right-2 md:after:border-t-2 md:after:border-primary/40 md:first:after:left-1/2 md:last:after:right-1/2 md:only:after:hidden"
                                 >
                                     @include('core::org-chart.box', ['node' => $child, 'level' => 1])
                                     @include('core::org-chart.branch', ['nodes' => $child->children, 'level' => 2])
@@ -98,9 +98,9 @@
                 @endforeach
             </div>
 
-            <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-3 pt-3 pb-4 text-sm text-neutral md:px-5">
+            <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-3 pt-3 pb-4 text-sm text-neutral md:px-5" data-testid="org-legend">
                 <x-icon name="o-lock-closed" class="h-3.5 w-3.5" aria-hidden="true" />Se edita en Académico ·
-                <x-icon name="o-user" class="h-3.5 w-3.5" aria-hidden="true" /><span class="font-mono">n</span> personas en la unidad y en sus hijas
+                <x-icon name="o-user" class="h-3.5 w-3.5" aria-hidden="true" /><span class="font-mono">n</span> personas en la unidad y en las que cuelgan de ella
             </p>
         </section>
 
