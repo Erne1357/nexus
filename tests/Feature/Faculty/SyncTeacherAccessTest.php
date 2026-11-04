@@ -15,6 +15,7 @@ use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Activitylog\Models\Activity;
@@ -321,6 +322,60 @@ it('un docente que también es admin queda activo al darlo de baja, pero su jefa
         ->and($head->fresh()->valid_to->toDateString())->toBe(today()->subDay()->toDateString());
 
     expect(syncAccess($teacher->fresh()))->toBe(AccessSync::Unchanged);
+});
+
+/**
+ * Un docente de baja cuyo usuario tiene Administración programada desde `$from`, y Ana (admin) hasta `$anaTo`.
+ */
+function scheduledAdminTeacher(string $from, string $anaTo, bool $withBeto): Teacher
+{
+    $user = User::factory()->create(['username' => '1234567']);
+    RoleAssignment::factory()->create(['user_id' => $user->id, 'role' => Role::Admin, 'valid_from' => $from, 'valid_to' => null]);
+    RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::Admin, 'valid_from' => '2026-08-01', 'valid_to' => $anaTo]);
+
+    if ($withBeto) {
+        RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::Admin, 'valid_from' => '2026-01-01', 'valid_to' => null]);
+    }
+
+    return Teacher::factory()->inactive()->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+}
+
+it('P3: el docente queda dado de baja pero su usuario sigue activo si se necesita como admin', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    $teacher = scheduledAdminTeacher('2026-12-01', '2026-11-30', withBeto: false);
+    $before = Activity::query()->count();
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Unchanged)
+        ->and($teacher->user->fresh()->is_active)->toBeTrue()
+        ->and(Activity::query()->count())->toBe($before)
+        ->and(syncAccess($teacher->fresh()))->toBe(AccessSync::Unchanged)
+        ->and($teacher->user->fresh()->is_active)->toBeTrue();
+});
+
+it('AZ-S12: la baja sí desactiva al usuario con Administración programada si otro admin cubre los días que siguen', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    $teacher = scheduledAdminTeacher('2026-12-01', '2026-11-30', withBeto: true);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Updated)
+        ->and($teacher->user->fresh()->is_active)->toBeFalse();
+});
+
+it('AZ-S12: la baja toma el candado de los puestos de Administración antes que el del usuario', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    $teacher = scheduledAdminTeacher('2026-12-01', '2026-11-30', withBeto: true);
+    $statements = [];
+    DB::listen(function ($query) use (&$statements): void {
+        $statements[] = strtolower($query->sql);
+    });
+
+    syncAccess($teacher);
+
+    $lock = collect($statements)->search(fn (string $sql): bool => str_contains($sql, 'pg_advisory_xact_lock'));
+    $userRow = collect($statements)->search(fn (string $sql): bool => str_contains($sql, 'from "users"') && str_contains($sql, 'for update'));
+
+    expect($lock)->not->toBeFalse()
+        ->and($userRow)->not->toBeFalse()
+        ->and($lock)->toBeLessThan($userRow);
 });
 
 it('reactivar al docente reactiva su usuario sin tocar su contraseña', function () {

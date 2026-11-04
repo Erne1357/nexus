@@ -10,6 +10,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Models\Teacher;
@@ -39,7 +40,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   se abre otro (supuesto por confirmar). Cierra los alcances de `docente` con campus que quedaron de antes, con la
  *   regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
  * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026):
- *   desactiva su usuario, salvo que sea admin, y termina con fecha de ayer cada jefatura suya vigente o por
+ *   desactiva su usuario, salvo que sea admin vigente o que su Administración programada haga falta para que ningún
+ *   día se quede sin admin (AZ-S12 y P3, confirmado el 3 de noviembre de 2026: el docente queda de baja y el usuario
+ *   sigue activo; toma ADMIN_SEATS_LOCK antes del candado del usuario), y termina con fecha de ayer cada jefatura suya vigente o por
  *   empezar (supuesto por confirmar; EndDepartmentHead borra las que empiezan hoy o después). Sin usuario no hace
  *   nada: un docente inactivo no recibe usuario. Sus alcances de `docente` se quedan, para cuando se reactive.
  *
@@ -53,6 +56,7 @@ final class SyncTeacherAccess
     public function __construct(
         private readonly CreateStaffUser $createStaffUser,
         private readonly EndDepartmentHead $endDepartmentHead,
+        private readonly RoleAssignmentRules $rules,
     ) {}
 
     /**
@@ -108,10 +112,14 @@ final class SyncTeacherAccess
             return AccessSync::Unchanged;
         }
 
+        DB::select('select pg_advisory_xact_lock(hashtext(?))', [RoleAssignmentRules::ADMIN_SEATS_LOCK]);
+
         $user = User::query()->lockForUpdate()->findOrFail($teacher->user_id);
         $changed = false;
 
-        if ($user->is_active && ! $user->roleAssignments()->current()->where('role', Role::Admin)->exists()) {
+        if ($user->is_active
+            && ! $user->roleAssignments()->current()->where('role', Role::Admin)->exists()
+            && $this->rules->deactivationGap($user) === null) {
             $user->forceFill(['is_active' => false])->save();
 
             $this->logAccess($teacher, $user, ['is_active' => true], ['is_active' => false], ['desactivó su usuario']);
