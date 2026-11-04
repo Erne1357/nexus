@@ -2,9 +2,8 @@
 
 namespace App\Modules\Faculty\Actions;
 
-use App\Modules\Academic\Actions\EndDepartmentHead;
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Core\Actions\CreateStaffUser;
+use App\Modules\Core\Actions\EndRoleAssignment;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
@@ -14,7 +13,6 @@ use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Models\Teacher;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -43,19 +41,19 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   desactiva su usuario, salvo que sea admin vigente o que su Administración programada haga falta para que ningún
  *   día se quede sin admin (AZ-S12 y P3, confirmado el 3 de noviembre de 2026: el docente queda de baja y el usuario
  *   sigue activo; toma ADMIN_SEATS_LOCK antes del candado del usuario), y termina con fecha de ayer cada jefatura suya vigente o por
- *   empezar (supuesto por confirmar; EndDepartmentHead borra las que empiezan hoy o después). Sin usuario no hace
+ *   empezar (supuesto por confirmar; EndRoleAssignment quita las que empiezan hoy o después). Sin usuario no hace
  *   nada: un docente inactivo no recibe usuario. Sus alcances de `docente` se quedan, para cuando se reactive.
  *
  * Cada cambio deja su bitácora: la liga sobre el docente, el alta (CreateStaffUser), el acceso (activo, el
  * alcance de `docente` de todo el Tec y los campus de `docente` cerrados, valor anterior y nuevo) sobre el usuario
- * y cada jefatura terminada (EndDepartmentHead). Nunca registra contraseñas. Si cambió algo, avisa con
+ * y cada jefatura terminada (EndRoleAssignment). Nunca registra contraseñas. Si cambió algo, avisa con
  * TeacherAccessChanged después del commit. Quién puede lo deciden las Actions y pantallas que la llaman.
  */
 final class SyncTeacherAccess
 {
     public function __construct(
         private readonly CreateStaffUser $createStaffUser,
-        private readonly EndDepartmentHead $endDepartmentHead,
+        private readonly EndRoleAssignment $endRoleAssignment,
         private readonly RoleAssignmentRules $rules,
     ) {}
 
@@ -126,14 +124,14 @@ final class SyncTeacherAccess
             $changed = true;
         }
 
-        $heads = DepartmentHead::query()
-            ->where('user_id', $user->getKey())
-            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', today()->toDateString()))
+        $heads = $user->roleAssignments()
+            ->whereIn('role', Role::HEADSHIPS)
+            ->notEnded()
             ->get();
         $yesterday = today()->subDay()->toImmutable();
 
         foreach ($heads as $head) {
-            $this->endDepartmentHead->handle($head, $yesterday);
+            $this->endRoleAssignment->handle($head, $yesterday);
             $changed = true;
         }
 

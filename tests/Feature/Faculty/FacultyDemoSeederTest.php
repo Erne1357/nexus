@@ -130,22 +130,24 @@ it('todo docente activo tiene usuario con la contraseña por defecto y cambio ob
         ->and((bool) $user->must_change_password)->toBeTrue();
 });
 
-it('algunos docentes son jefe de proyecto docente de su departamento, con su rol y su alcance', function () {
+it('dos docentes por departamento y campus son jefe de proyecto docente, con su nombramiento', function () {
     seedDemoTeachers();
 
-    $heads = DB::table('department_heads')
-        ->join('teachers', 'teachers.user_id', '=', 'department_heads.user_id')
-        ->where('kind', 'jefe_proyecto_docente')
-        ->get();
+    $heads = DB::table('role_assignments')
+        ->join('teachers', 'teachers.user_id', '=', 'role_assignments.user_id')
+        ->where('role_assignments.role', 'jefe_proyecto_docente')
+        ->get(['role_assignments.user_id', 'role_assignments.org_unit_id', 'role_assignments.campus_id']);
 
     expect($heads)->not->toBeEmpty()
-        ->and(DB::table('role_assignments')->whereIn('user_id', $heads->pluck('user_id'))->where('role', 'jefe_proyecto_docente')->count())->toBe($heads->count());
+        ->and($heads->groupBy(fn (object $head): string => "{$head->org_unit_id}|{$head->campus_id}")->map->count()->max())->toBe(2)
+        ->and($heads->every(fn (object $head): bool => $head->campus_id !== null))->toBeTrue()
+        ->and(DB::table('department_heads')->count())->toBe(0);
 });
 
 it('volver a sembrar no duplica nada', function () {
     seedDemoTeachers();
 
-    $tables = ['teachers', 'teacher_departments', 'teacher_positions', 'teacher_availability', 'teacher_external_loads', 'teacher_subject_history', 'teacher_subject_qualifications', 'teacher_evaluations', 'users', 'department_heads', 'role_assignments'];
+    $tables = ['teachers', 'teacher_departments', 'teacher_positions', 'teacher_availability', 'teacher_external_loads', 'teacher_subject_history', 'teacher_subject_qualifications', 'teacher_evaluations', 'users', 'role_assignments'];
     $before = array_map(fn (string $table) => DB::table($table)->count(), $tables);
 
     seedDemoTeachers();

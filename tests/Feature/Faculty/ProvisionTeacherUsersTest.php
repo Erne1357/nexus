@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
@@ -89,9 +88,11 @@ it('una segunda corrida no cambia nada y solo deja su propia entrada', function 
 it('aplica la baja a un docente borrado cuyo usuario seguía activo, y repetirla no cambia nada', function () {
     $user = User::factory()->create(['username' => '3333333']);
     $teacher = Teacher::factory()->adscribedTo($this->department)->create(['employee_number' => '3333333', 'user_id' => $user->id]);
-    $head = DepartmentHead::factory()->create([
-        'department_id' => $this->department->id,
-        'user_id' => $user->id,
+    $head = RoleAssignment::factory()->for($user)->create([
+        'role' => Role::JefeDepartamento,
+        'org_unit_id' => $this->department->id,
+        'valid_from' => today()->subMonth()->toDateString(),
+        'valid_to' => null,
     ]);
     $teacher->delete();
 

@@ -1,11 +1,11 @@
 <?php
 
-use App\Modules\Academic\Actions\AppointDepartmentHead;
-use App\Modules\Academic\Enums\DepartmentHeadKind;
+use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\DepartmentHead;
+use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\ScopedContext;
@@ -15,6 +15,7 @@ use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
@@ -35,6 +36,22 @@ beforeEach(function () {
     $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     $this->ind = Department::factory()->create(['code' => 'IND', 'name' => 'Industrial']);
 });
+
+/**
+ * Nombra a `$user` jefatura del departamento con AppointRole, del día `$from` (y hasta `$to`, si lo hay).
+ */
+function appointHeadship(User $user, Department $department, Role $role, string $from, ?Campus $campus = null, ?string $to = null): RoleAssignment
+{
+    return app(AppointRole::class)->handle(
+        $user,
+        $role,
+        $campus,
+        OrgUnit::query()->findOrFail($department->id),
+        null,
+        CarbonImmutable::parse($from),
+        $to === null ? null : CarbonImmutable::parse($to),
+    );
+}
 
 function syncAccess(Teacher $teacher): AccessSync
 {
@@ -268,34 +285,60 @@ it('a un docente nuevo sin departamento le da usuario, rol y alcance', function 
 });
 
 it('dar de baja desactiva su usuario y termina su jefatura vigente', function () {
+    $this->travelTo('2026-11-03 10:00:00');
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
     syncAccess($teacher);
     $user = $teacher->fresh()->user;
-    $head = app(AppointDepartmentHead::class)->handle($this->sis, null, $user, DepartmentHeadKind::Jefe, today()->subMonth()->toImmutable());
-    $past = DepartmentHead::factory()->projectLead()->create([
-        'department_id' => $this->ind->id,
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, '2026-10-03');
+    $past = RoleAssignment::factory()->for($user)->create([
+        'role' => Role::JefeProyectoDocente,
+        'org_unit_id' => $this->ind->id,
         'campus_id' => $this->c2->id,
-        'user_id' => $user->id,
-        'valid_from' => today()->subYear()->toDateString(),
-        'valid_to' => today()->subMonths(6)->toDateString(),
+        'valid_from' => '2025-11-03',
+        'valid_to' => '2026-05-03',
     ]);
 
     $teacher->update(['is_active' => false]);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Updated);
 
-    $yesterday = today()->subDay()->toDateString();
     $deactivated = Activity::where('subject_id', $user->id)->where('description', 'like', '%desactivó%')->sole();
 
     expect($user->fresh()->is_active)->toBeFalse()
-        ->and($head->fresh()->valid_to->toDateString())->toBe($yesterday)
-        ->and(RoleAssignment::where('role', Role::JefeDepartamento)->sole()->valid_to->toDateString())->toBe($yesterday)
-        ->and($past->fresh()->valid_to->toDateString())->toBe(today()->subMonths(6)->toDateString())
+        ->and($head->fresh()->valid_to->toDateString())->toBe('2026-11-02')
+        ->and($past->fresh()->valid_to->toDateString())->toBe('2026-05-03')
         ->and(app(ScopedContext::class)->forUser($user->fresh())->heldRoles())->toBe([])
         ->and($deactivated->description)->toBe('Sincronizó el acceso del docente 1234567: desactivó su usuario')
         ->and($deactivated->attribute_changes->all())->toBe(['attributes' => ['is_active' => false], 'old' => ['is_active' => true]]);
 
     expect(syncAccess($teacher->fresh()))->toBe(AccessSync::Unchanged);
+});
+
+it('la baja quita la jefatura que empieza hoy', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+    syncAccess($teacher);
+    $user = $teacher->fresh()->user;
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, '2026-11-03');
+
+    $teacher->update(['is_active' => false]);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Updated)
+        ->and(RoleAssignment::query()->whereKey($head->id)->exists())->toBeFalse()
+        ->and($user->fresh()->is_active)->toBeFalse();
+});
+
+it('la baja no termina los puestos que no son jefaturas', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+    syncAccess($teacher);
+    $user = $teacher->fresh()->user;
+    $coordinator = RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => Career::factory()->create()->id, 'valid_from' => '2026-09-01', 'valid_to' => null]);
+
+    $teacher->update(['is_active' => false]);
+    syncAccess($teacher);
+
+    expect($coordinator->fresh()->valid_to)->toBeNull();
 });
 
 it('la baja de un docente sin departamento desactiva su usuario', function () {
@@ -311,7 +354,7 @@ it('la baja de un docente sin departamento desactiva su usuario', function () {
 it('un docente que también es admin queda activo al darlo de baja, pero su jefatura termina', function () {
     $user = User::factory()->admin()->create(['username' => '1234567']);
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567', 'user_id' => $user->id]);
-    $head = app(AppointDepartmentHead::class)->handle($this->sis, null, $user, DepartmentHeadKind::Jefe, today()->subMonth()->toImmutable());
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, today()->subMonth()->toDateString());
 
     $teacher->update(['is_active' => false]);
 
@@ -485,12 +528,12 @@ it('la baja borra también la jefatura que todavía no empieza, y al reactivarlo
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
     syncAccess($teacher);
     $user = $teacher->fresh()->user;
-    $head = app(AppointDepartmentHead::class)->handle($this->sis, null, $user, DepartmentHeadKind::Jefe, today()->addDays(5)->toImmutable());
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, today()->addDays(5)->toDateString());
 
     $teacher->update(['is_active' => false]);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Updated)
-        ->and(DepartmentHead::find($head->id))->toBeNull()
+        ->and(RoleAssignment::query()->whereKey($head->id)->exists())->toBeFalse()
         ->and(RoleAssignment::where('role', Role::JefeDepartamento)->exists())->toBeFalse();
 
     $teacher->update(['is_active' => true]);
