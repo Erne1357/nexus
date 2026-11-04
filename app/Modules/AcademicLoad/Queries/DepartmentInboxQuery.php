@@ -93,7 +93,6 @@ final class DepartmentInboxQuery
                     'review' => $review,
                     'subjects' => $requested->count(),
                     'groups' => (int) $requested->sum('requested_groups'),
-                    'expected' => (int) $requested->sum('expected_students'),
                     'rows' => $requested->values()->all(),
                     'anomalies' => $requested->filter(fn (ProposalItem $item): bool => $anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups) !== [])->count(),
                 ];

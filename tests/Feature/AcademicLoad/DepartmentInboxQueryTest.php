@@ -108,9 +108,9 @@ function inboxRow(CareerProposal $proposal, Subject $subject, int $expected, int
 }
 
 /**
- * Las carreras de la bandeja: [clave, estado, se decide, materias, grupos, esperados, comentario].
+ * Las carreras de la bandeja: [clave, estado, se decide, materias, grupos, comentario].
  *
- * @return list<array{0: string, 1: string, 2: bool, 3: int, 4: int, 5: int, 6: ?string}>
+ * @return list<array{0: string, 1: string, 2: bool, 3: int, 4: int, 5: ?string}>
  */
 function inboxCareersOf(DepartmentInbox $inbox): array
 {
@@ -120,7 +120,6 @@ function inboxCareersOf(DepartmentInbox $inbox): array
         $row['decidable'],
         $row['subjects'],
         $row['groups'],
-        $row['expected'],
         $row['review']?->comment,
     ], $inbox->careers);
 }
@@ -160,11 +159,11 @@ describe('con lo que piden varias carreras', function () {
 
     it('da las carreras ofrecidas con el estado de lo que piden y sus totales, pendientes primero', function () {
         expect(inboxCareersOf(inboxOf()))->toBe([
-            ['ISC', 'pending', true, 2, 3, 90, null],
-            ['IGE', 'returned', false, 1, 2, 20, 'Pide un grupo de Cálculo, no dos.'],
-            ['IIND', 'accepted', false, 1, 2, 40, null],
-            ['ARQ', 'not_submitted', false, 0, 0, 0, null],
-            ['IEM', 'not_submitted', false, 0, 0, 0, null],
+            ['ISC', 'pending', true, 2, 3, null],
+            ['IGE', 'returned', false, 1, 2, 'Pide un grupo de Cálculo, no dos.'],
+            ['IIND', 'accepted', false, 1, 2, null],
+            ['ARQ', 'not_submitted', false, 0, 0, null],
+            ['IEM', 'not_submitted', false, 0, 0, null],
         ]);
     });
 
@@ -253,11 +252,11 @@ describe('con lo que piden varias carreras', function () {
         $inbox = inboxOf($this->sc);
 
         expect(inboxCareersOf($inbox))->toBe([
-            ['IEM', 'pending', true, 1, 1, 30, null],
-            ['ISC', 'pending', true, 1, 1, 30, null],
-            ['ARQ', 'not_submitted', false, 0, 0, 0, null],
-            ['IGE', 'not_submitted', false, 0, 0, 0, null],
-            ['IIND', 'not_submitted', false, 0, 0, 0, null],
+            ['IEM', 'pending', true, 1, 1, null],
+            ['ISC', 'pending', true, 1, 1, null],
+            ['ARQ', 'not_submitted', false, 0, 0, null],
+            ['IGE', 'not_submitted', false, 0, 0, null],
+            ['IIND', 'not_submitted', false, 0, 0, null],
         ])->and(array_map(fn (array $row): string => $row['subject']->code, $inbox->subjects))->toHaveCount(2);
     });
 
@@ -296,8 +295,8 @@ it('una parte pendiente de una propuesta que otro departamento regresó se ve pe
     $inbox = inboxOf();
 
     expect(inboxCareersOf($inbox))->toBe([
-        ['ISC', 'pending', true, 1, 2, 60, null],
-        ['IIND', 'accepted', false, 1, 2, 40, null],
+        ['ISC', 'pending', true, 1, 2, null],
+        ['IIND', 'accepted', false, 1, 2, null],
     ])
         ->and($inbox->subjects[0]['parallels']->careers)->toBe([
             'IIND' => ['expected' => 40, 'requested' => 2, 'full' => 1, 'remainder' => 5],
@@ -331,7 +330,7 @@ it('no cuenta las propuestas de otro periodo ni de otro campus', function () {
 
     $inbox = inboxOf();
 
-    expect(inboxCareersOf($inbox))->toBe([['ISC', 'not_submitted', false, 0, 0, 0, null]])
+    expect(inboxCareersOf($inbox))->toBe([['ISC', 'not_submitted', false, 0, 0, null]])
         ->and($inbox->subjects)->toBe([]);
 });
 

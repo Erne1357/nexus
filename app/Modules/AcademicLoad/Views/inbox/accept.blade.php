@@ -4,8 +4,8 @@
 --}}
 <div class="space-y-4">
     <h2 id="accept-title" class="text-xl font-bold">Aceptar la parte de {{ $target['career']->code }}</h2>
-    <dl class="grid grid-cols-3 gap-3 rounded-box border border-base-300 px-4 py-3">
-        @foreach ([['Materias', $target['subjects']], ['Grupos', $target['groups']], ['Esperados', $target['expected']]] as [$label, $value])
+    <dl class="grid grid-cols-2 gap-3 rounded-box border border-base-300 px-4 py-3">
+        @foreach ([['Materias', $target['subjects']], ['Grupos', $target['groups']]] as [$label, $value])
             <div>
                 <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
                 <dd class="font-mono text-xl font-semibold tabular-nums">{{ $value }}</dd>

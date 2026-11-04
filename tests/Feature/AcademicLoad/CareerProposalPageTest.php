@@ -72,7 +72,7 @@ describe('coordinador', function () {
             ->assertSee('Borrador')
             ->assertSee('Cálculo Diferencial')
             ->assertSee('Redes de Computadoras')
-            ->assertViewHas('overview', fn ($overview): bool => $overview->totals === ['subjects' => 2, 'groups' => 3, 'expected' => 100]);
+            ->assertViewHas('overview', fn ($overview): bool => $overview->totals === ['subjects' => 2, 'groups' => 3]);
     });
 
     it('muestra la retícula por omisión y la tabla con ?vista=tabla; otro valor muestra la retícula', function () {

@@ -20,7 +20,7 @@
                     @if ($row['review'] === null)
                         {{ $row['proposal'] === null || $row['proposal']->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Draft ? 'Sin propuesta' : 'Sin materias de este departamento' }}
                     @else
-                        {{ $row['groups'] }} grupos · {{ $row['expected'] }} esperados · {{ $row['subjects'] }} {{ $row['subjects'] === 1 ? 'materia' : 'materias' }}
+                        {{ $row['groups'] }} grupos · {{ $row['subjects'] }} {{ $row['subjects'] === 1 ? 'materia' : 'materias' }}
                     @endif
                 </span>
                 @if ($row['correctionBy'] !== [])

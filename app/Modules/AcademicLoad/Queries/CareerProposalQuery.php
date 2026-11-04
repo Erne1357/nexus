@@ -156,7 +156,6 @@ final class CareerProposalQuery
             totals: [
                 'subjects' => $requested->count(),
                 'groups' => (int) $requested->sum('requested_groups'),
-                'expected' => (int) $requested->sum('expected_students'),
             ],
             pendingCatalogs: $pendingCatalogs,
             anomalies: ProposalAnomalies::fromSettings(),
