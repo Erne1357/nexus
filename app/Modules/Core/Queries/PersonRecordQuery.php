@@ -22,7 +22,8 @@ use Spatie\Activitylog\Models\Activity;
  * otro cubre los días que siguen).
  *
  * La bitácora trae solo las entradas que llevan `role_assignment_id` o `department_head_id`, así que el cambio de
- * perfil no entra.
+ * perfil no entra. Las jefaturas nombradas antes de 3.P8 llevan `department_head_id` en sus cambios, no en sus
+ * propiedades, y las terminadas entonces citan sus nombramientos en `role_scope_ids`.
  */
 final class PersonRecordQuery
 {
@@ -117,7 +118,8 @@ final class PersonRecordQuery
             ->where('subject_id', $person->getKey())
             ->where(fn (Builder $query) => $query
                 ->whereNotNull('properties->role_assignment_id')
-                ->orWhereNotNull('properties->department_head_id'))
+                ->orWhereNotNull('properties->department_head_id')
+                ->orWhereNotNull('attribute_changes->attributes->department_head_id'))
             ->with('causer')
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -125,7 +127,8 @@ final class PersonRecordQuery
     }
 
     /**
-     * Quién terminó cada nombramiento y cuándo: la entrada `updated` más reciente con su id.
+     * Quién terminó cada nombramiento y cuándo: la entrada `updated` más reciente con su id, en `role_assignment_id`
+     * o, si es de una jefatura terminada antes de 3.P8, en `role_scope_ids`.
      *
      * @param  Collection<int, Activity>  $entries
      * @return array<string, array{name: string, on: CarbonImmutable}>
@@ -135,10 +138,15 @@ final class PersonRecordQuery
         $endings = [];
 
         foreach ($entries as $entry) {
-            $id = $entry->properties->get('role_assignment_id');
+            if ($entry->event !== 'updated' || $entry->causer === null) {
+                continue;
+            }
 
-            if ($entry->event === 'updated' && $id !== null && ! isset($endings[$id]) && $entry->causer !== null) {
-                $endings[$id] = ['name' => $entry->causer->name, 'on' => $this->on($entry)];
+            $id = $entry->properties->get('role_assignment_id');
+            $ids = $id !== null ? [$id] : (array) $entry->properties->get('role_scope_ids', []);
+
+            foreach ($ids as $assignmentId) {
+                $endings[$assignmentId] ??= ['name' => $entry->causer->name, 'on' => $this->on($entry)];
             }
         }
 

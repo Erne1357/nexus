@@ -281,7 +281,8 @@ final class RoleAssignmentRules
     }
 
     /**
-     * La misma persona no ocupa dos veces el mismo puesto y alcance con fechas que se traslapan.
+     * La misma persona no ocupa dos veces el mismo puesto y alcance con fechas que se traslapan. Del jefe de proyecto
+     * docente lo garantiza también la base (`role_assignments_jpd_no_duplicate`).
      *
      * @throws ValidationException sobre `role`
      */
@@ -296,15 +297,24 @@ final class RoleAssignmentRules
             ->exists();
 
         if ($exists) {
-            $summary = $this->assignmentLabels->one(new RoleAssignment([
-                'role' => $role,
-                'campus_id' => $campus?->getKey(),
-                'org_unit_id' => $unit?->getKey(),
-                'career_id' => $careerId,
-            ]))->summary;
-
-            throw ValidationException::withMessages(['role' => "{$user->name} ya es {$summary} en esas fechas."]);
+            throw $this->duplicated($user, $role, $campus, $unit, $careerId);
         }
+    }
+
+    /**
+     * El error de la misma persona dos veces en el mismo puesto y alcance: lo lanza `ensureNotDuplicated()` y, si otra
+     * sesión escribió el duplicado entre la revisión y la escritura (SQLSTATE 23P01), AppointRole.
+     */
+    public function duplicated(User $user, Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId): ValidationException
+    {
+        $summary = $this->assignmentLabels->one(new RoleAssignment([
+            'role' => $role,
+            'campus_id' => $campus?->getKey(),
+            'org_unit_id' => $unit?->getKey(),
+            'career_id' => $careerId,
+        ]))->summary;
+
+        return ValidationException::withMessages(['role' => "{$user->name} ya es {$summary} en esas fechas."]);
     }
 
     /**

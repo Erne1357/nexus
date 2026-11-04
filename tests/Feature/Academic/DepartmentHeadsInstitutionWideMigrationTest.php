@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\DB;
 | La migración que vuelve al jefe de departamento uno por departamento para todo el Tec (confirmado el 30 de
 | octubre de 2026) convierte los datos que ya existen: el de la base de desarrollo con el masivo tiene un jefe por
 | departamento en Campus I y otro en Campus II, y una Subdirección por campus. La prueba regresa el esquema al de
-| antes con down() (primero el de la migración posterior que convirtió `role_scopes` en `role_assignments`), siembra
+| antes con down() (primero el de las migraciones posteriores: la que dejó `department_heads` de solo lectura y la que
+| convirtió `role_scopes` en `role_assignments`), siembra
 | ese estado con DB::table y corre up(). Todo queda en la forma de entonces: lo que cubre cada alcance se revisa en
 | sus filas, porque ScopedContext ya lee `role_assignments`.
 */
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-10-30 12:00', 'America/Ciudad_Juarez'));
 
+    (require base_path('app/Modules/Academic/Database/Migrations/2026_11_07_000001_merge_department_heads_into_role_assignments.php'))->down();
     (require base_path('app/Modules/Core/Database/Migrations/2026_11_04_000001_create_role_assignments_from_role_scopes.php'))->down();
 
     $this->migration = require base_path('app/Modules/Academic/Database/Migrations/2026_10_30_000101_make_department_heads_institution_wide.php');

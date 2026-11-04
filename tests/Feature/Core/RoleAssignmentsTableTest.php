@@ -188,6 +188,8 @@ describe('versión de autorización del usuario', function () {
 describe('migración desde role_scopes', function () {
     beforeEach(function () {
         $this->travelTo(CarbonImmutable::parse('2026-11-04 12:00', 'America/Ciudad_Juarez'));
+        // Primero la migración posterior, que agregó la exclusión de jefes de proyecto docente a `role_assignments`.
+        (require base_path('app/Modules/Academic/Database/Migrations/2026_11_07_000001_merge_department_heads_into_role_assignments.php'))->down();
         $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_04_000001_create_role_assignments_from_role_scopes.php');
         $this->migration->down();
 

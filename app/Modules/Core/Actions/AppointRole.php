@@ -28,8 +28,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * (inactivo no se nombra) y a la unidad, que relee activa para que una desactivación concurrente espere, y revisa a la
  * misma persona dos veces y el puesto exclusivo ocupado (AZ-S7), cuyo error dice quién lo ocupa. Si otra sesión gana
  * el puesto entre la revisión y la escritura, la exclusión de la base (SQLSTATE 23P01) responde con el mismo error sin
- * nombre; cualquier otro error de la base sigue igual. Todo error de regla es una ValidationException y no se escribe
- * nada.
+ * nombre; si escribe el mismo jefe de proyecto docente, con el de duplicado. Cualquier otro error de la base sigue
+ * igual. Todo error de regla es una ValidationException y no se escribe nada.
  *
  * Deja la bitácora sobre el usuario, recarga ScopedContext (quien se nombra a sí mismo ve su puesto en la misma
  * petición) y avisa con RoleAppointed después del commit.
@@ -67,16 +67,17 @@ final class AppointRole
             $this->rules->ensureSeatFree($role, $unit, $validFrom, $validTo);
 
             try {
-                $assignment = $locked->roleAssignments()->create([
+                // En su propio punto de guardado: si la base lo rechaza, la transacción sigue sirviendo para armar el error.
+                $assignment = DB::transaction(fn (): RoleAssignment => $locked->roleAssignments()->create([
                     'role' => $role,
                     'campus_id' => $campus?->getKey(),
                     'org_unit_id' => $unit?->getKey(),
                     'career_id' => $careerId,
                     'valid_from' => $validFrom,
                     'valid_to' => $validTo,
-                ]);
+                ]));
             } catch (QueryException $exception) {
-                throw $this->seatLost($exception, $role, $unit) ?? $exception;
+                throw $this->seatLost($exception, $locked, $role, $campus, $unit, $careerId) ?? $exception;
             }
 
             activity()
@@ -126,10 +127,11 @@ final class AppointRole
     }
 
     /**
-     * El rechazo de `role_assignments_one_jefe` o `role_assignments_one_subdireccion` (SQLSTATE 23P01) como error de
-     * validación; cualquier otro, nulo.
+     * El rechazo de una exclusión (SQLSTATE 23P01) como el error de validación de su regla:
+     * `role_assignments_one_jefe` o `role_assignments_one_subdireccion`, el puesto ocupado (AZ-S7);
+     * `role_assignments_jpd_no_duplicate`, la misma persona dos veces. Cualquier otro, nulo.
      */
-    private function seatLost(QueryException $exception, Role $role, ?OrgUnit $unit): ?ValidationException
+    private function seatLost(QueryException $exception, User $user, Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId): ?ValidationException
     {
         if ($unit === null || (string) ($exception->errorInfo[0] ?? $exception->getCode()) !== '23P01') {
             return null;
@@ -137,10 +139,10 @@ final class AppointRole
 
         $message = $exception->getMessage();
 
-        if (str_contains($message, 'role_assignments_one_jefe') || str_contains($message, 'role_assignments_one_subdireccion')) {
-            return $this->rules->seatTaken($role, $unit);
-        }
-
-        return null;
+        return match (true) {
+            str_contains($message, 'role_assignments_one_jefe'), str_contains($message, 'role_assignments_one_subdireccion') => $this->rules->seatTaken($role, $unit),
+            str_contains($message, 'role_assignments_jpd_no_duplicate') => $this->rules->duplicated($user, $role, $campus, $unit, $careerId),
+            default => null,
+        };
     }
 }

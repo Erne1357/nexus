@@ -129,6 +129,34 @@ it('la bitácora solo trae entradas de nombramientos', function () {
     expect(array_column($log, 'description'))->toBe(['Nombró a Rosa Ruiz como Coordinador de carrera · ISC · C2']);
 });
 
+it('la bitácora trae las jefaturas nombradas antes de 3.P8', function () {
+    activity()->performedOn($this->rosa)->causedBy($this->admin)->event('created')
+        ->withChanges(['attributes' => ['department_head_id' => fakeKey(1), 'kind' => 'jefe', 'department_id' => $this->systems->id]])
+        ->log('Nombró a Rosa Ruiz jefe de departamento de Sistemas y Computación');
+    activity()->performedOn($this->rosa)->event('created')->withChanges(['attributes' => ['role' => 'docente']])->log('Otra cosa');
+
+    $log = app(PersonRecordQuery::class)->for($this->rosa)->log;
+
+    expect(array_column($log, 'description'))->toBe(['Nombró a Rosa Ruiz jefe de departamento de Sistemas y Computación'])
+        ->and($log[0]['by'])->toBe('Ada Admin');
+});
+
+it('Terminado por también sale de las jefaturas terminadas antes de 3.P8', function () {
+    $assignment = giveRole($this->rosa, Role::JefeDepartamento, '2026-01-01', '2026-10-31', ['org_unit_id' => $this->systems->id]);
+    $this->travelTo('2026-10-20 10:00:00');
+    activity()->performedOn($this->rosa)->causedBy($this->admin)->event('updated')
+        ->withChanges(['attributes' => ['valid_to' => '2026-10-31'], 'old' => ['valid_to' => null]])
+        ->withProperties(['department_head_id' => fakeKey(1), 'role_scope_ids' => [$assignment->id]])
+        ->log('Terminó la jefatura de Rosa Ruiz como jefe de departamento de Sistemas y Computación');
+    $this->travelTo('2026-11-03 10:00:00');
+
+    $row = app(PersonRecordQuery::class)->for($this->rosa)->assignments[0];
+
+    expect($row['assignment']->id)->toBe($assignment->id)
+        ->and($row['endedBy']['name'])->toBe('Ada Admin')
+        ->and($row['endedBy']['on']->toDateString())->toBe('2026-10-20');
+});
+
 it('la bitácora trae las 10 últimas', function () {
     foreach (range(1, 12) as $number) {
         activity()->performedOn($this->rosa)->event('updated')->withProperties(['role_assignment_id' => fakeKey($number)])->log("Entrada {$number}");
