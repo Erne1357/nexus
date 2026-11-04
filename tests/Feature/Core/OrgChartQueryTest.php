@@ -230,7 +230,7 @@ it('detail trae la ruta, los puestos de la unidad, sus hijas y los motivos de bl
     $department = $this->query->detail($systems->id);
 
     expect($department->path)->toBe(['Dirección', 'Subdirección Académica'])
-        ->and($department->titularNote)->toBe('Sin jefe vigente. El jefe se nombra en la ficha del docente.')
+        ->and($department->titularNote)->toBe('Sin jefe vigente. El jefe se nombra en la ficha del docente, en «Personas y puestos» o aquí.')
         ->and($department->lockedReason)->toBe('Es un departamento académico: su nombre, su clave y su estado se editan en Académico › Departamentos.')
         ->and($department->moveBlocker)->toBe('Un departamento académico no se mueve desde el Organigrama.');
 
@@ -294,4 +294,64 @@ it('la unidad huérfana de un departamento aparece con candado bajo su madre', f
         ->and(chartNode($chart, 'HUERFANO'))->locked->toBeTrue()->missingTitular->toBeTrue()
         ->and($chart->headless)->toBe(1)
         ->and($this->query->detail($id)->lockedReason)->not->toBeNull();
+});
+
+it('detail da por puesto su id, su fin, su motivo para no terminarse y su primer último día posible', function () {
+    $department = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id]);
+    $head = RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeDepartamento, 'org_unit_id' => $department->id, 'valid_from' => '2026-01-01', 'valid_to' => '2027-06-30']);
+
+    $row = $this->query->detail($department->id)->assignments[0];
+
+    expect($row['id'])->toBe($head->id)
+        ->and($row['to']->toDateString())->toBe('2027-06-30')
+        ->and($row['endBlocker'])->toBeNull()
+        ->and($row['earliestLastDay']->toDateString())->toBe('2026-11-03');
+});
+
+it('detail dice por qué no se nombra sobre la unidad: sin puesto que la admita, o inactiva', function () {
+    $inactive = OrgUnit::factory()->inactive()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id, 'name' => 'Departamento Dormido']);
+    $active = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id]);
+
+    $root = $this->query->detail($this->root->id);
+    $dormant = $this->query->detail($inactive->id);
+    $open = $this->query->detail($active->id);
+
+    expect($root->appointRoles)->toBe([])
+        ->and($root->appointBlocker)->toBe('Ningún puesto se nombra sobre esta unidad.')
+        ->and($dormant->appointBlocker)->toBe('Departamento Dormido está inactiva.')
+        ->and($open->appointRoles)->toBe([Role::JefeDepartamento, Role::JefeProyectoDocente])
+        ->and($open->appointBlocker)->toBeNull();
+});
+
+it('assignmentOf no encuentra un nombramiento de otra unidad ni uno ya terminado', function () {
+    $department = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id]);
+    $other = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id]);
+    $live = RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeDepartamento, 'org_unit_id' => $department->id, 'valid_from' => '2026-01-01']);
+    $ended = RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeDepartamento, 'org_unit_id' => $department->id, 'valid_from' => '2025-01-01', 'valid_to' => '2025-12-31']);
+
+    expect($this->query->assignmentOf($department, $live->id)->id)->toBe($live->id);
+    expect(fn () => $this->query->assignmentOf($other, $live->id))->toThrow(ModelNotFoundException::class);
+    expect(fn () => $this->query->assignmentOf($department, $ended->id))->toThrow(ModelNotFoundException::class);
+});
+
+it('detail hace las mismas consultas con un nombramiento que con varios', function () {
+    $department = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id]);
+    $count = function () use ($department): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->query->detail($department->id);
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $campus = Campus::factory()->create();
+    RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeProyectoDocente, 'campus_id' => $campus->id, 'org_unit_id' => $department->id, 'valid_from' => '2026-01-01']);
+    $one = $count();
+
+    foreach (range(1, 4) as $i) {
+        RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeProyectoDocente, 'campus_id' => $campus->id, 'org_unit_id' => $department->id, 'valid_from' => '2026-01-01']);
+    }
+
+    expect($count())->toBe($one);
 });

@@ -53,25 +53,7 @@
 
     @unless ($ended)
         @if ($endingId === $assignment->id)
-            <form wire:submit="end" class="mt-3 space-y-2 rounded border border-base-300 bg-base-200/60 p-3" data-testid="end-box">
-                <div class="flex flex-wrap items-end gap-2">
-                    <x-input label="Fecha de fin" name="lastDay" type="date" wire:model="lastDay" class="max-md:h-11" />
-                    <x-button label="Terminar nombramiento" type="submit" class="btn-primary btn-sm max-md:h-11" spinner="end" data-testid="end-submit" />
-                    <x-button label="Cancelar" wire:click="cancelEnd" class="btn-outline btn-sm max-md:h-11" />
-                </div>
-
-                @if ($row['earliestLastDay'] !== null && $row['earliestLastDay']->isAfter(today()))
-                    <p class="text-sm text-neutral" data-testid="end-earliest">Terminarlo antes dejaría días sin admin: el primer último día posible es el {{ $row['earliestLastDay']->format('d/m/Y') }}.</p>
-                @endif
-
-                <p class="text-sm text-neutral">
-                    @if ($status === \App\Modules\Core\Enums\AssignmentStatus::Scheduled)
-                        Todavía no empieza: si la fecha de fin es anterior a su inicio, el nombramiento se quita y queda en la bitácora.
-                    @else
-                        El puesto deja de ejercerse después de esa fecha. Queda en el historial y en la bitácora.
-                    @endif
-                </p>
-            </form>
+            @include('core::people.end-box', ['status' => $status, 'earliestLastDay' => $row['earliestLastDay']])
         @else
             <div class="mt-3 flex flex-col items-start gap-1">
                 @if ($row['endBlocker'] === null)

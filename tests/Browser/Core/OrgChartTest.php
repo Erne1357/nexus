@@ -107,6 +107,52 @@ it('un departamento académico se ve con candado y sus acciones deshabilitadas',
         ->assertNoJavaScriptErrors();
 });
 
+it('el admin nombra al jefe de un departamento desde el panel y lo termina', function () {
+    User::factory()->create(['username' => 'rosa', 'name' => 'Rosa Medina Torres']);
+
+    $page = signInToOrgChart('admin')
+        ->navigate('/org-chart')
+        ->resize(1440, 900)
+        ->click('@org-unit-EE')
+        ->waitForText('Nadie tiene un puesto vigente aquí.')
+        ->click('@unit-appoint')
+        ->waitForText('Nombrar a alguien en Eléctrica y Electrónica')
+        ->fill('findPerson', 'Rosa')
+        ->waitForText('Rosa Medina Torres')
+        ->click('@appoint-pick-rosa')
+        ->waitForText('Cambiar')
+        ->screenshot(filename: 'org-chart-appoint-form-1440')
+        ->click('@appoint-submit')
+        ->waitForText('Nombramiento creado')
+        ->assertSeeIn('@unit-assignments', 'Rosa Medina Torres')
+        ->assertNoJavaScriptErrors();
+
+    expect(User::where('username', 'rosa')->sole()->roleAssignments()->sole())
+        ->role->toBe(Role::JefeDepartamento)
+        ->org_unit_id->toBe(OrgUnit::where('code', 'EE')->value('id'));
+
+    $page->resize(1440, 900)
+        ->screenshot(filename: 'org-chart-appoint-1440')
+        ->click('[data-testid^="end-"]')
+        ->waitForText('Terminar nombramiento')
+        ->screenshot(filename: 'org-chart-end-box-1440')
+        ->click('@end-submit')
+        ->waitForText('Nombramiento terminado')
+        ->assertNoJavaScriptErrors();
+
+    $page->resize(390, 844)
+        ->click('@unit-appoint')
+        ->waitForText('Nombrar a alguien en Eléctrica y Electrónica')
+        ->assertScript('document.documentElement.scrollWidth <= window.innerWidth')
+        ->screenshot(filename: 'org-chart-appoint-form-390')
+        ->click('dialog[open] button:has-text("Cancelar")')
+        ->assertScript('document.documentElement.scrollWidth <= window.innerWidth')
+        ->screenshot(filename: 'org-chart-panel-390')
+        ->assertNoJavaScriptErrors();
+
+    expect(User::where('username', 'rosa')->sole()->roleAssignments()->sole()->valid_to)->not->toBeNull();
+});
+
 it('en celular el diagrama es una lista con rieles', function () {
     $page = signInToOrgChart('admin')
         ->resize(390, 844)
