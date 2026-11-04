@@ -43,14 +43,15 @@ enum ProposalTileState: string
     }
 
     /**
-     * El icono del mosaico y de la leyenda; «con grupos» no lleva.
+     * El icono del mosaico y de la leyenda; «con grupos» no lleva. Con toda la propuesta bloqueada (`$proposalLocked`:
+     * enviada o aceptada), la aceptada lleva la palomita: el candado no diría nada distinto en cada mosaico.
      */
-    public function icon(): ?string
+    public function icon(bool $proposalLocked = false): ?string
     {
         return match ($this) {
             self::WithGroups => null,
             self::NoGroups => 'o-minus-circle',
-            self::Accepted => 'o-lock-closed',
+            self::Accepted => $proposalLocked ? 'o-check-circle' : 'o-lock-closed',
             self::Returned => 'o-arrow-uturn-left',
         };
     }

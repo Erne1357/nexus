@@ -75,6 +75,16 @@ new #[Title('Propuesta de carrera')] class extends Component
     #[Locked]
     public ?int $chain = null;
 
+    /**
+     * Las filas guardadas desde el último cambio del filtro de grupos, de la vista o del departamento: la tabla las
+     * deja a la vista aunque ya no cumplan el filtro, para que no desaparezcan mientras se capturan (y el foco y el
+     * aviso «Guardado» tengan dónde quedarse).
+     *
+     * @var list<string>
+     */
+    #[Locked]
+    public array $editedRows = [];
+
     /** Id de la carrera elegida; '' es la primera que puede ver. */
     #[Url(as: 'carrera')]
     public string $careerId = '';
@@ -144,7 +154,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     public function updatedCareerId(Actor $context, CareerProposalQuery $proposals): void
     {
-        $this->reset('department', 'onlyDepartment', 'chain', 'itemId', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
+        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'itemId', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
         $this->resolve($context, $proposals);
     }
 
@@ -152,8 +162,17 @@ new #[Title('Propuesta de carrera')] class extends Component
     {
         $this->returnedAt = null;
         $this->chain = null;
+        $this->editedRows = [];
         $this->view = in_array($view, self::VIEWS, true) ? $view : 'reticula';
         $this->cellErrors = [];
+    }
+
+    /**
+     * «Mostrar solo» cambia qué filas deja la tabla: las guardadas dejan de quedarse a la vista.
+     */
+    public function updatedOnlyDepartment(): void
+    {
+        $this->editedRows = [];
     }
 
     /**
@@ -164,6 +183,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->department = $this->department === $code ? '' : $code;
         $this->returnedAt = null;
         $this->chain = null;
+        $this->editedRows = [];
 
         if ($this->department === '') {
             $this->onlyDepartment = false;
@@ -178,6 +198,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     {
         $this->groupsFilter = in_array($filter, self::GROUP_FILTERS, true) ? $filter : '';
         $this->chain = null;
+        $this->editedRows = [];
     }
 
     /**
@@ -201,7 +222,7 @@ new #[Title('Propuesta de carrera')] class extends Component
             return;
         }
 
-        $this->reset('department', 'onlyDepartment', 'groupsFilter', 'returnedAt');
+        $this->reset('department', 'onlyDepartment', 'groupsFilter', 'returnedAt', 'editedRows');
     }
 
     /**
@@ -226,6 +247,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->returnedAt = $next;
         $this->chain = null;
         $this->groupsFilter = '';
+        $this->editedRows = [];
 
         if ($this->view === 'tabla') {
             $this->onlyDepartment = true;
@@ -278,6 +300,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         if ($this->applyChange($update, $item, $this->expected_students, $this->requested_groups, $this->notes)) {
+            $this->keepRow($item);
             $this->showDrawer = false;
             $this->success('Materia guardada', e($item->load(['subject' => fn ($query) => $query->withTrashed()])->subject->code));
         }
@@ -315,6 +338,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         );
 
         if ($saved) {
+            $this->keepRow($item);
             unset($this->cellErrors["{$item->id}.expected_students"], $this->cellErrors["{$item->id}.requested_groups"]);
             $this->dispatch('cell-saved', id: $item->id, field: $field);
         }
@@ -495,6 +519,16 @@ new #[Title('Propuesta de carrera')] class extends Component
         return $proposal->loadMissing(['term', 'career' => fn ($query) => $query->withTrashed()]);
     }
 
+    /**
+     * Deja a la vista de la tabla la fila guardada aunque ya no cumpla el filtro (`editedRows`).
+     */
+    private function keepRow(ProposalItem $item): void
+    {
+        if (! in_array($item->id, $this->editedRows, true)) {
+            $this->editedRows[] = $item->id;
+        }
+    }
+
     private function applyChange(UpdateProposalItem $update, ProposalItem $item, int $expected, int $groups, ?string $notes, ?string $cell = null): bool
     {
         try {
@@ -660,7 +694,8 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Las filas de la tabla por semestre: las del filtro de grupos y, con «Mostrar solo», del departamento elegido.
+     * Las filas de la tabla por semestre: las del filtro de grupos y, con «Mostrar solo», del departamento elegido,
+     * más las que se guardaron desde el último cambio de filtro (`editedRows`).
      *
      * @return array<int, list<ProposalItem>>
      */
@@ -672,8 +707,10 @@ new #[Title('Propuesta de carrera')] class extends Component
             return $overview->semesters;
         }
 
+        $edited = array_flip($this->editedRows);
+
         return array_filter(array_map(
-            fn (array $items): array => array_values(array_filter($items, fn (ProposalItem $item): bool => $this->matches($item, $department))),
+            fn (array $items): array => array_values(array_filter($items, fn (ProposalItem $item): bool => isset($edited[$item->id]) || $this->matches($item, $department))),
             $overview->semesters,
         ));
     }

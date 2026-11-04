@@ -6,7 +6,8 @@
 
     Cada mosaico lleva la franja de su cadena (`$chains['of']`, la misma franja de la retícula del alumno) y el tinte
     de su estado (ProposalTileState, en `data-tone`): regresada en error, aceptada en éxito con candado (o palomita si
-    toda la propuesta está bloqueada, `$generalLock`), sin grupos en advertencia punteada y con grupos neutra. Dice, de
+    toda la propuesta está bloqueada, `$generalLock`, en el mosaico y en la leyenda), sin grupos en advertencia
+    punteada y con grupos neutra. Dice, de
     arriba abajo, su clave y el icono de su estado, el nombre, «Eleg. N · Esp. N» y, al pie, «Grupos N» en Mono de
     15 px, el código del departamento solo si no es el mayoritario de la carrera (`$majority`) y el conteo de
     anomalías.
@@ -24,10 +25,13 @@
         x-on:keydown.escape.window="if (($wire.chain !== null || $wire.department !== '' || $wire.groupsFilter !== '') && ! $wire.showDrawer && ! $wire.showSubmit && document.body.dataset.menu !== 'open' && ! document.querySelector('dialog[open]')) { $wire.clearHighlight() }">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-neutral" data-testid="state-legend">
             @foreach ($tileStates as $state)
+                @php
+                    $icon = $state->icon($generalLock !== null);
+                @endphp
                 <span class="inline-flex items-center gap-1">
-                    <span @class(['inline-flex w-6 h-6 shrink-0 items-center justify-center rounded border', $state->tileClasses()]) aria-hidden="true">
-                        @if ($state->icon())
-                            <x-icon :name="$state->icon()" class="w-4 h-4" />
+                    <span @class(['inline-flex w-6 h-6 shrink-0 items-center justify-center rounded border', $state->tileClasses()]) aria-hidden="true" data-testid="state-{{ $state->value }}" data-icon="{{ $icon }}">
+                        @if ($icon)
+                            <x-icon :name="$icon" class="w-4 h-4" />
                         @endif
                     </span>
                     {{ $state->label() }}
@@ -48,6 +52,12 @@
                         @php
                             $code = $item->subject->department->code;
                             $state = \App\Modules\AcademicLoad\Enums\ProposalTileState::of($parts[$item->subject->department_id], $item->requested_groups);
+                            $icon = $state->icon($generalLock !== null);
+                            $stateText = match ($state) {
+                                \App\Modules\AcademicLoad\Enums\ProposalTileState::Returned => 'Regresada por '.$code,
+                                \App\Modules\AcademicLoad\Enums\ProposalTileState::Accepted => 'Aceptada por '.$code.($generalLock === null ? ': ya no cambia' : ''),
+                                default => 'Sin grupos',
+                            };
                             $anomalies = $overview->anomaliesFor($item);
                             $specialty = $overview->specialtyFor($item);
                             $classes = Illuminate\Support\Arr::toCssClasses([
@@ -66,20 +76,13 @@
                             :data-on-chain="isset($highlight['marked'][$item->id]) ? '' : null"
                             :title="$title !== '' ? $title : null" data-opener data-testid="tile-{{ $item->subject->code }}" data-part="{{ $parts[$item->subject->department_id] }}" data-tone="{{ $state->value }}">
                             <x-slot:icon>
-                                @if ($state === \App\Modules\AcademicLoad\Enums\ProposalTileState::Returned)
-                                    <x-icon name="o-arrow-uturn-left" class="w-4 h-4 shrink-0" aria-hidden="true" />
-                                    <span class="sr-only">Regresada por {{ $code }}</span>
-                                @elseif ($state === \App\Modules\AcademicLoad\Enums\ProposalTileState::Accepted)
-                                    @if ($generalLock === null)
-                                        <x-icon name="o-lock-closed" class="w-4 h-4 shrink-0" aria-hidden="true" data-lock />
-                                        <span class="sr-only">Aceptada por {{ $code }}: ya no cambia</span>
+                                @if ($icon)
+                                    @if ($icon === 'o-lock-closed')
+                                        <x-icon :name="$icon" class="w-4 h-4 shrink-0" aria-hidden="true" data-lock />
                                     @else
-                                        <x-icon name="o-check-circle" class="w-4 h-4 shrink-0" aria-hidden="true" />
-                                        <span class="sr-only">Aceptada por {{ $code }}</span>
+                                        <x-icon :name="$icon" class="w-4 h-4 shrink-0" aria-hidden="true" />
                                     @endif
-                                @elseif ($state === \App\Modules\AcademicLoad\Enums\ProposalTileState::NoGroups)
-                                    <x-icon name="o-minus-circle" class="w-4 h-4 shrink-0" aria-hidden="true" />
-                                    <span class="sr-only">Sin grupos</span>
+                                    <span class="sr-only">{{ $stateText }}</span>
                                 @endif
                             </x-slot:icon>
                             <x-slot:requisites class="flex items-baseline" data-testid="figures-{{ $item->subject->code }}" title="Elegibles {{ $item->eligible_students }} · Esperados {{ $item->expected_students }}"><span class="truncate"><span class="min-[1600px]:hidden">El.</span><span class="max-[1599px]:hidden">Eleg.</span> <span class="font-mono">{{ $item->eligible_students }}</span> · <span class="min-[1600px]:hidden">Es.</span><span class="max-[1599px]:hidden">Esp.</span> <span class="font-mono">{{ $item->expected_students }}</span></span></x-slot:requisites>

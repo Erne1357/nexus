@@ -833,6 +833,28 @@ describe('retícula con estados, filtro de grupos y marcas (maqueta C)', functio
             ->assertDontSeeHtml('data-testid="row-SCD-1027"');
     });
 
+    it('en la tabla filtrada, la fila que se edita sigue a la vista hasta cambiar el filtro, la vista o el departamento', function () {
+        $page = proposalPageAs($this->coordinator, ['vista' => 'tabla', 'grupos' => 'con'])
+            ->call('saveCell', $this->networks->id, 'requested_groups', '0')
+            ->assertDispatched('cell-saved', id: $this->networks->id, field: 'requested_groups')
+            ->assertSeeHtml('data-testid="row-SCD-1015"');
+
+        expect($this->networks->fresh()->requested_groups)->toBe(0);
+
+        $page->call('filterGroups', 'con')->assertDontSeeHtml('data-testid="row-SCD-1015"');
+
+        $page->call('edit', $this->calculus->id)->set('requested_groups', 0)->call('save')
+            ->assertSeeHtml('data-testid="row-ACF-0901"')
+            ->call('pickDepartment', 'CB')
+            ->assertDontSeeHtml('data-testid="row-ACF-0901"');
+
+        proposalPageAs($this->coordinator, ['vista' => 'tabla', 'grupos' => 'sin'])
+            ->call('saveCell', $this->empty->id, 'requested_groups', '1')
+            ->assertSeeHtml('data-testid="row-SCD-1027"')
+            ->call('setView', 'tabla')
+            ->assertDontSeeHtml('data-testid="row-SCD-1027"');
+    });
+
     it('un departamento elegido marca sus materias como una cadena y la barra dice cuántas son y sus grupos', function () {
         $html = proposalPageAs($this->coordinator, ['depto' => 'SC'])->html();
 
@@ -891,6 +913,18 @@ describe('retícula con estados, filtro de grupos y marcas (maqueta C)', functio
             ->and($html)->toContain('<span class="sr-only">Sin grupos</span>')
             ->toContain('<span class="sr-only">Aceptada por CB: ya no cambia</span>')
             ->toContain('<span class="sr-only">Regresada por SC</span>');
+    });
+
+    it('la leyenda de «Aceptada por el departamento» lleva el mismo icono que sus mosaicos, también con toda la propuesta bloqueada', function () {
+        ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
+
+        $legend = fn (): string => proposalPageTag(proposalPageAs($this->coordinator)->html(), 'state-accepted');
+
+        expect($legend())->toContain('data-icon="o-lock-closed"');
+
+        $this->proposal->update(['status' => ProposalStatus::Submitted]);
+
+        expect($legend())->toContain('data-icon="o-check-circle"');
     });
 
     it('pinta la franja de su cadena en cada mosaico y la leyenda de cadenas resalta una por encima del departamento', function () {

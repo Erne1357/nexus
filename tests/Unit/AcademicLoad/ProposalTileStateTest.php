@@ -28,3 +28,10 @@ it('cada estado tiene su relleno, su icono y su nombre en la leyenda, en el orde
         ['returned', 'border-error/40 bg-error/10 text-error', 'o-arrow-uturn-left', 'Regresada por el departamento'],
     ]);
 });
+
+it('con toda la propuesta bloqueada, la aceptada lleva la palomita en lugar del candado y los demás no cambian', function () {
+    expect(ProposalTileState::Accepted->icon(proposalLocked: true))->toBe('o-check-circle')
+        ->and(ProposalTileState::Returned->icon(proposalLocked: true))->toBe('o-arrow-uturn-left')
+        ->and(ProposalTileState::NoGroups->icon(proposalLocked: true))->toBe('o-minus-circle')
+        ->and(ProposalTileState::WithGroups->icon(proposalLocked: true))->toBeNull();
+});
