@@ -4,6 +4,7 @@ use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Actions\EndRoleAssignment;
 use App\Modules\Core\Enums\AssignmentEnding;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Livewire\Concerns\AppointsRoles;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Queries\AssignmentLabels;
 use App\Modules\Core\Queries\PeopleQuery;
@@ -13,7 +14,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -26,13 +26,13 @@ use Mary\Traits\Toast;
  * puestos. Nombrar y terminar los hacen AppointRole y EndRoleAssignment, que hacen cumplir las reglas del alcance
  * (RoleAssignmentRules): sus errores salen junto al campo.
  *
- * Aquí solo se nombran y terminan Administración, Subdirección Académica y Coordinador (AZ-S11): el docente y las
- * jefaturas se ven de solo lectura, con el aviso de dónde se manejan, aunque la llamada llegue forzada desde el
- * navegador. El admin sí puede terminar su propio puesto de Administración si otro cubre los días que siguen; si no, queda deshabilitado con su motivo (AZ-S12), y quien pierde así su puesto vuelve a Inicio. Solo la ve el admin con ese perfil
+ * Aquí se nombran y terminan todos los puestos salvo el de docente (AZ-S11), que se ve de solo lectura con el aviso de
+ * dónde se maneja, aunque la llamada llegue forzada desde el navegador. El admin sí puede terminar su propio puesto de Administración si otro cubre los días que siguen; si no, queda deshabilitado con su motivo (AZ-S12), y quien pierde así su puesto vuelve a Inicio. Solo la ve el admin con ese perfil
  * activo (RoleAssignmentPolicy); el componente autoriza en mount(), al renderizar y en cada método público.
  */
 new #[Title('Ficha de la persona')] class extends Component
 {
+    use AppointsRoles;
     use Toast;
 
     /** La persona de la ficha. El navegador no la puede cambiar. */
@@ -40,19 +40,6 @@ new #[Title('Ficha de la persona')] class extends Component
     public string $personId = '';
 
     public bool $showModal = false;
-
-    /** El puesto, el campus, la unidad y la carrera del modal «Nombrar»; el servidor solo usa los que el puesto pide. */
-    public string $role = '';
-
-    public string $campus = '';
-
-    public string $unit = '';
-
-    public string $career = '';
-
-    public string $from = '';
-
-    public string $to = '';
 
     /** El nombramiento que se está terminando. El navegador no lo puede cambiar. */
     #[Locked]
@@ -93,7 +80,7 @@ new #[Title('Ficha de la persona')] class extends Component
         return [
             'record' => $records->for($person),
             'canAppoint' => $person->is_active,
-            'offered' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], $this->offered($rules)),
+            'offered' => $this->offeredOptions($rules),
             'roleCase' => $role,
             'options' => $role === null ? ['campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus)),
             'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente)),
@@ -111,12 +98,9 @@ new #[Title('Ficha de la persona')] class extends Component
     {
         $this->authorize('viewAny', RoleAssignment::class);
 
-        if ($property === 'role') {
-            $this->resetValidation();
-            $this->reset('campus', 'unit', 'career');
-        } elseif ($property === 'campus') {
-            $this->reset('career');
-        } elseif ($property === 'whoRole') {
+        $this->appointFieldUpdated($property);
+
+        if ($property === 'whoRole') {
             $this->reset('whoCampus', 'whoUnit', 'whoCareer');
         } elseif ($property === 'whoCampus') {
             $this->reset('whoCareer');
@@ -127,10 +111,7 @@ new #[Title('Ficha de la persona')] class extends Component
     {
         $this->authorize('create', RoleAssignment::class);
 
-        $this->resetValidation();
-        $this->reset('campus', 'unit', 'career', 'to');
-        $this->role = Role::Coordinador->value;
-        $this->from = today()->toDateString();
+        $this->resetAppointFields(Role::Coordinador);
         $this->showModal = true;
     }
 
@@ -140,30 +121,7 @@ new #[Title('Ficha de la persona')] class extends Component
 
         $person = $people->findOrFail($this->personId);
 
-        $this->validate([
-            'role' => ['required', Rule::in(array_map(fn (Role $role): string => $role->value, $this->offered($rules)))],
-            'from' => ['required', 'date'],
-            'to' => ['nullable', 'date'],
-        ], [
-            'role.required' => 'Elige un puesto de la lista.',
-            'role.in' => 'Elige un puesto de la lista.',
-            'from.required' => 'Escribe la fecha de inicio.',
-            'from.date' => 'La fecha de inicio no es válida.',
-            'to.date' => 'La fecha de fin no es válida.',
-        ]);
-
-        $role = Role::from($this->role);
-        $columns = $role->scopeColumns();
-
-        $assignment = $appointRole->handle(
-            $person,
-            $role,
-            in_array('campus_id', $columns, true) ? $people->campus($this->campus) : null,
-            in_array('org_unit_id', $columns, true) ? $people->unit($this->unit) : null,
-            in_array('career_id', $columns, true) && $this->career !== '' ? $this->career : null,
-            CarbonImmutable::parse($this->from),
-            $this->to === '' ? null : CarbonImmutable::parse($this->to),
-        );
+        $assignment = $this->appointPerson($appointRole, $people, $person, $this->offeredOptions($rules));
 
         $this->success('Nombramiento creado', e($labels->one($assignment)->summary));
         $this->showModal = false;
@@ -238,6 +196,14 @@ new #[Title('Ficha de la persona')] class extends Component
         };
 
         $this->endingId = null;
+    }
+
+    /**
+     * @return list<array{id: string, name: string}>
+     */
+    private function offeredOptions(RoleAssignmentRules $rules): array
+    {
+        return array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], $this->offered($rules));
     }
 
     /**

@@ -159,43 +159,76 @@ it('muestra en español los errores de la Action junto al campo', function () {
     expect(RoleAssignment::count())->toBe($before);
 });
 
-it('AZ-S11: no nombra docente ni jefaturas aunque se fuerce la llamada', function (string $role) {
-    $page = personPage($this->beto)->call('openAppoint')->set('role', $role)->call('appoint');
+it('P1: nombra jefe de departamento pidiendo solo el departamento académico, y jefe de proyecto docente con campus y departamento', function () {
+    $page = personPage($this->beto)->call('openAppoint')
+        ->set('role', 'jefe_departamento')
+        ->assertSee('Este puesto pide el departamento académico. Tiene un solo jefe vigente.')
+        ->assertSeeHtml('data-testid="field-unit"')
+        ->assertDontSeeHtml('data-testid="field-campus"')
+        ->assertDontSeeHtml('data-testid="field-career"')
+        ->set('unit', $this->systems->id)
+        ->call('appoint')
+        ->assertHasNoErrors()
+        ->assertSet('showModal', false);
+
+    expect(RoleAssignment::where('user_id', $this->beto->id)->sole())
+        ->role->toBe(Role::JefeDepartamento)
+        ->org_unit_id->toBe($this->systems->id)
+        ->campus_id->toBeNull();
+
+    $page->call('openAppoint')
+        ->set('role', 'jefe_proyecto_docente')
+        ->assertSee('Este puesto pide campus y departamento académico.')
+        ->assertSeeHtml('data-testid="field-campus"')
+        ->assertSeeHtml('data-testid="field-unit"')
+        ->set('campus', $this->c2->id)
+        ->set('unit', $this->systems->id)
+        ->call('appoint')
+        ->assertHasNoErrors();
+
+    expect(RoleAssignment::where('user_id', $this->beto->id)->where('role', Role::JefeProyectoDocente)->sole())
+        ->campus_id->toBe($this->c2->id)
+        ->org_unit_id->toBe($this->systems->id);
+});
+
+it('P1: termina una jefatura desde la ficha de la persona', function () {
+    $jefe = assign($this->rosa, Role::JefeDepartamento, ['org_unit_id' => $this->systems->id]);
+
+    $page = personPage($this->rosa)
+        ->assertSeeHtml('wire:click="confirmEnd(\''.$jefe->id.'\')"')
+        ->call('confirmEnd', $jefe->id)
+        ->set('lastDay', '2026-11-30')
+        ->call('end')
+        ->assertHasNoErrors();
+
+    expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Nombramiento terminado'])
+        ->and($jefe->fresh()->valid_to->toDateString())->toBe('2026-11-30');
+});
+
+it('AZ-S11: no nombra ni termina el puesto de docente aunque se fuerce la llamada', function () {
+    $page = personPage($this->beto)->call('openAppoint')->set('role', 'docente')->call('appoint');
 
     $page->assertHasErrors(['role'])->assertSee('Elige un puesto de la lista.');
 
-    expect(RoleAssignment::where('user_id', $this->beto->id)->count())->toBe(0)
-        ->and(activitySince()->count())->toBe(0);
-})->with(['jefe_departamento', 'jefe_proyecto_docente', 'docente']);
+    $docente = assign($this->rosa, Role::Docente);
 
-it('AZ-S11: el docente y las jefaturas se ven de solo lectura, con el aviso de dónde se manejan', function () {
+    personPage($this->rosa)->call('confirmEnd', $docente->id)->call('end')->assertHasErrors(['lastDay'])->assertSee('ficha del docente');
+
+    expect(RoleAssignment::where('user_id', $this->beto->id)->count())->toBe(0)
+        ->and($docente->fresh()->valid_to)->toBeNull()
+        ->and(activitySince()->count())->toBe(0);
+});
+
+it('AZ-S11: el puesto de docente se ve de solo lectura, con el aviso de dónde se maneja', function () {
     $docente = assign($this->rosa, Role::Docente);
     $jefe = assign($this->rosa, Role::JefeDepartamento, ['org_unit_id' => $this->systems->id]);
-    $coordinador = assign($this->rosa, Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id]);
 
     $page = personPage($this->rosa)
         ->assertSee('El puesto de docente lo da la ficha del docente')
-        ->assertSee('Las jefaturas se nombran y se terminan en la ficha del docente.')
-        ->assertSee('Las jefaturas y el puesto de docente se manejan en la ficha del docente.');
+        ->assertSee('El puesto de docente se maneja en la ficha del docente.');
 
-    $html = $page->html();
-
-    expect($html)->toContain('wire:click="confirmEnd(\''.$coordinador->id.'\')"')
-        ->not->toContain('confirmEnd(\''.$docente->id.'\')')
-        ->not->toContain('confirmEnd(\''.$jefe->id.'\')');
-});
-
-it('AZ-S11 y AZ-S12: no termina el docente ni una jefatura aunque se fuerce la llamada', function () {
-    $docente = assign($this->rosa, Role::Docente);
-    $jefe = assign($this->rosa, Role::JefeDepartamento, ['org_unit_id' => $this->systems->id]);
-
-    foreach ([[$this->rosa, $docente, 'ficha del docente'], [$this->rosa, $jefe, 'ficha del docente']] as [$person, $assignment, $reason]) {
-        personPage($person)->call('confirmEnd', $assignment->id)->call('end')->assertHasErrors(['lastDay'])->assertSee($reason);
-    }
-
-    expect($docente->fresh()->valid_to)->toBeNull()
-        ->and($jefe->fresh()->valid_to)->toBeNull()
-        ->and(activitySince()->count())->toBe(0);
+    expect($page->html())->toContain('confirmEnd(\''.$jefe->id.'\')')
+        ->not->toContain('confirmEnd(\''.$docente->id.'\')');
 });
 
 it('AZ-S12: el admin puede terminar su propio puesto desde la ficha si queda otro admin', function () {

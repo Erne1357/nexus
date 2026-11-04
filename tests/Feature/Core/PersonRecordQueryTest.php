@@ -95,7 +95,7 @@ it('sabe quién terminó un nombramiento por su entrada de bitácora', function 
         ]);
 });
 
-it('AZ-S11 y AZ-S12: el docente, las jefaturas y el último admin vigente no se terminan aquí', function () {
+it('AZ-S11 y AZ-S12: el docente y el último admin vigente no se terminan aquí; las jefaturas sí', function () {
     giveRole($this->rosa, Role::Docente, '2015-08-17');
     giveRole($this->rosa, Role::JefeDepartamento, '2026-01-01', null, ['org_unit_id' => $this->systems->id]);
     giveRole($this->rosa, Role::JefeProyectoDocente, '2026-01-01', null, ['campus_id' => $this->c2->id, 'org_unit_id' => $this->systems->id]);
@@ -106,8 +106,8 @@ it('AZ-S11 y AZ-S12: el docente, las jefaturas y el último admin vigente no se 
         ->mapWithKeys(fn (array $row): array => [$row['assignment']->role->value => $row['endBlocker']]);
 
     expect($blockers['docente'])->toContain('ficha del docente')
-        ->and($blockers['jefe_departamento'])->toContain('ficha del docente')
-        ->and($blockers['jefe_proyecto_docente'])->toContain('ficha del docente')
+        ->and($blockers['jefe_departamento'])->toBeNull()
+        ->and($blockers['jefe_proyecto_docente'])->toBeNull()
         ->and($blockers['coordinador'])->toBeNull()
         ->and($blockers['admin'])->toBeNull();
 
