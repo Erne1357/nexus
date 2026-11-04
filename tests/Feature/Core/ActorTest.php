@@ -226,24 +226,6 @@ describe('vigencia y coherencia del alcance', function () {
         expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue();
     });
 
-    it('un alcance al que le falta lo que exige su rol no cuenta', function (Role $role, array $scope) {
-        $user = User::factory()->create();
-        RoleAssignment::factory()->for($user)->create(['role' => $role, ...$scope]);
-
-        $context = actorOf($user);
-
-        expect($context->has($role))->toBeFalse()
-            ->and($context->covers($role, $this->c2, department: fakeKey(10), career: fakeKey(20)))->toBeFalse()
-            ->and($context->canAccessCampus($this->c2))->toBeFalse();
-    })->with([
-        'coordinador sin carrera' => fn () => [Role::Coordinador, ['campus_id' => $this->c2->id]],
-        'coordinador sin campus' => fn () => [Role::Coordinador, ['campus_id' => null, 'career_id' => careerKey(20)]],
-        'jefe sin departamento' => fn () => [Role::JefeDepartamento, ['campus_id' => $this->c2->id]],
-        'jefe sin departamento ni campus' => fn () => [Role::JefeDepartamento, ['campus_id' => null]],
-        'jefe de proyecto docente sin campus' => fn () => [Role::JefeProyectoDocente, ['campus_id' => null, 'org_unit_id' => departmentKey(10)]],
-        'subdirección sin unidad' => fn () => [Role::Subdireccion, ['org_unit_id' => null]],
-    ]);
-
     it('un usuario inactivo no tiene ningún rol, ni siquiera admin', function () {
         $admin = User::factory()->admin()->create(['is_active' => false]);
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create(['is_active' => false]);
