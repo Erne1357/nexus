@@ -118,3 +118,29 @@ describe('earliestLastDay (AZ-S12)', function () {
         expect($this->rules->endBlocker($ana))->toBeNull();
     });
 });
+
+describe('deactivationGap (AZ-S12, P3)', function () {
+    beforeEach(function () {
+        $this->travelTo('2026-11-03 10:00:00');
+        $this->rules = app(RoleAssignmentRules::class);
+    });
+
+    it('da el primer día sin admin vigente si se desactiva al usuario', function (array $seats, array $others, ?string $expected) {
+        $user = User::factory()->create();
+
+        foreach ($seats as $seat) {
+            adminSeat($user, $seat[0], $seat[1] ?? null);
+        }
+
+        foreach ($others as $other) {
+            adminSeat(User::factory()->create(), $other[0], $other[1] ?? null);
+        }
+
+        expect($this->rules->deactivationGap($user)?->toDateString())->toBe($expected);
+    })->with([
+        'sin Administración' => [[], [['2026-08-01', '2026-11-30']], null],
+        'Administración programada y Ana hasta el 30 de noviembre' => [[['2026-12-01']], [['2026-08-01', '2026-11-30']], '2026-12-01'],
+        'lo mismo, con Beto sin fin' => [[['2026-12-01']], [['2026-08-01', '2026-11-30'], ['2026-01-01']], null],
+        'dos programados: no cuenta el otro del mismo usuario' => [[['2026-12-01'], ['2027-02-01']], [['2026-08-01', '2026-11-30']], '2026-12-01'],
+    ]);
+});

@@ -126,8 +126,9 @@ final class RoleAssignmentRules
 
     /**
      * La llave del candado consultivo que serializa las escrituras sobre los puestos de Administración (AZ-S12):
-     * EndRoleAssignment lo toma antes del candado del renglón, así dos terminaciones simultáneas se esperan y la
-     * segunda revisa la cobertura con lo que la primera ya confirmó.
+     * EndRoleAssignment lo toma antes del candado del renglón y SyncTeacherAccess (la baja del docente) antes del
+     * candado del usuario, así dos escrituras simultáneas se esperan y la segunda revisa la cobertura con lo que la
+     * primera ya confirmó.
      */
     public const string ADMIN_SEATS_LOCK = 'role_assignments.admin';
 
@@ -193,6 +194,28 @@ final class RoleAssignmentRules
         }
 
         return $assignment->valid_to !== null && $day->toDateString() >= $assignment->valid_to->toDateString() ? null : $day;
+    }
+
+    /**
+     * AZ-S12 y P3 (confirmado el 3 de noviembre de 2026): el primer día sin admin vigente si se desactiva `$user`; nulo
+     * si no tiene nombramientos `admin` sin terminar o si, sin ellos, otros admin activos cubren todos los días desde
+     * `max(hoy, el menor inicio de los suyos)`. Se llama bajo ADMIN_SEATS_LOCK.
+     */
+    public function deactivationGap(User $user): ?CarbonImmutable
+    {
+        $from = RoleAssignment::query()
+            ->where('user_id', $user->getKey())
+            ->where('role', Role::Admin)
+            ->notEnded()
+            ->min('valid_from');
+
+        if ($from === null) {
+            return null;
+        }
+
+        $first = $this->uncoveredAdminDays(max(today()->toDateString(), CarbonImmutable::parse($from)->toDateString()), 'ra.user_id', $user->getKey())['first'];
+
+        return $first === null ? null : CarbonImmutable::parse($first);
     }
 
     /**
