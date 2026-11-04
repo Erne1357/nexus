@@ -15,7 +15,9 @@ enum Role: string
     case Docente = 'docente';
 
     /**
-     * Los puestos que son una jefatura de departamento: los que la ficha del docente nombra y termina (3.P8).
+     * Los puestos que son una jefatura de departamento. Desde 3.P8 se nombran y terminan como cualquier nombramiento,
+     * en la ficha del docente, en «Personas y puestos» y en el panel de la unidad del Organigrama (AZ-S11), y la baja del
+     * docente los termina.
      *
      * @var list<self>
      */
