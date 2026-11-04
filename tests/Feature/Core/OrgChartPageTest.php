@@ -341,6 +341,28 @@ it('el puesto exclusivo ocupado da su error en el formulario, no en las acciones
         ->and(User::where('username', 'rosa')->sole()->roleAssignments()->count())->toBe(0);
 });
 
+it('con el formulario abierto y el puesto ocupado, el error de la unidad sale una sola vez en el HTML', function () {
+    User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => $this->systems->id, 'valid_from' => '2026-01-01'])->create(['name' => 'Ana Jefa']);
+    User::factory()->create(['name' => 'Rosa Pérez', 'username' => 'rosa']);
+
+    $panel = appointPanelOn($this->systems, 'Rosa', 'rosa')->call('appoint')->assertHasErrors(['unit']);
+
+    expect(substr_count($panel->html(), 'ya tiene jefe en esas fechas'))->toBe(1);
+});
+
+it('llamar a «Nombrar» sobre una unidad que quedó inactiva se rechaza y el error sale bajo la unidad fija', function () {
+    User::factory()->create(['name' => 'Rosa Pérez', 'username' => 'rosa']);
+    $panel = appointPanelOn($this->systems, 'Rosa', 'rosa');
+
+    $this->systems->update(['is_active' => false]);
+
+    $panel->call('appoint')->assertHasErrors(['unit' => 'Sistemas y Computación está inactiva.'])->assertSet('showAppoint', true);
+
+    expect(textOf(domOf($panel)->querySelector('[data-testid="field-unit"]')))->toContain('Sistemas y Computación está inactiva.')
+        ->and(domOf($panel)->querySelector('[data-testid="unit-error"]'))->toBeNull()
+        ->and(User::where('username', 'rosa')->sole()->roleAssignments()->count())->toBe(0);
+});
+
 it('forzar un puesto que no va sobre la unidad, o mandar otra unidad, no escribe en otro lado', function () {
     User::factory()->create(['name' => 'Rosa Pérez', 'username' => 'rosa']);
     $panel = appointPanelOn($this->systems, 'Rosa', 'rosa');

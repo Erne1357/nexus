@@ -152,17 +152,19 @@ final class OrgChartQuery
             activationBlocker: $this->unitRules->activationBlocker($unit),
             childBlocker: $this->unitRules->parentProblem($unit),
             appointRoles: $appointRoles,
-            appointBlocker: $this->appointBlocker($unit),
+            appointBlocker: $this->appointBlocker($unit, $appointRoles),
         );
     }
 
     /**
      * Por qué no se nombra ningún puesto sobre la unidad: ninguno la admite o está inactiva; nulo si sí.
+     *
+     * @param  list<Role>|null  $roles  los puestos de la unidad, si ya se calcularon
      */
-    public function appointBlocker(OrgUnit $unit): ?string
+    public function appointBlocker(OrgUnit $unit, ?array $roles = null): ?string
     {
         return match (true) {
-            $this->rules->rolesForUnit($unit) === [] => 'Ningún puesto se nombra sobre esta unidad.',
+            ($roles ?? $this->rules->rolesForUnit($unit)) === [] => 'Ningún puesto se nombra sobre esta unidad.',
             ! $unit->is_active => "{$unit->name} está inactiva.",
             default => null,
         };

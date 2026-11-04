@@ -333,3 +333,25 @@ it('assignmentOf no encuentra un nombramiento de otra unidad ni uno ya terminado
     expect(fn () => $this->query->assignmentOf($other, $live->id))->toThrow(ModelNotFoundException::class);
     expect(fn () => $this->query->assignmentOf($department, $ended->id))->toThrow(ModelNotFoundException::class);
 });
+
+it('detail hace las mismas consultas con un nombramiento que con varios', function () {
+    $department = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id]);
+    $count = function () use ($department): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->query->detail($department->id);
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $campus = Campus::factory()->create();
+    RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeProyectoDocente, 'campus_id' => $campus->id, 'org_unit_id' => $department->id, 'valid_from' => '2026-01-01']);
+    $one = $count();
+
+    foreach (range(1, 4) as $i) {
+        RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeProyectoDocente, 'campus_id' => $campus->id, 'org_unit_id' => $department->id, 'valid_from' => '2026-01-01']);
+    }
+
+    expect($count())->toBe($one);
+});
