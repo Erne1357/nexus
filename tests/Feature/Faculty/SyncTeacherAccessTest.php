@@ -3,12 +3,12 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Actions\AppointRole;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Support\DefaultPassword;
 use App\Modules\Faculty\Actions\SyncTeacherAccess;
 use App\Modules\Faculty\Enums\AccessSync;
@@ -86,7 +86,7 @@ it('da usuario a un docente activo sin usuario: su número, la contraseña por d
     expect(syncAccess($teacher))->toBe(AccessSync::Created);
 
     $user = $teacher->fresh()->user;
-    $context = app(ScopedContext::class)->forUser($user);
+    $context = app(Actor::class)->forUser($user);
     $scope = $user->roleAssignments()->sole();
 
     expect($user)
@@ -204,7 +204,7 @@ it('cierra los alcances de docente por campus que quedaron de antes y abre el de
 
     $yesterday = today()->subDay()->toDateString();
     $access = Activity::where('subject_id', $user->id)->sole();
-    $context = app(ScopedContext::class)->forUser($user->fresh());
+    $context = app(Actor::class)->forUser($user->fresh());
 
     expect(RoleAssignment::whereNotNull('campus_id')->pluck('valid_to')->map->toDateString()->all())->toBe([$yesterday, $yesterday])
         ->and(teachingScopes($user))->toBe(['todo el Tec'])
@@ -273,7 +273,7 @@ it('un docente activo sin departamento conserva su usuario, su rol y su alcance'
         ->and($user->fresh()->is_active)->toBeTrue()
         ->and($user->fresh()->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue()
         ->and(teachingScopes($user))->toBe(['todo el Tec'])
-        ->and(app(ScopedContext::class)->forUser($user->fresh())->has(Role::Docente))->toBeTrue()
+        ->and(app(Actor::class)->forUser($user->fresh())->has(Role::Docente))->toBeTrue()
         ->and(Activity::count())->toBe($entries);
 });
 
@@ -307,7 +307,7 @@ it('dar de baja desactiva su usuario y termina su jefatura vigente', function ()
     expect($user->fresh()->is_active)->toBeFalse()
         ->and($head->fresh()->valid_to->toDateString())->toBe('2026-11-02')
         ->and($past->fresh()->valid_to->toDateString())->toBe('2026-05-03')
-        ->and(app(ScopedContext::class)->forUser($user->fresh())->heldRoles())->toBe([])
+        ->and(app(Actor::class)->forUser($user->fresh())->heldRoles())->toBe([])
         ->and($deactivated->description)->toBe('Sincronizó el acceso del docente 1234567: desactivó su usuario')
         ->and($deactivated->attribute_changes->all())->toBe(['attributes' => ['is_active' => false], 'old' => ['is_active' => true]]);
 
@@ -540,7 +540,7 @@ it('la baja borra también la jefatura que todavía no empieza, y al reactivarlo
     syncAccess($teacher);
     $this->travel(10)->days();
 
-    $context = app(ScopedContext::class)->forUser($user->fresh());
+    $context = app(Actor::class)->forUser($user->fresh());
 
     expect($context->has(Role::JefeDepartamento))->toBeFalse()
         ->and($context->has(Role::Docente))->toBeTrue();

@@ -4,9 +4,9 @@ namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
 use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Models\Student;
@@ -18,8 +18,8 @@ use Illuminate\Support\Str;
 
 /**
  * Lecturas de alumnos para las pantallas (tarea 1.6). El listado es de un campus, el activo de la credencial, y
- * deja ver lo mismo que StudentPolicy, filtrado en SQL con los alcances de ScopedContext y la misma regla que
- * ScopedContext::covers(): al admin, todo el campus; a la subdirección, las carreras de los departamentos de
+ * deja ver lo mismo que StudentPolicy, filtrado en SQL con los alcances de Actor y la misma regla que
+ * Actor::covers(): al admin, todo el campus; a la subdirección, las carreras de los departamentos de
  * Subdirección Académica; al jefe de departamento, las carreras de su departamento; al coordinador, su carrera
  * (reglas-de-negocio.md, "Consultar alumnos"). Incluye a los alumnos inactivos, como todo catálogo; los borrados no.
  */
@@ -37,7 +37,7 @@ final class StudentQuery
      * @param  array{career?: string, plan?: string, semester?: int|string, status?: string}  $filters
      * @return LengthAwarePaginator<int, Student>
      */
-    public function forTable(ScopedContext $context, Campus $campus, array $filters = [], string $search = '', int $perPage = 25): LengthAwarePaginator
+    public function forTable(Actor $context, Campus $campus, array $filters = [], string $search = '', int $perPage = 25): LengthAwarePaginator
     {
         return $this->visible($context, $campus)
             ->with([
@@ -75,7 +75,7 @@ final class StudentQuery
      *
      * @return array{careers: list<array{id: string, name: string}>, plans: list<array{id: string, name: string}>, semesters: list<array{id: int, name: string}>}
      */
-    public function filterOptions(ScopedContext $context, Campus $campus): array
+    public function filterOptions(Actor $context, Campus $campus): array
     {
         $visible = fn (): Builder => $this->visible($context, $campus);
 
@@ -91,12 +91,12 @@ final class StudentQuery
 
     /**
      * Los alumnos del campus que el usuario puede ver: con cada nombramiento que concede `students.student.view`
-     * (StudentsPermission) de ese campus o sin campus (de todo el Tec), los que ScopedContext::constrain() le daría: los de las carreras de un departamento de su unidad
+     * (StudentsPermission) de ese campus o sin campus (de todo el Tec), los que Actor::constrain() le daría: los de las carreras de un departamento de su unidad
      * o de su subárbol y de su carrera, cuando el nombramiento las trae. Uno sin unidad ni carrera cubre todo el campus.
      *
      * @return Builder<Student>
      */
-    private function visible(ScopedContext $context, Campus $campus): Builder
+    private function visible(Actor $context, Campus $campus): Builder
     {
         $query = Student::query()->where('students.campus_id', $campus->id);
 

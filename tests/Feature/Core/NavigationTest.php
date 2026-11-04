@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -7,7 +8,6 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Navigation\RecentPages;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Students\Models\Student;
 use Dom\Element;
 use Dom\HTMLDocument;
@@ -18,7 +18,7 @@ use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 /*
 | Navegación por rol. Cada módulo declara sus entradas en navigation() de su provider y Core las
 | junta en un registro inmutable al arrancar; el menú las agrupa por área (ADR-0015). DemoCatalog
-| (tests/Fixtures/Modules) declara "Saludo", para coordinadores (por ScopedContext), en Servicios
+| (tests/Fixtures/Modules) declara "Saludo", para coordinadores (por Actor), en Servicios
 | escolares, y "Elementos", por la ability viewAny de su policy (solo admin), en Recursos humanos.
 */
 
@@ -46,7 +46,7 @@ function handBuiltNavigation(): Navigation
     return new Navigation([
         new NavigationItem('Cargas', 'home', 'o-table-cells', NavigationArea::Datos),
         new NavigationItem('Propuestas', 'home', 'o-document-text', NavigationArea::Academico,
-            visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador)),
+            visible: static fn (Actor $context): bool => $context->has(Role::Coordinador)),
         new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
         new NavigationItem('Plantilla', 'core.campuses', 'o-users', NavigationArea::RecursosHumanos,
             ability: 'viewAny', arguments: [Campus::class]),
@@ -66,7 +66,7 @@ function navigationAreasFor(?User $user, ?Navigation $navigation = null): array
 
     $groups = [];
 
-    foreach (($navigation ?? app(Navigation::class))->visibleByArea(app(ScopedContext::class)) as $group) {
+    foreach (($navigation ?? app(Navigation::class))->visibleByArea(app(Actor::class)) as $group) {
         $groups[$group['area']->value] = array_map(fn (NavigationItem $item): string => $item->label, $group['items']);
     }
 
@@ -84,7 +84,7 @@ function navigationLabelsFor(?User $user): array
 
     return array_map(
         fn (NavigationItem $item): string => $item->label,
-        app(Navigation::class)->visibleTo(app(ScopedContext::class)),
+        app(Navigation::class)->visibleTo(app(Actor::class)),
     );
 }
 

@@ -3,10 +3,10 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Queries\StudentQuery;
@@ -53,7 +53,7 @@ function listedControlNumbers(User $user, Campus $campus, array $filters = [], s
 {
     test()->actingAs($user);
 
-    return app(StudentQuery::class)->forTable(app(ScopedContext::class), $campus, $filters, $search, $perPage)->pluck('control_number')->all();
+    return app(StudentQuery::class)->forTable(app(Actor::class), $campus, $filters, $search, $perPage)->pluck('control_number')->all();
 }
 
 it('al admin y a la subdirección les lista a todos los alumnos del campus, por número de control', function (Role $role) {
@@ -157,7 +157,7 @@ it('ofrece en los filtros solo las carreras y los planes de los alumnos que ve',
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
     $this->actingAs($coordinator);
 
-    $options = app(StudentQuery::class)->filterOptions(app(ScopedContext::class), $this->campus);
+    $options = app(StudentQuery::class)->filterOptions(app(Actor::class), $this->campus);
 
     expect(array_column($options['careers'], 'name'))->toBe(["ISC · {$this->isc->name}"])
         ->and(array_column($options['plans'], 'name'))->toBe(['ISC-2010'])
@@ -188,10 +188,10 @@ it('el filtro de alumnos da las mismas filas que antes por puesto', function () 
         ->and(listedControlNumbers($coordinator, $this->campus))->toBe(['21000003']);
 
     actingAsRole($both, Role::JefeDepartamento);
-    expect(app(StudentQuery::class)->forTable(app(ScopedContext::class), $this->campus)->pluck('control_number')->all())
+    expect(app(StudentQuery::class)->forTable(app(Actor::class), $this->campus)->pluck('control_number')->all())
         ->toBe(['21000004']);
 
     actingAsRole($both, Role::Coordinador);
-    expect(app(StudentQuery::class)->forTable(app(ScopedContext::class), $this->campus)->pluck('control_number')->all())
+    expect(app(StudentQuery::class)->forTable(app(Actor::class), $this->campus)->pluck('control_number')->all())
         ->toBe(['21000003']);
 });

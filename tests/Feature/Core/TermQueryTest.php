@@ -1,10 +1,10 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TermQuery;
 
 /*
@@ -21,7 +21,7 @@ function termCodesFor(User $user, string $search = '', int $perPage = 15): array
 {
     test()->actingAs($user);
 
-    return app(TermQuery::class)->forTable(app(ScopedContext::class), $search, $perPage)->pluck('code')->all();
+    return app(TermQuery::class)->forTable(app(Actor::class), $search, $perPage)->pluck('code')->all();
 }
 
 it('lista al admin y a la subdirección los periodos del más reciente al más antiguo', function () {

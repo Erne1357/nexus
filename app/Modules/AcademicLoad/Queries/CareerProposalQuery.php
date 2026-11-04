@@ -13,12 +13,12 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 
@@ -58,7 +58,7 @@ final class CareerProposalQuery
      *
      * @return Collection<int, Career>
      */
-    public function careersFor(ScopedContext $context, Campus $campus): Collection
+    public function careersFor(Actor $context, Campus $campus): Collection
     {
         return Career::query()
             ->whereIn('id', CareerCampus::query()->where('campus_id', $campus->getKey())->where('is_active', true)->select('career_id'))

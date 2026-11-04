@@ -15,6 +15,7 @@ use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
@@ -22,7 +23,6 @@ use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
@@ -386,7 +386,7 @@ describe('departamentos de la bandeja de un usuario', function () {
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
         $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => offeredCareer('ISC')->id])->create();
         $codes = fn (User $user): array => app(DepartmentInboxQuery::class)
-            ->departmentsFor(app(ScopedContext::class)->forUser($user), $this->campus)->pluck('code')->all();
+            ->departmentsFor(app(Actor::class)->forUser($user), $this->campus)->pluck('code')->all();
 
         expect($codes($jefe))->toBe(['CB'])
             ->and($codes($subdireccion))->toContain('CB', 'SC')
@@ -398,7 +398,7 @@ describe('departamentos de la bandeja de un usuario', function () {
         $otro = Campus::factory()->create();
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $otro->id, 'department_id' => $this->cb->id])->create();
 
-        expect(app(DepartmentInboxQuery::class)->departmentsFor(app(ScopedContext::class)->forUser($jefe), $this->campus))->toBeEmpty();
+        expect(app(DepartmentInboxQuery::class)->departmentsFor(app(Actor::class)->forUser($jefe), $this->campus))->toBeEmpty();
     });
 });
 
@@ -408,7 +408,7 @@ describe('departamentos desactivados y partes de otro periodo o campus', functio
         $this->sc->update(['is_active' => false]);
         $isc = offeredCareer('ISC');
         inboxPart(inboxProposal($isc), $this->cb);
-        $subdireccion = app(ScopedContext::class)->forUser(User::factory()->withRole(Role::Subdireccion)->create());
+        $subdireccion = app(Actor::class)->forUser(User::factory()->withRole(Role::Subdireccion)->create());
         $codes = fn (?Term $term) => app(DepartmentInboxQuery::class)->departmentsFor($subdireccion, $this->campus, $term)->pluck('code')->all();
 
         expect($codes($this->term))->toContain('CB')->not->toContain('SC')

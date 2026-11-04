@@ -2,8 +2,8 @@
 
 namespace App\Modules\Core\Notifications;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -80,10 +80,10 @@ abstract class NexusNotification extends Notification
 
     /**
      * Por qué el destino ya no se puede abrir para la persona de `$context`, con el perfil con que lo abriría
-     * (OpenNotification pasa el del puesto de `data.role`, ScopedContext::asRole()), o null si se puede. Recibe el
+     * (OpenNotification pasa el del puesto de `data.role`, Actor::asRole()), o null si se puede. Recibe el
      * mensaje guardado, no la notificación, porque la campana solo tiene la fila de la base.
      */
-    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
+    public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
     {
         if ($message->route === null || ! Route::has($message->route)) {
             return 'Esa pantalla no está disponible.';

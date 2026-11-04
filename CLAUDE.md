@@ -54,7 +54,7 @@ Monolito modular: `app/Modules/<Modulo>/{Models,Enums,Actions,Queries,Rules,Live
 3. Los `Models` solo tienen relaciones, casts, scopes y accessors.
 4. Los componentes Livewire validan, llaman Actions o Queries y renderizan. Nada de consultas en Blade.
 5. Un módulo solo depende de los que están a su izquierda en el mapa de `docs/dominio/modelo-de-datos.md`; hacia la derecha se comunica con eventos.
-6. Toda Policy usa `ScopedContext` (Core) para rol **y** alcance (campus, departamento, carrera).
+6. Toda Policy usa el trait `AuthorizesActor` (Core): pregunta por un permiso con `allows()` o `allowsAny()`, y `Actor` decide el puesto activo y el alcance (campus, unidad, carrera).
 7. Lo que tarda más de un segundo va a un job en cola.
 8. El perfil de flujo por campus (`campuses.settings`) decide qué aplica; nunca `if ($campus->code === 'C2')`.
 9. Las reglas de negocio tienen id (`HC-07`, `SC-01`) y viven en `docs/dominio/reglas-de-negocio.md`; el código las cita.

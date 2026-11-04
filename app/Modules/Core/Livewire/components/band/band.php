@@ -1,7 +1,7 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Navigation\Navigation;
-use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -12,7 +12,7 @@ use Livewire\Component;
  * sesión. Abrir y cerrar lo hace el componente Alpine `nexusShell` (resources/js/app.js).
  *
  * El área de la ruta es la de la entrada del menú de la pantalla (Navigation::forRoute). La
- * credencial muestra el perfil activo (ScopedContext::activeRole()) con su nombre de Role::label(), y el campus y el
+ * credencial muestra el perfil activo (Actor::activeRole()) con su nombre de Role::label(), y el campus y el
  * periodo activos.
  */
 new class extends Component
@@ -38,7 +38,7 @@ new class extends Component
     /**
      * @return array{areaLabel: ?string, pageTitle: ?string, name: string, username: string, initials: string, roleLabel: ?string, summary: string}
      */
-    public function with(ScopedContext $context, Navigation $navigation): array
+    public function with(Actor $context, Navigation $navigation): array
     {
         $user = $context->user();
         $role = $context->activeRole();

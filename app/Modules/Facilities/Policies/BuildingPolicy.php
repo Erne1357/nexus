@@ -5,7 +5,7 @@ namespace App\Modules\Facilities\Policies;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Models\Building;
 
@@ -16,14 +16,14 @@ use App\Modules\Facilities\Models\Building;
  */
 final class BuildingPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     /**
      * Si el usuario administra edificios en algún campus; el listado se acota al campus activo.
      */
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(FacilitiesPermission::BuildingView);
+        return $this->actor($user)->allowsAny(FacilitiesPermission::BuildingView);
     }
 
     public function view(User $user, Building $building): bool
@@ -46,6 +46,6 @@ final class BuildingPolicy
 
     private function allowsOn(User $user, FacilitiesPermission $permission, string $campusId): bool
     {
-        return $this->scope($user)->allows($permission, Target::of(campus: $campusId));
+        return $this->actor($user)->allows($permission, Target::of(campus: $campusId));
     }
 }

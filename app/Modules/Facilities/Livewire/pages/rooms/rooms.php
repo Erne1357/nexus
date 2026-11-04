@@ -1,8 +1,8 @@
 <?php
 
 use App\Modules\Academic\Queries\DepartmentQuery;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Actions\AddRoomBlock;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\RemoveRoomBlock;
@@ -25,7 +25,7 @@ use Mary\Traits\Toast;
  * CRUD de Salones, con la forma de Campus: tabla con búsqueda y filtros por edificio, tipo, departamento
  * dueño y estado; alta y edición en un modal; activar o desactivar desde la tabla. Los salones no se
  * borran. «Bloqueos» abre un panel lateral (x-drawer) con los bloqueos del salón y el formulario para
- * agregar otro. Es de un campus, el activo de la credencial (ScopedContext::activeCampus()): el listado y
+ * agregar otro. Es de un campus, el activo de la credencial (Actor::activeCampus()): el listado y
  * el alta usan ese campus, el formulario no lleva un select de campus y, sin uno elegido, la pantalla pide
  * elegirlo. Lo administran el admin y la Subdirección del campus (RoomPolicy).
  *
@@ -106,7 +106,7 @@ new #[Title('Salones')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(RoomQuery $rooms, BuildingQuery $buildingQuery, DepartmentQuery $departmentQuery, ScopedContext $context): array
+    public function with(RoomQuery $rooms, BuildingQuery $buildingQuery, DepartmentQuery $departmentQuery, Actor $context): array
     {
         $campus = $context->activeCampus();
         $buildings = $campus === null ? [] : $buildingQuery->options($campus);
@@ -177,7 +177,7 @@ new #[Title('Salones')] class extends Component
         }
     }
 
-    public function create(ScopedContext $context): void
+    public function create(Actor $context): void
     {
         $this->authorize('create', [Room::class, $this->campus($context)]);
 
@@ -203,7 +203,7 @@ new #[Title('Salones')] class extends Component
         $this->showModal = true;
     }
 
-    public function save(CreateRoom $createRoom, UpdateRoom $updateRoom, RoomQuery $rooms, ScopedContext $context): void
+    public function save(CreateRoom $createRoom, UpdateRoom $updateRoom, RoomQuery $rooms, Actor $context): void
     {
         if ($this->editingId === null) {
             $campus = $this->campus($context);
@@ -291,7 +291,7 @@ new #[Title('Salones')] class extends Component
     /**
      * El campus activo de la credencial; sin uno no hay dónde dar de alta (403).
      */
-    private function campus(ScopedContext $context): Campus
+    private function campus(Actor $context): Campus
     {
         $campus = $context->activeCampus() ?? abort(403, 'Elige un campus en tu credencial.');
         abort_unless($campus->profile->usesRooms, 403, 'Este campus no usa salones.');

@@ -2,12 +2,12 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\AssignmentEnding;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\RoleAssignmentEnded;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Queries\AssignmentLabels;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +26,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * su propio puesto si otro cubre los días que siguen, y el último nunca se termina. En un puesto de Administración toma
  * primero el candado consultivo RoleAssignmentRules::ADMIN_SEATS_LOCK, antes que el del renglón: dos terminaciones
  * simultáneas se esperan en lugar de trabarse, y la segunda revisa la cobertura con lo que la primera confirmó. Deja la
- * bitácora sobre el usuario con `role_assignment_id`, recarga ScopedContext y avisa con RoleAssignmentEnded después
+ * bitácora sobre el usuario con `role_assignment_id`, recarga Actor y avisa con RoleAssignmentEnded después
  * del commit.
  */
 final class EndRoleAssignment
@@ -116,7 +116,7 @@ final class EndRoleAssignment
 
             $assignment->setRawAttributes($locked->getAttributes(), sync: true);
 
-            app(ScopedContext::class)->refresh();
+            app(Actor::class)->refresh();
 
             RoleAssignmentEnded::dispatch($locked, $ending);
 

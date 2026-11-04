@@ -2,9 +2,9 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Navigation\RecentPages;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 final class SwitchRole
 {
     public function __construct(
-        private readonly ScopedContext $context,
+        private readonly Actor $context,
         private readonly Session $session,
         private readonly RecentPages $recentPages,
     ) {}
@@ -45,12 +45,12 @@ final class SwitchRole
                 ->log("Cambió al perfil {$role->label()}");
         });
 
-        $this->session->put(ScopedContext::ACTIVE_ROLE, $role->value);
+        $this->session->put(Actor::ACTIVE_ROLE, $role->value);
 
-        $campusId = $this->session->get(ScopedContext::ACTIVE_CAMPUS);
+        $campusId = $this->session->get(Actor::ACTIVE_CAMPUS);
 
         if ($campusId !== null && ! $this->context->campuses()->contains('id', $campusId)) {
-            $this->session->forget(ScopedContext::ACTIVE_CAMPUS);
+            $this->session->forget(Actor::ACTIVE_CAMPUS);
         }
 
         $this->recentPages->forget();

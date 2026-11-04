@@ -8,7 +8,7 @@ use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién ve la bandeja de un departamento y decide su parte de cada propuesta de carrera, según
@@ -25,17 +25,17 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class ProposalReviewPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user, Campus $campus, Department $department): bool
     {
-        return $this->scope($user)->allows(AcademicLoadPermission::ProposalReviewView, Target::of(campus: $campus->getKey(), unit: $department->getKey()));
+        return $this->actor($user)->allows(AcademicLoadPermission::ProposalReviewView, Target::of(campus: $campus->getKey(), unit: $department->getKey()));
     }
 
     public function decide(User $user, ProposalReview $review): bool
     {
         $review->loadMissing('proposal');
 
-        return $this->scope($user)->allows(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $review->proposal->campus_id, unit: $review->department_id));
+        return $this->actor($user)->allows(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $review->proposal->campus_id, unit: $review->department_id));
     }
 }

@@ -8,7 +8,7 @@ use UnexpectedValueException;
 /**
  * Lo que una persona tiene (spec 7 y 9): sus nombramientos vigentes hoy que llenan lo que su puesto pide
  * (Role::scopeColumns), el de admin incluido, como datos planos que se guardan en caché. No sabe qué campus están
- * activos: ese filtro lo aplica ScopedContext en cada petición, así que desactivar un campus no lo invalida.
+ * activos: ese filtro lo aplica Actor en cada petición, así que desactivar un campus no lo invalida.
  * Inmutable.
  */
 final readonly class AuthorizationSnapshot

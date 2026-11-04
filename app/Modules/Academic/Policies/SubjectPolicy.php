@@ -5,7 +5,7 @@ namespace App\Modules\Academic\Policies;
 use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién administra materias, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila
@@ -15,21 +15,21 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class SubjectPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(AcademicPermission::SubjectView);
+        return $this->actor($user)->allowsAny(AcademicPermission::SubjectView);
     }
 
     public function view(User $user, Subject $subject): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::SubjectView);
+        return $this->actor($user)->allows(AcademicPermission::SubjectView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::SubjectCreate);
+        return $this->actor($user)->allows(AcademicPermission::SubjectCreate);
     }
 
     /**
@@ -38,6 +38,6 @@ final class SubjectPolicy
      */
     public function update(User $user, Subject $subject): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::SubjectUpdate);
+        return $this->actor($user)->allows(AcademicPermission::SubjectUpdate);
     }
 }

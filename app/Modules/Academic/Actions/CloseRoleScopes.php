@@ -4,8 +4,8 @@ namespace App\Modules\Academic\Actions;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\RoleAssignment;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Spatie\Activitylog\Enums\ActivityEvent;
@@ -18,7 +18,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * no se tocan. Cada cambio deja su entrada en la bitácora sobre el usuario del alcance.
  *
  * Se llama dentro de la transacción de DeleteDepartment o DeleteCareer. Devuelve cuántos alcances tocó y le avisa
- * a ScopedContext que recargue roles y alcances. El departamento se busca en `org_unit_id` (su id es el de su
+ * a Actor que recargue roles y alcances. El departamento se busca en `org_unit_id` (su id es el de su
  * unidad); la bitácora lo llama igual, `org_unit_id`. El nombre de la clase cambia en 3.P9.
  */
 final class CloseRoleScopes
@@ -81,7 +81,7 @@ final class CloseRoleScopes
             }
 
             if ($scopes->isNotEmpty()) {
-                app(ScopedContext::class)->refresh();
+                app(Actor::class)->refresh();
             }
 
             return $scopes->count();

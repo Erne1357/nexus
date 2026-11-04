@@ -3,11 +3,11 @@
 use App\Modules\Academic\Actions\CloseRoleScopes;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Spatie\Activitylog\Models\Activity;
 
 /*
@@ -93,11 +93,11 @@ it('cierra también los alcances de una carrera con career_id', function () {
 });
 
 it('después de cerrar, el jefe ya no ejerce el rol', function () {
-    expect(app(ScopedContext::class)->forUser($this->jefe)->has(Role::JefeDepartamento))->toBeTrue();
+    expect(app(Actor::class)->forUser($this->jefe)->has(Role::JefeDepartamento))->toBeTrue();
 
     app(CloseRoleScopes::class)->handle('org_unit_id', $this->department->id);
 
-    expect(app(ScopedContext::class)->forUser($this->jefe->fresh())->has(Role::JefeDepartamento))->toBeFalse();
+    expect(app(Actor::class)->forUser($this->jefe->fresh())->has(Role::JefeDepartamento))->toBeFalse();
 });
 
 it('deja en la bitácora, sobre el usuario del alcance, qué cerró y por qué', function () {

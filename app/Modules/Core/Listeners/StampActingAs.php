@@ -2,7 +2,7 @@
 
 namespace App\Modules\Core\Listeners;
 
-use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Authorization\Actor;
 use Spatie\Activitylog\Models\Activity;
 
 /**
@@ -12,14 +12,14 @@ use Spatie\Activitylog\Models\Activity;
  * al crear la entrada (HC-18: la bitácora no se edita).
  *
  * Se engancha a `Activity::creating` y no a `LogActivityAction::beforeLogging()`, porque este guarda sus callbacks
- * en un arreglo estático que crece en cada arranque de Octane. `ScopedContext` se resuelve en cada llamada, sin
+ * en un arreglo estático que crece en cada arranque de Octane. `Actor` se resuelve en cada llamada, sin
  * estado propio, para que nada de una petición pase a la siguiente.
  */
 final class StampActingAs
 {
     public function handle(Activity $activity): void
     {
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
         $user = $context->user();
 
         if ($user === null || $activity->causer_id === null) {

@@ -6,7 +6,7 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién administra campus, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Abrir
@@ -20,21 +20,21 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class CampusPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(CorePermission::CampusView);
+        return $this->actor($user)->allowsAny(CorePermission::CampusView);
     }
 
     public function view(User $user, Campus $campus): bool
     {
-        return $this->scope($user)->allows(CorePermission::CampusView, Target::of(campus: $campus->getKey()));
+        return $this->actor($user)->allows(CorePermission::CampusView, Target::of(campus: $campus->getKey()));
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->allows(CorePermission::CampusCreate);
+        return $this->actor($user)->allows(CorePermission::CampusCreate);
     }
 
     /**
@@ -42,7 +42,7 @@ final class CampusPolicy
      */
     public function update(User $user, Campus $campus): bool
     {
-        return $this->scope($user)->allows(CorePermission::CampusUpdate);
+        return $this->actor($user)->allows(CorePermission::CampusUpdate);
     }
 
     /**
@@ -50,6 +50,6 @@ final class CampusPolicy
      */
     public function updateProfile(User $user, Campus $campus): bool
     {
-        return $this->scope($user)->allows(CorePermission::CampusUpdateProfile, Target::of(campus: $campus->getKey()));
+        return $this->actor($user)->allows(CorePermission::CampusUpdateProfile, Target::of(campus: $campus->getKey()));
     }
 }

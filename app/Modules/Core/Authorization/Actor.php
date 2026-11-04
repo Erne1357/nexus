@@ -1,20 +1,13 @@
 <?php
 
-namespace App\Modules\Core\Queries;
+namespace App\Modules\Core\Authorization;
 
-use App\Modules\Core\Authorization\AssignmentScope;
-use App\Modules\Core\Authorization\AuthorizationSnapshot;
-use App\Modules\Core\Authorization\AuthorizationSnapshots;
-use App\Modules\Core\Authorization\Dimension;
-use App\Modules\Core\Authorization\OrgTree;
-use App\Modules\Core\Authorization\Permission;
-use App\Modules\Core\Authorization\PermissionRegistry;
-use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\KeyLookup;
 use Closure;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,8 +16,8 @@ use Illuminate\Support\Collection;
 use LogicException;
 
 /**
- * La persona en esta petición (ADR-0004, ADR-0018; el «Actor» de la spec 7): sus nombramientos, el campus y el
- * periodo activos y lo que puede hacer. Toda policy (con el trait UsesScopedContext) y toda pantalla filtrada por
+ * La persona en esta petición (ADR-0018, spec §7): sus nombramientos, el campus y el
+ * periodo activos y lo que puede hacer. Toda policy (con el trait AuthorizesActor) y toda pantalla filtrada por
  * alcance le preguntan a esta clase.
  *
  * Los nombramientos salen del snapshot cacheado (AuthorizationSnapshots): los vigentes hoy que llenan lo que su
@@ -90,7 +83,7 @@ use LogicException;
  * El árbol de unidades (OrgTree, también `scoped`) se lee una vez por petición: un movimiento de unidades cuenta
  * desde la siguiente.
  */
-final class ScopedContext
+final class Actor
 {
     /**
      * Claves de sesión del campus y periodo elegidos en la credencial; las escribe SetActiveContext.

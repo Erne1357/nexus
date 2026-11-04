@@ -1,11 +1,11 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Enums\AvailabilityKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
@@ -93,7 +93,7 @@ describe('perfil (S12)', function () {
     it('usa el del campus activo', function () {
         $ead = Campus::factory()->create(['code' => 'EAD', 'name' => 'Educación a Distancia', 'settings' => ['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '14:00']]);
         Campus::factory()->create(['code' => 'C2']);
-        session([ScopedContext::ACTIVE_CAMPUS => $ead->id]);
+        session([Actor::ACTIVE_CAMPUS => $ead->id]);
 
         availabilityEditor($this->admin, $this->ana)
             ->assertSee('Horario de Educación a Distancia')
@@ -128,7 +128,7 @@ describe('guardar', function () {
     it('guarda con el perfil del campus activo', function () {
         $ead = Campus::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
         Campus::factory()->create();
-        session([ScopedContext::ACTIVE_CAMPUS => $ead->id]);
+        session([Actor::ACTIVE_CAMPUS => $ead->id]);
 
         availabilityEditor($this->admin, $this->ana)->call('save', [['day' => 6, 'starts_at' => '08:00', 'kind' => 'unavailable']]);
 
@@ -170,7 +170,7 @@ describe('guardar', function () {
 
     it('el periodo es el que se abrió, aunque después cambie el activo', function () {
         $page = availabilityEditor($this->jefe, $this->ana);
-        session([ScopedContext::ACTIVE_TERM => $this->previous->id]);
+        session([Actor::ACTIVE_TERM => $this->previous->id]);
 
         $page->call('save', [['day' => 1, 'starts_at' => '07:00', 'kind' => 'unavailable']]);
 

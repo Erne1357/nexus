@@ -7,7 +7,7 @@ use App\Modules\Academic\Actions\UpdateCareer;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Queries\CareerQuery;
 use App\Modules\Academic\Queries\DepartmentQuery;
-use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Authorization\Actor;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
@@ -24,7 +24,7 @@ use Mary\Traits\Toast;
  * El componente lee con CareerQuery, autoriza con CareerPolicy en mount() y en cada acción (una
  * petición puede llegar con una página que abrió otra sesión), valida la forma de los datos y llama
  * a CreateCareer, UpdateCareer, SetCareerOffering o DeleteCareer, que hacen cumplir las reglas. La
- * oferta es del campus activo de la credencial (ScopedContext::activeCampus()), nunca de un campo del
+ * oferta es del campus activo de la credencial (Actor::activeCampus()), nunca de un campo del
  * formulario.
  */
 new #[Title('Carreras')] class extends Component
@@ -63,7 +63,7 @@ new #[Title('Carreras')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(CareerQuery $careers, DepartmentQuery $departmentQuery, ScopedContext $context): array
+    public function with(CareerQuery $careers, DepartmentQuery $departmentQuery, Actor $context): array
     {
         $campus = $context->activeCampus();
         $departments = $departmentQuery->options();
@@ -149,7 +149,7 @@ new #[Title('Carreras')] class extends Component
     /**
      * Ofrece la carrera en el campus activo o deja de ofrecerla, según lo que haga hoy.
      */
-    public function toggleOffering(string $id, CareerQuery $careers, ScopedContext $context, SetCareerOffering $setCareerOffering): void
+    public function toggleOffering(string $id, CareerQuery $careers, Actor $context, SetCareerOffering $setCareerOffering): void
     {
         $career = $careers->findOrFail($id);
         $this->authorize('update', $career);

@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Actions\MarkAllNotificationsRead;
 use App\Modules\Core\Actions\OpenNotification;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -9,7 +10,6 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\NotificationQuery;
-use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Notifications\DatabaseNotification;
@@ -54,7 +54,7 @@ final class TestStrictJefeNotice extends NexusNotification
         $this->addressedTo(Role::JefeDepartamento);
     }
 
-    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
+    public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
     {
         return $context->has(Role::JefeDepartamento) ? parent::unavailableReason($context, $message) : 'Ese aviso ya no es de tu puesto.';
     }
@@ -190,7 +190,7 @@ it('abrirla cambia la credencial al periodo y el campus del aviso si el usuario 
 
     app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'));
 
-    $context = app(ScopedContext::class);
+    $context = app(Actor::class);
     expect($context->activeTerm()?->id)->toBe($term->id)
         ->and($context->activeCampus()?->id)->toBe($c2->id);
 });
@@ -230,7 +230,7 @@ it('abrir un aviso de jefe con Coordinación activa cambia a Jefatura y abre el 
     $target = app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id'));
 
     expect($target->url)->toBe(route('home'))
-        ->and(app(ScopedContext::class)->activeRole())->toBe(Role::JefeDepartamento)
+        ->and(app(Actor::class)->activeRole())->toBe(Role::JefeDepartamento)
         ->and($ana->fresh()->last_role)->toBe(Role::JefeDepartamento);
 });
 
@@ -244,7 +244,7 @@ it('si ya no tiene el puesto del aviso, no cambia de perfil', function () {
     $target = app(OpenNotification::class)->handle($ana, $ana->notifications()->value('id'));
 
     expect($target->url)->toBe(route('home'))
-        ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador)
+        ->and(app(Actor::class)->activeRole())->toBe(Role::Coordinador)
         ->and($ana->fresh()->last_role)->toBeNull();
 });
 
@@ -257,7 +257,7 @@ it('con Administración activa, un aviso de un puesto que ya no tiene no abre el
 
     expect($target->url)->toBeNull()
         ->and($target->problem)->toBe('Ese aviso ya no es de tu puesto.')
-        ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Admin);
+        ->and(app(Actor::class)->activeRole())->toBe(Role::Admin);
 });
 
 it('un aviso que ya no se puede abrir no cambia el perfil', function () {
@@ -278,7 +278,7 @@ it('un aviso que ya no se puede abrir no cambia el perfil', function () {
         ->assertNoRedirect();
 
     expect(lastToastOf($component))->toMatchArray(['type' => 'warning', 'title' => 'Ya no trabajas en el campus de ese aviso.'])
-        ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::Coordinador->value)
+        ->and(session(Actor::ACTIVE_ROLE))->toBe(Role::Coordinador->value)
         ->and($ana->fresh()->last_role)->toBeNull()
         ->and(session('core.recent_pages'))->toBe(['academico' => '/campus']);
 });
@@ -298,7 +298,7 @@ it('un aviso que cambia de perfil abre su pantalla con una carga completa, sin r
         ->assertNotDispatched('notifications-changed');
 
     expect($switching->effects)->not->toHaveKey('redirectUsingNavigate')
-        ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
+        ->and(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
 
     // Sin cambio de perfil sigue navegando con wire:navigate y avisa a la campana y a la página.
     $plain = Livewire::test('core::components.bell')
@@ -343,7 +343,7 @@ it('un aviso sin puesto válido se abre con el perfil activo y no lo cambia', fu
 
         expect($target->url)->toBe(route('home'))
             ->and($target->switchedRole)->toBeFalse()
-            ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador);
+            ->and(app(Actor::class)->activeRole())->toBe(Role::Coordinador);
     }
 });
 

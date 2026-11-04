@@ -2,13 +2,13 @@
 
 use App\Modules\Core\Actions\CreateCampus;
 use App\Modules\Core\Actions\UpdateCampus;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Enums\StaffingMode;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Queries\CampusQuery;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -72,7 +72,7 @@ new #[Title('Campus')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(CampusQuery $campuses, ScopedContext $context): array
+    public function with(CampusQuery $campuses, Actor $context): array
     {
         $page = $campuses->forTable($context, $this->search, match ($this->status) {
             'active' => true,

@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 | antes con down() (primero el de las migraciones posteriores: la que dejó `department_heads` de solo lectura y la que
 | convirtió `role_scopes` en `role_assignments`), siembra
 | ese estado con DB::table y corre up(). Todo queda en la forma de entonces: lo que cubre cada alcance se revisa en
-| sus filas, porque ScopedContext ya lee `role_assignments`.
+| sus filas, porque Actor ya lee `role_assignments`.
 */
 
 beforeEach(function () {

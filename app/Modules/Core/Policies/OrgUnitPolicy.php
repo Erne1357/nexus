@@ -5,7 +5,7 @@ namespace App\Modules\Core\Policies;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién ve y corrige el organigrama: solo el admin (spec §6.1). Cada ability se resuelve con un permiso
@@ -14,26 +14,26 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class OrgUnitPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allows(CorePermission::OrgUnitView);
+        return $this->actor($user)->allows(CorePermission::OrgUnitView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->allows(CorePermission::OrgUnitCreate);
+        return $this->actor($user)->allows(CorePermission::OrgUnitCreate);
     }
 
     public function update(User $user, OrgUnit $unit): bool
     {
-        return $this->scope($user)->allows(CorePermission::OrgUnitUpdate);
+        return $this->actor($user)->allows(CorePermission::OrgUnitUpdate);
     }
 
     public function move(User $user, OrgUnit $unit): bool
     {
-        return $this->scope($user)->allows(CorePermission::OrgUnitMove);
+        return $this->actor($user)->allows(CorePermission::OrgUnitMove);
     }
 
     /**
@@ -41,6 +41,6 @@ final class OrgUnitPolicy
      */
     public function setActive(User $user, OrgUnit $unit): bool
     {
-        return $this->scope($user)->allows(CorePermission::OrgUnitDeactivate);
+        return $this->actor($user)->allows(CorePermission::OrgUnitDeactivate);
     }
 }

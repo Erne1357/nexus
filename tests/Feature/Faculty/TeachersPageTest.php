@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -8,7 +9,6 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Jobs\ProvisionTeacherUsersJob;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -62,7 +62,7 @@ function seesTeachersMenu(User $user): bool
 {
     test()->actingAs($user);
 
-    return collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))
+    return collect(app(Navigation::class)->visibleTo(app(Actor::class)))
         ->contains(fn (NavigationItem $item): bool => $item->label === 'Docentes');
 }
 
@@ -716,5 +716,5 @@ it('cada docente de la lista enlaza a su ficha, y el menú de Docentes se queda 
         ->and($link->getAttribute('href'))->toBe(route('faculty.teachers.show', $teacher->id));
 
     $this->actingAs($admin)->get(route('faculty.teachers.show', $teacher->id))->assertOk();
-    expect(collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))->first(fn (NavigationItem $item): bool => $item->label === 'Docentes')->owns('faculty.teachers.show'))->toBeTrue();
+    expect(collect(app(Navigation::class)->visibleTo(app(Actor::class)))->first(fn (NavigationItem $item): bool => $item->label === 'Docentes')->owns('faculty.teachers.show'))->toBeTrue();
 });

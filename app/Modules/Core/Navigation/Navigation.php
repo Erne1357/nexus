@@ -2,9 +2,9 @@
 
 namespace App\Modules\Core\Navigation;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
-use App\Modules\Core\Queries\ScopedContext;
 
 /**
  * Registro del menú: las entradas que cada módulo declara en navigation() de su
@@ -51,7 +51,7 @@ final readonly class Navigation
      *
      * @return list<NavigationItem>
      */
-    public function visibleTo(ScopedContext $context): array
+    public function visibleTo(Actor $context): array
     {
         return array_values(array_filter(
             $this->items,
@@ -66,7 +66,7 @@ final readonly class Navigation
      *
      * @return list<array{area: NavigationArea, items: non-empty-list<NavigationItem>}>
      */
-    public function visibleByArea(ScopedContext $context): array
+    public function visibleByArea(Actor $context): array
     {
         $visible = $this->visibleTo($context);
         $groups = [];

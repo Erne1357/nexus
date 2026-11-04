@@ -7,7 +7,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién revisa los catálogos de un departamento, según docs/dominio/reglas-de-negocio.md, "Validación de
@@ -34,14 +34,14 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class CatalogReviewPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     /**
      * El tablero de avance de validación por departamento y campus (tarea 2.5).
      */
     public function viewProgress(User $user): bool
     {
-        return $this->scope($user)->allows(CatalogValidationPermission::ProgressView);
+        return $this->actor($user)->allows(CatalogValidationPermission::ProgressView);
     }
 
     /**
@@ -49,7 +49,7 @@ final class CatalogReviewPolicy
      */
     public function remind(User $user): bool
     {
-        return $this->scope($user)->allows(CatalogValidationPermission::ProgressRemind);
+        return $this->actor($user)->allows(CatalogValidationPermission::ProgressRemind);
     }
 
     public function view(User $user, CatalogReview $review): bool
@@ -97,6 +97,6 @@ final class CatalogReviewPolicy
 
     private function can(User $user, CatalogValidationPermission $permission, CatalogReview $review): bool
     {
-        return CatalogReviewQuery::allowsOnDepartment($this->scope($user), $permission, $review->campus_id, $review->department_id);
+        return CatalogReviewQuery::allowsOnDepartment($this->actor($user), $permission, $review->campus_id, $review->department_id);
     }
 }

@@ -4,11 +4,11 @@ namespace App\Modules\Faculty\Actions;
 
 use App\Modules\Core\Actions\CreateStaffUser;
 use App\Modules\Core\Actions\EndRoleAssignment;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
@@ -217,7 +217,7 @@ final class SyncTeacherAccess
     }
 
     /**
-     * Una entrada sobre el usuario con el valor anterior y el nuevo de lo que cambió, y recarga ScopedContext.
+     * Una entrada sobre el usuario con el valor anterior y el nuevo de lo que cambió, y recarga Actor.
      *
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
@@ -232,7 +232,7 @@ final class SyncTeacherAccess
             ->withProperties(['teacher_id' => $teacher->getKey()])
             ->log("Sincronizó el acceso del docente {$teacher->employee_number}: ".Arr::join($done, ', ', ' y '));
 
-        app(ScopedContext::class)->refresh();
+        app(Actor::class)->refresh();
     }
 
     /**

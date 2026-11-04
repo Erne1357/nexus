@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * quién tiene qué puesto. Un departamento académico es una unidad con su mismo id, así que `org_unit_id` de un jefe
  * es el id de su departamento. `career_id` tiene FK a `careers` (la agrega Academic), pero sin relación aquí porque
  * Core no depende de Academic. La base garantiza un solo jefe y una sola Subdirección por unidad en cada fecha, y
- * sube `users.authz_version` en cada cambio. Quién cubre qué lo decide ScopedContext, no este modelo.
+ * sube `users.authz_version` en cada cambio. Quién cubre qué lo decide Actor, no este modelo.
  */
 #[Fillable(['user_id', 'role', 'campus_id', 'org_unit_id', 'career_id', 'valid_from', 'valid_to'])]
 #[UseFactory(RoleAssignmentFactory::class)]

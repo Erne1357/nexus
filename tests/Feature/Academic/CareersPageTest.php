@@ -4,12 +4,12 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -53,7 +53,7 @@ function seesCareersMenu(User $user): bool
 {
     test()->actingAs($user);
 
-    return collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))
+    return collect(app(Navigation::class)->visibleTo(app(Actor::class)))
         ->contains(fn (NavigationItem $item): bool => $item->label === 'Carreras');
 }
 
@@ -93,7 +93,7 @@ describe('admin', function () {
 
     it('con un campus activo elegido muestra su clave y la acción de ofrecer', function () {
         $c1 = Campus::factory()->create(['code' => 'C1']);
-        session([ScopedContext::ACTIVE_CAMPUS => $c1->id]);
+        session([Actor::ACTIVE_CAMPUS => $c1->id]);
 
         $this->actingAs($this->admin)->get(route('academic.careers'))
             ->assertSee('Se ofrece en C1')->assertSee('Ofrecer')->assertDontSee('Elige un campus en tu credencial');

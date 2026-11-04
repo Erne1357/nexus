@@ -8,7 +8,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién arma, ve, corrige y envía la propuesta de una carrera, según docs/dominio/reglas-de-negocio.md,
@@ -24,11 +24,11 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class CareerProposalPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function create(User $user, Campus $campus, Career $career): bool
     {
-        return $this->scope($user)->allows(AcademicLoadPermission::ProposalCreate, Target::of(campus: $campus->getKey(), career: $career->getKey()));
+        return $this->actor($user)->allows(AcademicLoadPermission::ProposalCreate, Target::of(campus: $campus->getKey(), career: $career->getKey()));
     }
 
     public function view(User $user, CareerProposal $proposal): bool
@@ -48,6 +48,6 @@ final class CareerProposalPolicy
 
     private function can(User $user, AcademicLoadPermission $permission, CareerProposal $proposal): bool
     {
-        return $this->scope($user)->allows($permission, Target::of(campus: $proposal->campus_id, career: $proposal->career_id));
+        return $this->actor($user)->allows($permission, Target::of(campus: $proposal->campus_id, career: $proposal->career_id));
     }
 }

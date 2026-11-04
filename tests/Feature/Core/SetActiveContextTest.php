@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Actions\SetActiveContext;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -8,7 +9,6 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\RecentPages;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Auth\Access\AuthorizationException;
 
 beforeEach(function () {
@@ -28,7 +28,7 @@ it('fija el campus y el periodo activos del usuario', function () {
 
     app(SetActiveContext::class)->handle($this->c2, $this->previous);
 
-    $context = app(ScopedContext::class);
+    $context = app(Actor::class);
 
     expect($context->activeCampus()?->is($this->c2))->toBeTrue()
         ->and($context->activeTerm()?->is($this->previous))->toBeTrue();
@@ -40,7 +40,7 @@ it('con null olvida la elección y vuelve al campus y periodo por omisión', fun
 
     app(SetActiveContext::class)->handle(null, null);
 
-    $context = app(ScopedContext::class);
+    $context = app(Actor::class);
 
     expect($context->activeCampus()?->is($this->c2))->toBeTrue()
         ->and($context->activeTerm()?->is($this->current))->toBeTrue();
@@ -62,7 +62,7 @@ it('rechaza un campus fuera del alcance del usuario y no cambia el contexto', fu
     expect(fn () => app(SetActiveContext::class)->handle($other, $this->previous))
         ->toThrow(AuthorizationException::class);
 
-    $context = app(ScopedContext::class);
+    $context = app(Actor::class);
 
     expect($context->activeCampus()?->is($this->c2))->toBeTrue()
         ->and($context->activeTerm()?->is($this->current))->toBeTrue();
@@ -88,5 +88,5 @@ it('deja de usar el campus elegido cuando el alcance sobre él vence', function 
     RoleAssignment::where('user_id', $this->user->id)->where('campus_id', $this->c1->id)->update(['valid_to' => today()->subDay()]);
     app()->forgetScopedInstances();
 
-    expect(app(ScopedContext::class)->activeCampus()?->is($this->c2))->toBeTrue();
+    expect(app(Actor::class)->activeCampus()?->is($this->c2))->toBeTrue();
 });

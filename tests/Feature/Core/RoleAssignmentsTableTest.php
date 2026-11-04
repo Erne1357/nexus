@@ -13,7 +13,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | La tabla de nombramientos (ADR-0018): quién tiene qué puesto, sobre qué campus, unidad o carrera y desde cuándo.
-| Qué cubre cada uno lo decide ScopedContext; aquí se prueban la tabla, sus restricciones, su trigger y la migración
+| Qué cubre cada uno lo decide Actor; aquí se prueban la tabla, sus restricciones, su trigger y la migración
 | que la sacó de `role_scopes`.
 */
 

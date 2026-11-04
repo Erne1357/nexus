@@ -19,11 +19,11 @@ use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 
@@ -123,7 +123,7 @@ final class DepartmentInboxQuery
      *
      * @return Collection<int, Department>
      */
-    public function departmentsFor(ScopedContext $context, Campus $campus, ?Term $term = null): Collection
+    public function departmentsFor(Actor $context, Campus $campus, ?Term $term = null): Collection
     {
         return Department::query()
             ->withTrashed()

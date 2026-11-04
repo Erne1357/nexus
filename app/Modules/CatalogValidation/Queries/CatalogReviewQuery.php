@@ -8,10 +8,10 @@ use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -66,7 +66,7 @@ final class CatalogReviewQuery
      *
      * @return Collection<int, Department>
      */
-    public function departmentsFor(ScopedContext $context): Collection
+    public function departmentsFor(Actor $context): Collection
     {
         return Department::query()
             ->orderBy('code')
@@ -79,7 +79,7 @@ final class CatalogReviewQuery
      * Si `$permission` vale sobre el departamento en el campus de la revisión o, sin campus (las revisiones generales
      * no son de uno), en alguno de los campus del usuario. Es la regla única de CatalogReviewPolicy y de las pantallas.
      */
-    public static function allowsOnDepartment(ScopedContext $context, CatalogValidationPermission $permission, ?string $campus, string $department): bool
+    public static function allowsOnDepartment(Actor $context, CatalogValidationPermission $permission, ?string $campus, string $department): bool
     {
         return $context->allows($permission, Target::of(campus: $campus ?? $context->campuses()->map->getKey()->all(), unit: $department));
     }

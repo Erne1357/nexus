@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Actions\EndRoleAssignment;
 use App\Modules\Core\Actions\ResetUserPassword;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\AssignmentEnding;
 use App\Modules\Core\Enums\Role;
@@ -13,7 +14,6 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\AssignmentLabels;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\PeopleQuery;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Actions\AddExternalLoad;
 use App\Modules\Faculty\Actions\AddPosition;
 use App\Modules\Faculty\Actions\RemoveAdscription;
@@ -200,7 +200,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context, PeopleQuery $people, AvailabilityGridQuery $grids): array
+    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, Actor $context, PeopleQuery $people, AvailabilityGridQuery $grids): array
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -333,7 +333,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * Devuelve el usuario del docente a la contraseña por defecto y lo obliga a cambiarla. Solo el administrador.
      */
-    public function resetPassword(TeacherQuery $teachers, ResetUserPassword $resetUserPassword, ScopedContext $context): void
+    public function resetPassword(TeacherQuery $teachers, ResetUserPassword $resetUserPassword, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('resetPassword', $teacher);
@@ -639,7 +639,7 @@ new #[Title('Ficha del docente')] class extends Component
         $this->showQualificationModal = true;
     }
 
-    public function saveQualification(TeacherQuery $teachers, TeacherRecordQuery $records, SetQualification $setQualification, ScopedContext $context): void
+    public function saveQualification(TeacherQuery $teachers, TeacherRecordQuery $records, SetQualification $setQualification, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -679,7 +679,7 @@ new #[Title('Ficha del docente')] class extends Component
         }
     }
 
-    public function createLoad(TeacherQuery $teachers, ScopedContext $context): void
+    public function createLoad(TeacherQuery $teachers, Actor $context): void
     {
         $this->authorize('manageExternalLoads', $teachers->findOrFail($this->teacherId));
         $this->activeTermOrFail($context);
@@ -689,7 +689,7 @@ new #[Title('Ficha del docente')] class extends Component
         $this->showLoadModal = true;
     }
 
-    public function editLoad(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, ScopedContext $context): void
+    public function editLoad(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('manageExternalLoads', $teacher);
@@ -703,7 +703,7 @@ new #[Title('Ficha del docente')] class extends Component
         $this->showLoadModal = true;
     }
 
-    public function saveLoad(TeacherQuery $teachers, TeacherRecordQuery $records, AddExternalLoad $addExternalLoad, UpdateExternalLoad $updateExternalLoad, ScopedContext $context): void
+    public function saveLoad(TeacherQuery $teachers, TeacherRecordQuery $records, AddExternalLoad $addExternalLoad, UpdateExternalLoad $updateExternalLoad, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('manageExternalLoads', $teacher);
@@ -733,7 +733,7 @@ new #[Title('Ficha del docente')] class extends Component
         $this->showLoadModal = false;
     }
 
-    public function removeLoad(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, RemoveExternalLoad $removeExternalLoad, ScopedContext $context): void
+    public function removeLoad(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, RemoveExternalLoad $removeExternalLoad, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('manageExternalLoads', $teacher);
@@ -780,7 +780,7 @@ new #[Title('Ficha del docente')] class extends Component
      *
      * @return array<string, mixed>
      */
-    private function profileData(Teacher $teacher, TeacherRecordQuery $records, TeacherQuery $teachers, ScopedContext $context, ?Term $term): array
+    private function profileData(Teacher $teacher, TeacherRecordQuery $records, TeacherQuery $teachers, Actor $context, ?Term $term): array
     {
         $profile = $records->profile($teacher);
         $loads = $term === null ? collect() : $records->externalLoads($teacher, $term);
@@ -803,7 +803,7 @@ new #[Title('Ficha del docente')] class extends Component
      * @param  iterable<int, TeacherSubjectQualification>  $profile
      * @return array<string, bool>
      */
-    private function qualifiable(iterable $profile, Teacher $teacher, ScopedContext $context): array
+    private function qualifiable(iterable $profile, Teacher $teacher, Actor $context): array
     {
         $coversTeacher = $context->allows(FacultyPermission::TeacherViewAll)
             || $context->allows(FacultyPermission::TeacherQualificationManage, Target::of(unit: $teacher->adscriptions->pluck('department_id')->unique()->values()->all()));
@@ -817,7 +817,7 @@ new #[Title('Ficha del docente')] class extends Component
         return $allowed;
     }
 
-    private function activeTermOrFail(ScopedContext $context): Term
+    private function activeTermOrFail(Actor $context): Term
     {
         return $context->activeTerm() ?? abort(403, 'Elige un periodo en la credencial.');
     }
@@ -825,7 +825,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * Unas horas fuera del ITCJ del docente en el periodo activo; las de otro periodo no se tocan desde aquí.
      */
-    private function findLoadInActiveTerm(string $id, Teacher $teacher, TeacherRecordQuery $records, ScopedContext $context): TeacherExternalLoad
+    private function findLoadInActiveTerm(string $id, Teacher $teacher, TeacherRecordQuery $records, Actor $context): TeacherExternalLoad
     {
         $load = $records->findExternalLoad($teacher, $id);
         abort_unless($load->term_id === $this->activeTermOrFail($context)->id, 404);

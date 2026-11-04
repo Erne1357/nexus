@@ -1,11 +1,11 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Gate;
 
 /*
 | TeacherQuery: la tabla de Docentes deja ver lo mismo que TeacherPolicy (`view`), filtrado en SQL con los
-| departamentos de los alcances de ScopedContext, sin campus (el docente no es de un campus), y sin preguntarle a la
+| departamentos de los alcances de Actor, sin campus (el docente no es de un campus), y sin preguntarle a la
 | policy fila por fila. Busca por número o nombre; filtra por departamento de una adscripción, por tipo de plaza
 | vigente y por estado; trae las horas base del periodo activo de toda la página en una consulta.
 */
@@ -52,7 +52,7 @@ function teacherNumbersFor(User $user, array $filters = []): array
 {
     test()->actingAs($user);
 
-    return app(TeacherQuery::class)->forTable(app(ScopedContext::class), ...$filters)->pluck('employee_number')->all();
+    return app(TeacherQuery::class)->forTable(app(Actor::class), ...$filters)->pluck('employee_number')->all();
 }
 
 it('al admin y a la Subdirección les trae a todos los docentes sin borrar, también sin departamento, activos e inactivos', function () {
@@ -94,10 +94,10 @@ it('con varios puestos ve solo lo del perfil activo', function () {
         ->create();
 
     actingAsRole($both, Role::JefeDepartamento);
-    $asJefe = app(TeacherQuery::class)->forTable(app(ScopedContext::class))->pluck('employee_number')->all();
+    $asJefe = app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('employee_number')->all();
 
     actingAsRole($both, Role::JefeProyectoDocente);
-    $asJefeProyecto = app(TeacherQuery::class)->forTable(app(ScopedContext::class))->pluck('employee_number')->all();
+    $asJefeProyecto = app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('employee_number')->all();
 
     // Ana está adscrita a SC y a II: sale con los dos perfiles. Beto solo es de SC; Carla y Elena, solo de II.
     expect($asJefe)->toBe(['1000001', '1000002'])
@@ -157,7 +157,7 @@ it('filtra por estado', function () {
 it('trae las adscripciones sin borrar de cada docente con su departamento, la principal primero', function () {
     $this->actingAs(User::factory()->admin()->create());
 
-    $page = app(TeacherQuery::class)->forTable(app(ScopedContext::class));
+    $page = app(TeacherQuery::class)->forTable(app(Actor::class));
     $ana = $page->firstWhere('employee_number', '1000001');
 
     expect($ana->relationLoaded('adscriptions'))->toBeTrue()
@@ -169,7 +169,7 @@ it('trae las adscripciones sin borrar de cada docente con su departamento, la pr
 
 it('las opciones de departamento marcan los inactivos', function () {
     $this->actingAs(User::factory()->admin()->create());
-    $context = app(ScopedContext::class);
+    $context = app(Actor::class);
 
     expect(app(TeacherQuery::class)->filterOptions($context)['departments'])->toBe([
         ['id' => $this->ii->id, 'name' => "II · {$this->ii->name} (inactivo)"],
@@ -183,10 +183,10 @@ it('las opciones de departamento marcan los inactivos', function () {
 
 it('el jefe da de alta solo en su departamento; la Subdirección, en cualquiera', function () {
     $this->actingAs(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create());
-    $jefeTargets = app(TeacherQuery::class)->adscriptionTargets(app(ScopedContext::class));
+    $jefeTargets = app(TeacherQuery::class)->adscriptionTargets(app(Actor::class));
 
     $this->actingAs(User::factory()->withRole(Role::Subdireccion)->create());
-    $subdireccionTargets = app(TeacherQuery::class)->adscriptionTargets(app(ScopedContext::class));
+    $subdireccionTargets = app(TeacherQuery::class)->adscriptionTargets(app(Actor::class));
 
     expect(array_column($jefeTargets, 'code'))->toBe(['SC'])
         ->and(array_column($subdireccionTargets, 'code'))->toBe(['II', 'SC']);
@@ -197,7 +197,7 @@ it('da las horas base del periodo activo de toda la página en una sola consulta
     TeacherPosition::factory()->for($this->ana)->asignatura(5)->create();
     TeacherPosition::factory()->for($this->beto)->expired()->create();
     $this->actingAs(User::factory()->admin()->create());
-    $page = app(TeacherQuery::class)->forTable(app(ScopedContext::class));
+    $page = app(TeacherQuery::class)->forTable(app(Actor::class));
 
     DB::enableQueryLog();
     $hours = app(TeacherQuery::class)->baseHoursFor($this->term, $page);
@@ -226,7 +226,7 @@ it('carga 40 docentes con 3 adscripciones cada uno y sus horas base sin N+1', fu
     });
 
     $this->actingAs(User::factory()->admin()->create());
-    $context = app(ScopedContext::class);
+    $context = app(Actor::class);
     $context->isAdmin();
 
     DB::enableQueryLog();
@@ -267,10 +267,10 @@ it('la lista de docentes da las mismas filas que antes por puesto', function () 
         ->and(teacherNumbersFor($jpd))->toBe(['1000001', '1000002']);
 
     actingAsRole($both, Role::JefeDepartamento);
-    expect(app(TeacherQuery::class)->forTable(app(ScopedContext::class))->pluck('employee_number')->all())->toBe(['1000001', '1000002']);
+    expect(app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('employee_number')->all())->toBe(['1000001', '1000002']);
 
     actingAsRole($both, Role::Coordinador);
-    expect(app(TeacherQuery::class)->forTable(app(ScopedContext::class))->pluck('employee_number')->all())->toBe([]);
+    expect(app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('employee_number')->all())->toBe([]);
 });
 
 it('los departamentos del perfil de materias y del alta son los de antes por puesto', function () {
@@ -278,8 +278,8 @@ it('los departamentos del perfil de materias y del alta son los de antes por pue
         ->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
         ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
         ->create();
-    $covered = fn (): ?array => app(TeacherQuery::class)->coveredDepartments(app(ScopedContext::class), FacultyPermission::TeacherQualificationManage);
-    $targets = fn (): array => array_column(app(TeacherQuery::class)->adscriptionTargets(app(ScopedContext::class)), 'code');
+    $covered = fn (): ?array => app(TeacherQuery::class)->coveredDepartments(app(Actor::class), FacultyPermission::TeacherQualificationManage);
+    $targets = fn (): array => array_column(app(TeacherQuery::class)->adscriptionTargets(app(Actor::class)), 'code');
 
     $this->actingAs(User::factory()->admin()->create());
     expect($covered())->toBeNull();

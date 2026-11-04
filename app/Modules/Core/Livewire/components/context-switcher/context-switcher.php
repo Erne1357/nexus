@@ -2,12 +2,12 @@
 
 use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Actions\SwitchRole;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\RoleSummaryQuery;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TermQuery;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -22,7 +22,7 @@ use Mary\Traits\Toast;
  * puesto ve «Actuando como», un renglón por puesto con su alcance (RoleSummaryQuery, armado una vez al montar: no
  * cambia mientras la página está abierta); elegir uno lo cambia con switchRole() (SwitchRole) y regresa a Inicio.
  * Con un solo puesto no hay selector (la credencial ya dice cuál es). Ofrece los campus de
- * ScopedContext::campuses() (fijo si solo hay uno) y todos los periodos, y apply() guarda la elección con
+ * Actor::campuses() (fijo si solo hay uno) y todos los periodos, y apply() guarda la elección con
  * SetActiveContext, que rechaza un campus ajeno; apply() nunca cambia el perfil. Elegir el periodo actual deja el
  * de omisión, para seguirlo cuando cambie. Sin periodo activo, el selector muestra "Sin periodo". Después lo
  * confirma con un toast y recarga la página para que todo lo que depende del contexto lo use. Si el campus o el
@@ -42,7 +42,7 @@ new class extends Component
     #[Locked]
     public array $roles = [];
 
-    public function mount(ScopedContext $context, RoleSummaryQuery $summaries): void
+    public function mount(Actor $context, RoleSummaryQuery $summaries): void
     {
         $this->roleValue = $context->activeRole()?->value;
         $this->campusId = $context->activeCampus()?->getKey();
@@ -55,7 +55,7 @@ new class extends Component
     /**
      * @return array{campuses: Collection<int, Campus>, terms: Collection<int, Term>}
      */
-    public function with(ScopedContext $context, TermQuery $terms): array
+    public function with(Actor $context, TermQuery $terms): array
     {
         return [
             'campuses' => $context->campuses(),
@@ -66,7 +66,7 @@ new class extends Component
     /**
      * Cambia al perfil elegido en «Actuando como» y regresa a Inicio. Si no lo tiene, avisa y deja el de antes.
      */
-    public function switchRole(SwitchRole $switchRole, ScopedContext $context): void
+    public function switchRole(SwitchRole $switchRole, Actor $context): void
     {
         $role = Role::tryFrom((string) $this->roleValue);
 
@@ -91,7 +91,7 @@ new class extends Component
     /**
      * Guarda el campus y el periodo elegidos. No toca el perfil: eso es de switchRole().
      */
-    public function apply(SetActiveContext $setActiveContext, ScopedContext $context, CampusQuery $campuses, TermQuery $terms): void
+    public function apply(SetActiveContext $setActiveContext, Actor $context, CampusQuery $campuses, TermQuery $terms): void
     {
         try {
             $campus = blank($this->campusId) ? null : $campuses->findOrFail($this->campusId);
@@ -119,7 +119,7 @@ new class extends Component
     /**
      * Regresa la selección al contexto vigente y avisa por qué no cambió.
      */
-    private function reject(string $reason, ScopedContext $context): void
+    private function reject(string $reason, Actor $context): void
     {
         $this->roleValue = $context->activeRole()?->value;
         $this->campusId = $context->activeCampus()?->getKey();

@@ -5,7 +5,7 @@ namespace App\Modules\Academic\Policies;
 use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién administra departamentos, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila
@@ -14,21 +14,21 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class DepartmentPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(AcademicPermission::DepartmentView);
+        return $this->actor($user)->allowsAny(AcademicPermission::DepartmentView);
     }
 
     public function view(User $user, Department $department): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::DepartmentView);
+        return $this->actor($user)->allows(AcademicPermission::DepartmentView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::DepartmentCreate);
+        return $this->actor($user)->allows(AcademicPermission::DepartmentCreate);
     }
 
     /**
@@ -36,7 +36,7 @@ final class DepartmentPolicy
      */
     public function update(User $user, Department $department): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::DepartmentUpdate);
+        return $this->actor($user)->allows(AcademicPermission::DepartmentUpdate);
     }
 
     /**
@@ -44,6 +44,6 @@ final class DepartmentPolicy
      */
     public function delete(User $user, Department $department): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::DepartmentDelete);
+        return $this->actor($user)->allows(AcademicPermission::DepartmentDelete);
     }
 }

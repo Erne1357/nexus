@@ -1,16 +1,16 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\CampusQuery;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /*
 | CampusQuery: lecturas del CRUD de Campus. forTable() es la tabla, por código, paginada, con búsqueda
 | literal por código o nombre (TextSearch) y filtro por estado; lista lo que la policy deja ver: al
-| admin, todos; a la subdirección, sus campus activos de ScopedContext::campuses(); a nadie más,
+| admin, todos; a la subdirección, sus campus activos de Actor::campuses(); a nadie más,
 | ninguno. findOrFail() carga el campus que se va a editar.
 */
 
@@ -28,7 +28,7 @@ function campusCodesFor(User $user, string $search = '', ?bool $active = null, i
     test()->actingAs($user);
 
     return app(CampusQuery::class)
-        ->forTable(app(ScopedContext::class), $search, $active, $perPage)
+        ->forTable(app(Actor::class), $search, $active, $perPage)
         ->pluck('code')
         ->all();
 }
@@ -72,7 +72,7 @@ it('no lista los campus borrados', function () {
 it('pagina el listado', function () {
     $this->actingAs(User::factory()->admin()->create());
 
-    $page = app(CampusQuery::class)->forTable(app(ScopedContext::class), perPage: 2);
+    $page = app(CampusQuery::class)->forTable(app(Actor::class), perPage: 2);
 
     expect($page->total())->toBe(3)
         ->and($page->pluck('code')->all())->toBe(['C1', 'C2']);

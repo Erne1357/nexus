@@ -5,7 +5,7 @@ namespace App\Modules\Academic\Policies;
 use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién administra carreras, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila
@@ -14,21 +14,21 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class CareerPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(AcademicPermission::CareerView);
+        return $this->actor($user)->allowsAny(AcademicPermission::CareerView);
     }
 
     public function view(User $user, Career $career): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::CareerView);
+        return $this->actor($user)->allows(AcademicPermission::CareerView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::CareerCreate);
+        return $this->actor($user)->allows(AcademicPermission::CareerCreate);
     }
 
     /**
@@ -36,7 +36,7 @@ final class CareerPolicy
      */
     public function update(User $user, Career $career): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::CareerUpdate);
+        return $this->actor($user)->allows(AcademicPermission::CareerUpdate);
     }
 
     /**
@@ -44,6 +44,6 @@ final class CareerPolicy
      */
     public function delete(User $user, Career $career): bool
     {
-        return $this->scope($user)->allows(AcademicPermission::CareerDelete);
+        return $this->actor($user)->allows(AcademicPermission::CareerDelete);
     }
 }

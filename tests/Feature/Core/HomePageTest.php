@@ -11,7 +11,7 @@ use Livewire\Livewire;
 
 /*
 | Página de inicio (`/`, core::pages.home): saludo y un bloque por cada rol que el usuario ejerce
-| según ScopedContext::roles(). El admin, que tiene todos los roles, ve solo el suyo. Los bloques se
+| según Actor::roles(). El admin, que tiene todos los roles, ve solo el suyo. Los bloques se
 | prueban con el componente solo, porque la credencial de la banda también nombra el rol.
 */
 

@@ -6,7 +6,7 @@ Cómo se organiza el equipo desde la fase 1 (3 de noviembre de 2026) para llegar
 
 | Rol | Quién | Notas |
 |---|---|---|
-| **A** | Quien hizo la fase 0 | Conoce `Core`, `ScopedContext`, la convención de módulos y la CI. Es la referencia cuando algo de la base no queda claro. |
+| **A** | Quien hizo la fase 0 | Conoce `Core`, `Actor`, la convención de módulos y la CI. Es la referencia cuando algo de la base no queda claro. |
 | **B** | Por asignar | Perfil con más pantallas y UI: retícula, validación, editor de horarios, consulta publicada. |
 | **C** | Por asignar | Perfil de reglas y flujos: docentes, ranking, asignación, cierre, seguridad. |
 
@@ -40,7 +40,7 @@ Cada fase empieza con un **PR pequeño de contratos** que publica lo que otros n
 - Fase 1: contrato de plantilla de importación y una plantilla de ejemplo (A, día 1); migraciones, modelos y factories de Academic (B, tarea 1.7, a más tardar el día 2), porque Students, Faculty y Facilities tienen llaves foráneas a sus tablas; eventos `BatchApplied` y `TermOpened`; `EligibleStudentsQuery` como interfaz con una implementación provisional.
 - Fase 2: Actions de transición de `academic_loads` con sus firmas y guardas vacías (A); evento de propuesta enviada.
 - Fase 3: interfaz del validador de restricciones y una regla de ejemplo (A, antes del día 4), para que el editor (B) y la asignación (C) lo consuman desde el inicio; `RoomSuggestionQuery` como interfaz.
-- Siempre: `ScopedContext` de `Core` es el único punto de alcance; si alguien necesita un método nuevo ahí, lo pide por issue a A y se agrega en un PR aparte.
+- Siempre: `Actor` de `Core` es el único punto de alcance; si alguien necesita un método nuevo ahí, lo pide por issue a A y se agrega en un PR aparte.
 
 Un contrato publicado no se cambia sin avisar en el issue a quienes lo consumen.
 
@@ -58,7 +58,7 @@ Un contrato publicado no se cambia sin avisar en el issue a quienes lo consumen.
 
 - Las migraciones viven **dentro del módulo** con marca de tiempo; dos personas no editan la misma migración. Una migración ya mezclada en `develop` no se modifica: se crea otra.
 - **No se edita un módulo ajeno** sin avisar antes en el issue y etiquetar a su dueño; lo normal es pedirle el cambio.
-- Los cambios a `Core` (layout, `ScopedContext`, roles, configuración de módulos) se **anuncian antes** de hacerlos, porque afectan a todos.
+- Los cambios a `Core` (layout, `Actor`, roles, configuración de módulos) se **anuncian antes** de hacerlos, porque afectan a todos.
 - Nada de ramas largas: se integra a `develop` **al menos cada dos días**, aunque sea detrás de una condición que no active la pantalla todavía.
 - Antes de abrir un PR se actualiza la rama con `develop` y se corre la suite completa en local.
 
