@@ -170,16 +170,17 @@ new #[Title('Ficha de la persona')] class extends Component
     }
 
     /**
-     * Abre el recuadro «Terminar…» en la tarjeta del nombramiento, con hoy como último día.
+     * Abre el recuadro «Terminar…» en la tarjeta del nombramiento, con el primer último día posible (AZ-S12), que es hoy
+     * salvo un puesto de Administración cuyo sucesor empieza después.
      */
-    public function confirmEnd(string $id, PeopleQuery $people, PersonRecordQuery $records): void
+    public function confirmEnd(string $id, PeopleQuery $people, PersonRecordQuery $records, RoleAssignmentRules $rules): void
     {
         $assignment = $records->assignmentOf($people->findOrFail($this->personId), $id);
         $this->authorize('end', $assignment);
 
         $this->resetValidation();
         $this->endingId = $assignment->id;
-        $this->lastDay = today()->toDateString();
+        $this->lastDay = ($rules->earliestLastDay($assignment) ?? today()->toImmutable())->toDateString();
     }
 
     public function cancelEnd(): void

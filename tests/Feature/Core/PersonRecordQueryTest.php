@@ -138,3 +138,12 @@ it('la bitácora trae las 10 últimas', function () {
 
     expect($log)->toHaveCount(10)->and($log[0]['description'])->toBe('Entrada 12');
 });
+
+it('AZ-S12: con el único sucesor programado, «Terminar…» queda habilitado y el primer último día posible es la víspera del sucesor', function () {
+    giveRole($this->rosa, Role::Admin, '2026-12-01');
+
+    $row = collect(app(PersonRecordQuery::class)->for($this->admin)->assignments)->firstWhere('assignment.role', Role::Admin);
+
+    expect($row['endBlocker'])->toBeNull()
+        ->and($row['earliestLastDay']->toDateString())->toBe('2026-11-30');
+});

@@ -51,6 +51,7 @@ final class PersonRecordQuery
                     : null,
                 'endedBy' => $status === AssignmentStatus::Ended ? ($endings[$assignment->getKey()] ?? null) : null,
                 'endBlocker' => $this->endBlocker($assignment),
+                'earliestLastDay' => $this->rules->earliestLastDay($assignment),
             ];
         })->all();
 
@@ -96,13 +97,12 @@ final class PersonRecordQuery
     }
 
     /**
-     * Por qué el nombramiento no se termina desde esta pantalla; nulo si sí. Uno de Administración no se termina si,
-     * terminándolo hoy, quedaría algún día sin admin vigente (RoleAssignmentRules::adminGap(), la misma regla que
-     * EndRoleAssignment).
+     * Por qué el nombramiento no se termina desde esta pantalla; nulo si sí. Uno de Administración no se termina si
+     * ningún último día desde hoy evita días sin admin vigente (AZ-S12, RoleAssignmentRules::endBlocker()).
      */
     public function endBlocker(RoleAssignment $assignment): ?string
     {
-        return $this->rules->managedElsewhere($assignment->role) ?? $this->rules->adminGap($assignment, today()->toImmutable());
+        return $this->rules->endBlocker($assignment);
     }
 
     /**

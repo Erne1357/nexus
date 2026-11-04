@@ -138,8 +138,8 @@ final class RoleAssignmentRules
      * El primer día que deja de cubrir es el siguiente a `$lastDay` o, si se quita, su inicio, y nunca antes de hoy:
      * desde ahí, la unión de los demás nombramientos `admin` de usuarios activos (`range_agg`) debe cubrir todos los
      * días, sin fin. El que se termina cuenta solo hasta `$lastDay`, que ya quedó atrás de ese día. Uno que ya termina
-     * ese día o antes no cambia. Lo usan EndRoleAssignment, bajo ADMIN_SEATS_LOCK, y la ficha de la persona, sin
-     * candado y con hoy como último día, para dejar «Terminar…» deshabilitado con el mismo motivo.
+     * ese día o antes no cambia. Lo usan EndRoleAssignment, bajo ADMIN_SEATS_LOCK, y `endBlocker()`, sin candado.
+     * Dice «Es el único…» solo si nadie más cubre ningún día desde ahí; si no, el primer día que queda sin admin.
      */
     public function adminGap(RoleAssignment $assignment, CarbonImmutable $lastDay): ?string
     {
@@ -156,20 +156,80 @@ final class RoleAssignmentRules
         $from = $assignment->valid_from->toDateString();
         $start = max($from > $last ? $from : $lastDay->addDay()->toDateString(), today()->toDateString());
 
-        $gap = DB::selectOne(<<<'SQL'
-            select lower(datemultirange(daterange(cast(? as date), null, '[)')) - coalesce(range_agg(daterange(ra.valid_from, ra.valid_to, '[]')), '{}'::datemultirange)) as day
-            from role_assignments ra
-            join users u on u.id = ra.user_id
-            where ra.role = 'admin' and ra.id <> ? and u.is_active
-            SQL, [$start, $assignment->getKey()])->day;
+        $uncovered = $this->uncoveredAdminDays($start, 'ra.id', $assignment->getKey());
 
-        if ($gap === null) {
+        if ($uncovered['first'] === null) {
             return null;
         }
 
-        return $gap === $start
+        return $uncovered['all']
             ? 'Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.'
-            : 'El '.CarbonImmutable::parse($gap)->format('d/m/Y').' nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.';
+            : 'El '.CarbonImmutable::parse($uncovered['first'])->format('d/m/Y').' nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.';
+    }
+
+    /**
+     * AZ-S12: el primer último día, desde hoy, con el que terminar o quitar `$assignment` no deja ningún día sin admin
+     * vigente; hoy si no es de Administración y nulo si ningún último día sirve. Los demás nombramientos `admin` de
+     * usuarios activos dejan sin cubrir los días `m` desde hoy: si `m` es vacío sirve hoy, si no tiene fin ninguno
+     * sirve, y si lo tiene sirve el último día de `m` (hoy, si el nombramiento empieza después de ese día, porque
+     * quitarlo no causa el hueco) siempre que sea anterior al fin del propio nombramiento.
+     */
+    public function earliestLastDay(RoleAssignment $assignment): ?CarbonImmutable
+    {
+        $today = today()->toImmutable();
+
+        if ($assignment->role !== Role::Admin) {
+            return $today;
+        }
+
+        $uncovered = $this->uncoveredAdminDays($today->toDateString(), 'ra.id', $assignment->getKey());
+
+        if ($uncovered['first'] === null) {
+            $day = $today;
+        } elseif (! $uncovered['bounded']) {
+            return null;
+        } else {
+            $day = $assignment->valid_from->toDateString() > $uncovered['last'] ? $today : CarbonImmutable::parse($uncovered['last']);
+        }
+
+        return $assignment->valid_to !== null && $day->toDateString() >= $assignment->valid_to->toDateString() ? null : $day;
+    }
+
+    /**
+     * Por qué el nombramiento no se termina desde «Personas y puestos» ni el Organigrama; nulo si sí: se maneja en otra
+     * parte (AZ-S11) o, siendo de Administración, ningún último día desde hoy evita días sin admin (AZ-S12).
+     */
+    public function endBlocker(RoleAssignment $assignment): ?string
+    {
+        return $this->managedElsewhere($assignment->role)
+            ?? ($this->earliestLastDay($assignment) === null ? $this->adminGap($assignment, today()->toImmutable()) : null);
+    }
+
+    /**
+     * El único SQL de cobertura de Administración (AZ-S12): los días desde `$from`, sin fin, que ningún nombramiento
+     * `admin` de un usuario activo cubre, sin contar el excluido (`$exceptColumn` es `ra.id` o `ra.user_id`).
+     *
+     * @return array{first: ?string, last: ?string, bounded: bool, all: bool}
+     */
+    private function uncoveredAdminDays(string $from, string $exceptColumn, string $exceptId): array
+    {
+        $exceptColumn = $exceptColumn === 'ra.user_id' ? 'ra.user_id' : 'ra.id';
+
+        $row = DB::selectOne(<<<SQL
+            select lower(m) as first,
+                   upper(m) - 1 as last,
+                   (isempty(m) or upper(m) is not null) as bounded,
+                   (m = base) as "all"
+            from (
+                select datemultirange(daterange(cast(? as date), null, '[)')) as base,
+                       datemultirange(daterange(cast(? as date), null, '[)')) - coalesce(range_agg(daterange(ra.valid_from, ra.valid_to, '[]')), '{}'::datemultirange) as m
+                from role_assignments ra
+                join users u on u.id = ra.user_id
+                where ra.role = 'admin' and {$exceptColumn} <> ? and u.is_active
+            ) covered
+            SQL, [$from, $from, $exceptId]);
+
+        return ['first' => $row->first, 'last' => $row->last, 'bounded' => (bool) $row->bounded, 'all' => (bool) $row->all];
     }
 
     /**

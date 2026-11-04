@@ -16,7 +16,7 @@ use Carbon\CarbonImmutable;
 final readonly class PersonRecord
 {
     /**
-     * @param  list<array{assignment: RoleAssignment, label: AssignmentLabel, status: AssignmentStatus, daysLeft: ?int, endedBy: ?array{name: string, on: CarbonImmutable}, endBlocker: ?string}>  $assignments  vigentes, programados y terminados, en ese orden
+     * @param  list<array{assignment: RoleAssignment, label: AssignmentLabel, status: AssignmentStatus, daysLeft: ?int, endedBy: ?array{name: string, on: CarbonImmutable}, endBlocker: ?string, earliestLastDay: ?CarbonImmutable}>  $assignments  vigentes, programados y terminados, en ese orden
      * @param  int  $current  los vigentes
      * @param  int  $past  los terminados
      * @param  CarbonImmutable|null  $since  el inicio del nombramiento más antiguo
