@@ -236,6 +236,22 @@ describe('listar y terminar', function () {
         expect(RoleAssignment::whereKey($head->id)->exists())->toBeFalse();
     });
 
+    it('quitar una jefatura que empieza hoy dice que empezaba hoy', function () {
+        $user = User::factory()->withRole(Role::Docente)->create(['username' => '1000001']);
+        $this->ana->update(['user_id' => $user->id]);
+        $head = headshipFor($user, Role::JefeDepartamento, $this->sc->id, null, ['valid_from' => today()->toDateString()]);
+
+        $page = headshipRecord($this->admin, $this->ana)
+            ->call('confirmEndHeadship', $head->id)
+            ->assertSee('Si empieza hoy o después y el último día es anterior a su inicio, se quita.')
+            ->set('endLastDay', today()->subDay()->toDateString())
+            ->call('endHeadship')
+            ->assertHasNoErrors();
+
+        expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Jefatura quitada', 'description' => 'Empezaba hoy.'])
+            ->and(RoleAssignment::whereKey($head->id)->exists())->toBeFalse();
+    });
+
     it('terminar en una fecha posterior a su fin no cambia nada', function () {
         $user = User::factory()->withRole(Role::Docente)->create(['username' => '1000001']);
         $this->ana->update(['user_id' => $user->id]);

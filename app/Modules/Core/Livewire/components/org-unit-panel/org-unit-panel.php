@@ -339,7 +339,7 @@ new class extends Component
 
         match ($ending) {
             AssignmentEnding::Ended => $this->success('Nombramiento terminado', e('Último día: '.$day->format('d/m/Y'))),
-            AssignmentEnding::Removed => $this->success('Nombramiento quitado', 'Todavía no empezaba.'),
+            AssignmentEnding::Removed => $this->success('Nombramiento quitado', $assignment->valid_from->isToday() ? 'Empezaba hoy.' : 'Todavía no empezaba.'),
             AssignmentEnding::Unchanged => $this->info('Sin cambios', e('Ese nombramiento ya termina el '.$assignment->valid_to->format('d/m/Y').'.')),
         };
 
