@@ -2,8 +2,10 @@
 
 namespace App\Modules\Faculty\Queries;
 
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Enums\AssignmentStatus;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
@@ -16,6 +18,7 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Rules\BaseHours;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -78,54 +81,54 @@ final class TeacherRecordQuery
     }
 
     /**
-     * Las jefaturas del usuario del docente, vigentes y pasadas (sin las borradas), con su departamento y campus
-     * aunque estén borrados: las vigentes y las por empezar primero, luego las terminadas, y dentro de cada grupo
-     * las de inicio más reciente. Cada una lleva `status` (`vigente`, `por_empezar` o `terminada`). Sin usuario no
-     * tiene jefaturas. Quién la ve lo decide TeacherPolicy (`appointHeads`).
+     * Las jefaturas del usuario del docente (los nombramientos de Role::HEADSHIPS), vigentes y pasadas, con su unidad
+     * y campus aunque estén borrados: las que no terminaron primero, luego las terminadas, y dentro de cada grupo las
+     * de inicio más reciente. Cada una lleva su `status` de hoy. Sin usuario no tiene jefaturas. Quién la ve lo decide
+     * RoleAssignmentPolicy (`viewAny`).
      *
-     * @return EloquentCollection<int, DepartmentHead>
+     * @return Collection<int, array{assignment: RoleAssignment, status: AssignmentStatus}>
      */
-    public function headships(Teacher $teacher): EloquentCollection
+    public function headships(Teacher $teacher): Collection
     {
         if ($teacher->user_id === null) {
-            return new EloquentCollection;
+            return collect();
         }
 
-        $today = today()->toDateString();
+        $today = CarbonImmutable::today();
 
-        return DepartmentHead::query()
+        return RoleAssignment::query()
             ->where('user_id', $teacher->user_id)
+            ->whereIn('role', array_map(fn (Role $role): string => $role->value, Role::HEADSHIPS))
             ->with([
-                'department' => fn (BelongsTo $department) => $department->withTrashed()->select(['id', 'code', 'name']),
+                'orgUnit' => fn (BelongsTo $unit) => $unit->withTrashed()->select(['id', 'code', 'name']),
                 'campus' => fn (BelongsTo $campus) => $campus->withTrashed()->select(['id', 'code', 'name']),
             ])
             ->get()
-            ->each(fn (DepartmentHead $head) => $head->setAttribute('status', match (true) {
-                $head->valid_to !== null && $head->valid_to->toDateString() < $today => 'terminada',
-                $head->valid_from->toDateString() > $today => 'por_empezar',
-                default => 'vigente',
-            }))
+            ->map(fn (RoleAssignment $assignment): array => ['assignment' => $assignment, 'status' => AssignmentStatus::of($assignment, $today)])
             ->sortBy([
-                fn (DepartmentHead $a, DepartmentHead $b): int => ($a->status === 'terminada') <=> ($b->status === 'terminada'),
-                fn (DepartmentHead $a, DepartmentHead $b): int => strcmp($b->valid_from->toDateString(), $a->valid_from->toDateString()),
-                fn (DepartmentHead $a, DepartmentHead $b): int => strcmp($a->id, $b->id),
+                fn (array $a, array $b): int => ($a['status'] === AssignmentStatus::Ended) <=> ($b['status'] === AssignmentStatus::Ended),
+                fn (array $a, array $b): int => strcmp($b['assignment']->valid_from->toDateString(), $a['assignment']->valid_from->toDateString()),
+                fn (array $a, array $b): int => strcmp($a['assignment']->id, $b['assignment']->id),
             ])
             ->values();
     }
 
     /**
-     * Una jefatura sin borrar del usuario de ese docente; el id llega del navegador.
+     * Una jefatura del usuario de ese docente; el id llega del navegador. Un nombramiento de otro usuario o de un
+     * puesto que no es jefatura no existe.
      *
-     * @throws ModelNotFoundException<DepartmentHead>
+     * @throws ModelNotFoundException<RoleAssignment>
      */
-    public function findHeadship(Teacher $teacher, string $id): DepartmentHead
+    public function findHeadship(Teacher $teacher, string $id): RoleAssignment
     {
         return KeyLookup::findOrFail(
-            DepartmentHead::query()->when(
-                $teacher->user_id === null,
-                fn ($query) => $query->whereRaw('false'),
-                fn ($query) => $query->where('user_id', $teacher->user_id),
-            ),
+            RoleAssignment::query()
+                ->whereIn('role', array_map(fn (Role $role): string => $role->value, Role::HEADSHIPS))
+                ->when(
+                    $teacher->user_id === null,
+                    fn ($query) => $query->whereRaw('false'),
+                    fn ($query) => $query->where('user_id', $teacher->user_id),
+                ),
             $id,
         );
     }

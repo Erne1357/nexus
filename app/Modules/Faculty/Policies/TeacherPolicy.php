@@ -32,7 +32,8 @@ use Illuminate\Support\Collection;
  * - Dar de alta (`create`) en un departamento es de quien lo cubre. Adscribir a un docente que ya existe
  *   (`adscribe`) es solo del admin y la Subdirección; a los jefes la pantalla solo les dice que el número ya está
  *   registrado (S9).
- * - Nombrar jefes (S7), dar de alta usuarios y reiniciar contraseñas, solo el admin.
+ * - Dar de alta usuarios y reiniciar contraseñas, solo el admin. Nombrar jefes ya no es de esta Policy: la ficha usa
+ *   RoleAssignmentPolicy de Core (3.P8).
  *
  * Se resuelve con los permisos de FacultyPermission, que el provider concede por puesto:
  * - Sobre un docente (`view`, `update`, `managePositions`, `manageAvailability`, `manageExternalLoads` y la parte del
@@ -45,7 +46,7 @@ use Illuminate\Support\Collection;
  *   `faculty.teacher_department.set_primary`, `faculty.teacher_qualification.manage`) sobre ese departamento.
  *   `view_all` no lo abre: la Subdirección cubre los de su subárbol, Subdirección Académica, como antes.
  * - Sin dimensiones: `faculty.teacher.deactivate` y `faculty.teacher.adscribe` (la Subdirección), y
- *   `faculty.department_head.appoint`, `faculty.teacher_user.provision` y `faculty.teacher_user.reset_password`, que
+ *   `faculty.teacher_user.provision` y `faculty.teacher_user.reset_password`, que
  *   no se conceden a nadie: solo el admin, que tiene todo.
  * «No sobre sí mismo» es una condición del recurso y se queda aquí.
  *
@@ -158,11 +159,6 @@ final class TeacherPolicy
     public function adscribe(User $user): bool
     {
         return $this->scope($user)->allows(FacultyPermission::TeacherAdscribe);
-    }
-
-    public function appointHeads(User $user): bool
-    {
-        return $this->scope($user)->allows(FacultyPermission::DepartmentHeadAppoint);
     }
 
     /**

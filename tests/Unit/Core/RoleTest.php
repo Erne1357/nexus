@@ -40,3 +40,7 @@ it('unitKind: la Subdirección pide una subdirección; el jefe y el jefe de proy
     [Role::Docente, null],
     [Role::Admin, null],
 ]);
+
+it('HEADSHIPS son el jefe de departamento y el jefe de proyecto docente', function () {
+    expect(Role::HEADSHIPS)->toBe([Role::JefeDepartamento, Role::JefeProyectoDocente]);
+});

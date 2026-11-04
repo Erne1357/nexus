@@ -339,24 +339,25 @@
                         @endif
                     </header>
 
-                    @forelse ($headships as $head)
-                        @php($ended = $head->status === 'terminada')
+                    @forelse ($headships as $row)
+                        @php($head = $row['assignment'])
+                        @php($ended = $row['status'] === \App\Modules\Core\Enums\AssignmentStatus::Ended)
                         <div wire:key="headship-{{ $head->id }}" @class(['grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_8rem_8rem_9rem_auto]', 'text-neutral' => $ended])>
                             <div class="min-w-0">
-                                <span @class(['font-semibold', 'font-normal' => $ended])>{{ $head->kind->label() }}</span>
-                                <span class="block text-sm text-neutral">{{ $head->department?->name }}{{ $head->campus ? ' · '.$head->campus->name : ' · Todo el Tec' }}</span>
+                                <span @class(['font-semibold', 'font-normal' => $ended])>{{ $head->role->label() }}</span>
+                                <span class="block text-sm text-neutral">{{ $head->orgUnit?->name }}{{ $head->campus ? ' · '.$head->campus->name : ' · Todo el Tec' }}</span>
                             </div>
                             <span class="max-md:col-span-2"><span class="text-neutral md:hidden">Desde </span>{{ $head->valid_from->format('d/m/Y') }}</span>
                             <span class="max-md:col-span-2"><span class="text-neutral md:hidden">Hasta </span>{{ $head->valid_to?->format('d/m/Y') ?? 'Sin fecha' }}</span>
                             <span class="max-md:col-span-2">
                                 <x-core::status-badge
-                                    :tone="['vigente' => 'success', 'por_empezar' => 'info', 'terminada' => 'neutral'][$head->status]"
-                                    :label="['vigente' => 'Vigente', 'por_empezar' => 'Por empezar', 'terminada' => 'Terminada'][$head->status]"
+                                    :tone="$row['status']->tone()->value"
+                                    :label="['vigente' => 'Vigente', 'programado' => 'Por empezar', 'terminado' => 'Terminada'][$row['status']->value]"
                                 />
                             </span>
                             <span class="flex justify-end max-md:col-span-2 max-md:justify-start max-md:-ms-3">
                                 @unless ($ended)
-                                    <x-button label="Terminar" icon="o-stop-circle" class="btn-ghost btn-sm text-error" wire:click="confirmEndHeadship('{{ $head->id }}')" spinner="confirmEndHeadship('{{ $head->id }}')" :data-testid="'end-headship-'.$head->id" aria-label="Terminar la jefatura de {{ $head->department?->name }}" />
+                                    <x-button label="Terminar" icon="o-stop-circle" class="btn-ghost btn-sm text-error" wire:click="confirmEndHeadship('{{ $head->id }}')" spinner="confirmEndHeadship('{{ $head->id }}')" :data-testid="'end-headship-'.$head->id" aria-label="Terminar la jefatura de {{ $head->orgUnit?->name }}" />
                                 @endunless
                             </span>
                         </div>
@@ -374,7 +375,7 @@
                 <div class="grid gap-4 md:grid-cols-2">
                     <x-select label="Cargo" name="headKind" wire:model.live="headKind" :options="$headKinds" placeholder="Elige el cargo" />
                     <x-select label="Departamento" name="headDepartmentId" wire:model="headDepartmentId" :options="$departmentOptions" placeholder="Elige el departamento" />
-                    @if ($headKind === \App\Modules\Academic\Enums\DepartmentHeadKind::JefeProyectoDocente->value)
+                    @if ($headKind === \App\Modules\Core\Enums\Role::JefeProyectoDocente->value)
                         <x-select label="Campus" name="headCampusId" wire:model="headCampusId" :options="$campusOptions" placeholder="Elige el campus" />
                     @elseif ($headKind !== '')
                         <p class="self-end pb-2 text-sm text-neutral md:col-span-2">El jefe de departamento es de todo el Tec: no lleva campus.</p>
@@ -395,7 +396,7 @@
 
         <x-modal wire:model="showEndHeadshipModal" title="Terminar jefatura" box-class="max-w-lg" separator>
             @if ($endingHeadship)
-                <p>¿Terminar la jefatura de <b>{{ $endingHeadship->kind->label() }}</b> de <b>{{ $record->teacher->name }}</b>? Su alcance termina con ella. Si todavía no empieza, se quita.</p>
+                <p>¿Terminar la jefatura de <b>{{ $endingHeadship->role->label() }}</b> de <b>{{ $record->teacher->name }}</b>? Deja de ejercerse después del último día. Si todavía no empieza, se quita.</p>
                 <x-input label="Último día" name="endLastDay" wire:model="endLastDay" type="date" class="mt-3" />
             @endif
 

@@ -2,6 +2,8 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
@@ -55,4 +57,38 @@ it('el jefe de SC no abre la ficha de un docente de otro departamento', function
         ->press('Entrar')
         ->navigate('/faculty/teachers/'.$other->id)
         ->assertDontSee('Beto Ruiz');
+});
+
+it('el admin nombra y termina una jefatura desde la ficha del docente', function () {
+    $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    User::factory()->admin()->create(['username' => 'admin.nexus', 'name' => 'Ana Admin']);
+
+    $page = visit('/login')
+        ->fill('username', 'admin.nexus')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->navigate('/faculty/teachers/'.$this->ana->id)
+        ->waitForText('Jefaturas')
+        ->resize(1440, 900)
+        ->click('[data-testid="add-headship"]')
+        ->waitForText('Nombrar jefatura')
+        ->select('headKind', 'jefe_proyecto_docente')
+        ->select('headDepartmentId', $this->sc->id)
+        ->select('headCampusId', $c2->id)
+        ->screenshot(filename: 'teacher-headship-appoint-1440')
+        ->press('Nombrar')
+        ->waitForText('Jefatura nombrada')
+        ->waitForText('Vigente')
+        ->screenshot(filename: 'teacher-headships-1440')
+        ->resize(390, 844)
+        ->screenshot(filename: 'teacher-headships-390')
+        ->assertScript('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        ->click('[data-testid^="end-headship-"]')
+        ->waitForText('¿Terminar la jefatura')
+        ->click('[data-testid="confirm-end-headship"]')
+        ->waitForText('Jefatura terminada')
+        ->assertNoJavaScriptErrors();
+
+    expect(RoleAssignment::where('role', Role::JefeProyectoDocente)->sole())
+        ->campus_id->toBe($c2->id)->valid_to->toDateString()->toBe(today()->toDateString());
 });

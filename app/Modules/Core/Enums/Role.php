@@ -15,6 +15,13 @@ enum Role: string
     case Docente = 'docente';
 
     /**
+     * Los puestos que son una jefatura de departamento: los que la ficha del docente nombra y termina (3.P8).
+     *
+     * @var list<self>
+     */
+    public const HEADSHIPS = [self::JefeDepartamento, self::JefeProyectoDocente];
+
+    /**
      * Nombre para la interfaz (la credencial y la página de inicio), como lo nombran PROJECT.md y el
      * glosario.
      */
