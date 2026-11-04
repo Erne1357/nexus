@@ -124,6 +124,24 @@ it('AZ-S14: si la jefatura terminó antes que su gemelo, el gemelo termina ese d
     'gemelo que termina después' => ['2026-12-31'],
 ]);
 
+it('AZ-S14: el jefe de proyecto docente también: si su jefatura terminó antes, su gemelo del mismo campus termina ese día', function () {
+    $head = p8Head($this->juan, $this->systems, 'jefe_proyecto_docente', $this->c2, '2026-01-01', '2026-10-31');
+    $twin = p8Assignment($this->juan, Role::JefeProyectoDocente, $this->systems, $this->c2, '2026-01-01');
+    $otherCampus = p8Assignment($this->juan, Role::JefeProyectoDocente, $this->systems, $this->c1, '2026-01-01');
+
+    $this->migration->up();
+
+    $entry = p8Entries()->sole();
+
+    expect(p8ValidTo($twin))->toBe('2026-10-31')
+        ->and(p8ValidTo($otherCampus))->toBeNull()
+        ->and($entry)
+        ->subject_id->toBe($this->juan->id)
+        ->event->toBe('updated')
+        ->description->toBe('Terminó el nombramiento de Juan Ruiz como Jefe de proyecto docente de Sistemas y Computación en C2 el 31/10/2026, el día en que terminó su jefatura (3.P8)')
+        ->and($entry->properties->all())->toBe(['role_assignment_id' => $twin, 'department_head_id' => $head]);
+});
+
 it('AZ-S14: nunca alarga: si el gemelo terminó antes que la jefatura, se queda como está', function (?string $headEnd) {
     $head = p8Head($this->juan, $this->systems, 'jefe', null, '2026-01-01', $headEnd);
     $twin = p8Assignment($this->juan, Role::JefeDepartamento, $this->systems, null, '2026-01-01', '2026-10-31');
@@ -226,7 +244,7 @@ it('department_heads queda de solo lectura: altas, cambios, bajas y vaciado fall
         'update' => DB::table('department_heads')->where('id', $head)->update(['valid_to' => '2026-12-31']),
         'delete' => DB::table('department_heads')->where('id', $head)->delete(),
         'truncate' => DB::statement('truncate department_heads'),
-    }))->toThrow(QueryException::class, 'department_heads es histórica desde 3.P8');
+    }))->toThrow(QueryException::class, 'department_heads es histórica desde 3.P8 (las jefaturas viven en role_assignments): no se permite '.strtoupper($change));
 })->with(['insert', 'update', 'delete', 'truncate']);
 
 it('la misma persona no es dos veces jefe de proyecto docente del mismo departamento y campus en fechas que se traslapan', function () {

@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +34,9 @@ use Illuminate\Support\Facades\DB;
  */
 return new class extends Migration
 {
+    /** El `subject_type` de las entradas sobre un usuario: la migración usa solo DB y SQL, sin modelos. */
+    private const string USER_MORPH = 'App\\Modules\\Core\\Models\\User';
+
     /** @var array<string, array{role: string, label: string}> el puesto de cada `kind` y su nombre en la bitácora */
     private const array KINDS = [
         'jefe' => ['role' => 'jefe_departamento', 'label' => 'Jefe de departamento académico'],
@@ -62,7 +64,7 @@ return new class extends Migration
             create or replace function department_heads_reject_changes() returns trigger
             language plpgsql as $$
             begin
-                raise exception 'department_heads es histórica desde 3.P8: no se permite %', tg_op;
+                raise exception 'department_heads es histórica desde 3.P8 (las jefaturas viven en role_assignments): no se permite %', tg_op;
             end;
             $$;
 
@@ -188,10 +190,8 @@ return new class extends Migration
      */
     private function log(string $userId, string $event, string $description, array $properties, ?array $changes = null): void
     {
-        $subject = (new User)->getMorphClass();
-
         $logged = DB::table('activity_log')
-            ->where('subject_type', $subject)
+            ->where('subject_type', self::USER_MORPH)
             ->where('subject_id', $userId)
             ->where('event', $event)
             ->where('description', $description)
@@ -205,7 +205,7 @@ return new class extends Migration
         DB::table('activity_log')->insert([
             'log_name' => config('activitylog.default_log_name', 'default'),
             'description' => $description,
-            'subject_type' => $subject,
+            'subject_type' => self::USER_MORPH,
             'subject_id' => $userId,
             'event' => $event,
             'attribute_changes' => $changes === null ? null : json_encode($changes),
