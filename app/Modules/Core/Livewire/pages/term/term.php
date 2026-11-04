@@ -492,6 +492,7 @@ new #[Title('Ficha del periodo')] class extends Component
         $this->authorize('open', $term);
 
         $campus = $campuses->findOrFail($campusId);
+        $this->authorize('open', [$term, $campus]);
 
         try {
             $lines = $openTerm->handle($term, $campus);

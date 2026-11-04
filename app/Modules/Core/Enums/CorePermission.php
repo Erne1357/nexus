@@ -58,7 +58,7 @@ enum CorePermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::CampusView, self::CampusUpdateProfile => [Dimension::Campus],
+            self::CampusView, self::CampusUpdateProfile, self::TermOpen => [Dimension::Campus],
             default => [],
         };
     }

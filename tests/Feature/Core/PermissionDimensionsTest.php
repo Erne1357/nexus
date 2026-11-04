@@ -1,0 +1,205 @@
+<?php
+
+use App\Modules\Academic\Enums\AcademicPermission;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\Core\Authorization\Dimension;
+use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\PermissionRegistry;
+use App\Modules\Core\Enums\CorePermission;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Facilities\Enums\FacilitiesPermission;
+use App\Modules\Faculty\Enums\FacultyPermission;
+use App\Modules\Imports\Enums\ImportsPermission;
+use App\Modules\Students\Enums\StudentsPermission;
+use Illuminate\Support\Facades\Schema;
+
+/*
+| Spec §7.1 (Autorización por permisos): un nombramiento con una dimensión vacía cubre cualquier valor, así que un
+| permiso sobre un recurso con `campus_id` que no declara `Dimension::Campus` se concedería "en todos los campus"
+| aunque el puesto sea de uno. Esta prueba lo impide (§14) y fija D4 a D6 del plan 3.P9:
+| D4: `core.term.open` declara campus; D5: `core.assignment.*` e `imports.batch.*`, solo del admin;
+| D6: `core.term.manage_calendar` y `catalog_validation.progress.*`, solo de puestos de todo el Tec.
+*/
+
+/**
+ * Recurso (`modulo.recurso`) o clave completa de un permiso -> tabla que lo respalda.
+ *
+ * @return array<string, string>
+ */
+function dimensionTables(): array
+{
+    return [
+        'core.campus' => 'campuses',
+        'core.term' => 'terms',
+        'core.term.open' => 'term_openings',
+        'core.term.manage_calendar' => 'term_stages',
+        'core.assignment' => 'role_assignments',
+        'core.org_unit' => 'org_units',
+        'academic.department' => 'departments',
+        'academic.career' => 'careers',
+        'academic.subject' => 'subjects',
+        'academic.study_plan' => 'study_plans',
+        'facilities.building' => 'buildings',
+        'facilities.room' => 'rooms',
+        'faculty.teacher' => 'teachers',
+        'faculty.teacher_qualification' => 'teacher_subject_qualifications',
+        'faculty.teacher_department' => 'teacher_departments',
+        'faculty.teacher_user' => 'users',
+        'imports.batch' => 'import_batches',
+        'students.student' => 'students',
+        'catalog_validation.review' => 'catalog_reviews',
+        'catalog_validation.progress' => 'catalog_reviews',
+        'academic_load.load' => 'academic_loads',
+        'academic_load.proposal' => 'career_proposals',
+        'academic_load.proposal_review' => 'proposal_reviews',
+    ];
+}
+
+/**
+ * Permisos que, sobre una tabla con `campus_id`, pueden no declarar campus, con su motivo (D5 y D6).
+ *
+ * @return array<string, string>
+ */
+function dimensionExceptions(): array
+{
+    $admin = 'D5: solo del admin, que cubre todo; si se concede a otro puesto hay que decidir sus dimensiones en ese PR.';
+    $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección); el panel o tablero abarca todos los campus.';
+
+    return [
+        'core.assignment.view' => $admin,
+        'core.assignment.appoint' => $admin,
+        'core.assignment.end' => $admin,
+        'imports.batch.view' => $admin,
+        'imports.batch.create' => $admin,
+        'imports.batch.apply' => $admin,
+        'core.term.manage_calendar' => $tec,
+        'catalog_validation.progress.view' => $tec,
+        'catalog_validation.progress.remind' => $tec,
+    ];
+}
+
+/**
+ * Los puestos que no se acotan por campus ni por dimensión en los permisos de gestión: el admin cubre todo y la
+ * Subdirección es de todo el Tec. Se escribe a mano: derivarla de "no tiene campus_id" exentaría al jefe y al docente.
+ *
+ * @return list<Role>
+ */
+function dimensionWholeTecRoles(): array
+{
+    return [Role::Subdireccion];
+}
+
+function dimensionTableFor(Permission $permission): ?string
+{
+    $parts = explode('.', $permission->value);
+
+    return dimensionTables()[$permission->value] ?? dimensionTables()[$parts[0].'.'.$parts[1]] ?? null;
+}
+
+function dimensionHasCampus(Permission $permission): bool
+{
+    return in_array(Dimension::Campus, $permission->dimensions(), true);
+}
+
+/**
+ * Concesiones (puesto, permiso) cuyo permiso no declara ninguna dimensión que el puesto lleve en su nombramiento:
+ * ahí el nombramiento tendría esa dimensión vacía y cubriría cualquier valor (§7.1).
+ *
+ * @return list<string>
+ */
+function dimensionUncoveredGrants(PermissionRegistry $registry): array
+{
+    $found = [];
+
+    foreach ($registry->permissions() as $permission) {
+        foreach ($registry->rolesGranting($permission) as $role) {
+            if (in_array($role, dimensionWholeTecRoles(), true)) {
+                continue;
+            }
+
+            $declared = array_map(fn (Dimension $dimension): string => $dimension->column(), $permission->dimensions());
+
+            if (array_intersect($declared, $role->scopeColumns()) === []) {
+                $found[] = "{$role->value} → {$permission->value}";
+            }
+        }
+    }
+
+    return $found;
+}
+
+$enums = [
+    CorePermission::class,
+    AcademicPermission::class,
+    FacilitiesPermission::class,
+    FacultyPermission::class,
+    StudentsPermission::class,
+    ImportsPermission::class,
+    CatalogValidationPermission::class,
+    AcademicLoadPermission::class,
+];
+
+it('la prueba revisa los enums de permisos de todos los módulos', function () use ($enums) {
+    $classes = array_values(array_unique(array_map(
+        fn (Permission $permission): string => $permission::class,
+        app(PermissionRegistry::class)->permissions(),
+    )));
+    sort($classes);
+    $expected = $enums;
+    sort($expected);
+
+    expect($classes)->toBe($expected);
+});
+
+it('spec §7.1: ningún permiso del módulo sobre un recurso con campus_id omite la dimensión campus', function (string $enum) {
+    $problems = [];
+
+    foreach ($enum::cases() as $permission) {
+        $table = dimensionTableFor($permission);
+
+        if ($table === null || ! Schema::hasTable($table)) {
+            $problems[] = "{$permission->value}: sin tabla en el mapa o la tabla no existe";
+
+            continue;
+        }
+
+        if (Schema::hasColumn($table, 'campus_id') && ! dimensionHasCampus($permission) && ! isset(dimensionExceptions()[$permission->value])) {
+            $problems[] = "{$permission->value}: {$table}.campus_id sin la dimensión campus";
+        }
+    }
+
+    expect($problems)->toBe([]);
+})->with($enums);
+
+it('cada excepción es solo del admin o solo de puestos de todo el Tec', function (string $key) {
+    $registry = app(PermissionRegistry::class);
+    $permission = collect($registry->permissions())->firstWhere('value', $key);
+
+    expect($permission)->not->toBeNull();
+
+    foreach ($registry->rolesGranting($permission) as $role) {
+        expect($role->scopeColumns())->not->toContain('campus_id', "{$role->value} tiene {$key}, una excepción de todo el Tec");
+    }
+})->with(array_keys(dimensionExceptions()));
+
+it('cada excepción sigue siendo necesaria', function (string $key) {
+    $permission = collect(app(PermissionRegistry::class)->permissions())->firstWhere('value', $key);
+
+    expect(Schema::hasColumn(dimensionTableFor($permission), 'campus_id'))->toBeTrue()
+        ->and(dimensionHasCampus($permission))->toBeFalse();
+})->with(array_keys(dimensionExceptions()));
+
+it('todo permiso concedido declara una dimensión que el puesto lleva en su nombramiento', function () {
+    expect(dimensionUncoveredGrants(app(PermissionRegistry::class)))->toBe([]);
+});
+
+it('la guardia de dimensiones detecta una concesión que dejaría una dimensión vacía', function () {
+    $registry = PermissionRegistry::fromDeclarations(
+        [CorePermission::class],
+        [Role::Coordinador->value => [CorePermission::OrgUnitView], Role::Subdireccion->value => [CorePermission::OrgUnitView]],
+        [],
+    );
+
+    expect(dimensionUncoveredGrants($registry))->toBe(['coordinador → core.org_unit.view']);
+});
