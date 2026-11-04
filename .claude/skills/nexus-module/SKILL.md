@@ -175,7 +175,7 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 | Evento sin `ShouldDispatchAfterCommit` | Lo oyen aunque la transacción se revierta |
 | `<Modelo>::find()` en el componente o consultas en Blade | La Query (`findOrFail()`, `forTable()`). Arch no ve las MFC (clases anónimas): revísalo tú |
 | Autorizar solo en `mount()` | Autorizar en cada método público y probarlo llamándolo directo |
-| `covers(Role::Docente, …)` esperando `true` | `covers()` nunca cubre al docente; su acceso lo deciden Staffing y Scheduling por asignación |
+| Preguntar por el puesto (`Role::Docente`, `Role::Coordinador`…) en una Policy o pantalla | Preguntar por un permiso: `$this->actor($user)->allows(<Modulo>Permission::X, Target::of(…))`, y conceder el permiso al puesto en `grants()` del provider. El docente no tiene permisos de gestión; su acceso a su propia carga lo deciden las policies de Staffing y Scheduling por asignación, con permisos personales |
 | `if ($campus->code === 'C2')` | El perfil de flujo, `$campus->profile` |
 | `wire:click="edit({{ $campus->id }})"` sin comillas, o `findOrFail()` directo con un id del cliente | `edit('{{ $campus->id }}')` también en `spinner`; buscar con `KeyLookup::findOrFail()`. Un uuid sin comillas es un error de JS y uno inválido, un 500 de PostgreSQL |
 | `NavigationItem` con una ruta que no existe, o antes que su pantalla | En el mismo PR que la ruta; `tests/Feature/Core/NavigationTest.php` lo atrapa |
