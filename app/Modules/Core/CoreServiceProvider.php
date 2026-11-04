@@ -16,6 +16,7 @@ use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
@@ -89,6 +90,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 ability: 'viewAny', arguments: [Campus::class]),
             new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Term::class], childRoutes: ['core.terms.show']),
+            new NavigationItem('Personas y puestos', 'core.people', 'o-users', NavigationArea::Academico,
+                ability: 'viewAny', arguments: [RoleAssignment::class], childRoutes: ['core.people.show']),
         ];
     }
 
