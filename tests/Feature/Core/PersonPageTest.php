@@ -240,6 +240,24 @@ it('AZ-S12: «Terminar…» queda deshabilitado si dejaría días sin admin', fu
     expect($own->fresh()->valid_to)->toBeNull();
 });
 
+it('AZ-S12: con el único sucesor programado, «Terminar…» propone la víspera del sucesor y la Action dice el día exacto', function () {
+    $own = $this->admin->roleAssignments()->sole();
+    assign($this->beto, Role::Admin, ['valid_from' => '2026-12-01']);
+
+    $page = personPage($this->admin)
+        ->call('confirmEnd', $own->id)
+        ->assertSet('lastDay', '2026-11-30')
+        ->assertSee('Terminarlo antes dejaría días sin admin: el primer último día posible es el 30/11/2026.');
+
+    $page->set('lastDay', '2026-11-15')
+        ->call('end')
+        ->assertHasErrors(['lastDay' => 'El 16/11/2026 nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.']);
+
+    $page->set('lastDay', '2026-11-30')->call('end')->assertHasNoErrors();
+
+    expect(lastToastOf($page))->title->toBe('Nombramiento terminado');
+});
+
 it('quien termina hoy su propio puesto de Administración vuelve a Inicio con un aviso, no a un 403', function () {
     $own = $this->admin->roleAssignments()->sole();
     $own->update(['valid_from' => '2026-08-01']);

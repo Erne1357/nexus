@@ -60,6 +60,10 @@
                     <x-button label="Cancelar" wire:click="cancelEnd" class="btn-outline btn-sm max-md:h-11" />
                 </div>
 
+                @if ($row['earliestLastDay'] !== null && $row['earliestLastDay']->isAfter(today()))
+                    <p class="text-sm text-neutral" data-testid="end-earliest">Terminarlo antes dejaría días sin admin: el primer último día posible es el {{ $row['earliestLastDay']->format('d/m/Y') }}.</p>
+                @endif
+
                 <p class="text-sm text-neutral">
                     @if ($status === \App\Modules\Core\Enums\AssignmentStatus::Scheduled)
                         Todavía no empieza: si la fecha de fin es anterior a su inicio, el nombramiento se quita y queda en la bitácora.

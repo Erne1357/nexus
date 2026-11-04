@@ -4,7 +4,10 @@ use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\RoleAssignmentRules;
+use Carbon\CarbonImmutable;
 
 /*
 | RoleAssignmentRules: qué unidad admite cada puesto (AZ-S10), quién es el titular de una unidad y qué puestos se
@@ -38,4 +41,80 @@ it('managedElsewhere dice dónde se maneja el puesto que no es de esta pantalla 
         ->and($rules->managedElsewhere(Role::Admin))->toBeNull()
         ->and($rules->managedElsewhere(Role::Subdireccion))->toBeNull()
         ->and($rules->managedElsewhere(Role::Coordinador))->toBeNull();
+});
+
+/**
+ * @param  array<string, mixed>  $attributes
+ */
+function adminSeat(User $user, string $from, ?string $to = null, array $attributes = []): RoleAssignment
+{
+    return RoleAssignment::factory()->create(['user_id' => $user->id, 'role' => Role::Admin, 'valid_from' => $from, 'valid_to' => $to, ...$attributes]);
+}
+
+describe('earliestLastDay (AZ-S12)', function () {
+    beforeEach(function () {
+        $this->travelTo('2026-11-03 10:00:00');
+        $this->rules = app(RoleAssignmentRules::class);
+    });
+
+    it('da el primer último día que no deja días sin admin', function (array $ana, array $others, ?string $expected) {
+        $ana = adminSeat(User::factory()->create(), ...$ana);
+
+        foreach ($others as $other) {
+            adminSeat(User::factory()->create(['is_active' => $other[2] ?? true]), $other[0], $other[1] ?? null);
+        }
+
+        $day = $this->rules->earliestLastDay($ana);
+
+        expect($day?->toDateString())->toBe($expected);
+
+        if ($day !== null) {
+            expect($this->rules->adminGap($ana, $day))->toBeNull();
+
+            if ($day->isAfter(today())) {
+                expect($this->rules->adminGap($ana, $day->subDay()))->not->toBeNull();
+            }
+        }
+    })->with([
+        'otro sin fin' => [['2026-08-01'], [['2026-01-01']], '2026-11-03'],
+        'único sucesor programado' => [['2026-08-01'], [['2026-12-01']], '2026-11-30'],
+        'sucesor con fin' => [['2026-08-01'], [['2026-12-01', '2027-01-31']], null],
+        'Ana termina el 2026-12-31' => [['2026-08-01', '2026-12-31'], [['2027-01-01']], null],
+        'Ana programada desde 2026-12-20' => [['2026-12-20'], [['2026-01-01', '2026-12-09'], ['2026-12-11']], '2026-11-03'],
+        'otro admin con usuario inactivo' => [['2026-08-01'], [['2026-01-01', null, false]], null],
+    ]);
+
+    it('un nombramiento de otro puesto termina hoy', function () {
+        $coordinator = RoleAssignment::factory()->create(['role' => Role::Docente, 'valid_from' => '2026-08-01']);
+
+        expect($this->rules->earliestLastDay($coordinator)->toDateString())->toBe('2026-11-03');
+    });
+
+    it('adminGap da el día exacto aunque sea el siguiente al último día, si otro admin empieza después', function () {
+        $ana = adminSeat(User::factory()->create(), '2026-08-01');
+
+        expect($this->rules->adminGap($ana, CarbonImmutable::parse('2026-11-15')))
+            ->toBe('Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.');
+
+        adminSeat(User::factory()->create(), '2026-12-01');
+
+        expect($this->rules->adminGap($ana, CarbonImmutable::parse('2026-11-15')))
+            ->toBe('El 16/11/2026 nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.');
+    });
+
+    it('endBlocker: el docente se maneja en otra parte; Administración solo se bloquea si ningún último día sirve', function () {
+        $docente = RoleAssignment::factory()->create(['role' => Role::Docente, 'valid_from' => '2026-08-01']);
+        $ana = adminSeat(User::factory()->create(), '2026-08-01');
+
+        expect($this->rules->endBlocker($docente))->toContain('ficha del docente')
+            ->and($this->rules->endBlocker($ana))->toContain('único nombramiento de Administración');
+
+        adminSeat(User::factory()->create(), '2026-12-01');
+
+        expect($this->rules->endBlocker($ana))->toBeNull();
+
+        adminSeat(User::factory()->create(), '2026-01-01');
+
+        expect($this->rules->endBlocker($ana))->toBeNull();
+    });
 });
