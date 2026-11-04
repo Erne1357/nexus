@@ -98,7 +98,7 @@ final class EndRoleAssignment
                     ->event(ActivityEvent::Deleted)
                     ->withChanges(['old' => $old])
                     ->withProperties($properties)
-                    ->log("Quitó el nombramiento de {$user->name} como {$summary}, que todavía no empezaba");
+                    ->log("Quitó el nombramiento de {$user->name} como {$summary}, que ".($from === today()->toDateString() ? 'empezaba hoy' : 'todavía no empezaba'));
 
                 $ending = AssignmentEnding::Removed;
             } else {

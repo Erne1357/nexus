@@ -396,7 +396,7 @@
 
         <x-modal wire:model="showEndHeadshipModal" title="Terminar jefatura" box-class="max-w-lg" separator>
             @if ($endingHeadship)
-                <p>¿Terminar la jefatura de <b>{{ $endingHeadship->role->label() }}</b> de <b>{{ $record->teacher->name }}</b>? Deja de ejercerse después del último día. Si todavía no empieza, se quita.</p>
+                <p>¿Terminar la jefatura de <b>{{ $endingHeadship->role->label() }}</b> de <b>{{ $record->teacher->name }}</b>? Deja de ejercerse después del último día. Si empieza hoy o después y el último día es anterior a su inicio, se quita.</p>
                 <x-input label="Último día" name="endLastDay" wire:model="endLastDay" type="date" class="mt-3" />
             @endif
 

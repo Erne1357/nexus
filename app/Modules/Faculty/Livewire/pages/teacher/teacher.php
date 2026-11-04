@@ -483,7 +483,7 @@ new #[Title('Ficha del docente')] class extends Component
 
         match ($ending) {
             AssignmentEnding::Ended => $this->success('Jefatura terminada', e('Último día: '.$day->format('d/m/Y'))),
-            AssignmentEnding::Removed => $this->success('Jefatura quitada', 'Todavía no empezaba.'),
+            AssignmentEnding::Removed => $this->success('Jefatura quitada', $head->valid_from->isToday() ? 'Empezaba hoy.' : 'Todavía no empezaba.'),
             AssignmentEnding::Unchanged => $this->info('Sin cambios', e('Esa jefatura ya termina el '.$head->valid_to->format('d/m/Y').'.')),
         };
     }

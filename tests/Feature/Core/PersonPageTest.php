@@ -372,7 +372,7 @@ it('P4 y P5: el recuadro de un nombramiento que empieza hoy avisa que una fecha 
         ->call('end')
         ->assertHasNoErrors();
 
-    expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Nombramiento quitado'])
+    expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Nombramiento quitado', 'description' => 'Empezaba hoy.'])
         ->and(RoleAssignment::find($today->id))->toBeNull();
 });
 

@@ -437,6 +437,20 @@ it('termina un puesto desde el panel con la fecha elegida y quita uno programado
         ->and(lastToastOf($panel))->title->toBe('Nombramiento quitado');
 });
 
+it('quitar desde el panel un nombramiento que empieza hoy dice que empezaba hoy', function () {
+    $head = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'org_unit_id' => $this->systems->id, 'valid_from' => '2026-11-03'])->create();
+    $assignment = $head->roleAssignments()->sole();
+
+    $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $this->systems->id)
+        ->call('confirmEnd', $assignment->id)
+        ->set('lastDay', '2026-11-02')
+        ->call('end')
+        ->assertHasNoErrors();
+
+    expect(lastToastOf($panel))->title->toBe('Nombramiento quitado')->description->toBe('Empezaba hoy.')
+        ->and(RoleAssignment::find($assignment->id))->toBeNull();
+});
+
 it('elegir otra caja cierra el formulario y el recuadro de terminar', function () {
     $head = User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => $this->systems->id, 'valid_from' => '2026-01-01'])->create();
     $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $this->systems->id);
