@@ -133,17 +133,21 @@ final class OrgChartQuery
             path: $path,
             titular: $titular,
             titularNote: $titularNote,
-            assignments: $assignments->map(fn (RoleAssignment $assignment): array => [
-                'id' => $assignment->id,
-                'name' => $assignment->user->name,
-                'userId' => $assignment->user_id,
-                'summary' => $labels[$assignment->id]->summary,
-                'status' => AssignmentStatus::of($assignment, $today),
-                'from' => $assignment->valid_from,
-                'to' => $assignment->valid_to,
-                'endBlocker' => $this->rules->endBlocker($assignment),
-                'earliestLastDay' => $this->rules->earliestLastDay($assignment),
-            ])->all(),
+            assignments: $assignments->map(function (RoleAssignment $assignment) use ($labels, $today): array {
+                $endState = $this->rules->endState($assignment);
+
+                return [
+                    'id' => $assignment->id,
+                    'name' => $assignment->user->name,
+                    'userId' => $assignment->user_id,
+                    'summary' => $labels[$assignment->id]->summary,
+                    'status' => AssignmentStatus::of($assignment, $today),
+                    'from' => $assignment->valid_from,
+                    'to' => $assignment->valid_to,
+                    'endBlocker' => $endState['blocker'],
+                    'earliestLastDay' => $endState['earliestLastDay'],
+                ];
+            })->all(),
             people: $this->peopleCounts($units, $childrenOf, $this->currentHolders())[$unit->id] ?? 0,
             children: $childrenOf[$unit->id] ?? [],
             lockedReason: $this->unitRules->lockedReason($unit),
