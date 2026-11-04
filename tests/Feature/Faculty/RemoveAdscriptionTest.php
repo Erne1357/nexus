@@ -1,8 +1,8 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Actions\RemoveAdscription;
 use App\Modules\Faculty\Actions\SyncTeacherAccess;
 use App\Modules\Faculty\Events\AdscriptionChanged;
@@ -114,7 +114,7 @@ it('quitar la única deja al docente activo y sin departamento, con su usuario, 
         ->and($teacher->primaryAdscription)->toBeNull()
         ->and($user->fresh()->is_active)->toBeTrue()
         ->and($user->fresh()->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue()
-        ->and(app(ScopedContext::class)->forUser($user->fresh())->has(Role::Docente))->toBeTrue()
+        ->and(app(Actor::class)->forUser($user->fresh())->has(Role::Docente))->toBeTrue()
         ->and($entry->description)->toBe('Quitó al docente 1234567 del departamento SIS; queda sin departamento')
         ->and($entry->properties->all())->toBe(['teacher_id' => $teacher->id, 'primary_adscription_id' => null]);
 });

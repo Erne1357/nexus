@@ -4,9 +4,9 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
@@ -53,7 +53,7 @@ function seedCatalogRow(string $route, string $code): void
 
     // Edificios y salones son de un campus: el admin, que no tiene uno por omisión, elige el de la fila.
     if (str_starts_with($route, 'facilities.')) {
-        session([ScopedContext::ACTIVE_CAMPUS => ($route === 'facilities.rooms' ? Room::query() : Building::query())->where('code', $code)->value('campus_id')]);
+        session([Actor::ACTIVE_CAMPUS => ($route === 'facilities.rooms' ? Room::query() : Building::query())->where('code', $code)->value('campus_id')]);
     }
 }
 

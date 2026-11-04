@@ -5,7 +5,7 @@ namespace App\Modules\Core\Policies;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién ve personas y puestos, nombra y termina nombramientos: solo el admin (reglas-de-negocio.md, "Aprobaciones y
@@ -15,20 +15,20 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class RoleAssignmentPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allows(CorePermission::AssignmentView);
+        return $this->actor($user)->allows(CorePermission::AssignmentView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->allows(CorePermission::AssignmentAppoint);
+        return $this->actor($user)->allows(CorePermission::AssignmentAppoint);
     }
 
     public function end(User $user, RoleAssignment $assignment): bool
     {
-        return $this->scope($user)->allows(CorePermission::AssignmentEnd);
+        return $this->actor($user)->allows(CorePermission::AssignmentEnd);
     }
 }

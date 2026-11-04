@@ -7,7 +7,7 @@ use App\Modules\Core\Enums\Role;
 /**
  * Un nombramiento vigente como dato plano, para el snapshot cacheado: el puesto y su alcance (nulo = sin límite en esa
  * dimensión). `unitIsDepartment` dice si su unidad es un departamento académico; solo lo usa la API de compatibilidad
- * de ScopedContext (un objetivo sin departamento), que se va en 3.P9.
+ * de Actor (un objetivo sin departamento), que se va en 3.P9.
  */
 final readonly class AssignmentScope
 {

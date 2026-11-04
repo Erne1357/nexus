@@ -11,7 +11,7 @@ use Carbon\CarbonImmutable;
 
 /*
 | A quién avisar: los usuarios activos que, con el rol, cubren el campus y, si se piden, el departamento
-| o la carrera, con la misma regla que las policies (ScopedContext::covers), pero sin el admin, que lo
+| o la carrera, con la misma regla que las policies (Actor::covers), pero sin el admin, que lo
 | cubre todo y no es destinatario de los avisos del proceso. Departamentos 10 y 11, carreras 20 y 21.
 */
 

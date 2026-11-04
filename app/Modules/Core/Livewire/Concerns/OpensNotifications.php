@@ -4,8 +4,8 @@ namespace App\Modules\Core\Livewire\Concerns;
 
 use App\Modules\Core\Actions\MarkAllNotificationsRead;
 use App\Modules\Core\Actions\OpenNotification;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Livewire\Attributes\On;
 
@@ -18,7 +18,7 @@ use Livewire\Attributes\On;
  */
 trait OpensNotifications
 {
-    public function open(string $id, OpenNotification $openNotification, ScopedContext $context): mixed
+    public function open(string $id, OpenNotification $openNotification, Actor $context): mixed
     {
         $user = $context->user();
 
@@ -52,7 +52,7 @@ trait OpensNotifications
         return $this->redirect($target->url, navigate: true);
     }
 
-    public function markAllRead(MarkAllNotificationsRead $markAllNotificationsRead, ScopedContext $context): void
+    public function markAllRead(MarkAllNotificationsRead $markAllNotificationsRead, Actor $context): void
     {
         $user = $context->user();
 

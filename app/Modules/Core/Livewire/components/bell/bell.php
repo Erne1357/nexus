@@ -1,8 +1,8 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\OpensNotifications;
 use App\Modules\Core\Queries\NotificationQuery;
-use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
@@ -37,7 +37,7 @@ new class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(ScopedContext $context, NotificationQuery $notifications): array
+    public function with(Actor $context, NotificationQuery $notifications): array
     {
         $user = $context->user();
         $showCampus = $context->campuses()->count() > 1;

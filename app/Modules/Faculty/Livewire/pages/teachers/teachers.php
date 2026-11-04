@@ -2,8 +2,8 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Queries\DepartmentQuery;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Support\DefaultPassword;
 use App\Modules\Faculty\Actions\AddAdscription;
 use App\Modules\Faculty\Actions\CreateTeacher;
@@ -113,7 +113,7 @@ new #[Title('Docentes')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TeacherQuery $teachers, ScopedContext $context): array
+    public function with(TeacherQuery $teachers, Actor $context): array
     {
         $options = $teachers->filterOptions($context);
         $this->forgetFiltersOutside($options);
@@ -178,7 +178,7 @@ new #[Title('Docentes')] class extends Component
         $this->lookUpExisting();
     }
 
-    public function create(TeacherQuery $teachers, ScopedContext $context): void
+    public function create(TeacherQuery $teachers, Actor $context): void
     {
         $this->authorize('create', Teacher::class);
 
@@ -207,7 +207,7 @@ new #[Title('Docentes')] class extends Component
         $this->showModal = true;
     }
 
-    public function save(CreateTeacher $createTeacher, UpdateTeacher $updateTeacher, TeacherQuery $teachers, ScopedContext $context, DefaultPassword $defaultPassword): void
+    public function save(CreateTeacher $createTeacher, UpdateTeacher $updateTeacher, TeacherQuery $teachers, Actor $context, DefaultPassword $defaultPassword): void
     {
         if ($this->editingId !== null) {
             $teacher = $teachers->findOrFail($this->editingId);
@@ -252,7 +252,7 @@ new #[Title('Docentes')] class extends Component
      *
      * @throws ValidationException
      */
-    public function adscribeExisting(AddAdscription $addAdscription, TeacherQuery $teachers, ScopedContext $context): void
+    public function adscribeExisting(AddAdscription $addAdscription, TeacherQuery $teachers, Actor $context): void
     {
         $this->authorize('adscribe', Teacher::class);
 
@@ -314,7 +314,7 @@ new #[Title('Docentes')] class extends Component
      * «Dar de alta usuarios»: encola la sincronización del acceso de todos los docentes, a nombre de quien la pide.
      * Sin NEXUS_DEFAULT_PASSWORD no encola nada y dice por qué.
      */
-    public function provisionUsers(DefaultPassword $defaultPassword, ScopedContext $context): void
+    public function provisionUsers(DefaultPassword $defaultPassword, Actor $context): void
     {
         $this->authorize('provisionUsers', Teacher::class);
 
@@ -375,7 +375,7 @@ new #[Title('Docentes')] class extends Component
      *
      * @throws ValidationException
      */
-    private function allowedDepartment(TeacherQuery $teachers, ScopedContext $context): Department
+    private function allowedDepartment(TeacherQuery $teachers, Actor $context): Department
     {
         $allowed = in_array($this->department_id, array_column($teachers->adscriptionTargets($context), 'id'), true)
             && Gate::allows('create', [Teacher::class, $this->department_id]);
@@ -396,7 +396,7 @@ new #[Title('Docentes')] class extends Component
      * @param  LengthAwarePaginator<int, Teacher>  $teachers
      * @return array<string, array{removals: list<array{id: string, label: string, confirm: string, reason: ?string}>, deactivateReason: ?string}>
      */
-    private function rowActions(LengthAwarePaginator $teachers, ScopedContext $context): array
+    private function rowActions(LengthAwarePaginator $teachers, Actor $context): array
     {
         $actions = [];
 

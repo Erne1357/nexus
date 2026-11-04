@@ -11,13 +11,13 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Notifications\ProposalSubmitted;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NotificationMessage;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\Notification;
 
 /*
@@ -103,7 +103,7 @@ it('un jefe que también coordina recibe el aviso de propuesta aunque su último
     $this->actingAs($jefeCoordinador);
     app(SubmitCareerProposal::class)->handle($this->proposal, $jefeCoordinador);
 
-    expect(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador);
+    expect(app(Actor::class)->activeRole())->toBe(Role::Coordinador);
     Notification::assertSentTo($jefeCoordinador, ProposalSubmitted::class, fn (ProposalSubmitted $notification) => $notification->message($jefeCoordinador)->parameters['depto'] === 'IND');
 });
 
@@ -120,8 +120,8 @@ it('deja de poder abrirse si el usuario ya no es jefe del departamento o la prop
     app(NotifyProposalSubmitted::class)->handle($this->proposal, [$this->cb->id]);
     $message = NotificationMessage::fromArray($this->jefeCb->notifications()->first()->data);
 
-    expect(ProposalSubmitted::unavailableReason(app(ScopedContext::class)->forUser($this->jefeSc), $message))->toBe('Ya no eres jefe de Ciencias Básicas.')
-        ->and(ProposalSubmitted::unavailableReason(app(ScopedContext::class)->forUser($this->jefeCb), NotificationMessage::fromArray([...$this->jefeCb->notifications()->first()->data, 'parameters' => ['depto' => 'CB', 'carrera' => fakeKey(77)]])))->toBe('Esa propuesta ya no existe.');
+    expect(ProposalSubmitted::unavailableReason(app(Actor::class)->forUser($this->jefeSc), $message))->toBe('Ya no eres jefe de Ciencias Básicas.')
+        ->and(ProposalSubmitted::unavailableReason(app(Actor::class)->forUser($this->jefeCb), NotificationMessage::fromArray([...$this->jefeCb->notifications()->first()->data, 'parameters' => ['depto' => 'CB', 'carrera' => fakeKey(77)]])))->toBe('Esa propuesta ya no existe.');
 });
 
 it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe', function () {
@@ -130,7 +130,7 @@ it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe'
     $message = NotificationMessage::fromArray($this->jefeCb->notifications()->first()->data);
     Career::query()->whereKey($this->proposal->career_id)->delete();
 
-    expect(ProposalSubmitted::unavailableReason(app(ScopedContext::class)->forUser($this->jefeCb), $message))->toBeNull();
+    expect(ProposalSubmitted::unavailableReason(app(Actor::class)->forUser($this->jefeCb), $message))->toBeNull();
 });
 
 it('guarda el puesto de jefe en el aviso', function () {

@@ -1,6 +1,6 @@
 <?php
 
-use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Queries\StudentQuery;
@@ -47,7 +47,7 @@ new #[Title('Alumnos')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(StudentQuery $students, ScopedContext $context): array
+    public function with(StudentQuery $students, Actor $context): array
     {
         $campus = $context->activeCampus();
         $options = $campus === null ? ['careers' => [], 'plans' => [], 'semesters' => []] : $students->filterOptions($context, $campus);

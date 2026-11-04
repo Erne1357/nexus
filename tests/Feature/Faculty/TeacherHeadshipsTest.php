@@ -1,11 +1,11 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Features\SupportTesting\Testable;
@@ -62,7 +62,7 @@ describe('nombrar', function () {
         expect($user)->not->toBeNull()
             ->and($head)->user_id->toBe($user->id)->org_unit_id->toBe($this->sc->id)->campus_id->toBeNull();
 
-        $context = app(ScopedContext::class)->forUser($user->fresh());
+        $context = app(Actor::class)->forUser($user->fresh());
         expect($context->heldRoles())->toContain(Role::JefeDepartamento)
             ->and($context->coversDepartment(Role::JefeDepartamento, $this->sc->id))->toBeTrue()
             ->and($context->coversDepartment(Role::JefeDepartamento, $this->ii->id))->toBeFalse();
@@ -217,7 +217,7 @@ describe('listar y terminar', function () {
         expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Jefatura terminada', 'description' => 'Último día: '.today()->subDay()->format('d/m/Y')]);
 
         expect($head->fresh()->valid_to->toDateString())->toBe(today()->subDay()->toDateString())
-            ->and(app(ScopedContext::class)->forUser($user->fresh())->coversDepartment(Role::JefeDepartamento, $this->sc->id))->toBeFalse();
+            ->and(app(Actor::class)->forUser($user->fresh())->coversDepartment(Role::JefeDepartamento, $this->sc->id))->toBeFalse();
     });
 
     it('terminar con un último día anterior al inicio no falla: la jefatura que no había empezado se quita', function () {

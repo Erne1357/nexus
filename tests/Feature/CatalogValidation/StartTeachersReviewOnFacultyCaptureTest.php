@@ -7,11 +7,11 @@ use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Actions\AddExternalLoad;
 use App\Modules\Faculty\Actions\RemoveAdscription;
 use App\Modules\Faculty\Actions\SetQualification;
@@ -135,7 +135,7 @@ it('sin sesión y sin actor no hace nada', function () {
 it('con otro periodo activo en la sesión, inicia la revisión de ese periodo y no la del actual', function () {
     $active = Term::factory()->create();
     app(CreateTermReviews::class)->handle($active, $this->campus);
-    $this->withSession([ScopedContext::ACTIVE_TERM => $active->id]);
+    $this->withSession([Actor::ACTIVE_TERM => $active->id]);
 
     captureQualification($this->jefe);
 

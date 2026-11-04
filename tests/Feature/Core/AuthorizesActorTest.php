@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Gate;
 use Tests\Fixtures\Modules\DemoCatalog\Models\Item;
 
 /*
-| ItemPolicy (tests/Fixtures/Modules/DemoCatalog) es la policy de ejemplo de UsesScopedContext:
+| ItemPolicy (tests/Fixtures/Modules/DemoCatalog) es la policy de ejemplo de AuthorizesActor:
 | ve el elemento quien trabaja en su campus; lo edita el jefe de su departamento o el coordinador
 | de su carrera en ese campus. El elemento es del departamento 10 y la carrera 20 en C2.
 */

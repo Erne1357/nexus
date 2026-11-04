@@ -5,7 +5,7 @@ namespace App\Modules\Core\Policies;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién administra periodos y su calendario, según reglas-de-negocio.md, "Aprobaciones y permisos"
@@ -17,26 +17,26 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class TermPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(CorePermission::TermView);
+        return $this->actor($user)->allowsAny(CorePermission::TermView);
     }
 
     public function view(User $user, Term $term): bool
     {
-        return $this->scope($user)->allows(CorePermission::TermView);
+        return $this->actor($user)->allows(CorePermission::TermView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->allows(CorePermission::TermCreate);
+        return $this->actor($user)->allows(CorePermission::TermCreate);
     }
 
     public function update(User $user, Term $term): bool
     {
-        return $this->scope($user)->allows(CorePermission::TermUpdate);
+        return $this->actor($user)->allows(CorePermission::TermUpdate);
     }
 
     /**
@@ -44,7 +44,7 @@ final class TermPolicy
      */
     public function makeCurrent(User $user, Term $term): bool
     {
-        return $this->scope($user)->allows(CorePermission::TermMakeCurrent);
+        return $this->actor($user)->allows(CorePermission::TermMakeCurrent);
     }
 
     /**
@@ -52,7 +52,7 @@ final class TermPolicy
      */
     public function manageCalendar(User $user, Term $term): bool
     {
-        return $this->scope($user)->allows(CorePermission::TermManageCalendar);
+        return $this->actor($user)->allows(CorePermission::TermManageCalendar);
     }
 
     /**
@@ -60,6 +60,6 @@ final class TermPolicy
      */
     public function open(User $user, Term $term): bool
     {
-        return $this->scope($user)->allows(CorePermission::TermOpen);
+        return $this->actor($user)->allows(CorePermission::TermOpen);
     }
 }

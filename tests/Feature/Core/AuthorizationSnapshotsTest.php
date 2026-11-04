@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AssignmentScope;
 use App\Modules\Core\Authorization\AuthorizationSnapshot;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
@@ -7,7 +8,6 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -30,12 +30,12 @@ beforeEach(function () {
 /**
  * Una petición nueva del usuario, leído de la base como lo lee el guard de sesión.
  */
-function nextRequestOf(User $user): ScopedContext
+function nextRequestOf(User $user): Actor
 {
     app()->forgetScopedInstances();
     test()->actingAs(User::find($user->id));
 
-    return app(ScopedContext::class);
+    return app(Actor::class);
 }
 
 /**

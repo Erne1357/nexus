@@ -5,12 +5,12 @@ namespace App\Modules\CatalogValidation\Notifications;
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
-use App\Modules\Core\Queries\ScopedContext;
 
 /**
  * «Tienes catálogos por validar» (tarea 2.9): al jefe de un departamento, con los catálogos que le faltan
@@ -54,7 +54,7 @@ final class CatalogReviewsPending extends NexusNotification
         );
     }
 
-    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
+    public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
     {
         $department = Department::query()->find($message->parameters['department'] ?? null);
 

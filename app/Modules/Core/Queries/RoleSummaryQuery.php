@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -23,7 +24,7 @@ final class RoleSummaryQuery
      *
      * @return array<string, string>
      */
-    public function forHeldRoles(ScopedContext $context): array
+    public function forHeldRoles(Actor $context): array
     {
         $scopes = $context->heldScopes();
         $units = OrgUnit::query()->whereKey($scopes->pluck('org_unit_id')->filter()->unique()->all())->pluck('name', 'id');

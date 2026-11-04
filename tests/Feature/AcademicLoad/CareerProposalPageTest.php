@@ -11,13 +11,13 @@ use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
-use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -357,7 +357,7 @@ describe('ruta y menú', function () {
             (function () use ($user) {
                 $this->actingAs($user);
 
-                return app(Navigation::class)->visibleTo(app(ScopedContext::class));
+                return app(Navigation::class)->visibleTo(app(Actor::class));
             })->call($this),
         );
 

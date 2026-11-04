@@ -2,8 +2,8 @@
 
 namespace App\Modules\Core\Navigation;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Contracts\Session\Session;
 
 /**
@@ -20,7 +20,7 @@ final readonly class RecentPages
     public function __construct(
         private Session $session,
         private Navigation $navigation,
-        private ScopedContext $context,
+        private Actor $context,
     ) {}
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -95,7 +96,7 @@ final class TermQuery
      *
      * @return LengthAwarePaginator<int, Term>
      */
-    public function forTable(ScopedContext $context, string $search = '', int $perPage = 15): LengthAwarePaginator
+    public function forTable(Actor $context, string $search = '', int $perPage = 15): LengthAwarePaginator
     {
         return Term::query()
             ->with(['openings.campus' => fn (BelongsTo $query) => $query->withTrashed()])

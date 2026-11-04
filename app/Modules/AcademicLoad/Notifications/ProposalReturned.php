@@ -6,11 +6,11 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Str;
 
 /**
@@ -51,7 +51,7 @@ final class ProposalReturned extends NexusNotification
         );
     }
 
-    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
+    public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
     {
         $career = KeyLookup::find(Career::query()->withTrashed(), $message->parameters['carrera'] ?? null);
         $exists = $career !== null && $message->termId !== null && $message->campusId !== null && CareerProposal::query()

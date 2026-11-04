@@ -2,7 +2,7 @@
 
 namespace App\Modules\Core\Livewire;
 
-use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Authorization\Actor;
 use Livewire\ComponentHook;
 
 /**
@@ -33,7 +33,7 @@ final class ActiveRoleHook extends ComponentHook
             return;
         }
 
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
 
         $user = $context->user();
 
@@ -49,7 +49,7 @@ final class ActiveRoleHook extends ComponentHook
 
     public function dehydrate($context): void
     {
-        $scoped = app(ScopedContext::class);
+        $scoped = app(Actor::class);
 
         if ($scoped->user() === null) {
             return;

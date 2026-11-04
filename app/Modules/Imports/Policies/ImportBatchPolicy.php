@@ -3,7 +3,7 @@
 namespace App\Modules\Imports\Policies;
 
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 
@@ -14,25 +14,25 @@ use App\Modules\Imports\Models\ImportBatch;
  */
 final class ImportBatchPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(ImportsPermission::BatchView);
+        return $this->actor($user)->allowsAny(ImportsPermission::BatchView);
     }
 
     public function view(User $user, ImportBatch $batch): bool
     {
-        return $this->scope($user)->allows(ImportsPermission::BatchView);
+        return $this->actor($user)->allows(ImportsPermission::BatchView);
     }
 
     public function create(User $user): bool
     {
-        return $this->scope($user)->allows(ImportsPermission::BatchCreate);
+        return $this->actor($user)->allows(ImportsPermission::BatchCreate);
     }
 
     public function apply(User $user, ImportBatch $batch): bool
     {
-        return $this->scope($user)->allows(ImportsPermission::BatchApply);
+        return $this->actor($user)->allows(ImportsPermission::BatchApply);
     }
 }

@@ -1,10 +1,10 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Navigation\RecentPages;
-use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -55,7 +55,7 @@ new class extends Component
     /**
      * @return array{areas: list<array{area: NavigationArea, current: bool, href: string, style: string, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string}>}>}
      */
-    public function with(Navigation $navigation, ScopedContext $context, RecentPages $recentPages): array
+    public function with(Navigation $navigation, Actor $context, RecentPages $recentPages): array
     {
         $groups = $navigation->visibleByArea($context);
         $routeItem = $this->route === null ? null : $navigation->forRoute($this->route);

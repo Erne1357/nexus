@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -7,7 +8,6 @@ use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Queries\ScopedContext;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Support\Facades\DB;
@@ -100,7 +100,7 @@ function seesCampusMenu(User $user): bool
 {
     test()->actingAs($user);
 
-    return collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))
+    return collect(app(Navigation::class)->visibleTo(app(Actor::class)))
         ->contains(fn (NavigationItem $item): bool => $item->label === 'Campus');
 }
 

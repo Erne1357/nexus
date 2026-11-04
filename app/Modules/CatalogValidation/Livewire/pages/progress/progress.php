@@ -6,13 +6,13 @@ use App\Modules\CatalogValidation\Actions\ResolveFlag;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Enums\StageStatus;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\StageWindow;
 use App\Modules\Core\Queries\TermCalendarQuery;
 use Illuminate\Support\Collection;
@@ -60,7 +60,7 @@ new #[Title('Avance de validación')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(ValidationProgressQuery $progress, TermCalendarQuery $calendar, ScopedContext $context): array
+    public function with(ValidationProgressQuery $progress, TermCalendarQuery $calendar, Actor $context): array
     {
         Gate::authorize('viewProgress', CatalogReview::class);
 
@@ -109,7 +109,7 @@ new #[Title('Avance de validación')] class extends Component
      * departamento («Recordar a todos los pendientes»), de los departamentos de las filas visibles (búsqueda, estado y
      * campus) en un job en cola, porque tarda.
      */
-    public function remind(RemindPendingReviews $remind, ValidationProgressQuery $progress, ScopedContext $context, ?string $departmentId = null): void
+    public function remind(RemindPendingReviews $remind, ValidationProgressQuery $progress, Actor $context, ?string $departmentId = null): void
     {
         Gate::authorize('remind', CatalogReview::class);
 
@@ -222,6 +222,6 @@ new #[Title('Avance de validación')] class extends Component
 
     private function user(): User
     {
-        return app(ScopedContext::class)->user() ?? abort(403);
+        return app(Actor::class)->user() ?? abort(403);
     }
 };

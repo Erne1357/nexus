@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Actions\AppointRole;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
@@ -12,7 +13,6 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -262,7 +262,7 @@ it('el jefe de proyecto docente admite varios a la vez en el mismo departamento 
 it('quien se nombra a sí mismo ve su puesto nuevo en la misma petición', function () {
     $teacher = User::factory()->withRole(Role::Docente)->create();
     $this->actingAs($teacher);
-    $context = app(ScopedContext::class);
+    $context = app(Actor::class);
 
     expect($context->heldRoles())->toBe([Role::Docente]);
 

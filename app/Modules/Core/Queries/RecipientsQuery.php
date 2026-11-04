@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\Target;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Collection;
  * A quién le llega un aviso del proceso. holders() da, por permiso y objetivo, los usuarios activos que con alguno
  * de sus puestos vigentes lo tienen (cada uno con el puesto al que va el aviso). for() es la forma anterior (tarea
  * 2.9), obsoleta hasta 3.P9: los usuarios activos que, con `$role`, cubren el campus
- * y, si se piden, el departamento o la carrera. La regla es la misma de las policies (ScopedContext::covers):
+ * y, si se piden, el departamento o la carrera. La regla es la misma de las policies (Actor::covers):
  * un nombramiento sin campus vale en cualquier campus activo, y uno sobre una unidad cubre los departamentos de su
  * subárbol. Cuenta solo el nombramiento: el admin lo cubre todo sin tenerlo, y los avisos van a quien hace el
  * trabajo; un admin que además tiene el nombramiento sí los recibe.
@@ -25,13 +26,13 @@ use Illuminate\Database\Eloquent\Collection;
 final class RecipientsQuery
 {
     public function __construct(
-        private readonly ScopedContext $context,
+        private readonly Actor $context,
         private readonly PermissionRegistry $permissions,
     ) {}
 
     /**
      * A quién le llega un aviso por permiso: los usuarios activos que, con alguno de sus puestos vigentes (no solo el
-     * activo), tienen `$permission` y cubren `$target` (ScopedContext::rolesAllowing). El admin no entra por serlo.
+     * activo), tienen `$permission` y cubren `$target` (Actor::rolesAllowing). El admin no entra por serlo.
      * Cada persona va una vez, con el primer puesto del enum que cubre. Ordenados por nombre.
      *
      * @return list<array{user: User, role: Role}>

@@ -2,12 +2,12 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Livewire;
 
 /*
@@ -33,7 +33,7 @@ function seesPeopleMenu(User $user): bool
 {
     test()->actingAs($user);
 
-    return collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))
+    return collect(app(Navigation::class)->visibleTo(app(Actor::class)))
         ->contains(fn (NavigationItem $item): bool => $item->label === 'Personas y puestos');
 }
 

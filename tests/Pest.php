@@ -8,11 +8,11 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Builder;
@@ -69,13 +69,13 @@ function lastToastOf(Testable $component): ?array
 }
 
 /**
- * Entra como `$user` con `$role` como perfil activo (ScopedContext::ACTIVE_ROLE en la sesión, como lo deja el cambio
+ * Entra como `$user` con `$role` como perfil activo (Actor::ACTIVE_ROLE en la sesión, como lo deja el cambio
  * de perfil): en esta sesión solo cuentan ese puesto y sus nombramientos. Para quien tiene varios puestos; con uno
  * solo, `actingAs()` basta. Lo ven también las peticiones de Livewire::test().
  */
 function actingAsRole(User $user, Role $role): TestCase
 {
-    return test()->actingAs($user)->withSession([ScopedContext::ACTIVE_ROLE => $role->value]);
+    return test()->actingAs($user)->withSession([Actor::ACTIVE_ROLE => $role->value]);
 }
 
 /**

@@ -8,8 +8,8 @@ use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
@@ -29,7 +29,7 @@ use Illuminate\Support\Collection;
  * de los del docente que el actor cubre como jefe, incluido el de la adscripción que se acaba de quitar. El admin,
  * Subdirección y el jefe de proyecto docente no la mueven, ni una revisión ya en revisión o validada.
  *
- * Si el actor es quien está en sesión, cuenta su perfil activo (ScopedContext): la mueve si actúa como jefe del
+ * Si el actor es quien está en sesión, cuenta su perfil activo (Actor): la mueve si actúa como jefe del
  * departamento y su perfil concede corregir esa revisión (`catalog_validation.review.correct`, la regla de
  * CatalogReviewPolicy::correct), así que el jefe que entró como coordinador no la mueve. Si el actor es otro usuario (forUser()) o no hay usuario autenticado (un job), basta con que sea jefe aunque tenga otros
  * puestos; el código de consola que fija el usuario del guard recibe el perfil predeterminado. Sale después del
@@ -38,7 +38,7 @@ use Illuminate\Support\Collection;
 final class StartTeachersReviewOnFacultyCapture
 {
     public function __construct(
-        private readonly ScopedContext $context,
+        private readonly Actor $context,
         private readonly StartReview $startReview,
     ) {}
 

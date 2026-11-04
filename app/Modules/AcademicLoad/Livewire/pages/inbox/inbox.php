@@ -13,7 +13,7 @@ use App\Modules\AcademicLoad\Queries\DepartmentInbox;
 use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
-use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Rules\SelfApproval;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -99,7 +99,7 @@ new #[Title('Bandeja del departamento')] class extends Component
 
     public bool $showParallels = false;
 
-    public function mount(ScopedContext $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
+    public function mount(Actor $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
         abort_unless($context->allowsAny(AcademicLoadPermission::ProposalReviewView), 403);
 
@@ -111,7 +111,7 @@ new #[Title('Bandeja del departamento')] class extends Component
     /**
      * Cambiar de departamento suelta la carrera y la parte de la anterior.
      */
-    public function updatedDepartment(ScopedContext $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
+    public function updatedDepartment(Actor $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
         $this->reset('careerId', 'reviewId', 'showAccept', 'showReturn', 'comment', 'mobileDetail', 'onlyAnomalies', 'showParallels', 'parallelsSubjectId');
         $this->resolve($context, $inbox, $proposals);
@@ -298,7 +298,7 @@ new #[Title('Bandeja del departamento')] class extends Component
      * pinta y escribe la página (o por qué no hay bandeja). Un departamento pedido por la URL que el usuario no
      * ve es 403.
      */
-    private function resolve(ScopedContext $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
+    private function resolve(Actor $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
         $this->termId = $this->campusId = $this->departmentId = null;
         $this->departments = [];

@@ -7,13 +7,13 @@ use App\Modules\CatalogValidation\Listeners\CreateReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnCampusUpdated;
 use App\Modules\CatalogValidation\Listeners\NotifyPendingReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\CampusUpdated;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
@@ -55,9 +55,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     {
         return [
             new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico,
-                visible: static fn (ScopedContext $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView)),
+                visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView)),
             new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico,
-                visible: static fn (ScopedContext $context): bool => $context->allowsAny(CatalogValidationPermission::ProgressView)),
+                visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ProgressView)),
         ];
     }
 

@@ -1,11 +1,11 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Jobs\ValidateQueuedBatch;
@@ -116,7 +116,7 @@ describe('admin', function () {
         // La plantilla de prueba por campus no tiene catálogo real que validar: basta ver que se encola.
         Queue::fake();
         Campus::factory()->create(['code' => 'C1']);
-        session([ScopedContext::ACTIVE_CAMPUS => $this->c2->id]);
+        session([Actor::ACTIVE_CAMPUS => $this->c2->id]);
 
         wizardWithFile($this->admin, 'test-campus-scoped')
             ->assertSet('step', 2)
@@ -340,7 +340,7 @@ function importWizardMenuVisibleTo(User $user): bool
 {
     test()->actingAs($user);
 
-    return collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))
+    return collect(app(Navigation::class)->visibleTo(app(Actor::class)))
         ->contains(fn (NavigationItem $item): bool => $item->route === 'imports.wizard');
 }
 

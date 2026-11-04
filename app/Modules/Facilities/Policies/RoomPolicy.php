@@ -5,7 +5,7 @@ namespace App\Modules\Facilities\Policies;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Models\Room;
 
@@ -16,14 +16,14 @@ use App\Modules\Facilities\Models\Room;
  */
 final class RoomPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     /**
      * Si el usuario administra salones en algún campus; el listado se acota al campus activo.
      */
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(FacilitiesPermission::RoomView);
+        return $this->actor($user)->allowsAny(FacilitiesPermission::RoomView);
     }
 
     public function view(User $user, Room $room): bool
@@ -46,6 +46,6 @@ final class RoomPolicy
 
     private function allowsOn(User $user, FacilitiesPermission $permission, string $campusId): bool
     {
-        return $this->scope($user)->allows($permission, Target::of(campus: $campusId));
+        return $this->actor($user)->allows($permission, Target::of(campus: $campusId));
     }
 }

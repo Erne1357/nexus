@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Campus;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -16,13 +17,13 @@ final class CampusQuery
 {
     /**
      * La tabla del CRUD de Campus, por código y sin los borrados. Al admin, todos, activos e
-     * inactivos; a cualquier otro, los campus sobre los que tiene `core.campus.view` (ScopedContext::constrain()):
+     * inactivos; a cualquier otro, los campus sobre los que tiene `core.campus.view` (Actor::constrain()):
      * así ni el alcance ni el permiso se repiten aquí. Busca `$search`
      * en el código o el nombre con TextSearch; `$active` filtra por estado y `null` trae los dos.
      *
      * @return LengthAwarePaginator<int, Campus>
      */
-    public function forTable(ScopedContext $context, string $search = '', ?bool $active = null, int $perPage = 15): LengthAwarePaginator
+    public function forTable(Actor $context, string $search = '', ?bool $active = null, int $perPage = 15): LengthAwarePaginator
     {
         return Campus::query()
             ->tap(fn (Builder $query) => $context->constrain($query, CorePermission::CampusView, ['campus' => 'campuses.id']))

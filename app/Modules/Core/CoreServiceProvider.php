@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\DefaultScopeLabels;
 use App\Modules\Core\Authorization\OrgTree;
@@ -22,7 +23,6 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
@@ -40,7 +40,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // `scoped`, nunca singleton: con Octane un singleton guardaría el alcance de un usuario
         // para las peticiones siguientes.
-        $this->app->scoped(ScopedContext::class, fn (Application $app): ScopedContext => new ScopedContext(
+        $this->app->scoped(Actor::class, fn (Application $app): Actor => new Actor(
             fn (): mixed => $app['auth']->user(),
             $app->make(OrgTree::class),
             $app->make(AuthorizationSnapshots::class),

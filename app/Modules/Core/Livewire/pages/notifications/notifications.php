@@ -1,9 +1,9 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\OpensNotifications;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\NotificationQuery;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -48,7 +48,7 @@ new #[Title('Notificaciones')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(ScopedContext $context, NotificationQuery $notifications): array
+    public function with(Actor $context, NotificationQuery $notifications): array
     {
         $user = $context->user();
         $onlyUnread = $this->filter === 'sin-leer';

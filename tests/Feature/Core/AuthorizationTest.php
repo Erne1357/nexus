@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\OrgUnitKind;
@@ -8,7 +9,6 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -83,12 +83,12 @@ function authorizationUser(string $kind, array $f): User
     };
 }
 
-function actorOf(User $user): ScopedContext
+function authorizationActor(User $user): Actor
 {
     app()->forgetScopedInstances();
     test()->actingAs($user);
 
-    return app(ScopedContext::class);
+    return app(Actor::class);
 }
 
 /**
@@ -147,16 +147,16 @@ function probeTarget(FakePermission $permission, object $row): Target
 
 describe('allows()', function () {
     it('un puesto sin el permiso no puede aunque su alcance cubra', function () {
-        $jefe = actorOf(authorizationUser('jefe', $this->f));
+        $jefe = authorizationActor(authorizationUser('jefe', $this->f));
 
         expect($jefe->allows(FakePermission::ViewCareer, Target::of(career: $this->f['x'])))->toBeFalse()
             ->and($jefe->allows(FakePermission::ViewCampusCareer, Target::of(campus: $this->f['c2'], career: $this->f['x'])))->toBeFalse()
             ->and($jefe->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['d1'])))->toBeTrue()
-            ->and(actorOf(authorizationUser('docente', $this->f))->allows(FakePermission::ViewAny, Target::of()))->toBeFalse();
+            ->and(authorizationActor(authorizationUser('docente', $this->f))->allows(FakePermission::ViewAny, Target::of()))->toBeFalse();
     });
 
     it('el jefe de un departamento puede sobre lo de su departamento y no sobre lo de otro', function () {
-        $jefe = actorOf(authorizationUser('jefe', $this->f));
+        $jefe = authorizationActor(authorizationUser('jefe', $this->f));
 
         expect($jefe->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['d1'])))->toBeTrue()
             ->and($jefe->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['office'])))->toBeTrue()
@@ -168,7 +168,7 @@ describe('allows()', function () {
     });
 
     it('Subdirección puede sobre lo de cualquier departamento de su subárbol', function () {
-        $subdireccion = actorOf(authorizationUser('subdirección', $this->f));
+        $subdireccion = authorizationActor(authorizationUser('subdirección', $this->f));
 
         expect($subdireccion->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['d1'])))->toBeTrue()
             ->and($subdireccion->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['office'])))->toBeTrue()
@@ -181,7 +181,7 @@ describe('allows()', function () {
     it('un nombramiento sin campus vale en cualquier campus activo y no en uno desactivado', function () {
         $deleted = Campus::factory()->create(['code' => 'C4']);
         $deleted->delete();
-        $subdireccion = actorOf(authorizationUser('subdirección', $this->f));
+        $subdireccion = authorizationActor(authorizationUser('subdirección', $this->f));
 
         expect($subdireccion->allows(FakePermission::ViewCampus, Target::of(campus: $this->f['c1'])))->toBeTrue()
             ->and($subdireccion->allows(FakePermission::ViewCampus, Target::of(campus: $this->f['c2'])))->toBeTrue()
@@ -192,7 +192,7 @@ describe('allows()', function () {
     it('un nombramiento en un campus desactivado no cuenta, ni en las dimensiones que el permiso no declara', function () {
         $user = authorizationUser('jefe de proyecto docente', $this->f);
         Campus::whereKey($this->f['c2'])->update(['is_active' => false]);
-        $jefeDeProyecto = actorOf($user);
+        $jefeDeProyecto = authorizationActor($user);
 
         expect($jefeDeProyecto->allows(FakePermission::ViewCampusUnit, Target::of(campus: $this->f['c2'], unit: $this->f['d2'])))->toBeFalse()
             ->and($jefeDeProyecto->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['d2'])))->toBeFalse()
@@ -200,14 +200,14 @@ describe('allows()', function () {
     });
 
     it('un objetivo sin campus (general) solo lo cubre un nombramiento sin campus', function () {
-        expect(actorOf(authorizationUser('subdirección', $this->f))->allows(FakePermission::ViewCampus, Target::of()))->toBeTrue()
-            ->and(actorOf(authorizationUser('jefe', $this->f))->allows(FakePermission::ViewCampusUnit, Target::of(unit: $this->f['d1'])))->toBeTrue()
-            ->and(actorOf(authorizationUser('coordinador', $this->f))->allows(FakePermission::ViewCampus, Target::of()))->toBeFalse()
-            ->and(actorOf(authorizationUser('coordinador', $this->f))->allows(FakePermission::ViewCampusCareer, Target::of(career: $this->f['x'])))->toBeFalse();
+        expect(authorizationActor(authorizationUser('subdirección', $this->f))->allows(FakePermission::ViewCampus, Target::of()))->toBeTrue()
+            ->and(authorizationActor(authorizationUser('jefe', $this->f))->allows(FakePermission::ViewCampusUnit, Target::of(unit: $this->f['d1'])))->toBeTrue()
+            ->and(authorizationActor(authorizationUser('coordinador', $this->f))->allows(FakePermission::ViewCampus, Target::of()))->toBeFalse()
+            ->and(authorizationActor(authorizationUser('coordinador', $this->f))->allows(FakePermission::ViewCampusCareer, Target::of(career: $this->f['x'])))->toBeFalse();
     });
 
     it('las dimensiones que el permiso no declara no se revisan', function () {
-        $jefeDeProyecto = actorOf(authorizationUser('jefe de proyecto docente', $this->f));
+        $jefeDeProyecto = authorizationActor(authorizationUser('jefe de proyecto docente', $this->f));
 
         expect($jefeDeProyecto->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['d2'])))->toBeTrue()
             ->and($jefeDeProyecto->allows(FakePermission::ViewUnit, Target::of(campus: $this->f['c1'], unit: $this->f['d2'])))->toBeTrue()
@@ -217,17 +217,17 @@ describe('allows()', function () {
     });
 
     it('un objetivo con varios valores se cubre si alguno coincide', function () {
-        $coordinador = actorOf(authorizationUser('coordinador', $this->f));
+        $coordinador = authorizationActor(authorizationUser('coordinador', $this->f));
 
         expect($coordinador->allows(FakePermission::ViewCampusCareer, Target::of(campus: [$this->f['c1'], $this->f['c2']], career: [$this->f['y'], $this->f['x']])))->toBeTrue()
             ->and($coordinador->allows(FakePermission::ViewCampusCareer, Target::of(campus: [$this->f['c1']], career: [$this->f['x'], $this->f['y']])))->toBeFalse();
 
-        $jefe = actorOf(authorizationUser('jefe', $this->f));
+        $jefe = authorizationActor(authorizationUser('jefe', $this->f));
 
         expect($jefe->allows(FakePermission::ViewUnit, Target::of(unit: [$this->f['d2'], $this->f['office']])))->toBeTrue()
             ->and($jefe->allows(FakePermission::ViewUnit, Target::of(unit: [$this->f['d2'], $this->f['d3']])))->toBeFalse();
 
-        $subdireccion = actorOf(authorizationUser('subdirección', $this->f));
+        $subdireccion = authorizationActor(authorizationUser('subdirección', $this->f));
 
         expect($subdireccion->allows(FakePermission::ViewCampus, Target::of(campus: [$this->f['c3'], $this->f['c1']])))->toBeTrue()
             ->and($subdireccion->allows(FakePermission::ViewCampus, Target::of(campus: [$this->f['c3']])))->toBeFalse();
@@ -235,7 +235,7 @@ describe('allows()', function () {
 
     it('con dos puestos basta que uno cubra, cada uno con su alcance', function () {
         // Sin perfil activo: el contexto de otro usuario (forUser) cuenta todos sus puestos.
-        $user = app(ScopedContext::class)->forUser(authorizationUser('dos puestos', $this->f));
+        $user = app(Actor::class)->forUser(authorizationUser('dos puestos', $this->f));
 
         expect($user->allows(FakePermission::ViewUnit, Target::of(unit: $this->f['d2'])))->toBeTrue()
             ->and($user->allows(FakePermission::ViewCampusCareer, Target::of(campus: $this->f['c1'], career: $this->f['y'])))->toBeTrue()
@@ -244,7 +244,7 @@ describe('allows()', function () {
     });
 
     it('el admin puede todo menos sus excepciones', function () {
-        $admin = actorOf(authorizationUser('admin', $this->f));
+        $admin = authorizationActor(authorizationUser('admin', $this->f));
 
         expect($admin->allows(FakePermission::ViewCampusUnitCareer, Target::of(campus: $this->f['c3'], unit: $this->f['d3'], career: $this->f['y'])))->toBeTrue()
             ->and($admin->allows(FakePermission::ViewUnit, Target::of()))->toBeTrue()
@@ -255,7 +255,7 @@ describe('allows()', function () {
 
     it('un permiso personal vale con cualquier puesto y solo sobre lo propio', function () {
         $docenteUser = authorizationUser('docente', $this->f);
-        $docente = actorOf($docenteUser);
+        $docente = authorizationActor($docenteUser);
 
         expect($docente->allows(FakePermission::ViewOwn, Target::ownedBy($docenteUser->id)))->toBeTrue()
             ->and($docente->allows(FakePermission::ViewOwn, Target::ownedBy(User::factory()->create()->id)))->toBeFalse()
@@ -266,35 +266,35 @@ describe('allows()', function () {
         $jefeUser = authorizationUser('jefe', $this->f);
         $adminUser = authorizationUser('admin', $this->f);
 
-        expect(actorOf($jefeUser)->allows(FakePermission::ViewOwn, Target::ownedBy($jefeUser->id)))->toBeFalse()
-            ->and(actorOf($jefeUser)->allowsAny(FakePermission::ViewOwn))->toBeFalse()
-            ->and(actorOf($adminUser)->allows(FakePermission::ViewOwn, Target::ownedBy($adminUser->id)))->toBeTrue()
-            ->and(actorOf($adminUser)->allows(FakePermission::ViewOwn, Target::ownedBy($docenteUser->id)))->toBeFalse();
+        expect(authorizationActor($jefeUser)->allows(FakePermission::ViewOwn, Target::ownedBy($jefeUser->id)))->toBeFalse()
+            ->and(authorizationActor($jefeUser)->allowsAny(FakePermission::ViewOwn))->toBeFalse()
+            ->and(authorizationActor($adminUser)->allows(FakePermission::ViewOwn, Target::ownedBy($adminUser->id)))->toBeTrue()
+            ->and(authorizationActor($adminUser)->allows(FakePermission::ViewOwn, Target::ownedBy($docenteUser->id)))->toBeFalse();
     });
 
     it('sin usuario activo no puede nada', function () {
         $inactive = User::factory()->admin()->create(['is_active' => false]);
 
-        expect(actorOf($inactive)->allows(FakePermission::ViewAny, Target::of()))->toBeFalse()
-            ->and(actorOf($inactive)->allowsAny(FakePermission::ViewAny))->toBeFalse()
-            ->and(actorOf($inactive)->allows(FakePermission::ViewOwn, Target::ownedBy($inactive->id)))->toBeFalse();
+        expect(authorizationActor($inactive)->allows(FakePermission::ViewAny, Target::of()))->toBeFalse()
+            ->and(authorizationActor($inactive)->allowsAny(FakePermission::ViewAny))->toBeFalse()
+            ->and(authorizationActor($inactive)->allows(FakePermission::ViewOwn, Target::ownedBy($inactive->id)))->toBeFalse();
     });
 });
 
 describe('allowsAny()', function () {
     it('allowsAny responde si el puesto tiene el permiso y algún nombramiento vigente', function () {
-        $coordinador = actorOf(authorizationUser('coordinador', $this->f));
+        $coordinador = authorizationActor(authorizationUser('coordinador', $this->f));
         $expired = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->f['c2'], 'career_id' => $this->f['x']])->create();
         RoleAssignment::where('user_id', $expired->id)->update(['valid_to' => today()->subDay()->toDateString()]);
         $inactiveCampus = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->f['c3'], 'career_id' => $this->f['x']])->create();
 
         expect($coordinador->allowsAny(FakePermission::ViewCareer))->toBeTrue()
             ->and($coordinador->allows(FakePermission::ViewCareer))->toBeTrue()
-            ->and(actorOf(authorizationUser('jefe', $this->f))->allowsAny(FakePermission::ViewCareer))->toBeFalse()
-            ->and(actorOf($expired)->allowsAny(FakePermission::ViewCareer))->toBeFalse()
-            ->and(actorOf($inactiveCampus)->allowsAny(FakePermission::ViewCareer))->toBeFalse()
-            ->and(actorOf(User::factory()->create())->allowsAny(FakePermission::ViewAny))->toBeFalse()
-            ->and(actorOf(authorizationUser('admin', $this->f))->allowsAny(FakePermission::ViewAny))->toBeTrue();
+            ->and(authorizationActor(authorizationUser('jefe', $this->f))->allowsAny(FakePermission::ViewCareer))->toBeFalse()
+            ->and(authorizationActor($expired)->allowsAny(FakePermission::ViewCareer))->toBeFalse()
+            ->and(authorizationActor($inactiveCampus)->allowsAny(FakePermission::ViewCareer))->toBeFalse()
+            ->and(authorizationActor(User::factory()->create())->allowsAny(FakePermission::ViewAny))->toBeFalse()
+            ->and(authorizationActor(authorizationUser('admin', $this->f))->allowsAny(FakePermission::ViewAny))->toBeTrue();
     });
 });
 
@@ -302,7 +302,7 @@ describe('constrain()', function () {
     it('constrain filtra en SQL igual que allows', function (string $kind, FakePermission $permission) {
         $user = authorizationUser($kind, $this->f);
         $probe = authorizationProbe($this->f, $user->id);
-        $actor = actorOf($user);
+        $actor = authorizationActor($user);
 
         $allowed = DB::table('authorization_probes')->orderBy('id')->get()
             ->filter(fn (object $row): bool => $actor->allows($permission, probeTarget($permission, $row)))
@@ -317,7 +317,7 @@ describe('constrain()', function () {
         $user = authorizationUser('subdirección', $this->f);
         $probe = authorizationProbe($this->f, $user->id);
 
-        $campuses = actorOf($user)->constrain($probe->newQuery(), FakePermission::ViewCampus, probeColumns())
+        $campuses = authorizationActor($user)->constrain($probe->newQuery(), FakePermission::ViewCampus, probeColumns())
             ->distinct()->pluck('campus_id')->all();
 
         expect($campuses)->toEqualCanonicalizing([$this->f['c1'], $this->f['c2'], null]);
@@ -327,15 +327,15 @@ describe('constrain()', function () {
         $jefe = authorizationUser('jefe', $this->f);
         $probe = authorizationProbe($this->f, $jefe->id);
 
-        expect(actorOf($jefe)->constrain($probe->newQuery(), FakePermission::ViewCareer, probeColumns())->count())->toBe(0)
-            ->and(actorOf(authorizationUser('admin', $this->f))->constrain($probe->newQuery(), FakePermission::ViewUnit, probeColumns())->count())->toBe(180)
-            ->and(actorOf(authorizationUser('admin', $this->f))->constrain($probe->newQuery(), FakePermission::ViewCampusCareer, probeColumns())->count())->toBe(0);
+        expect(authorizationActor($jefe)->constrain($probe->newQuery(), FakePermission::ViewCareer, probeColumns())->count())->toBe(0)
+            ->and(authorizationActor(authorizationUser('admin', $this->f))->constrain($probe->newQuery(), FakePermission::ViewUnit, probeColumns())->count())->toBe(180)
+            ->and(authorizationActor(authorizationUser('admin', $this->f))->constrain($probe->newQuery(), FakePermission::ViewCampusCareer, probeColumns())->count())->toBe(0);
     });
 
     it('acepta una Closure para la unidad o la carrera con los valores que cubre', function () {
         $user = authorizationUser('dos puestos', $this->f);
         $probe = authorizationProbe($this->f, $user->id);
-        $actor = actorOf($user);
+        $actor = authorizationActor($user);
         $byColumn = $actor->constrain($probe->newQuery(), FakePermission::ViewCampusUnitCareer, probeColumns())->orderBy('id')->pluck('id')->all();
         $received = [];
         $columns = [
@@ -356,7 +356,7 @@ describe('constrain()', function () {
     it('constrain rechaza una consulta con un OR suelto, y con el OR agrupado la sigue filtrando', function (string $kind, int $expected) {
         $user = authorizationUser($kind, $this->f);
         $probe = authorizationProbe($this->f, $user->id);
-        $actor = actorOf($user);
+        $actor = authorizationActor($user);
         $loose = $probe->newQuery()->where('campus_id', $this->f['c1'])->orWhere('campus_id', $this->f['c3']);
         $grouped = $probe->newQuery()->where(fn (Builder $query) => $query->where('campus_id', $this->f['c1'])->orWhere('campus_id', $this->f['c3']));
 
@@ -372,7 +372,7 @@ describe('constrain()', function () {
     it('falla si falta la columna de una dimensión que el permiso declara, o si el campus viene como Closure', function (FakePermission $permission, array $columns) {
         $user = authorizationUser('admin', $this->f);
 
-        expect(fn () => actorOf($user)->constrain(User::query(), $permission, $columns))->toThrow(LogicException::class);
+        expect(fn () => authorizationActor($user)->constrain(User::query(), $permission, $columns))->toThrow(LogicException::class);
     })->with([
         'sin unidad' => [FakePermission::ViewCampusUnit, ['campus' => 'campus_id']],
         'sin campus' => [FakePermission::ViewCampus, ['unit' => 'department_id']],

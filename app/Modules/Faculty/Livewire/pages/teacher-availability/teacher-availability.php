@@ -1,7 +1,7 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TermQuery;
 use App\Modules\Faculty\Actions\SetTeacherAvailability;
 use App\Modules\Faculty\Enums\AvailabilityKind;
@@ -47,7 +47,7 @@ new #[Title('Disponibilidad')] class extends Component
     #[Locked]
     public ?string $campusId = null;
 
-    public function mount(string $teacher, TeacherQuery $teachers, ScopedContext $context): void
+    public function mount(string $teacher, TeacherQuery $teachers, Actor $context): void
     {
         $model = $teachers->findOrFail($teacher);
         $this->authorize('manageAvailability', $model);

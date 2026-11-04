@@ -3,9 +3,9 @@
 use App\Modules\Core\Actions\CreateTerm;
 use App\Modules\Core\Actions\MakeTermCurrent;
 use App\Modules\Core\Actions\UpdateTerm;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Forms\TermForm;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TermQuery;
 use App\Modules\Core\Rules\TermRules;
 use Illuminate\Support\Facades\Gate;
@@ -48,7 +48,7 @@ new #[Title('Periodos')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TermQuery $terms, ScopedContext $context): array
+    public function with(TermQuery $terms, Actor $context): array
     {
         return [
             'terms' => $terms->forTable($context, $this->search),

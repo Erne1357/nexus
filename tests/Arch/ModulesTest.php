@@ -1,7 +1,7 @@
 <?php
 
 use App\Modules\Core\ModuleServiceProvider;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
@@ -198,12 +198,12 @@ arch('module enums are string backed')
     ->expect($layer('Enums'))
     ->toBeStringBackedEnums();
 
-// CLAUDE.md, arquitectura 6: toda policy decide por rol y alcance con ScopedContext, a través del
+// CLAUDE.md, arquitectura 6: toda policy decide por rol y alcance con Actor, a través del
 // trait, que además usa el usuario que recibe la policy y no siempre el autenticado.
-arch('module policies check role and scope through UsesScopedContext')
+arch('module policies authorize through AuthorizesActor')
     ->expect($layer('Policies'))
     ->classes()
-    ->toUseTrait(UsesScopedContext::class);
+    ->toUseTrait(AuthorizesActor::class);
 
 // ADR-0014: todo modelo de Nexus usa UUIDv7 como llave primaria. Models/ también tiene value
 // objects (CampusProfile), que no son modelos y no cuentan.

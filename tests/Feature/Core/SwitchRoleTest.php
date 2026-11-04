@@ -1,10 +1,10 @@
 <?php
 
 use App\Modules\Core\Actions\SwitchRole;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -28,8 +28,8 @@ it('cambia el perfil, lo recuerda para la siguiente sesión y deja bitácora', f
 
     $log = Activity::latest('id')->first();
 
-    expect(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::Coordinador->value)
-        ->and(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador)
+    expect(session(Actor::ACTIVE_ROLE))->toBe(Role::Coordinador->value)
+        ->and(app(Actor::class)->activeRole())->toBe(Role::Coordinador)
         ->and($this->user->fresh()->last_role)->toBe(Role::Coordinador)
         ->and($log->description)->toBe('Cambió al perfil Coordinador de carrera')
         ->and($log->subject->is($this->user))->toBeTrue()
@@ -41,22 +41,22 @@ it('rechaza un puesto que no tiene', function () {
 
     expect(fn () => app(SwitchRole::class)->handle(Role::Subdireccion))
         ->toThrow(AuthorizationException::class, 'No tienes ese puesto.')
-        ->and(app(ScopedContext::class)->activeRole())->toBe(Role::JefeDepartamento);
+        ->and(app(Actor::class)->activeRole())->toBe(Role::JefeDepartamento);
 });
 
 it('olvida el campus si el nuevo perfil no trabaja en él', function () {
     actingAsRole($this->user, Role::JefeDepartamento);
-    session([ScopedContext::ACTIVE_CAMPUS => $this->c1->id]);
+    session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
 
     app(SwitchRole::class)->handle(Role::Coordinador);
 
-    expect(session()->has(ScopedContext::ACTIVE_CAMPUS))->toBeFalse();
+    expect(session()->has(Actor::ACTIVE_CAMPUS))->toBeFalse();
 
     actingAsRole($this->user, Role::Coordinador);
-    session([ScopedContext::ACTIVE_CAMPUS => $this->c2->id]);
+    session([Actor::ACTIVE_CAMPUS => $this->c2->id]);
     app(SwitchRole::class)->handle(Role::JefeDepartamento);
 
-    expect(session(ScopedContext::ACTIVE_CAMPUS))->toBe($this->c2->id);
+    expect(session(Actor::ACTIVE_CAMPUS))->toBe($this->c2->id);
 });
 
 it('olvida las páginas recientes', function () {
@@ -76,7 +76,7 @@ it('si la bitácora falla, no cambia el perfil de la sesión, ni last_role, ni o
     });
 
     expect(fn () => app(SwitchRole::class)->handle(Role::Coordinador))->toThrow(RuntimeException::class, 'No se pudo escribir la bitácora.')
-        ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value)
+        ->and(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value)
         ->and($this->user->fresh()->last_role)->toBeNull()
         ->and(session('core.recent_pages'))->toBe(['academico' => '/campus']);
 });

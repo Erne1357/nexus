@@ -1,9 +1,9 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Livewire;
 
 /*
@@ -25,7 +25,7 @@ it('una acción de un componente pintado con otro perfil responde 419', function
 
     $component = Livewire::test('core::components.context-switcher');
 
-    session()->put(ScopedContext::ACTIVE_ROLE, Role::Coordinador->value);
+    session()->put(Actor::ACTIVE_ROLE, Role::Coordinador->value);
 
     $component->call('$refresh')->assertStatus(419)->assertHeader('X-Nexus-Role-Changed', '1');
 });
@@ -51,7 +51,7 @@ it('perder el puesto activo también responde 419: la página se pintó con otro
     $component = Livewire::test('core::components.context-switcher');
 
     $persona->roleAssignments()->update(['valid_to' => today()->subDay()]);
-    app(ScopedContext::class)->refresh();
+    app(Actor::class)->refresh();
 
     $component->call('$refresh')->assertStatus(419)->assertHeader('X-Nexus-Role-Changed', '1');
 });

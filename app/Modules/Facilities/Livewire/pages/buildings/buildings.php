@@ -1,7 +1,7 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Actions\CreateBuilding;
 use App\Modules\Facilities\Actions\UpdateBuilding;
 use App\Modules\Facilities\Models\Building;
@@ -16,7 +16,7 @@ use Mary\Traits\Toast;
 /**
  * CRUD de Edificios, con la forma de Campus: tabla con búsqueda y filtro de estado; alta y edición en un
  * modal; activar o desactivar desde la tabla. Los edificios no se borran. Es de un campus, el activo de la
- * credencial (ScopedContext::activeCampus()): el listado y el alta usan ese campus, el formulario no lleva
+ * credencial (Actor::activeCampus()): el listado y el alta usan ese campus, el formulario no lleva
  * un select de campus y, sin uno elegido, la pantalla pide elegirlo. Lo administran el admin y la
  * Subdirección del campus (BuildingPolicy).
  *
@@ -55,7 +55,7 @@ new #[Title('Edificios')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(BuildingQuery $buildings, ScopedContext $context): array
+    public function with(BuildingQuery $buildings, Actor $context): array
     {
         $campus = $context->activeCampus();
 
@@ -86,7 +86,7 @@ new #[Title('Edificios')] class extends Component
         }
     }
 
-    public function create(ScopedContext $context): void
+    public function create(Actor $context): void
     {
         $this->authorize('create', [Building::class, $this->campus($context)]);
 
@@ -107,7 +107,7 @@ new #[Title('Edificios')] class extends Component
         $this->showModal = true;
     }
 
-    public function save(CreateBuilding $createBuilding, UpdateBuilding $updateBuilding, BuildingQuery $buildings, ScopedContext $context): void
+    public function save(CreateBuilding $createBuilding, UpdateBuilding $updateBuilding, BuildingQuery $buildings, Actor $context): void
     {
         if ($this->editingId === null) {
             $campus = $this->campus($context);
@@ -145,7 +145,7 @@ new #[Title('Edificios')] class extends Component
     /**
      * El campus activo de la credencial; sin uno no hay dónde dar de alta (403).
      */
-    private function campus(ScopedContext $context): Campus
+    private function campus(Actor $context): Campus
     {
         return $context->activeCampus() ?? abort(403, 'Elige un campus en tu credencial.');
     }

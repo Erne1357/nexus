@@ -2,11 +2,11 @@
 
 namespace Tests\Fixtures\Modules\DemoCatalog;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Notifications\DatabaseNotification;
 use Tests\Fixtures\Modules\DemoCatalog\Models\Item;
 use Tests\Fixtures\Modules\DemoCatalog\Policies\NotificationPolicy;
@@ -29,7 +29,7 @@ final class DemoCatalogServiceProvider extends ModuleServiceProvider
                 route: 'demo-catalog.greeting',
                 icon: 'o-hand-raised',
                 area: NavigationArea::ServiciosEscolares,
-                visible: static fn (ScopedContext $context): bool => $context->has(Role::Coordinador),
+                visible: static fn (Actor $context): bool => $context->has(Role::Coordinador),
             ),
             new NavigationItem(
                 label: 'Elementos',

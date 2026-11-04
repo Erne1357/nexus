@@ -4,10 +4,10 @@ namespace App\Modules\Faculty\Policies;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
-use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -55,16 +55,16 @@ use Illuminate\Support\Collection;
  */
 final class TeacherPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function viewAny(User $user): bool
     {
-        return $this->scope($user)->allowsAny(FacultyPermission::TeacherView);
+        return $this->actor($user)->allowsAny(FacultyPermission::TeacherView);
     }
 
     public function view(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherView);
+        return $this->coversTeacher($this->actor($user), $teacher, FacultyPermission::TeacherView);
     }
 
     /**
@@ -72,7 +72,7 @@ final class TeacherPolicy
      */
     public function update(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherUpdate);
+        return $this->coversTeacher($this->actor($user), $teacher, FacultyPermission::TeacherUpdate);
     }
 
     /**
@@ -80,17 +80,17 @@ final class TeacherPolicy
      */
     public function deactivate(User $user, Teacher $teacher): bool
     {
-        return $this->scope($user)->allows(FacultyPermission::TeacherDeactivate) && ! $this->isSelf($user, $teacher->user_id);
+        return $this->actor($user)->allows(FacultyPermission::TeacherDeactivate) && ! $this->isSelf($user, $teacher->user_id);
     }
 
     public function managePositions(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherManagePositions);
+        return $this->coversTeacher($this->actor($user), $teacher, FacultyPermission::TeacherManagePositions);
     }
 
     public function manageAvailability(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherManageAvailability);
+        return $this->coversTeacher($this->actor($user), $teacher, FacultyPermission::TeacherManageAvailability);
     }
 
     /**
@@ -98,7 +98,7 @@ final class TeacherPolicy
      */
     public function manageExternalLoads(User $user, Teacher $teacher): bool
     {
-        return $this->coversTeacher($this->scope($user), $teacher, FacultyPermission::TeacherManageExternalLoads);
+        return $this->coversTeacher($this->actor($user), $teacher, FacultyPermission::TeacherManageExternalLoads);
     }
 
     /**
@@ -106,7 +106,7 @@ final class TeacherPolicy
      */
     public function manageQualification(User $user, Teacher $teacher, Subject $subject): bool
     {
-        $scope = $this->scope($user);
+        $scope = $this->actor($user);
 
         return $this->coversTeacher($scope, $teacher, FacultyPermission::TeacherQualificationManage)
             && $scope->allows(FacultyPermission::TeacherQualificationManage, Target::of(unit: $subject->department_id));
@@ -122,7 +122,7 @@ final class TeacherPolicy
             ? $adscription->teacher?->user_id
             : Teacher::withTrashed()->whereKey($adscription->teacher_id)->value('user_id');
 
-        return $this->scope($user)->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
+        return $this->actor($user)->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
             && ! $this->isSelf($user, $teacherUserId);
     }
 
@@ -132,7 +132,7 @@ final class TeacherPolicy
      */
     public function setPrimaryAdscription(User $user, TeacherDepartment $adscription): bool
     {
-        return $this->scope($user)->allows(FacultyPermission::TeacherDepartmentSetPrimary, Target::of(unit: $adscription->department_id));
+        return $this->actor($user)->allows(FacultyPermission::TeacherDepartmentSetPrimary, Target::of(unit: $adscription->department_id));
     }
 
     /**
@@ -141,7 +141,7 @@ final class TeacherPolicy
      */
     public function create(User $user, Department|string|null $department = null): bool
     {
-        $scope = $this->scope($user);
+        $scope = $this->actor($user);
 
         if ($department === null) {
             return $scope->allowsAny(FacultyPermission::TeacherCreate);
@@ -158,7 +158,7 @@ final class TeacherPolicy
      */
     public function adscribe(User $user): bool
     {
-        return $this->scope($user)->allows(FacultyPermission::TeacherAdscribe);
+        return $this->actor($user)->allows(FacultyPermission::TeacherAdscribe);
     }
 
     /**
@@ -166,19 +166,19 @@ final class TeacherPolicy
      */
     public function provisionUsers(User $user): bool
     {
-        return $this->scope($user)->allows(FacultyPermission::TeacherUserProvision);
+        return $this->actor($user)->allows(FacultyPermission::TeacherUserProvision);
     }
 
     public function resetPassword(User $user, Teacher $teacher): bool
     {
-        return $this->scope($user)->allows(FacultyPermission::TeacherUserResetPassword);
+        return $this->actor($user)->allows(FacultyPermission::TeacherUserResetPassword);
     }
 
     /**
      * Si cubre al docente para `$permission`: con `faculty.teacher.view_all`, a todos, también a los que no tienen
      * departamento; si no, con `$permission` sobre los departamentos de sus adscripciones sin borrar.
      */
-    private function coversTeacher(ScopedContext $scope, Teacher $teacher, FacultyPermission $permission): bool
+    private function coversTeacher(Actor $scope, Teacher $teacher, FacultyPermission $permission): bool
     {
         return $scope->allows(FacultyPermission::TeacherViewAll)
             || $scope->allows($permission, Target::of(unit: $this->adscriptionsOf($teacher)->pluck('department_id')->unique()->values()->all()));

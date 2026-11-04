@@ -15,10 +15,10 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Rules\RoomRules;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
@@ -389,7 +389,7 @@ new #[Title('Validación de catálogos')] class extends Component
             return $this->resolved;
         }
 
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
         $departments = app(CatalogReviewQuery::class)->departmentsFor($context);
         abort_if($departments->isEmpty(), 403);
 
@@ -414,7 +414,7 @@ new #[Title('Validación de catálogos')] class extends Component
 
     private function user(): User
     {
-        return app(ScopedContext::class)->user() ?? abort(403);
+        return app(Actor::class)->user() ?? abort(403);
     }
 
     private function openCatalog(): ?Catalog

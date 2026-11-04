@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Actions\SwitchRole;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
@@ -12,7 +13,6 @@ use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\ScopedContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Session\ArraySessionHandler;
 use Illuminate\Session\Store;
@@ -31,16 +31,16 @@ beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
 });
 
-function scopedContextOf(User $user): ScopedContext
+function actorOf(User $user): Actor
 {
     test()->actingAs($user);
 
-    return app(ScopedContext::class);
+    return app(Actor::class);
 }
 
 describe('alcance por rol', function () {
     it('el admin tiene todos los roles y cubre cualquier campus, departamento y carrera sin alcance', function () {
-        $context = scopedContextOf(User::factory()->admin()->create());
+        $context = actorOf(User::factory()->admin()->create());
 
         expect($context->isAdmin())->toBeTrue()
             ->and(collect(Role::cases())->every(fn (Role $role): bool => $context->has($role)))->toBeTrue()
@@ -53,13 +53,13 @@ describe('alcance por rol', function () {
     it('el admin trabaja en todos los campus activos, pero no en los inactivos', function () {
         Campus::factory()->create(['code' => 'EAD', 'is_active' => false]);
 
-        $context = scopedContextOf(User::factory()->admin()->create());
+        $context = actorOf(User::factory()->admin()->create());
 
         expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2']);
     });
 
     it('un coordinador de la carrera X en C2 cubre X en C2, pero no la carrera Y ni C1', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
+        $context = actorOf(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
 
         expect($context->has(Role::Coordinador))->toBeTrue()
             ->and($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue()
@@ -73,7 +73,7 @@ describe('alcance por rol', function () {
     });
 
     it('un jefe del departamento D en C2 cubre D en C2, pero no otro departamento ni C1', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
 
         expect($context->has(Role::JefeDepartamento))->toBeTrue()
             ->and($context->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeTrue()
@@ -85,7 +85,7 @@ describe('alcance por rol', function () {
     });
 
     it('un jefe de proyecto docente del departamento D en C2 cubre D en C2 como su propio rol, no como jefe', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
 
         expect($context->covers(Role::JefeProyectoDocente, $this->c2, department: fakeKey(10)))->toBeTrue()
             ->and($context->covers(Role::JefeProyectoDocente, $this->c2, department: fakeKey(11)))->toBeFalse()
@@ -93,7 +93,7 @@ describe('alcance por rol', function () {
     });
 
     it('la subdirección de C2 cubre todo C2, pero no C1', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])->create());
+        $context = actorOf(User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])->create());
 
         expect($context->covers(Role::Subdireccion, $this->c2))->toBeTrue()
             ->and($context->covers(Role::Subdireccion, $this->c2, department: departmentKey(10), career: fakeKey(20)))->toBeTrue()
@@ -104,7 +104,7 @@ describe('alcance por rol', function () {
     });
 
     it('un docente trabaja en su campus pero no cubre ningún rol de gestión', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
         $management = [Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente, Role::Coordinador];
 
         expect($context->has(Role::Docente))->toBeTrue()
@@ -117,7 +117,7 @@ describe('alcance por rol', function () {
     });
 
     it('un docente nunca cubre por covers(), ni con Role::Docente: su carga se autoriza por asignación', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
 
         expect($context->covers(Role::Docente, $this->c2))->toBeFalse()
             ->and($context->covers([Role::Docente, Role::Coordinador], $this->c2, department: fakeKey(10), career: fakeKey(20)))->toBeFalse()
@@ -133,14 +133,14 @@ describe('alcance por rol', function () {
         $vencido = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
         RoleAssignment::where('user_id', $vencido->id)->update(['valid_to' => today()->subDay()]);
 
-        expect(scopedContextOf($jefeYDocente)->heldRoles())->toBe([Role::JefeDepartamento, Role::Docente])
-            ->and(scopedContextOf(User::factory()->admin()->create())->heldRoles())->toBe([Role::Admin])
-            ->and(scopedContextOf($vencido)->heldRoles())->toBe([])
-            ->and(scopedContextOf(User::factory()->admin()->create(['is_active' => false]))->heldRoles())->toBe([]);
+        expect(actorOf($jefeYDocente)->heldRoles())->toBe([Role::JefeDepartamento, Role::Docente])
+            ->and(actorOf(User::factory()->admin()->create())->heldRoles())->toBe([Role::Admin])
+            ->and(actorOf($vencido)->heldRoles())->toBe([])
+            ->and(actorOf(User::factory()->admin()->create(['is_active' => false]))->heldRoles())->toBe([]);
     });
 
     it('cubre con cualquiera de varios roles el que el usuario sí tiene', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
+        $context = actorOf(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
 
         expect($context->covers([Role::JefeDepartamento, Role::Coordinador], $this->c2, department: fakeKey(10), career: fakeKey(20)))->toBeTrue();
     });
@@ -154,7 +154,7 @@ describe('vigencia y coherencia del alcance', function () {
             'valid_from' => $from, 'valid_to' => $to,
         ]);
 
-        $context = scopedContextOf($user);
+        $context = actorOf($user);
 
         expect($context->has(Role::JefeDepartamento))->toBeFalse()
             ->and($context->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeFalse()
@@ -172,7 +172,7 @@ describe('vigencia y coherencia del alcance', function () {
             'valid_from' => $from, 'valid_to' => $to,
         ]);
 
-        expect(scopedContextOf($user)->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeTrue();
+        expect(actorOf($user)->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeTrue();
     })->with([
         'empieza hoy' => ['2026-10-27', null],
         'termina hoy' => ['2026-01-01', '2026-10-27'],
@@ -185,15 +185,15 @@ describe('vigencia y coherencia del alcance', function () {
         RoleAssignment::factory()->for($endsToday)->create(['role' => Role::Docente, 'campus_id' => $this->c2->id, 'valid_from' => '2026-01-01', 'valid_to' => '2026-10-27']);
         RoleAssignment::factory()->for($startsTomorrow)->create(['role' => Role::Docente, 'campus_id' => $this->c2->id, 'valid_from' => '2026-10-28']);
 
-        expect(scopedContextOf($endsToday)->has(Role::Docente))->toBeTrue()
-            ->and(scopedContextOf($startsTomorrow)->has(Role::Docente))->toBeFalse();
+        expect(actorOf($endsToday)->has(Role::Docente))->toBeTrue()
+            ->and(actorOf($startsTomorrow)->has(Role::Docente))->toBeFalse();
     });
 
     it('un alcance en un campus desactivado o borrado no cuenta', function (string $retired) {
         $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
         $retired === 'borrado' ? $this->c2->delete() : $this->c2->update(['is_active' => false]);
 
-        $context = scopedContextOf($user);
+        $context = actorOf($user);
 
         expect($context->has(Role::Coordinador))->toBeFalse()
             ->and($context->covers(Role::Coordinador, $this->c2->id, career: fakeKey(20)))->toBeFalse()
@@ -205,7 +205,7 @@ describe('vigencia y coherencia del alcance', function () {
         $this->c1->update(['is_active' => false]);
         $this->c2->delete();
 
-        $context = scopedContextOf(User::factory()->admin()->create());
+        $context = actorOf(User::factory()->admin()->create());
 
         expect($context->covers(Role::Coordinador, $this->c1->id, career: fakeKey(20)))->toBeTrue()
             ->and($context->canAccessCampus($this->c2->id))->toBeTrue();
@@ -213,7 +213,7 @@ describe('vigencia y coherencia del alcance', function () {
 
     it('refresh() vuelve a cargar roles y alcances en la misma petición', function () {
         $user = User::factory()->create();
-        $context = scopedContextOf($user);
+        $context = actorOf($user);
 
         expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse();
 
@@ -230,7 +230,7 @@ describe('vigencia y coherencia del alcance', function () {
         $user = User::factory()->create();
         RoleAssignment::factory()->for($user)->create(['role' => $role, ...$scope]);
 
-        $context = scopedContextOf($user);
+        $context = actorOf($user);
 
         expect($context->has($role))->toBeFalse()
             ->and($context->covers($role, $this->c2, department: fakeKey(10), career: fakeKey(20)))->toBeFalse()
@@ -248,22 +248,22 @@ describe('vigencia y coherencia del alcance', function () {
         $admin = User::factory()->admin()->create(['is_active' => false]);
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create(['is_active' => false]);
 
-        expect(scopedContextOf($admin)->isAdmin())->toBeFalse()
-            ->and(scopedContextOf($admin)->canAccessCampus($this->c2))->toBeFalse()
-            ->and(scopedContextOf($jefe)->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeFalse();
+        expect(actorOf($admin)->isAdmin())->toBeFalse()
+            ->and(actorOf($admin)->canAccessCampus($this->c2))->toBeFalse()
+            ->and(actorOf($jefe)->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeFalse();
     });
 
     it('el admin es un nombramiento: sin él, el usuario no es admin aunque alguna vez lo fue', function () {
         $admin = User::factory()->admin()->create();
         $admin->roleAssignments()->where('role', Role::Admin)->update(['valid_to' => today()->subDay()->toDateString()]);
 
-        expect(scopedContextOf($admin->fresh())->isAdmin())->toBeFalse();
+        expect(actorOf($admin->fresh())->isAdmin())->toBeFalse();
     });
 
     it('sin usuario autenticado no hay roles, campus ni periodo', function () {
         Term::factory()->current()->create();
 
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
 
         expect($context->user())->toBeNull()
             ->and($context->isAdmin())->toBeFalse()
@@ -276,7 +276,7 @@ describe('vigencia y coherencia del alcance', function () {
 
 describe('alcance de todo el Tec (sin campus)', function () {
     it('la subdirección sin campus cubre todos los campus activos y los ofrece en la credencial', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion)->create());
+        $context = actorOf(User::factory()->withRole(Role::Subdireccion)->create());
 
         expect($context->has(Role::Subdireccion))->toBeTrue()
             ->and($context->covers(Role::Subdireccion, $this->c1))->toBeTrue()
@@ -292,7 +292,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
         $c3 = Campus::factory()->create(['code' => 'C3']);
         $retired === 'borrado' ? $c3->delete() : $c3->update(['is_active' => false]);
 
-        $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion)->create());
+        $context = actorOf(User::factory()->withRole(Role::Subdireccion)->create());
 
         expect($context->covers(Role::Subdireccion, $c3->id))->toBeFalse()
             ->and($context->canAccessCampus($c3->id))->toBeFalse()
@@ -301,7 +301,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
     })->with(['desactivado', 'borrado']);
 
     it('un jefe del departamento D sin campus cubre D en C1 y en C2, pero no otro departamento ni el campus completo', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
 
         expect($context->has(Role::JefeDepartamento))->toBeTrue()
             ->and($context->covers(Role::JefeDepartamento, $this->c1, department: fakeKey(10)))->toBeTrue()
@@ -314,7 +314,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
 
     it('un docente sin campus trabaja en cualquier campus activo, pero no cubre nada por covers()', function () {
         Campus::factory()->create(['code' => 'EAD', 'is_active' => false]);
-        $context = scopedContextOf(User::factory()->withRole(Role::Docente)->create());
+        $context = actorOf(User::factory()->withRole(Role::Docente)->create());
 
         expect($context->has(Role::Docente))->toBeTrue()
             ->and($context->heldRoles())->toBe([Role::Docente])
@@ -327,7 +327,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
 
     it('un alcance de docente sin campus no extiende a otro campus el de su coordinación', function () {
         // Con los dos puestos a la vez: el contexto de otro usuario (forUser), sin perfil activo.
-        $context = app(ScopedContext::class)->forUser(User::factory()
+        $context = app(Actor::class)->forUser(User::factory()
             ->withRole(Role::Docente)
             ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
             ->create());
@@ -346,7 +346,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
             ->create();
 
         actingAsRole($user, Role::Coordinador);
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
 
         expect($context->campuses()->pluck('code')->all())->toBe(['C2'])
             ->and($context->activeCampus()?->is($this->c2))->toBeTrue()
@@ -366,7 +366,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
             ->create(['last_role' => Role::Coordinador]);
         $retired === 'borrado' ? $this->c2->delete() : $this->c2->update(['is_active' => false]);
 
-        $context = scopedContextOf($user);
+        $context = actorOf($user);
 
         expect($context->activeRole())->toBe(Role::Docente)
             ->and($context->campuses()->pluck('code')->all())->toBe(['C1'])
@@ -385,11 +385,11 @@ describe('alcance de todo el Tec (sin campus)', function () {
             ->create();
         $c3->update(['is_active' => false]);
 
-        expect(scopedContextOf($user)->campuses()->pluck('code')->all())->toBe(['C2']);
+        expect(actorOf($user)->campuses()->pluck('code')->all())->toBe(['C2']);
     });
 
     it('con otro rol de todo el Tec, la credencial de un docente de todo el Tec ofrece todos los campus activos', function () {
-        $context = scopedContextOf(User::factory()
+        $context = actorOf(User::factory()
             ->withRole(Role::Docente)
             ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
             ->create());
@@ -399,7 +399,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
     });
 
     it('un alcance sin campus de un usuario inactivo no cuenta', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion)->create(['is_active' => false]));
+        $context = actorOf(User::factory()->withRole(Role::Subdireccion)->create(['is_active' => false]));
 
         expect($context->has(Role::Subdireccion))->toBeFalse()
             ->and($context->covers(Role::Subdireccion, $this->c2))->toBeFalse()
@@ -415,7 +415,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
             ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
             ->create();
 
-        $context = scopedContextOf($withoutScopes);
+        $context = actorOf($withoutScopes);
 
         expect($context->has(Role::Subdireccion))->toBeFalse()
             ->and($context->has(Role::JefeDepartamento))->toBeFalse()
@@ -427,7 +427,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
     });
 
     it('un alcance sin campus vencido no cuenta', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion, ['valid_from' => '2026-01-01', 'valid_to' => '2026-10-26'])->create());
+        $context = actorOf(User::factory()->withRole(Role::Subdireccion, ['valid_from' => '2026-01-01', 'valid_to' => '2026-10-26'])->create());
 
         expect($context->has(Role::Subdireccion))->toBeFalse()
             ->and($context->covers(Role::Subdireccion, $this->c2))->toBeFalse()
@@ -435,7 +435,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
     });
 
     it('averigua una sola vez por petición qué campus están activos', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion)->create());
+        $context = actorOf(User::factory()->withRole(Role::Subdireccion)->create());
         $context->covers(Role::Subdireccion, $this->c1);
 
         DB::enableQueryLog();
@@ -454,13 +454,13 @@ describe('unidades del organigrama', function () {
         $division = OrgUnit::factory()->create(['kind' => OrgUnitKind::Division, 'parent_id' => OrgUnit::where('code', OrgTree::ACADEMIC)->value('id')]);
         $planeacion = OrgUnit::factory()->create(['kind' => OrgUnitKind::Subdireccion]);
         $user = User::factory()->withRole(Role::Subdireccion)->create();
-        $nextRequest = function () use ($user): ScopedContext {
+        $nextRequest = function () use ($user): Actor {
             app()->forgetScopedInstances();
 
-            return scopedContextOf($user);
+            return actorOf($user);
         };
 
-        $context = scopedContextOf($user);
+        $context = actorOf($user);
 
         expect($context->coversDepartment(Role::Subdireccion, $inside))->toBeTrue()
             ->and($context->coversDepartment(Role::Subdireccion, $moved))->toBeTrue()
@@ -482,18 +482,18 @@ describe('unidades del organigrama', function () {
     });
 
     it('Subdirección (sobre Subdirección Académica) cubre un campus completo; un jefe de departamento, no', function () {
-        $subdireccion = scopedContextOf(User::factory()->withRole(Role::Subdireccion)->create());
+        $subdireccion = actorOf(User::factory()->withRole(Role::Subdireccion)->create());
 
         expect($subdireccion->covers(Role::Subdireccion, $this->c2))->toBeTrue()
             ->and($subdireccion->covers(Role::Subdireccion, $this->c1, career: careerKey(20)))->toBeTrue();
 
-        $jefe = scopedContextOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
+        $jefe = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
 
         expect($jefe->covers(Role::JefeDepartamento, $this->c2))->toBeFalse()
             ->and($jefe->covers(Role::JefeDepartamento, $this->c2, career: careerKey(20)))->toBeFalse()
             ->and($jefe->covers(Role::JefeDepartamento, $this->c2, department: fakeKey(10)))->toBeTrue();
 
-        $jefeDeProyecto = scopedContextOf(User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
+        $jefeDeProyecto = actorOf(User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
 
         expect($jefeDeProyecto->covers(Role::JefeProyectoDocente, $this->c2))->toBeFalse();
     });
@@ -501,7 +501,7 @@ describe('unidades del organigrama', function () {
     it('un jefe cubre las unidades debajo de la suya', function () {
         $department = departmentKey(10);
         $office = OrgUnit::factory()->create(['parent_id' => $department]);
-        $context = scopedContextOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $department])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $department])->create());
 
         expect($context->coversDepartment(Role::JefeDepartamento, $office->id))->toBeTrue()
             ->and($context->covers(Role::JefeDepartamento, $this->c2, department: $office->id))->toBeTrue()
@@ -509,7 +509,7 @@ describe('unidades del organigrama', function () {
     });
 
     it('carga el tipo de unidad con los nombramientos: decidir sobre el campus no consulta la base', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion)->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
+        $context = actorOf(User::factory()->withRole(Role::Subdireccion)->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
         $context->covers(Role::Subdireccion, $this->c1);
 
         DB::enableQueryLog();
@@ -522,7 +522,7 @@ describe('unidades del organigrama', function () {
 
 describe('coversDepartment()', function () {
     it('el jefe sin campus cubre su departamento y no otro', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create());
 
         expect($context->coversDepartment(Role::JefeDepartamento, fakeKey(10)))->toBeTrue()
             ->and($context->coversDepartment(Role::JefeDepartamento, fakeKey(11)))->toBeFalse()
@@ -530,7 +530,7 @@ describe('coversDepartment()', function () {
     });
 
     it('el jefe de proyecto docente de D en C2 cubre D, en cualquier campus, como su propio rol', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
 
         expect($context->coversDepartment(Role::JefeProyectoDocente, fakeKey(10)))->toBeTrue()
             ->and($context->coversDepartment([Role::JefeDepartamento, Role::JefeProyectoDocente], fakeKey(10)))->toBeTrue()
@@ -542,13 +542,13 @@ describe('coversDepartment()', function () {
         $user = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
         $this->c2->update(['is_active' => false]);
 
-        expect(scopedContextOf($user)->coversDepartment(Role::JefeProyectoDocente, fakeKey(10)))->toBeFalse();
+        expect(actorOf($user)->coversDepartment(Role::JefeProyectoDocente, fakeKey(10)))->toBeFalse();
     });
 
     it('la subdirección cubre cualquier departamento de Subdirección Académica, con alcance sin campus o con campus', function (array $scope) {
         $scope = array_map(fn ($value) => $value instanceof Closure ? $value($this) : $value, $scope);
         [$sc, $ind] = [departmentKey(10), departmentKey(11)];
-        $context = scopedContextOf(User::factory()->withRole(Role::Subdireccion, $scope)->create());
+        $context = actorOf(User::factory()->withRole(Role::Subdireccion, $scope)->create());
 
         expect($context->coversDepartment(Role::Subdireccion, $sc))->toBeTrue()
             ->and($context->coversDepartment(Role::Subdireccion, $ind))->toBeTrue()
@@ -559,20 +559,20 @@ describe('coversDepartment()', function () {
     ]);
 
     it('el coordinador no cubre un departamento: su alcance es una carrera', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
+        $context = actorOf(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
 
         expect($context->coversDepartment(Role::Coordinador, fakeKey(10)))->toBeFalse();
     });
 
     it('el docente nunca cubre un departamento, ni con Role::Docente', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::Docente)->create());
+        $context = actorOf(User::factory()->withRole(Role::Docente)->create());
 
         expect($context->coversDepartment(Role::Docente, fakeKey(10)))->toBeFalse()
             ->and($context->coversDepartment([Role::Docente, Role::JefeDepartamento], fakeKey(10)))->toBeFalse();
     });
 
     it('el admin cubre cualquier departamento sin alcance', function () {
-        expect(scopedContextOf(User::factory()->admin()->create())->coversDepartment(Role::JefeDepartamento, fakeKey(10)))->toBeTrue();
+        expect(actorOf(User::factory()->admin()->create())->coversDepartment(Role::JefeDepartamento, fakeKey(10)))->toBeTrue();
     });
 });
 
@@ -581,7 +581,7 @@ describe('campus y periodo activos por omisión', function () {
         Term::factory()->create();
         $current = Term::factory()->current()->create();
 
-        $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
 
         expect($context->activeTerm()?->is($current))->toBeTrue();
     });
@@ -589,7 +589,7 @@ describe('campus y periodo activos por omisión', function () {
     it('recuerda el periodo activo en la petición, pero sigue una elección nueva', function () {
         $current = Term::factory()->current()->create();
         $previous = Term::factory()->create();
-        $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
         $context->activeTerm();
 
         DB::enableQueryLog();
@@ -605,14 +605,14 @@ describe('campus y periodo activos por omisión', function () {
     // ADR-0014: una sesión de antes del cambio a UUID guarda el id entero del periodo.
     it('con un periodo guardado que no es uuid usa el actual', function () {
         $current = Term::factory()->current()->create();
-        $context = scopedContextOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
-        session([ScopedContext::ACTIVE_TERM => 3]);
+        $context = actorOf(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
+        session([Actor::ACTIVE_TERM => 3]);
 
         expect($context->activeTerm()?->is($current))->toBeTrue();
     });
 
     it('el campus activo por omisión es el único del alcance', function () {
-        $context = scopedContextOf(User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
+        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
 
         expect($context->activeCampus()?->is($this->c2))->toBeTrue();
     });
@@ -623,7 +623,7 @@ describe('campus y periodo activos por omisión', function () {
             ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
             ->create();
 
-        $context = scopedContextOf($user);
+        $context = actorOf($user);
 
         expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2'])
             ->and($context->activeCampus())->toBeNull();
@@ -632,17 +632,17 @@ describe('campus y periodo activos por omisión', function () {
 
 describe('ciclo de vida en el contenedor (Octane)', function () {
     it('se registra como scoped: una instancia por petición, no un singleton', function () {
-        $first = app(ScopedContext::class);
+        $first = app(Actor::class);
 
-        expect(app(ScopedContext::class))->toBe($first);
+        expect(app(Actor::class))->toBe($first);
 
         app()->forgetScopedInstances();
 
-        expect(app(ScopedContext::class))->not->toBe($first);
+        expect(app(Actor::class))->not->toBe($first);
     });
 
     it('no filtra el alcance ni el campus activo entre dos usuarios seguidos en la misma app', function () {
-        Route::middleware('web')->get('/_test/scoped-context', fn (ScopedContext $context): array => [
+        Route::middleware('web')->get('/_test/scoped-context', fn (Actor $context): array => [
             'campuses' => $context->campuses()->pluck('code')->all(),
             'active' => $context->activeCampus()?->code,
         ]);
@@ -674,7 +674,7 @@ describe('perfil activo', function () {
             ->create();
 
         actingAsRole($user, Role::JefeDepartamento);
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
 
         expect($context->activeRole())->toBe(Role::JefeDepartamento)
             ->and($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse()
@@ -703,10 +703,10 @@ describe('perfil activo', function () {
             ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey($department)])
             ->create(['last_role' => $last]);
         // Cada persona entra con una sesión nueva: el perfil de omisión queda fijo en la sesión de quien entró.
-        $loginAs = function (User $user): ScopedContext {
+        $loginAs = function (User $user): Actor {
             session()->flush();
 
-            return scopedContextOf($user);
+            return actorOf($user);
         };
 
         expect($loginAs($holder(Role::Coordinador, 10))->activeRole())->toBe(Role::Coordinador)
@@ -717,15 +717,15 @@ describe('perfil activo', function () {
         $user = $holder(Role::Docente, 13);
         actingAsRole($user, Role::Coordinador);
 
-        expect(app(ScopedContext::class)->activeRole())->toBe(Role::Coordinador);
+        expect(app(Actor::class)->activeRole())->toBe(Role::Coordinador);
 
         actingAsRole($user, Role::Admin);
 
-        expect(app(ScopedContext::class)->activeRole())->toBe(Role::Docente);
+        expect(app(Actor::class)->activeRole())->toBe(Role::Docente);
 
-        session([ScopedContext::ACTIVE_ROLE => 'no-es-un-puesto']);
+        session([Actor::ACTIVE_ROLE => 'no-es-un-puesto']);
 
-        expect(app(ScopedContext::class)->activeRole())->toBe(Role::Docente);
+        expect(app(Actor::class)->activeRole())->toBe(Role::Docente);
     });
 
     it('cambiar de perfil en otra sesión no cambia el perfil de esta', function () {
@@ -735,7 +735,7 @@ describe('perfil activo', function () {
             ->create();
         // El dispositivo A tiene su propia sesión; cada petición suya arma su contexto con el usuario recién leído.
         $sessionA = new Store('nexus_session', new ArraySessionHandler(120));
-        $requestInA = fn (): ScopedContext => new ScopedContext(fn (): ?User => $user->fresh(), app(OrgTree::class), app(AuthorizationSnapshots::class), app(PermissionRegistry::class), $sessionA);
+        $requestInA = fn (): Actor => new Actor(fn (): ?User => $user->fresh(), app(OrgTree::class), app(AuthorizationSnapshots::class), app(PermissionRegistry::class), $sessionA);
 
         expect($requestInA()->activeRole())->toBe(Role::JefeDepartamento);
 
@@ -745,7 +745,7 @@ describe('perfil activo', function () {
 
         expect($user->fresh()->last_role)->toBe(Role::Coordinador)
             ->and($requestInA()->activeRole())->toBe(Role::JefeDepartamento)
-            ->and($sessionA->get(ScopedContext::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
+            ->and($sessionA->get(Actor::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
     });
 
     it('un last_role desconocido no rompe el perfil activo', function () {
@@ -754,7 +754,7 @@ describe('perfil activo', function () {
 
         $this->actingAs($user->fresh());
 
-        expect(app(ScopedContext::class)->activeRole())->toBe(Role::Docente);
+        expect(app(Actor::class)->activeRole())->toBe(Role::Docente);
     });
 
     it('heldScopes da los nombramientos de todos los puestos aunque el activo sea otro, sin el de admin', function () {
@@ -764,7 +764,7 @@ describe('perfil activo', function () {
             ->create();
 
         actingAsRole($user, Role::JefeDepartamento);
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
 
         expect($context->scopes()->pluck('role')->all())->toBe([Role::JefeDepartamento])
             ->and($context->heldScopes()->pluck('role')->all())->toBe([Role::JefeDepartamento, Role::Coordinador])
@@ -772,7 +772,7 @@ describe('perfil activo', function () {
     });
 
     it('sin usuario autenticado no hay perfil activo', function () {
-        expect(app(ScopedContext::class)->activeRole())->toBeNull();
+        expect(app(Actor::class)->activeRole())->toBeNull();
     });
 
     it('el contexto de otro usuario (forUser) cuenta todos sus puestos', function () {
@@ -782,7 +782,7 @@ describe('perfil activo', function () {
             ->create(['last_role' => Role::Coordinador]);
 
         actingAsRole(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(21)])->create(), Role::Coordinador);
-        $context = app(ScopedContext::class)->forUser($other);
+        $context = app(Actor::class)->forUser($other);
 
         expect($context->activeRole())->toBeNull()
             ->and($context->heldRoles())->toBe([Role::JefeDepartamento, Role::Coordinador])
@@ -800,7 +800,7 @@ describe('perfil activo', function () {
             ->create();
 
         actingAsRole($user, Role::Coordinador);
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
         $asJefe = $context->asRole(Role::JefeDepartamento);
 
         expect($asJefe->activeRole())->toBe(Role::JefeDepartamento)
@@ -808,7 +808,7 @@ describe('perfil activo', function () {
             ->and($asJefe->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse()
             ->and($asJefe->campuses()->pluck('code')->all())->toBe(['C1'])
             ->and($context->activeRole())->toBe(Role::Coordinador)
-            ->and(session(ScopedContext::ACTIVE_ROLE))->toBe(Role::Coordinador->value);
+            ->and(session(Actor::ACTIVE_ROLE))->toBe(Role::Coordinador->value);
 
         $asSubdireccion = $context->asRole(Role::Subdireccion);
 
@@ -825,7 +825,7 @@ describe('perfil activo', function () {
             ->create();
 
         actingAsRole($user, Role::JefeDepartamento);
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
 
         expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeFalse()
             ->and($context->coversWithScope(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue()
@@ -836,7 +836,7 @@ describe('perfil activo', function () {
         $user = User::factory()->admin()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
 
         actingAsRole($user, Role::Admin);
-        $context = app(ScopedContext::class);
+        $context = app(Actor::class);
 
         expect($context->isAdmin())->toBeTrue()
             ->and($context->has(Role::Coordinador))->toBeTrue()

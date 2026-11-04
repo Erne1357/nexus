@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\RoleAppointed;
 use App\Modules\Core\Models\Campus;
@@ -9,7 +10,6 @@ use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\AssignmentLabels;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
@@ -31,7 +31,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * nombre; si escribe el mismo jefe de proyecto docente, con el de duplicado. Cualquier otro error de la base sigue
  * igual. Todo error de regla es una ValidationException y no se escribe nada.
  *
- * Deja la bitácora sobre el usuario, recarga ScopedContext (quien se nombra a sí mismo ve su puesto en la misma
+ * Deja la bitácora sobre el usuario, recarga Actor (quien se nombra a sí mismo ve su puesto en la misma
  * petición) y avisa con RoleAppointed después del commit.
  */
 final class AppointRole
@@ -94,7 +94,7 @@ final class AppointRole
                 ]])
                 ->log("Nombró a {$locked->name} como ".$this->labels->one($assignment)->summary);
 
-            app(ScopedContext::class)->refresh();
+            app(Actor::class)->refresh();
 
             RoleAppointed::dispatch($assignment);
 

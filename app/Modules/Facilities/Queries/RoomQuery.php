@@ -3,10 +3,10 @@
 namespace App\Modules\Facilities\Queries;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Enums\RoomType;
@@ -36,7 +36,7 @@ final class RoomQuery
      * @return LengthAwarePaginator<int, Room>
      */
     public function forTable(
-        ScopedContext $context,
+        Actor $context,
         Campus $campus,
         string $search = '',
         ?string $building = null,

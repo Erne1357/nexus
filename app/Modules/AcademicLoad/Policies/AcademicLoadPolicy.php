@@ -6,7 +6,7 @@ use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Policies\Concerns\UsesScopedContext;
+use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién ve y propone una carga, según docs/dominio/reglas-de-negocio.md, "Aprobaciones y permisos"
@@ -22,7 +22,7 @@ use App\Modules\Core\Policies\Concerns\UsesScopedContext;
  */
 final class AcademicLoadPolicy
 {
-    use UsesScopedContext;
+    use AuthorizesActor;
 
     public function view(User $user, AcademicLoad $load): bool
     {
@@ -36,6 +36,6 @@ final class AcademicLoadPolicy
 
     private function can(User $user, AcademicLoadPermission $permission, AcademicLoad $load): bool
     {
-        return $this->scope($user)->allows($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
+        return $this->actor($user)->allows($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
     }
 }

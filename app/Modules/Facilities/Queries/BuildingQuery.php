@@ -2,9 +2,9 @@
 
 namespace App\Modules\Facilities\Queries;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Core\Queries\ScopedContext;
 use App\Modules\Core\Queries\TextSearch;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Models\Building;
@@ -25,7 +25,7 @@ final class BuildingQuery
      *
      * @return LengthAwarePaginator<int, Building>
      */
-    public function forTable(ScopedContext $context, Campus $campus, string $search = '', ?bool $active = null, int $perPage = 15): LengthAwarePaginator
+    public function forTable(Actor $context, Campus $campus, string $search = '', ?bool $active = null, int $perPage = 15): LengthAwarePaginator
     {
         return Building::query()
             ->where('campus_id', $campus->getKey())

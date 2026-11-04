@@ -1,6 +1,6 @@
 <?php
 
-use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Imports\Actions\CreateImportMapping;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Enums\BatchStatus;
@@ -114,7 +114,7 @@ new #[Title('Importaciones')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(ImportBatchQuery $batches, ImportMappingQuery $mappings, TemplateRegistry $templates, ScopedContext $context, ColumnMatcher $matcher): array
+    public function with(ImportBatchQuery $batches, ImportMappingQuery $mappings, TemplateRegistry $templates, Actor $context, ColumnMatcher $matcher): array
     {
         $batch = $this->batchId === null ? null : $batches->findOrFail($this->batchId);
 
@@ -191,7 +191,7 @@ new #[Title('Importaciones')] class extends Component
     /**
      * Paso 1 → 2: lee el encabezado del archivo y propone las columnas por nombre.
      */
-    public function continue(TemplateRegistry $templates, SpreadsheetReader $reader, ScopedContext $context, ColumnMatcher $matcher): void
+    public function continue(TemplateRegistry $templates, SpreadsheetReader $reader, Actor $context, ColumnMatcher $matcher): void
     {
         $this->authorize('create', ImportBatch::class);
 
@@ -249,7 +249,7 @@ new #[Title('Importaciones')] class extends Component
         ColumnMatcher $matcher,
         CreateImportMapping $createMapping,
         StoreImportBatch $storeBatch,
-        ScopedContext $context,
+        Actor $context,
     ): void {
         $this->authorize('create', ImportBatch::class);
 
@@ -364,7 +364,7 @@ new #[Title('Importaciones')] class extends Component
      *
      * @param  int|null  $confirmedMissing  cuántos faltantes mostraba la página al confirmar
      */
-    public function apply(ImportBatchQuery $batches, ScopedContext $context, TemplateRegistry $templates, ?int $confirmedMissing = null): void
+    public function apply(ImportBatchQuery $batches, Actor $context, TemplateRegistry $templates, ?int $confirmedMissing = null): void
     {
         $this->authorize('viewAny', ImportBatch::class);
 

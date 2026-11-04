@@ -16,7 +16,7 @@ use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
 use App\Modules\AcademicLoad\Queries\ProposalOverview;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
-use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Support\SemesterGrid;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -113,7 +113,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     /** Sube con cada rechazo: la tabla repinta sus campos con lo guardado, no con lo que se tecleó. */
     public int $rejections = 0;
 
-    public function mount(ScopedContext $context, CareerProposalQuery $proposals): void
+    public function mount(Actor $context, CareerProposalQuery $proposals): void
     {
         abort_unless($context->allowsAny(AcademicLoadPermission::ProposalView), 403);
 
@@ -124,7 +124,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     /**
      * Cambiar de carrera arma su propuesta si falta y suelta el resaltado y el panel de la anterior.
      */
-    public function updatedCareerId(ScopedContext $context, CareerProposalQuery $proposals): void
+    public function updatedCareerId(Actor $context, CareerProposalQuery $proposals): void
     {
         $this->reset('department', 'onlyDepartment', 'itemId', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
         $this->resolve($context, $proposals);
@@ -354,7 +354,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      * y quien entra puede armarla, la arma (StartCareerProposal). Una carrera pedida por la URL que el usuario
      * no cubre es 403. Después, la página pinta y escribe siempre en esa propuesta.
      */
-    private function resolve(ScopedContext $context, CareerProposalQuery $proposals): void
+    private function resolve(Actor $context, CareerProposalQuery $proposals): void
     {
         $this->proposalId = null;
         $this->careers = [];

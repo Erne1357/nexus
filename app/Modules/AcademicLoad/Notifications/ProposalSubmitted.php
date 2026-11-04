@@ -6,11 +6,11 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Core\Queries\ScopedContext;
 
 /**
  * «Ingeniería en Sistemas Computacionales envió su propuesta» (tareas 2.7 y 2.9): al jefe de un departamento
@@ -55,7 +55,7 @@ final class ProposalSubmitted extends NexusNotification
         );
     }
 
-    public static function unavailableReason(ScopedContext $context, NotificationMessage $message): ?string
+    public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
     {
         $career = $message->parameters['carrera'] ?? null;
         $proposal = $message->termId === null || $message->campusId === null || ! is_string($career) ? null : CareerProposal::query()

@@ -40,7 +40,7 @@ enum Role: string
     }
 
     /**
-     * Columnas de `role_assignments` que un nombramiento de este puesto debe llenar para contar en ScopedContext
+     * Columnas de `role_assignments` que un nombramiento de este puesto debe llenar para contar en Actor
      * (columna "Alcance" de PROJECT.md). Admin no necesita alcance y el docente es de todo el Tec. La Subdirección
      * va sobre su unidad (Subdirección Académica, AZ-S3) y el jefe de departamento sobre la de su departamento, los
      * dos en todo el Tec: no piden campus, y sin campus valen en todos los activos. El jefe de proyecto docente y el

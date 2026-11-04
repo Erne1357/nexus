@@ -6,12 +6,12 @@ use App\Modules\AcademicLoad\Actions\Proposals\ReturnProposalReview;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Notifications\ProposalReturned;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NotificationMessage;
-use App\Modules\Core\Queries\ScopedContext;
 use Illuminate\Support\Facades\Notification;
 
 /*
@@ -57,9 +57,9 @@ it('se abre en la propuesta y deja de abrirse si ya no coordina la carrera en es
     app(ReturnProposalReview::class)->handle($this->part, 'Revisa Cálculo.', $this->jefe);
     $message = NotificationMessage::fromArray($this->coordinador->notifications()->first()->data);
 
-    expect(ProposalReturned::unavailableReason(app(ScopedContext::class)->forUser($this->coordinador), $message))->toBeNull()
-        ->and(ProposalReturned::unavailableReason(app(ScopedContext::class)->forUser($this->otroCampus), $message))->toBe('Ya no coordinas Ingeniería en Sistemas Computacionales en ese campus.')
-        ->and(ProposalReturned::unavailableReason(app(ScopedContext::class)->forUser($this->coordinador), NotificationMessage::fromArray([...$this->coordinador->notifications()->first()->data, 'parameters' => ['carrera' => fakeKey(70), 'depto' => 'CB']])))->toBe('Esa propuesta ya no existe.');
+    expect(ProposalReturned::unavailableReason(app(Actor::class)->forUser($this->coordinador), $message))->toBeNull()
+        ->and(ProposalReturned::unavailableReason(app(Actor::class)->forUser($this->otroCampus), $message))->toBe('Ya no coordinas Ingeniería en Sistemas Computacionales en ese campus.')
+        ->and(ProposalReturned::unavailableReason(app(Actor::class)->forUser($this->coordinador), NotificationMessage::fromArray([...$this->coordinador->notifications()->first()->data, 'parameters' => ['carrera' => fakeKey(70), 'depto' => 'CB']])))->toBe('Esa propuesta ya no existe.');
 });
 
 it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe', function () {
@@ -67,7 +67,7 @@ it('sigue abriéndose si la carrera se borró lógicamente: la propuesta existe'
     $message = NotificationMessage::fromArray($this->coordinador->notifications()->first()->data);
     Career::query()->whereKey($this->proposal->career_id)->delete();
 
-    expect(ProposalReturned::unavailableReason(app(ScopedContext::class)->forUser($this->coordinador), $message))->toBeNull();
+    expect(ProposalReturned::unavailableReason(app(Actor::class)->forUser($this->coordinador), $message))->toBeNull();
 });
 
 it('guarda el puesto de coordinador en el aviso', function () {

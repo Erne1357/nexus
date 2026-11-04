@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\OrgUnitKind;
@@ -13,7 +14,6 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Queries\ScopedContext;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -54,7 +54,7 @@ function seesOrgChartMenu(User $user): bool
 {
     test()->actingAs($user);
 
-    return collect(app(Navigation::class)->visibleTo(app(ScopedContext::class)))
+    return collect(app(Navigation::class)->visibleTo(app(Actor::class)))
         ->contains(fn (NavigationItem $item): bool => $item->label === 'Organigrama');
 }
 
