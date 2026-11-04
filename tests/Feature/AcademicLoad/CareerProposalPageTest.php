@@ -72,7 +72,7 @@ describe('coordinador', function () {
             ->assertSee('Borrador')
             ->assertSee('Cálculo Diferencial')
             ->assertSee('Redes de Computadoras')
-            ->assertViewHas('overview', fn ($overview): bool => $overview->totals === ['subjects' => 2, 'groups' => 3]);
+            ->assertViewHas('overview', fn ($overview): bool => $overview->totals === ['subjects' => 2, 'subjects_total' => 2, 'groups' => 3, 'eligible_students' => 0]);
     });
 
     it('no suma alumnos esperados entre materias en los totales ni en la confirmación de envío', function () {

@@ -96,12 +96,13 @@ it('da las partes de los departamentos por clave, con su estado y comentario', f
         ->and($overview->reviewFor(Department::factory()->create()->id))->toBeNull();
 });
 
-it('suma las materias con grupos y sus grupos, sin sumar alumnos esperados entre materias', function () {
+it('suma las materias con grupos, todas las materias y sus grupos, y trae los alumnos posibles congelados, sin sumar alumnos esperados entre materias', function () {
+    $this->proposal->update(['eligible_students' => 40]);
     overviewRow($this->cb, 'ACF-0901', 1, 2, 70);
     overviewRow($this->sc, 'SCD-1015', 5, 1, 20);
     overviewRow($this->sc, 'AED-1026', 2, 0, 15);
 
-    expect(proposalOverview()->totals)->toBe(['subjects' => 2, 'groups' => 3]);
+    expect(proposalOverview()->totals)->toBe(['subjects' => 2, 'subjects_total' => 3, 'groups' => 3, 'eligible_students' => 40]);
 });
 
 it('una propuesta sin filas da semestres y totales vacíos', function () {
@@ -109,7 +110,7 @@ it('una propuesta sin filas da semestres y totales vacíos', function () {
 
     expect($overview->semesters)->toBe([])
         ->and($overview->reviews)->toBe([])
-        ->and($overview->totals)->toBe(['subjects' => 0, 'groups' => 0])
+        ->and($overview->totals)->toBe(['subjects' => 0, 'subjects_total' => 0, 'groups' => 0, 'eligible_students' => 0])
         ->and($overview->pendingCatalogs)->toBe([]);
 });
 

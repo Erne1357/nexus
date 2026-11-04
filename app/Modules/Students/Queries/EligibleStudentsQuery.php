@@ -40,4 +40,32 @@ final class EligibleStudentsQuery
             ->pluck('eligible', 'subject_id')
             ->all();
     }
+
+    /**
+     * Cuántos alumnos distintos de la carrera en el campus son elegibles para al menos una de las materias dadas,
+     * con los mismos filtros que `countsFor`: cada alumno cuenta una vez aunque lo sea para varias.
+     *
+     * @param  list<string>  $subjectIds
+     */
+    public function distinctFor(Career $career, Campus $campus, array $subjectIds): int
+    {
+        if ($subjectIds === []) {
+            return 0;
+        }
+
+        return Student::query()
+            ->join('student_progress', function (JoinClause $join): void {
+                $join->on('student_progress.student_id', '=', 'students.id')
+                    ->on('student_progress.study_plan_id', '=', 'students.study_plan_id');
+            })
+            ->crossJoin(DB::raw('jsonb_array_elements_text(student_progress.subjects_available) as available(subject_id)'))
+            ->where('students.career_id', $career->id)
+            ->where('students.campus_id', $campus->id)
+            ->where('students.is_active', true)
+            ->where('students.status', StudentStatus::Activo)
+            ->whereIn('available.subject_id', $subjectIds)
+            ->distinct()
+            ->toBase()
+            ->count('students.id');
+    }
 }

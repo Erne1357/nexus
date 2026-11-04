@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * un periodo (reglas-de-negocio.md, "Propuesta de carrera"). Una por periodo, campus y carrera. Se arma con
  * StartCareerProposal, se corrige con UpdateProposalItem y se envía con SubmitCareerProposal.
  */
-#[Fillable(['term_id', 'campus_id', 'career_id', 'status', 'submitted_by', 'submitted_at'])]
+#[Fillable(['term_id', 'campus_id', 'career_id', 'eligible_students', 'status', 'submitted_by', 'submitted_at'])]
 #[UseFactory(CareerProposalFactory::class)]
 class CareerProposal extends Model
 {
@@ -35,6 +35,7 @@ class CareerProposal extends Model
     {
         return [
             'status' => ProposalStatus::class,
+            'eligible_students' => 'integer',
             'submitted_at' => 'immutable_datetime',
         ];
     }

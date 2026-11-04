@@ -100,7 +100,8 @@ it('arma la propuesta en borrador con una fila por materia, sus elegibles y la p
             'ACA-0907' => ['ISIC-2010-224', 2, 0, 0, 0],
             'ACF-0901' => ['ISIC-2010-224', 1, 71, 71, 3],
             'SCD-1015' => ['ISIC-2010-224', 5, 36, 36, 2],
-        ]);
+        ])
+        ->and($proposal->eligible_students)->toBe(71);
 });
 
 it('HC-13: deja fuera las materias inactivas o borradas, las quitadas de la retícula y las de planes inactivos, borrados o de otra carrera', function () {

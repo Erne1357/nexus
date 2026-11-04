@@ -155,7 +155,9 @@ final class CareerProposalQuery
             reviews: $reviews->values()->all(),
             totals: [
                 'subjects' => $requested->count(),
+                'subjects_total' => $items->count(),
                 'groups' => (int) $requested->sum('requested_groups'),
+                'eligible_students' => $proposal->eligible_students,
             ],
             pendingCatalogs: $pendingCatalogs,
             anomalies: ProposalAnomalies::fromSettings(),

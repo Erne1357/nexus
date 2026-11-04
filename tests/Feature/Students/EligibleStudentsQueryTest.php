@@ -7,6 +7,7 @@ use App\Modules\Students\Actions\RefreshStudentProgress;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Models\StudentProgress;
 use App\Modules\Students\Queries\EligibleStudentsQuery;
 
 /*
@@ -169,4 +170,23 @@ it('devuelve un mapa vacío si nadie de la carrera puede cursar nada', function 
     app(RefreshStudentProgress::class)->handle();
 
     expect(eligibleCounts($this->plan, $this->campus))->toBe([]);
+});
+
+it('distinctFor cuenta una vez al alumno elegible para varias materias de la lista y no al que solo lo es para otras', function () {
+    $other = Subject::factory()->create(['code' => 'O-9']);
+    $both = eligibilityStudent($this->plan, $this->campus);
+    $one = eligibilityStudent($this->plan, $this->campus);
+    $outside = eligibilityStudent($this->plan, $this->campus);
+    $inactive = eligibilityStudent($this->plan, $this->campus, ['is_active' => false]);
+    $otherCampus = eligibilityStudent($this->plan, Campus::factory()->create());
+    $otherCareer = eligibilityStudent(StudyPlan::factory()->create(), $this->campus);
+    foreach ([[$both, [$this->a, $this->f]], [$one, [$this->f]], [$outside, [$other]], [$inactive, [$this->a]], [$otherCampus, [$this->a]], [$otherCareer, [$this->a]]] as [$student, $subjects]) {
+        StudentProgress::factory()->for($student)->create(['subjects_available' => array_map(fn (Subject $subject): string => $subject->id, $subjects)]);
+    }
+
+    $query = app(EligibleStudentsQuery::class);
+
+    expect($query->distinctFor($this->plan->career, $this->campus, [$this->a->id, $this->f->id]))->toBe(2)
+        ->and($query->distinctFor($this->plan->career, $this->campus, [$this->a->id]))->toBe(1)
+        ->and($query->distinctFor($this->plan->career, $this->campus, []))->toBe(0);
 });
