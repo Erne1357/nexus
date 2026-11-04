@@ -8,15 +8,8 @@
 --}}
 @php
     $person = $record->person;
-    $unitLabel = $roleCase?->unitKind() === \App\Modules\Core\Enums\OrgUnitKind::Subdireccion ? 'Subdirección' : 'Departamento académico';
     $whoUnitLabel = $whoRoleCase?->unitKind() === \App\Modules\Core\Enums\OrgUnitKind::Subdireccion ? 'Subdirección' : 'Departamento académico';
-    $columns = $roleCase?->scopeColumns() ?? [];
     $whoColumns = $whoRoleCase?->scopeColumns() ?? [];
-    $hints = [
-        'admin' => 'Este puesto no tiene alcance: vale en todo el sistema.',
-        'subdireccion' => 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.',
-        'coordinador' => 'Este puesto pide campus y carrera.',
-    ];
 @endphp
 
 <div class="space-y-5">
@@ -199,45 +192,7 @@
 
     <x-modal wire:model="showModal" :title="'Nombrar a '.$person->name" subtitle="El formulario pide solo el alcance que el puesto necesita." box-class="max-w-xl" separator>
         <x-form wire:submit="appoint" no-separator>
-            @error('user')
-                <x-alert :title="$message" icon="o-x-circle" class="alert-error" />
-            @enderror
-
-            <div>
-                <x-select label="Puesto" name="role" wire:model.live="role" :options="$offered" placeholder="Elige un puesto" />
-                <p class="mt-1 text-sm text-neutral">Las jefaturas y el puesto de docente se manejan en la ficha del docente.</p>
-            </div>
-
-            @if ($roleCase !== null)
-                <p class="text-sm" data-testid="role-hint">{{ $hints[$roleCase->value] ?? '' }}</p>
-            @endif
-
-            @if ($columns !== [])
-                <div class="grid gap-4 sm:grid-cols-2">
-                    @if (in_array('campus_id', $columns, true))
-                        <div data-testid="field-campus">
-                            <x-select label="Campus" name="campus" wire:model.live="campus" :options="$options['campuses']" placeholder="Elige el campus" />
-                        </div>
-                    @endif
-
-                    @if (in_array('career_id', $columns, true))
-                        <div data-testid="field-career">
-                            <x-select label="Carrera" name="career" wire:model="career" :options="$options['careers']" :placeholder="$campus === '' ? 'Elige primero el campus' : 'Elige la carrera'" />
-                        </div>
-                    @endif
-
-                    @if (in_array('org_unit_id', $columns, true))
-                        <div data-testid="field-unit" class="sm:col-span-2">
-                            <x-select :label="$unitLabel" name="unit" wire:model="unit" :options="$options['units']" placeholder="Elige" />
-                        </div>
-                    @endif
-                </div>
-            @endif
-
-            <div class="grid gap-4 sm:grid-cols-2">
-                <x-input label="Desde" name="from" type="date" wire:model="from" />
-                <x-input label="Hasta (opcional)" name="to" type="date" wire:model="to" />
-            </div>
+            @include('core::people.appoint-fields', ['roleNote' => 'El puesto de docente se maneja en la ficha del docente.', 'lockedUnit' => null])
 
             <x-slot:actions>
                 <x-button label="Cancelar" @click="$wire.showModal = false" />

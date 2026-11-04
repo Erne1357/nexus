@@ -73,6 +73,33 @@ it('el admin nombra coordinadora a una persona y luego termina el nombramiento',
     expect(RoleAssignment::where('user_id', $this->rosa->id)->sole()->valid_to->toDateString())->toBe(today()->subDay()->toDateString());
 });
 
+it('el admin nombra a un jefe de departamento sin registro de docente y lo termina', function () {
+    $page = signInToPeople('admin')
+        ->navigate('/people/'.$this->rosa->id)
+        ->click('@appoint')
+        ->assertSee('Nombrar a Rosa Ruiz Almanza')
+        ->select('role', 'jefe_departamento')
+        ->assertSee('Este puesto pide el departamento académico. Tiene un solo jefe vigente.')
+        ->select('unit', $this->systems->id)
+        ->fill('from', today()->subDays(10)->toDateString())
+        ->click('@appoint-submit')
+        ->assertSee('Nombramiento creado')
+        ->assertSee('Jefe de departamento')
+        ->assertNoJavaScriptErrors();
+
+    expect(RoleAssignment::where('user_id', $this->rosa->id)->sole())
+        ->role->toBe(Role::JefeDepartamento)
+        ->org_unit_id->toBe($this->systems->id);
+
+    $page->press('Terminar…')
+        ->fill('lastDay', today()->toDateString())
+        ->click('@end-submit')
+        ->assertSee('Nombramiento terminado')
+        ->assertNoJavaScriptErrors();
+
+    expect(RoleAssignment::where('user_id', $this->rosa->id)->sole()->valid_to->toDateString())->toBe(today()->toDateString());
+});
+
 it('un coordinador no ve «Personas y puestos» en el menú', function () {
     signInToPeople('19110001')
         ->assertScript('document.querySelector(\'#nexus-menu a[data-label="Personas y puestos"]\') === null')

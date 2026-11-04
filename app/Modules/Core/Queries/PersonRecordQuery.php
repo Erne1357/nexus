@@ -17,7 +17,7 @@ use Spatie\Activitylog\Models\Activity;
  * La ficha de una persona en «Personas y puestos» (PersonRecord). Los nombramientos salen ordenados (vigentes por
  * inicio descendente, programados por inicio ascendente y terminados por fin descendente) y cada uno con su estado
  * de hoy, los días que le faltan, quién lo terminó (la entrada de bitácora con su `role_assignment_id`) y, si aquí no
- * se puede terminar, por qué: el docente y las jefaturas se manejan en la ficha del docente (AZ-S11), y uno de
+ * se puede terminar, por qué: el docente se maneja en la ficha del docente (AZ-S11), y uno de
  * Administración no se termina si quedaría algún día sin admin vigente (AZ-S12: el admin puede terminar el suyo si
  * otro cubre los días que siguen).
  *

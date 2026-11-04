@@ -32,12 +32,12 @@ it('allowsUnit y titularRoleOf: la Subdirección solo va en Subdirección Acadé
         ->and($rules->titularRoleOf($office))->toBeNull();
 });
 
-it('managedElsewhere dice dónde se maneja el puesto que no es de esta pantalla (AZ-S11)', function () {
+it('managedElsewhere: solo el docente se maneja en otra parte (AZ-S11)', function () {
     $rules = app(RoleAssignmentRules::class);
 
     expect($rules->managedElsewhere(Role::Docente))->toBe('El puesto de docente lo da la ficha del docente: se activa y se desactiva con el docente.')
-        ->and($rules->managedElsewhere(Role::JefeDepartamento))->toBe('Las jefaturas se nombran y se terminan en la ficha del docente.')
-        ->and($rules->managedElsewhere(Role::JefeProyectoDocente))->toBe('Las jefaturas se nombran y se terminan en la ficha del docente.')
+        ->and($rules->managedElsewhere(Role::JefeDepartamento))->toBeNull()
+        ->and($rules->managedElsewhere(Role::JefeProyectoDocente))->toBeNull()
         ->and($rules->managedElsewhere(Role::Admin))->toBeNull()
         ->and($rules->managedElsewhere(Role::Subdireccion))->toBeNull()
         ->and($rules->managedElsewhere(Role::Coordinador))->toBeNull();

@@ -23,8 +23,8 @@ use Illuminate\Validation\ValidationException;
  *
  * - AZ-S10 (confirmado el 3 de noviembre de 2026): el puesto Subdirección Académica solo va sobre la unidad
  *   Subdirección Académica.
- * - AZ-S11: Administración, Subdirección Académica y Coordinador de carrera se nombran en «Personas y puestos»; el
- *   docente lo da la ficha del docente y las jefaturas se nombran allí hasta 3.P8 (`managedElsewhere()`).
+ * - AZ-S11: todos los puestos salvo el de docente se nombran en «Personas y puestos»; el docente lo da la ficha del
+ *   docente (`managedElsewhere()`).
  * - AZ-S12 (confirmado el 3 de noviembre de 2026): el admin puede terminar su propio puesto de Administración si
  *   queda otro vigente; el último nunca se termina, y ningún día se queda sin admin vigente (`adminGap()`).
  * - AZ-S7: el titular de una unidad es quien ocupa su puesto exclusivo (`titularRoleOf()`).
@@ -262,7 +262,6 @@ final class RoleAssignmentRules
     {
         return match ($role) {
             Role::Docente => 'El puesto de docente lo da la ficha del docente: se activa y se desactiva con el docente.',
-            Role::JefeDepartamento, Role::JefeProyectoDocente => 'Las jefaturas se nombran y se terminan en la ficha del docente.',
             default => null,
         };
     }
