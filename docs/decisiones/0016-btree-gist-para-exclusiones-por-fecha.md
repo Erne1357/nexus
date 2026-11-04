@@ -18,6 +18,12 @@ Las dos usan `daterange(valid_from, valid_to, '[]')`, con los dos extremos inclu
 
 La decisión de usar `btree_gist` no cambia.
 
+**Cambio del 3 de noviembre de 2026:** las exclusiones por fecha de los puestos viven en `role_assignments` (ADR-0018):
+- 3.P3 (migración `2026_11_04_000001`, que también crea la extensión si falta): `role_assignments_one_jefe` y `role_assignments_one_subdireccion`, un solo jefe y una sola Subdirección por unidad en cada fecha (AZ-S7);
+- 3.P8 (migración `2026_11_07_000001`): `role_assignments_jpd_no_duplicate`, la misma persona no es dos veces jefe de proyecto docente del mismo departamento y campus en fechas que se traslapan.
+
+`department_heads` quedó histórica y de solo lectura (AZ-S14); sus dos exclusiones siguen en la tabla, pero ya no reciben filas. La decisión de usar `btree_gist` no cambia.
+
 ## Consecuencias
 - Toda base de Nexus (desarrollo, pruebas, CI y producción) necesita la extensión. Viene con la imagen oficial de PostgreSQL 18 y es *trusted* desde PostgreSQL 13, así que basta el dueño de la base, sin superusuario.
 - La fase 3 la reutiliza para los empalmes de salón y de docente (`docs/dominio/modelo-de-datos.md`, "Scheduling").

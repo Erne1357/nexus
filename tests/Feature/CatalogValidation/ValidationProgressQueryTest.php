@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\AcademicLoad\Actions\CreateTermLoads;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
@@ -132,10 +131,9 @@ it('cuenta las observaciones abiertas y en cuántos departamentos, y las resuelt
         ->and(collect($board['rows'])->firstWhere('department.code', 'ELE')['open_flags'])->toBe(0);
 });
 
-it('el jefe sale de quien recibe el aviso: alcance de rol vigente y usuario activo, aunque no tenga fila en department_heads', function () {
+it('el jefe sale de quien recibe el aviso: nombramiento vigente y usuario activo', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Dra. Ana Soto']);
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Baja', 'is_active' => false]);
-    DepartmentHead::factory()->create(['department_id' => $this->ele->id, 'user_id' => User::factory()->create(['name' => 'Solo en la tabla'])->id]);
 
     $board = ($this->progress)();
     $sis = collect($board['rows'])->firstWhere('department.code', 'SIS');

@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\CreateTermLoads;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
@@ -47,7 +46,6 @@ beforeEach(function () {
     }
 
     $this->jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Dra. Ana Soto']);
-    DepartmentHead::factory()->create(['department_id' => $this->sis->id, 'user_id' => $this->jefeSis->id]);
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion, [])->create();
     $this->admin = User::factory()->admin()->create();
 });

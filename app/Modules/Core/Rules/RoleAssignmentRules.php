@@ -153,7 +153,8 @@ final class RoleAssignmentRules
      * El primer día que deja de cubrir es el siguiente a `$lastDay` o, si se quita, su inicio, y nunca antes de hoy:
      * desde ahí, la unión de los demás nombramientos `admin` de usuarios activos (`range_agg`) debe cubrir todos los
      * días, sin fin. El que se termina cuenta solo hasta `$lastDay`, que ya quedó atrás de ese día. Uno que ya termina
-     * ese día o antes no cambia. Lo usan EndRoleAssignment, bajo ADMIN_SEATS_LOCK, y `endBlocker()`, sin candado.
+     * ese día o antes no cambia. Lo usa EndRoleAssignment, bajo ADMIN_SEATS_LOCK; `endState()` responde lo mismo para hoy,
+     * sin candado y en la misma consulta que el primer último día posible.
      * Dice «Es el único…» solo si nadie más cubre ningún día desde ahí; si no, el primer día que queda sin admin.
      */
     public function adminGap(RoleAssignment $assignment, CarbonImmutable $lastDay): ?string
@@ -162,24 +163,13 @@ final class RoleAssignmentRules
             return null;
         }
 
-        $last = $lastDay->toDateString();
-
-        if ($assignment->valid_to !== null && $assignment->valid_to->toDateString() <= $last) {
+        if ($assignment->valid_to !== null && $assignment->valid_to->toDateString() <= $lastDay->toDateString()) {
             return null;
         }
 
-        $from = $assignment->valid_from->toDateString();
-        $start = max($from > $last ? $from : $lastDay->addDay()->toDateString(), today()->toDateString());
+        $uncovered = $this->uncoveredAdminDays($this->gapStart($assignment, $lastDay), 'ra.id', $assignment->getKey());
 
-        $uncovered = $this->uncoveredAdminDays($start, 'ra.id', $assignment->getKey());
-
-        if ($uncovered['first'] === null) {
-            return null;
-        }
-
-        return $uncovered['all']
-            ? 'Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.'
-            : 'El '.CarbonImmutable::parse($uncovered['first'])->format('d/m/Y').' nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.';
+        return $this->gapMessage($uncovered['first'], $uncovered['all']);
     }
 
     /**
@@ -191,23 +181,44 @@ final class RoleAssignmentRules
      */
     public function earliestLastDay(RoleAssignment $assignment): ?CarbonImmutable
     {
+        return $this->endState($assignment)['earliestLastDay'];
+    }
+
+    /**
+     * Lo que la pantalla necesita para «Terminar…»: el primer último día posible (`earliestLastDay()`) y por qué no se
+     * termina aquí (`endBlocker()`), con una sola consulta de cobertura para un nombramiento de Administración y
+     * ninguna para los demás. El bloqueo de Administración es el de `adminGap()` con hoy como último día.
+     *
+     * @return array{earliestLastDay: ?CarbonImmutable, blocker: ?string}
+     */
+    public function endState(RoleAssignment $assignment): array
+    {
         $today = today()->toImmutable();
 
         if ($assignment->role !== Role::Admin) {
-            return $today;
+            return ['earliestLastDay' => $today, 'blocker' => $this->managedElsewhere($assignment->role)];
         }
 
-        $uncovered = $this->uncoveredAdminDays($today->toDateString(), 'ra.id', $assignment->getKey());
+        $uncovered = $this->uncoveredAdminDays($today->toDateString(), 'ra.id', $assignment->getKey(), $this->gapStart($assignment, $today));
 
         if ($uncovered['first'] === null) {
             $day = $today;
         } elseif (! $uncovered['bounded']) {
-            return null;
+            $day = null;
         } else {
             $day = $assignment->valid_from->toDateString() > $uncovered['last'] ? $today : CarbonImmutable::parse($uncovered['last']);
         }
 
-        return $assignment->valid_to !== null && $day->toDateString() >= $assignment->valid_to->toDateString() ? null : $day;
+        $endsFirst = $assignment->valid_to !== null && $assignment->valid_to->toDateString() <= $today->toDateString();
+
+        if ($day !== null && $assignment->valid_to !== null && $day->toDateString() >= $assignment->valid_to->toDateString()) {
+            $day = null;
+        }
+
+        return [
+            'earliestLastDay' => $day,
+            'blocker' => $day === null && ! $endsFirst ? $this->gapMessage($uncovered['gapFirst'], $uncovered['gapAll']) : null,
+        ];
     }
 
     /**
@@ -238,35 +249,73 @@ final class RoleAssignmentRules
      */
     public function endBlocker(RoleAssignment $assignment): ?string
     {
-        return $this->managedElsewhere($assignment->role)
-            ?? ($this->earliestLastDay($assignment) === null ? $this->adminGap($assignment, today()->toImmutable()) : null);
+        return $this->endState($assignment)['blocker'];
+    }
+
+    /**
+     * El primer día que dejaría sin cubrir terminar `$assignment` con `$lastDay` como último día (o quitarlo, si
+     * empieza después): el siguiente a `$lastDay` o, si se quita, su inicio, y nunca antes de hoy.
+     */
+    private function gapStart(RoleAssignment $assignment, CarbonImmutable $lastDay): string
+    {
+        $from = $assignment->valid_from->toDateString();
+
+        return max($from > $lastDay->toDateString() ? $from : $lastDay->addDay()->toDateString(), today()->toDateString());
+    }
+
+    /**
+     * El texto de AZ-S12 para el primer día sin admin: «Es el único…» si nadie más cubre ningún día desde ahí; nulo si
+     * no queda ningún día sin cubrir.
+     */
+    private function gapMessage(?string $first, bool $all): ?string
+    {
+        if ($first === null) {
+            return null;
+        }
+
+        return $all
+            ? 'Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.'
+            : 'El '.CarbonImmutable::parse($first)->format('d/m/Y').' nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.';
     }
 
     /**
      * El único SQL de cobertura de Administración (AZ-S12): los días desde `$from`, sin fin, que ningún nombramiento
-     * `admin` de un usuario activo cubre, sin contar el excluido (`$exceptColumn` es `ra.id` o `ra.user_id`).
+     * `admin` de un usuario activo cubre, sin contar el excluido (`$exceptColumn` es `ra.id` o `ra.user_id`). En la
+     * misma consulta da también el primero de esos días desde `$gapFrom` (no antes de `$from`; por omisión, `$from`) y
+     * si ninguno desde ahí está cubierto.
      *
-     * @return array{first: ?string, last: ?string, bounded: bool, all: bool}
+     * @return array{first: ?string, last: ?string, bounded: bool, all: bool, gapFirst: ?string, gapAll: bool}
      */
-    private function uncoveredAdminDays(string $from, string $exceptColumn, string $exceptId): array
+    private function uncoveredAdminDays(string $from, string $exceptColumn, string $exceptId, ?string $gapFrom = null): array
     {
         $exceptColumn = $exceptColumn === 'ra.user_id' ? 'ra.user_id' : 'ra.id';
+        $gapFrom = max($gapFrom ?? $from, $from);
 
         $row = DB::selectOne(<<<SQL
             select lower(m) as first,
                    upper(m) - 1 as last,
                    (isempty(m) or upper(m) is not null) as bounded,
-                   (m = base) as "all"
+                   (m = base) as "all",
+                   lower(m * gap) as gap_first,
+                   (m * gap = gap) as gap_all
             from (
                 select datemultirange(daterange(cast(? as date), null, '[)')) as base,
+                       datemultirange(daterange(cast(? as date), null, '[)')) as gap,
                        datemultirange(daterange(cast(? as date), null, '[)')) - coalesce(range_agg(daterange(ra.valid_from, ra.valid_to, '[]')), '{}'::datemultirange) as m
                 from role_assignments ra
                 join users u on u.id = ra.user_id
                 where ra.role = 'admin' and {$exceptColumn} <> ? and u.is_active
             ) covered
-            SQL, [$from, $from, $exceptId]);
+            SQL, [$from, $gapFrom, $from, $exceptId]);
 
-        return ['first' => $row->first, 'last' => $row->last, 'bounded' => (bool) $row->bounded, 'all' => (bool) $row->all];
+        return [
+            'first' => $row->first,
+            'last' => $row->last,
+            'bounded' => (bool) $row->bounded,
+            'all' => (bool) $row->all,
+            'gapFirst' => $row->gap_first,
+            'gapAll' => (bool) $row->gap_all,
+        ];
     }
 
     /**
@@ -281,7 +330,8 @@ final class RoleAssignmentRules
     }
 
     /**
-     * La misma persona no ocupa dos veces el mismo puesto y alcance con fechas que se traslapan.
+     * La misma persona no ocupa dos veces el mismo puesto y alcance con fechas que se traslapan. Del jefe de proyecto
+     * docente lo garantiza también la base (`role_assignments_jpd_no_duplicate`).
      *
      * @throws ValidationException sobre `role`
      */
@@ -296,15 +346,24 @@ final class RoleAssignmentRules
             ->exists();
 
         if ($exists) {
-            $summary = $this->assignmentLabels->one(new RoleAssignment([
-                'role' => $role,
-                'campus_id' => $campus?->getKey(),
-                'org_unit_id' => $unit?->getKey(),
-                'career_id' => $careerId,
-            ]))->summary;
-
-            throw ValidationException::withMessages(['role' => "{$user->name} ya es {$summary} en esas fechas."]);
+            throw $this->duplicated($user, $role, $campus, $unit, $careerId);
         }
+    }
+
+    /**
+     * El error de la misma persona dos veces en el mismo puesto y alcance: lo lanza `ensureNotDuplicated()` y, si otra
+     * sesión escribió el duplicado entre la revisión y la escritura (SQLSTATE 23P01), AppointRole.
+     */
+    public function duplicated(User $user, Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId): ValidationException
+    {
+        $summary = $this->assignmentLabels->one(new RoleAssignment([
+            'role' => $role,
+            'campus_id' => $campus?->getKey(),
+            'org_unit_id' => $unit?->getKey(),
+            'career_id' => $careerId,
+        ]))->summary;
+
+        return ValidationException::withMessages(['role' => "{$user->name} ya es {$summary} en esas fechas."]);
     }
 
     /**

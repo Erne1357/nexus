@@ -48,14 +48,4 @@ class Department extends Model
     {
         return $this->hasMany(Subject::class);
     }
-
-    /**
-     * Quién lo dirige o lo dirigió: sus jefes, de todo el Tec, y sus jefes de proyecto docente, de cada campus.
-     *
-     * @return HasMany<DepartmentHead, $this>
-     */
-    public function heads(): HasMany
-    {
-        return $this->hasMany(DepartmentHead::class);
-    }
 }

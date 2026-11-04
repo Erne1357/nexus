@@ -49,7 +49,7 @@ class TeacherPosition extends Model
 
     /**
      * Vigentes en una fecha: `valid_from` ≤ fecha ≤ `valid_to`, con límite nulo sin límite. El día se cuenta
-     * en Ciudad Juárez (config/app.php) aunque la fecha llegue en otra zona, como DepartmentHead::currentOn().
+     * en Ciudad Juárez (config/app.php) aunque la fecha llegue en otra zona, como RoleAssignment::current().
      *
      * @param  Builder<self>  $query
      */

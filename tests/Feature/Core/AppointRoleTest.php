@@ -222,6 +222,43 @@ it('AZ-S7: si otra sesión gana el puesto entre la revisión y la escritura, el 
     expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse();
 });
 
+it('si otra sesión nombra a la misma persona jefe de proyecto docente entre la revisión y la escritura, el error es el de duplicado', function () {
+    $fired = false;
+
+    RoleAssignment::creating(function () use (&$fired): void {
+        if ($fired) {
+            return;
+        }
+
+        $fired = true;
+        DB::table('role_assignments')->insert([
+            'user_id' => $this->rosa->id,
+            'role' => Role::JefeProyectoDocente->value,
+            'campus_id' => $this->c2->id,
+            'org_unit_id' => $this->systems->id,
+            'valid_from' => '2026-11-01',
+        ]);
+    });
+
+    expectInvalid(
+        fn () => appoint($this->rosa, Role::JefeProyectoDocente, $this->c2, $this->systems),
+        'role',
+        'Rosa Ruiz ya es Jefe de proyecto docente · Sistemas y Computación · C2 en esas fechas.',
+    );
+
+    expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse();
+});
+
+it('el jefe de proyecto docente admite varios a la vez en el mismo departamento y campus', function () {
+    $beto = User::factory()->create(['name' => 'Beto Rentería']);
+
+    appoint($this->rosa, Role::JefeProyectoDocente, $this->c2, $this->systems);
+    appoint($beto, Role::JefeProyectoDocente, $this->c2, $this->systems);
+
+    expect(RoleAssignment::query()->where('role', Role::JefeProyectoDocente)->where('org_unit_id', $this->systems->id)->pluck('user_id')->all())
+        ->toEqualCanonicalizing([$this->rosa->id, $beto->id]);
+});
+
 it('quien se nombra a sí mismo ve su puesto nuevo en la misma petición', function () {
     $teacher = User::factory()->withRole(Role::Docente)->create();
     $this->actingAs($teacher);

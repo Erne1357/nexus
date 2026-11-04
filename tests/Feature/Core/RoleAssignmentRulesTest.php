@@ -82,6 +82,9 @@ describe('earliestLastDay (AZ-S12)', function () {
         'Ana termina el 2026-12-31' => [['2026-08-01', '2026-12-31'], [['2027-01-01']], null],
         'Ana programada desde 2026-12-20' => [['2026-12-20'], [['2026-01-01', '2026-12-09'], ['2026-12-11']], '2026-11-03'],
         'otro admin con usuario inactivo' => [['2026-08-01'], [['2026-01-01', null, false]], null],
+        'sin sucesor' => [['2026-08-01'], [], null],
+        'sucesor desde mañana' => [['2026-08-01'], [['2026-11-04']], '2026-11-03'],
+        'Ana termina antes de que empiece el sucesor' => [['2026-08-01', '2026-11-20'], [['2026-12-01']], null],
     ]);
 
     it('un nombramiento de otro puesto termina hoy', function () {

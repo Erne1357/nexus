@@ -53,7 +53,7 @@
 
     @unless ($ended)
         @if ($endingId === $assignment->id)
-            @include('core::people.end-box', ['status' => $status, 'earliestLastDay' => $row['earliestLastDay']])
+            @include('core::people.end-box', ['status' => $status, 'from' => $assignment->valid_from, 'earliestLastDay' => $row['earliestLastDay']])
         @else
             <div class="mt-3 flex flex-col items-start gap-1">
                 @if ($row['endBlocker'] === null)

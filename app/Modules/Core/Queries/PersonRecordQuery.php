@@ -19,10 +19,12 @@ use Spatie\Activitylog\Models\Activity;
  * de hoy, los días que le faltan, quién lo terminó (la entrada de bitácora con su `role_assignment_id`) y, si aquí no
  * se puede terminar, por qué: el docente se maneja en la ficha del docente (AZ-S11), y uno de
  * Administración no se termina si quedaría algún día sin admin vigente (AZ-S12: el admin puede terminar el suyo si
- * otro cubre los días que siguen).
+ * otro cubre los días que siguen). Los dos salen de `RoleAssignmentRules::endState()`, con una sola consulta de
+ * cobertura por nombramiento de Administración vigente o por empezar; los terminados no la necesitan.
  *
  * La bitácora trae solo las entradas que llevan `role_assignment_id` o `department_head_id`, así que el cambio de
- * perfil no entra.
+ * perfil no entra. Las jefaturas nombradas antes de 3.P8 llevan `department_head_id` en sus cambios, no en sus
+ * propiedades, y las terminadas entonces citan sus nombramientos en `role_scope_ids`.
  */
 final class PersonRecordQuery
 {
@@ -41,6 +43,7 @@ final class PersonRecordQuery
 
         $rows = $assignments->map(function (RoleAssignment $assignment) use ($today, $labels, $endings): array {
             $status = AssignmentStatus::of($assignment, $today);
+            $endState = $status === AssignmentStatus::Ended ? ['earliestLastDay' => null, 'blocker' => null] : $this->rules->endState($assignment);
 
             return [
                 'assignment' => $assignment,
@@ -50,8 +53,8 @@ final class PersonRecordQuery
                     ? (int) $today->diffInDays($assignment->valid_to->toImmutable()->startOfDay())
                     : null,
                 'endedBy' => $status === AssignmentStatus::Ended ? ($endings[$assignment->getKey()] ?? null) : null,
-                'endBlocker' => $this->endBlocker($assignment),
-                'earliestLastDay' => $this->rules->earliestLastDay($assignment),
+                'endBlocker' => $endState['blocker'],
+                'earliestLastDay' => $endState['earliestLastDay'],
             ];
         })->all();
 
@@ -62,7 +65,8 @@ final class PersonRecordQuery
             ->sortBy(fn (array $row): string => $row['assignment']->valid_to->toDateString())
             ->first();
 
-        $appointed = $entries->first(fn (Activity $entry): bool => $entry->event === 'created' && $entry->properties->has('role_assignment_id'));
+        $appointed = $entries->first(fn (Activity $entry): bool => $entry->event === 'created'
+            && ($entry->properties->has('role_assignment_id') || data_get($entry->attribute_changes, 'attributes.department_head_id') !== null));
 
         return new PersonRecord(
             person: $person,
@@ -117,7 +121,8 @@ final class PersonRecordQuery
             ->where('subject_id', $person->getKey())
             ->where(fn (Builder $query) => $query
                 ->whereNotNull('properties->role_assignment_id')
-                ->orWhereNotNull('properties->department_head_id'))
+                ->orWhereNotNull('properties->department_head_id')
+                ->orWhereNotNull('attribute_changes->attributes->department_head_id'))
             ->with('causer')
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -125,7 +130,8 @@ final class PersonRecordQuery
     }
 
     /**
-     * Quién terminó cada nombramiento y cuándo: la entrada `updated` más reciente con su id.
+     * Quién terminó cada nombramiento y cuándo: la entrada `updated` más reciente con su id, en `role_assignment_id`
+     * o, si es de una jefatura terminada antes de 3.P8, en `role_scope_ids`.
      *
      * @param  Collection<int, Activity>  $entries
      * @return array<string, array{name: string, on: CarbonImmutable}>
@@ -135,10 +141,15 @@ final class PersonRecordQuery
         $endings = [];
 
         foreach ($entries as $entry) {
-            $id = $entry->properties->get('role_assignment_id');
+            if ($entry->event !== 'updated' || $entry->causer === null) {
+                continue;
+            }
 
-            if ($entry->event === 'updated' && $id !== null && ! isset($endings[$id]) && $entry->causer !== null) {
-                $endings[$id] = ['name' => $entry->causer->name, 'on' => $this->on($entry)];
+            $id = $entry->properties->get('role_assignment_id');
+            $ids = $id !== null ? [$id] : (array) $entry->properties->get('role_scope_ids', []);
+
+            foreach ($ids as $assignmentId) {
+                $endings[$assignmentId] ??= ['name' => $entry->causer->name, 'on' => $this->on($entry)];
             }
         }
 

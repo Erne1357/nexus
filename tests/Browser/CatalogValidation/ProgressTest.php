@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\DepartmentHead;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -22,7 +21,6 @@ it('Subdirección abre el tablero, el drawer de un departamento y le recuerda al
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     app(CreateTermReviews::class)->handle($term, $campus);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['name' => 'Dra. Ana Soto']);
-    DepartmentHead::factory()->create(['department_id' => $sis->id, 'user_id' => $jefe->id]);
     User::factory()->withRole(Role::Subdireccion, [])->create(['username' => 'subdireccion']);
 
     visit('/login')

@@ -12,6 +12,8 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\PersonRecordQuery;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 
 /*
 | La ficha de una persona en «Personas y puestos»: sus nombramientos ordenados, las cifras, la línea de vigencias y la
@@ -129,6 +131,49 @@ it('la bitácora solo trae entradas de nombramientos', function () {
     expect(array_column($log, 'description'))->toBe(['Nombró a Rosa Ruiz como Coordinador de carrera · ISC · C2']);
 });
 
+it('la bitácora trae las jefaturas nombradas antes de 3.P8', function () {
+    activity()->performedOn($this->rosa)->causedBy($this->admin)->event('created')
+        ->withChanges(['attributes' => ['department_head_id' => fakeKey(1), 'kind' => 'jefe', 'department_id' => $this->systems->id]])
+        ->log('Nombró a Rosa Ruiz jefe de departamento de Sistemas y Computación');
+    activity()->performedOn($this->rosa)->event('created')->withChanges(['attributes' => ['role' => 'docente']])->log('Otra cosa');
+
+    $log = app(PersonRecordQuery::class)->for($this->rosa)->log;
+
+    expect(array_column($log, 'description'))->toBe(['Nombró a Rosa Ruiz jefe de departamento de Sistemas y Computación'])
+        ->and($log[0]['by'])->toBe('Ada Admin');
+});
+
+it('«Último nombramiento» también cuenta las jefaturas nombradas antes de 3.P8', function () {
+    $this->travelTo('2026-09-01 10:00:00');
+    app(AppointRole::class)->handle($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-09-01'));
+    $this->travelTo('2026-10-15 10:00:00');
+    activity()->performedOn($this->rosa)->causedBy($this->admin)->event('created')
+        ->withChanges(['attributes' => ['department_head_id' => fakeKey(1), 'kind' => 'jefe', 'department_id' => $this->systems->id]])
+        ->log('Nombró a Rosa Ruiz jefe de departamento de Sistemas y Computación');
+    $this->travelTo('2026-11-03 10:00:00');
+
+    $record = app(PersonRecordQuery::class)->for($this->rosa);
+
+    expect($record->lastAppointment['on']->toDateString())->toBe('2026-10-15')
+        ->and($record->lastAppointment['by'])->toBe('Ada Admin');
+});
+
+it('Terminado por también sale de las jefaturas terminadas antes de 3.P8', function () {
+    $assignment = giveRole($this->rosa, Role::JefeDepartamento, '2026-01-01', '2026-10-31', ['org_unit_id' => $this->systems->id]);
+    $this->travelTo('2026-10-20 10:00:00');
+    activity()->performedOn($this->rosa)->causedBy($this->admin)->event('updated')
+        ->withChanges(['attributes' => ['valid_to' => '2026-10-31'], 'old' => ['valid_to' => null]])
+        ->withProperties(['department_head_id' => fakeKey(1), 'role_scope_ids' => [$assignment->id]])
+        ->log('Terminó la jefatura de Rosa Ruiz como jefe de departamento de Sistemas y Computación');
+    $this->travelTo('2026-11-03 10:00:00');
+
+    $row = app(PersonRecordQuery::class)->for($this->rosa)->assignments[0];
+
+    expect($row['assignment']->id)->toBe($assignment->id)
+        ->and($row['endedBy']['name'])->toBe('Ada Admin')
+        ->and($row['endedBy']['on']->toDateString())->toBe('2026-10-20');
+});
+
 it('la bitácora trae las 10 últimas', function () {
     foreach (range(1, 12) as $number) {
         activity()->performedOn($this->rosa)->event('updated')->withProperties(['role_assignment_id' => fakeKey($number)])->log("Entrada {$number}");
@@ -137,6 +182,29 @@ it('la bitácora trae las 10 últimas', function () {
     $log = app(PersonRecordQuery::class)->for($this->rosa)->log;
 
     expect($log)->toHaveCount(10)->and($log[0]['description'])->toBe('Entrada 12');
+});
+
+it('AZ-S12: revisa la cobertura de Administración una vez por nombramiento vigente o por empezar, y nunca en los terminados', function () {
+    giveRole($this->rosa, Role::Admin, '2026-01-01');
+    giveRole($this->rosa, Role::Admin, '2025-01-01', '2025-12-31');
+    giveRole($this->rosa, Role::Coordinador, '2026-01-01', null, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id]);
+    $coverage = 0;
+    DB::listen(function (QueryExecuted $query) use (&$coverage): void {
+        $coverage += str_contains($query->sql, 'range_agg') ? 1 : 0;
+    });
+
+    $rows = collect(app(PersonRecordQuery::class)->for($this->rosa)->assignments);
+
+    expect($coverage)->toBe(1)
+        ->and($rows->firstWhere('status', AssignmentStatus::Ended))->endBlocker->toBeNull()->earliestLastDay->toBeNull();
+
+    $this->rosa->roleAssignments()->where('role', Role::Admin)->delete();
+    $coverage = 0;
+    $alone = collect(app(PersonRecordQuery::class)->for($this->admin)->assignments)->sole();
+
+    expect($coverage)->toBe(1)
+        ->and($alone['earliestLastDay'])->toBeNull()
+        ->and($alone['endBlocker'])->toBe('Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.');
 });
 
 it('AZ-S12: con el único sucesor programado, «Terminar…» queda habilitado y el primer último día posible es la víspera del sucesor', function () {
