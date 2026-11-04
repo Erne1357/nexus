@@ -88,7 +88,7 @@
                                 </div>
 
                                 @if ($endingId === $row['id'])
-                                    @include('core::people.end-box', ['status' => $row['status'], 'earliestLastDay' => $row['earliestLastDay']])
+                                    @include('core::people.end-box', ['status' => $row['status'], 'from' => $row['from'], 'earliestLastDay' => $row['earliestLastDay']])
                                 @else
                                     <div class="mt-2 flex flex-col items-start gap-1">
                                         @if ($row['endBlocker'] === null)

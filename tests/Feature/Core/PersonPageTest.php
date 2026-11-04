@@ -361,6 +361,21 @@ it('termina con la fecha elegida y avisa según el resultado', function () {
         ->and(RoleAssignment::find($future->id))->toBeNull();
 });
 
+it('P4 y P5: el recuadro de un nombramiento que empieza hoy avisa que una fecha anterior lo quita, y ayer lo quita', function () {
+    $today = assign($this->rosa, Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id, 'valid_from' => '2026-11-03']);
+
+    $page = personPage($this->rosa)
+        ->call('confirmEnd', $today->id)
+        ->assertSee('Empieza hoy: si la fecha de fin es anterior a su inicio, el nombramiento se quita y queda en la bitácora.')
+        ->assertDontSee('Queda en el historial y en la bitácora.')
+        ->set('lastDay', '2026-11-02')
+        ->call('end')
+        ->assertHasNoErrors();
+
+    expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Nombramiento quitado'])
+        ->and(RoleAssignment::find($today->id))->toBeNull();
+});
+
 it('cancelar el recuadro de terminar no escribe nada, y una fecha vacía se pide', function () {
     $current = assign($this->rosa, Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id]);
 
