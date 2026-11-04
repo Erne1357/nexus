@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
@@ -44,20 +43,7 @@ beforeEach(function () {
         'y' => careerKey(21),
     ];
 
-    $management = [
-        FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCareer, FakePermission::ViewCampusUnit,
-        FakePermission::ViewCampusCareer, FakePermission::ViewCampusUnitCareer, FakePermission::ViewAny,
-    ];
-
-    app()->instance(PermissionRegistry::class, PermissionRegistry::fromDeclarations([FakePermission::class], [
-        Role::Subdireccion->value => $management,
-        Role::JefeDepartamento->value => [FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCampusUnit, FakePermission::ViewCampusUnitCareer, FakePermission::ViewAny],
-        Role::JefeProyectoDocente->value => $management,
-        Role::Coordinador->value => [...$management, FakePermission::ViewOwn],
-        Role::Docente->value => [FakePermission::ViewOwn],
-    ], [FakePermission::ViewCampusCareer]));
-
-    app()->forgetScopedInstances();
+    useFakePermissions();
 });
 
 /**

@@ -6,8 +6,7 @@ use App\Modules\Core\Enums\Role;
 
 /**
  * Un nombramiento vigente como dato plano, para el snapshot cacheado: el puesto y su alcance (nulo = sin límite en esa
- * dimensión). `unitIsDepartment` dice si su unidad es un departamento académico; solo lo usa la API de compatibilidad
- * de Actor (un objetivo sin departamento), que se va en 3.P9.
+ * dimensión).
  */
 final readonly class AssignmentScope
 {
@@ -16,7 +15,6 @@ final readonly class AssignmentScope
         public ?string $campusId,
         public ?string $unitId,
         public ?string $careerId,
-        public bool $unitIsDepartment = false,
     ) {}
 
     /**
@@ -32,7 +30,7 @@ final readonly class AssignmentScope
     }
 
     /**
-     * @return array{role: string, campus_id: ?string, org_unit_id: ?string, career_id: ?string, unit_is_department: bool}
+     * @return array{role: string, campus_id: ?string, org_unit_id: ?string, career_id: ?string}
      */
     public function toArray(): array
     {
@@ -41,7 +39,6 @@ final readonly class AssignmentScope
             'campus_id' => $this->campusId,
             'org_unit_id' => $this->unitId,
             'career_id' => $this->careerId,
-            'unit_is_department' => $this->unitIsDepartment,
         ];
     }
 
@@ -55,7 +52,7 @@ final readonly class AssignmentScope
     {
         $role = is_string($data['role'] ?? null) ? Role::tryFrom($data['role']) : null;
 
-        if ($role === null || ! is_bool($data['unit_is_department'] ?? null)) {
+        if ($role === null) {
             return null;
         }
 
@@ -65,6 +62,6 @@ final readonly class AssignmentScope
             }
         }
 
-        return new self($role, $data['campus_id'], $data['org_unit_id'], $data['career_id'], $data['unit_is_department']);
+        return new self($role, $data['campus_id'], $data['org_unit_id'], $data['career_id']);
     }
 }

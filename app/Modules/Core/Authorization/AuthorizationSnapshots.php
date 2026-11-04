@@ -2,11 +2,9 @@
 
 namespace App\Modules\Core\Authorization;
 
-use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use Illuminate\Contracts\Cache\Repository;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -21,7 +19,8 @@ use Illuminate\Support\Facades\DB;
  *   transacción, de inmediato). Una transacción revertida deshace también la subida de `authz_version`, y la
  *   siguiente alta vuelve a usar ese número: un snapshot leído dentro de ella no debe quedar bajo esa llave.
  * - Lo cacheado se lee estricto: si le falta un campo o uno es de otro tipo, se descarta y se vuelve a leer de la base
- *   (un alcance nulo es «sin límite», así que completarlo ampliaría el acceso). FORMAT va en la llave.
+ *   (un alcance nulo es «sin límite», así que completarlo ampliaría el acceso). FORMAT va en la llave: lo que guardó
+ *   un formato anterior no se lee, aunque el nuevo pudiera leerlo; se recarga de la base y se guarda con la llave nueva.
  * - La versión sale del modelo: el guard de sesión lee la fila completa en cada petición, así que no cuesta una
  *   consulta. Un modelo sin `authz_version` cargada (uno recién creado, como los de las factories, o uno leído con
  *   columnas sueltas) no da una llave confiable: sus nombramientos se leen de la base, sin caché. Las pruebas de la
@@ -35,8 +34,11 @@ final class AuthorizationSnapshots
     /**
      * Versión del formato de AuthorizationSnapshot::toArray() en la llave. Súbela cada vez que cambie la forma del
      * snapshot o el significado de un campo, para que nadie lea lo que guardó una versión anterior.
+     *
+     * - 1: el primero, con `unit_is_department`.
+     * - 2: sin `unit_is_department` (3.P9).
      */
-    public const int FORMAT = 1;
+    public const int FORMAT = 2;
 
     /** @var array<string, AuthorizationSnapshot> */
     private array $memo = [];
@@ -77,17 +79,14 @@ final class AuthorizationSnapshots
     }
 
     /**
-     * Los nombramientos vigentes hoy que llenan Role::scopeColumns(), con el tipo de su unidad, en una consulta. La
-     * base ya lo exige (CHECK `role_assignments_scope_complete`); el filtro queda como defensa.
+     * Los nombramientos vigentes hoy que llenan Role::scopeColumns(), en una consulta. La base ya lo exige (CHECK
+     * `role_assignments_scope_complete`); el filtro queda como defensa.
      */
     private function load(User $user): AuthorizationSnapshot
     {
         $assignments = RoleAssignment::query()
             ->where('user_id', $user->getKey())
             ->current()
-            ->withExists([
-                'orgUnit as unit_is_department' => fn (Builder $query) => $query->withTrashed()->where('kind', OrgUnitKind::DepartamentoAcademico),
-            ])
             ->orderBy('id')
             ->get()
             ->filter(fn (RoleAssignment $assignment): bool => collect($assignment->role->scopeColumns())
@@ -99,7 +98,6 @@ final class AuthorizationSnapshots
                 $assignment->campus_id,
                 $assignment->org_unit_id,
                 $assignment->career_id,
-                (bool) $assignment->unit_is_department,
             ))
             ->values()
             ->all());

@@ -43,7 +43,7 @@ final readonly class AuthorizationSnapshot
     }
 
     /**
-     * @return array{scopes: list<array{role: string, campus_id: ?string, org_unit_id: ?string, career_id: ?string, unit_is_department: bool}>}
+     * @return array{scopes: list<array{role: string, campus_id: ?string, org_unit_id: ?string, career_id: ?string}>}
      */
     public function toArray(): array
     {

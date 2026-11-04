@@ -15,9 +15,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /*
-| Snapshot cacheado de los nombramientos (spec 9): llave `authz:user:v1:{id}:{authz_version}` (v1 es la versión del
-| formato), vence a la siguiente
-| medianoche de Ciudad Juárez. Cada «petición» lee al usuario de la base, como el guard de sesión, para que su
+| Snapshot cacheado de los nombramientos (spec 9): llave `authz:user:v{FORMAT}:{id}:{authz_version}` (FORMAT es la
+| versión del formato, AuthorizationSnapshots::FORMAT), vence a la siguiente medianoche de Ciudad Juárez. Cada «petición» lee al usuario de la base, como el guard de sesión, para que su
 | authz_version sea la vigente; un usuario recién creado por la factory no la trae y no usa la caché.
 | "Hoy" es el 3 de noviembre de 2026.
 */
@@ -45,7 +44,7 @@ function nextRequestOf(User $user): Actor
  */
 function snapshotKeyOf(User $user): string
 {
-    return "authz:user:v1:{$user->id}:".User::find($user->id)->authz_version;
+    return 'authz:user:v'.AuthorizationSnapshots::FORMAT.":{$user->id}:".User::find($user->id)->authz_version;
 }
 
 /**
@@ -67,8 +66,8 @@ it('guarda los nombramientos vigentes, por puesto, y vuelve igual de la caché',
     $snapshot = app(AuthorizationSnapshots::class)->for(User::find($user->id));
 
     expect($snapshot->roles())->toBe([Role::Admin, Role::JefeDepartamento, Role::Coordinador])
-        ->and($snapshot->scopes(Role::JefeDepartamento))->toEqual([new AssignmentScope(Role::JefeDepartamento, null, fakeKey(10), null, true)])
-        ->and($snapshot->scopes(Role::Coordinador))->toEqual([new AssignmentScope(Role::Coordinador, $this->c2->id, null, fakeKey(20), false)])
+        ->and($snapshot->scopes(Role::JefeDepartamento))->toEqual([new AssignmentScope(Role::JefeDepartamento, null, fakeKey(10), null)])
+        ->and($snapshot->scopes(Role::Coordinador))->toEqual([new AssignmentScope(Role::Coordinador, $this->c2->id, null, fakeKey(20))])
         ->and($snapshot->scopes())->toHaveCount(3)
         ->and(AuthorizationSnapshot::fromArray($snapshot->toArray()))->toEqual($snapshot)
         ->and(fn () => AuthorizationSnapshot::fromArray(['scopes' => [['role' => 'coordinador']]]))->toThrow(UnexpectedValueException::class);
@@ -157,7 +156,7 @@ it('una transacción revertida no deja un snapshot con lo que se deshizo', funct
     } catch (RuntimeException) {
     }
 
-    expect(Cache::has('authz:user:v1:'.$user->id.':'.(User::find($user->id)->authz_version + 1)))->toBeFalse();
+    expect(Cache::has('authz:user:v'.AuthorizationSnapshots::FORMAT.':'.$user->id.':'.(User::find($user->id)->authz_version + 1)))->toBeFalse();
 
     // Un cambio confirmado vuelve a la misma authz_version que tuvo la transacción revertida.
     RoleAssignment::factory()->for($user)->create(['role' => Role::JefeProyectoDocente, 'campus_id' => $this->c2->id, 'org_unit_id' => departmentKey(10)]);
@@ -171,7 +170,7 @@ it('un snapshot en caché con un campo faltante o de otro tipo se descarta y se 
     $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
     $key = snapshotKeyOf($user);
     $broken = array_filter(
-        [...['role' => 'coordinador', 'campus_id' => $this->c2->id, 'org_unit_id' => null, 'career_id' => careerKey(20), 'unit_is_department' => false], ...$changes],
+        [...['role' => 'coordinador', 'campus_id' => $this->c2->id, 'org_unit_id' => null, 'career_id' => careerKey(20)], ...$changes],
         fn (mixed $value): bool => $value !== '__drop__',
     );
     Cache::put($key, ['scopes' => [$broken]], now()->addHour());
@@ -181,14 +180,25 @@ it('un snapshot en caché con un campo faltante o de otro tipo se descarta y se 
     expect($context->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $this->c2->id, career: fakeKey(20))))->toBeTrue()
         ->and($context->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $this->c2->id, career: careerKey(21))))->toBeFalse()
         ->and(Cache::get($key))->toBe(['scopes' => [[
-            'role' => 'coordinador', 'campus_id' => $this->c2->id, 'org_unit_id' => null, 'career_id' => fakeKey(20), 'unit_is_department' => false,
+            'role' => 'coordinador', 'campus_id' => $this->c2->id, 'org_unit_id' => null, 'career_id' => fakeKey(20),
         ]]]);
 })->with([
     'sin carrera' => [['career_id' => '__drop__']],
     'campus de otro tipo' => [['campus_id' => 7]],
-    'sin el tipo de unidad' => [['unit_is_department' => '__drop__']],
     'puesto que ya no existe' => [['role' => 'decano']],
 ]);
+
+it('un snapshot con el formato anterior no se lee: se recarga de la base con el nuevo', function () {
+    $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
+    $version = User::find($user->id)->authz_version;
+    // Lo que guardó el formato 1, que el 2 también podría leer (sobra un campo): una Subdirección de todo el Tec.
+    Cache::put("authz:user:v1:{$user->id}:{$version}", ['scopes' => [[
+        'role' => 'subdireccion', 'campus_id' => null, 'org_unit_id' => null, 'career_id' => null, 'unit_is_department' => false,
+    ]]], now()->addHour());
+
+    expect(nextRequestOf($user)->heldRoles())->toBe([Role::Coordinador])
+        ->and(Cache::has("authz:user:v2:{$user->id}:{$version}"))->toBeTrue();
+});
 
 it('un snapshot en caché que no es una lista de nombramientos se descarta y se recarga', function (mixed $cached) {
     $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();

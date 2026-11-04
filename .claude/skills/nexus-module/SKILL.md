@@ -97,7 +97,7 @@ docker compose exec -T -w /app/.worktrees/<wt> app ./vendor/bin/pint  # sin --di
 - Copia `Queries/CampusQuery.php`, `final`:
   - `forTable(Actor $context, string $search = '', ?bool $active = null, int $perPage = 15)`: al admin todo; a los demás, solo lo que la policy les deja ver, sin repetir la lógica de alcance: una tabla con columnas de alcance se filtra en SQL con `$context->constrain($query, <Modulo>Permission::X, ['campus' => '<tabla>.campus_id', 'unit' => …, 'career' => …])`, sin pre-chequeos de admin ni de campus. Búsqueda con `->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))` (`Queries/TextSearch.php`); filtro de estado; orden por la clave natural; `paginate()`.
   - `findOrFail(string $id)` carga lo que se edita con `KeyLookup::findOrFail(<Modelo>::query(), $id)`: el id llega del cliente y uno que no es uuid haría fallar a PostgreSQL.
-- CampusQuery filtra con `Gate::forUser($context->user())` sobre `Actor::campuses()` porque los campus son el alcance mismo. Una tabla con columnas de alcance (`campus_id`, `department_id`, `career_id`) no se autoriza fila por fila: se filtra en SQL con los alcances de `$context->scopes()`, y una prueba confirma que el resultado coincide con la policy.
+- CampusQuery filtra con `Gate::forUser($context->user())` sobre `Actor::campuses()` porque los campus son el alcance mismo. Una tabla con columnas de alcance (`campus_id`, `department_id`, `career_id`) no se autoriza fila por fila: se filtra en SQL con `$context->constrain()`, y una prueba confirma que el resultado coincide con la policy.
 
 ### 9. Página MFC
 
