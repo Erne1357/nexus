@@ -39,7 +39,7 @@
                         No le pide materias a {{ $inbox->department->name }}.
                     @endif
                 @else
-                    {{ $selected['groups'] }} grupos · {{ $selected['expected'] }} esperados · {{ $selected['subjects'] }} {{ $selected['subjects'] === 1 ? 'materia' : 'materias' }}
+                    {{ $selected['groups'] }} grupos · {{ $selected['subjects'] }} {{ $selected['subjects'] === 1 ? 'materia' : 'materias' }}
                 @endif
             </p>
             @if ($acceptBlock !== null && $canDecide)
@@ -143,7 +143,7 @@
     @if ($items !== [])
         <div class="sticky bottom-0 z-10 flex items-baseline justify-between gap-4 rounded-b-box border-t border-base-300 bg-base-100 px-4 py-3 text-sm font-semibold sm:px-5" data-testid="inbox-detail-total">
             <span>Total</span>
-            <span class="font-mono tabular-nums">{{ $selected['groups'] }} grupos · {{ $selected['expected'] }} esperados</span>
+            <span class="font-mono tabular-nums">{{ $selected['groups'] }} grupos</span>
         </div>
     @endif
 </div>

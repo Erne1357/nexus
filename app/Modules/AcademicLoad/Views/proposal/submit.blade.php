@@ -8,8 +8,8 @@
     <h2 id="submit-title" class="text-xl font-bold">{{ $resend ? 'Reenviar la propuesta' : 'Enviar la propuesta' }}</h2>
     <p class="text-neutral">Cada departamento recibe lo que se le pide y acepta o regresa su parte. Mientras esté enviada no se puede corregir.</p>
 
-    <dl class="grid grid-cols-3 gap-3 rounded-box border border-base-300 px-4 py-3">
-        @foreach ([['Materias con grupos', $overview->totals['subjects']], ['Grupos', $overview->totals['groups']], ['Esperados', $overview->totals['expected']]] as [$label, $value])
+    <dl class="grid grid-cols-2 gap-3 rounded-box border border-base-300 px-4 py-3">
+        @foreach ([['Materias con grupos', $overview->totals['subjects']], ['Grupos', $overview->totals['groups']]] as [$label, $value])
             <div>
                 <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
                 <dd class="font-mono text-xl font-semibold tabular-nums">{{ $value }}</dd>

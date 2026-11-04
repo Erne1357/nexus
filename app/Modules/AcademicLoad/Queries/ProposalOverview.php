@@ -22,7 +22,7 @@ final readonly class ProposalOverview
     /**
      * @param  array<int, list<ProposalItem>>  $semesters  semestre → sus filas por clave de materia, con `subject.department`
      * @param  list<ProposalReview>  $reviews  la parte de cada departamento, por clave del departamento, con `department`
-     * @param  array{subjects: int, groups: int, expected: int}  $totals  materias con grupos, grupos pedidos y alumnos esperados en ellas
+     * @param  array{subjects: int, groups: int}  $totals  materias con grupos y grupos pedidos; los alumnos esperados no se suman entre materias, porque un alumno cuenta en cada una que puede llevar
      * @param  list<array{department: Department, catalogs: list<Catalog>}>  $pendingCatalogs  departamentos con grupos pedidos y catálogos sin validar, por clave
      * @param  array<string, string>  $specialtyOf  materia → la especialidad de su plan; las del tronco común no aparecen
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la propuesta, por clave, con cuántas

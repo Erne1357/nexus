@@ -201,6 +201,14 @@ describe('jefe de departamento', function () {
             ->assertSeeHtml('data-testid="inbox-detail-total"');
     });
 
+    it('no suma alumnos esperados entre materias en la lista, el detalle ni la confirmación de aceptar', function () {
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertDontSeeText('esperados ·')
+            ->assertDontSeeHtml('esperados</span>')
+            ->call('confirmAccept', $this->iscPart->id)
+            ->assertDontSeeHtml('>Esperados</dt>');
+    });
+
     it('ofrece los paralelos como un chip con el ahorro, y su detalle por carrera y los grupos mixtos', function () {
         inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
             ->assertSeeHtml('data-testid="parallels-chip"')

@@ -33,7 +33,7 @@ final readonly class DepartmentInbox
 {
     /**
      * @param  list<Catalog>  $pendingCatalogs  catálogos del departamento sin validar, en el orden del enum Catalog
-     * @param  list<array{career: Career, status: InboxStatus, decidable: bool, correctionBy: list<string>, proposal: ?CareerProposal, review: ?ProposalReview, subjects: int, groups: int, expected: int, rows: list<ProposalItem>, anomalies: int}>  $careers  pendientes primero (InboxStatus::order), luego por clave; cada fila con `subject`, por semestre y clave; `anomalies` es cuántas filas tienen algo raro (ProposalAnomalies)
+     * @param  list<array{career: Career, status: InboxStatus, decidable: bool, correctionBy: list<string>, proposal: ?CareerProposal, review: ?ProposalReview, subjects: int, groups: int, rows: list<ProposalItem>, anomalies: int}>  $careers  pendientes primero (InboxStatus::order), luego por clave; cada fila con `subject`, por semestre y clave; `anomalies` es cuántas filas tienen algo raro (ProposalAnomalies)
      * @param  list<array{subject: Subject, expected: int, parallels: ParallelGroups}>  $subjects  por clave de materia; los paralelos por clave de carrera
      */
     public function __construct(
@@ -59,7 +59,7 @@ final readonly class DepartmentInbox
     /**
      * La carrera de la bandeja con ese id (que puede llegar del cliente), o null si no está.
      *
-     * @return array{career: Career, status: InboxStatus, decidable: bool, correctionBy: list<string>, proposal: ?CareerProposal, review: ?ProposalReview, subjects: int, groups: int, expected: int, rows: list<ProposalItem>, anomalies: int}|null
+     * @return array{career: Career, status: InboxStatus, decidable: bool, correctionBy: list<string>, proposal: ?CareerProposal, review: ?ProposalReview, subjects: int, groups: int, rows: list<ProposalItem>, anomalies: int}|null
      */
     public function career(string $careerId): ?array
     {
