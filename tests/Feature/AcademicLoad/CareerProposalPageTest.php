@@ -853,6 +853,14 @@ describe('retícula con estados, filtro de grupos y marcas (maqueta C)', functio
             ->assertSeeHtml('data-testid="row-SCD-1027"')
             ->call('setView', 'tabla')
             ->assertDontSeeHtml('data-testid="row-SCD-1027"');
+
+        $this->networks->update(['requested_groups' => 1]);
+
+        proposalPageAs($this->coordinator, ['vista' => 'tabla', 'grupos' => 'con', 'depto' => 'SC'])
+            ->call('saveCell', $this->networks->id, 'requested_groups', '0')
+            ->assertSeeHtml('data-testid="row-SCD-1015"')
+            ->set('onlyDepartment', true)
+            ->assertDontSeeHtml('data-testid="row-SCD-1015"');
     });
 
     it('un departamento elegido marca sus materias como una cadena y la barra dice cuántas son y sus grupos', function () {
