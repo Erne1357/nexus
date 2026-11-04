@@ -76,6 +76,7 @@ it('rechaza un nombramiento de un usuario, campus, unidad o carrera que no exist
         'user_id' => User::factory()->create()->id,
         'role' => Role::JefeProyectoDocente->value,
         'campus_id' => Campus::factory()->create()->id,
+        'org_unit_id' => departmentKey(10),
         'valid_from' => '2026-08-01',
     ];
 
@@ -152,6 +153,84 @@ describe('puestos exclusivos (AZ-S7)', function () {
     });
 });
 
+describe('columnas de alcance por puesto (role_assignments_scope_complete)', function () {
+    $migrationPath = 'app/Modules/Core/Database/Migrations/2026_11_08_000001_add_scope_check_to_role_assignments.php';
+
+    /**
+     * Un renglón con todo lo que `scopeColumns()` del puesto pide, menos `$without`.
+     *
+     * @param  list<string>  $without
+     * @return array<string, mixed>
+     */
+    function scopedRow(Role $role, array $without = []): array
+    {
+        $values = [
+            'campus_id' => Campus::factory()->create()->id,
+            'org_unit_id' => $role === Role::Subdireccion ? academicUnit() : departmentKey(10),
+            'career_id' => careerKey(20),
+        ];
+
+        return [
+            'user_id' => User::factory()->create()->id,
+            'role' => $role->value,
+            'valid_from' => '2026-08-01',
+            ...collect($role->scopeColumns())->diff($without)->mapWithKeys(fn (string $column): array => [$column => $values[$column]])->all(),
+        ];
+    }
+
+    $missing = [];
+    $complete = [];
+    foreach (Role::cases() as $role) {
+        $complete[$role->value] = $role;
+        foreach ($role->scopeColumns() as $column) {
+            $missing["{$role->value} sin {$column}"] = [$role, $column];
+        }
+    }
+
+    it('la base rechaza un nombramiento al que le falta una columna que su puesto pide', function (Role $role, string $column) {
+        expect(fn () => DB::table('role_assignments')->insert(scopedRow($role, [$column])))
+            ->toThrow(QueryException::class, 'role_assignments_scope_complete');
+    })->with($missing);
+
+    it('la base acepta cada puesto con lo que pide', function (Role $role) {
+        DB::table('role_assignments')->insert(scopedRow($role));
+
+        expect(DB::table('role_assignments')->count())->toBe(1);
+    })->with($complete);
+
+    it('la base acepta una columna de más, que solo acota', function () {
+        DB::table('role_assignments')->insert([...scopedRow(Role::JefeDepartamento), 'campus_id' => Campus::factory()->create()->id]);
+
+        expect(DB::table('role_assignments')->count())->toBe(1);
+    });
+
+    it('la expresión del CHECK pide lo mismo que Role::scopeColumns()', function () {
+        // Cada puesto, con exactamente sus columnas, pasa; con una menos, no (arriba). Aquí, las columnas que pide el
+        // enum contra las que la migración congeló.
+        expect(collect(Role::cases())->mapWithKeys(fn (Role $role): array => [$role->value => $role->scopeColumns()])->all())->toBe([
+            'admin' => [],
+            'subdireccion' => ['org_unit_id'],
+            'jefe_departamento' => ['org_unit_id'],
+            'jefe_proyecto_docente' => ['campus_id', 'org_unit_id'],
+            'coordinador' => ['campus_id', 'career_id'],
+            'docente' => [],
+        ]);
+    });
+
+    it('Q2: la migración se detiene y lista los ids si ya hay nombramientos incompletos', function () use ($migrationPath) {
+        DB::statement('alter table role_assignments drop constraint role_assignments_scope_complete');
+        $id = DB::table('role_assignments')->insertGetId(scopedRow(Role::Coordinador, ['career_id']));
+        $migration = require base_path($migrationPath);
+
+        expect(fn () => $migration->up())->toThrow(RuntimeException::class, $id)
+            ->and(DB::table('pg_constraint')->where('conname', 'role_assignments_scope_complete')->exists())->toBeFalse()
+            ->and(DB::table('role_assignments')->where('id', $id)->exists())->toBeTrue();
+
+        DB::table('role_assignments')->where('id', $id)->delete();
+        $migration->up();
+    });
+});
+
 describe('versión de autorización del usuario', function () {
     it('dar, cambiar o quitar un nombramiento sube authz_version de su usuario', function () {
         $user = User::factory()->create();
@@ -188,7 +267,8 @@ describe('versión de autorización del usuario', function () {
 describe('migración desde role_scopes', function () {
     beforeEach(function () {
         $this->travelTo(CarbonImmutable::parse('2026-11-04 12:00', 'America/Ciudad_Juarez'));
-        // Primero la migración posterior, que agregó la exclusión de jefes de proyecto docente a `role_assignments`.
+        // Primero las migraciones posteriores: el CHECK de columnas de alcance y la que agregó la exclusión de jefes de proyecto docente a `role_assignments`.
+        (require base_path('app/Modules/Core/Database/Migrations/2026_11_08_000001_add_scope_check_to_role_assignments.php'))->down();
         (require base_path('app/Modules/Academic/Database/Migrations/2026_11_07_000001_merge_department_heads_into_role_assignments.php'))->down();
         $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_04_000001_create_role_assignments_from_role_scopes.php');
         $this->migration->down();

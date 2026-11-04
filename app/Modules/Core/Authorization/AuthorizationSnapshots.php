@@ -77,7 +77,8 @@ final class AuthorizationSnapshots
     }
 
     /**
-     * Los nombramientos vigentes hoy que llenan Role::scopeColumns(), con el tipo de su unidad, en una consulta.
+     * Los nombramientos vigentes hoy que llenan Role::scopeColumns(), con el tipo de su unidad, en una consulta. La
+     * base ya lo exige (CHECK `role_assignments_scope_complete`); el filtro queda como defensa.
      */
     private function load(User $user): AuthorizationSnapshot
     {

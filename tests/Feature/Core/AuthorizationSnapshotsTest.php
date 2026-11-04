@@ -56,13 +56,12 @@ function roleAssignmentQueries(): array
     return collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'role_assignments'))->values()->all();
 }
 
-it('guarda los nombramientos vigentes y completos, por puesto, y vuelve igual de la caché', function () {
+it('guarda los nombramientos vigentes, por puesto, y vuelve igual de la caché', function () {
     $user = User::factory()
         ->admin()
         ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
         ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
         ->create();
-    RoleAssignment::factory()->for($user)->create(['role' => Role::JefeProyectoDocente, 'campus_id' => null, 'org_unit_id' => departmentKey(11)]);
     RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(21), 'valid_to' => today()->subDay()->toDateString()]);
 
     $snapshot = app(AuthorizationSnapshots::class)->for(User::find($user->id));
