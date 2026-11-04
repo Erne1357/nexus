@@ -310,6 +310,17 @@ describe('sección «Campus»', function () {
             ->and(TermOpening::count())->toBe(0);
     });
 
+    it('la Subdirección que fuerza un campus desactivado recibe 403 y no se abre nada', function () {
+        $this->c3->update(['is_active' => false]);
+
+        Livewire::actingAs($this->subdireccion)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openIn', $this->c3->id)
+            ->assertForbidden();
+
+        expect(TermOpening::count())->toBe(0);
+    });
+
     it('un campus inexistente o manipulado da 404, no 500', function (string $id) {
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])

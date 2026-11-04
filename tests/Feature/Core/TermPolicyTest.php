@@ -71,3 +71,27 @@ it('la misma persona con otro perfil activo es rechazada', function () {
     actingAsRole($user, Role::Docente);
     expect(termAbilities($user, $this->term))->each->toBeFalse();
 });
+
+it('D4: abrir el periodo se decide por campus', function () {
+    $active = $this->campus;
+    $other = Campus::factory()->create();
+    $inactive = Campus::factory()->create(['is_active' => false]);
+    $admin = User::factory()->admin()->create();
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $active->id, 'career_id' => careerKey(20)])->create();
+
+    expect($admin->can('open', [$this->term, $active]))->toBeTrue()
+        ->and($admin->can('open', [$this->term, $inactive]))->toBeTrue()
+        ->and($subdireccion->can('open', [$this->term, $active]))->toBeTrue()
+        ->and($subdireccion->can('open', [$this->term, $inactive]))->toBeFalse()
+        ->and($coordinador->can('open', [$this->term, $active]))->toBeFalse()
+        ->and($coordinador->can('open', [$this->term, $other]))->toBeFalse();
+});
+
+it('D4: una Subdirección con nombramiento en un campus (columna de más, D3) abre ahí y no en otro', function () {
+    $other = Campus::factory()->create();
+    $scoped = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->campus->id])->create();
+
+    expect($scoped->can('open', [$this->term, $this->campus]))->toBeTrue()
+        ->and($scoped->can('open', [$this->term, $other]))->toBeFalse();
+});

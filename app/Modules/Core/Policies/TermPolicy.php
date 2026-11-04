@@ -2,7 +2,9 @@
 
 namespace App\Modules\Core\Policies;
 
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\CorePermission;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\AuthorizesActor;
@@ -56,10 +58,12 @@ final class TermPolicy
     }
 
     /**
-     * Abrir el periodo en un campus o completar una apertura (fila "Abrir periodo, calendario, perfil de campus").
+     * Abrir el periodo en un campus o completar una apertura (fila "Abrir periodo, calendario, perfil de campus": la
+     * Subdirección, "en cualquier campus activo"). D4 del plan 3.P9: el permiso declara la dimensión campus, así que se
+     * decide sobre el par (periodo, campus). Sin campus pregunta si abre en alguno: es el `canOpen` de la página.
      */
-    public function open(User $user, Term $term): bool
+    public function open(User $user, Term $term, ?Campus $campus = null): bool
     {
-        return $this->actor($user)->allows(CorePermission::TermOpen);
+        return $this->actor($user)->allows(CorePermission::TermOpen, $campus === null ? null : Target::of(campus: $campus->getKey()));
     }
 }
