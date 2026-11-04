@@ -40,6 +40,21 @@ enum Role: string
     }
 
     /**
+     * Lo que el puesto hace en Nexus, para la página de inicio.
+     */
+    public function description(): string
+    {
+        return match ($this) {
+            self::Admin => 'Tienes acceso a todo Nexus, en todos los campus. Tus acciones quedan en la bitácora como las de cualquier usuario.',
+            self::Subdireccion => 'Si el campus lo tiene configurado, das el visto bueno final antes de publicar la carga académica.',
+            self::JefeDepartamento => 'Validas los catálogos de tu departamento, asignas docentes y salones a los grupos de sus materias y cierras su carga.',
+            self::JefeProyectoDocente => 'Junto con el jefe de departamento, asignas docentes a los grupos según la prioridad de base.',
+            self::Coordinador => 'Analizas el avance de los alumnos de tu carrera, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre.',
+            self::Docente => 'Consultas tu propia carga: los grupos que impartes y sus horarios.',
+        };
+    }
+
+    /**
      * Columnas de `role_assignments` que un nombramiento de este puesto debe llenar para contar en Actor
      * (columna "Alcance" de PROJECT.md). Admin no necesita alcance y el docente es de todo el Tec. La Subdirección
      * va sobre su unidad (Subdirección Académica, AZ-S3) y el jefe de departamento sobre la de su departamento, los
