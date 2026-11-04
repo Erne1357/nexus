@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
 use Spatie\Activitylog\Models\Activity;
+use Tests\Fixtures\Authorization\FakePermission;
 use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 use Tests\TestCase;
 
@@ -92,6 +93,30 @@ function registerDemoCatalog(): void
     app('router')->getRoutes()->refreshNameLookups();
     app()->forgetInstance(Navigation::class);
     app()->forgetInstance(PermissionRegistry::class);
+    app()->forgetScopedInstances();
+}
+
+/**
+ * Cambia el registro de permisos por uno con solo los de prueba (FakePermission) y olvida los servicios de la petición
+ * para que Actor lo use. Lo que concede: Subdirección, jefe de proyecto docente y Coordinación, todos los de gestión
+ * (Coordinación también el personal); el jefe de departamento, los de gestión que no declaran carrera, más
+ * ViewCampusUnitCareer; Docente, solo el personal. El admin tiene todos menos ViewCampusCareer, su excepción.
+ */
+function useFakePermissions(): void
+{
+    $management = [
+        FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCareer, FakePermission::ViewCampusUnit,
+        FakePermission::ViewCampusCareer, FakePermission::ViewCampusUnitCareer, FakePermission::ViewAny,
+    ];
+
+    app()->instance(PermissionRegistry::class, PermissionRegistry::fromDeclarations([FakePermission::class], [
+        Role::Subdireccion->value => $management,
+        Role::JefeDepartamento->value => [FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCampusUnit, FakePermission::ViewCampusUnitCareer, FakePermission::ViewAny],
+        Role::JefeProyectoDocente->value => $management,
+        Role::Coordinador->value => [...$management, FakePermission::ViewOwn],
+        Role::Docente->value => [FakePermission::ViewOwn],
+    ], [FakePermission::ViewCampusCareer]));
+
     app()->forgetScopedInstances();
 }
 

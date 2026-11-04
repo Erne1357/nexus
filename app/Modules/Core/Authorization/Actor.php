@@ -23,18 +23,17 @@ use LogicException;
  * Los nombramientos salen del snapshot cacheado (AuthorizationSnapshots): los vigentes hoy que llenan lo que su
  * puesto pide (Role::scopeColumns). Aquí se descartan los de un campus desactivado o borrado, para todo: no cuentan
  * ni en las dimensiones que un permiso no declara. Un usuario inactivo, o ninguno, no tiene ningún puesto. `admin`
- * (un nombramiento `admin` vigente) no es un alcance: no sale en scopes().
+ * (un nombramiento `admin` vigente) no es un alcance: no sale en heldScopes().
  *
  * Perfil activo (spec 8.1, AZ-S4): en la sesión de quien entró solo cuenta un puesto, el que eligió, con sus
  * nombramientos. activeRole() es la elección de la sesión (ACTIVE_ROLE) si todavía tiene ese puesto; si no, el último
  * que usó (`users.last_role`) si lo conserva; si no, el primero de heldRoles() en el orden del enum, y ese de omisión
  * queda fijo en la sesión la primera vez que se pregunta. Sin puestos no hay perfil. Elegir otro es del cambio de
  * perfil (SwitchRole); asRole() responde como si ya hubiera cambiado, sin tocar la sesión. Sus puestos efectivos
- * (effectiveRoles()) son solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, has, isAdmin, scopes, covers,
- * coversDepartment, canAccessCampus y campuses) responde con ellos. El contexto de otro usuario (forUser()) y uno sin
- * usuario autenticado no tienen perfil activo (el código de consola que fija el usuario del guard sí recibe el
- * predeterminado): sus puestos efectivos son todos los que tiene, porque responden «quién podría», que
- * es lo que preguntan los avisos y las policies sobre otra persona.
+ * (effectiveRoles()) son solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, y campuses()) responde
+ * con ellos. El contexto de otro usuario (forUser()) y uno sin usuario autenticado no tienen perfil activo (el código
+ * de consola que fija el usuario del guard sí recibe el predeterminado): sus puestos efectivos son todos los que tiene,
+ * porque responden «quién podría», que es lo que preguntan los avisos y las policies sobre otra persona.
  *
  * API de permisos (spec 7.1; el registro de permisos dice qué puesto concede qué):
  * - allows(): un permiso personal lo da cualquier puesto que tenga, aunque no sea el activo, solo sobre lo suyo (el
@@ -48,34 +47,6 @@ use LogicException;
  * - constrain(): la misma regla en SQL, para las listas.
  * - rolesAllowing(): los puestos (todos los que tiene, sin el admin) con que allows() daría que sí sobre un objetivo; de ahí salen los
  *   destinatarios de un aviso (RecipientsQuery::holders()).
- *
- * API de compatibilidad (has, covers, coversWithScope, coversDepartment, canAccessCampus, scopes), que se va en 3.P9.
- * Responde con los puestos efectivos, salvo coversWithScope(), que cuenta todos (ver abajo):
- * - El admin efectivo tiene todos los roles y lo cubre todo, sin alcance.
- * - Cualquier otro rol cuenta solo si es efectivo y el usuario tiene un nombramiento de ese rol que vale (ver arriba).
- * - Un nombramiento sin campus es de todo el Tec: vale en cada campus activo y no borrado (los desactivados o
- *   borrados quedan para el admin). Uno con campus vale solo en ese campus, aunque su rol no pida campus.
- * - Un nombramiento cubre un objetivo de un campus donde vale si cubre su unidad y su carrera. La carrera, como
- *   siempre: sin carrera, o la del objetivo. La unidad es jerárquica (OrgTree): sin unidad cubre cualquiera; con una,
- *   cubre la del objetivo si es ella o una de sus descendientes. Así el jefe de D cubre lo de D en cualquier carrera,
- *   el coordinador de X lo de X en cualquier departamento, y la Subdirección, sobre Subdirección Académica, los
- *   departamentos de su subárbol (deja de cubrir uno que se mueve fuera). coversDepartment() pregunta por un
- *   departamento sin campus.
- * - Un objetivo sin departamento (un campus completo, o una carrera sin decir su departamento) lo cubre el
- *   nombramiento sin unidad o con una unidad que no es un departamento académico, como la de la Subdirección. Es la
- *   traducción fiel de la regla de antes, cuando «sin departamento» era «todos los departamentos» y solo la
- *   Subdirección lo tenía: hoy su equivalente es una unidad estructural por encima de los departamentos. El jefe y
- *   el jefe de proyecto docente, sobre un departamento, no cubren el campus completo. Las llamadas actuales sin
- *   departamento (CampusPolicy, BuildingPolicy, RoomPolicy, CareerProposalPolicy y los avisos a coordinadores) solo
- *   nombran puestos sin unidad o a la Subdirección. Esta regla vive solo en esta API de compatibilidad.
- * - El docente nunca cubre por covers() ni por coversDepartment(): su acceso a su propia carga lo
- *   deciden las policies de Staffing y Scheduling por asignación. has(Role::Docente) y
- *   canAccessCampus() sí lo cuentan.
- * - Los campus de la credencial (campuses()) salen de los nombramientos efectivos, como todo lo demás: con
- *   Coordinación activa, los de sus coordinaciones; con Docente activa, los de su nombramiento de docente.
- * - coversWithScope() cuenta todos sus puestos, aunque no sean el activo: dice a quién le toca un aviso
- *   (RecipientsQuery), y forUser() del usuario autenticado es este mismo contexto. Un jefe que entró como
- *   coordinador recibe los avisos de su departamento (spec 8.4).
  *
  * El contenedor la registra con `scoped` (una instancia por petición, por Octane) para el usuario
  * autenticado; forUser() da, y recuerda en esta instancia, la de otro usuario, que comparte con esta los campus
@@ -112,7 +83,7 @@ final class Actor
     /** @var list<Role> puestos que tiene, el admin incluido, en el orden del enum */
     private array $heldRoles = [];
 
-    /** @var Collection<int, RoleAssignment>|null los nombramientos que cuentan, como modelos, para scopes() */
+    /** @var Collection<int, RoleAssignment>|null los nombramientos que cuentan, como modelos, para heldScopes() */
     private ?Collection $scopeModels = null;
 
     /** @var Collection<int, Campus>|null todos los campus activos, por código */
@@ -357,22 +328,6 @@ final class Actor
     }
 
     /**
-     * Si actúa como admin: con sesión, si el admin es su perfil activo; sin ella, si tiene el puesto.
-     */
-    public function isAdmin(): bool
-    {
-        return in_array(Role::Admin, $this->effectiveRoles(), true);
-    }
-
-    /**
-     * Si el usuario ejerce `$role` en algún lugar con un puesto efectivo. El admin efectivo, todos.
-     */
-    public function has(Role $role): bool
-    {
-        return $this->isAdmin() || in_array($role, $this->effectiveRoles(), true);
-    }
-
-    /**
      * Los puestos que tiene, el admin incluido, en el orden del enum: los que tienen un nombramiento que vale (ver el
      * docblock de la clase). Ninguno sin usuario activo ni nombramiento vigente. No depende del perfil activo.
      *
@@ -422,79 +377,9 @@ final class Actor
     }
 
     /**
-     * Si el usuario, con alguno de `$roles` que sea efectivo, cubre el objetivo: un campus completo, o un
-     * departamento o una carrera dentro de él. Un alcance sin campus cubre en cualquier campus
-     * activo. El admin efectivo, siempre; el docente, nunca.
-     *
-     * @param  Role|list<Role>  $roles
-     */
-    public function covers(Role|array $roles, Campus|string $campus, ?string $department = null, ?string $career = null): bool
-    {
-        return $this->isAdmin() || $this->coversBy($this->effectiveAmong($roles), $campus, $department, $career);
-    }
-
-    /**
-     * Lo mismo que covers(), solo por sus alcances y con todos sus puestos: sin el atajo del admin, que lo cubre
-     * todo sin tener alcance, y sin acotar al perfil activo. Para saber a quién le toca un aviso (RecipientsQuery):
-     * un admin que además es jefe recibe los de su departamento, y no los de todos; un jefe que entró como
-     * coordinador también los recibe, porque forUser() de quien está en sesión es este mismo contexto.
-     *
-     * @param  Role|list<Role>  $roles
-     */
-    public function coversWithScope(Role|array $roles, Campus|string $campus, ?string $department = null, ?string $career = null): bool
-    {
-        return $this->coversBy($this->withoutDocente($roles), $campus, $department, $career);
-    }
-
-    /**
-     * Si el usuario, con alguno de `$roles` que sea efectivo, cubre el departamento completo, en cualquier campus:
-     * un nombramiento de esos roles sin unidad o sobre el departamento o una unidad de la que cuelga, y sin
-     * carrera, con o sin campus (el coordinador, cuyo alcance es una carrera, nunca). Para lo que no es de un
-     * campus, como los docentes. El admin efectivo, siempre; el docente, nunca.
-     *
-     * @param  Role|list<Role>  $roles
-     */
-    public function coversDepartment(Role|array $roles, string $department): bool
-    {
-        if ($this->isAdmin()) {
-            return true;
-        }
-
-        return array_any($this->assignmentsOf($this->effectiveAmong($roles)), fn (AssignmentScope $scope): bool => ($scope->unitId === null || $this->orgTree->covers($scope->unitId, $department))
-            && $scope->careerId === null);
-    }
-
-    /**
-     * Si el usuario trabaja en el campus con un puesto efectivo, aunque sea sobre una parte de él. Con un
-     * alcance sin campus, también el del docente, trabaja en todos los activos.
-     */
-    public function canAccessCampus(Campus|string $campus): bool
-    {
-        $campusId = $campus instanceof Campus ? $campus->getKey() : $campus;
-
-        return $this->isAdmin() || array_any($this->assignmentsOf($this->effectiveRoles()), fn (AssignmentScope $scope): bool => $this->appliesIn($scope, $campusId));
-    }
-
-    /**
-     * Nombramientos vigentes, completos y sin campus o en campus activos, de sus puestos efectivos salvo admin o solo
-     * de `$role`, como modelos sin guardar armados desde el snapshot (rol, campus, unidad y carrera). Cada uno trae
-     * `unit_is_department` (si su unidad es un departamento académico).
-     *
-     * @return Collection<int, RoleAssignment>
-     */
-    public function scopes(?Role $role = null): Collection
-    {
-        $effective = $this->effectiveRoles();
-
-        return $this->allScopeModels()
-            ->filter(fn (RoleAssignment $scope): bool => in_array($scope->role, $effective, true) && ($role === null || $scope->role === $role))
-            ->values();
-    }
-
-    /**
      * Los nombramientos de todos sus puestos (o solo de `$role`), sin importar el perfil activo: lo que la credencial
-     * muestra por cada puesto. Mismo formato y filtros de vigencia que scopes(), que sí responde con el perfil activo;
-     * el admin tampoco sale, porque no es un alcance.
+     * muestra por cada puesto. Son los vigentes, completos y sin campus o en un campus activo, como modelos sin guardar
+     * armados desde el snapshot (rol, campus, unidad y carrera); el admin no sale, porque no es un alcance.
      *
      * @return Collection<int, RoleAssignment>
      */
@@ -518,7 +403,6 @@ final class Actor
             'campus_id' => $scope->campusId,
             'org_unit_id' => $scope->unitId,
             'career_id' => $scope->careerId,
-            'unit_is_department' => $scope->unitIsDepartment,
         ]));
     }
 
@@ -588,8 +472,7 @@ final class Actor
 
     /**
      * Los puestos con los que actúa: el perfil activo, con sesión; si no, todos los que tiene. En un contexto de
-     * asRole() sin ese puesto, ninguno. Todo permiso de gestión y toda la API de compatibilidad, salvo
-     * coversWithScope(), pasan por aquí.
+     * asRole() sin ese puesto, ninguno. Todo permiso de gestión y campuses() pasan por aquí.
      *
      * @return list<Role>
      */
@@ -605,30 +488,11 @@ final class Actor
     }
 
     /**
-     * Los de `$roles` que son efectivos, sin el docente (que no cubre por covers() ni por coversDepartment()).
-     *
-     * @param  Role|list<Role>  $roles
-     * @return list<Role>
+     * Si actúa como admin: con sesión, si el admin es su perfil activo; sin ella, si tiene el puesto.
      */
-    private function effectiveAmong(Role|array $roles): array
+    private function isAdmin(): bool
     {
-        $effective = $this->effectiveRoles();
-
-        return array_values(array_filter($this->withoutDocente($roles), fn (Role $role): bool => in_array($role, $effective, true)));
-    }
-
-    /**
-     * Si algún nombramiento de `$roles` cubre el objetivo: su unidad, su carrera y el campus donde vale.
-     *
-     * @param  list<Role>  $roles
-     */
-    private function coversBy(array $roles, Campus|string $campus, ?string $department, ?string $career): bool
-    {
-        $campusId = $campus instanceof Campus ? $campus->getKey() : $campus;
-
-        return array_any($this->assignmentsOf($roles), fn (AssignmentScope $scope): bool => $this->coversUnit($scope, $department)
-            && ($scope->careerId === null || $scope->careerId === $career)
-            && $this->appliesIn($scope, $campusId));
+        return in_array(Role::Admin, $this->effectiveRoles(), true);
     }
 
     /**
@@ -757,32 +621,6 @@ final class Actor
             : $query->where(fn (Builder $nested) => $mapping($nested, $values));
     }
 
-    /**
-     * Si el nombramiento cubre la unidad del objetivo: sin unidad, siempre; con departamento, si es su unidad o
-     * una de sus descendientes (OrgTree); sin departamento, solo si su unidad no es un departamento académico (ver
-     * el docblock de la clase).
-     */
-    private function coversUnit(AssignmentScope $scope, ?string $department): bool
-    {
-        if ($scope->unitId === null) {
-            return true;
-        }
-
-        return $department === null
-            ? ! $scope->unitIsDepartment
-            : $this->orgTree->covers($scope->unitId, $department);
-    }
-
-    /**
-     * Si el nombramiento vale en el campus: el suyo o, sin campus, cualquiera activo y no borrado.
-     */
-    private function appliesIn(AssignmentScope $scope, string $campusId): bool
-    {
-        return $scope->campusId === null
-            ? $this->isActiveCampus($campusId)
-            : $scope->campusId === $campusId;
-    }
-
     private function isActiveCampus(string $campusId): bool
     {
         return $this->activeCampuses()->contains(fn (Campus $campus): bool => $campus->getKey() === $campusId);
@@ -801,15 +639,6 @@ final class Actor
         }
 
         return $this->activeCampuses ??= Campus::query()->where('is_active', true)->orderBy('code')->get();
-    }
-
-    /**
-     * @param  Role|list<Role>  $roles
-     * @return list<Role>
-     */
-    private function withoutDocente(Role|array $roles): array
-    {
-        return array_values(array_filter(is_array($roles) ? $roles : [$roles], fn (Role $role): bool => $role !== Role::Docente));
     }
 
     private function resolvedUser(): ?User
