@@ -155,6 +155,21 @@ it('volver a sembrar no duplica nada', function () {
     expect(array_map(fn (string $table) => DB::table($table)->count(), $tables))->toBe($before);
 });
 
+it('volver a sembrar no vuelve a nombrar al jefe de proyecto docente que un admin terminó', function () {
+    seedDemoTeachers();
+    $head = DB::table('role_assignments')->where('role', 'jefe_proyecto_docente')->orderBy('id')->first();
+    DB::table('role_assignments')->where('id', $head->id)->update([
+        'valid_from' => today()->subMonth()->toDateString(),
+        'valid_to' => today()->subDay()->toDateString(),
+    ]);
+
+    seedDemoTeachers();
+
+    expect(DB::table('role_assignments')
+        ->where(['role' => 'jefe_proyecto_docente', 'user_id' => $head->user_id, 'org_unit_id' => $head->org_unit_id, 'campus_id' => $head->campus_id])
+        ->pluck('id')->all())->toBe([$head->id]);
+});
+
 it('los docentes de un campus son los mismos solo o junto con el otro', function () {
     DB::beginTransaction();
     seedDemoTeachers(['C2' => 20]);

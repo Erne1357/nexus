@@ -437,9 +437,11 @@ new #[Title('Ficha del docente')] class extends Component
 
     public function confirmEndHeadship(string $id, TeacherQuery $teachers, TeacherRecordQuery $records): void
     {
-        $this->authorize('end', new RoleAssignment);
+        $this->authorize('viewAny', RoleAssignment::class);
 
         $head = $records->findHeadship($teachers->findOrFail($this->teacherId), $id);
+        $this->authorize('end', $head);
+
         $this->endingHeadshipId = $head->id;
         $this->endLastDay = today()->toDateString();
         $this->resetValidation();
@@ -452,14 +454,16 @@ new #[Title('Ficha del docente')] class extends Component
      */
     public function endHeadship(TeacherQuery $teachers, TeacherRecordQuery $records, EndRoleAssignment $endRoleAssignment): void
     {
-        $this->authorize('end', new RoleAssignment);
+        $this->authorize('viewAny', RoleAssignment::class);
 
         if ($this->endingHeadshipId === null) {
             return;
         }
 
-        $data = $this->validate(['endLastDay' => ['required', 'date_format:Y-m-d']]);
         $head = $records->findHeadship($teachers->findOrFail($this->teacherId), $this->endingHeadshipId);
+        $this->authorize('end', $head);
+
+        $data = $this->validate(['endLastDay' => ['required', 'date_format:Y-m-d']]);
         $day = CarbonImmutable::parse($data['endLastDay']);
 
         try {

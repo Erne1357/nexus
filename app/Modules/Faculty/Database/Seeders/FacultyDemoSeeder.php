@@ -226,7 +226,9 @@ class FacultyDemoSeeder extends Seeder
     }
 
     /**
-     * Nombra jefe de proyecto docente a los docentes elegidos de cada departamento, salvo que ya lo sean.
+     * Nombra jefe de proyecto docente a los docentes elegidos de cada departamento, salvo que ya tengan cualquier
+     * nombramiento de ese puesto en ese departamento y campus, aunque ya haya terminado: volver a sembrar no repone una
+     * jefatura que un admin terminó.
      *
      * @param  array<string, array<string, list<string>>>  $heads  por campus y departamento, números de empleado
      * @param  array<string, string>  $campuses
@@ -244,7 +246,6 @@ class FacultyDemoSeeder extends Seeder
                 foreach (User::query()->whereIn('id', DB::table('teachers')->whereIn('employee_number', $numbers)->whereNotNull('user_id')->select('user_id'))->orderBy('username')->get() as $user) {
                     $already = $user->roleAssignments()
                         ->where(['role' => Role::JefeProyectoDocente, 'org_unit_id' => $departmentId, 'campus_id' => $campus->id])
-                        ->notEnded()
                         ->exists();
 
                     if (! $already) {
