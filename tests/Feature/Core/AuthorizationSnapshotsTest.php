@@ -16,8 +16,8 @@ use Illuminate\Support\Facades\DB;
 
 /*
 | Snapshot cacheado de los nombramientos (spec 9): llave `authz:user:v{FORMAT}:{id}:{authz_version}` (FORMAT es la
-| versión del formato, AuthorizationSnapshots::FORMAT), vence a la siguiente medianoche de Ciudad Juárez. Cada «petición» lee al usuario de la base, como el guard de sesión, para que su
-| authz_version sea la vigente; un usuario recién creado por la factory no la trae y no usa la caché.
+| versión del formato, AuthorizationSnapshots::FORMAT), vence a la siguiente medianoche de Ciudad Juárez. Cada
+| «petición» lee al usuario de la base, como el guard de sesión, para que su authz_version sea la vigente; un usuario recién creado por la factory no la trae y no usa la caché.
 | "Hoy" es el 3 de noviembre de 2026.
 */
 

@@ -44,3 +44,11 @@ it('unitKind: la Subdirección pide una subdirección; el jefe y el jefe de proy
 it('HEADSHIPS son el jefe de departamento y el jefe de proyecto docente', function () {
     expect(Role::HEADSHIPS)->toBe([Role::JefeDepartamento, Role::JefeProyectoDocente]);
 });
+
+it('cada puesto describe lo que hace en Nexus para Inicio', function () {
+    expect(Role::Docente->description())->toBe('Consultas tu propia carga: los grupos que impartes y sus horarios.');
+
+    foreach (Role::cases() as $role) {
+        expect($role->description())->not->toBe('');
+    }
+});

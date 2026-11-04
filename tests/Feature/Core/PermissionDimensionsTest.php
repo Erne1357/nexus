@@ -13,6 +13,7 @@ use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Students\Enums\StudentsPermission;
 use Illuminate\Support\Facades\Schema;
+use Tests\Fixtures\Authorization\FakePermission;
 
 /*
 | Spec §7.1 (Autorización por permisos): un nombramiento con una dimensión vacía cubre cualquier valor, así que un
@@ -24,6 +25,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Recurso (`modulo.recurso`) o clave completa de un permiso -> tabla que lo respalda.
+ *
+ * Nota: `academic.career.update` también escribe `career_campus` (careers.php, toggleOffering, vía SetCareerOffering),
+ * con el campus de Actor::activeCampus(). Hoy es solo del admin; el día que se conceda a otro puesto, esa oferta por
+ * campus necesita su propio permiso con la dimensión campus.
  *
  * @return array<string, string>
  */
@@ -113,6 +118,10 @@ function dimensionUncoveredGrants(PermissionRegistry $registry): array
     $found = [];
 
     foreach ($registry->permissions() as $permission) {
+        if ($permission->isPersonal()) {
+            continue;
+        }
+
         foreach ($registry->rolesGranting($permission) as $role) {
             if (in_array($role, dimensionWholeTecRoles(), true)) {
                 continue;
@@ -172,16 +181,22 @@ it('spec §7.1: ningún permiso del módulo sobre un recurso con campus_id omite
     expect($problems)->toBe([]);
 })->with($enums);
 
-it('cada excepción es solo del admin o solo de puestos de todo el Tec', function (string $key) {
+it('cada excepción es solo del admin (D5) o solo de puestos de todo el Tec (D6)', function (string $key, string $reason) {
     $registry = app(PermissionRegistry::class);
     $permission = collect($registry->permissions())->firstWhere('value', $key);
 
     expect($permission)->not->toBeNull();
 
-    foreach ($registry->rolesGranting($permission) as $role) {
-        expect($role->scopeColumns())->not->toContain('campus_id', "{$role->value} tiene {$key}, una excepción de todo el Tec");
+    if (str_starts_with($reason, 'D5')) {
+        expect($registry->rolesGranting($permission))->toBe([], "{$key} es solo del admin");
+
+        return;
     }
-})->with(array_keys(dimensionExceptions()));
+
+    foreach ($registry->rolesGranting($permission) as $role) {
+        expect(in_array($role, dimensionWholeTecRoles(), true))->toBeTrue("{$role->value} tiene {$key}, una excepción de todo el Tec");
+    }
+})->with(fn (): array => collect(dimensionExceptions())->map(fn (string $reason, string $key): array => [$key, $reason])->all());
 
 it('cada excepción sigue siendo necesaria', function (string $key) {
     $permission = collect(app(PermissionRegistry::class)->permissions())->firstWhere('value', $key);
@@ -202,4 +217,12 @@ it('la guardia de dimensiones detecta una concesión que dejaría una dimensión
     );
 
     expect(dimensionUncoveredGrants($registry))->toBe(['coordinador → core.org_unit.view']);
+});
+
+it('la guardia de dimensiones es solo de permisos de gestión: uno personal concedido al docente no se señala', function () {
+    $personal = PermissionRegistry::fromDeclarations([FakePermission::class], [Role::Docente->value => [FakePermission::ViewOwn]], []);
+    $management = PermissionRegistry::fromDeclarations([FakePermission::class], [Role::Docente->value => [FakePermission::ViewAny]], []);
+
+    expect(dimensionUncoveredGrants($personal))->toBe([])
+        ->and(dimensionUncoveredGrants($management))->toBe(['docente → fake.thing.view_any']);
 });
