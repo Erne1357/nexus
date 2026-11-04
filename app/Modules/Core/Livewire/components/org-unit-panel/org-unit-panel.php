@@ -1,16 +1,28 @@
 <?php
 
+use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Actions\CreateOrgUnit;
+use App\Modules\Core\Actions\EndRoleAssignment;
 use App\Modules\Core\Actions\MoveOrgUnit;
 use App\Modules\Core\Actions\SetOrgUnitActive;
 use App\Modules\Core\Actions\UpdateOrgUnit;
+use App\Modules\Core\Enums\AssignmentEnding;
 use App\Modules\Core\Enums\OrgUnitKind;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Livewire\Concerns\AppointsRoles;
 use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Queries\AssignmentLabels;
 use App\Modules\Core\Queries\OrgChartQuery;
 use App\Modules\Core\Queries\OrgUnitDetail;
+use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Core\Rules\OrgUnitRules;
+use App\Modules\Core\Rules\RoleAssignmentRules;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -27,9 +39,14 @@ use Mary\Traits\Toast;
  * cada escritura avisa al diagrama con `org-chart-changed` (y la unidad que queda elegida); mover a la misma madre o
  * guardar sin cambios solo dice «Sin cambios». Solo lo usa el admin con
  * ese perfil activo (OrgUnitPolicy): autoriza al pintar y en cada método, cada escritura con su ability.
+ *
+ * Los puestos que van sobre la unidad se nombran y terminan aquí (P1, confirmado el 3 de noviembre de 2026): «Nombrar»
+ * es el formulario de «Personas y puestos» (AppointsRoles) con la unidad fija y la persona por buscar, y «Terminar…» es
+ * el recuadro de la ficha de la persona. Los roles y sus permisos siguen en código.
  */
 new class extends Component
 {
+    use AppointsRoles;
     use Toast;
 
     /** La unidad del panel. El navegador no la puede cambiar. */
@@ -51,6 +68,19 @@ new class extends Component
     /** La unidad de la que depende, al dar de alta o mover. */
     public string $parent = '';
 
+    public bool $showAppoint = false;
+
+    /** Búsqueda de la persona a nombrar, por nombre o usuario. */
+    public string $findPerson = '';
+
+    public ?string $appointUserId = null;
+
+    /** El nombramiento que se está terminando. El navegador no lo puede cambiar. */
+    #[Locked]
+    public ?string $endingId = null;
+
+    public string $lastDay = '';
+
     public function mount(OrgChartQuery $query): void
     {
         $this->authorize('viewAny', OrgUnit::class);
@@ -61,7 +91,7 @@ new class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(OrgChartQuery $query, OrgUnitRules $rules): array
+    public function with(OrgChartQuery $query, OrgUnitRules $rules, PeopleQuery $people): array
     {
         $this->authorize('viewAny', OrgUnit::class);
 
@@ -82,6 +112,13 @@ new class extends Component
             },
             'kinds' => $this->kinds($detail->unit, $rules),
             'fixedKind' => $this->mode === 'edit' ? $rules->fixedKindReason($detail->unit) : null,
+            'offered' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], $detail->appointRoles),
+            'roleCase' => Role::tryFrom($this->role),
+            'options' => $this->showAppoint && Role::tryFrom($this->role) !== null
+                ? $people->scopeOptions(Role::from($this->role), Str::isUuid($this->campus) ? $this->campus : null)
+                : ['campuses' => [], 'units' => [], 'careers' => []],
+            'person' => $this->showAppoint && $this->appointUserId !== null ? $people->findOrFail($this->appointUserId) : null,
+            'found' => $this->showAppoint && $this->appointUserId === null ? $people->search($this->findPerson) : collect(),
         ];
     }
 
@@ -94,7 +131,11 @@ new class extends Component
 
         if ($property === 'showForm' && ! $this->showForm) {
             $this->closeForm();
+        } elseif ($property === 'showAppoint' && ! $this->showAppoint) {
+            $this->closeAppoint();
         }
+
+        $this->appointFieldUpdated($property, unitLocked: true);
     }
 
     #[On('org-unit-picked')]
@@ -104,6 +145,8 @@ new class extends Component
 
         $this->unitId = $query->findOrFail($id)->id;
         $this->closeForm();
+        $this->closeAppoint();
+        $this->reset('endingId');
     }
 
     /**
@@ -169,6 +212,139 @@ new class extends Component
 
         $this->resetValidation();
         $this->reset('showForm', 'mode', 'name', 'code', 'kind', 'parent');
+    }
+
+    /**
+     * Cierra «Nombrar» y olvida la persona, la búsqueda y los campos.
+     */
+    public function closeAppoint(): void
+    {
+        $this->authorize('viewAny', OrgUnit::class);
+
+        $this->resetValidation();
+        $this->reset('showAppoint', 'findPerson', 'appointUserId', 'role', 'campus', 'unit', 'career', 'from', 'to');
+    }
+
+    /**
+     * «Nombrar»: abre el formulario sobre la unidad del panel, con el puesto del titular elegido; si la unidad no admite
+     * puestos o está inactiva, lo rechaza con el motivo.
+     */
+    public function openAppoint(OrgChartQuery $query, RoleAssignmentRules $rules): void
+    {
+        $this->authorize('viewAny', OrgUnit::class);
+        $this->authorize('create', RoleAssignment::class);
+
+        $unit = $query->findOrFail((string) $this->unitId);
+
+        if (($blocker = $query->appointBlocker($unit)) !== null) {
+            $this->addError('unit', $blocker);
+
+            return;
+        }
+
+        $this->closeForm();
+        $this->reset('findPerson', 'appointUserId', 'endingId');
+        $this->resetAppointFields($rules->titularRoleOf($unit) ?? $rules->rolesForUnit($unit)[0], $unit);
+        $this->showAppoint = true;
+    }
+
+    public function choosePerson(string $id, PeopleQuery $people): void
+    {
+        $this->authorize('viewAny', OrgUnit::class);
+        $this->authorize('create', RoleAssignment::class);
+
+        $this->appointUserId = $people->findOrFail($id)->id;
+        $this->findPerson = '';
+        $this->resetValidation('appointUserId');
+    }
+
+    public function appoint(AppointRole $appointRole, OrgChartQuery $query, PeopleQuery $people, AssignmentLabels $labels, RoleAssignmentRules $rules): void
+    {
+        $this->authorize('viewAny', OrgUnit::class);
+        $this->authorize('create', RoleAssignment::class);
+
+        $unit = $query->findOrFail((string) $this->unitId);
+
+        if ($this->appointUserId === null) {
+            $this->addError('appointUserId', 'Elige a la persona.');
+
+            return;
+        }
+
+        $person = $people->findOrFail($this->appointUserId);
+        $offered = array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], $rules->rolesForUnit($unit));
+
+        $assignment = $this->appointPerson($appointRole, $people, $person, $offered, $unit);
+
+        $this->success('Nombramiento creado', e($labels->one($assignment)->summary));
+        $this->closeAppoint();
+        $this->dispatch('org-chart-changed', id: $unit->id);
+    }
+
+    /**
+     * Abre el recuadro «Terminar…» en el renglón, con el primer último día posible (AZ-S12).
+     */
+    public function confirmEnd(string $id, OrgChartQuery $query, RoleAssignmentRules $rules): void
+    {
+        $this->authorize('viewAny', OrgUnit::class);
+
+        $assignment = $query->assignmentOf($query->findOrFail((string) $this->unitId), $id);
+        $this->authorize('end', $assignment);
+
+        $this->resetValidation();
+        $this->endingId = $assignment->id;
+        $this->lastDay = ($rules->earliestLastDay($assignment) ?? today()->toImmutable())->toDateString();
+    }
+
+    public function cancelEnd(): void
+    {
+        $this->authorize('viewAny', OrgUnit::class);
+
+        $this->resetValidation();
+        $this->endingId = null;
+    }
+
+    public function end(EndRoleAssignment $endRoleAssignment, OrgChartQuery $query, RoleAssignmentRules $rules): void
+    {
+        $this->authorize('viewAny', OrgUnit::class);
+
+        if ($this->endingId === null) {
+            return;
+        }
+
+        $unit = $query->findOrFail((string) $this->unitId);
+        $assignment = $query->assignmentOf($unit, $this->endingId);
+        $this->authorize('end', $assignment);
+
+        $this->validate(['lastDay' => ['required', 'date']], [
+            'lastDay.required' => 'Escribe la fecha de fin.',
+            'lastDay.date' => 'La fecha de fin no es válida.',
+        ]);
+
+        if (($blocker = $rules->endBlocker($assignment)) !== null) {
+            throw ValidationException::withMessages(['lastDay' => $blocker]);
+        }
+
+        $day = CarbonImmutable::parse($this->lastDay);
+
+        try {
+            $ending = $endRoleAssignment->handle($assignment, $day);
+        } catch (ValidationException $exception) {
+            if (isset($exception->errors()['assignment'])) {
+                throw ValidationException::withMessages(['lastDay' => $exception->errors()['assignment'][0]]);
+            }
+
+            throw $exception;
+        }
+
+        match ($ending) {
+            AssignmentEnding::Ended => $this->success('Nombramiento terminado', e('Último día: '.$day->format('d/m/Y'))),
+            AssignmentEnding::Removed => $this->success('Nombramiento quitado', 'Todavía no empezaba.'),
+            AssignmentEnding::Unchanged => $this->info('Sin cambios', e('Ese nombramiento ya termina el '.$assignment->valid_to->format('d/m/Y').'.')),
+        };
+
+        $this->endingId = null;
+        $this->dispatch('org-chart-changed', id: $unit->id);
     }
 
     /**
@@ -320,7 +496,7 @@ new class extends Component
     private function openForm(string $mode): void
     {
         $this->resetValidation();
-        $this->reset('name', 'code', 'kind', 'parent');
+        $this->reset('name', 'code', 'kind', 'parent', 'showAppoint', 'endingId');
         $this->mode = $mode;
         $this->showForm = true;
     }

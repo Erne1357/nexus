@@ -125,6 +125,20 @@ final class RoleAssignmentRules
     }
 
     /**
+     * Los puestos que se nombran sobre esa unidad desde el Organigrama: los que la admiten (`allowsUnit()`) y no se
+     * manejan en otra parte (AZ-S11), en el orden del enum.
+     *
+     * @return list<Role>
+     */
+    public function rolesForUnit(OrgUnit $unit): array
+    {
+        return array_values(array_filter(
+            Role::cases(),
+            fn (Role $role): bool => $this->allowsUnit($role, $unit) && $this->managedElsewhere($role) === null,
+        ));
+    }
+
+    /**
      * La llave del candado consultivo que serializa las escrituras sobre los puestos de Administración (AZ-S12):
      * EndRoleAssignment lo toma antes del candado del renglón y SyncTeacherAccess (la baja del docente) antes del
      * candado del usuario, así dos escrituras simultáneas se esperan y la segunda revisa la cobertura con lo que la

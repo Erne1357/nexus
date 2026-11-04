@@ -57,29 +57,53 @@
                 @endif
             </section>
 
-            @if ($detail->assignments !== [])
-                <section aria-labelledby="unit-assignments-title">
-                    <h3 id="unit-assignments-title" class="{{ $label }} mb-2 flex items-center gap-2">
+            <section aria-labelledby="unit-assignments-title">
+                <div class="mb-2 flex items-center justify-between gap-2">
+                    <h3 id="unit-assignments-title" class="{{ $label }} flex items-center gap-2">
                         Puestos vigentes aquí
                         <span class="rounded bg-base-200 px-1.5 font-mono tracking-normal">{{ count($detail->assignments) }}</span>
                     </h3>
+                    <x-button label="Nombrar" icon="o-plus" class="btn-outline btn-sm max-md:h-11" wire:click="openAppoint" spinner="openAppoint" :disabled="$detail->appointBlocker !== null" data-testid="unit-appoint" />
+                </div>
 
+                @if ($detail->appointBlocker !== null)
+                    <p class="-mt-1 mb-2 text-sm text-neutral" data-testid="unit-appoint-blocker">{{ $detail->appointBlocker }}</p>
+                @endif
+
+                @if ($detail->assignments === [])
+                    <p class="text-sm text-neutral" data-testid="unit-assignments-empty">Nadie tiene un puesto vigente aquí.</p>
+                @else
                     <ul class="divide-y divide-base-300 rounded-box border border-base-300" data-testid="unit-assignments">
                         @foreach ($detail->assignments as $row)
-                            <li class="flex items-start justify-between gap-3 px-3 py-2.5" wire:key="unit-assignment-{{ $loop->index }}-{{ $row['userId'] }}">
-                                <div class="min-w-0">
-                                    <a href="{{ route('core.people.show', $row['userId']) }}" wire:navigate class="font-semibold hover:underline">{{ $row['name'] }}</a>
-                                    <p class="text-sm text-neutral">{{ $row['summary'] }}</p>
+                            <li class="px-3 py-2.5" wire:key="unit-assignment-{{ $row['id'] }}" data-testid="unit-assignment-{{ $row['id'] }}">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <a href="{{ route('core.people.show', $row['userId']) }}" wire:navigate class="font-semibold hover:underline">{{ $row['name'] }}</a>
+                                        <p class="text-sm text-neutral">{{ $row['summary'] }}</p>
+                                    </div>
+                                    <div class="grid shrink-0 justify-items-end gap-1">
+                                        <x-core::status-badge :tone="$row['status']->tone()" :label="$row['status']->label()" />
+                                        <span class="font-mono text-sm tabular-nums text-neutral">{{ $row['from']->format('d/m/Y') }}</span>
+                                    </div>
                                 </div>
-                                <div class="grid shrink-0 justify-items-end gap-1">
-                                    <x-core::status-badge :tone="$row['status']->tone()" :label="$row['status']->label()" />
-                                    <span class="font-mono text-sm tabular-nums text-neutral">{{ $row['from']->format('d/m/Y') }}</span>
-                                </div>
+
+                                @if ($endingId === $row['id'])
+                                    @include('core::people.end-box', ['status' => $row['status'], 'earliestLastDay' => $row['earliestLastDay']])
+                                @else
+                                    <div class="mt-2 flex flex-col items-start gap-1">
+                                        @if ($row['endBlocker'] === null)
+                                            <x-button label="Terminar…" wire:click="confirmEnd('{{ $row['id'] }}')" class="btn-outline btn-sm max-md:h-11" data-testid="end-{{ $row['id'] }}" />
+                                        @else
+                                            <x-button label="Terminar…" class="btn-outline btn-sm max-md:h-11" disabled data-testid="end-{{ $row['id'] }}" />
+                                            <p class="text-sm text-neutral" data-testid="end-blocker">{{ $row['endBlocker'] }}</p>
+                                        @endif
+                                    </div>
+                                @endif
                             </li>
                         @endforeach
                     </ul>
-                </section>
-            @endif
+                @endif
+            </section>
 
             <section aria-labelledby="unit-people-title">
                 <h3 id="unit-people-title" class="{{ $label }} mb-1">Personas</h3>
@@ -153,7 +177,7 @@
                     </ul>
                 @endif
 
-                @if ($errors->has('unit') && ! $showForm)
+                @if ($errors->has('unit') && ! $showForm && ! $showAppoint)
                     <x-alert icon="o-x-circle" class="alert-error alert-soft mt-3" data-testid="unit-error">
                         @foreach ($errors->get('unit') as $message)
                             <span class="block">{{ $message }}</span>
@@ -165,4 +189,5 @@
     </aside>
 
     @include('core::org-chart.unit-form')
+    @include('core::org-chart.appoint-form')
 </div>

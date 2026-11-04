@@ -126,6 +126,7 @@ final class OrgChartQuery
         $assignments = RoleAssignment::query()->notEnded()->where('org_unit_id', $unit->id)->with('user:id,name')->orderBy('valid_from')->orderBy('id')->get();
         $labels = $this->labels->describe($assignments);
         $today = today()->toImmutable();
+        $appointRoles = $this->rules->rolesForUnit($unit);
 
         return new OrgUnitDetail(
             unit: $unit,
@@ -133,11 +134,15 @@ final class OrgChartQuery
             titular: $titular,
             titularNote: $titularNote,
             assignments: $assignments->map(fn (RoleAssignment $assignment): array => [
+                'id' => $assignment->id,
                 'name' => $assignment->user->name,
                 'userId' => $assignment->user_id,
                 'summary' => $labels[$assignment->id]->summary,
                 'status' => AssignmentStatus::of($assignment, $today),
                 'from' => $assignment->valid_from,
+                'to' => $assignment->valid_to,
+                'endBlocker' => $this->rules->endBlocker($assignment),
+                'earliestLastDay' => $this->rules->earliestLastDay($assignment),
             ])->all(),
             people: $this->peopleCounts($units, $childrenOf, $this->currentHolders())[$unit->id] ?? 0,
             children: $childrenOf[$unit->id] ?? [],
@@ -146,7 +151,32 @@ final class OrgChartQuery
             deactivationBlockers: $this->unitRules->deactivationBlockers($unit),
             activationBlocker: $this->unitRules->activationBlocker($unit),
             childBlocker: $this->unitRules->parentProblem($unit),
+            appointRoles: $appointRoles,
+            appointBlocker: $this->appointBlocker($unit),
         );
+    }
+
+    /**
+     * Por qué no se nombra ningún puesto sobre la unidad: ninguno la admite o está inactiva; nulo si sí.
+     */
+    public function appointBlocker(OrgUnit $unit): ?string
+    {
+        return match (true) {
+            $this->rules->rolesForUnit($unit) === [] => 'Ningún puesto se nombra sobre esta unidad.',
+            ! $unit->is_active => "{$unit->name} está inactiva.",
+            default => null,
+        };
+    }
+
+    /**
+     * Un nombramiento sin terminar de esa unidad, para terminarlo; el de otra unidad, uno ya terminado o un id que no
+     * es uuid no existe.
+     *
+     * @throws ModelNotFoundException<RoleAssignment>
+     */
+    public function assignmentOf(OrgUnit $unit, string $id): RoleAssignment
+    {
+        return KeyLookup::findOrFail(RoleAssignment::query()->notEnded()->where('org_unit_id', $unit->id), $id);
     }
 
     /**
@@ -355,7 +385,7 @@ final class OrgChartQuery
 
         if ($assignment === null) {
             return [null, $role === Role::JefeDepartamento
-                ? 'Sin jefe vigente. El jefe se nombra en la ficha del docente.'
+                ? 'Sin jefe vigente. El jefe se nombra en la ficha del docente, en «Personas y puestos» o aquí.'
                 : 'Sin titular vigente.'];
         }
 

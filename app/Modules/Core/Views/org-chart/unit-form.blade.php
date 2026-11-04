@@ -17,9 +17,11 @@
 
 <x-modal wire:model="showForm" :title="$titles[$mode] ?? ''" :subtitle="$subtitles[$mode] ?? ''" box-class="max-w-xl" separator>
     <x-form wire:submit="{{ $mode === 'move' ? 'move' : 'save' }}" no-separator>
-        @error('unit')
-            <x-alert :title="$message" icon="o-x-circle" class="alert-error alert-soft" />
-        @enderror
+        @if ($showForm)
+            @error('unit')
+                <x-alert :title="$message" icon="o-x-circle" class="alert-error alert-soft" />
+            @enderror
+        @endif
 
         @if (in_array($mode, ['create', 'edit'], true))
             <x-input label="Nombre" name="name" wire:model="name" />

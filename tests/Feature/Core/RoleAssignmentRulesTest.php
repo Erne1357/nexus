@@ -144,3 +144,17 @@ describe('deactivationGap (AZ-S12, P3)', function () {
         'dos programados: no cuenta el otro del mismo usuario' => [[['2026-12-01'], ['2027-02-01']], [['2026-08-01', '2026-11-30']], '2026-12-01'],
     ]);
 });
+
+it('rolesForUnit: un departamento académico admite jefe y jefe de proyecto docente; Subdirección Académica, la Subdirección; las demás unidades, ninguno', function () {
+    $rules = app(RoleAssignmentRules::class);
+    $academic = OrgUnit::find(app(OrgTree::class)->idOf(OrgTree::ACADEMIC));
+    $planning = OrgUnit::factory()->create(['kind' => OrgUnitKind::Subdireccion]);
+    $department = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico]);
+    $office = OrgUnit::factory()->create(['kind' => OrgUnitKind::Oficina]);
+
+    expect($rules->rolesForUnit($department))->toBe([Role::JefeDepartamento, Role::JefeProyectoDocente])
+        ->and($rules->rolesForUnit($academic))->toBe([Role::Subdireccion])
+        ->and($rules->rolesForUnit($planning))->toBe([])
+        ->and($rules->rolesForUnit($office))->toBe([])
+        ->and($rules->rolesForUnit(OrgUnit::where('code', 'DIRECCION')->sole()))->toBe([]);
+});
