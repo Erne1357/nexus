@@ -199,7 +199,7 @@ describe('listar y terminar', function () {
         RoleAssignment::factory()->create(['user_id' => $user->id, 'role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
 
         headshipRecord($this->admin, $this->ana)
-            ->assertSeeInOrder(['Jefaturas', 'Jefe de proyecto docente', 'Sistemas y Computación', 'Campus II', 'Vigente', 'Jefe de departamento', 'Ingeniería Industrial', 'Todo el Tec', 'Terminada'])
+            ->assertSeeInOrder(['Jefaturas', 'Jefe de proyecto docente', 'Sistemas y Computación', 'Campus II', 'Vigente', 'Jefe de departamento', 'Ingeniería Industrial', 'Todo el Tec', 'Terminado'])
             ->assertViewHas('headships', fn ($rows) => $rows->pluck('assignment.id')->all() === [$now->id, $elsewhere->id, $past->id]);
     });
 
@@ -285,7 +285,7 @@ describe('alcance', function () {
         'Subdirección' => [Role::Subdireccion],
     ]);
 
-    it('la misma persona, admin y coordinadora, con Coordinación activa no ve la sección', function () {
+    it('la misma persona, admin y coordinadora, con Coordinación activa ve la ficha como admin pero recibe 403 con Coordinación activa', function () {
         $both = User::factory()->admin()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
 
         actingAsRole($both, Role::Admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk()->assertSee('Nombrar jefatura');

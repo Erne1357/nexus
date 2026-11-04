@@ -352,7 +352,7 @@
                             <span class="max-md:col-span-2">
                                 <x-core::status-badge
                                     :tone="$row['status']->tone()->value"
-                                    :label="['vigente' => 'Vigente', 'programado' => 'Por empezar', 'terminado' => 'Terminada'][$row['status']->value]"
+                                    :label="$row['status']->label()"
                                 />
                             </span>
                             <span class="flex justify-end max-md:col-span-2 max-md:justify-start max-md:-ms-3">
