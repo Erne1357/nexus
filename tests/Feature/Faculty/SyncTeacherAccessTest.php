@@ -40,7 +40,7 @@ beforeEach(function () {
 /**
  * Nombra a `$user` jefatura del departamento con AppointRole, del día `$from` (y hasta `$to`, si lo hay).
  */
-function appointHead(User $user, Department $department, Role $role, string $from, ?Campus $campus = null, ?string $to = null): RoleAssignment
+function appointHeadship(User $user, Department $department, Role $role, string $from, ?Campus $campus = null, ?string $to = null): RoleAssignment
 {
     return app(AppointRole::class)->handle(
         $user,
@@ -289,7 +289,7 @@ it('dar de baja desactiva su usuario y termina su jefatura vigente', function ()
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
     syncAccess($teacher);
     $user = $teacher->fresh()->user;
-    $head = appointHead($user, $this->sis, Role::JefeDepartamento, '2026-10-03');
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, '2026-10-03');
     $past = RoleAssignment::factory()->for($user)->create([
         'role' => Role::JefeProyectoDocente,
         'org_unit_id' => $this->ind->id,
@@ -319,7 +319,7 @@ it('la baja quita la jefatura que empieza hoy', function () {
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
     syncAccess($teacher);
     $user = $teacher->fresh()->user;
-    $head = appointHead($user, $this->sis, Role::JefeDepartamento, '2026-11-03');
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, '2026-11-03');
 
     $teacher->update(['is_active' => false]);
 
@@ -354,7 +354,7 @@ it('la baja de un docente sin departamento desactiva su usuario', function () {
 it('un docente que también es admin queda activo al darlo de baja, pero su jefatura termina', function () {
     $user = User::factory()->admin()->create(['username' => '1234567']);
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567', 'user_id' => $user->id]);
-    $head = appointHead($user, $this->sis, Role::JefeDepartamento, today()->subMonth()->toDateString());
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, today()->subMonth()->toDateString());
 
     $teacher->update(['is_active' => false]);
 
@@ -528,7 +528,7 @@ it('la baja borra también la jefatura que todavía no empieza, y al reactivarlo
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
     syncAccess($teacher);
     $user = $teacher->fresh()->user;
-    $head = appointHead($user, $this->sis, Role::JefeDepartamento, today()->addDays(5)->toDateString());
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, today()->addDays(5)->toDateString());
 
     $teacher->update(['is_active' => false]);
 
