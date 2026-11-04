@@ -65,7 +65,8 @@ it('muestra la ficha: cifras, línea de vigencias, nombramientos y bitácora', f
         ->assertSeeInOrder(['Puestos vigentes', 'Anteriores', 'Con nombramiento desde', '17/08/2015', 'Próximo vencimiento', '31/07/2027', 'Coordinador de carrera · ISC · C2'])
         ->assertSeeInOrder(['Línea de vigencias', 'Hoy', 'Nombramientos', 'Coordinador de carrera', 'Vigente', 'Faltan', '270', 'días', 'Docente', 'Sin alcance', 'Jefe de proyecto docente', 'Terminado'])
         ->assertSeeInOrder(['Quién ocupa un puesto?', 'Bitácora de sus puestos', 'Nombró a Rosa Ruiz Almanza como Coordinador de carrera · ISC · C2', 'por Ada Admin'])
-        ->assertSeeHtml('data-testid="vigencias"');
+        ->assertSeeHtml('data-testid="vigencias"')
+        ->assertSeeHtml('data-testid="vigencias-hoy"');
 });
 
 it('una persona sin nombramientos muestra sus estados vacíos', function () {
@@ -216,12 +217,43 @@ it('AZ-S12: no puede terminar al último admin vigente (botón deshabilitado con
 
     personPage($this->admin)
         ->assertDontSeeHtml('wire:click="confirmEnd(\''.$own->id.'\')"')
-        ->assertSee('Es el único nombramiento de Administración vigente')
+        ->assertSee('Es el único nombramiento de Administración que seguiría vigente')
         ->call('confirmEnd', $own->id)
         ->call('end')
         ->assertHasErrors(['lastDay']);
 
     expect($own->fresh()->valid_to)->toBeNull();
+});
+
+it('AZ-S12: «Terminar…» queda deshabilitado si dejaría días sin admin', function () {
+    $own = $this->admin->roleAssignments()->sole();
+    assign($this->beto, Role::Admin, ['valid_to' => '2026-11-30']);
+
+    personPage($this->admin)
+        ->assertDontSeeHtml('wire:click="confirmEnd(\''.$own->id.'\')"')
+        ->assertSee('El 01/12/2026 nadie tendría un nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.')
+        ->call('confirmEnd', $own->id)
+        ->set('lastDay', '2026-11-15')
+        ->call('end')
+        ->assertHasErrors(['lastDay']);
+
+    expect($own->fresh()->valid_to)->toBeNull();
+});
+
+it('quien termina hoy su propio puesto de Administración vuelve a Inicio con un aviso, no a un 403', function () {
+    $own = $this->admin->roleAssignments()->sole();
+    $own->update(['valid_from' => '2026-08-01']);
+    assign($this->beto, Role::Admin);
+
+    $page = personPage($this->admin)
+        ->call('confirmEnd', $own->id)
+        ->set('lastDay', '2026-11-02')
+        ->call('end')
+        ->assertHasNoErrors()
+        ->assertRedirect(route('home'));
+
+    expect(lastToastOf($page))->title->toBe('Terminaste tu puesto de Administración.')
+        ->and($own->fresh()->valid_to->toDateString())->toBe('2026-11-02');
 });
 
 it('termina con la fecha elegida y avisa según el resultado', function () {

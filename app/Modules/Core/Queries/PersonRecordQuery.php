@@ -3,7 +3,6 @@
 namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Enums\AssignmentStatus;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\RoleAssignmentRules;
@@ -18,8 +17,9 @@ use Spatie\Activitylog\Models\Activity;
  * La ficha de una persona en «Personas y puestos» (PersonRecord). Los nombramientos salen ordenados (vigentes por
  * inicio descendente, programados por inicio ascendente y terminados por fin descendente) y cada uno con su estado
  * de hoy, los días que le faltan, quién lo terminó (la entrada de bitácora con su `role_assignment_id`) y, si aquí no
- * se puede terminar, por qué: el docente y las jefaturas se manejan en la ficha del docente (AZ-S11) y el último
- * nombramiento de Administración vigente tampoco (AZ-S12: el admin puede terminar el suyo si queda otro).
+ * se puede terminar, por qué: el docente y las jefaturas se manejan en la ficha del docente (AZ-S11), y uno de
+ * Administración no se termina si quedaría algún día sin admin vigente (AZ-S12: el admin puede terminar el suyo si
+ * otro cubre los días que siguen).
  *
  * La bitácora trae solo las entradas que llevan `role_assignment_id` o `department_head_id`, así que el cambio de
  * perfil no entra.
@@ -31,7 +31,7 @@ final class PersonRecordQuery
         private readonly RoleAssignmentRules $rules,
     ) {}
 
-    public function for(User $person, User $viewer): PersonRecord
+    public function for(User $person): PersonRecord
     {
         $today = today()->toImmutable();
         $assignments = $person->roleAssignments()->get();
@@ -39,7 +39,7 @@ final class PersonRecordQuery
         $entries = $this->entries($person);
         $endings = $this->endings($entries);
 
-        $rows = $assignments->map(function (RoleAssignment $assignment) use ($today, $labels, $endings, $viewer): array {
+        $rows = $assignments->map(function (RoleAssignment $assignment) use ($today, $labels, $endings): array {
             $status = AssignmentStatus::of($assignment, $today);
 
             return [
@@ -50,7 +50,7 @@ final class PersonRecordQuery
                     ? (int) $today->diffInDays($assignment->valid_to->toImmutable()->startOfDay())
                     : null,
                 'endedBy' => $status === AssignmentStatus::Ended ? ($endings[$assignment->getKey()] ?? null) : null,
-                'endBlocker' => $this->endBlocker($assignment, $viewer),
+                'endBlocker' => $this->endBlocker($assignment),
             ];
         })->all();
 
@@ -96,32 +96,13 @@ final class PersonRecordQuery
     }
 
     /**
-     * Por qué el nombramiento no se termina desde esta pantalla; nulo si sí.
+     * Por qué el nombramiento no se termina desde esta pantalla; nulo si sí. Uno de Administración no se termina si,
+     * terminándolo hoy, quedaría algún día sin admin vigente (RoleAssignmentRules::adminGap(), la misma regla que
+     * EndRoleAssignment).
      */
-    public function endBlocker(RoleAssignment $assignment, ?User $viewer = null): ?string
+    public function endBlocker(RoleAssignment $assignment): ?string
     {
-        if (($elsewhere = $this->rules->managedElsewhere($assignment->role)) !== null) {
-            return $elsewhere;
-        }
-
-        if ($assignment->role === Role::Admin && ! $this->otherAdminRemains($assignment)) {
-            return 'Es el único nombramiento de Administración vigente; nombra a otra persona antes de terminarlo.';
-        }
-
-        return null;
-    }
-
-    /**
-     * Si queda otro nombramiento `admin` vigente hoy de un usuario activo (AZ-S12); el último no se termina.
-     */
-    private function otherAdminRemains(RoleAssignment $assignment): bool
-    {
-        return RoleAssignment::query()
-            ->current()
-            ->where('role', Role::Admin)
-            ->whereKeyNot($assignment->getKey())
-            ->whereHas('user', fn (Builder $query) => $query->where('is_active', true))
-            ->exists();
+        return $this->rules->managedElsewhere($assignment->role) ?? $this->rules->adminGap($assignment, today()->toImmutable());
     }
 
     /**

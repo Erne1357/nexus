@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Enums\AssignmentEnding;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\RoleAssignmentEnded;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Queries\AssignmentLabels;
@@ -20,9 +21,12 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * es un error. Nunca alarga: uno que ya termina ese día o antes se queda como está, sin bitácora ni aviso.
  *
  * Relee el nombramiento con `lockForUpdate`; si otra sesión lo borró, es un error de validación. Antes de escribir
- * pide a RoleAssignmentRules que siga habiendo otro administrador (AZ-S12): el admin puede terminar su propio puesto
- * si queda otro vigente, y el último nunca se termina. Deja la bitácora sobre el usuario con `role_assignment_id`,
- * recarga ScopedContext y avisa con RoleAssignmentEnded después del commit.
+ * pide a RoleAssignmentRules::adminGap() que ningún día se quede sin admin vigente (AZ-S12): el admin puede terminar
+ * su propio puesto si otro cubre los días que siguen, y el último nunca se termina. En un puesto de Administración toma
+ * primero el candado consultivo RoleAssignmentRules::ADMIN_SEATS_LOCK, antes que el del renglón: dos terminaciones
+ * simultáneas se esperan en lugar de trabarse, y la segunda revisa la cobertura con lo que la primera confirmó. Deja la
+ * bitácora sobre el usuario con `role_assignment_id`, recarga ScopedContext y avisa con RoleAssignmentEnded después
+ * del commit.
  */
 final class EndRoleAssignment
 {
@@ -39,6 +43,10 @@ final class EndRoleAssignment
         $last = $lastDay->toDateString();
 
         return DB::transaction(function () use ($assignment, $lastDay, $last): AssignmentEnding {
+            if ($assignment->role === Role::Admin) {
+                DB::select('select pg_advisory_xact_lock(hashtext(?))', [RoleAssignmentRules::ADMIN_SEATS_LOCK]);
+            }
+
             $locked = RoleAssignment::query()->whereKey($assignment->getKey())->lockForUpdate()->first();
 
             if ($locked === null) {
@@ -64,7 +72,9 @@ final class EndRoleAssignment
                 $removing = true;
             }
 
-            $this->rules->ensureAdminRemains($locked, $lastDay);
+            if (($gap = $this->rules->adminGap($locked, $lastDay)) !== null) {
+                throw ValidationException::withMessages(['lastDay' => $gap]);
+            }
 
             $locked->load('user');
             $user = $locked->user;
