@@ -35,7 +35,6 @@ final class RoleAssignmentRules
 {
     public function __construct(
         private readonly ScopeLabels $labels,
-        private readonly OrgTree $tree,
         private readonly AssignmentLabels $assignmentLabels,
     ) {}
 
@@ -96,7 +95,9 @@ final class RoleAssignmentRules
 
     /**
      * Si el puesto se nombra sobre esa unidad: el tipo es `Role::unitKind()` y, para la Subdirección, además es
-     * Subdirección Académica (AZ-S10).
+     * Subdirección Académica (AZ-S10), sin borrar. Se decide con la unidad, sin consultar la base: la clave de una
+     * unidad estructural es única aun entre las borradas y la de Subdirección Académica no cambia (AZ-S13), así que es
+     * la misma que daría `OrgTree::idOf(OrgTree::ACADEMIC)`, y el Organigrama la pregunta por cada caja.
      */
     public function allowsUnit(Role $role, OrgUnit $unit): bool
     {
@@ -104,7 +105,7 @@ final class RoleAssignmentRules
             return false;
         }
 
-        return $role !== Role::Subdireccion || $unit->getKey() === $this->tree->idOf(OrgTree::ACADEMIC);
+        return $role !== Role::Subdireccion || ($unit->code === OrgTree::ACADEMIC && ! $unit->trashed());
     }
 
     /**

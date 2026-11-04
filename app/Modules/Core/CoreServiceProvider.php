@@ -16,11 +16,14 @@ use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\ScopedContext;
+use App\Modules\Core\Queries\UnitAdscriptions;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
@@ -59,6 +62,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Sin estado: nombra lo que Core no conoce. Un módulo con esos datos lo reemplaza en su register().
         $this->app->bindIf(ScopeLabels::class, DefaultScopeLabels::class);
 
+        // Sin estado: quién está adscrito a cada unidad del Organigrama. Faculty lo reemplaza con sus adscripciones.
+        $this->app->bindIf(UnitAdscriptions::class, NoUnitAdscriptions::class);
+
         // Singleton porque es inmutable: el catálogo de permisos y las concesiones por puesto de todos
         // los módulos, sin nada del usuario ni de la petición.
         $this->app->singleton(PermissionRegistry::class, fn (Application $app): PermissionRegistry => PermissionRegistry::fromModules(
@@ -90,6 +96,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 ability: 'viewAny', arguments: [Campus::class]),
             new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Term::class], childRoutes: ['core.terms.show']),
+            new NavigationItem('Organigrama', 'core.org-chart', 'o-rectangle-group', NavigationArea::Academico,
+                ability: 'viewAny', arguments: [OrgUnit::class]),
             new NavigationItem('Personas y puestos', 'core.people', 'o-users', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [RoleAssignment::class], childRoutes: ['core.people.show']),
         ];
