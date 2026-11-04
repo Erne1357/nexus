@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\Core\Actions\MarkAllNotificationsRead;
 use App\Modules\Core\Actions\OpenNotification;
 use App\Modules\Core\Authorization\Actor;
@@ -56,7 +57,7 @@ final class TestStrictJefeNotice extends NexusNotification
 
     public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
     {
-        return $context->has(Role::JefeDepartamento) ? parent::unavailableReason($context, $message) : 'Ese aviso ya no es de tu puesto.';
+        return $context->allowsAny(CatalogValidationPermission::ReviewCorrect) ? parent::unavailableReason($context, $message) : 'Ese aviso ya no es de tu puesto.';
     }
 
     public function message(object $notifiable): NotificationMessage

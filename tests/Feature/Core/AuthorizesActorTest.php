@@ -14,6 +14,8 @@ use Tests\Fixtures\Modules\DemoCatalog\Models\Item;
 */
 
 beforeEach(function () {
+    registerDemoCatalog();
+
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
 

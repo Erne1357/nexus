@@ -6,7 +6,6 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Livewire\Livewire;
-use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 
 /*
 | Layout de la aplicación (resources/views/layouts/app.blade.php, DESIGN.md "Estructura"): la banda
@@ -170,7 +169,7 @@ it('deja listos los toasts de MaryUI para cualquier página', function () {
 });
 
 it('un invitado no ve el layout aunque la página no pida sesión', function () {
-    $this->app->register(DemoCatalogServiceProvider::class);
+    registerDemoCatalog();
 
     $this->get('/demo-catalog/greeting')
         ->assertOk()

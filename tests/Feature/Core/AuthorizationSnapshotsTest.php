@@ -1,9 +1,11 @@
 <?php
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AssignmentScope;
 use App\Modules\Core\Authorization\AuthorizationSnapshot;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
@@ -76,12 +78,12 @@ it('guarda los nombramientos vigentes y completos, por puesto, y vuelve igual de
 it('el snapshot se lee de la caché en la segunda petición', function () {
     $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
 
-    expect(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue()
+    expect(nextRequestOf($user)->heldRoles())->toContain(Role::Coordinador)
         ->and(Cache::has(snapshotKeyOf($user)))->toBeTrue();
 
     DB::enableQueryLog();
 
-    expect(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue()
+    expect(nextRequestOf($user)->heldRoles())->toContain(Role::Coordinador)
         ->and(roleAssignmentQueries())->toBe([]);
 });
 
@@ -149,7 +151,7 @@ it('una transacción revertida no deja un snapshot con lo que se deshizo', funct
         DB::transaction(function () use ($user): void {
             RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
 
-            expect(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue();
+            expect(nextRequestOf($user)->heldRoles())->toContain(Role::Coordinador);
 
             throw new RuntimeException('se revierte');
         });
@@ -162,8 +164,8 @@ it('una transacción revertida no deja un snapshot con lo que se deshizo', funct
     RoleAssignment::factory()->for($user)->create(['role' => Role::JefeProyectoDocente, 'campus_id' => $this->c2->id, 'org_unit_id' => departmentKey(10)]);
     $context = nextRequestOf($user);
 
-    expect($context->has(Role::JefeProyectoDocente))->toBeTrue()
-        ->and($context->has(Role::Coordinador))->toBeFalse();
+    expect($context->heldRoles())->toContain(Role::JefeProyectoDocente)
+        ->and($context->heldRoles())->not->toContain(Role::Coordinador);
 });
 
 it('un snapshot en caché con un campo faltante o de otro tipo se descarta y se recarga', function (array $changes) {
@@ -177,8 +179,8 @@ it('un snapshot en caché con un campo faltante o de otro tipo se descarta y se 
 
     $context = nextRequestOf($user);
 
-    expect($context->covers(Role::Coordinador, $this->c2, career: fakeKey(20)))->toBeTrue()
-        ->and($context->covers(Role::Coordinador, $this->c2, career: careerKey(21)))->toBeFalse()
+    expect($context->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $this->c2->id, career: fakeKey(20))))->toBeTrue()
+        ->and($context->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $this->c2->id, career: careerKey(21))))->toBeFalse()
         ->and(Cache::get($key))->toBe(['scopes' => [[
             'role' => 'coordinador', 'campus_id' => $this->c2->id, 'org_unit_id' => null, 'career_id' => fakeKey(20), 'unit_is_department' => false,
         ]]]);
@@ -193,8 +195,8 @@ it('un snapshot en caché que no es una lista de nombramientos se descarta y se 
     $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
     Cache::put(snapshotKeyOf($user), $cached, now()->addHour());
 
-    expect(nextRequestOf($user)->covers(Role::Coordinador, $this->c2, career: careerKey(21)))->toBeFalse()
-        ->and(nextRequestOf($user)->has(Role::Coordinador))->toBeTrue();
+    expect(nextRequestOf($user)->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $this->c2->id, career: careerKey(21))))->toBeFalse()
+        ->and(nextRequestOf($user)->heldRoles())->toContain(Role::Coordinador);
 })->with([
     'sin scopes' => [[]],
     'scopes que no es lista' => [['scopes' => 'coordinador']],

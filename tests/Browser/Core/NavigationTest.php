@@ -4,8 +4,6 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Navigation\Navigation;
-use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 
 /*
 | Layout en el navegador. DemoCatalog (tests/Fixtures/Modules) agrega "Saludo", para coordinadores,
@@ -17,9 +15,7 @@ use Tests\Fixtures\Modules\DemoCatalog\DemoCatalogServiceProvider;
 
 beforeEach(function () {
     // Como al arrancar: indexar los nombres de las rutas del módulo y rearmar el registro.
-    $this->app->register(DemoCatalogServiceProvider::class);
-    $this->app['router']->getRoutes()->refreshNameLookups();
-    $this->app->forgetInstance(Navigation::class);
+    registerDemoCatalog();
 
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
