@@ -11,6 +11,7 @@ use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\AssignmentLabels;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
 
@@ -23,6 +24,8 @@ use Illuminate\Validation\ValidationException;
  *   Subdirección Académica.
  * - AZ-S11: Administración, Subdirección Académica y Coordinador de carrera se nombran en «Personas y puestos»; el
  *   docente lo da la ficha del docente y las jefaturas se nombran allí hasta 3.P8 (`managedElsewhere()`).
+ * - AZ-S12 (confirmado el 3 de noviembre de 2026): el admin puede terminar su propio puesto de Administración si
+ *   queda otro vigente; el último nunca se termina (`ensureAdminRemains()`).
  * - AZ-S7: el titular de una unidad es quien ocupa su puesto exclusivo (`titularRoleOf()`).
  *
  * El campus y la unidad se releen de la base, borrados incluidos, para que un modal abierto con opciones viejas
@@ -117,6 +120,37 @@ final class RoleAssignmentRules
         }
 
         return null;
+    }
+
+    /**
+     * AZ-S12: terminar un nombramiento `admin` deja al menos otro de un usuario activo que valga el día siguiente a
+     * `$lastDay` (empieza ese día o antes, y su fin es nulo o no anterior a ese día). Los otros se bloquean para que
+     * dos terminaciones simultáneas no dejen a nadie. Otros puestos no se revisan.
+     *
+     * @throws ValidationException sobre `lastDay`
+     */
+    public function ensureAdminRemains(RoleAssignment $assignment, CarbonImmutable $lastDay): void
+    {
+        if ($assignment->role !== Role::Admin) {
+            return;
+        }
+
+        $day = $lastDay->addDay()->toDateString();
+
+        $remains = RoleAssignment::query()
+            ->where('role', Role::Admin)
+            ->whereKeyNot($assignment->getKey())
+            ->where('valid_from', '<=', $day)
+            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>=', $day))
+            ->whereHas('user', fn (Builder $query) => $query->where('is_active', true))
+            ->lockForUpdate()
+            ->exists();
+
+        if (! $remains) {
+            throw ValidationException::withMessages([
+                'lastDay' => 'Es el único nombramiento de Administración que seguiría vigente; nombra a otra persona antes de terminarlo.',
+            ]);
+        }
     }
 
     /**
