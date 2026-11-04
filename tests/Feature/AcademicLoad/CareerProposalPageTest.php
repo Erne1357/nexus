@@ -75,6 +75,15 @@ describe('coordinador', function () {
             ->assertViewHas('overview', fn ($overview): bool => $overview->totals === ['subjects' => 2, 'groups' => 3]);
     });
 
+    it('no suma alumnos esperados entre materias en los totales ni en la confirmación de envío', function () {
+        proposalPageAs($this->coordinator)
+            ->assertSeeHtml('data-testid="proposal-totals"')
+            ->assertDontSeeText('Alumnos esperados')
+            ->call('confirmSubmit')
+            ->assertSee('Enviar la propuesta')
+            ->assertDontSeeHtml('>Esperados</dt>');
+    });
+
     it('muestra la retícula por omisión y la tabla con ?vista=tabla; otro valor muestra la retícula', function () {
         proposalPageAs($this->coordinator)->assertSet('view', 'reticula')->assertSeeHtml('data-testid="proposal-grid"');
         proposalPageAs($this->coordinator, ['vista' => 'tabla'])->assertSet('view', 'tabla')->assertSeeHtml('data-testid="proposal-table"')->assertDontSeeHtml('data-testid="proposal-grid"');
