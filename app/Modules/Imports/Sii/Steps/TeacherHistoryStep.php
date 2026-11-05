@@ -31,14 +31,20 @@ final class TeacherHistoryStep implements SiiStep
         /** @var array<string|int, string> $subjectFor */
         $subjectFor = $migration->remember('subject_for', fn () => throw new SiiStepOutOfOrder($this->name(), 'subject_for', ['materias']));
 
-        yield new SiiBatch('teacher_history', 'historial_docente.csv', $this->rows($migration, $roster, $subjectFor), incidents: $this->incidents($roster, $subjectFor));
+        $skipped = ['parallel' => 0, 'long' => 0, 'repeated' => 0];
+        foreach ($this->rows($migration, $roster, $subjectFor, $skipped) as $unused) {
+            // Primera pasada: solo cuenta lo que no se emite, para que el aviso salga en el lote.
+        }
+
+        yield new SiiBatch('teacher_history', 'historial_docente.csv', $this->rows($migration, $roster, $subjectFor), incidents: $this->incidents($roster, $subjectFor, $skipped));
     }
 
     /**
      * @param  array<string|int, string>  $subjectFor
+     * @param  array{parallel: int, long: int, repeated: int}  $skipped
      * @return list<array{level: 'error'|'warning', ref: string, message: string}>
      */
-    private function incidents(TeacherRoster $roster, array $subjectFor): array
+    private function incidents(TeacherRoster $roster, array $subjectFor, array $skipped): array
     {
         $missing = [];
 
@@ -61,6 +67,9 @@ final class TeacherHistoryStep implements SiiStep
 
         foreach ([
             [$roster->withoutRfc, 'grupos del SII no traen RFC: no pasan al historial.'],
+            [$skipped['parallel'], 'grupos paralelos cuentan una vez (mismo docente y periodo que su grupo padre): no se repiten en el historial (R18).'],
+            [$skipped['long'], 'grupos con clave de más de 20 caracteres (materia del SII + grupo): no pasan al historial.'],
+            [$skipped['repeated'], 'grupos repetidos (mismo docente, materia de Nexus, periodo y clave): se emite uno solo.'],
             [$roster->unmigratedGroups, 'grupos son de un RFC que no se migró (administrativos o sin departamento): no pasan al historial.'],
         ] as [$count, $text]) {
             if ($count > 0) {
@@ -72,11 +81,18 @@ final class TeacherHistoryStep implements SiiStep
     }
 
     /**
+     * Una fila por grupo. El `group_code` lleva la materia del SII como prefijo (`<materia>-<grupo>`) porque al
+     * unificar las claves de materia dos grupos distintos pueden compartir letra (R18). Un grupo paralelo de otro
+     * del mismo docente y periodo no se emite; los exactamente repetidos se emiten una vez.
+     *
      * @param  array<string|int, string>  $subjectFor
+     * @param  array{parallel: int, long: int, repeated: int}|null  $skipped  se llena con lo que no se emite
      * @return Generator<int, array<string, string>>
      */
-    private function rows(SiiMigration $migration, TeacherRoster $roster, array $subjectFor): Generator
+    private function rows(SiiMigration $migration, TeacherRoster $roster, array $subjectFor, ?array &$skipped = null): Generator
     {
+        $seen = [];
+
         foreach ($migration->export()->reader(SiiFile::Grupos)->rows() as $row) {
             $teacher = $roster->teacherFor[TeacherRoster::normalizeRfc($row['rfc'])] ?? null;
             $subject = $subjectFor[$row['materia']] ?? null;
@@ -85,12 +101,34 @@ final class TeacherHistoryStep implements SiiStep
                 continue;
             }
 
+            $parent = TeacherRoster::parentKey($row['paralelo_de']);
+            if ($parent !== null && $parent !== TeacherRoster::groupKey($row['materia'], $row['grupo']) && isset($roster->groupKeys[$teacher][$row['periodo']][$parent])) {
+                $skipped['parallel'] = ($skipped['parallel'] ?? 0) + 1;
+
+                continue;
+            }
+
+            $group = trim($row['materia']).'-'.trim($row['grupo']);
+            if (mb_strlen($group) > 20) {
+                $skipped['long'] = ($skipped['long'] ?? 0) + 1;
+
+                continue;
+            }
+
+            $key = "{$teacher}|{$subject}|{$row['periodo']}|{$group}";
+            if (isset($seen[$key])) {
+                $skipped['repeated'] = ($skipped['repeated'] ?? 0) + 1;
+
+                continue;
+            }
+            $seen[$key] = true;
+
             yield [
                 'rfc' => $teacher,
                 'subject_code' => $subject,
                 'term_code' => $row['periodo'],
                 'campus_code' => '',
-                'group_code' => $row['grupo'],
+                'group_code' => $group,
             ];
         }
     }

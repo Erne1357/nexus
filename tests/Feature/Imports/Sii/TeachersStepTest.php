@@ -218,6 +218,24 @@ it('un docente sin departamento académico toma el de sus grupos', function () {
         ->and($messages)->toContain('PRUE800202AB2')->toContain('1 docentes no se migran');
 });
 
+it('un docente antiguo toma el departamento de sus últimos grupos', function () {
+    SiiFixtures::writeStaff($this->dir, [teacherStaffRow('PRUE800101AB1', ['clave_area' => '999999'])]);
+    SiiFixtures::write($this->dir.'/materias.csv', SiiFile::Materias, array_map(
+        fn (array $m): string => SiiFixtures::line(SiiFile::Materias, ['materia' => "'{$m[0]}'", 'clave_area' => "'{$m[1]}'"]),
+        [['M1', '110100'], ['M2', '110600']],
+    ));
+    SiiFixtures::writeGroups($this->dir, [['20171', 'M1', 'A', 'PRUE800101AB1'], ['20173', 'M1', 'A', 'PRUE800101AB1'], ['20173', 'M2', 'A', 'PRUE800101AB1'], ['20263', 'M2', 'Z', 'OTRO800101AB1']]);
+
+    expect(teachersStepRun($this->dir)['rows'][0]['department'])->toBe('110100');
+});
+
+it('si docentes2 trae el nombre en blanco usa el de docentes', function () {
+    SiiFixtures::writeStaff($this->dir, [teacherStaffRow('PRUE800101AB1')], [teacherStaff2Row('PRUE800101AB1', ['nombre_empleado' => '', 'apellidop' => '', 'apellidom' => ''])]);
+    SiiFixtures::writeGroups($this->dir, []);
+
+    expect(teachersStepRun($this->dir)['rows'][0]['name'])->toBe('Juan Perez de la Cruz');
+});
+
 it('la adscripción de docentes2 manda sobre el área de docentes', function () {
     SiiFixtures::writeStaff($this->dir, [teacherStaffRow('PRUE800101AB1', ['clave_area' => '110100'])], [teacherStaff2Row('PRUE800101AB1', ['id_unidad_organica' => '110600'])]);
     SiiFixtures::writeGroups($this->dir, []);
@@ -305,7 +323,7 @@ it('migra docentes e historial de punta a punta sin filas con error', function (
         teacherStaffRow('ADMI800101AA1', ['nombramiento' => 'A']),
     ], [teacherStaff2Row('PRUE800101NEW', ['fecha_ingreso_institucion' => '2015-08-16'])]);
     SiiFixtures::writeGroups($this->dir, [
-        ['20251', 'CD1', 'A', 'PRUE800101OLD'], ['20263', 'CD1', 'B', 'PRUE800101NEW'], ['20263', 'ZZZ', 'C', 'PRUE800101NEW'], ['20263', 'CD1', 'D', ''],
+        ['20251', 'CD1', 'A', 'PRUE800101OLD'], ['20263', 'CD1', 'B', 'PRUE800101NEW'], ['20263', 'ZZZ', 'C', 'PRUE800101NEW'], ['20263', 'CD1', 'D', ''], ['20263', 'CD1', 'B', 'PRUE800101NEW'], ['20263', 'ZZZ', 'E', 'PRUE800101NEW', 'CD1        B'],
     ]);
 
     app()->instance('sii.steps', [OrgChartStep::class, CareersStep::class, SubjectsStep::class, TeachersStep::class, TeacherHistoryStep::class]);

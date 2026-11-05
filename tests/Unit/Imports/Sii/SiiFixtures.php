@@ -79,12 +79,12 @@ final class SiiFixtures
     }
 
     /**
-     * @param  list<array{0: string, 1: string, 2: string, 3: string}>  $groups  periodo, materia, grupo y RFC
+     * @param  list<array{0: string, 1: string, 2: string, 3: string, 4?: string}>  $groups  periodo, materia, grupo, RFC y `paralelo_de`
      */
     public static function writeGroups(string $dir, array $groups): void
     {
         self::write($dir.'/grupos.csv', SiiFile::Grupos, array_map(fn (array $g): string => self::line(SiiFile::Grupos, [
-            'periodo' => "'{$g[0]}'", 'materia' => "'{$g[1]}'", 'grupo' => "'{$g[2]}'", 'rfc' => "'{$g[3]}'",
+            'periodo' => "'{$g[0]}'", 'materia' => "'{$g[1]}'", 'grupo' => "'{$g[2]}'", 'rfc' => "'{$g[3]}'", 'paralelo_de' => "'".($g[4] ?? '')."'",
         ]), $groups));
     }
 }

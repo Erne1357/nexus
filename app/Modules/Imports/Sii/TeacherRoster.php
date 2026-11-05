@@ -33,6 +33,9 @@ final class TeacherRoster
     /** @var array<string, array<string, array<string, int>>> grupos por RFC del docente en Nexus, periodo y materia */
     public array $cells = [];
 
+    /** @var array<string, array<string, array<string, true>>> claves `MATERIA|GRUPO` por RFC del docente en Nexus y periodo */
+    public array $groupKeys = [];
+
     /** @var int grupos sin RFC */
     public int $withoutRfc = 0;
 
@@ -42,6 +45,22 @@ final class TeacherRoster
     public static function normalizeRfc(string $rfc): string
     {
         return TeacherRfc::normalize($rfc) ?? trim($rfc);
+    }
+
+    public static function groupKey(string $materia, string $grupo): string
+    {
+        return mb_strtoupper(trim($materia)).'|'.mb_strtoupper(trim($grupo));
+    }
+
+    /**
+     * La clave del grupo padre de `paralelo_de` (`<materia con relleno> <grupo>`): la primera palabra es la materia y
+     * la última el grupo. Null si viene vacío o no se entiende.
+     */
+    public static function parentKey(string $paraleloDe): ?string
+    {
+        $tokens = preg_split('/\s+/u', trim($paraleloDe), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return count($tokens) < 2 ? null : self::groupKey($tokens[0], $tokens[array_key_last($tokens)]);
     }
 
     /**
@@ -78,7 +97,7 @@ final class TeacherRoster
             }
         }
 
-        [$raw, $periods] = $this->readGroups($export);
+        [$raw, $periods, $rawKeys] = $this->readGroups($export);
         $currentPeriod = $periods === [] ? '' : max($periods);
 
         $included = [];
@@ -99,7 +118,6 @@ final class TeacherRoster
 
         $merge = $this->mergeChangedRfcs(array_keys($included), $staff);
         $materiaArea = $this->materiaAreas($export);
-        $regular = $this->lastRegularPeriods($periods);
 
         $emails = 0;
         $noDepartment = 0;
@@ -123,7 +141,7 @@ final class TeacherRoster
                 continue;
             }
 
-            $department = $this->department($d, $d2, $cells, $regular, $materiaArea, $departmentForArea);
+            $department = $this->department($d, $d2, $cells, $materiaArea, $departmentForArea);
             if ($department === null) {
                 $noDepartment++;
                 $this->incidents[] = $this->warning($rfc, "El docente {$rfc} no tiene departamento académico (ni por su adscripción ni por sus grupos recientes): no se migra.");
@@ -157,6 +175,11 @@ final class TeacherRoster
                 $this->teacherFor[$source] = $rfc;
             }
             $this->cells[$rfc] = $cells;
+            foreach ($sources as $source) {
+                foreach ($rawKeys[$source] ?? [] as $period => $keys) {
+                    $this->groupKeys[$rfc][$period] = [...($this->groupKeys[$rfc][$period] ?? []), ...$keys];
+                }
+            }
         }
 
         foreach ($raw as $rfc => $periodCells) {
@@ -177,6 +200,7 @@ final class TeacherRoster
     {
         $raw = [];
         $periods = [];
+        $keys = [];
 
         foreach ($export->reader(SiiFile::Grupos)->rows() as $row) {
             $periods[$row['periodo']] = true;
@@ -188,13 +212,14 @@ final class TeacherRoster
                 continue;
             }
 
+            $keys[$rfc][$row['periodo']][self::groupKey($row['materia'], $row['grupo'])] = true;
             $raw[$rfc][$row['periodo']][$row['materia']] = ($raw[$rfc][$row['periodo']][$row['materia']] ?? 0) + 1;
         }
 
         $periods = array_map('strval', array_keys($periods));
         sort($periods);
 
-        return [$raw, $periods];
+        return [$raw, $periods, $keys];
     }
 
     /**
@@ -269,11 +294,14 @@ final class TeacherRoster
     }
 
     /**
-     * @param  list<string>  $periods  ordenados
-     * @return list<string> los últimos periodos regulares (terminan en 1 o 3)
+     * Los últimos 4 periodos regulares (terminan en 1 o 3) en que el docente tuvo grupos (R19).
+     *
+     * @param  list<string>  $periods
+     * @return list<string>
      */
-    private function lastRegularPeriods(array $periods): array
+    private function ownLastRegularPeriods(array $periods): array
     {
+        sort($periods);
         $regular = array_values(array_filter($periods, fn (string $p): bool => in_array(substr($p, -1), ['1', '3'], true)));
 
         return array_slice($regular, -self::REGULAR_PERIODS);
@@ -285,22 +313,20 @@ final class TeacherRoster
      */
     private function name(?array $d, ?array $d2): string
     {
-        $parts = $d2 !== null
-            ? [$d2['nombre_empleado'], $d2['apellidop'], $d2['apellidom']]
-            : [$d['nombre_empleado'] ?? '', $d['apellidos_empleado'] ?? ''];
+        $join = fn (array $parts): string => SubjectName::title(implode(' ', array_filter($parts, fn (string $part): bool => trim($part) !== '')));
+        $name = $d2 === null ? '' : $join([$d2['nombre_empleado'], $d2['apellidop'], $d2['apellidom']]);
 
-        return SubjectName::title(implode(' ', array_filter($parts, fn (string $part): bool => trim($part) !== '')));
+        return $name !== '' ? $name : $join([$d['nombre_empleado'] ?? '', $d['apellidos_empleado'] ?? '']);
     }
 
     /**
      * @param  array<string, string>|null  $d
      * @param  array<string, string>|null  $d2
      * @param  array<string, array<string, int>>  $cells
-     * @param  list<string>  $regular
      * @param  array<string, string>  $materiaArea
      * @param  array<string|int, string|null>  $departmentForArea
      */
-    private function department(?array $d, ?array $d2, array $cells, array $regular, array $materiaArea, array $departmentForArea): ?string
+    private function department(?array $d, ?array $d2, array $cells, array $materiaArea, array $departmentForArea): ?string
     {
         foreach ([$d2['id_unidad_organica'] ?? '', $d['clave_area'] ?? ''] as $area) {
             $code = $area === '' ? null : ($departmentForArea[$area] ?? null);
@@ -311,7 +337,7 @@ final class TeacherRoster
 
         $counts = [];
 
-        foreach ($regular as $period) {
+        foreach ($this->ownLastRegularPeriods(array_map('strval', array_keys($cells))) as $period) {
             foreach ($cells[$period] ?? [] as $materia => $count) {
                 $code = $departmentForArea[$materiaArea[(string) $materia] ?? ''] ?? null;
                 if ($code !== null) {
