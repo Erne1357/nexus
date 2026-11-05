@@ -17,6 +17,12 @@ use Illuminate\Support\Facades\Validator;
  */
 final class TeacherRoster
 {
+    /** @var list<string> las únicas columnas de `docentes` que se leen (nunca CURP, domicilio, teléfono ni familiares) */
+    public const array STAFF_COLUMNS = ['rfc', 'clave_area', 'nombramiento', 'status_empleado', 'nombre_empleado', 'apellidos_empleado', 'correo_electronico', 'inicio_plantel'];
+
+    /** @var list<string> las únicas columnas de `docentes2` que se leen */
+    public const array STAFF2_COLUMNS = ['rfc', 'apellidop', 'apellidom', 'nombre_empleado', 'id_unidad_organica', 'fecha_ingreso_institucion'];
+
     private const int REGULAR_PERIODS = 4;
 
     private const string DEGREE_WARNING = 'el grado viene en letras sin catálogo (nivel_estudios / grado_academico): pendiente';
@@ -83,14 +89,14 @@ final class TeacherRoster
         $staff = [];
         $staff2 = [];
 
-        foreach ($export->reader(SiiFile::Docentes)->rows() as $row) {
+        foreach ($export->reader(SiiFile::Docentes)->rows(self::STAFF_COLUMNS) as $row) {
             $rfc = self::normalizeRfc($row['rfc']);
             if ($rfc !== '') {
                 $staff[$rfc] ??= $row;
             }
         }
 
-        foreach ($export->reader(SiiFile::Docentes2)->rows() as $row) {
+        foreach ($export->reader(SiiFile::Docentes2)->rows(self::STAFF2_COLUMNS) as $row) {
             $rfc = self::normalizeRfc($row['rfc']);
             if ($rfc !== '') {
                 $staff2[$rfc] ??= $row;

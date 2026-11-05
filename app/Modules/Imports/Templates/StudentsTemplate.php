@@ -44,6 +44,9 @@ class StudentsTemplate extends ImportTemplate
     /** @var array<string, StudyPlan|null> plan por clave, en esta corrida */
     private array $plans = [];
 
+    /** @var array<string, Student|null> alumno por número de control, en esta corrida */
+    private array $students = [];
+
     /** @var array<string, string|null> id de campus por clave, en esta corrida */
     private array $campuses = [];
 
@@ -170,9 +173,7 @@ class StudentsTemplate extends ImportTemplate
         }
 
         if ($row['active'] === false) {
-            $existing = Student::query()->where('control_number', $row['control_number'])->first(['id', 'is_active']);
-
-            if ($existing?->is_active) {
+            if ($this->student($row['control_number'])?->is_active) {
                 $issues = $issues->withWarning('active', 'El archivo lo marca inactivo, pero el alumno sigue activo: una importación no lo da de baja.');
             }
         }
@@ -233,5 +234,10 @@ class StudentsTemplate extends ImportTemplate
     private function campus(string $code): ?string
     {
         return array_key_exists($code, $this->campuses) ? $this->campuses[$code] : $this->campuses[$code] = Campus::query()->where('code', $code)->value('id');
+    }
+
+    private function student(string $number): ?Student
+    {
+        return array_key_exists($number, $this->students) ? $this->students[$number] : $this->students[$number] = Student::query()->where('control_number', $number)->first(['id', 'is_active']);
     }
 }

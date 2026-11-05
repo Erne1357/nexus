@@ -81,7 +81,7 @@ final class StudentsStep implements SiiStep
             $campus = self::CAMPUSES[$row['campus']] ?? null;
 
             if ($campus === null) {
-                $label = $row['campus'] === '' ? 'vacío' : $row['campus'];
+                $label = $row['campus'] === '' ? 'vacío' : mb_substr($row['campus'], 0, 20);
                 $tally->unknownCampuses[$label] = ($tally->unknownCampuses[$label] ?? 0) + 1;
 
                 continue;
@@ -99,7 +99,7 @@ final class StudentsStep implements SiiStep
             $status = self::STATUSES[$code] ?? '';
 
             if ($status === '' && $code !== 'ASP') {
-                $label = $code === '' ? 'vacío' : $code;
+                $label = $code === '' ? 'vacío' : mb_substr($code, 0, 20);
                 $tally->unknownStatuses[$label] = ($tally->unknownStatuses[$label] ?? 0) + 1;
             }
 

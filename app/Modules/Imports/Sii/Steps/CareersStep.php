@@ -33,6 +33,9 @@ final class CareersStep implements SiiStep
     /** @var list<string> */
     private const array ACTIVE_STATUSES = ['ACT', 'INS', 'BT1', 'BT2', 'BT3', 'BT4'];
 
+    /** @var list<string> las únicas columnas de `alumnos` que lee este paso (nunca el NIP ni la CURP) */
+    public const array STUDENT_COLUMNS = ['carrera', 'reticula', 'periodo_ingreso_it', 'campus', 'estatus_alumno'];
+
     private const array CAMPUSES = ['1' => 'C1', '2' => 'C2'];
 
     public function name(): string
@@ -205,7 +208,7 @@ final class CareersStep implements SiiStep
     {
         $facts = ['campuses' => [], 'unknownCampuses' => [], 'active' => [], 'entrants' => []];
 
-        foreach ($migration->export()->reader(SiiFile::Alumnos)->rows() as $row) {
+        foreach ($migration->export()->reader(SiiFile::Alumnos)->rows(self::STUDENT_COLUMNS) as $row) {
             $key = trim($row['carrera']).'/'.trim($row['reticula']);
             $period = trim($row['periodo_ingreso_it'] ?? '');
 

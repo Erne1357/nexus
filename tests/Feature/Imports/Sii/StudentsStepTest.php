@@ -13,6 +13,7 @@ use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\StudentsStep;
+use App\Modules\Imports\Sii\TeacherRoster;
 use App\Modules\Students\Enums\StudentModality;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
@@ -246,4 +247,14 @@ it('migra a los alumnos de punta a punta sin errores', function () {
         ->and(Career::query()->count())->toBe(1);
 
     File::deleteDirectory($curated);
+});
+
+it('los pasos de carreras y docentes tampoco leen el NIP, la CURP ni datos personales', function () {
+    expect(CareersStep::STUDENT_COLUMNS)->not->toContain('nip')->not->toContain('curp_alumno')->not->toContain('fecha_nacimiento')
+        ->and(TeacherRoster::STAFF_COLUMNS)->not->toContain('curp_empleado')->not->toContain('domicilio_empleado')->not->toContain('telefono_empleado');
+
+    writeSiiStudents($this->dir, [['no_de_control' => 'S1', 'nip' => 'secreto', 'curp_alumno' => 'CURPSECRETA']]);
+    $rows = iterator_to_array((new SiiCsvReader($this->dir.'/alumnos_todos.csv', SiiFile::Alumnos))->rows(CareersStep::STUDENT_COLUMNS));
+
+    expect(array_keys(reset($rows)))->toBe(CareersStep::STUDENT_COLUMNS);
 });
