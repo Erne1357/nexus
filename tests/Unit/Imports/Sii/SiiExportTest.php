@@ -9,7 +9,6 @@ require_once __DIR__.'/SiiFixtures.php';
 
 beforeEach(function () {
     $this->dir = SiiFixtures::dir();
-    $this->skipped = [];
 });
 
 afterEach(fn () => SiiFixtures::clean($this->dir));
@@ -83,4 +82,9 @@ it('ignora los archivos que no son CSV', function () {
     file_put_contents($this->dir.'/aulas.txt', 'x');
 
     expect(fn () => SiiExport::open($this->dir))->toThrow(SiiContractBroken::class);
+});
+
+it('normaliza el nombre del archivo con acentos y símbolos', function () {
+    expect(SiiFile::normalize('Organigrama Ñ (2).csv'))->toBe('organigrama_n_2_csv')
+        ->and(SiiFile::normalize('ÁREAS técnicas'))->toBe('areas_tecnicas');
 });

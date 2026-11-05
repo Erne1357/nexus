@@ -311,8 +311,8 @@ enum SiiFile: string
      */
     public static function normalize(string $name): string
     {
-        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
-        $ascii = strtolower($ascii === false ? $name : $ascii);
+        $decomposed = \Normalizer::normalize($name, \Normalizer::FORM_D);
+        $ascii = strtolower(preg_replace('/\p{Mn}+/u', '', $decomposed === false ? $name : $decomposed) ?? $name);
 
         return trim((string) preg_replace('/[^a-z0-9]+/', '_', $ascii), '_');
     }

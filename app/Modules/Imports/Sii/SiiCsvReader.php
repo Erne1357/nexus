@@ -76,6 +76,14 @@ final class SiiCsvReader
             while (($line = $this->readLine($handle)) !== null) {
                 $lineNo++;
                 $tokens = $this->tokenize($line);
+                if ($tokens === null) {
+                    if ($afterBlank) {
+                        break;
+                    }
+                    $this->malformed[] = $lineNo;
+
+                    continue;
+                }
                 if ($this->isBlank($tokens)) {
                     $afterBlank = true;
 
@@ -149,7 +157,9 @@ final class SiiCsvReader
             $this->quote = $single > $double ? "'" : '"';
 
             $header = [];
-            foreach ($this->tokenize($first) as [$name]) {
+            $names = $this->tokenize($first)
+                ?? throw new RuntimeException("El encabezado del archivo {$this->path} tiene una comilla sin cerrar.");
+            foreach ($names as [$name]) {
                 $name = SiiFile::normalize($name);
                 $name = $name === '' ? 'sin_nombre' : $name;
                 $header[] = in_array($name, $header, true) ? $name.'__'.count($header) : $name;
@@ -178,7 +188,7 @@ final class SiiCsvReader
             $this->readLine($handle);
             while ($healthy < self::QUOTE_LEARN_ROWS && ($line = $this->readLine($handle)) !== null) {
                 $tokens = $this->tokenize($line);
-                if (count($tokens) !== $width) {
+                if ($tokens === null || count($tokens) !== $width) {
                     continue;
                 }
                 $healthy++;
@@ -213,11 +223,12 @@ final class SiiCsvReader
     }
 
     /**
-     * Partes de un renglón como (valor, venía entre comillas).
+     * Partes de un renglón como (valor, venía entre comillas); null si una comilla no se cierra en la línea
+     * (comilla suelta o texto con salto de línea), porque el renglón no se puede leer sin adivinar.
      *
-     * @return list<array{string, bool}>
+     * @return list<array{string, bool}>|null
      */
-    private function tokenize(string $line): array
+    private function tokenize(string $line): ?array
     {
         $quote = $this->quote;
         $out = [];
@@ -240,6 +251,9 @@ final class SiiCsvReader
                     }
                     $buf .= $line[$j];
                     $j++;
+                }
+                if ($j >= $n) {
+                    return null;
                 }
                 $out[] = [$buf, true];
                 $k = strpos($line, self::DELIMITER, $j + 1);
