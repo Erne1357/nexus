@@ -23,6 +23,7 @@ use App\Modules\Imports\Templates\EvaluationsTemplate;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\KardexTemplate;
 use App\Modules\Imports\Templates\OrgUnitsTemplate;
+use App\Modules\Imports\Templates\PendingPlacementsTemplate;
 use App\Modules\Imports\Templates\PositionsTemplate;
 use App\Modules\Imports\Templates\PrerequisitesTemplate;
 use App\Modules\Imports\Templates\RoomsTemplate;
@@ -49,6 +50,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         CareersTemplate::class,
         StudyPlansTemplate::class,
         SubjectsTemplate::class,
+        PendingPlacementsTemplate::class,
         SubjectAliasesTemplate::class,
         PrerequisitesTemplate::class,
         StudentsTemplate::class,

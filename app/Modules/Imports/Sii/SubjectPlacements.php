@@ -25,7 +25,8 @@ namespace App\Modules\Imports\Sii;
  * 5. Sin semestre (D18, R10): un lugar con semestre 0 toma el semestre más frecuente (en empate, el menor) de los
  *    lugares con semestre con el mismo nombre normalizado (de cualquiera de sus claves del SII), primero en planes de
  *    la misma carrera y si no hay, de cualquiera, con advertencia que nombra de dónde lo tomó. Si nada empata, no
- *    entra a la retícula y avisa que queda para Servicios Escolares (detalles del empate, supuestos por confirmar).
+ *    entra a la retícula: queda en pending() y avisa que va a la lista de pendientes de Servicios Escolares, que le
+ *    asigna semestre (D19; detalles del empate, supuestos por confirmar).
  *
  * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string}
  * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string}
@@ -37,6 +38,9 @@ final class SubjectPlacements
 
     /** @var list<array{level: 'warning', ref: string, message: string}> */
     private array $incidents = [];
+
+    /** @var array<string, GridPlacement> */
+    private array $pending = [];
 
     /**
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog  materias del SII por clave
@@ -60,17 +64,29 @@ final class SubjectPlacements
     }
 
     /**
-     * Los alias (R11): cada clave del SII de un lugar emitido apunta a su materia de Nexus, con el primer plan donde
-     * se vio. Si una clave del SII quedó en varias materias de Nexus (en un plan se unió por la clave TecNM y en otro
+     * Los lugares sin semestre que no empataron con ninguna materia (D18 y D19), por `"{plan}/{clave}"`, con la forma
+     * de grid(): no entran a la retícula y pasan a la lista de pendientes. Vacío hasta llamar a grid().
+     *
+     * @return array<string, GridPlacement>
+     */
+    public function pending(): array
+    {
+        return $this->pending;
+    }
+
+    /**
+     * Los alias (R11): cada clave del SII de un lugar emitido, o pendiente (`$pending`), apunta a su materia de Nexus,
+     * con el primer plan donde se vio. Si una clave del SII quedó en varias materias de Nexus (en un plan se unió por la clave TecNM y en otro
      * conservó la suya), el alias apunta a la que está en más planes, en empate a la menor, y se avisa.
      *
      * @param  array<string, GridPlacement>  $grid
+     * @param  array<string, GridPlacement>  $pending
      * @return array{array<string, string>, list<array{code: string, subject: string, plan: string}>, list<array{level: 'warning', ref: string, message: string}>}
      */
-    public function aliases(array $grid): array
+    public function aliases(array $grid, array $pending = []): array
     {
         $targets = [];
-        foreach ($grid as $placement) {
+        foreach ([...$grid, ...$pending] as $placement) {
             foreach ($placement['materias'] as $materia) {
                 $targets[$materia][$placement['code']][] = $placement['plan'];
             }
@@ -395,6 +411,7 @@ final class SubjectPlacements
      */
     private function withSemesters(array $grid): array
     {
+        $this->pending = [];
         $byName = [];
         foreach ($grid as $ref => $placement) {
             if ($placement['semester'] > 0) {
@@ -414,8 +431,9 @@ final class SubjectPlacements
             $sources = $sameCareer === [] ? $matches : $sameCareer;
 
             if ($sources === []) {
+                $this->pending[(string) $ref] = $placement;
                 unset($grid[$ref]);
-                $this->warn((string) $ref, "Lugar {$ref} sin semestre en el SII y sin materia con el mismo nombre que lo tenga: no entra a la retícula; queda para que Servicios Escolares le asigne semestre (D18).");
+                $this->warn((string) $ref, "Lugar {$ref} sin semestre en el SII y sin materia con el mismo nombre que lo tenga: no entra a la retícula; pasa a la lista de pendientes para que Servicios Escolares le asigne semestre (D18 y D19).");
 
                 continue;
             }
