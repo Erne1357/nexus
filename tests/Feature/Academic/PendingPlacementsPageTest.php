@@ -337,3 +337,15 @@ describe('lista de planes', function () {
         Livewire::actingAs($this->servicesHead)->test('academic::pages.plans')->call('create')->assertForbidden();
     });
 });
+
+it('el jefe de Servicios Escolares ve el orden pero no puede reordenar la retícula (D21)', function () {
+    $physics = StudyPlanSubject::query()->where('study_plan_id', $this->plan->id)->whereHas('subject', fn ($query) => $query->where('code', 'AEF-1024'))->sole();
+
+    $page = Livewire::actingAs($this->servicesHead)->test('academic::pages.plan', ['plan' => $this->plan->id]);
+
+    expect(domOf($page)->querySelector('[wire\\:sort], [wire\\:sort\\:handle]'))->toBeNull();
+
+    $page->call('sortPlacement', $physics->id, 0)->assertForbidden();
+
+    expect($physics->fresh()->position)->toBeNull();
+});

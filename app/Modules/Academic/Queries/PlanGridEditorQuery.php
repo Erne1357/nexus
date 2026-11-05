@@ -38,7 +38,8 @@ final class PlanGridEditorQuery
      * La retícula en tres consultas, sin importar cuántas materias tenga:
      *
      * - `semesters`: del 1 a `semesters_count`, cada uno con sus materias (vacío si no tiene): primero las del
-     *   tronco común y luego las de cada especialidad, por clave de especialidad y de materia. Cada una dice qué
+     *   tronco común y luego las de cada especialidad, por clave de especialidad y, dentro de cada sección, por su
+     *   posición en el semestre (D21; las sin posición al final) y por clave de materia. Cada una dice qué
      *   pide (`requires`) y qué materias la piden (`required_by`), con su tipo (`seriacion` o `correquisito`), y
      *   su cadena de seriación (`chain`, el índice en `chains`).
      * - `specialties`: las del plan sin las quitadas, por clave, con cuántas filas de la retícula las usan
@@ -60,6 +61,7 @@ final class PlanGridEditorQuery
             ->leftJoin('specialties', 'specialties.id', '=', 'study_plan_subjects.specialty_id')
             ->orderBy('study_plan_subjects.semester')
             ->orderByRaw('specialties.code asc nulls first')
+            ->orderByRaw('study_plan_subjects.position asc nulls last')
             ->orderBy('subjects.code')
             ->toBase()
             ->get([

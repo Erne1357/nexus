@@ -24,7 +24,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * la especialidad para compartir y la fila con bloqueo; si otra sesión pone la misma materia al mismo tiempo, la
  * restricción única responde con el mismo error. Deja bitácora sobre la fila (alta o restauración, con el lugar)
  * y, después del commit, avisa con CurriculumChanged: cambia el avance de los alumnos del plan. Deja la materia en
- * la relación `subject` de la fila.
+ * la relación `subject` de la fila. D21: la materia queda al final de su semestre (PlacementRules::endOfSemester()).
  */
 final class PlaceSubject
 {
@@ -54,7 +54,7 @@ final class PlaceSubject
                 throw $this->rules->alreadyPlaced($subject, $placement->semester);
             }
 
-            $place = ['semester' => $semester, 'specialty_id' => $specialty?->getKey(), 'is_required' => $isRequired];
+            $place = ['semester' => $semester, 'specialty_id' => $specialty?->getKey(), 'is_required' => $isRequired, 'position' => $this->rules->endOfSemester($plan, $semester)];
 
             if ($placement === null) {
                 try {

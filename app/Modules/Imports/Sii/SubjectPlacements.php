@@ -28,9 +28,9 @@ namespace App\Modules\Imports\Sii;
  *    entra a la retícula: queda en pending() y avisa que va a la lista de pendientes de Servicios Escolares, que le
  *    asigna semestre (D19; detalles del empate, supuestos por confirmar).
  *
- * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string}
- * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string}
- * @phpstan-type GridPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, materias: list<string>, sources: list<string>}
+ * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}
+ * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}
+ * @phpstan-type GridPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, materias: list<string>, sources: list<string>}
  */
 final class SubjectPlacements
 {

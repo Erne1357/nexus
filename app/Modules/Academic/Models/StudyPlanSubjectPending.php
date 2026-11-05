@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `resolved_at` y `resolved_by`; no tiene borrado lógico (supuesto por confirmar). `sii_grid` es la retícula del SII
  * de la que salió (`carrera/retícula`).
  */
-#[Fillable(['study_plan_id', 'subject_id', 'specialty_id', 'source', 'sii_grid', 'note', 'resolved_at', 'resolved_by'])]
+#[Fillable(['study_plan_id', 'subject_id', 'specialty_id', 'source', 'sii_grid', 'position', 'note', 'resolved_at', 'resolved_by'])]
 #[UseFactory(StudyPlanSubjectPendingFactory::class)]
 class StudyPlanSubjectPending extends Model
 {
@@ -29,7 +29,7 @@ class StudyPlanSubjectPending extends Model
      */
     protected function casts(): array
     {
-        return ['resolved_at' => 'datetime'];
+        return ['resolved_at' => 'datetime', 'position' => 'integer'];
     }
 
     /**

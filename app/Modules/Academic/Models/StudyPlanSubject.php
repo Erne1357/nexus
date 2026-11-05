@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Una materia en la retícula de un plan: su semestre, su especialidad (del mismo plan) y si es obligatoria.
  * Una vez por plan y materia; quitarla es borrado lógico.
  */
-#[Fillable(['study_plan_id', 'subject_id', 'semester', 'specialty_id', 'is_required'])]
+#[Fillable(['study_plan_id', 'subject_id', 'semester', 'specialty_id', 'is_required', 'position'])]
 #[UseFactory(StudyPlanSubjectFactory::class)]
 class StudyPlanSubject extends Model
 {
@@ -30,6 +30,7 @@ class StudyPlanSubject extends Model
         return [
             'semester' => 'integer',
             'is_required' => 'boolean',
+            'position' => 'integer',
         ];
     }
 

@@ -6,6 +6,7 @@ use App\Modules\Academic\Actions\PlaceSubject;
 use App\Modules\Academic\Actions\RemovePlacement;
 use App\Modules\Academic\Actions\RemovePrerequisite;
 use App\Modules\Academic\Actions\RemoveSpecialty;
+use App\Modules\Academic\Actions\ReorderPlacements;
 use App\Modules\Academic\Actions\UpdatePlacement;
 use App\Modules\Academic\Actions\UpdatePrerequisite;
 use App\Modules\Academic\Actions\UpdateSpecialty;
@@ -471,6 +472,29 @@ new #[Title('Retícula del plan')] class extends Component
         }
 
         $this->success('Lugar guardado', e("{$subject->code} {$subject->name} queda en el semestre {$placement->semester}."));
+    }
+
+    /**
+     * Suelta una materia en otra posición de su semestre (`wire:sort`, D21): `$position` es el lugar que ocupa ahora
+     * entre las materias de su semestre, empezando en 0, y se acota a sus extremos. Reordena con ReorderPlacements
+     * a partir del orden que muestra la retícula. Pide `editGrid`; una fila de otro plan o quitada no existe (404). Si
+     * la retícula cambió entre tanto (otra sesión quitó o puso una materia), lo dice y la retícula se pinta al día.
+     */
+    public function sortPlacement(string $id, int $position, StudyPlanQuery $plans, PlanGridEditorQuery $grids, ReorderPlacements $reorder): void
+    {
+        $plan = $this->plan($plans);
+        $this->authorize('editGrid', $plan);
+
+        $placement = $grids->placementOrFail($plan, $id);
+        $ids = array_column($grids->forPlan($plan)['semesters'][$placement->semester] ?? [], 'placement_id');
+        $ids = array_values(array_diff($ids, [$id]));
+        array_splice($ids, max(0, min($position, count($ids))), 0, [$id]);
+
+        try {
+            $reorder->handle($plan, $placement->semester, $ids, auth()->user());
+        } catch (ValidationException) {
+            $this->info('La retícula cambió', 'Ya está al día; vuelve a intentarlo.');
+        }
     }
 
     /**

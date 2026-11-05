@@ -119,7 +119,7 @@ const SUBJECTS_STEP_SPECIALTIES = [
  * Escribe los cuatro archivos de materias del SII con las claves rellenas de espacios, como las exporta el SII.
  *
  * @param  list<array{string, string, string, string}>  $catalog
- * @param  list<array{string, string, string, string, string, string, string, string, string}>  $placements
+ * @param  list<array{string, string, string, string, string, string, string, string, string}|array{string, string, string, string, string, string, string, string, string, string}>  $placements
  * @param  list<array{string, string, string, string}>  $tecnm
  * @param  list<array{string, string, string, string}>  $specialties
  */
@@ -134,6 +134,7 @@ function writeSiiSubjects(string $dir, array $catalog, array $placements, array 
     SiiFixtures::write($dir.'/materias_carreras.csv', SiiFile::MateriasCarreras, array_map(fn (array $p): string => SiiFixtures::line(SiiFile::MateriasCarreras, [
         'carrera' => $text($p[0]), 'reticula' => $p[1], 'materia' => $text($p[2]), 'creditos_materia' => $p[3], 'horas_teoricas' => $p[4],
         'horas_practicas' => $p[5], 'semestre_reticula' => $p[6], 'especialidad' => $text($p[7]), 'estatus_materia_carrera' => "'{$p[8]}'",
+        'renglon' => $p[9] ?? '',
     ]), $placements));
 
     SiiFixtures::write($dir.'/materias_claves_tecnm.csv', SiiFile::MateriasClavesTecnm, array_map(fn (array $t): string => SiiFixtures::line(SiiFile::MateriasClavesTecnm, [
@@ -556,4 +557,21 @@ it('migra las materias de punta a punta después del organigrama y las carreras'
         ->and(ImportBatch::query()->whereIn('template', ['subjects', 'pending_placements', 'subject_aliases'])->pluck('error_rows', 'template')->all())
         ->toBe(['subjects' => 0, 'pending_placements' => 0, 'subject_aliases' => 0])
         ->and(file_get_contents($this->dir.'/_incidencias.csv'))->toContain('AAA-2004-100/ZZZ')->toContain('Servicios Escolares');
+});
+
+it('toma el orden en el semestre (D21) del renglón del SII, de la variante presencial al fundir; 0 queda vacío', function () {
+    $placements = array_map(fn (array $p): array => match ($p[2]) {
+        'CD1' => [...$p, '3'],
+        'CD1D' => [...$p, '5'],
+        'ETI' => [...$p, '0'],
+        'CD2' => [...$p, '7'],
+        default => $p,
+    }, SUBJECTS_STEP_PLACEMENTS);
+    writeSiiSubjects($this->dir, SUBJECTS_STEP_CATALOG, $placements, SUBJECTS_STEP_TECNM, SUBJECTS_STEP_SPECIALTIES);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+
+    expect(subjectsStepRow($subjects, 'AAA-2010-224', 'ACF-0901')['position'])->toBe('3')
+        ->and(subjectsStepRow($subjects, 'BBB-2010-300', 'ACF-0901')['position'])->toBe('7')
+        ->and(subjectsStepRow($subjects, 'AAA-2010-224', 'ACA-0907')['position'])->toBe('');
 });

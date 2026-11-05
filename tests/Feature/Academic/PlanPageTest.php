@@ -1235,6 +1235,7 @@ describe('otros roles e invitados', function () {
         'guardar el lugar' => ['savePlacement', fn ($test) => [$test->integralRow->id]],
         'pedir quitarla' => ['confirmRemove', fn () => []],
         'quitarla de la retícula' => ['removePlacement', fn ($test) => [$test->integralRow->id]],
+        'reordenar un semestre (D21)' => ['sortPlacement', fn ($test) => [$test->integralRow->id, 1]],
     ]);
 
     it('reciben 403 en cada método de la seriación aunque lo llamen directo con una página que abrió el admin', function (string $method, Closure $arguments) {
@@ -1274,5 +1275,44 @@ describe('otros roles e invitados', function () {
 
     it('un invitado va al login', function () {
         $this->get(route('academic.plans.show', $this->plan))->assertRedirect('/login');
+    });
+});
+
+describe('orden de las materias en el semestre (D21)', function () {
+    beforeEach(fn () => planFixture($this));
+
+    it('arrastrar una materia a otra posición de su semestre guarda el orden y lo pinta', function () {
+        $order = fn () => array_map(
+            fn (Element $tile): string => $tile->getAttribute('data-subject'),
+            iterator_to_array(domOf(planPage($this->admin, $this->plan))->querySelectorAll('[data-semester="2"] [data-subject]')),
+        );
+        expect($order())->toBe(['ACF-0902', 'SCC-1017']);
+
+        planPage($this->admin, $this->plan)->call('sortPlacement', $this->integralRow->id, 1)->assertHasNoErrors();
+
+        expect($order())->toBe(['SCC-1017', 'ACF-0902'])
+            ->and($this->integralRow->fresh()->position)->toBe(2);
+    });
+
+    it('el admin ve cada semestre ordenable y cada mosaico con su agarre', function () {
+        $page = domOf(planPage($this->admin, $this->plan));
+
+        expect($page->querySelector('[data-semester="2"][wire\\:sort]'))->not->toBeNull()
+            ->and($page->querySelectorAll('[data-semester="2"] [wire\\:sort\\:item]'))->toHaveCount(2)
+            ->and($page->querySelectorAll('[data-semester="2"] [wire\\:sort\\:handle]'))->toHaveCount(2);
+    });
+
+    it('una posición fuera del semestre se acota a sus extremos', function () {
+        planPage($this->admin, $this->plan)->call('sortPlacement', $this->integralRow->id, 99);
+
+        expect($this->integralRow->fresh()->position)->toBe(2);
+    });
+
+    it('una fila de otro plan no existe', function () {
+        $foreign = placeInPlan(StudyPlan::factory()->create(), Subject::factory()->create());
+
+        planPage($this->admin, $this->plan)->call('sortPlacement', $foreign->id, 0)->assertNotFound();
+
+        expect($foreign->fresh()->position)->toBeNull();
     });
 });

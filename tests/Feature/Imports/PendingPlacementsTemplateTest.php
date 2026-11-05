@@ -40,7 +40,7 @@ it('está registrada en Imports sin campo de semestre', function () {
     $template = app(TemplateRegistry::class)->get('pending_placements');
 
     expect($template)->toBeInstanceOf(PendingPlacementsTemplate::class)
-        ->and(array_keys($template->fields()))->toBe(['plan', 'code', 'name', 'theory_hours', 'practice_hours', 'credits', 'department', 'specialty', 'specialty_name', 'kind', 'sii_grid'])
+        ->and(array_keys($template->fields()))->toBe(['plan', 'code', 'name', 'theory_hours', 'practice_hours', 'credits', 'department', 'specialty', 'specialty_name', 'kind', 'sii_grid', 'position'])
         ->and($template->naturalKey())->toBe(['plan', 'code'])
         ->and($template->deactivatesMissing())->toBeFalse();
 });
@@ -105,4 +105,12 @@ it('una especialidad borrada es error y una materia borrada también', function 
 
     expect($this->template->validate(pendingPlacementRow(['specialty' => 'ESP-9']), $this->context)->errors)->toHaveKey('specialty')
         ->and($this->template->validate(pendingPlacementRow(['code' => 'DEL-1']), $this->context)->errors)->toHaveKey('code');
+});
+
+it('el renglón (`position`) del pendiente se escribe al crearlo y no se pisa si el archivo no lo trae', function () {
+    $this->template->apply(pendingPlacementRow(['position' => '4']), $this->context);
+    expect(StudyPlanSubjectPending::sole()->position)->toBe(4);
+
+    $this->template->apply(pendingPlacementRow(['credits' => '5']), $this->context);
+    expect(StudyPlanSubjectPending::sole()->position)->toBe(4);
 });
