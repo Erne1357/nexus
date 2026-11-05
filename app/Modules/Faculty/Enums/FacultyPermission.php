@@ -4,6 +4,7 @@ namespace App\Modules\Faculty\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo Faculty: docentes, sus adscripciones, su perfil y sus usuarios. La clave es
@@ -67,5 +68,13 @@ enum FacultyPermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    /**
+     * Lo académico (D20): a los departamentos académicos y a la Subdirección Académica.
+     */
+    public function appliesTo(): ?UnitApplicability
+    {
+        return UnitApplicability::academic();
     }
 }

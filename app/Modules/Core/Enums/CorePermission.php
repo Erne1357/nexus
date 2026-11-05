@@ -4,6 +4,7 @@ namespace App\Modules\Core\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo Core: campus, periodos, nombramientos y organigrama (los de nombramientos y organigrama son solo del admin). La clave es `core.<recurso>.<accion>`.
@@ -66,5 +67,13 @@ enum CorePermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    /**
+     * A cualquier unidad: ningún permiso del módulo depende de la unidad del puesto (D20).
+     */
+    public function appliesTo(): ?UnitApplicability
+    {
+        return null;
     }
 }

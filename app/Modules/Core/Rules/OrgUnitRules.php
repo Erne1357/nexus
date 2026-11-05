@@ -20,11 +20,16 @@ use Illuminate\Validation\ValidationException;
  *   Académica tampoco cambia de tipo ni se desactiva, porque AZ-S10 y AZ-S13 se apoyan en ella (supuesto por
  *   confirmar).
  * - La clave es única entre las unidades que no son departamentos académicos, también las borradas.
+ * - D20: la clave de Servicios Escolares (OrgTree::SCHOOL_SERVICES) no cambia mientras la unidad tenga un jefe vigente
+ *   o por empezar, porque su permiso «Por validar» aplica a esa clave (supuesto por confirmar); un cambio de tipo
+ *   tampoco deja sin lugar a ese jefe (RoleAssignmentRules::kindNeeded()).
  * - Un ciclo se revisa leyendo la base al momento (no OrgTree, que se memoriza por petición); el trigger
  *   `org_units_no_cycle` es la última defensa.
  */
 final class OrgUnitRules
 {
+    public function __construct(private readonly RoleAssignmentRules $assignmentRules) {}
+
     public function lockedReason(OrgUnit $unit): ?string
     {
         return $unit->kind === OrgUnitKind::DepartamentoAcademico
@@ -119,10 +124,12 @@ final class OrgUnitRules
         $assignments = RoleAssignment::query()->notEnded()->where('org_unit_id', $unit->getKey())->get();
 
         foreach ($assignments as $assignment) {
-            $needed = $assignment->role->unitKind();
+            $needed = $this->assignmentRules->kindNeeded($assignment->role, $unit);
 
             if ($needed !== null && $needed !== $kind) {
-                return "Tiene nombramientos de {$assignment->role->label()}; ese puesto pide una unidad de tipo {$needed->label()}.";
+                $title = $assignment->role->titleOn([['kind' => $unit->kind, 'code' => $unit->code, 'name' => $unit->name]]);
+
+                return "Tiene nombramientos de {$title}; ese puesto pide una unidad de tipo {$needed->label()}.";
             }
         }
 
@@ -166,11 +173,28 @@ final class OrgUnitRules
         return ValidationException::withMessages(['code' => "Ya hay una unidad con la clave {$code}."]);
     }
 
+    /**
+     * Por qué la clave de la unidad no cambia a `$code`; nulo si puede. La de la Dirección y la de Subdirección
+     * Académica, nunca (AZ-S13); la de Servicios Escolares, mientras tenga un jefe vigente o por empezar (D20).
+     */
     public function fixedCodeProblem(OrgUnit $unit, string $code): ?string
     {
-        $fixed = in_array($unit->code, [OrgTree::ROOT, OrgTree::ACADEMIC], true) && $unit->kind !== OrgUnitKind::DepartamentoAcademico;
+        if ($code === $unit->code || $unit->kind === OrgUnitKind::DepartamentoAcademico) {
+            return null;
+        }
 
-        return $fixed && $code !== $unit->code ? "Nexus usa la clave {$unit->code}; no se cambia." : null;
+        if (in_array($unit->code, [OrgTree::ROOT, OrgTree::ACADEMIC], true)) {
+            return "Nexus usa la clave {$unit->code}; no se cambia.";
+        }
+
+        $headed = $unit->code === OrgTree::SCHOOL_SERVICES && RoleAssignment::query()->notEnded()
+            ->where('org_unit_id', $unit->getKey())
+            ->get()
+            ->contains(fn (RoleAssignment $assignment): bool => $this->assignmentRules->allowsUnit($assignment->role, $unit) && $assignment->role->isExclusive());
+
+        return $headed
+            ? "Nexus usa la clave {$unit->code} para el jefe de Servicios Escolares; termina su nombramiento antes de cambiarla."
+            : null;
     }
 
     /**

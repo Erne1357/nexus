@@ -56,8 +56,10 @@ final class StudyPlanPolicy
 
     /**
      * Ver cuántas materias esperan semestre, la pestaña «Por validar» y resolverlas (D19): el permiso sobre la unidad
-     * del Departamento de Servicios Escolares. Sin esa unidad en el organigrama, solo el admin. La unidad se busca
-     * solo si algún puesto del usuario concede el permiso y no lo tiene sin límite de unidad (el admin).
+     * del Departamento de Servicios Escolares. Como el permiso aplica solo a esa unidad (D20), allowsAny() ya deja
+     * fuera al jefe de un departamento académico; preguntarlo sobre la unidad es la segunda defensa. Sin esa unidad
+     * en el organigrama, solo el admin. La unidad se busca solo si algún puesto del usuario concede el permiso y no lo
+     * tiene sin límite de unidad (el admin).
      */
     public function validatePlacements(User $user): bool
     {

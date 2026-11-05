@@ -42,6 +42,7 @@ beforeEach(function () {
     $this->planning = OrgUnit::where('code', 'SUB-PLANEACION')->sole();
     $this->administrative = OrgUnit::where('code', 'SUB-ADMINISTRATIVA')->sole();
     $this->services = OrgUnit::where('code', 'SERVICIOS-ESCOLARES')->sole();
+    $this->linkage = OrgUnit::where('code', 'VINCULACION')->sole();
     $this->activityBase = (int) Activity::max('id');
 });
 
@@ -97,7 +98,7 @@ it('el panel muestra la unidad elegida', function () {
         ->assertSee('Dirección › Subdirección de Planeación y Vinculación')
         ->assertSee('Esta unidad todavía no tiene un puesto de titular en Nexus.')
         ->assertSee('con adscripción o puesto vigente en la unidad y en las que cuelgan de ella')
-        ->assertSee('Departamento de Servicios Escolares');
+        ->assertSee('Departamento de Gestión Tecnológica y Vinculación');
 
     $panel->dispatch('org-unit-picked', id: $this->academic->id)
         ->assertSee('Alejandro Rentería Cota')
@@ -174,12 +175,12 @@ it('da de alta, renombra, mueve, desactiva y activa desde el panel, y avisa al d
 it('mover a la misma madre o guardar sin cambios no avisa al diagrama', function () {
     $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $this->services->id);
 
-    $panel->call('openMove')->assertSet('parent', $this->planning->id)->call('move')
+    $panel->call('openMove')->assertSet('parent', $this->academic->id)->call('move')
         ->assertHasNoErrors()
         ->assertNotDispatched('org-chart-changed')
         ->assertSet('showForm', false);
 
-    expect(lastToastOf($panel))->title->toBe('Sin cambios')->description->toBe('Departamento de Servicios Escolares ya depende de Subdirección de Planeación y Vinculación');
+    expect(lastToastOf($panel))->title->toBe('Sin cambios')->description->toBe('Departamento de Servicios Escolares ya depende de Subdirección Académica');
 
     $panel->call('openEdit')->call('save')
         ->assertHasNoErrors()
@@ -205,7 +206,7 @@ it('lo bloqueado se queda deshabilitado con su motivo escrito', function () {
 
     expect($dom->querySelector('[data-testid="unit-deactivate"]')->hasAttribute('disabled'))->toBeTrue()
         ->and($dom->querySelector('[data-testid="unit-move"]')->hasAttribute('disabled'))->toBeFalse()
-        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toContain('Tiene 5 unidades hijas activas; muévelas o desactívalas primero.');
+        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toContain('Tiene 6 unidades hijas activas; muévelas o desactívalas primero.');
 
     $panel->dispatch('org-unit-picked', id: $this->systems->id);
     $dom = domOf($panel);
@@ -254,7 +255,7 @@ it('muestra en español los errores de las Actions junto al campo', function () 
 
     $panel->dispatch('org-unit-picked', id: $this->planning->id)
         ->call('openMove')
-        ->set('parent', $this->services->id)
+        ->set('parent', $this->linkage->id)
         ->call('move')
         ->assertHasErrors(['parent'])
         ->assertSee('Subdirección de Planeación y Vinculación no puede depender de sí misma ni de una de sus hijas.');
@@ -549,7 +550,7 @@ describe('otros perfiles', function () {
         expect(OrgUnit::where('code', 'BECAS')->exists())->toBeFalse()
             ->and($this->head->roleAssignments()->sole()->valid_to)->toBeNull()
             ->and($this->coordinator->roleAssignments()->count())->toBe(1)
-            ->and($this->services->fresh())->parent_id->toBe($this->planning->id)->is_active->toBeTrue()
+            ->and($this->services->fresh())->parent_id->toBe($this->academic->id)->is_active->toBeTrue()
             ->and(activitySince()->count())->toBe(0);
     })->with(['pick', 'openCreate', 'openEdit', 'openMove', 'save', 'move', 'setActive', 'openAppoint', 'choosePerson', 'appoint', 'confirmEnd', 'cancelEnd', 'end']);
 });

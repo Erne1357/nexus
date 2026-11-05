@@ -116,8 +116,9 @@ it('valida las columnas que pide cada puesto', function (Role $role, array $scop
     'coordinador sin carrera' => [Role::Coordinador, ['c2', null, null], 'career', 'Elige la carrera.'],
     'coordinador con unidad' => [Role::Coordinador, ['c2', 'systems', 'isc'], 'unit', 'Este puesto no lleva unidad.'],
     'jefe con campus' => [Role::JefeDepartamento, ['c2', 'systems', null], 'campus', 'Este puesto no lleva campus.'],
-    'jefe sin unidad' => [Role::JefeDepartamento, [null, null, null], 'unit', 'Elige el departamento académico.'],
-    'jefe sobre una subdirección' => [Role::JefeDepartamento, [null, 'planning', null], 'unit', 'Subdirección de Planeación no es un departamento académico.'],
+    'jefe sin unidad' => [Role::JefeDepartamento, [null, null, null], 'unit', 'Elige el departamento.'],
+    'jefe sobre una subdirección' => [Role::JefeDepartamento, [null, 'planning', null], 'unit', 'Subdirección de Planeación no es un departamento académico ni Servicios Escolares.'],
+    'jefe de proyecto docente sin unidad' => [Role::JefeProyectoDocente, ['c2', null, null], 'unit', 'Elige el departamento académico.'],
     'jefe de proyecto docente sin campus' => [Role::JefeProyectoDocente, [null, 'systems', null], 'campus', 'Elige el campus.'],
     'subdirección sin unidad' => [Role::Subdireccion, [null, null, null], 'unit', 'Elige la subdirección.'],
     'subdirección sobre otra subdirección (AZ-S10)' => [Role::Subdireccion, [null, 'planning', null], 'unit', 'El puesto de Subdirección Académica va sobre la unidad Subdirección Académica.'],
@@ -138,7 +139,7 @@ it('D19: los demás departamentos que no son académicos siguen sin jefe en Nexu
     $linkage = OrgUnit::factory()->create(['code' => 'VINCULACION', 'name' => 'Departamento de Gestión Tecnológica y Vinculación', 'kind' => OrgUnitKind::Departamento]);
     $inactiveServices = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento, 'is_active' => false]);
 
-    expectInvalid(fn () => appoint($this->rosa, Role::JefeDepartamento, null, $linkage), 'unit', 'Departamento de Gestión Tecnológica y Vinculación no es un departamento académico.');
+    expectInvalid(fn () => appoint($this->rosa, Role::JefeDepartamento, null, $linkage), 'unit', 'Departamento de Gestión Tecnológica y Vinculación no es un departamento académico ni Servicios Escolares.');
     expectInvalid(fn () => appoint($this->rosa, Role::JefeProyectoDocente, $this->c2, $inactiveServices), 'unit', 'Departamento de Servicios Escolares no es un departamento académico.');
     expectInvalid(fn () => appoint($this->rosa, Role::JefeDepartamento, null, $inactiveServices), 'unit', 'Departamento de Servicios Escolares está inactiva.');
 

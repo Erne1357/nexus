@@ -8,11 +8,7 @@
 --}}
 @php
     $person = $record->person;
-    $whoUnitLabel = match ($whoRoleCase?->value) {
-        'subdireccion' => 'Subdirección',
-        'jefe_departamento' => 'Departamento',
-        default => 'Departamento académico',
-    };
+    $whoUnitLabel = $whoRoleCase?->unitLabel() ?? 'Departamento académico';
     $whoColumns = $whoRoleCase?->scopeColumns() ?? [];
 @endphp
 

@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\OrgUnitKind;
@@ -260,6 +261,48 @@ describe('alcance', function () {
     it('el jefe de Servicios Escolares ve Planes de estudio en el menú', function () {
         expect(seesPlansEntry($this->servicesHead))->toBeTrue();
     });
+
+    it('el jefe de Servicios Escolares no escribe en la retícula, aunque llame con una página que abrió el admin', function (string $method) {
+        $rows = StudyPlanSubject::with('subject')->where('study_plan_id', $this->plan->id)->get();
+        [$calculus, $physics] = [$rows->firstWhere('subject.code', 'ACF-0901'), $rows->firstWhere('subject.code', 'AEF-1024')];
+        $before = fn (): array => [
+            StudyPlanSubject::withTrashed()->where('study_plan_id', $this->plan->id)->orderBy('id')->get(['id', 'semester', 'specialty_id', 'is_required', 'deleted_at'])->toArray(),
+            $this->quality->fresh()->only(['is_active', 'deleted_at']),
+            SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count(),
+        ];
+        $snapshot = $before();
+
+        $page = Livewire::actingAs($this->admin)->test('academic::pages.plan', ['plan' => $this->plan->id]);
+        match ($method) {
+            'savePlacement' => $page->call('select', $calculus->id)->set('semester', '1'),
+            'place' => $page->call('openAdd', 2)->call('pick', $this->modern->subject_id),
+            'addPrerequisite' => $page->call('select', $physics->id)->call('pickRequisite', $calculus->subject_id),
+            default => $page,
+        };
+
+        $this->actingAs($this->servicesHead);
+        $page->call($method, ...match ($method) {
+            'savePlacement', 'removePlacement' => [$calculus->id],
+            'toggleSpecialty', 'removeSpecialty' => [$this->quality->id],
+            default => [],
+        })->assertForbidden();
+
+        expect($before())->toBe($snapshot);
+    })->with(['savePlacement', 'place', 'removePlacement', 'addPrerequisite', 'toggleSpecialty', 'removeSpecialty']);
+
+    it('el jefe de Servicios Escolares no edita ni activa planes, aunque llame con la lista que abrió el admin', function (string $method) {
+        $snapshot = $this->plan->fresh()->toArray();
+        $page = Livewire::actingAs($this->admin)->test('academic::pages.plans');
+
+        if ($method === 'save') {
+            $page->call('edit', $this->plan->id)->set('name', 'Otro nombre');
+        }
+
+        $this->actingAs($this->servicesHead);
+        $page->call($method, ...($method === 'save' ? [] : [$this->plan->id]))->assertForbidden();
+
+        expect($this->plan->fresh()->toArray())->toBe($snapshot);
+    })->with(['edit', 'save', 'toggleActive']);
 });
 
 describe('lista de planes', function () {

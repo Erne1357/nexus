@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Navigation\Navigation;
+use App\Modules\Core\Queries\RoleTitleQuery;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -12,8 +13,8 @@ use Livewire\Component;
  * sesión. Abrir y cerrar lo hace el componente Alpine `nexusShell` (resources/js/app.js).
  *
  * El área de la ruta es la de la entrada del menú de la pantalla (Navigation::forRoute). La
- * credencial muestra el perfil activo (Actor::activeRole()) con su nombre de Role::label(), y el campus y el
- * periodo activos.
+ * credencial muestra el perfil activo (Actor::activeRole()) con su nombre para quien lo ocupa (RoleTitleQuery: el jefe
+ * de Servicios Escolares, «Jefe del Departamento de Servicios Escolares», D20), y el campus y el periodo activos.
  */
 new class extends Component
 {
@@ -38,10 +39,11 @@ new class extends Component
     /**
      * @return array{areaLabel: ?string, pageTitle: ?string, name: string, username: string, initials: string, roleLabel: ?string, summary: string}
      */
-    public function with(Actor $context, Navigation $navigation): array
+    public function with(Actor $context, Navigation $navigation, RoleTitleQuery $titles): array
     {
         $user = $context->user();
         $role = $context->activeRole();
+        $roleLabel = $role === null ? null : $titles->of($context, $role)['title'];
         $item = $this->route === null ? null : $navigation->forRoute($this->route);
 
         return [
@@ -50,9 +52,9 @@ new class extends Component
             'name' => $user->name ?? '',
             'username' => $user->username ?? '',
             'initials' => $this->initials($user->name ?? ''),
-            'roleLabel' => $role?->label(),
+            'roleLabel' => $roleLabel,
             'summary' => implode(' · ', array_filter([
-                $role?->label(),
+                $roleLabel,
                 $context->activeCampus()?->name,
                 $context->activeTerm()?->name,
             ])),

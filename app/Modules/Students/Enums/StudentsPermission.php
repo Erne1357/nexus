@@ -4,6 +4,7 @@ namespace App\Modules\Students\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo Students: consulta de alumnos. La clave es `students.<recurso>.<accion>`.
@@ -27,5 +28,13 @@ enum StudentsPermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    /**
+     * Lo académico (D20): a los departamentos académicos y a la Subdirección Académica.
+     */
+    public function appliesTo(): ?UnitApplicability
+    {
+        return UnitApplicability::academic();
     }
 }

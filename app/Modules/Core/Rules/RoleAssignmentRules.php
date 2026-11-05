@@ -68,11 +68,17 @@ final class RoleAssignmentRules
 
         if (in_array('org_unit_id', $columns, true)) {
             if ($unit === null) {
-                $errors['unit'] = $role->unitKind() === OrgUnitKind::Subdireccion ? 'Elige la subdirección.' : 'Elige el departamento académico.';
+                $errors['unit'] = match ($role) {
+                    Role::Subdireccion => 'Elige la subdirección.',
+                    Role::JefeDepartamento => 'Elige el departamento.',
+                    default => 'Elige el departamento académico.',
+                };
             } elseif ($unit->kind !== $role->unitKind() && ! $this->isSchoolServicesHead($role, $unit)) {
-                $errors['unit'] = $role->unitKind() === OrgUnitKind::Subdireccion
-                    ? "{$unit->name} no es una subdirección."
-                    : "{$unit->name} no es un departamento académico.";
+                $errors['unit'] = match ($role) {
+                    Role::Subdireccion => "{$unit->name} no es una subdirección.",
+                    Role::JefeDepartamento => "{$unit->name} no es un departamento académico ni Servicios Escolares.",
+                    default => "{$unit->name} no es un departamento académico.",
+                };
             } elseif (! $this->allowsUnit($role, $unit)) {
                 $errors['unit'] = 'El puesto de Subdirección Académica va sobre la unidad Subdirección Académica.';
             } elseif ($unit->trashed() || ! $unit->is_active) {
@@ -115,6 +121,16 @@ final class RoleAssignmentRules
         }
 
         return $role !== Role::Subdireccion || ($unit->code === OrgTree::ACADEMIC && ! $unit->trashed());
+    }
+
+    /**
+     * El tipo de unidad que el puesto pide sobre `$unit`: el de Role::unitKind(), salvo el jefe del Departamento de
+     * Servicios Escolares, que pide un departamento (D19). Nulo si el puesto no lleva unidad. Lo usa OrgUnitRules para
+     * que un cambio de tipo no deje sin lugar a los nombramientos de la unidad.
+     */
+    public function kindNeeded(Role $role, OrgUnit $unit): ?OrgUnitKind
+    {
+        return $this->isSchoolServicesHead($role, $unit) ? OrgUnitKind::Departamento : $role->unitKind();
     }
 
     /**

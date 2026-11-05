@@ -4,6 +4,7 @@ namespace App\Modules\Facilities\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo Facilities: edificios y salones. La clave es `facilities.<recurso>.<accion>`.
@@ -37,5 +38,13 @@ enum FacilitiesPermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    /**
+     * A cualquier unidad: ningún permiso del módulo depende de la unidad del puesto (D20).
+     */
+    public function appliesTo(): ?UnitApplicability
+    {
+        return null;
     }
 }

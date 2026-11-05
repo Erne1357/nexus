@@ -4,6 +4,7 @@ namespace App\Modules\AcademicLoad\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo AcademicLoad: la carga académica de un departamento, la propuesta de una carrera y la
@@ -46,5 +47,13 @@ enum AcademicLoadPermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    /**
+     * Lo académico (D20): a los departamentos académicos y a la Subdirección Académica.
+     */
+    public function appliesTo(): ?UnitApplicability
+    {
+        return UnitApplicability::academic();
     }
 }

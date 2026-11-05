@@ -154,6 +154,34 @@ final class PermissionRegistry
     }
 
     /**
+     * D20: los permisos que declaran a qué unidades aplican, agrupados por UnitApplicability::key(); grupos y claves
+     * ordenados. Los que aplican a cualquier unidad no salen. Lo congela `matrix.json` junto con las concesiones.
+     *
+     * @return array<string, list<string>>
+     */
+    public function applicability(): array
+    {
+        $groups = [];
+
+        foreach ($this->byKey as $key => $permission) {
+            $applicability = $permission->appliesTo();
+
+            if ($applicability !== null) {
+                $groups[$applicability->key()][] = $key;
+            }
+        }
+
+        $groups = array_map(function (array $keys): array {
+            sort($keys);
+
+            return $keys;
+        }, $groups);
+        ksort($groups);
+
+        return $groups;
+    }
+
+    /**
      * Las claves que el admin no tiene, ordenadas.
      *
      * @return list<string>

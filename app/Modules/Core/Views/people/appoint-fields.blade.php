@@ -4,11 +4,7 @@
     (la unidad, deshabilitada si viene fija) y las fechas. Espera $offered, $roleCase, $options, $roleNote y $lockedUnit.
 --}}
 @php
-    $unitLabel = match ($roleCase?->value) {
-        'subdireccion' => 'Subdirección',
-        'jefe_departamento' => 'Departamento',
-        default => 'Departamento académico',
-    };
+    $unitLabel = $roleCase?->unitLabel() ?? 'Departamento académico';
     $columns = $roleCase?->scopeColumns() ?? [];
     $hints = [
         'admin' => 'Este puesto no tiene alcance: vale en todo el sistema.',

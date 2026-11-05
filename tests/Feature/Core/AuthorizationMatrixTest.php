@@ -7,8 +7,20 @@ use App\Modules\Core\ModuleServiceProvider;
 test('la matriz puesto→permisos es la que está en tests/Fixtures/Authorization/matrix.json', function () {
     $registry = app(PermissionRegistry::class);
 
-    expect(['grants' => $registry->matrix(), 'admin_denies' => $registry->adminDenials()])
+    expect(['grants' => $registry->matrix(), 'admin_denies' => $registry->adminDenials(), 'applies_to' => $registry->applicability()])
         ->toEqual(json_decode(file_get_contents(base_path('tests/Fixtures/Authorization/matrix.json')), true));
+});
+
+test('D20: todo permiso concedido al jefe de departamento declara a qué unidades aplica', function () {
+    $registry = app(PermissionRegistry::class);
+
+    $open = collect($registry->permissions())
+        ->filter(fn ($permission): bool => $registry->grants(Role::JefeDepartamento, $permission) && $permission->appliesTo() === null)
+        ->map(fn ($permission): string => $permission->value)
+        ->values()
+        ->all();
+
+    expect($open)->toBe([]);
 });
 
 test('todo permiso está concedido a algún puesto o lo tiene el admin', function () {

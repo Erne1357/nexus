@@ -36,15 +36,21 @@ use LogicException;
  * porque responden «quién podría», que es lo que preguntan los avisos y las policies sobre otra persona.
  *
  * API de permisos (spec 7.1; el registro de permisos dice qué puesto concede qué):
- * - allows(): un permiso personal lo da cualquier puesto que tenga, aunque no sea el activo, solo sobre lo suyo (el
- *   dueño del objetivo es el usuario). Uno de gestión, alguno de sus puestos efectivos que lo conceda: el admin, sobre
- *   todo; otro, si alguno de sus nombramientos cubre el objetivo en cada dimensión que el permiso declara. Un
- *   nombramiento que no fija una dimensión la cubre (en campus, solo los activos; un objetivo sin campus también); uno
- *   que la fija cubre si algún valor del objetivo coincide (en unidad, la unidad o una descendiente, OrgTree) y no
- *   cubre un objetivo sin valor. Las dimensiones que el permiso no declara no se revisan.
- * - allowsAny(): si puede sobre algo: algún puesto efectivo (cualquiera que tenga, si es personal) lo concede. Todo
- *   puesto que tiene cuenta con al menos un nombramiento que vale, o es el admin.
- * - constrain(): la misma regla en SQL, para las listas.
+ * - Qué nombramientos aportan un permiso (D20, contributing()): los de un puesto al que el registro se lo concede y
+ *   cuya unidad, o una de sus descendientes, es de las que el permiso declara en Permission::appliesTo()
+ *   (OrgTree::fits()). Un nombramiento sin unidad, o un permiso sin aplicabilidad, lo aporta siempre. Así el jefe de
+ *   Servicios Escolares no aporta lo académico aunque su puesto (jefe de departamento) lo tenga concedido. Todo lo de
+ *   abajo cuenta solo esos nombramientos, y un puesto concede un permiso si el admin lo es o si alguno de sus
+ *   nombramientos lo aporta (rolesGranting()): allows(), allowsAny(), constrain() y rolesAllowing() salen de esa
+ *   misma definición.
+ * - allows(): un permiso personal lo da cualquier puesto que tenga y lo conceda, aunque no sea el activo, solo sobre
+ *   lo suyo (el dueño del objetivo es el usuario). Uno de gestión, alguno de sus puestos efectivos que lo conceda: el
+ *   admin, sobre todo; otro, si alguno de los nombramientos que lo aportan cubre el objetivo en cada dimensión que el
+ *   permiso declara. Un nombramiento que no fija una dimensión la cubre (en campus, solo los activos; un objetivo sin
+ *   campus también); uno que la fija cubre si algún valor del objetivo coincide (en unidad, la unidad o una
+ *   descendiente, OrgTree) y no cubre un objetivo sin valor. Las dimensiones que el permiso no declara no se revisan.
+ * - allowsAny(): si puede sobre algo: algún puesto efectivo (cualquiera que tenga, si es personal) lo concede.
+ * - constrain(): la misma regla en SQL, para las listas, con una cláusula por nombramiento que lo aporta.
  * - rolesAllowing(): los puestos (todos los que tiene, sin el admin) con que allows() daría que sí sobre un objetivo; de ahí salen los
  *   destinatarios de un aviso (RecipientsQuery::holders()).
  *
@@ -207,12 +213,12 @@ final class Actor
             return true;
         }
 
-        return array_any($this->assignmentsOf($roles), fn (AssignmentScope $scope): bool => $this->coversTarget($scope, $permission, $target));
+        return array_any($this->contributing($permission, $roles), fn (AssignmentScope $scope): bool => $this->coversTarget($scope, $permission, $target));
     }
 
     /**
      * Los puestos que tiene (todos, no solo el activo; sin el admin) que conceden `$permission` y tienen algún
-     * nombramiento que cubre `$target` en cada dimensión que el permiso declara: la regla de allows() sin el atajo
+     * nombramiento que lo aporta y cubre `$target` en cada dimensión que el permiso declara: la regla de allows() sin el atajo
      * del admin, para saber a quién y con qué puesto le toca un aviso. En el orden del enum. Solo permisos de gestión.
      *
      * @return list<Role>
@@ -229,14 +235,15 @@ final class Actor
         ));
 
         return array_values(array_filter($roles, fn (Role $role): bool => array_any(
-            $this->assignmentsOf([$role]),
+            $this->contributing($permission, [$role]),
             fn (AssignmentScope $scope): bool => $this->coversTarget($scope, $permission, $target),
         )));
     }
 
     /**
      * Si puede `$permission` sobre algo: para el menú y la entrada a una pantalla de lista, que luego se filtra con
-     * constrain(). Uno personal lo da cualquier puesto que tenga; uno de gestión, un puesto efectivo.
+     * constrain(). Uno personal lo da cualquier puesto que tenga; uno de gestión, un puesto efectivo; en los dos, el
+     * puesto debe concederlo con un nombramiento que lo aporte (D20, rolesGranting()).
      */
     public function allowsAny(Permission $permission): bool
     {
@@ -310,7 +317,7 @@ final class Actor
             return $query;
         }
 
-        $scopes = $this->assignmentsOf($roles);
+        $scopes = $this->contributing($permission, $roles);
 
         return $query->where(function (Builder $any) use ($scopes, $permission, $mappings): void {
             $any->whereRaw('false');
@@ -496,14 +503,39 @@ final class Actor
     }
 
     /**
-     * Los de `$roles` a los que el registro concede `$permission`. Lanza LogicException si nadie lo declaró.
+     * Los de `$roles` que le conceden `$permission` a esta persona: el registro se lo concede al puesto y es el admin o
+     * alguno de sus nombramientos lo aporta (contributing()). Lanza LogicException si nadie lo declaró.
      *
      * @param  list<Role>  $roles
      * @return list<Role>
      */
     private function rolesGranting(Permission $permission, array $roles): array
     {
-        return array_values(array_filter($roles, fn (Role $role): bool => $this->permissions->grants($role, $permission)));
+        return array_values(array_filter($roles, fn (Role $role): bool => $this->permissions->grants($role, $permission)
+            && ($role === Role::Admin || $this->contributing($permission, [$role]) !== [])));
+    }
+
+    /**
+     * D20: los nombramientos de `$roles` que aportan `$permission`: sin unidad, o con una unidad a la que el permiso
+     * aplica (ella o una descendiente, OrgTree::fits()). Sin aplicabilidad declarada, todos. No revisa que el registro
+     * se lo conceda al puesto: eso es de rolesGranting(), que pasa antes.
+     *
+     * @param  list<Role>  $roles
+     * @return list<AssignmentScope>
+     */
+    private function contributing(Permission $permission, array $roles): array
+    {
+        $applicability = $permission->appliesTo();
+        $scopes = $this->assignmentsOf($roles);
+
+        if ($applicability === null) {
+            return $scopes;
+        }
+
+        return array_values(array_filter(
+            $scopes,
+            fn (AssignmentScope $scope): bool => $scope->unitId === null || $this->orgTree->fits($scope->unitId, $applicability),
+        ));
     }
 
     /**
