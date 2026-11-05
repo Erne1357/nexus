@@ -35,7 +35,7 @@ use Throwable;
  * Un campus o plantilla desconocidos se detectan al llegar a su lote, antes de guardarlo: los lotes anteriores
  * ya se aplicaron en una corrida real (son altas por clave natural, repetirlas no cambia nada) y se revierten en
  * un ensayo. Cualquier fallo se reporta como SiiMigrationStopped, sin valores. `_incidencias.csv` se reescribe
- * siempre al terminar.
+ * siempre al terminar. Al log va solo la clase, el lugar y el SQLSTATE de la falla (SiiFailureLog), nunca su mensaje.
  *
  * Los catálogos curados se leen de `Sii/Curated/`; las pruebas pasan otra carpeta como `$curatedDir`.
  *
@@ -104,7 +104,7 @@ final class RunSiiMigration
         } catch (SiiMigrationStopped $stopped) {
             $pending = new SiiMigrationStopped($stopped->step, $stopped->batchFile, $stopped->cause, count($reports), $stopped->getPrevious());
         } catch (Throwable $exception) {
-            report($exception);
+            SiiFailureLog::write('la corrida se detuvo en el paso '.($current[0] ?? '-'), $exception);
             $pending = new SiiMigrationStopped($current[0] ?? '-', $current[1], $this->causeOf($exception), count($reports), $exception);
         }
 
@@ -143,7 +143,7 @@ final class RunSiiMigration
 
     /**
      * Revierte el ensayo, borra lo subido y reescribe las incidencias. Cada paso corre aunque otro falle; un
-     * fallo se reporta al log y se devuelve el primero, sin tapar un error pendiente.
+     * fallo va al log (SiiFailureLog: sin mensaje ni valores) y se devuelve el primero, sin tapar un error pendiente.
      *
      * @param  list<string>  $stored
      */
@@ -165,7 +165,7 @@ final class RunSiiMigration
             try {
                 $step();
             } catch (Throwable $failure) {
-                report($failure);
+                SiiFailureLog::write('falló la limpieza', $failure);
                 $first ??= $failure;
             }
         }

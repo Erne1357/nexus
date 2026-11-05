@@ -7,7 +7,10 @@ use App\Modules\Imports\Sii\SiiBatch;
 use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Imports\Sii\SiiStep;
+use Illuminate\Database\QueryException;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -152,6 +155,25 @@ it('no imprime en consola el mensaje de una excepción inesperada', function () 
         ->and($output)->toContain('RuntimeException')->toContain('paso explota');
 });
 
+it('el log de una falla trae la clase, el lugar y el SQLSTATE, nunca el mensaje ni los valores', function () {
+    app()->instance('sii.steps', [QueryFailingStep::class]);
+    $logged = [];
+    Event::listen(MessageLogged::class, function (MessageLogged $event) use (&$logged): void {
+        $logged[] = $event->message.' '.json_encode(array_map(
+            fn (mixed $value): mixed => $value instanceof Throwable ? [$value::class, $value->getMessage(), $value instanceof QueryException ? $value->getBindings() : null] : $value,
+            $event->context,
+        ));
+    });
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $text = implode("\n", $logged);
+
+    expect($exit)->toBe(1)
+        ->and($logged)->not->toBeEmpty()
+        ->and($text)->not->toContain('VALOR-PERSONAL-555')
+        ->toContain('QueryException')->toContain('23505')->toContain('MigrateSiiTest.php:');
+});
+
 it('restaura la cola después de un ensayo', function () {
     $before = config('queue.default');
 
@@ -288,6 +310,26 @@ final class BadTemplateStep implements SiiStep
     public function batches(SiiMigration $migration): iterable
     {
         yield new SiiBatch('no_existe', 'x.csv', [['code' => 'A']]);
+    }
+}
+
+/**
+ * Paso de prueba que falla como una escritura rechazada por la base, con un valor personal en el SQL y en el mensaje.
+ */
+final class QueryFailingStep implements SiiStep
+{
+    public function name(): string
+    {
+        return 'consulta';
+    }
+
+    public function batches(SiiMigration $migration): iterable
+    {
+        $pdo = new PDOException('SQLSTATE[23505]: Unique violation: Key (rfc)=(VALOR-PERSONAL-555) already exists.');
+        $pdo->errorInfo = ['23505', 7, 'Key (rfc)=(VALOR-PERSONAL-555) already exists.'];
+
+        throw new QueryException('pgsql', 'insert into teachers (rfc) values (?)', ['VALOR-PERSONAL-555'], $pdo);
+        yield;
     }
 }
 

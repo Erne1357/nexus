@@ -7,7 +7,8 @@ use Throwable;
 
 /**
  * La corrida se detuvo en un paso y lote. El mensaje es fijo y no trae valores: la causa original (que puede
- * traer datos personales, como el SQL de una QueryException) queda en `getPrevious()` y solo va al log.
+ * traer datos personales, como el SQL de una QueryException) queda en `getPrevious()`, y al log va solo su clase, su
+ * lugar y su SQLSTATE (SiiFailureLog).
  */
 final class SiiMigrationStopped extends RuntimeException
 {

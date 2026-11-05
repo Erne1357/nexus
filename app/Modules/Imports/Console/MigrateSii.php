@@ -7,6 +7,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Sii\RunSiiMigration;
 use App\Modules\Imports\Sii\SiiContractBroken;
+use App\Modules\Imports\Sii\SiiFailureLog;
 use App\Modules\Imports\Sii\SiiMigrationStopped;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
@@ -67,7 +68,7 @@ final class MigrateSii extends Command
 
             return self::FAILURE;
         } catch (Throwable $exception) {
-            report($exception);
+            SiiFailureLog::write('error inesperado', $exception);
             $this->components->error('La migración se detuvo por un error inesperado ('.class_basename($exception).'). Detalle en el log.');
 
             return self::FAILURE;
