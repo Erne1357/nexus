@@ -77,6 +77,14 @@ final class SiiExport
     }
 
     /**
+     * El nombre del archivo en la carpeta (sin la carpeta), para señalar una línea en las incidencias.
+     */
+    public function fileName(SiiFile $file): string
+    {
+        return basename($this->paths[$file->value] ?? throw new InvalidArgumentException("La exportación no trae el archivo {$file->value}."));
+    }
+
+    /**
      * Lo leído de los archivos que terminaron su primera pasada completa desde la última llamada, en el orden en que
      * terminaron; cada archivo sale una sola vez por corrida.
      *
