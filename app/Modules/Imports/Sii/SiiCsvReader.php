@@ -57,11 +57,13 @@ final class SiiCsvReader
 
     /**
      * Renglones sanos o reparados; la clave es el número de línea del archivo (el encabezado es la 1) y el
-     * valor, columna → texto recortado en UTF-8.
+     * valor, columna → texto recortado en UTF-8. Con `$columns` entrega solo esas, en ese orden, y descarta el
+     * resto en cuanto se lee el renglón (para que un paso nunca reciba datos que no necesita).
      *
+     * @param  list<string>|null  $columns
      * @return Generator<int, array<string, string>>
      */
-    public function rows(): Generator
+    public function rows(?array $columns = null): Generator
     {
         $this->prepare();
         $this->repaired = 0;
@@ -106,7 +108,9 @@ final class SiiCsvReader
                 }
                 $afterBlank = false;
 
-                yield $lineNo => array_combine($this->header, array_map('trim', $values));
+                $row = array_combine($this->header, array_map('trim', $values));
+
+                yield $lineNo => $columns === null ? $row : array_intersect_key(array_replace(array_flip($columns), $row), array_flip($columns));
             }
         } finally {
             fclose($handle);

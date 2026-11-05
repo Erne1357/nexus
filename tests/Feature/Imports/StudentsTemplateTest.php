@@ -144,3 +144,22 @@ it('una modalidad que Nexus no conoce o un motivo demasiado largo son error', fu
     expect($this->template->validate(studentRow(['modality' => 'Híbrida']), $this->context)->errors)->toHaveKey('modality')
         ->and($this->template->validate(studentRow(['status_reason' => 'ABCDEFGHIJK']), $this->context)->errors)->toHaveKey('status_reason');
 });
+
+it('el alumno que el archivo marca inactivo nace inactivo y el vacío lo deja activo', function () {
+    $inactive = $this->template->apply(studentRow(['control_number' => '1', 'active' => 'No']), $this->context);
+    $unmarked = $this->template->apply(studentRow(['control_number' => '2']), $this->context);
+
+    expect($inactive->fresh()->is_active)->toBeFalse()
+        ->and($unmarked->fresh()->is_active)->toBeTrue();
+});
+
+it('un cambio no reactiva ni desactiva y avisa si el archivo no coincide', function () {
+    Student::factory()->create(['control_number' => '19111234', 'is_active' => true]);
+
+    $issues = $this->template->validate(studentRow(['active' => 'No']), $this->context);
+    $student = $this->template->apply(studentRow(['active' => 'No']), $this->context);
+
+    expect($issues->warnings)->toHaveKey('active')
+        ->and($student->fresh()->is_active)->toBeTrue()
+        ->and($this->template->validate(studentRow(['active' => 'tal vez']), $this->context)->errors)->toHaveKey('active');
+});

@@ -221,3 +221,13 @@ it('normaliza encabezados con acentos', function () {
 
     expect((new SiiCsvReader($this->path, SiiFile::Organigrama))->header())->toBe(['clave_area', 'descripcion_nandu']);
 });
+
+it('con una lista de columnas entrega solo esas y descarta las demás', function () {
+    SiiFixtures::write($this->path, SiiFile::Alumnos, [
+        SiiFixtures::line(SiiFile::Alumnos, ['no_de_control' => "'10'", 'carrera' => "'ISC'", 'nip' => "'secreto'", 'curp_alumno' => "'CURP'"]),
+    ]);
+
+    $rows = iterator_to_array((new SiiCsvReader($this->path, SiiFile::Alumnos))->rows(['no_de_control', 'carrera']));
+
+    expect($rows[2])->toBe(['no_de_control' => '10', 'carrera' => 'ISC']);
+});
