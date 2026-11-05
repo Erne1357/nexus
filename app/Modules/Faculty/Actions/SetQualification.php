@@ -50,7 +50,7 @@ final class SetQualification
                     'notes' => $notes,
                 ]);
 
-                return $this->log($qualification, ActivityEvent::Created, "Declaró la materia {$subject->code} en el perfil del docente {$locked->employee_number}", attributes: $this->logged($qualification));
+                return $this->log($qualification, ActivityEvent::Created, "Declaró la materia {$subject->code} en el perfil del docente {$locked->rfc}", attributes: $this->logged($qualification));
             }
 
             $old = $this->logged($existing);
@@ -67,7 +67,7 @@ final class SetQualification
             return $this->log(
                 $existing,
                 $restoring ? ActivityEvent::Created : ActivityEvent::Updated,
-                ($restoring ? 'Volvió a declarar' : 'Cambió').' la materia '.$subject->code." en el perfil del docente {$locked->employee_number}",
+                ($restoring ? 'Volvió a declarar' : 'Cambió').' la materia '.$subject->code." en el perfil del docente {$locked->rfc}",
                 attributes: $this->logged($existing),
                 old: $restoring ? null : $old,
             );

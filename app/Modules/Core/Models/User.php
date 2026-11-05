@@ -14,7 +14,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 /**
- * Usuario de Nexus. Entra con `username` (número de empleado o de control del SII); el correo
+ * Usuario de Nexus. Entra con `username` (RFC o de control del SII); el correo
  * es opcional. Un usuario nuevo debe cambiar su contraseña en el primer acceso (supuesto 2 de
  * PROJECT.md). Sus puestos son sus nombramientos (`role_assignments`, ADR-0018).
  * Qué puede ver o hacer se pregunta a Actor, nunca a los roles directamente. `authz_version` la sube un

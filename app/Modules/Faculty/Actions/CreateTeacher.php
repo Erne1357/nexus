@@ -16,7 +16,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Da de alta un docente activo adscrito al departamento dado, con esa adscripción como principal; sin campus,
  * porque el docente da clase en cualquier campus o modalidad (confirmado el 30 de octubre de 2026). Recibe datos ya
- * validados en forma (el componente) y hace cumplir TeacherRules: número de empleado sin espacios y único también
+ * validados en forma (el componente) y hace cumplir TeacherRules: RFC sin espacios y único también
  * entre los borrados, nombre no vacío y grado de TeacherDegree o vacío. Quién puede, y en qué departamento, lo
  * decide TeacherPolicy (`create`) antes de llamarla.
  *
@@ -29,7 +29,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 final class CreateTeacher
 {
     /** Lo que se escribe al dar de alta y se registra en la bitácora. */
-    public const array FIELDS = ['employee_number', 'name', 'email', 'degree', 'hired_on', 'is_active'];
+    public const array FIELDS = ['rfc', 'name', 'email', 'degree', 'hired_on', 'is_active'];
 
     public function __construct(
         private readonly TeacherRules $rules,
@@ -38,23 +38,23 @@ final class CreateTeacher
     ) {}
 
     /**
-     * @param  array{employee_number: string, name: string, email?: ?string, degree?: TeacherDegree|string|null, hired_on?: ?string}  $data
+     * @param  array{rfc: string, name: string, email?: ?string, degree?: TeacherDegree|string|null, hired_on?: ?string}  $data
      *
      * @throws ValidationException
      * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
     public function handle(array $data, Department $department): Teacher
     {
-        $number = $this->rules->normalizeEmployeeNumber($data['employee_number']);
+        $number = $this->rules->normalizeRfc($data['rfc']);
         $name = $this->rules->name($data['name']);
         $degree = $this->rules->degree($data['degree'] ?? null);
 
         return DB::transaction(function () use ($data, $department, $number, $name, $degree): Teacher {
-            $this->rules->ensureEmployeeNumberIsFree($number);
+            $this->rules->ensureRfcIsFree($number);
 
             try {
                 $teacher = Teacher::create([
-                    'employee_number' => $number,
+                    'rfc' => $number,
                     'name' => $name,
                     'email' => $this->rules->optional($data['email'] ?? null),
                     'degree' => $degree,
@@ -62,14 +62,14 @@ final class CreateTeacher
                     'is_active' => true,
                 ]);
             } catch (UniqueConstraintViolationException) {
-                throw $this->rules->employeeNumberTaken($number);
+                throw $this->rules->rfcTaken($number);
             }
 
             activity()
                 ->performedOn($teacher)
                 ->event(ActivityEvent::Created)
                 ->withChanges(['attributes' => $this->rules->logged($teacher, self::FIELDS)])
-                ->log("Dio de alta al docente {$teacher->employee_number}");
+                ->log("Dio de alta al docente {$teacher->rfc}");
 
             $this->addAdscription->handle($teacher, $department, primary: true);
             $this->syncTeacherAccess->handle($teacher);

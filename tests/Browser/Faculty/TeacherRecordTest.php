@@ -17,7 +17,7 @@ use App\Modules\Faculty\Models\TeacherPosition;
 beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
-    $this->ana = Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
+    $this->ana = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'PRUE000001AB1', 'name' => 'Ana Pérez']);
     TeacherPosition::factory()->for($this->ana)->medioTiempo()->create();
 
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
@@ -30,7 +30,7 @@ it('el jefe de SC abre la ficha, agrega una plaza y ve las horas base actualizad
         ->fill('password', 'password')
         ->press('Entrar')
         ->navigate('/faculty/teachers')
-        ->click('[data-testid="record-1000001"]')
+        ->click('[data-testid="record-PRUE000001AB1"]')
         ->waitForText('Horas base')
         ->assertPathIs('/faculty/teachers/'.$this->ana->id)
         ->assertSee('Ana Pérez')

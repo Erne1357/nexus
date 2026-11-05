@@ -14,7 +14,7 @@ Que los alumnos de Campus II se inscriban para Ago-Dic 2027 dentro de Nexus: con
 - Cada alumno recibe una **cita de inscripción** (`EnrollmentAppointment`): una ventana de fecha y hora en la que puede entrar a inscribirse.
 - La **auto-inscripción** aplica HC-19: solo materias cuya seriación está aprobada y que no se tienen aprobadas, con cupo disponible en la carrera del alumno (`group_quotas`) y sin empalme con sus otros grupos.
 - Solo aplica a **Campus II**, modalidad presencial. Campus I sigue inscribiendo en el SII en R3.
-- Los alumnos entran con Fortify usando **username = número de control**, igual que docentes con número de empleado. La provisión masiva de usuarios se hace desde el catálogo de alumnos, con el mismo mecanismo que `ProvisionTeacherUsers` de fase 1.
+- Los alumnos entran con Fortify usando **username = número de control**, igual que docentes con RFC. La provisión masiva de usuarios se hace desde el catálogo de alumnos, con el mismo mecanismo que `ProvisionTeacherUsers` de fase 1.
 - Los cupos por carrera (`group_quotas`) ya existen desde fase 3 y son el control de cupo de esta fase; no hay que rediseñarlos.
 - La carga sobre la que se inscribe es el **snapshot publicado** más reciente (fase 4), ajustado por el re-análisis (fase 8).
 

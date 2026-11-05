@@ -35,7 +35,7 @@ function availabilityRowsOf(Teacher $teacher): array
 beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
-    $this->ana = Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
+    $this->ana = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'PRUE000001AB1', 'name' => 'Ana Pérez']);
 
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])
         ->create(['username' => 'jefe.sc', 'name' => 'Julia Jefa']);

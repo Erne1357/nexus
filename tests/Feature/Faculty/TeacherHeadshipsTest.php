@@ -27,7 +27,7 @@ beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
     $this->admin = User::factory()->admin()->create();
-    $this->ana = Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
+    $this->ana = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => '1000001', 'name' => 'Ana Pérez']);
 });
 
 function headshipRecord(User $user, Teacher $teacher): Testable
@@ -135,7 +135,7 @@ describe('nombrar', function () {
     });
 
     it('un docente inactivo no se puede nombrar', function () {
-        $inactive = Teacher::factory()->inactive()->create(['employee_number' => '1000009']);
+        $inactive = Teacher::factory()->inactive()->create(['rfc' => '1000009']);
 
         headshipRecord($this->admin, $inactive)
             ->call('createHeadship')

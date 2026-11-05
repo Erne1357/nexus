@@ -21,13 +21,15 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->migration = require base_path('app/Modules/Faculty/Database/Migrations/2026_10_30_000100_remove_campus_from_teacher_departments.php');
+    $this->rename = require base_path('app/Modules/Faculty/Database/Migrations/2026_11_05_000001_rename_employee_number_to_rfc_on_teachers.php');
+    $this->rename->down();
     $this->migration->down();
 
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->sis = Department::factory()->create(['code' => 'SIS']);
     $this->ind = Department::factory()->create(['code' => 'IND']);
-    $this->teacher = Teacher::factory()->create(['employee_number' => '1234567']);
+    $this->teacher = Teacher::query()->forceCreate(['employee_number' => '1234567', 'name' => 'Docente', 'is_active' => true]);
 });
 
 /**
@@ -118,7 +120,7 @@ it('si todas están borradas se queda la más antigua, borrada', function () {
 });
 
 it('cada docente conserva una sola principal, y la base rechaza otra principal y repetir el departamento aunque esté borrado', function () {
-    $other = Teacher::factory()->create();
+    $other = Teacher::query()->forceCreate(['employee_number' => '7654321', 'name' => 'Otro docente', 'is_active' => true]);
     oldAdscription($this->teacher, $this->sis, $this->c1, primary: true, createdAt: '2026-01-01');
     oldAdscription($this->teacher, $this->sis, $this->c2, primary: false, createdAt: '2026-02-01');
     oldAdscription($this->teacher, $this->ind, $this->c2, primary: false, createdAt: '2026-03-01');

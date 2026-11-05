@@ -19,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| Actions de Docentes (spec 4.2 y 4.3). El número de empleado va sin espacios y es único también contra los
+| Actions de Docentes (spec 4.2 y 4.3). El RFC va sin espacios y es único también contra los
 | borrados; dar de alta deja la adscripción principal (solo departamento: el docente no es de un campus), el usuario
 | (SyncTeacherAccess) y la bitácora; editar sin cambios no escribe; la baja desactiva su usuario y reactivarlo lo
 | devuelve; adscribir a un docente que ya existe (S9, supuesto por confirmar) agrega la adscripción sin tocar sus
@@ -37,7 +37,7 @@ beforeEach(function () {
 function newTeacher(array $overrides = [], ?Department $department = null): Teacher
 {
     return app(CreateTeacher::class)->handle([
-        'employee_number' => '1234567',
+        'rfc' => '1234567',
         'name' => 'Ana Pérez Soto',
         'email' => 'ana.perez@example.test',
         'degree' => 'maestria',
@@ -64,11 +64,11 @@ function teacherErrorsOf(Closure $action): array
 
 describe('alta', function () {
     it('da de alta un docente activo con el número sin espacios, su adscripción principal y su usuario', function () {
-        $teacher = newTeacher(['employee_number' => " 123\u{00A0}4567 "]);
+        $teacher = newTeacher(['rfc' => " 123\u{00A0}4567 "]);
         $teacher = $teacher->fresh(['adscriptions', 'user']);
 
         expect($teacher)
-            ->employee_number->toBe('1234567')
+            ->rfc->toBe('1234567')
             ->name->toBe('Ana Pérez Soto')
             ->email->toBe('ana.perez@example.test')
             ->degree->toBe(TeacherDegree::Maestria)
@@ -99,7 +99,7 @@ describe('alta', function () {
         expect($created->description)->toBe('Dio de alta al docente 1234567')
             ->and($created->causer->is($admin))->toBeTrue()
             ->and($created->attribute_changes->toArray())->toBe(['attributes' => [
-                'employee_number' => '1234567',
+                'rfc' => '1234567',
                 'name' => 'Ana Pérez Soto',
                 'email' => 'ana.perez@example.test',
                 'degree' => 'maestria',
@@ -113,32 +113,32 @@ describe('alta', function () {
         Event::assertDispatched(AdscriptionChanged::class);
     });
 
-    it('rechaza un número repetido con un error en employee_number, también contra un borrado', function (bool $trashed) {
-        $existing = Teacher::factory()->create(['employee_number' => '1234567']);
+    it('rechaza un número repetido con un error en rfc, también contra un borrado', function (bool $trashed) {
+        $existing = Teacher::factory()->create(['rfc' => '1234567']);
 
         if ($trashed) {
             $existing->delete();
         }
 
-        expect(teacherErrorsOf(fn () => newTeacher(['employee_number' => '123 4567']))['employee_number'][0])
-            ->toBe('Ya existe un docente con el número de empleado 1234567, aunque esté inactivo o borrado.')
+        expect(teacherErrorsOf(fn () => newTeacher(['rfc' => '123 4567']))['rfc'][0])
+            ->toBe('Ya existe un docente con el RFC 1234567, aunque esté inactivo o borrado.')
             ->and(Teacher::withTrashed()->count())->toBe(1)
             ->and(TeacherDepartment::withTrashed()->count())->toBe(0);
     })->with(['activo' => false, 'borrado' => true]);
 
     it('si otra sesión guarda el mismo número entre la revisión y el alta, responde con el mismo error', function () {
         Teacher::creating(function (Teacher $teacher): void {
-            DB::table('teachers')->insert(['employee_number' => $teacher->employee_number, 'name' => 'Otra sesión', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
+            DB::table('teachers')->insert(['rfc' => $teacher->rfc, 'name' => 'Otra sesión', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
         });
 
-        expect(teacherErrorsOf(fn () => newTeacher())['employee_number'][0])->toContain('Ya existe un docente con el número de empleado 1234567');
+        expect(teacherErrorsOf(fn () => newTeacher())['rfc'][0])->toContain('Ya existe un docente con el RFC 1234567');
     });
 
     it('rechaza un número o un nombre que quedan vacíos', function (string $field, string $value, string $message) {
         expect(teacherErrorsOf(fn () => newTeacher([$field => $value]))[$field][0])->toBe($message)
             ->and(Teacher::count())->toBe(0);
     })->with([
-        'número' => ['employee_number', "\u{00A0} ", 'El número de empleado no puede quedar vacío ni ser solo espacios.'],
+        'número' => ['rfc', "\u{00A0} ", 'El RFC no puede quedar vacío ni ser solo espacios.'],
         'nombre' => ['name', '   ', 'El nombre no puede quedar vacío.'],
     ]);
 
@@ -176,7 +176,7 @@ describe('alta', function () {
 describe('edición', function () {
     beforeEach(function () {
         $this->teacher = Teacher::factory()->adscribedTo($this->sc)->create([
-            'employee_number' => '7654321',
+            'rfc' => '7654321',
             'name' => 'Luis Gómez',
             'email' => null,
             'degree' => TeacherDegree::Licenciatura,
@@ -219,10 +219,10 @@ describe('edición', function () {
         Event::assertNotDispatched(TeacherUpdated::class);
     });
 
-    it('no cambia el número de empleado ni el estado: el número es su usuario y la baja es SetTeacherActive', function () {
-        app(UpdateTeacher::class)->handle($this->teacher, ['employee_number' => '9999999', 'is_active' => false]);
+    it('no cambia el RFC ni el estado: el número es su usuario y la baja es SetTeacherActive', function () {
+        app(UpdateTeacher::class)->handle($this->teacher, ['rfc' => '9999999', 'is_active' => false]);
 
-        expect($this->teacher->fresh())->employee_number->toBe('7654321')->is_active->toBeTrue()
+        expect($this->teacher->fresh())->rfc->toBe('7654321')->is_active->toBeTrue()
             ->and(Activity::count())->toBe(0);
     });
 
@@ -276,7 +276,7 @@ describe('baja y reactivación', function () {
 describe('adscripción de un docente que ya existe (S9)', function () {
     beforeEach(function () {
         $this->teacher = Teacher::factory()->adscribedTo($this->ii)->create([
-            'employee_number' => '5555555',
+            'rfc' => '5555555',
             'name' => 'Rosa Díaz',
             'email' => 'rosa@example.test',
         ]);
@@ -284,7 +284,7 @@ describe('adscripción de un docente que ya existe (S9)', function () {
 
     it('agrega la adscripción, que no es la principal, sin tocar sus datos ni su acceso', function () {
         Event::fake([AdscriptionChanged::class]);
-        $before = $this->teacher->fresh()->only(['employee_number', 'user_id', 'name', 'email', 'degree', 'is_active']);
+        $before = $this->teacher->fresh()->only(['rfc', 'user_id', 'name', 'email', 'degree', 'is_active']);
 
         $adscription = app(AddAdscription::class)->handle($this->teacher, $this->sc);
 
@@ -292,7 +292,7 @@ describe('adscripción de un docente que ya existe (S9)', function () {
             ->teacher_id->toBe($this->teacher->id)
             ->department_id->toBe($this->sc->id)
             ->is_primary->toBeFalse()
-            ->and($this->teacher->fresh()->only(['employee_number', 'user_id', 'name', 'email', 'degree', 'is_active']))->toBe($before)
+            ->and($this->teacher->fresh()->only(['rfc', 'user_id', 'name', 'email', 'degree', 'is_active']))->toBe($before)
             ->and($this->teacher->adscriptions()->count())->toBe(2)
             // Su usuario y su alcance de `docente` no dependen de sus departamentos (G3).
             ->and(User::count())->toBe(0)
@@ -316,7 +316,7 @@ describe('adscripción de un docente que ya existe (S9)', function () {
     });
 
     it('si el docente se quedó sin principal viva, la adscripción restaurada queda como principal', function () {
-        $alone = Teacher::factory()->create(['employee_number' => '6666666']);
+        $alone = Teacher::factory()->create(['rfc' => '6666666']);
         $removed = TeacherDepartment::factory()->for($alone)->for($this->sc)->create(['is_primary' => false]);
         $removed->delete();
 

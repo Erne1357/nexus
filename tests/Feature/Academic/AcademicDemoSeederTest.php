@@ -68,7 +68,7 @@ function demoCounts(): array
 
 /**
  * Los usuarios de prueba de DemoStaffSeeder: `subdir`, `jefe.<depto>`, `jpd.<depto>.<campus>` y
- * `coord.<carrera>.<campus>` (los docentes de FacultyDemoSeeder entran con su número de empleado).
+ * `coord.<carrera>.<campus>` (los docentes de FacultyDemoSeeder entran con su RFC).
  *
  * @return EloquentCollection<int, User>
  */

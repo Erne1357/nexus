@@ -25,7 +25,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * (docs/arquitectura/arquitectura.md, "Acceso de docentes"). Es idempotente: correrla otra vez sin cambios en el
  * docente no escribe nada.
  *
- * - Docente activo: su usuario es el ligado o, si no tiene, el de username = número de empleado, que se liga sin
+ * - Docente activo: su usuario es el ligado o, si no tiene, el de username = RFC, que se liga sin
  *   tocar su contraseña (S15, supuesto por confirmar), solo si está activo, no es de otro docente (aunque esté
  *   borrado) y no tiene más puesto que `docente` (supuesto por confirmar): si no, devuelve `conflict` y no toca
  *   nada, porque quien da de alta un docente no debe poder reactivar ni, con la baja, desactivar una cuenta de
@@ -87,14 +87,14 @@ final class SyncTeacherAccess
         $user = $teacher->user_id === null ? null : User::query()->lockForUpdate()->findOrFail($teacher->user_id);
 
         if ($user === null) {
-            $user = User::query()->where('username', $teacher->employee_number)->lockForUpdate()->first();
+            $user = User::query()->where('username', $teacher->rfc)->lockForUpdate()->first();
 
             if ($user !== null && ! $this->linkable($user)) {
                 return AccessSync::Conflict;
             }
 
             $result = $user === null ? AccessSync::Created : AccessSync::Linked;
-            $user ??= $this->createStaffUser->handle($teacher->employee_number, $teacher->name, $this->freeEmail($teacher->email), $passwordHash);
+            $user ??= $this->createStaffUser->handle($teacher->rfc, $teacher->name, $this->freeEmail($teacher->email), $passwordHash);
 
             $this->link($teacher, $user);
         }
@@ -160,7 +160,7 @@ final class SyncTeacherAccess
             ->performedOn($teacher)
             ->event(ActivityEvent::Updated)
             ->withChanges(['attributes' => ['user_id' => $user->getKey()], 'old' => ['user_id' => null]])
-            ->log("Ligó al docente {$teacher->employee_number} con el usuario {$user->username}");
+            ->log("Ligó al docente {$teacher->rfc} con el usuario {$user->username}");
     }
 
     /**
@@ -230,7 +230,7 @@ final class SyncTeacherAccess
             ->event(ActivityEvent::Updated)
             ->withChanges(['attributes' => $new, 'old' => $old])
             ->withProperties(['teacher_id' => $teacher->getKey()])
-            ->log("Sincronizó el acceso del docente {$teacher->employee_number}: ".Arr::join($done, ', ', ' y '));
+            ->log("Sincronizó el acceso del docente {$teacher->rfc}: ".Arr::join($done, ', ', ' y '));
 
         app(Actor::class)->refresh();
     }

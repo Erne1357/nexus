@@ -35,13 +35,13 @@ beforeEach(function () {
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
 
     $this->docente = User::factory()->withRole(Role::Docente)->create(['username' => '1000001']);
-    $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez', 'email' => 'ana@example.test', 'user_id' => $this->docente->id]);
+    $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => '1000001', 'name' => 'Ana Pérez', 'email' => 'ana@example.test', 'user_id' => $this->docente->id]);
     TeacherDepartment::factory()->for($this->ana)->for($this->sc)->create(['is_primary' => false, 'created_at' => now()->addSecond()]);
     $this->plaza = TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create();
-    $this->beto = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
+    $this->beto = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => '1000002', 'name' => 'Beto Ruiz']);
 
     $this->admin = User::factory()->admin()->create();
-    $this->sin = Teacher::factory()->create(['employee_number' => '1000003', 'name' => 'Elsa Mora']);
+    $this->sin = Teacher::factory()->create(['rfc' => '1000003', 'name' => 'Elsa Mora']);
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
     $this->jefeCb = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
@@ -62,7 +62,7 @@ describe('ficha', function () {
 
     it('en Datos muestra sus datos y sus adscripciones con la principal primero', function () {
         teacherRecord($this->admin, $this->ana)
-            ->assertSeeInOrder(['Número de empleado', '1000001', 'Correo', 'ana@example.test', 'Usuario'])
+            ->assertSeeInOrder(['RFC', '1000001', 'Correo', 'ana@example.test', 'Usuario'])
             ->assertSeeInOrder(['Adscripciones', 'Ingeniería Industrial', 'Principal', 'Sistemas y Computación', 'Hacer principal']);
     });
 

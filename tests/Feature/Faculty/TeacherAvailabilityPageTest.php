@@ -29,9 +29,9 @@ beforeEach(function () {
     $this->previous = Term::factory()->create(['code' => '20263', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-24', 'ends_on' => '2026-12-11']);
     Term::factory()->create(['code' => '20262', 'name' => 'Verano 2026', 'starts_on' => '2026-06-22', 'ends_on' => '2026-08-07']);
 
-    $this->ana = Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
+    $this->ana = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => '1000001', 'name' => 'Ana Pérez']);
     TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create();
-    $this->beto = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
+    $this->beto = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => '1000002', 'name' => 'Beto Ruiz']);
 
     $this->admin = User::factory()->admin()->create();
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();

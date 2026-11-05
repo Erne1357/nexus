@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Storage;
 */
 
 beforeEach(function () {
-    $this->teacher = Teacher::factory()->create(['employee_number' => '1001']);
+    $this->teacher = Teacher::factory()->create(['rfc' => 'PRUE001001AB1']);
     $this->context = new ImportContext(User::factory()->admin()->create());
     $this->template = new PositionsTemplate;
 });
@@ -30,7 +30,7 @@ beforeEach(function () {
 function positionRow(array $changes = []): array
 {
     return (new PositionsTemplate)->normalize([
-        'employee_number' => '1001', 'kind' => 'TIEMPO COMPLETO', 'base_hours' => '40',
+        'rfc' => 'PRUE001001AB1', 'kind' => 'TIEMPO COMPLETO', 'base_hours' => '40',
         'valid_from' => '01/08/2026', 'valid_to' => '31/12/2026', ...$changes,
     ]);
 }
@@ -78,12 +78,12 @@ it('un tipo desconocido es error', function () {
 });
 
 it('un docente que no existe, o que está borrado, es error', function () {
-    Teacher::factory()->create(['employee_number' => '1002'])->delete();
+    Teacher::factory()->create(['rfc' => 'PRUE001002AB1'])->delete();
 
-    expect($this->template->validate(positionRow(['employee_number' => '9999']), $this->context)->errors)
-        ->toBe(['employee_number' => ['No hay un docente con el número de empleado 9999.']])
-        ->and($this->template->validate(positionRow(['employee_number' => '1002']), $this->context)->errors)
-        ->toHaveKey('employee_number');
+    expect($this->template->validate(positionRow(['rfc' => 'PRUE009999AB1']), $this->context)->errors)
+        ->toBe(['rfc' => ['No hay un docente con el RFC PRUE009999AB1.']])
+        ->and($this->template->validate(positionRow(['rfc' => 'PRUE001002AB1']), $this->context)->errors)
+        ->toHaveKey('rfc');
 });
 
 it('«hasta» antes de «desde» es error; el mismo día se acepta', function () {
@@ -149,8 +149,8 @@ it('busca cada docente una sola vez por corrida', function () {
 
 it('el archivo de ejemplo anonimizado se valida y se aplica sin errores', function () {
     Storage::fake('imports');
-    foreach (['90001', '90002', '90003'] as $number) {
-        Teacher::factory()->create(['employee_number' => $number]);
+    foreach (['PRUE090001AB1', 'PRUE090002AB1', 'PRUE090003AB1'] as $number) {
+        Teacher::factory()->create(['rfc' => $number]);
     }
     $batch = ImportBatch::factory()->create(['template' => 'positions', 'uploaded_by' => $this->context->user->id]);
     $batch->update(['file_path' => "{$batch->id}.csv"]);

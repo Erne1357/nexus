@@ -18,7 +18,7 @@
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
         <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-                <span class="font-mono text-[15px] font-semibold">{{ $record->code ?? $record->employee_number }}</span>
+                <span class="font-mono text-[15px] font-semibold">{{ $record->code ?? $record->rfc }}</span>
                 <x-core::status-badge :tone="$record->is_active ? 'success' : 'neutral'" :label="$record->is_active ? 'Activo' : 'Inactivo'" />
             </div>
             <h2 id="review-drawer-title" class="mt-0.5 text-xl font-bold leading-tight">{{ $record->name }}</h2>

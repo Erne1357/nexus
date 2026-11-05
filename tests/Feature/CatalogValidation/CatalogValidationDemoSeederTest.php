@@ -203,7 +203,7 @@ it('es idempotente: correrlo dos veces no duplica observaciones, recordatorios n
 it('el resumen del periodo actual muestra exactamente las bajas y las reactivaciones sembradas', function () {
     seedCatalogScenario();
     $department = Department::query()->where('code', 'CB')->firstOrFail();
-    $wasInactive = Teacher::query()->where('is_active', false)->whereHas('adscriptions', fn ($query) => $query->where('department_id', $department->id))->pluck('employee_number')->all();
+    $wasInactive = Teacher::query()->where('is_active', false)->whereHas('adscriptions', fn ($query) => $query->where('department_id', $department->id))->pluck('rfc')->all();
 
     runCatalogDemoSeeder('massive');
 
@@ -228,7 +228,7 @@ it('no desactiva a los jefes ni a los jefes de proyecto docente', function () {
             $user = $kind === null
                 ? User::query()->whereIn('id', RoleAssignment::query()->where(['role' => Role::JefeDepartamento, 'org_unit_id' => $department->id])->select('user_id'))->sole()
                 : User::factory()->create();
-            $teacher = Teacher::factory()->adscribedTo($department)->create(['employee_number' => 'A'.count($kept).'000', 'user_id' => $user->id]);
+            $teacher = Teacher::factory()->adscribedTo($department)->create(['rfc' => 'A'.count($kept).'000', 'user_id' => $user->id]);
 
             if ($kind !== null) {
                 RoleAssignment::factory()->create(['user_id' => $user->id, 'org_unit_id' => $department->id, 'campus_id' => Campus::query()->where('code', 'C2')->value('id'), 'role' => Role::JefeProyectoDocente, 'valid_from' => today()->subMonth()->toDateString(), 'valid_to' => null]);

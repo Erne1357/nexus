@@ -10,8 +10,8 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Plazas del SII (tarea 10): número de empleado, tipo de plaza, horas base y vigencia (`dd/mm/aaaa`). La clave es
- * el docente, el tipo y «desde»; el archivo trae el número de empleado y la tabla guarda `teacher_id`, que
+ * Plazas del SII (tarea 10): RFC, tipo de plaza, horas base y vigencia (`dd/mm/aaaa`). La clave es
+ * el docente, el tipo y «desde»; el archivo trae el RFC y la tabla guarda `teacher_id`, que
  * `recordKey()` traduce. Un docente puede tener varias plazas vigentes a la vez, así que dos del mismo docente
  * con otro tipo u otro «desde» no son repetidas.
  *
@@ -21,9 +21,10 @@ use Illuminate\Validation\ValidationException;
  */
 class PositionsTemplate extends ImportTemplate
 {
+    use ChecksTeacherRfc;
     use ParsesSiiDates;
 
-    /** @var array<string, Teacher|null> docente por número de empleado, en esta corrida */
+    /** @var array<string, Teacher|null> docente por RFC, en esta corrida */
     private array $teachers = [];
 
     public function key(): string
@@ -39,7 +40,7 @@ class PositionsTemplate extends ImportTemplate
     public function fields(): array
     {
         return [
-            'employee_number' => 'número de empleado',
+            'rfc' => 'RFC',
             'kind' => 'tipo de plaza',
             'base_hours' => 'horas base',
             'valid_from' => 'desde',
@@ -49,7 +50,7 @@ class PositionsTemplate extends ImportTemplate
 
     public function naturalKey(): array
     {
-        return ['employee_number', 'kind', 'valid_from'];
+        return ['rfc', 'kind', 'valid_from'];
     }
 
     public function model(): string
@@ -60,7 +61,7 @@ class PositionsTemplate extends ImportTemplate
     public function rules(): array
     {
         return [
-            'employee_number' => ['required', 'string', 'max:20'],
+            'rfc' => $this->rfcRules(),
             'kind' => ['required', Rule::enum(PositionKind::class)],
             'base_hours' => ['required', 'integer', 'min:0', 'max:'.PositionKind::MAX_HOURS],
             'valid_from' => ['nullable', 'date_format:Y-m-d'],
@@ -71,11 +72,11 @@ class PositionsTemplate extends ImportTemplate
     public function normalize(array $row): array
     {
         $row = parent::normalize($row);
-        $row['employee_number'] = self::asText($row['employee_number']);
+        $row['rfc'] = self::asText($row['rfc']);
 
-        if (is_string($row['employee_number'])) {
+        if (is_string($row['rfc'])) {
             try {
-                $row['employee_number'] = app(TeacherRules::class)->normalizeEmployeeNumber($row['employee_number']);
+                $row['rfc'] = app(TeacherRules::class)->normalizeRfc($row['rfc']);
             } catch (ValidationException) {
                 // Texto que no es UTF-8 válido: validate() lo reporta.
             }
@@ -95,13 +96,13 @@ class PositionsTemplate extends ImportTemplate
 
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
-        $issues = parent::check($row, $context, $issues);
-        $teacher = $this->teacher($row['employee_number']);
+        $issues = $this->warnWithoutHomoclave(parent::check($row, $context, $issues), $row['rfc']);
+        $teacher = $this->teacher($row['rfc']);
 
         if ($teacher === null) {
-            $issues = $issues->withError('employee_number', "No hay un docente con el número de empleado {$row['employee_number']}.");
+            $issues = $issues->withError('rfc', "No hay un docente con el RFC {$row['rfc']}.");
         } elseif ($teacher->trashed()) {
-            $issues = $issues->withError('employee_number', "El docente {$row['employee_number']} está borrado.");
+            $issues = $issues->withError('rfc', "El docente {$row['rfc']} está borrado.");
         }
 
         $kind = PositionKind::from($row['kind']);
@@ -120,7 +121,7 @@ class PositionsTemplate extends ImportTemplate
 
     protected function recordKey(array $row, ImportContext $context): ?array
     {
-        $teacher = $this->teacher($row['employee_number']);
+        $teacher = $this->teacher($row['rfc']);
 
         if ($teacher === null || $teacher->trashed()) {
             return null;
@@ -138,7 +139,7 @@ class PositionsTemplate extends ImportTemplate
     {
         return array_key_exists($number, $this->teachers)
             ? $this->teachers[$number]
-            : $this->teachers[$number] = Teacher::withTrashed()->where('employee_number', $number)->first(['id', 'deleted_at']);
+            : $this->teachers[$number] = Teacher::withTrashed()->where('rfc', $number)->first(['id', 'deleted_at']);
     }
 
     private function kind(string $name): ?PositionKind

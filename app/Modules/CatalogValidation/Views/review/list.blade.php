@@ -65,8 +65,8 @@
                 @endif
             @endscope
 
-            @scope('cell_employee_number', $record)
-                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->employee_number }}</span>
+            @scope('cell_rfc', $record)
+                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->rfc }}</span>
             @endscope
 
             @scope('cell_theory_hours', $record)
@@ -141,7 +141,7 @@
             @foreach ($page as $record)
                 <li wire:key="record-card-{{ $record->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $record->is_active])>
                     <div class="flex items-center justify-between gap-2.5">
-                        <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->code ?? $record->employee_number }}</span>
+                        <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->code ?? $record->rfc }}</span>
                         <x-core::status-badge :tone="$record->is_active ? 'success' : 'neutral'" :label="$record->is_active ? 'Activo' : 'Inactivo'" />
                     </div>
                     <p @class(['font-semibold' => $record->is_active])>{{ $record->name ?? '—' }}</p>
@@ -185,7 +185,7 @@
         @if ($page->isNotEmpty() || $page->hasPages())
             <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
                 @if ($page->isNotEmpty())
-                    @php($keyOf = fn ($record): string => $record->code ?? $record->employee_number)
+                    @php($keyOf = fn ($record): string => $record->code ?? $record->rfc)
                     <p>{{ $review->catalog->label() }} <span class="font-mono">{{ $keyOf($page->getCollection()->first()) }}</span>@if ($page->count() > 1) a <span class="font-mono">{{ $keyOf($page->getCollection()->last()) }}</span> · <span class="font-mono">{{ $page->firstItem() }}–{{ $page->lastItem() }}</span>@else · <span class="font-mono">{{ $page->firstItem() }}</span>@endif de <span class="font-mono">{{ $page->total() }}</span></p>
                 @endif
 

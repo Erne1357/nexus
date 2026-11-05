@@ -18,7 +18,7 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
-    $this->teacher = app(CreateTeacher::class)->handle(['employee_number' => '1234567', 'name' => 'Ana Pérez Soto'], $this->sc);
+    $this->teacher = app(CreateTeacher::class)->handle(['rfc' => '1234567', 'name' => 'Ana Pérez Soto'], $this->sc);
     $this->second = app(AddAdscription::class)->handle($this->teacher, $this->ii);
     $this->first = $this->teacher->adscriptions()->where('is_primary', true)->sole();
     $this->activityBase = (int) Activity::max('id');

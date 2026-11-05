@@ -88,7 +88,7 @@ class CatalogValidationDemoSeeder extends Seeder
             'rooms' => ['Caben 40 con las bancas actuales, no 30.', 'La capacidad real es de 25 por el equipo instalado.', 'Se retiraron mesas; la capacidad bajó a 20.'],
         ],
         'duplicate' => [
-            'teachers' => ['Aparece dos veces con otro número de empleado.', 'Duplicado por la importación del SII.'],
+            'teachers' => ['Aparece dos veces con otro RFC.', 'Duplicado por la importación del SII.'],
             'rooms' => ['Es el mismo salón que otro con distinta clave.', 'Duplicado por la importación del SII.'],
             'subjects' => ['Es la misma materia con otra clave.', 'Duplicada por la importación del SII.'],
             'study_plans' => ['Es el mismo plan capturado con otra clave.', 'Duplicado por la importación del SII.'],
@@ -191,7 +191,7 @@ class CatalogValidationDemoSeeder extends Seeder
         $departments = Department::query()->where('is_active', true)->orderBy('code')->get();
 
         foreach ($departments as $index => $department) {
-            $teachers = Teacher::query()->whereHas('adscriptions', fn ($query) => $query->where('department_id', $department->getKey()))->orderBy('employee_number');
+            $teachers = Teacher::query()->whereHas('adscriptions', fn ($query) => $query->where('department_id', $department->getKey()))->orderBy('rfc');
             $reactivate = (clone $teachers)->where('is_active', false)->limit($config['reactivate'])->get();
 
             // Sin jefes ni jefes de proyecto docente: SetTeacherActive les termina la jefatura y desactiva su usuario.
@@ -211,7 +211,7 @@ class CatalogValidationDemoSeeder extends Seeder
 
             for ($n = 1; $n <= $config['create']; $n++) {
                 app(CreateTeacher::class)->handle([
-                    'employee_number' => $this->freeCode(fn (string $code): bool => Teacher::withTrashed()->where('employee_number', $code)->exists(), sprintf('DN%02d%02d', $index + 1, $n)),
+                    'rfc' => $this->freeCode(fn (string $code): bool => Teacher::withTrashed()->where('rfc', $code)->exists(), sprintf('DN%02d%02d', $index + 1, $n)),
                     'name' => "Docente Nuevo {$department->code} {$n}",
                     'email' => strtolower("dn{$department->code}{$n}").'@example.test',
                 ], $department);

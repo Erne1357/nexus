@@ -48,7 +48,7 @@ function seedCatalogRow(string $route, string $code): void
         'academic.plans' => StudyPlan::factory()->create(['code' => $code]),
         'facilities.buildings' => Building::factory()->create(['code' => $code]),
         'facilities.rooms' => Room::factory()->create(['code' => $code]),
-        'faculty.teachers' => Teacher::factory()->adscribedTo(Department::factory()->create())->create(['employee_number' => $code]),
+        'faculty.teachers' => Teacher::factory()->adscribedTo(Department::factory()->create())->create(['rfc' => $code]),
     };
 
     // Edificios y salones son de un campus: el admin, que no tiene uno por omisión, elige el de la fila.

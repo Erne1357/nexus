@@ -23,7 +23,7 @@ use RuntimeException;
  * periodo actual, horas fuera del ITCJ, perfil, historial de 8 periodos y evaluaciones. Hay docentes de cada
  * departamento que da materias en los planes del campus, de los cinco tipos de plaza (varias a la vez, vencidas y
  * futuras), sin plaza, con dos o tres departamentos, inactivos, borrados, sin correo ni grado y con nombres muy
- * largos. La adscripción es solo al departamento: el campus del docente es solo el de su número de empleado y su
+ * largos. La adscripción es solo al departamento: el campus del docente es solo el de su RFC y su
  * historial.
  *
  * Al final ProvisionTeacherUsers les da usuario (contraseña por defecto, cambio obligatorio) a los activos, y unos
@@ -33,7 +33,7 @@ use RuntimeException;
  *
  * Inserta con `DB::table()` en bloques de 1 000, todo un campus en una transacción. Cada campus usa su propia semilla (`$seed` más una constante del
  * campus): los docentes de Campus II son los mismos solo o junto con Campus I. Volver a sembrar no duplica: un
- * docente cuyo número de empleado ya existe, incluso borrado, no se toca. No corre en producción.
+ * docente cuyo RFC ya existe, incluso borrado, no se toca. No corre en producción.
  */
 class FacultyDemoSeeder extends Seeder
 {
@@ -140,7 +140,7 @@ class FacultyDemoSeeder extends Seeder
     private function insert(array $roster, array $catalog, string $campusId, array $terms, string $admin, array &$totals): array
     {
         $now = now();
-        $existing = DB::table('teachers')->whereIn('employee_number', array_column($roster, 'employee_number'))->pluck('employee_number')->flip();
+        $existing = DB::table('teachers')->whereIn('rfc', array_column($roster, 'rfc'))->pluck('rfc')->flip();
         $buffers = [];
         $candidates = [];
 
@@ -164,10 +164,10 @@ class FacultyDemoSeeder extends Seeder
             $primary = $catalog[$teacher['adscriptions'][0]['dept']]['id'];
 
             if ($teacher['is_active'] && ! $teacher['deleted'] && array_filter($teacher['positions'], fn (array $position): bool => $position['kind'] === 'tiempo_completo' || $position['kind'] === 'medio_tiempo')) {
-                $candidates[$primary][] = $teacher['employee_number'];
+                $candidates[$primary][] = $teacher['rfc'];
             }
 
-            if (isset($existing[$teacher['employee_number']])) {
+            if (isset($existing[$teacher['rfc']])) {
                 continue;
             }
 
@@ -176,7 +176,7 @@ class FacultyDemoSeeder extends Seeder
 
             $push('teachers', [
                 'id' => $id,
-                'employee_number' => $teacher['employee_number'],
+                'rfc' => $teacher['rfc'],
                 'user_id' => null,
                 'name' => $teacher['name'],
                 'email' => $teacher['email'],
@@ -243,7 +243,7 @@ class FacultyDemoSeeder extends Seeder
             foreach ($byDepartment as $departmentId => $numbers) {
                 $department = OrgUnit::query()->findOrFail($departmentId);
 
-                foreach (User::query()->whereIn('id', DB::table('teachers')->whereIn('employee_number', $numbers)->whereNotNull('user_id')->select('user_id'))->orderBy('username')->get() as $user) {
+                foreach (User::query()->whereIn('id', DB::table('teachers')->whereIn('rfc', $numbers)->whereNotNull('user_id')->select('user_id'))->orderBy('username')->get() as $user) {
                     $already = $user->roleAssignments()
                         ->where(['role' => Role::JefeProyectoDocente, 'org_unit_id' => $departmentId, 'campus_id' => $campus->id])
                         ->exists();

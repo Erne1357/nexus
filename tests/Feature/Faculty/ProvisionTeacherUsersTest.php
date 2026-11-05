@@ -38,7 +38,7 @@ function teachersToProvision(Department $department): Teacher
     $taken = User::factory()->create(['username' => '7654321', 'is_active' => false]);
     Teacher::factory()->create(['user_id' => $taken->id])->delete();
 
-    return Teacher::factory()->adscribedTo($department)->create(['employee_number' => '7654321']);
+    return Teacher::factory()->adscribedTo($department)->create(['rfc' => '7654321']);
 }
 
 it('con 3 activos, 1 inactivo, 1 borrado y 1 conflicto devuelve las cuentas', function () {
@@ -87,7 +87,7 @@ it('una segunda corrida no cambia nada y solo deja su propia entrada', function 
 
 it('aplica la baja a un docente borrado cuyo usuario seguía activo, y repetirla no cambia nada', function () {
     $user = User::factory()->create(['username' => '3333333']);
-    $teacher = Teacher::factory()->adscribedTo($this->department)->create(['employee_number' => '3333333', 'user_id' => $user->id]);
+    $teacher = Teacher::factory()->adscribedTo($this->department)->create(['rfc' => '3333333', 'user_id' => $user->id]);
     $head = RoleAssignment::factory()->for($user)->create([
         'role' => Role::JefeDepartamento,
         'org_unit_id' => $this->department->id,
@@ -104,7 +104,7 @@ it('aplica la baja a un docente borrado cuyo usuario seguía activo, y repetirla
 });
 
 it('no da usuario a un docente borrado', function () {
-    $teacher = Teacher::factory()->create(['employee_number' => '1111111']);
+    $teacher = Teacher::factory()->create(['rfc' => '1111111']);
     $teacher->delete();
 
     app(ProvisionTeacherUsers::class)->handle();
@@ -136,7 +136,7 @@ it('deja la corrida y los cambios de cada docente a nombre de quien la pidió', 
 });
 
 it('el job corre la provisión en la cola', function () {
-    Teacher::factory()->adscribedTo($this->department)->create(['employee_number' => '2222222']);
+    Teacher::factory()->adscribedTo($this->department)->create(['rfc' => '2222222']);
 
     ProvisionTeacherUsersJob::dispatch();
 

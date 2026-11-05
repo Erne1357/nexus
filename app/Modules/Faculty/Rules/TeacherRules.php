@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
  * (docs/dominio/modelo-de-datos.md, `teachers` y `teacher_departments`). Cada regla rota es una
  * ValidationException sobre su campo.
  *
- * - `employee_number`: texto UTF-8 válido, sin espacios (también los de Unicode, como NBSP), no vacío y único
+ * - `rfc`: texto UTF-8 válido, en mayúsculas y sin espacios (también los de Unicode, como NBSP), no vacío y único
  *   entre todos los docentes, también los borrados: el número de un borrado sigue reservado
  *   (reglas-de-negocio.md, "Reglas de datos").
  * - `name`: sin espacios a los lados y no vacío.
@@ -25,16 +25,16 @@ final class TeacherRules
     /**
      * @throws ValidationException si no es UTF-8 válido o queda vacío
      */
-    public function normalizeEmployeeNumber(string $number): string
+    public function normalizeRfc(string $number): string
     {
-        $number = preg_replace('/\s+/u', '', $number);
+        $number = TeacherRfc::normalize($number);
 
         if ($number === null) {
-            throw ValidationException::withMessages(['employee_number' => 'El número de empleado no es texto válido.']);
+            throw ValidationException::withMessages(['rfc' => 'El RFC no es texto válido.']);
         }
 
         if ($number === '') {
-            throw ValidationException::withMessages(['employee_number' => 'El número de empleado no puede quedar vacío ni ser solo espacios.']);
+            throw ValidationException::withMessages(['rfc' => 'El RFC no puede quedar vacío ni ser solo espacios.']);
         }
 
         return $number;
@@ -45,21 +45,21 @@ final class TeacherRules
      *
      * @throws ValidationException
      */
-    public function ensureEmployeeNumberIsFree(string $number): void
+    public function ensureRfcIsFree(string $number): void
     {
-        if (Teacher::withTrashed()->where('employee_number', $number)->exists()) {
-            throw $this->employeeNumberTaken($number);
+        if (Teacher::withTrashed()->where('rfc', $number)->exists()) {
+            throw $this->rfcTaken($number);
         }
     }
 
     /**
      * El error de número repetido, también para cuando la restricción única de la base gana la carrera a
-     * ensureEmployeeNumberIsFree().
+     * ensureRfcIsFree().
      */
-    public function employeeNumberTaken(string $number): ValidationException
+    public function rfcTaken(string $number): ValidationException
     {
         return ValidationException::withMessages([
-            'employee_number' => "Ya existe un docente con el número de empleado {$number}, aunque esté inactivo o borrado.",
+            'rfc' => "Ya existe un docente con el RFC {$number}, aunque esté inactivo o borrado.",
         ]);
     }
 

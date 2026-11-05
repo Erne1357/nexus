@@ -10,7 +10,7 @@ use RuntimeException;
 /**
  * Variedad en la captura de los docentes activos del último periodo abierto, para la pantalla de validación: de los
  * que FacultyDemoSeeder sembró, unos quedan sin disponibilidad, unos sin perfil (sin materias calificadas) y unos con
- * horas fuera del ITCJ (el resto, sin ellas). Quién cae en cada grupo sale de un hash del número de empleado, así que
+ * horas fuera del ITCJ (el resto, sin ellas). Quién cae en cada grupo sale de un hash del RFC, así que
  * es el mismo siempre y no cambia al sembrar más docentes. Lo que quita lo borra de forma lógica (`deleted_at`). Idempotente. Sin periodos abiertos, no hace nada. No corre
  * en producción.
  *
@@ -50,7 +50,7 @@ class TeacherCaptureDemoSeeder extends Seeder
         $withExternal = [];
         $withoutExternal = [];
 
-        $teachers = DB::table('teachers')->where('is_active', true)->whereNull('deleted_at')->orderBy('employee_number')->pluck('id', 'employee_number');
+        $teachers = DB::table('teachers')->where('is_active', true)->whereNull('deleted_at')->orderBy('rfc')->pluck('id', 'rfc');
 
         foreach ($teachers as $number => $id) {
             $this->in($number, 'availability', $percent['availability']) ? $withoutAvailability[] = $id : $withAvailability[] = $id;

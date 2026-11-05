@@ -32,10 +32,10 @@ function seedDemoTeachers(array $perCampus = ['C2' => 40], int $seed = 2027): vo
 it('siembra los docentes pedidos de cada campus, cada uno con su adscripción principal', function () {
     seedDemoTeachers(['C1' => 22, 'C2' => 25]);
 
-    $perCampus = DB::table('teachers')->selectRaw('substr(employee_number, 1, 2) as prefix, count(*) as total')->groupBy('prefix')->pluck('total', 'prefix')->all();
+    $perCampus = DB::table('teachers')->selectRaw('substr(rfc, 1, 1) as prefix, count(*) as total')->groupBy('prefix')->pluck('total', 'prefix')->all();
 
     expect(DB::table('teachers')->count())->toBe(47)
-        ->and($perCampus)->toEqual(['D1' => 22, 'D2' => 25])
+        ->and($perCampus)->toEqual(['B' => 22, 'C' => 25])
         ->and(DB::table('teacher_departments')->where('is_primary', true)->count())->toBe(47);
 });
 
@@ -173,13 +173,13 @@ it('volver a sembrar no vuelve a nombrar al jefe de proyecto docente que un admi
 it('los docentes de un campus son los mismos solo o junto con el otro', function () {
     DB::beginTransaction();
     seedDemoTeachers(['C2' => 20]);
-    $alone = DB::table('teachers')->orderBy('employee_number')->pluck('name', 'employee_number')->all();
+    $alone = DB::table('teachers')->orderBy('rfc')->pluck('name', 'rfc')->all();
     DB::rollBack();
 
     expect(DB::table('teachers')->count())->toBe(0);
 
     seedDemoTeachers(['C1' => 20, 'C2' => 20]);
-    $both = DB::table('teachers')->where('employee_number', 'like', 'D2%')->orderBy('employee_number')->pluck('name', 'employee_number')->all();
+    $both = DB::table('teachers')->where('rfc', 'like', 'C%')->orderBy('rfc')->pluck('name', 'rfc')->all();
 
     expect($both)->toBe($alone)->and($alone)->toHaveCount(20);
 });

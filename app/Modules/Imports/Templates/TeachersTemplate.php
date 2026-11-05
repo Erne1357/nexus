@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Docentes del SII (tarea 10): número de empleado, nombre, departamento de su adscripción, correo, grado, activo y
+ * Docentes del SII (tarea 10): RFC, nombre, departamento de su adscripción, correo, grado, activo y
  * fecha de ingreso.
  *
  * Los docentes son de toda la institución y su adscripción no tiene campus (confirmado el 30 de octubre de 2026).
@@ -21,7 +21,7 @@ use Illuminate\Validation\ValidationException;
  *
  * Un docente con varias adscripciones viene en un renglón por departamento, y la clave del archivo es el docente
  * con su departamento, para que esos renglones no cuenten como repetidos (S5, supuesto por confirmar). El registro
- * se busca por el número de empleado, que se normaliza con `TeacherRules` igual que uno capturado. La primera
+ * se busca por el RFC, que se normaliza con `TeacherRules` igual que uno capturado. La primera
  * adscripción de un docente es la principal; si ya tenía otra principal, la conserva y avisa. Los renglones de un
  * mismo docente deben traer el mismo nombre, correo, grado y fecha de ingreso: si uno posterior trae otro, avisa y
  * se queda el del primero.
@@ -34,13 +34,14 @@ use Illuminate\Validation\ValidationException;
  */
 class TeachersTemplate extends ImportTemplate
 {
+    use ChecksTeacherRfc;
     use ParsesActiveFlag;
     use ParsesSiiDates;
 
     /** @var array<string, Department|null> departamento por clave, en esta corrida */
     private array $departments = [];
 
-    /** @var array<string, Teacher> docente por número de empleado, en esta corrida (solo los que existen) */
+    /** @var array<string, Teacher> docente por RFC, en esta corrida (solo los que existen) */
     private array $teachers = [];
 
     /** @var array<string, true> docentes cuya última fila aplicada solo agregó una adscripción */
@@ -59,7 +60,7 @@ class TeachersTemplate extends ImportTemplate
     public function fields(): array
     {
         return [
-            'employee_number' => 'número de empleado',
+            'rfc' => 'RFC',
             'name' => 'nombre',
             'department' => 'departamento',
             'email' => 'correo',
@@ -71,7 +72,7 @@ class TeachersTemplate extends ImportTemplate
 
     public function naturalKey(): array
     {
-        return ['employee_number', 'department'];
+        return ['rfc', 'department'];
     }
 
     public function model(): string
@@ -89,13 +90,13 @@ class TeachersTemplate extends ImportTemplate
      */
     public function consistentAcrossRows(): ?array
     {
-        return ['group' => ['employee_number'], 'errors' => [], 'warnings' => ['name', 'email', 'degree', 'hired_on']];
+        return ['group' => ['rfc'], 'errors' => [], 'warnings' => ['name', 'email', 'degree', 'hired_on']];
     }
 
     public function rules(): array
     {
         return [
-            'employee_number' => ['required', 'string', 'max:20'],
+            'rfc' => $this->rfcRules(),
             'name' => ['required', 'string', 'max:255'],
             'department' => ['required', 'string'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -109,13 +110,13 @@ class TeachersTemplate extends ImportTemplate
     {
         $row = parent::normalize($row);
 
-        foreach (['employee_number', 'department'] as $field) {
+        foreach (['rfc', 'department'] as $field) {
             $row[$field] = self::asText($row[$field]);
         }
 
-        if (is_string($row['employee_number'])) {
+        if (is_string($row['rfc'])) {
             try {
-                $row['employee_number'] = app(TeacherRules::class)->normalizeEmployeeNumber($row['employee_number']);
+                $row['rfc'] = app(TeacherRules::class)->normalizeRfc($row['rfc']);
             } catch (ValidationException) {
                 // Texto que no es UTF-8 válido: validate() lo reporta.
             }
@@ -138,7 +139,7 @@ class TeachersTemplate extends ImportTemplate
      */
     public function apply(array $row, ImportContext $context): Model
     {
-        unset($this->teachers[$row['employee_number']]);
+        unset($this->teachers[$row['rfc']]);
         $teacher = parent::apply($row, $context);
 
         if ($row['degree'] !== null && TeacherDegree::tryFrom($row['degree']) === null && $teacher->getAttribute('degree') !== null) {
@@ -176,7 +177,7 @@ class TeachersTemplate extends ImportTemplate
 
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
-        $issues = parent::check($row, $context, $issues);
+        $issues = $this->warnWithoutHomoclave(parent::check($row, $context, $issues), $row['rfc']);
 
         if ($row['degree'] !== null && TeacherDegree::tryFrom($row['degree']) === null) {
             $issues = $issues->withWarning('degree', "El grado «{$row['degree']}» no está en Nexus: el docente queda sin grado.");
@@ -190,7 +191,7 @@ class TeachersTemplate extends ImportTemplate
             $issues = $issues->withWarning('department', "El departamento {$row['department']} está inactivo.");
         }
 
-        $teacher = $this->teacher($row['employee_number']);
+        $teacher = $this->teacher($row['rfc']);
 
         if ($teacher === null || $teacher->trashed()) {
             return $issues;
@@ -221,7 +222,7 @@ class TeachersTemplate extends ImportTemplate
 
     protected function recordKey(array $row, ImportContext $context): ?array
     {
-        return ['employee_number' => $row['employee_number']];
+        return ['rfc' => $row['rfc']];
     }
 
     protected function attributes(array $row, ImportContext $context): array
@@ -246,6 +247,6 @@ class TeachersTemplate extends ImportTemplate
      */
     private function teacher(string $number): ?Teacher
     {
-        return $this->teachers[$number] ??= Teacher::withTrashed()->where('employee_number', $number)->first(['id', 'is_active', 'deleted_at']);
+        return $this->teachers[$number] ??= Teacher::withTrashed()->where('rfc', $number)->first(['id', 'is_active', 'deleted_at']);
     }
 }

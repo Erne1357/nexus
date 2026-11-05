@@ -15,6 +15,7 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Jefe de proyecto docente** | rol `jefe_proyecto_docente` | Co-responsable, junto al jefe de departamento, de la asignación docente según prioridad de base. |
 | **Coordinador de carrera** | rol `coordinador` | Analiza el avance de los alumnos de su carrera en un campus, propone qué materias y cuántos grupos abrir y arma la propuesta de horarios por semestre reticular. |
 | **Subdirección Académica** | rol `subdireccion` | Instancia superior que, si el campus lo configura, da el visto bueno final antes de publicar la carga. |
+| **RFC del docente** | `teachers.rfc` | Clave natural del docente y su username en Nexus (confirmado el 5 de noviembre de 2026): el SII liga grupos, horarios y expediente por RFC, y el número de tarjeta del reloj checador no identifica a nadie. En mayúsculas, sin espacios, con homoclave de preferencia. |
 | **Carrera / programa educativo** | `Career` | Licenciatura o ingeniería (ISC, IGE, Industrial, etc.). Se ofrece en uno o varios campus. |
 | **Plan de estudios / retícula** | `StudyPlan` | Versión del plan de una carrera: lista de materias por semestre con créditos y seriación. Una carrera puede tener varios planes (vigentes e inactivos). |
 | **Materia / asignatura** | `Subject` | Unidad curricular con clave (ej. `ACF-0901`), horas teoría/práctica y créditos. La imparte un departamento y puede aparecer en varias retículas (tronco común). |

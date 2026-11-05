@@ -16,7 +16,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * lo decide TeacherPolicy (`update`) antes de llamarla. Hace cumplir las mismas reglas que CreateTeacher
  * (TeacherRules).
  *
- * No cambia el número de empleado ni el estado: el número es el usuario del docente y la clave del SII (supuesto
+ * No cambia el RFC ni el estado: el RFC es el usuario del docente y la clave del SII (supuesto
  * por confirmar: no se edita), y la baja es SetTeacherActive, que además sincroniza su acceso.
  *
  * En una transacción vuelve a leer al docente con bloqueo (`lockForUpdate`), así el valor anterior de la bitácora
@@ -74,7 +74,7 @@ final class UpdateTeacher
                     'attributes' => $this->rules->logged($teacher, $changed),
                     'old' => Arr::only($old, $changed),
                 ])
-                ->log("Actualizó al docente {$teacher->employee_number}");
+                ->log("Actualizó al docente {$teacher->rfc}");
 
             TeacherUpdated::dispatch($teacher, $changed, auth()->user());
 

@@ -23,7 +23,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * - Planes: los de las carreras sin borrar del departamento.
  * - Salones: los del departamento en el campus de la revisión.
  *
- * La clave es el número de empleado en los docentes y `code` en lo demás.
+ * La clave es el RFC en los docentes y `code` en lo demás.
  */
 final class CatalogContentsQuery
 {
@@ -115,6 +115,6 @@ final class CatalogContentsQuery
 
     private function codeColumn(Catalog $catalog): string
     {
-        return $catalog === Catalog::Teachers ? 'employee_number' : 'code';
+        return $catalog === Catalog::Teachers ? 'rfc' : 'code';
     }
 }

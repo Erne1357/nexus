@@ -61,8 +61,8 @@
             :row-decoration="$rowDecoration"
             class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
         >
-            @scope('cell_employee_number', $teacher)
-                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $teacher->is_active])>{{ $teacher->employee_number }}</span>
+            @scope('cell_rfc', $teacher)
+                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $teacher->is_active])>{{ $teacher->rfc }}</span>
             @endscope
 
             @scope('cell_adscriptions', $teacher)
@@ -94,7 +94,7 @@
             @foreach ($teachers as $teacher)
                 <li wire:key="teacher-card-{{ $teacher->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $teacher->is_active])>
                     <div class="flex items-center gap-2.5">
-                        <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $teacher->is_active])>{{ $teacher->employee_number }}</span>
+                        <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $teacher->is_active])>{{ $teacher->rfc }}</span>
                         <span @class(['min-w-0 flex-1', 'font-semibold' => $teacher->is_active])>{{ $teacher->name }}</span>
 
                         <x-core::status-badge :tone="$teacher->is_active ? 'success' : 'neutral'" :label="$teacher->is_active ? 'Activo' : 'Inactivo'" />
@@ -114,7 +114,7 @@
         @if ($teachers->isNotEmpty() || $teachers->hasPages())
             <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
                 @if ($teachers->isNotEmpty())
-                    <p>Docentes <span class="font-mono">{{ $teachers->first()->employee_number }}</span>@if ($teachers->count() > 1) a <span class="font-mono">{{ $teachers->last()->employee_number }}</span> · <span class="font-mono">{{ $teachers->firstItem() }}–{{ $teachers->lastItem() }}</span>@else · <span class="font-mono">{{ $teachers->firstItem() }}</span>@endif de <span class="font-mono">{{ $teachers->total() }}</span></p>
+                    <p>Docentes <span class="font-mono">{{ $teachers->first()->rfc }}</span>@if ($teachers->count() > 1) a <span class="font-mono">{{ $teachers->last()->rfc }}</span> · <span class="font-mono">{{ $teachers->firstItem() }}–{{ $teachers->lastItem() }}</span>@else · <span class="font-mono">{{ $teachers->firstItem() }}</span>@endif de <span class="font-mono">{{ $teachers->total() }}</span></p>
                 @endif
 
                 {{ $teachers->onEachSide(1)->links(data: ['scrollTo' => false]) }}
@@ -127,9 +127,9 @@
             <div class="grid gap-4 md:grid-cols-6">
                 <div class="md:col-span-2">
                     <x-input
-                        label="Número de empleado"
-                        name="employee_number"
-                        wire:model.live.blur="employee_number"
+                        label="RFC"
+                        name="rfc"
+                        wire:model.live.blur="rfc"
                         inputmode="numeric"
                         :disabled="$editingId !== null"
                         :hint="$editingId !== null ? 'No se cambia: es su usuario.' : null"

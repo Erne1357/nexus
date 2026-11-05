@@ -241,17 +241,17 @@ it('exporta un renglón por adscripción con la principal primero y una plaza po
     $firstOfEach = $teachers->unique(0)->pluck(2, 0);
     $primary = DB::table('teacher_departments as td')->join('teachers as t', 't.id', '=', 'td.teacher_id')
         ->join('departments as d', 'd.id', '=', 'td.department_id')
-        ->where('td.is_primary', true)->whereNull('td.deleted_at')->whereNull('t.deleted_at')->pluck('d.code', 't.employee_number');
+        ->where('td.is_primary', true)->whereNull('td.deleted_at')->whereNull('t.deleted_at')->pluck('d.code', 't.rfc');
 
     expect($teachers)->toHaveCount($adscriptions)
-        ->and(demoCsv('teachers')[0])->toBe(['número de empleado', 'nombre', 'departamento', 'correo', 'grado', 'activo', 'fecha de ingreso'])
+        ->and(demoCsv('teachers')[0])->toBe(['RFC', 'nombre', 'departamento', 'correo', 'grado', 'activo', 'fecha de ingreso'])
         ->and($teachers->map(fn (array $r): string => "{$r[0]}/{$r[2]}")->unique())->toHaveCount($adscriptions)
         ->and($firstOfEach->all())->toEqual($primary->all())
         ->and(demoCsv('positions'))->toHaveCount($positions + 1);
 });
 
 it('exporta el historial docente y las evaluaciones, y esos archivos validan con 0 errores', function () {
-    $teacher = Teacher::factory()->create(['employee_number' => '7654321']);
+    $teacher = Teacher::factory()->create(['rfc' => 'PRUE654321AB1']);
     $subject = DB::table('subjects')->whereNull('deleted_at')->first();
     $campus = DB::table('campuses')->first();
     TeacherSubjectHistory::factory()->create(['teacher_id' => $teacher->id, 'subject_id' => $subject->id, 'campus_id' => $campus->id, 'term_code' => '20241', 'group_code' => '5A']);
@@ -263,10 +263,10 @@ it('exporta el historial docente y las evaluaciones, y esos archivos validan con
 
     $history = array_slice(demoCsv('teacher_history'), 1);
     $evaluations = array_slice(demoCsv('evaluations'), 1);
-    $mine = collect($evaluations)->where(0, '7654321')->pluck(3)->sort()->values()->all();
+    $mine = collect($evaluations)->where(0, 'PRUE654321AB1')->pluck(3)->sort()->values()->all();
 
     expect($history)->not->toBeEmpty()
-        ->and(collect($history)->where(0, '7654321')->pluck(4)->sort()->values()->all())->toBe(['5A', '5B'])
+        ->and(collect($history)->where(0, 'PRUE654321AB1')->pluck(4)->sort()->values()->all())->toBe(['5A', '5B'])
         ->and($evaluations)->not->toBeEmpty()
         ->and($mine)->toBe(['3', '4.5']);
 

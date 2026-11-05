@@ -31,7 +31,7 @@ final class TeacherQuery
     public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
 
     /**
-     * La tabla de Docentes, por número de empleado, con sus adscripciones sin borrar (la principal primero y luego
+     * La tabla de Docentes, por RFC, con sus adscripciones sin borrar (la principal primero y luego
      * de la más antigua a la más nueva, el orden en que RemoveAdscription escoge la principal que queda) y su
      * departamento, aunque esté borrado. Busca `$search` en el número o el nombre con TextSearch. `$departmentId`
      * filtra por una adscripción sin borrar (un id que no es uuid no trae a nadie); `$kind`, por una plaza de ese
@@ -50,7 +50,7 @@ final class TeacherQuery
     ): LengthAwarePaginator {
         return $this->visible($context)
             ->with(['adscriptions' => fn (HasMany $adscriptions) => $this->orderedAdscriptions($adscriptions)])
-            ->tap(fn (Builder $query) => TextSearch::apply($query, ['employee_number', 'name'], $search))
+            ->tap(fn (Builder $query) => TextSearch::apply($query, ['rfc', 'name'], $search))
             ->when($departmentId !== null, fn (Builder $query) => $query->whereHas('adscriptions', fn (Builder $adscription) => Str::isUuid($departmentId)
                 ? $adscription->where('department_id', $departmentId)
                 : $adscription->whereRaw('false')))
@@ -58,7 +58,7 @@ final class TeacherQuery
                 ->currentOn($context->activeTerm()?->starts_on ?? today())
                 ->where('kind', $kind)))
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
-            ->orderBy('employee_number')
+            ->orderBy('rfc')
             ->paginate($perPage);
     }
 
@@ -141,15 +141,15 @@ final class TeacherQuery
     }
 
     /**
-     * El docente con ese número de empleado (ya normalizado), para ofrecer adscribirlo en lugar de darlo de alta otra
+     * El docente con ese RFC (ya normalizado), para ofrecer adscribirlo en lugar de darlo de alta otra
      * vez (S9, supuesto por confirmar); con `$withTrashed`, también si está borrado, para decir por qué no se puede.
      */
-    public function findByEmployeeNumber(string $number, bool $withTrashed = false): ?Teacher
+    public function findByRfc(string $number, bool $withTrashed = false): ?Teacher
     {
         return Teacher::query()
             ->when($withTrashed, fn (Builder $query) => $query->withTrashed())
             ->with('adscriptions')
-            ->where('employee_number', $number)
+            ->where('rfc', $number)
             ->first();
     }
 

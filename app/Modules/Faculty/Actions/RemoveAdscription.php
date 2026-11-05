@@ -73,7 +73,7 @@ final class RemoveAdscription
                 ->event(ActivityEvent::Deleted)
                 ->withChanges(['old' => ['department_id' => $removed->department_id, 'is_primary' => $wasPrimary]])
                 ->withProperties(['teacher_id' => $teacher->getKey(), 'primary_adscription_id' => $primary?->getKey()])
-                ->log("Quitó al docente {$teacher->employee_number} del departamento {$from}".($outcome === null ? '' : "; {$outcome}"));
+                ->log("Quitó al docente {$teacher->rfc} del departamento {$from}".($outcome === null ? '' : "; {$outcome}"));
 
             if ($promoted !== null) {
                 activity()
@@ -81,7 +81,7 @@ final class RemoveAdscription
                     ->event(ActivityEvent::Updated)
                     ->withChanges(['attributes' => ['is_primary' => true], 'old' => ['is_primary' => false]])
                     ->withProperties(['teacher_id' => $teacher->getKey()])
-                    ->log("Hizo principal la adscripción del docente {$teacher->employee_number} a {$codes[$promoted->department_id]} al quitarlo de {$from}");
+                    ->log("Hizo principal la adscripción del docente {$teacher->rfc} a {$codes[$promoted->department_id]} al quitarlo de {$from}");
             }
 
             AdscriptionChanged::dispatch($removed, auth()->user());

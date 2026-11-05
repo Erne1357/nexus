@@ -38,7 +38,7 @@ La fase 0 se cerró con `id` bigint autoincremental en todas las tablas, como de
 
   Las búsquedas por índice cuestan lo mismo con cualquier llave (unos 0.2 ms cada una). UUIDv7 ocupa más disco, unos 150 MB a este volumen, y carga casi igual que bigint. UUIDv4 es el que se descarta: al ser aleatorio fragmenta el índice y carga 27 % más lento.
 - Una importación histórica recibe UUIDv7 con la fecha de la importación, no la del periodo académico. No importa, porque el orden académico sale de la columna del periodo y nada ordena por `id`.
-- Depurar con UUIDs es menos cómodo que con enteros. Se compensa porque las consultas a mano van por las claves naturales: código de campus, número de control, número de empleado.
+- Depurar con UUIDs es menos cómodo que con enteros. Se compensa porque las consultas a mano van por las claves naturales: código de campus, número de control, RFC.
 - Un UUIDv7 revela su fecha de creación al milisegundo; en Nexus no es un dato sensible.
 - Las claves naturales con datos personales (número de control, RFC, CURP) siguen sin ir en URLs: la URL lleva el UUID.
 

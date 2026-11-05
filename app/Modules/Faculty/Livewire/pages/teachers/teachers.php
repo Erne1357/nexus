@@ -17,6 +17,7 @@ use App\Modules\Faculty\Jobs\ProvisionTeacherUsersJob;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Queries\TeacherQuery;
+use App\Modules\Faculty\Rules\TeacherRfc;
 use App\Modules\Faculty\Rules\TeacherRules;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
@@ -52,15 +53,15 @@ new #[Title('Docentes')] class extends Component
     use Toast, WithPagination;
 
     /** El número es de un docente borrado: no se reutiliza ni se adscribe. */
-    private const string DELETED_NUMBER = 'Ese número pertenece a un docente borrado; pide a Subdirección que lo revise.';
+    private const string DELETED_RFC = 'Ese RFC pertenece a un docente borrado; pide a Subdirección que lo revise.';
 
     /** El número es de un docente dado de baja: primero se reactiva. */
-    private const string INACTIVE_NUMBER = 'Ese número es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.';
+    private const string INACTIVE_RFC = 'Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.';
 
     /** A un jefe no se le dice de quién es un número que ya existe (S9, supuesto por confirmar). */
-    private const string TAKEN_NUMBER = 'Ese número ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.';
+    private const string TAKEN_RFC = 'Ese RFC ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.';
 
-    /** Número de empleado o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
+    /** RFC o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
     #[Session]
     public string $search = '';
 
@@ -90,7 +91,7 @@ new #[Title('Docentes')] class extends Component
     #[Locked]
     public string $existingLabel = '';
 
-    public string $employee_number = '';
+    public string $rfc = '';
 
     public string $name = '';
 
@@ -145,7 +146,7 @@ new #[Title('Docentes')] class extends Component
             'canProvision' => Gate::allows('provisionUsers', Teacher::class),
             // La adscripción y el usuario son las columnas descriptivas: se ocultan debajo de 1024 y de 1200 px.
             'headers' => [
-                ['key' => 'employee_number', 'label' => 'Número'],
+                ['key' => 'rfc', 'label' => 'RFC'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'adscriptions', 'label' => 'Adscripción', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'base_hours', 'label' => 'Horas base', 'class' => 'text-right'],
@@ -167,14 +168,14 @@ new #[Title('Docentes')] class extends Component
     /**
      * Al capturar el número en un alta, si ya hay un docente con él, ofrece adscribirlo (S9).
      */
-    public function updatedEmployeeNumber(): void
+    public function updatedRfc(): void
     {
         if ($this->editingId !== null) {
             return;
         }
 
         $this->authorize('create', Teacher::class);
-        $this->resetErrorBag(['adscription', 'employee_number']);
+        $this->resetErrorBag(['adscription', 'rfc']);
         $this->lookUpExisting();
     }
 
@@ -183,7 +184,7 @@ new #[Title('Docentes')] class extends Component
         $this->authorize('create', Teacher::class);
 
         $this->resetValidation();
-        $this->reset('editingId', 'existingId', 'existingLabel', 'employee_number', 'name', 'email', 'degree', 'hired_on', 'department_id');
+        $this->reset('editingId', 'existingId', 'existingLabel', 'rfc', 'name', 'email', 'degree', 'hired_on', 'department_id');
 
         // Si solo puede dar de alta en un departamento (el jefe, el suyo), ya va elegido.
         $targets = $teachers->adscriptionTargets($context);
@@ -199,7 +200,7 @@ new #[Title('Docentes')] class extends Component
         $this->resetValidation();
         $this->reset('existingId', 'existingLabel', 'department_id');
         $this->editingId = $teacher->id;
-        $this->employee_number = $teacher->employee_number;
+        $this->rfc = $teacher->rfc;
         $this->name = $teacher->name;
         $this->email = (string) $teacher->email;
         $this->degree = $teacher->degree?->value ?? '';
@@ -237,7 +238,7 @@ new #[Title('Docentes')] class extends Component
         $teacher = $createTeacher->handle($data, $department);
 
         if ($teacher->user_id === null) {
-            $this->warning('Docente creado sin usuario', $this->describe($teacher).e(": ya hay un usuario {$teacher->employee_number} que no se puede ligar; lo resuelve el administrador."));
+            $this->warning('Docente creado sin usuario', $this->describe($teacher).e(": ya hay un usuario {$teacher->rfc} que no se puede ligar; lo resuelve el administrador."));
         } else {
             $this->success('Docente creado', $this->describe($teacher));
         }
@@ -265,7 +266,7 @@ new #[Title('Docentes')] class extends Component
         if ($teacher === null || $teacher->trashed() || ! $teacher->is_active) {
             $this->reset('existingId', 'existingLabel');
 
-            throw ValidationException::withMessages(['employee_number' => $teacher === null || $teacher->trashed() ? self::DELETED_NUMBER : self::INACTIVE_NUMBER]);
+            throw ValidationException::withMessages(['rfc' => $teacher === null || $teacher->trashed() ? self::DELETED_RFC : self::INACTIVE_RFC]);
         }
 
         $this->validate(['department_id' => ['required', 'string']]);
@@ -301,7 +302,7 @@ new #[Title('Docentes')] class extends Component
         $this->authorize('deactivate', $teacher);
 
         // Reactivar a uno sin usuario se lo crea con la contraseña por defecto.
-        if (! $teacher->is_active && $teacher->user_id === null && $this->defaultPasswordIsMissing($defaultPassword, 'No se pudo activar a '.e($teacher->employee_number))) {
+        if (! $teacher->is_active && $teacher->user_id === null && $this->defaultPasswordIsMissing($defaultPassword, 'No se pudo activar a '.e($teacher->rfc))) {
             return;
         }
 
@@ -333,7 +334,7 @@ new #[Title('Docentes')] class extends Component
     protected function validationAttributes(): array
     {
         return [
-            'employee_number' => 'número de empleado',
+            'rfc' => 'RFC',
             'name' => 'nombre',
             'email' => 'correo',
             'degree' => 'grado',
@@ -345,13 +346,13 @@ new #[Title('Docentes')] class extends Component
     /**
      * Los datos validados en forma. El número y el departamento solo en un alta: el número no se edita.
      *
-     * @return array{employee_number?: string, name: string, email: string, degree: string, hired_on: string}
+     * @return array{rfc?: string, name: string, email: string, degree: string, hired_on: string}
      */
     private function validatedData(bool $creating = false): array
     {
         $data = $this->validate([
             ...($creating ? [
-                'employee_number' => ['required', 'string', 'max:255'],
+                'rfc' => ['required', 'string', new TeacherRfc],
                 'department_id' => ['required', 'string'],
             ] : []),
             'name' => ['required', 'string', 'max:255'],
@@ -361,7 +362,7 @@ new #[Title('Docentes')] class extends Component
         ]);
 
         return [
-            ...($creating ? ['employee_number' => $data['employee_number']] : []),
+            ...($creating ? ['rfc' => $data['rfc']] : []),
             'name' => $data['name'],
             'email' => (string) $data['email'],
             'degree' => (string) $data['degree'],
@@ -443,7 +444,7 @@ new #[Title('Docentes')] class extends Component
             default => 'Sigue activo y su adscripción principal no cambia.',
         };
 
-        return "¿Quitar al docente {$teacher->employee_number} de {$adscription->department?->code}? {$outcome}";
+        return "¿Quitar al docente {$teacher->rfc} de {$adscription->department?->code}? {$outcome}";
     }
 
     /**
@@ -475,12 +476,12 @@ new #[Title('Docentes')] class extends Component
         $this->reset('existingId', 'existingLabel');
 
         try {
-            $number = app(TeacherRules::class)->normalizeEmployeeNumber($this->employee_number);
+            $number = app(TeacherRules::class)->normalizeRfc($this->rfc);
         } catch (ValidationException) {
             return null;
         }
 
-        $teacher = app(TeacherQuery::class)->findByEmployeeNumber($number, withTrashed: true);
+        $teacher = app(TeacherQuery::class)->findByRfc($number, withTrashed: true);
 
         if ($teacher === null) {
             return null;
@@ -490,12 +491,12 @@ new #[Title('Docentes')] class extends Component
 
         if ($canAdscribe && $teacher->is_active && ! $teacher->trashed()) {
             $this->existingId = $teacher->id;
-            $this->existingLabel = "{$teacher->employee_number} · {$teacher->name}";
+            $this->existingLabel = "{$teacher->rfc} · {$teacher->name}";
         } else {
-            $this->addError('employee_number', match (true) {
-                $teacher->trashed() => self::DELETED_NUMBER,
-                ! $canAdscribe => self::TAKEN_NUMBER,
-                default => self::INACTIVE_NUMBER,
+            $this->addError('rfc', match (true) {
+                $teacher->trashed() => self::DELETED_RFC,
+                ! $canAdscribe => self::TAKEN_RFC,
+                default => self::INACTIVE_RFC,
             });
         }
 
@@ -524,6 +525,6 @@ new #[Title('Docentes')] class extends Component
      */
     private function describe(Teacher $teacher): string
     {
-        return e("{$teacher->employee_number} · {$teacher->name}");
+        return e("{$teacher->rfc} · {$teacher->name}");
     }
 };

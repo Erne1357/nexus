@@ -13,8 +13,8 @@
         href="{{ route('faculty.teachers.show', $teacher->id) }}"
         wire:navigate
         class="btn btn-ghost btn-sm"
-        aria-label="Ficha de {{ $teacher->employee_number }}"
-        @if ($inTable) data-testid="record-{{ $teacher->employee_number }}" @endif
+        aria-label="Ficha de {{ $teacher->rfc }}"
+        @if ($inTable) data-testid="record-{{ $teacher->rfc }}" @endif
     >
         <x-icon name="o-identification" class="h-4 w-4" aria-hidden="true" />
         <span @class(['max-[1200px]:hidden' => $inTable])>Ficha</span>
@@ -23,15 +23,15 @@
     <x-button
         icon="o-pencil-square"
         wire:click="edit('{{ $teacher->id }}')"
-        aria-label="Editar {{ $teacher->employee_number }}"
-        :data-testid="$inTable ? 'edit-'.$teacher->employee_number : null"
+        aria-label="Editar {{ $teacher->rfc }}"
+        :data-testid="$inTable ? 'edit-'.$teacher->rfc : null"
         class="btn-ghost btn-sm"
         spinner="edit('{{ $teacher->id }}')"
     >
         <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
     </x-button>
 
-    <x-core::row-menu :name="$teacher->employee_number" :compact="$inTable">
+    <x-core::row-menu :name="$teacher->rfc" :compact="$inTable">
         @foreach ($actions['removals'] as $removal)
             @if ($removal['reason'] === null)
                 <x-core::row-menu-item
@@ -49,7 +49,7 @@
             <x-core::row-menu-item
                 :label="$teacher->is_active ? 'Desactivar' : 'Activar'"
                 wire:click="toggleActive('{{ $teacher->id }}')"
-                wire:confirm="{{ $teacher->is_active ? '¿Dar de baja al docente '.$teacher->employee_number.'? Se desactiva su usuario y terminan sus jefaturas vigentes.' : '¿Activar al docente '.$teacher->employee_number.'? Su usuario vuelve a estar activo.' }}"
+                wire:confirm="{{ $teacher->is_active ? '¿Dar de baja al docente '.$teacher->rfc.'? Se desactiva su usuario y terminan sus jefaturas vigentes.' : '¿Activar al docente '.$teacher->rfc.'? Su usuario vuelve a estar activo.' }}"
                 :spinner="'toggleActive(\''.$teacher->id.'\')'"
             />
         @else

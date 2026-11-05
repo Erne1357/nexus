@@ -307,12 +307,12 @@ describe('lista de un catálogo', function () {
         Room::factory()->for($building)->create(['code' => 'K-201', 'capacity' => 38, 'department_id' => $this->sis->id]);
         $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas Computacionales', 'department_id' => $this->sis->id]);
         StudyPlan::factory()->create(['code' => 'ISIC-2010', 'career_id' => $career->id]);
-        Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '04230', 'name' => 'Ana Torres']);
+        Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '04230', 'name' => 'Ana Torres']);
 
         reviewPage($this->jefe, ['catalogo' => 'rooms'])->assertSee('K-201')->assertSee('ED-K')->assertSee('38');
         reviewPage($this->jefe, ['catalogo' => 'study_plans'])->assertSee('ISIC-2010')->assertSee('ISC');
         reviewPage($this->jefe, ['catalogo' => 'careers'])->assertSee('Sistemas Computacionales');
-        reviewPage($this->jefe, ['catalogo' => 'teachers'])->assertSee('04230')->assertSee('Ana Torres')->assertSee(route('faculty.teachers.show', Teacher::where('employee_number', '04230')->sole()->id), escape: false);
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])->assertSee('04230')->assertSee('Ana Torres')->assertSee(route('faculty.teachers.show', Teacher::where('rfc', '04230')->sole()->id), escape: false);
     });
 
     it('un catálogo que no existe cae al tablero', function () {
@@ -493,7 +493,7 @@ describe('acciones de fila', function () {
     });
 
     it('las filas de docentes tienen un control habilitado que abre el drawer de observaciones, también en lectura y con la revisión validada', function (string $who) {
-        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '04230']);
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '04230']);
         $user = match ($who) {
             'jefe validada' => $this->jefe,
             'admin' => User::factory()->admin()->create(),
@@ -533,9 +533,9 @@ describe('acciones de fila', function () {
 
 describe('captura de docentes (2.6, CV6)', function () {
     beforeEach(function () {
-        $this->ready = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '00001', 'name' => 'Con Todo']);
-        $this->bare = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '00002', 'name' => 'Sin Nada']);
-        $this->profileOnly = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '00003', 'name' => 'Solo Perfil']);
+        $this->ready = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '00001', 'name' => 'Con Todo']);
+        $this->bare = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '00002', 'name' => 'Sin Nada']);
+        $this->profileOnly = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '00003', 'name' => 'Solo Perfil']);
         TeacherAvailability::factory()->for($this->ready)->for($this->term)->create();
         TeacherSubjectQualification::factory()->for($this->ready)->for($this->subject)->create();
         TeacherSubjectQualification::factory()->for($this->profileOnly)->for($this->subject)->create();
@@ -574,7 +574,7 @@ describe('captura de docentes (2.6, CV6)', function () {
     });
 
     it('un docente inactivo no sale como «Falta» ni con el 0 de perfil en advertencia, y no cuenta en los indicadores', function () {
-        $inactive = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '00009', 'name' => 'Ya Baja', 'is_active' => false]);
+        $inactive = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '00009', 'name' => 'Ya Baja', 'is_active' => false]);
 
         $component = reviewPage($this->jefe, ['catalogo' => 'teachers', 'search' => '']);
         $component->set('search', 'Ya Baja')->assertSee('Ya Baja')->assertSeeHtml('Sin dato: docente inactivo')->assertSee('Docente inactivo');

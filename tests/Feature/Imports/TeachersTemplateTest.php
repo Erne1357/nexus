@@ -36,7 +36,7 @@ beforeEach(function () {
 function teacherRow(array $changes = []): array
 {
     return (new TeachersTemplate)->normalize([
-        'employee_number' => '1001', 'name' => 'Ana López', 'department' => 'sc',
+        'rfc' => 'PRUE001001AB1', 'name' => 'Ana López', 'department' => 'sc',
         'email' => 'ana@example.test', 'degree' => 'Maestría', 'active' => 'Sí', 'hired_on' => '05/08/2015',
         ...$changes,
     ]);
@@ -72,17 +72,17 @@ it('rechaza un correo, una fecha o un activo que no se entienden', function (arr
 it('da de alta al docente con sus datos y su adscripción principal', function () {
     $teacher = $this->template->apply(teacherRow(), $this->context)->fresh();
 
-    expect($teacher)->employee_number->toBe('1001')->name->toBe('Ana López')->email->toBe('ana@example.test')
+    expect($teacher)->rfc->toBe('PRUE001001AB1')->name->toBe('Ana López')->email->toBe('ana@example.test')
         ->degree->toBe(TeacherDegree::Maestria)->is_active->toBeTrue()
         ->and($teacher->hired_on->toDateString())->toBe('2015-08-05')
         ->and($teacher->adscriptions)->toHaveCount(1)
         ->and($teacher->adscriptions->first())->department_id->toBe($this->sistemas->id)->is_primary->toBeTrue();
 });
 
-it('un número de empleado con espacios se importa igual que uno capturado', function () {
-    $teacher = $this->template->apply(teacherRow(['employee_number' => ' 10 01 ']), $this->context);
+it('un RFC con espacios se importa igual que uno capturado', function () {
+    $teacher = $this->template->apply(teacherRow(['rfc' => ' prue 001001 ab1 ']), $this->context);
 
-    expect($teacher->employee_number)->toBe('1001');
+    expect($teacher->rfc)->toBe('PRUE001001AB1');
 });
 
 it('S6: un grado desconocido queda vacío con advertencia, también en un cambio', function () {
@@ -108,7 +108,7 @@ it('S4: un docente sin dato de activo nace activo', function () {
 });
 
 it('S4: uno activo que el archivo marca inactivo sigue activo, con advertencia', function () {
-    Teacher::factory()->create(['employee_number' => '1001']);
+    Teacher::factory()->create(['rfc' => 'PRUE001001AB1']);
 
     $issues = $this->template->validate(teacherRow(['active' => 'No']), $this->context);
     $teacher = $this->template->apply(teacherRow(['active' => 'No']), $this->context);
@@ -119,16 +119,16 @@ it('S4: uno activo que el archivo marca inactivo sigue activo, con advertencia',
 });
 
 it('un docente inactivo se actualiza y sigue inactivo, con advertencia; uno borrado es error', function () {
-    $inactive = Teacher::factory()->inactive()->create(['employee_number' => '1001']);
-    Teacher::factory()->create(['employee_number' => '1002'])->delete();
+    $inactive = Teacher::factory()->inactive()->create(['rfc' => 'PRUE001001AB1']);
+    Teacher::factory()->create(['rfc' => 'PRUE001002AB1'])->delete();
 
     $warning = $this->template->validate(teacherRow(['name' => 'Ana Nueva']), $this->context);
     $this->template->apply(teacherRow(['name' => 'Ana Nueva']), $this->context);
 
     expect($warning->errors)->toBe([])
-        ->and($warning->warnings)->toHaveKey('employee_number')
+        ->and($warning->warnings)->toHaveKey('rfc')
         ->and($inactive->fresh())->name->toBe('Ana Nueva')->is_active->toBeFalse()
-        ->and($this->template->validate(teacherRow(['employee_number' => '1002']), $this->context)->errors)->toHaveKey('employee_number');
+        ->and($this->template->validate(teacherRow(['rfc' => 'PRUE001002AB1']), $this->context)->errors)->toHaveKey('rfc');
 });
 
 it('S5: dos renglones del mismo docente con otro departamento son adscripciones, no repetidos; la primera es la principal', function () {
@@ -148,7 +148,7 @@ it('S5: dos renglones del mismo docente con otro departamento son adscripciones,
 });
 
 it('S5: si el docente ya tiene otra principal, la conserva y avisa', function () {
-    $teacher = Teacher::factory()->adscribedTo($this->industrial)->create(['employee_number' => '1001']);
+    $teacher = Teacher::factory()->adscribedTo($this->industrial)->create(['rfc' => 'PRUE001001AB1']);
 
     $issues = $this->template->validate(teacherRow(), $this->context);
     $this->template->apply(teacherRow(), $this->context);
@@ -162,7 +162,7 @@ it('S5: si el docente ya tiene otra principal, la conserva y avisa', function ()
 });
 
 it('una adscripción borrada a mano es error: importar no la restaura', function () {
-    $teacher = Teacher::factory()->create(['employee_number' => '1001']);
+    $teacher = Teacher::factory()->create(['rfc' => 'PRUE001001AB1']);
     TeacherDepartment::factory()->for($teacher)->for($this->sistemas)->create()->delete();
 
     expect($this->template->validate(teacherRow(), $this->context)->errors)->toHaveKey('department');
@@ -216,11 +216,11 @@ it('en un archivo, el nombre de un docente debe coincidir en sus renglones: avis
     $batch = ImportBatch::factory()->create(['template' => 'teachers', 'uploaded_by' => $this->context->user->id]);
     $batch->update(['file_path' => "{$batch->id}.csv"]);
     Storage::disk('imports')->put($batch->file_path, implode("\n", [
-        'número de empleado,nombre,departamento,correo,grado,activo,fecha de ingreso',
-        '1001,Ana López,SC,ana@example.test,Maestría,Sí,05/08/2015',
-        '1001,Ana López,II,ana@example.test,Maestría,Sí,05/08/2015',
-        '1001,Ana Lopez R.,CB,ana@example.test,Maestría,Sí,05/08/2015',
-        '1001,Ana López,SC,ana@example.test,Maestría,Sí,05/08/2015',
+        'RFC,nombre,departamento,correo,grado,activo,fecha de ingreso',
+        'PRUE001001AB1,Ana López,SC,ana@example.test,Maestría,Sí,05/08/2015',
+        'PRUE001001AB1,Ana López,II,ana@example.test,Maestría,Sí,05/08/2015',
+        'PRUE001001AB1,Ana Lopez R.,CB,ana@example.test,Maestría,Sí,05/08/2015',
+        'PRUE001001AB1,Ana López,SC,ana@example.test,Maestría,Sí,05/08/2015',
     ]));
 
     app(ValidateImportBatch::class)->handle($batch);
@@ -249,8 +249,8 @@ it('el archivo de ejemplo anonimizado se valida y se aplica: S4, S5 y S6 en un a
     $batch = app(ApplyImportBatch::class)->handle($batch->fresh(), $this->context->user);
 
     expect([$batch->error_rows, $batch->created_rows])->toBe([0, 3])
-        ->and(Teacher::where('employee_number', '90003')->sole())->is_active->toBeFalse()->degree->toBeNull()
-        ->and(Teacher::where('employee_number', '90001')->sole()->adscriptions()->where('is_primary', true)->sole()->department_id)->toBe($this->sistemas->id);
+        ->and(Teacher::where('rfc', 'PRUE090003AB1')->sole())->is_active->toBeFalse()->degree->toBeNull()
+        ->and(Teacher::where('rfc', 'PRUE090001AB1')->sole()->adscriptions()->where('is_primary', true)->sole()->department_id)->toBe($this->sistemas->id);
 });
 
 it('un archivo del SII con columna de campus la ignora: los docentes no son de un campus', function () {
@@ -258,9 +258,9 @@ it('un archivo del SII con columna de campus la ignora: los docentes no son de u
     $batch = ImportBatch::factory()->create(['template' => 'teachers', 'uploaded_by' => $this->context->user->id]);
     $batch->update(['file_path' => "{$batch->id}.csv"]);
     Storage::disk('imports')->put($batch->file_path, implode("\n", [
-        'número de empleado,nombre,departamento,campus,correo,grado,activo,fecha de ingreso',
-        '1001,Ana López,SC,C2,ana@example.test,Maestría,Sí,05/08/2015',
-        '1001,Ana López,SC,C1,ana@example.test,Maestría,Sí,05/08/2015',
+        'RFC,nombre,departamento,campus,correo,grado,activo,fecha de ingreso',
+        'PRUE001001AB1,Ana López,SC,C2,ana@example.test,Maestría,Sí,05/08/2015',
+        'PRUE001001AB1,Ana López,SC,C1,ana@example.test,Maestría,Sí,05/08/2015',
     ]));
 
     $batch = app(ValidateImportBatch::class)->handle($batch);
@@ -272,7 +272,7 @@ it('un archivo del SII con columna de campus la ignora: los docentes no son de u
 });
 
 it('busca cada docente una sola vez por corrida al validar', function () {
-    Teacher::factory()->create(['employee_number' => '1001']);
+    Teacher::factory()->create(['rfc' => 'PRUE001001AB1']);
     DB::enableQueryLog();
 
     foreach (['SC', 'II', 'SC'] as $department) {
@@ -291,9 +291,9 @@ it('en un archivo, un correo, grado o fecha de ingreso distintos en otro rengló
     $batch = ImportBatch::factory()->create(['template' => 'teachers', 'uploaded_by' => $this->context->user->id]);
     $batch->update(['file_path' => "{$batch->id}.csv"]);
     Storage::disk('imports')->put($batch->file_path, implode("\n", [
-        'número de empleado,nombre,departamento,correo,grado,activo,fecha de ingreso',
-        '1001,Ana López,SC,ana@example.test,Maestría,Sí,05/08/2015',
-        '1001,Ana López,II,otra@example.test,Doctorado,Sí,06/08/2016',
+        'RFC,nombre,departamento,correo,grado,activo,fecha de ingreso',
+        'PRUE001001AB1,Ana López,SC,ana@example.test,Maestría,Sí,05/08/2015',
+        'PRUE001001AB1,Ana López,II,otra@example.test,Doctorado,Sí,06/08/2016',
     ]));
 
     app(ValidateImportBatch::class)->handle($batch);
