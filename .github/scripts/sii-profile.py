@@ -89,6 +89,11 @@ MOJIBAKE = re.compile('Ã[\u0080-\u00bf]|Â[\u0080-\u00bf]')
 LOST = re.compile(r'[^\W\d_]\?[^\W\d_]', re.UNICODE)
 
 
+def base(name: str) -> str:
+    """Nombre de la columna sin el sufijo que distingue un encabezado repetido (`curp__7` → `curp`)."""
+    return name.split('__', 1)[0]
+
+
 def slug(name: str) -> str:
     text = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode()
     return re.sub(r'[^a-z0-9]+', '_', text.lower()).strip('_')
@@ -102,6 +107,10 @@ def shape(value: str) -> str:
 def cell(value: object, width: int = 60) -> str:
     text = str(value).replace('|', '\\|').replace('\n', ' ')
     return text if len(text) <= width else text[:width] + '…'
+
+
+class EmptyExport(Exception):
+    """El archivo no trae encabezados: se reporta y se sigue con los demás."""
 
 
 @dataclass
@@ -225,10 +234,12 @@ def load(path: Path) -> Loaded:
     quote = "'" if body.count(delimiter + "'") + body.count("\n'") > body.count(delimiter + '"') + body.count('\n"') else '"'
 
     parsed = [tokenize(line.rstrip('\r'), delimiter, quote) for line in lines]
+    if not parsed or all(not v.strip() for v, _ in parsed[0]):
+        raise EmptyExport(path.name)
     header: list[str] = []
     for name, _ in parsed[0]:
         name = slug(name) or 'sin_nombre'
-        header.append(name if name not in header else f'{name}_{len(header)}')
+        header.append(name if name not in header else f'{name}__{len(header)}')
     width = len(header)
 
     # Qué columnas vienen entre comillas en los renglones sanos (None: siempre vacía, no se sabe).
@@ -240,7 +251,7 @@ def load(path: Path) -> Loaded:
                     votes[j][was_quoted] += 1
     quoted = [None if a + b == 0 else b > a for a, b in votes]
 
-    keep = [i for i, name in enumerate(header) if name not in DROP]
+    keep = [i for i, name in enumerate(header) if base(name) not in DROP]
     rows: list[list[str]] = []
     blank, malformed, tail, repaired = 0, [], [], 0
     after_blank = False
@@ -255,12 +266,13 @@ def load(path: Path) -> Loaded:
             after_blank = True
             continue
         if len(tokens) != width:
-            if after_blank:
-                tail.append(delimiter.join(values))
-                continue
+            # Primero se intenta reparar: un renglón con coma decimal tras uno en blanco sigue siendo dato.
             fixed = repair(tokens, header, quoted)
             if fixed is None:
-                malformed.append(line_no)
+                if after_blank:
+                    tail.append(delimiter.join(values))
+                else:
+                    malformed.append(line_no)
                 continue
             repaired += 1
             values = fixed
@@ -268,7 +280,7 @@ def load(path: Path) -> Loaded:
         rows.append([values[i].strip() for i in keep])
 
     df = pd.DataFrame(rows, columns=[header[i] for i in keep], dtype='string')
-    dropped = [name for name in header if name in DROP]
+    dropped = [name for name in header if base(name) in DROP]
 
     return Loaded(
         key=canonical(path), path=path, encoding=encoding, delimiter=delimiter + ' ' + quote, header=header, df=df,
@@ -293,13 +305,13 @@ def column_report(name: str, s: pd.Series) -> list[str]:
 
     lost = filled[filled.str.contains(LOST, regex=True)]
     if len(lost):
-        examples = '' if name in PRIVATE else ' — ej.: ' + ', '.join(f'`{cell(v, 40)}`' for v in lost.unique()[:4])
+        examples = '' if base(name) in PRIVATE else ' — ej.: ' + ', '.join(f'`{cell(v, 40)}`' for v in lost.unique()[:4])
         lines.append(f'- con caracteres perdidos en el origen («?» entre letras): {len(lost):,}{examples}')
 
-    if name in PRIVATE:
+    if base(name) in PRIVATE:
         lengths = filled.str.len()
         lines.append(f'- largo: {int(lengths.min())}–{int(lengths.max())} (privada: sin valores)')
-        if name in EMAIL:
+        if base(name) in EMAIL:
             domains = filled.str.extract(r'@(.+)$')[0].str.lower().value_counts().head(8)
             if len(domains):
                 lines.append('- dominios: ' + ', '.join(f'`{cell(k, 30)}` ×{v:,}' for k, v in domains.items()))
@@ -332,7 +344,7 @@ def key_report(f: Loaded, cols: list[str]) -> str | None:
     dup_rows = int(dup_mask.sum())
     dup_keys = int(full[dup_mask].drop_duplicates().shape[0])
     text = f'- `{"+".join(cols)}`: vacía en {int(empty.sum()):,}; repetida en {dup_rows:,} filas ({dup_keys:,} claves)'
-    if dup_keys and not any(c in PRIVATE for c in cols):
+    if dup_keys and not any(base(c) in PRIVATE for c in cols):
         examples = full[dup_mask].drop_duplicates().head(5).apply(lambda r: '+'.join(r), axis=1)
         text += ' — ej.: ' + ', '.join(f'`{cell(e, 30)}`' for e in examples)
     return text
@@ -353,7 +365,7 @@ def reference_report(child: Loaded, ccols: tuple[str, ...], parent: Loaded, pcol
             f'cobertura {pct}, huérfanas {len(missing):,} ({len(distinct_missing):,} claves distintas)')
     if len(missing) != len(missing_ci):
         text += f'; {len(missing) - len(missing_ci):,} cuadran ignorando mayúsculas'
-    if distinct_missing and not any(col in PRIVATE for col in ccols):
+    if distinct_missing and not any(base(col) in PRIVATE for col in ccols):
         text += ' — ej.: ' + ', '.join(f'`{cell("+".join(k), 30)}`' for k in distinct_missing[:8])
     return text
 
@@ -463,7 +475,11 @@ def main(folder: Path) -> int:
 
     for path in paths:
         print(f'leyendo {path.name}…', file=sys.stderr)
-        f = load(path)
+        try:
+            f = load(path)
+        except EmptyExport:
+            summary.append(f'| {cell(path.name, 40)} | — | 0 | 0 | — | — | — | — | — | archivo vacío |')
+            continue
         if f.key in files:
             f.key = f'{f.key}:{slug(path.stem)}'
         files[f.key] = f
