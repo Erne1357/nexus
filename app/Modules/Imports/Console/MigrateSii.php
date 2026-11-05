@@ -7,9 +7,9 @@ use App\Modules\Core\Models\User;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Sii\RunSiiMigration;
 use App\Modules\Imports\Sii\SiiContractBroken;
+use App\Modules\Imports\Sii\SiiMigrationStopped;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
-use Throwable;
 
 /**
  * Migra la exportación del SII a Nexus por el motor de importación. Con `--dry-run` corre todo y lo revierte.
@@ -54,12 +54,15 @@ final class MigrateSii extends Command
             $this->components->error($exception->getMessage());
 
             return self::FAILURE;
-        } catch (InvalidArgumentException $exception) {
-            $this->components->error($exception->getMessage());
+        } catch (SiiMigrationStopped $stopped) {
+            $this->components->error($stopped->getMessage().' Excepción: '.class_basename($stopped->getPrevious() ?? $stopped).'.');
+            $this->components->warn($this->option('dry-run')
+                ? 'Era un ensayo: no quedó nada. Detalle en _incidencias.csv y en el log.'
+                : "Los lotes anteriores ya se aplicaron ({$stopped->appliedBatches}); repetir la migración no los cambia. Detalle en _incidencias.csv y en el log.");
 
             return self::FAILURE;
-        } catch (Throwable $exception) {
-            $this->components->error('La migración se detuvo: '.$exception->getMessage());
+        } catch (InvalidArgumentException $exception) {
+            $this->components->error($exception->getMessage());
 
             return self::FAILURE;
         }

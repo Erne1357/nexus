@@ -6,6 +6,7 @@ use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiBatch;
 use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Imports\Sii\SiiStep;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -119,13 +120,95 @@ it('exige un usuario con permiso de importar', function () {
         ->and(is_dir("{$this->dir}/_nexus"))->toBeFalse();
 });
 
-it('rechaza un campus desconocido antes de escribir', function () {
-    app()->instance('sii.steps', [UnknownCampusStep::class]);
+it('rechaza un campus desconocido y dice qué lote se detuvo', function () {
+    app()->instance('sii.steps', [FakeDepartmentsStep::class, UnknownCampusStep::class]);
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('paso campus')->toContain('lotes anteriores ya se aplicaron')
+        ->and(Department::count())->toBe(2);
+});
+
+it('en un ensayo un campus desconocido no deja nada', function () {
+    app()->instance('sii.steps', [FakeDepartmentsStep::class, UnknownCampusStep::class]);
+
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador', '--dry-run' => true])->assertFailed();
+
+    expect(Department::count())->toBe(0)->and(ImportBatch::count())->toBe(0);
+});
+
+it('no imprime en consola el mensaje de una excepción inesperada', function () {
+    app()->instance('sii.steps', [ExplodingStep::class]);
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->not->toContain('VALOR-PERSONAL-123')
+        ->and($output)->toContain('RuntimeException')->toContain('paso explota');
+});
+
+it('restaura la cola después de un ensayo', function () {
+    $before = config('queue.default');
+
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador', '--dry-run' => true])->assertSuccessful();
+
+    expect(config('queue.default'))->toBe($before);
+});
+
+it('se niega a correr en producción sin --force', function () {
+    app()->detectEnvironment(fn (): string => 'production');
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertFailed();
+    expect(Department::count())->toBe(0);
 
-    expect(ImportBatch::count())->toBe(0);
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador', '--force' => true])->assertSuccessful();
+    expect(Department::count())->toBe(2);
 });
+
+it('falla con un nombre de paso desconocido sin escribir nada', function () {
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador', '--only' => ['nada']]);
+
+    expect($exit)->toBe(1)
+        ->and(Artisan::output())->toContain('departamentos')
+        ->and(is_dir("{$this->dir}/_nexus"))->toBeFalse()
+        ->and(file_exists("{$this->dir}/_incidencias.csv"))->toBeFalse()
+        ->and(Department::count())->toBe(0);
+});
+
+it('reescribe las incidencias aunque no haya ninguna', function () {
+    File::put("{$this->dir}/_incidencias.csv", "viejo\n");
+    app()->instance('sii.steps', []);
+
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
+
+    expect(file_get_contents("{$this->dir}/_incidencias.csv"))->toBe("paso,archivo,fila,campo,nivel,mensaje\n");
+});
+
+it('las incidencias no traen el valor crudo de la fila', function () {
+    FakeDepartmentsStep::$extraRows = [['code' => 'ZZZ-VALOR-PERSONAL-9999', 'name' => 'Ok']];
+
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
+
+    $text = file_get_contents("{$this->dir}/_incidencias.csv");
+    expect($text)->not->toContain('VALOR-PERSONAL')->toContain('departamentos.csv,4,code,error');
+});
+
+final class ExplodingStep implements SiiStep
+{
+    public function name(): string
+    {
+        return 'explota';
+    }
+
+    public function batches(SiiMigration $migration): iterable
+    {
+        throw new RuntimeException('VALOR-PERSONAL-123');
+        yield;
+    }
+}
 
 final class UnknownCampusStep implements SiiStep
 {

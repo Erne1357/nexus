@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 /**
  * Corre los pasos de la migración del SII en orden: cada lote que entrega un paso se escribe como CSV
@@ -30,7 +31,13 @@ use RuntimeException;
  * subidos; las incidencias se leen antes de revertir. Sin `$dryRun` los archivos subidos se conservan como
  * evidencia de cada lote.
  *
+ * Un campus o plantilla desconocidos se detectan al llegar a su lote, antes de guardarlo: los lotes anteriores
+ * ya se aplicaron en una corrida real (son altas por clave natural, repetirlas no cambia nada) y se revierten en
+ * un ensayo. Cualquier fallo se reporta como SiiMigrationStopped, sin valores. `_incidencias.csv` se reescribe
+ * siempre al terminar.
+ *
  * @throws SiiContractBroken antes de escribir nada, si la exportación no cumple el contrato
+ * @throws SiiMigrationStopped si un paso o lote falla
  */
 final class RunSiiMigration
 {
@@ -50,11 +57,21 @@ final class RunSiiMigration
     public function handle(string $dir, User $user, bool $dryRun, array $only = []): SiiMigrationReport
     {
         $export = SiiExport::open($dir);
+        $steps = $this->steps();
+        $names = array_map(fn (SiiStep $step): string => $step->name(), $steps);
+        $unknown = array_values(array_diff($only, $names));
+
+        if ($unknown !== []) {
+            throw new InvalidArgumentException('Paso desconocido: '.implode(', ', $unknown).'. Pasos válidos: '.implode(', ', $names).'.');
+        }
+
         $migration = new SiiMigration($export, __DIR__.'/Curated');
         $incidents = new Incidents;
         $reports = [];
         $stored = [];
         $queue = config('queue.default');
+        $level = DB::transactionLevel();
+        $current = [null, null];
 
         if ($dryRun) {
             config(['queue.default' => 'null']);
@@ -62,31 +79,57 @@ final class RunSiiMigration
         }
 
         try {
-            foreach ($this->steps() as $step) {
+            foreach ($steps as $step) {
                 if ($only !== [] && ! in_array($step->name(), $only, true)) {
                     continue;
                 }
 
+                $current = [$step->name(), null];
+
                 foreach ($step->batches($migration) as $batch) {
+                    $current[1] = $batch->file;
                     $reports[] = $this->run($dir, $user, $step, $batch, $incidents, $stored);
                 }
             }
+        } catch (SiiMigrationStopped $stopped) {
+            throw $stopped;
+        } catch (Throwable $exception) {
+            report($exception);
+
+            throw new SiiMigrationStopped($current[0] ?? '-', $current[1], $this->causeOf($exception), count($reports), $exception);
         } finally {
             if ($dryRun) {
-                DB::rollBack();
                 config(['queue.default' => $queue]);
-
-                foreach ($stored as $path) {
-                    Storage::disk('imports')->delete($path);
-                }
             }
 
-            if ($incidents->count() > 0 || $reports !== []) {
-                $incidents->write(rtrim($dir, '/').'/_incidencias.csv');
+            try {
+                if ($dryRun) {
+                    DB::rollBack($level);
+                }
+            } finally {
+                try {
+                    foreach ($stored as $path) {
+                        if ($dryRun) {
+                            Storage::disk('imports')->delete($path);
+                        }
+                    }
+                } finally {
+                    $incidents->write(rtrim($dir, '/').'/_incidencias.csv');
+                }
             }
         }
 
         return new SiiMigrationReport($reports, $incidents->count());
+    }
+
+    /**
+     * Una causa fija: nunca el mensaje de la excepción, que puede traer valores.
+     */
+    private function causeOf(Throwable $exception): string
+    {
+        return $exception instanceof InvalidArgumentException
+            ? 'campus o plantilla desconocidos'
+            : 'error inesperado ('.class_basename($exception).')';
     }
 
     /**
@@ -114,14 +157,15 @@ final class RunSiiMigration
         $model = $this->validate->handle($model);
 
         if ($model->status === BatchStatus::Failed) {
-            throw new RuntimeException("El lote {$batch->file} no se pudo validar: {$model->failure_reason}");
+            throw new SiiMigrationStopped($step->name(), $batch->file, 'el lote no pasó la validación', 0);
         }
 
+        $model = $this->apply->handle($model, $user)->refresh();
+
+        // Después de aplicar: una fila puede pasar a error al escribirse.
         $this->collectIssues($step, $batch, $model, $incidents);
 
         $warnings = ImportRow::query()->where('batch_id', $model->id)->where('status', RowStatus::Warning)->count();
-
-        $model = $this->apply->handle($model, $user)->refresh();
 
         return new SiiBatchReport(
             $batch->template,
