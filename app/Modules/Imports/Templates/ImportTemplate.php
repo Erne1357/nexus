@@ -342,6 +342,19 @@ abstract class ImportTemplate
     }
 
     /**
+     * Un valor que en un mismo archivo solo puede pertenecer a un dueño: `value` es el campo del valor (la clave
+     * del SII) y `owner`, el del dueño (la materia). Si una fila trae un valor que una anterior sin error ya dio
+     * a otro dueño, es error y no se aplica, con el número de esa fila. ValidateImportBatch lo revisa en SQL al
+     * terminar; null, como por omisión, no revisa nada.
+     *
+     * @return array{value: string, owner: string}|null
+     */
+    public function exclusiveAcrossRows(): ?array
+    {
+        return null;
+    }
+
+    /**
      * Corre una vez al terminar de aplicar el lote, por ejemplo para despachar un job de recálculo (tarea
      * 1.4: `RecomputeStudentProgress`). También corre si la aplicación falló después de escribir algo,
      * porque lo escrito se queda; no corre si no se escribió nada.

@@ -13,6 +13,7 @@ use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use LogicException;
 
 /**
  * «Materias por plan» del SII (tarea 1.9): cada renglón es una materia en la retícula de un plan, con su clave,
@@ -101,6 +102,11 @@ class SubjectsTemplate extends ImportTemplate
         return ['group' => ['code'], 'errors' => ['credits', 'theory_hours', 'practice_hours', 'department'], 'warnings' => ['name']];
     }
 
+    public function exclusiveAcrossRows(): ?array
+    {
+        return ['value' => 'sii_code', 'owner' => 'code'];
+    }
+
     public function twinsAcrossRows(): ?array
     {
         return ['name' => 'name', 'key' => 'code'];
@@ -170,6 +176,10 @@ class SubjectsTemplate extends ImportTemplate
             ['code' => $row['sii_code']],
             ['subject_id' => $subject->getKey(), 'study_plan_id' => $plan->getKey()],
         );
+
+        if ($alias !== null && $alias->subject_id !== $subject->getKey()) {
+            throw new LogicException("La clave del SII {$row['sii_code']} ya es de otra materia: validate() lo reporta como error.");
+        }
 
         $specialty = $row['specialty'] === null ? null : Specialty::query()->firstOrCreate(
             ['study_plan_id' => $plan->getKey(), 'code' => $row['specialty']],

@@ -167,6 +167,10 @@ class StudyPlansTemplate extends ImportTemplate
      */
     private function checkIntake(array $row, Career $career, RowIssues $issues): RowIssues
     {
+        if ($row['current'] === false || ! $career->is_active) {
+            $issues = $issues->withWarning('intake', "El plan {$row['code']} queda inactivo y se marca como el actual de la carrera {$row['career']}.");
+        }
+
         $first = $this->intakePlans[$career->id] ?? null;
 
         if ($first !== null && $first !== $row['code']) {

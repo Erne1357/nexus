@@ -153,3 +153,10 @@ it('un plan sin nuevo ingreso no cambia cuál es el actual', function () {
 
     expect($plan->fresh()->is_current)->toBeFalse()->and($current->fresh()->is_current)->toBeTrue();
 });
+
+it('un plan inactivo marcado como nuevo ingreso se importa, con advertencia', function () {
+    $issues = $this->template->validate(studyPlanRow(['intake' => 'Sí', 'current' => 'No']), $this->context);
+
+    expect($issues->errors)->toBe([])
+        ->and($issues->warnings['intake'])->toContain('El plan ISIC-2010-224 queda inactivo y se marca como el actual de la carrera ISIC.');
+});
