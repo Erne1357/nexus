@@ -147,13 +147,15 @@ final class RunSiiMigration
     }
 
     /**
-     * Una causa fija: nunca el mensaje de la excepción, que puede traer valores.
+     * Una causa fija: nunca el mensaje de la excepción, que puede traer valores. Solo SiiCuratedMismatch, que solo nombra claves.
      */
     private function causeOf(Throwable $exception): string
     {
-        return $exception instanceof InvalidArgumentException
-            ? 'campus o plantilla desconocidos'
-            : 'error inesperado ('.class_basename($exception).')';
+        return match (true) {
+            $exception instanceof SiiCuratedMismatch => $exception->getMessage(),
+            $exception instanceof InvalidArgumentException => 'campus o plantilla desconocidos',
+            default => 'error inesperado ('.class_basename($exception).')',
+        };
     }
 
     /**
