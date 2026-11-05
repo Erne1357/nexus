@@ -27,6 +27,12 @@ final class OrgTree
 
     public const string ACADEMIC = 'SUB-ACADEMICA';
 
+    /**
+     * El Departamento de Servicios Escolares: su jefe valida las materias de la migración del SII que esperan
+     * semestre (D19), con el puesto de jefe de departamento aunque no sea un departamento académico.
+     */
+    public const string SCHOOL_SERVICES = 'SERVICIOS-ESCOLARES';
+
     /** @var array<string, list<string>>|null */
     private ?array $map = null;
 

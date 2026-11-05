@@ -108,7 +108,6 @@ final class PeopleQuery
             ->all();
 
         $units = $role->unitKind() === null ? [] : OrgUnit::query()
-            ->where('kind', $role->unitKind())
             ->where('is_active', true)
             ->orderBy('name')
             ->get()

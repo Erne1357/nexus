@@ -59,6 +59,50 @@ describe('ResolvePendingPlacement', function () {
         expect($pending->fresh()->resolved_at)->toBeNull()
             ->and(StudyPlanSubject::where('subject_id', $pending->subject_id)->exists())->toBeFalse();
     });
+
+    it('R23: un plan inactivo o borrado es un error en español sobre el pendiente, sin tocarlo', function (Closure $breakPlan, string $message) {
+        $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
+        $breakPlan($this->plan);
+
+        expect(fn () => app(ResolvePendingPlacement::class)->handle($pending, 2, $this->user))
+            ->toThrow(function (ValidationException $exception) use ($message): void {
+                expect($exception->errors())->toBe(['pending' => [$message]]);
+            });
+
+        expect($pending->fresh()->resolved_at)->toBeNull()
+            ->and(StudyPlanSubject::where('subject_id', $pending->subject_id)->exists())->toBeFalse();
+    })->with([
+        'inactivo' => [fn (StudyPlan $plan) => $plan->update(['is_active' => false]), 'El plan ISIC-2010-224 está inactivo: actívalo antes de validar sus materias.'],
+        'borrado' => [fn (StudyPlan $plan) => $plan->delete(), 'El plan ISIC-2010-224 ya no existe.'],
+    ]);
+
+    it('R23: si la materia ya está en la retícula, marca el pendiente resuelto sin crear otro lugar y lo deja en la bitácora', function () {
+        Event::fake([CurriculumChanged::class]);
+        $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
+        $placed = placeInPlan($this->plan, $pending->subject, 3);
+
+        $placement = app(ResolvePendingPlacement::class)->handle($pending, 5, $this->user);
+
+        expect($placement->id)->toBe($placed->id)
+            ->and($placement->wasRecentlyCreated || $placement->wasChanged())->toBeFalse()
+            ->and(StudyPlanSubject::where('subject_id', $pending->subject_id)->sole()->semester)->toBe(3)
+            ->and($pending->fresh())->resolved_at->not->toBeNull()->resolved_by->toBe($this->user->id)
+            ->and(Activity::where('subject_type', (new StudyPlanSubjectPending)->getMorphClass())->where('subject_id', $pending->id)->sole()->description)
+            ->toBe("Resolvió el pendiente de la materia {$pending->subject->code}: ya estaba en el semestre 3 del plan ISIC-2010-224");
+        Event::assertNotDispatched(CurriculumChanged::class);
+    });
+
+    it('una materia que se quitó de la retícula vuelve con el semestre del pendiente', function () {
+        $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
+        $removed = placeInPlan($this->plan, $pending->subject, 3);
+        $removed->delete();
+
+        $placement = app(ResolvePendingPlacement::class)->handle($pending, 6, $this->user);
+
+        expect($placement->id)->toBe($removed->id)
+            ->and($placement->fresh())->semester->toBe(6)->trashed()->toBeFalse()
+            ->and($pending->fresh()->resolved_at)->not->toBeNull();
+    });
 });
 
 describe('PendingPlacementsQuery', function () {
@@ -76,6 +120,34 @@ describe('PendingPlacementsQuery', function () {
         expect($listed->pluck('subject.code')->all())->toBe(['AAA-1', 'BBB-1'])
             ->and($listed->first()->relationLoaded('subject'))->toBeTrue()
             ->and($listed->contains('id', $first->id))->toBeTrue()
-            ->and($query->countsByPlan())->toBe([$this->plan->id => 2, $other->id => 1]);
+            ->and($query->countsByPlan())->toBe([$this->plan->id => 2, $other->id => 1])
+            ->and($query->countForPlan($this->plan))->toBe(2);
+    });
+
+    it('busca por clave o nombre de la materia', function () {
+        StudyPlanSubjectPending::factory()->for($this->plan)->for(Subject::factory()->create(['code' => 'AE14', 'name' => 'Programación Estructurada']), 'subject')->create();
+        StudyPlanSubjectPending::factory()->for($this->plan)->for(Subject::factory()->create(['code' => 'AE22', 'name' => 'Física Moderna']), 'subject')->create();
+
+        $query = new PendingPlacementsQuery;
+
+        expect($query->forPlan($this->plan, 'física')->pluck('subject.code')->all())->toBe(['AE22'])
+            ->and($query->forPlan($this->plan, 'ae1')->pluck('subject.code')->all())->toBe(['AE14'])
+            ->and($query->forPlan($this->plan, '  ')->count())->toBe(2);
+    });
+
+    it('R23: no cuenta los pendientes de un plan borrado', function () {
+        $gone = StudyPlan::factory()->create();
+        StudyPlanSubjectPending::factory()->for($gone)->create();
+        StudyPlanSubjectPending::factory()->for($this->plan)->create();
+        $gone->delete();
+
+        expect((new PendingPlacementsQuery)->countsByPlan())->toBe([$this->plan->id => 1]);
+    });
+
+    it('trae la materia de un pendiente aunque se haya borrado del catálogo', function () {
+        $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
+        $pending->subject->delete();
+
+        expect((new PendingPlacementsQuery)->forPlan($this->plan)->sole()->subject?->trashed())->toBeTrue();
     });
 });

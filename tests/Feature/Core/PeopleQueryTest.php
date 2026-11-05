@@ -80,13 +80,16 @@ it('scopeOptions: lo que cada puesto ofrece para elegir', function () {
     $systems = Department::factory()->create(['name' => 'Sistemas y Computación']);
     Department::factory()->inactive()->create(['name' => 'Metal Mecánica']);
     $oficina = OrgUnit::factory()->create(['name' => 'Oficina X', 'kind' => OrgUnitKind::Oficina]);
+    $services = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento]);
+    $linkage = OrgUnit::factory()->create(['code' => 'VINCULACION', 'name' => 'Departamento de Vinculación', 'kind' => OrgUnitKind::Departamento]);
 
     $subdireccion = $this->people->scopeOptions(Role::Subdireccion, null);
     $jefe = $this->people->scopeOptions(Role::JefeDepartamento, null);
     $coordinador = $this->people->scopeOptions(Role::Coordinador, $this->c2->id);
 
     expect($subdireccion['units'])->toBe([['id' => $academic, 'name' => OrgUnit::find($academic)->name]])
-        ->and(array_column($jefe['units'], 'id'))->toContain($systems->id)->not->toContain($oficina->id)
+        ->and(array_column($jefe['units'], 'id'))->toContain($systems->id, $services->id)->not->toContain($oficina->id)->not->toContain($linkage->id)
+        ->and(array_column($this->people->scopeOptions(Role::JefeProyectoDocente, null)['units'], 'id'))->toContain($systems->id)->not->toContain($services->id)
         ->and(array_column($jefe['units'], 'name'))->not->toContain('Metal Mecánica')
         ->and($jefe['careers'])->toBe([])
         ->and($coordinador['units'])->toBe([])

@@ -1,7 +1,9 @@
 {{--
     Un semestre de core::semester-grid.frame, con su encabezado de dos renglones: «SEMESTRE N» y, debajo, sus
     cifras en Mono (`$figures`: «4 de 6» en la ficha, «27 cr» en el editor) con `$actions`, si llega, a la derecha
-    (un botón `btn-xs` con `-my-1` cabe en el renglón). Todos los encabezados miden lo mismo: no llevan notas. `$note` se dice solo a lectores de pantalla («su semestre»), porque
+    (un botón `btn-xs` con `-my-1` cabe en el renglón). Todos los encabezados miden lo mismo: no llevan notas.
+    `$below`, si llega, va debajo de las cifras, a todo el ancho de la columna (en «Por validar», «Colocar aquí» en
+    todos los semestres a la vez, así los encabezados siguen midiendo lo mismo). `$note` se dice solo a lectores de pantalla («su semestre»), porque
     el fondo de la columna no lo ve quien no ve. Desde 768 px la sección no tiene caja (`md:contents`): su
     encabezado y sus mosaicos se acomodan en la cuadrícula del marco, en la columna `--col`. En celular es una caja
     con sus materias en dos columnas, resaltada si `$current`.
@@ -19,6 +21,7 @@
             <span>{{ $figures ?? '' }}</span>
             {{ $actions ?? '' }}
         </div>
+        {{ $below ?? '' }}
     </div>
     {{ $slot }}
 </section>

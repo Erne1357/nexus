@@ -58,6 +58,16 @@ class StudyPlan extends Model
     }
 
     /**
+     * Sus materias de la migración del SII que esperan semestre (D18), resueltas o no.
+     *
+     * @return HasMany<StudyPlanSubjectPending, $this>
+     */
+    public function pendingPlacements(): HasMany
+    {
+        return $this->hasMany(StudyPlanSubjectPending::class);
+    }
+
+    /**
      * Sus materias, con `pivot.semester`, `pivot.specialty_id` y `pivot.is_required`; sin las que se
      * quitaron de la retícula. Solo para leer: attach(), detach() y sync() borrarían filas de verdad o chocarían con una
      * borrada. La retícula se edita por StudyPlanSubject, con borrado lógico y restore().

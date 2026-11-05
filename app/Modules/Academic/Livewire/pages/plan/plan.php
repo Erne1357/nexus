@@ -14,17 +14,21 @@ use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\Academic\Queries\PendingPlacementsQuery;
 use App\Modules\Academic\Queries\PlanGridEditorQuery;
 use App\Modules\Academic\Queries\StudyPlanQuery;
 use App\Modules\Academic\Rules\PlacementRules;
 use App\Modules\Academic\Rules\SeriationRules;
 use App\Modules\Core\Support\SemesterGrid;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
@@ -45,6 +49,13 @@ use Mary\Traits\Toast;
  *
  * Una seriación que cierra un ciclo se rechaza en el panel con su cadena, del requisito a la materia; la cadena la
  * calcula SeriationRules::cyclePath() con la seriación de la retícula que ya se leyó, sin consultar.
+ *
+ * «Por validar» (D18 y D19; maqueta B elegida el 5 de noviembre de 2026): quien valida las materias de la migración
+ * del SII que esperan semestre (`validatePlacements`: el jefe de Servicios Escolares y el admin) ve el segmentado
+ * «Retícula | Por validar (N)», en la URL como `?vista=por-validar`; esa vista es academic::components.pending-placements,
+ * que avisa con `pending-placed` al colocar una para que el segmentado y las cifras del plan se pongan al día. Quien
+ * valida sin poder editar la retícula la ve de solo lectura: tocar una materia resalta su cadena sin abrir el panel, y
+ * lo que edita queda deshabilitado con su motivo.
  */
 new #[Title('Retícula del plan')] class extends Component
 {
@@ -52,6 +63,13 @@ new #[Title('Retícula del plan')] class extends Component
 
     /** Cuántas materias de la retícula muestra «Agregar requisito», como en la maqueta. */
     private const int REQUISITE_LIMIT = 8;
+
+    /** Las vistas del segmentado; la segunda solo para quien valida las materias por validar. */
+    private const array VIEWS = ['reticula', 'por-validar'];
+
+    /** La vista: la retícula o «Por validar» (D19). */
+    #[Url(as: 'vista', except: 'reticula')]
+    public string $view = 'reticula';
 
     /** El plan de la retícula. El navegador no lo puede cambiar. */
     #[Locked]
@@ -150,15 +168,23 @@ new #[Title('Retícula del plan')] class extends Component
         $model = $plans->findOrFail($plan);
         $this->authorize('view', $model);
         $this->planId = $model->id;
+        $this->view = $this->view === 'por-validar' && Gate::allows('validatePlacements', StudyPlan::class) ? 'por-validar' : 'reticula';
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function with(StudyPlanQuery $plans, PlanGridEditorQuery $grids): array
+    public function with(StudyPlanQuery $plans, PlanGridEditorQuery $grids, PendingPlacementsQuery $pendings): array
     {
         $plan = $plans->findWithCareerOrFail($this->planId);
         $this->authorize('view', $plan);
+        $canValidate = Gate::allows('validatePlacements', StudyPlan::class);
+
+        // Sin `validatePlacements` no hay «Por validar», tampoco en una petición que llega con esa vista.
+        if (! $canValidate) {
+            $this->view = 'reticula';
+        }
+
         $grid = $grids->forPlan($plan);
         $rows = array_merge(...array_values($grid['semesters']));
         $selected = $this->selectedId === null ? null : collect($rows)->firstWhere('placement_id', $this->selectedId);
@@ -183,6 +209,8 @@ new #[Title('Retícula del plan')] class extends Component
 
         return [
             'plan' => $plan,
+            'canEditGrid' => Gate::allows('editGrid', $plan),
+            'pendingCount' => $canValidate ? $pendings->countForPlan($plan) : null,
             'grid' => $grid,
             'subjectsCount' => count($rows),
             'specialtiesById' => array_column($grid['specialties'], null, 'id'),
@@ -212,16 +240,45 @@ new #[Title('Retícula del plan')] class extends Component
     }
 
     /**
-     * Abre en el panel la materia de la fila `$id` y resalta su cadena.
+     * Cambia de vista: la retícula o «Por validar», que pide `validatePlacements`. Cambiar suelta lo resaltado.
+     */
+    public function setView(string $view, StudyPlanQuery $plans): void
+    {
+        $this->plan($plans);
+        $view = in_array($view, self::VIEWS, true) ? $view : 'reticula';
+
+        if ($view === 'por-validar') {
+            $this->authorize('validatePlacements', StudyPlan::class);
+        }
+
+        $this->resetValidation();
+        $this->reset('selectedId', 'chainFocus', 'showDrawer', 'showAdd', 'showRemove', 'renamingId', 'renamedName');
+        $this->resetRequisiteForm();
+        $this->view = $view;
+    }
+
+    /**
+     * «Por validar» colocó una materia: al pintar, el segmentado, las cifras del plan y la retícula ya la cuentan.
+     */
+    #[On('pending-placed')]
+    public function pendingPlaced(StudyPlanQuery $plans): void
+    {
+        $this->plan($plans);
+    }
+
+    /**
+     * Abre en el panel la materia de la fila `$id` y resalta su cadena. Quien no edita la retícula solo la resalta:
+     * el panel es para editar.
      */
     public function select(string $id, StudyPlanQuery $plans, PlanGridEditorQuery $grids): void
     {
-        $placement = $grids->placementOrFail($this->plan($plans), $id);
+        $plan = $this->plan($plans);
+        $placement = $grids->placementOrFail($plan, $id);
 
         $this->selectedId = $placement->id;
         $this->chainFocus = null;
         $this->panel = 'subject';
-        $this->showDrawer = true;
+        $this->showDrawer = Gate::allows('editGrid', $plan);
         $this->showRemove = false;
         $this->fillPlacement($placement);
         $this->resetRequisiteForm();
@@ -240,11 +297,18 @@ new #[Title('Retícula del plan')] class extends Component
         $this->resetRequisiteForm();
     }
 
+    /**
+     * Quita el resaltado de la cadena y, con el panel cerrado, la materia resaltada (la que resalta quien no edita).
+     */
     public function clearFocus(StudyPlanQuery $plans): void
     {
         $this->plan($plans);
 
         $this->chainFocus = null;
+
+        if (! $this->showDrawer) {
+            $this->selectedId = null;
+        }
     }
 
     /**
@@ -269,7 +333,7 @@ new #[Title('Retícula del plan')] class extends Component
             return;
         }
 
-        if ($this->selectedId === null) {
+        if ($this->selectedId === null || ! Gate::allows('editGrid', $this->plan(app(StudyPlanQuery::class)))) {
             $this->showDrawer = false;
         }
     }

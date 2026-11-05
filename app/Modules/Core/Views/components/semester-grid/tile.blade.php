@@ -12,9 +12,10 @@
     El relleno, el borde y el color de su estado llegan en `class`. `$chain` es su cadena de seriación: la franja a
     la izquierda (una sombra interior con el token chain-N, que no toca el borde). Con algo resaltado (`data-focus`
     en el marco), lo que no está en la cadena (`data-on-chain`) se atenúa, y el elegido (`data-me`) lleva anillo.
-    `$muted` deja el nombre en el color del mosaico en lugar de `text-base-content`.
+    `$muted` deja el nombre en el color del mosaico en lugar de `text-base-content`. Con `:interactive="false"` es solo
+    lectura: un `div` sin cursor de mano (la retícula de «Por validar», donde se coloca desde la bandeja).
 --}}
-@props(['row', 'code', 'name', 'chain' => null, 'muted' => false])
+@props(['row', 'code', 'name', 'chain' => null, 'muted' => false, 'interactive' => true])
 
 @php
     // Un color por cadena, en clases completas: Tailwind solo publica los tokens chain-N que encuentra escritos.
@@ -26,8 +27,10 @@
     ];
 @endphp
 
-<button type="button" {{ $attributes->class([
-    'flex h-26 min-w-0 cursor-pointer flex-col overflow-hidden rounded-field border p-2 text-left transition-opacity motion-reduce:transition-none md:col-(--col) md:row-(--row) md:mx-1',
+@php($tag = $interactive ? 'button' : 'div')
+<{{ $tag }} @if ($interactive) type="button" @endif {{ $attributes->class([
+    'flex h-26 min-w-0 flex-col overflow-hidden rounded-field border p-2 text-left transition-opacity motion-reduce:transition-none md:col-(--col) md:row-(--row) md:mx-1',
+    'cursor-pointer' => $interactive,
     'group-data-[focus]/grid:not-data-[on-chain]:opacity-20 group-data-[focus]/grid:not-data-[on-chain]:grayscale',
     'data-[me]:ring-2 data-[me]:ring-primary data-[me]:ring-offset-2 data-[me]:ring-offset-base-100',
     $chain === null ? '' : $chainColors[$chain % 12].' shadow-[inset_5px_0_0_var(--chain)] pl-3',
@@ -51,4 +54,4 @@
             <span class="flex gap-1.5">{{ $end ?? '' }}</span>
         </span>
     </span>
-</button>
+</{{ $tag }}>

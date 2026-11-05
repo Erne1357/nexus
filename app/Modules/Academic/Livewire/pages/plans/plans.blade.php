@@ -5,6 +5,13 @@
     Entre 768 y 1199 px se ocultan la versión y los semestres; debajo de 768 px la tabla cede su lugar
     a renglones apilados (clave, nombre y estado; luego el detalle; luego las acciones), que no repiten
     los data-testid de la tabla.
+
+    Para quien valida las materias de la migración del SII (`$pendingPlans` no es null; maqueta
+    `.impeccable/mocks/por-validar/planes.html`): el filtro «Por validar N» después de los demás, y bajo el nombre
+    del plan «N por validar» (insignia de advertencia que lleva a «Por validar» del plan; data-pending-plan con la
+    clave), no en una columna propia, para que la tabla siga cabiendo en su caja a 1440 px. Un plan sin pendientes no
+    lleva nada: «Al día» sería ruido en cada renglón. En el celular, la insignia va bajo el detalle. Sin permiso de
+    alta, «Nuevo plan» queda deshabilitado con su motivo.
 --}}
 <div>
     <x-header title="Planes de estudio" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
@@ -27,8 +34,22 @@
         <x-select wire:model.live="careerFilter" aria-label="Carrera" :options="$careers" placeholder="Todas las carreras" />
         <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activos e inactivos" />
 
+        @if ($pendingPlans !== null)
+            <button type="button" wire:click="togglePending" aria-pressed="{{ $pendingOnly ? 'true' : 'false' }}" data-testid="filter-pending"
+                @class(['btn md:w-auto!', 'btn-primary' => $pendingOnly, 'btn-outline border-base-300 bg-base-100' => ! $pendingOnly])>
+                Por validar
+                <span @class(['badge badge-sm font-mono', 'badge-warning badge-soft' => ! $pendingOnly, 'bg-base-100 text-base-content border-transparent' => $pendingOnly])>{{ $pendingPlans }}</span>
+            </button>
+        @endif
+
         <x-slot:action>
-            <x-button label="Nuevo plan" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+            @if ($canCreate)
+                <x-button label="Nuevo plan" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" data-testid="create-plan" />
+            @else
+                <span class="tooltip tooltip-left max-md:w-full" data-tip="Solo el administrador da de alta planes.">
+                    <x-button label="Nuevo plan" icon="o-plus" class="btn-primary w-full" data-testid="create-plan" disabled />
+                </span>
+            @endif
         </x-slot:action>
     </x-core::catalog-toolbar>
 
@@ -63,6 +84,13 @@
                 <span class="whitespace-nowrap">{{ trans_choice('{0} Sin materias|{1} 1 materia|[2,*] :count materias', $plan->placements_count) }}</span>
             @endscope
 
+            @scope('cell_name', $plan)
+                {{ $plan->name }}
+                @if (($plan->pending_placements_count ?? 0) > 0)
+                    <div class="mt-1">@include('academic::plans.pending-badge', ['plan' => $plan])</div>
+                @endif
+            @endscope
+
             @scope('cell_is_active', $plan)
                 <x-core::status-badge :tone="$plan->is_active ? 'success' : 'neutral'" :label="$plan->is_active ? 'Activo' : 'Inactivo'" />
             @endscope
@@ -93,6 +121,10 @@
                         {{ $plan->total_credits ?? '—' }} créditos ·
                         {{ trans_choice('{0} Sin materias|{1} 1 materia|[2,*] :count materias', $plan->placements_count) }}
                     </div>
+
+                    @if (($plan->pending_placements_count ?? 0) > 0)
+                        <div>@include('academic::plans.pending-badge', ['plan' => $plan])</div>
+                    @endif
 
                     @include('academic::plans.row-actions', ['plan' => $plan, 'inTable' => false])
                 </li>

@@ -472,6 +472,7 @@ it('deja pendiente la materia sin semestre que no empata', function () {
         ->and(array_keys($run))->toBe(['migration', 'subjects', 'pending_placements', 'subject_aliases'])
         ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'ZZZ'))->toMatchArray([
             'name' => 'Materia Sin Par', 'credits' => '4', 'theory_hours' => '2', 'practice_hours' => '2', 'department' => '110100',
+            'sii_grid' => 'A/3',
         ])
         ->and($run['pending_placements']['rows'][0])->not->toHaveKey('semester')
         ->and($pending)->toHaveCount(1)

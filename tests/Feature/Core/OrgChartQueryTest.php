@@ -236,7 +236,7 @@ it('detail trae la ruta, los puestos de la unidad, sus hijas y los motivos de bl
 
     expect($this->query->detail($this->services->id))
         ->path->toBe(['Dirección', 'Subdirección de Planeación y Vinculación'])
-        ->titularNote->toBe('Esta unidad todavía no tiene un puesto de titular en Nexus.')
+        ->titularNote->toBe('Sin jefe vigente. El jefe se nombra en «Personas y puestos» o aquí.')
         ->assignments->toBe([])
         ->deactivationBlockers->toBe([]);
 

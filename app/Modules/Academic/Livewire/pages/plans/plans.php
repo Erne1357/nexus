@@ -4,7 +4,9 @@ use App\Modules\Academic\Actions\CreateStudyPlan;
 use App\Modules\Academic\Actions\UpdateStudyPlan;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Queries\CareerQuery;
+use App\Modules\Academic\Queries\PendingPlacementsQuery;
 use App\Modules\Academic\Queries\StudyPlanQuery;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
@@ -25,6 +27,13 @@ use Mary\Traits\Toast;
  *
  * Los campos del formulario se llaman como las columnas, así los errores de las Actions caen en su
  * campo.
+ *
+ * Quien valida las materias de la migración del SII que esperan semestre (`validatePlacements`: el jefe de Servicios
+ * Escolares y el admin, D19) ve «N por validar» bajo el nombre del plan, que lleva a «Por validar» del plan, y el
+ * filtro «Por validar» con cuántos planes tienen alguna (maqueta `.impeccable/mocks/por-validar/planes.html`; la
+ * insignia va bajo el nombre y no en una columna propia para que la tabla siga cabiendo en su caja a 1440 px); un plan
+ * sin pendientes no muestra nada. Quien entra sin poder editar ve dar de alta, editar y activar deshabilitados con su
+ * motivo.
  */
 new #[Title('Planes de estudio')] class extends Component
 {
@@ -41,6 +50,10 @@ new #[Title('Planes de estudio')] class extends Component
     /** '' (todos), 'active' o 'inactive'. */
     #[Session]
     public string $status = '';
+
+    /** Solo los planes con materias por validar (D19); lo ve y lo usa quien las valida. */
+    #[Session]
+    public bool $pendingOnly = false;
 
     public bool $showModal = false;
 
@@ -71,13 +84,17 @@ new #[Title('Planes de estudio')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(StudyPlanQuery $plans, CareerQuery $careerQuery): array
+    public function with(StudyPlanQuery $plans, CareerQuery $careerQuery, PendingPlacementsQuery $pendings): array
     {
+        $this->authorize('viewAny', StudyPlan::class);
         $careers = $careerQuery->options();
+        $canValidate = Gate::allows('validatePlacements', StudyPlan::class);
 
         if ($this->careerFilter !== '' && ! in_array($this->careerFilter, array_column($careers, 'id'), true)) {
             $this->careerFilter = '';
         }
+
+        $this->pendingOnly = $this->pendingOnly && $canValidate;
 
         return [
             'plans' => $plans->forTable(
@@ -88,7 +105,11 @@ new #[Title('Planes de estudio')] class extends Component
                     'inactive' => false,
                     default => null,
                 },
+                withPending: $canValidate,
+                pendingOnly: $this->pendingOnly,
             ),
+            'canCreate' => Gate::allows('create', StudyPlan::class),
+            'pendingPlans' => $canValidate ? count($pendings->countsByPlan()) : null,
             'careers' => $careers,
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
             // La versión y los semestres son las columnas descriptivas: se ocultan debajo de 1200 px.
@@ -109,9 +130,20 @@ new #[Title('Planes de estudio')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'careerFilter', 'status'], true)) {
+        if (in_array($property, ['search', 'careerFilter', 'status', 'pendingOnly'], true)) {
             $this->resetPage();
         }
+    }
+
+    /**
+     * El filtro «Por validar»: solo los planes con materias que esperan semestre, o todos otra vez.
+     */
+    public function togglePending(): void
+    {
+        $this->authorize('validatePlacements', StudyPlan::class);
+
+        $this->pendingOnly = ! $this->pendingOnly;
+        $this->resetPage();
     }
 
     public function create(): void

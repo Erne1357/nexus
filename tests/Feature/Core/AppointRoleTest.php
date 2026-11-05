@@ -13,6 +13,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\RoleAssignmentRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -123,6 +124,26 @@ it('valida las columnas que pide cada puesto', function (Role $role, array $scop
     'docente con campus' => [Role::Docente, ['c2', null, null], 'campus', 'Este puesto no lleva campus.'],
     'admin con carrera' => [Role::Admin, [null, null, 'isc'], 'career', 'Este puesto no lleva carrera.'],
 ]);
+
+it('D19: nombra jefe del Departamento de Servicios Escolares, que no es un departamento académico', function () {
+    $services = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento, 'parent_id' => $this->planning->id]);
+
+    $assignment = appoint($this->rosa, Role::JefeDepartamento, null, $services);
+
+    expect($assignment->fresh())->role->toBe(Role::JefeDepartamento)->org_unit_id->toBe($services->id)
+        ->and(app(RoleAssignmentRules::class)->titularRoleOf($services))->toBe(Role::JefeDepartamento);
+});
+
+it('D19: los demás departamentos que no son académicos siguen sin jefe en Nexus', function () {
+    $linkage = OrgUnit::factory()->create(['code' => 'VINCULACION', 'name' => 'Departamento de Gestión Tecnológica y Vinculación', 'kind' => OrgUnitKind::Departamento]);
+    $inactiveServices = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento, 'is_active' => false]);
+
+    expectInvalid(fn () => appoint($this->rosa, Role::JefeDepartamento, null, $linkage), 'unit', 'Departamento de Gestión Tecnológica y Vinculación no es un departamento académico.');
+    expectInvalid(fn () => appoint($this->rosa, Role::JefeProyectoDocente, $this->c2, $inactiveServices), 'unit', 'Departamento de Servicios Escolares no es un departamento académico.');
+    expectInvalid(fn () => appoint($this->rosa, Role::JefeDepartamento, null, $inactiveServices), 'unit', 'Departamento de Servicios Escolares está inactiva.');
+
+    expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse();
+});
 
 it('junta todos los errores de alcance en una sola excepción', function () {
     expect(fn () => appoint($this->rosa, Role::Coordinador, null, $this->systems, null))

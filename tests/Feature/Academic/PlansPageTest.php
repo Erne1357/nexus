@@ -250,8 +250,9 @@ describe('admin', function () {
         $this->get(route('academic.plans'))->assertOk();
         $queries = count(DB::getQueryLog());
 
-        // 8 medidas: constante con el número de planes (sesión, auth, carreras, página, conteo, relaciones).
-        expect($queries)->toBe(8);
+        // 9 medidas: constante con el número de planes (sesión, auth, carreras, página, conteo, relaciones y
+        // cuántos planes tienen materias por validar; las de cada plan van en la consulta de la página).
+        expect($queries)->toBe(9);
     });
 });
 

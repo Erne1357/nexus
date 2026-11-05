@@ -2,10 +2,14 @@
 
 namespace App\Modules\Academic\Enums;
 
+use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
 
 /**
- * Permisos del módulo Academic: catálogos de departamentos, carreras, materias y planes de estudio. La clave es `academic.<recurso>.<accion>`. Todos son solo del admin: ningún rol los recibe por concesión.
+ * Permisos del módulo Academic: catálogos de departamentos, carreras, materias y planes de estudio. La clave es
+ * `academic.<recurso>.<accion>`. Todos son solo del admin, salvo `academic.placement.validate`: validar las materias
+ * de la migración del SII que esperan semestre (D19). Se concede al jefe de departamento y declara la unidad: solo lo
+ * tiene el jefe nombrado sobre Servicios Escolares, porque StudyPlanPolicy lo pregunta sobre esa unidad.
  */
 enum AcademicPermission: string implements Permission
 {
@@ -24,6 +28,7 @@ enum AcademicPermission: string implements Permission
     case StudyPlanCreate = 'academic.study_plan.create';
     case StudyPlanUpdate = 'academic.study_plan.update';
     case StudyPlanEditGrid = 'academic.study_plan.edit_grid';
+    case PlacementValidate = 'academic.placement.validate';
 
     public function label(): string
     {
@@ -43,12 +48,13 @@ enum AcademicPermission: string implements Permission
             self::StudyPlanCreate => 'Dar de alta planes de estudio',
             self::StudyPlanUpdate => 'Editar planes de estudio',
             self::StudyPlanEditGrid => 'Editar la retícula de un plan',
+            self::PlacementValidate => 'Asignar semestre a las materias por validar de la migración del SII',
         };
     }
 
     public function dimensions(): array
     {
-        return [];
+        return $this === self::PlacementValidate ? [Dimension::Unit] : [];
     }
 
     public function isPersonal(): bool

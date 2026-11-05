@@ -18,7 +18,8 @@ use Illuminate\Database\Eloquent\Model;
  * Si el plan ya tiene la materia en su retícula, avisa y no crea pendiente; una materia quitada de la retícula es
  * error, como en `subjects`. Repetir el renglón no duplica: el pendiente es único por plan y materia, y uno ya
  * resuelto no se reabre (su materia ya está en la retícula). La especialidad del archivo se pone al crear el
- * pendiente, y en uno sin resolver se actualiza si el archivo la trae (supuesto por confirmar). Nunca desactiva.
+ * pendiente, y en uno sin resolver se actualiza si el archivo la trae (supuesto por confirmar); lo mismo la retícula
+ * del SII de la que salió (`sii_grid`, «carrera/retícula»), que Servicios Escolares ve al validarla. Nunca desactiva.
  */
 class PendingPlacementsTemplate extends ImportTemplate
 {
@@ -50,6 +51,7 @@ class PendingPlacementsTemplate extends ImportTemplate
             'specialty' => 'especialidad',
             'specialty_name' => 'nombre de especialidad',
             'kind' => 'tipo',
+            'sii_grid' => 'retícula del sii',
         ];
     }
 
@@ -80,7 +82,7 @@ class PendingPlacementsTemplate extends ImportTemplate
 
     public function rules(): array
     {
-        return $this->subjectRules();
+        return [...$this->subjectRules(), 'sii_grid' => ['nullable', 'string', 'max:50']];
     }
 
     public function normalize(array $row): array
@@ -102,7 +104,10 @@ class PendingPlacementsTemplate extends ImportTemplate
         $target = $placement ?? StudyPlanSubjectPending::query()->firstOrNew(['study_plan_id' => $plan->getKey(), 'subject_id' => $subject->getKey()]);
 
         if ($placement === null && $target->resolved_at === null) {
-            $target->fill(['specialty_id' => $specialty?->getKey() ?? $target->specialty_id])->save();
+            $target->fill([
+                'specialty_id' => $specialty?->getKey() ?? $target->specialty_id,
+                'sii_grid' => $row['sii_grid'] ?? $target->sii_grid,
+            ])->save();
         }
 
         unset($this->subjectOnly[$target->getKey()]);

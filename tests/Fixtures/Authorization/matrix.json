@@ -8,6 +8,7 @@
             "students.student.view"
         ],
         "jefe_departamento": [
+            "academic.placement.validate",
             "academic_load.load.propose",
             "academic_load.load.view",
             "academic_load.proposal_review.decide",

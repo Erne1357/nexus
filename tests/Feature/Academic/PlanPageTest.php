@@ -310,9 +310,10 @@ describe('admin', function () {
         $this->get(route('academic.plans.show', $this->plan))->assertOk();
         $queries = count(DB::getQueryLog());
 
-        // 10 medidas, constantes con el número de materias: el plan (en mount y al pintar) con su carrera,
-        // permisos y alcances, la retícula (3: materias, seriación y especialidades) y la credencial.
-        expect($queries)->toBe(10);
+        // 11 medidas, constantes con el número de materias: el plan (en mount y al pintar) con su carrera,
+        // permisos y alcances, la retícula (3: materias, seriación y especialidades), cuántas materias esperan
+        // semestre («Por validar») y la credencial.
+        expect($queries)->toBe(11);
     });
 });
 
@@ -826,10 +827,10 @@ describe('agregar materia', function () {
         $component->set('addSearch', 'optativa');
         $queries = count(DB::getQueryLog());
 
-        // 7 medidas, constantes con el número de materias: el plan con su carrera (2), la retícula (3) y el
-        // catálogo (2: cuántas tiene y las que coinciden, con su cuenta en la misma consulta).
+        // 8 medidas, constantes con el número de materias: el plan con su carrera (2), la retícula (3), cuántas
+        // esperan semestre (1) y el catálogo (2: cuántas tiene y las que coinciden, con su cuenta en la misma consulta).
         expect(domOf($component)->querySelectorAll('[data-testid="catalog"] button'))->toHaveCount(8)
-            ->and($queries)->toBe(7);
+            ->and($queries)->toBe(8);
     });
 });
 
@@ -1154,9 +1155,10 @@ describe('seriación', function () {
         $component->set('requisiteSearch', 'optativa');
         $queries = count(DB::getQueryLog());
 
-        // 5 medidas, constantes con el número de materias: el plan con su carrera (2) y la retícula (3).
+        // 6 medidas, constantes con el número de materias: el plan con su carrera (2), la retícula (3) y cuántas
+        // esperan semestre (1).
         expect(domOf($component)->querySelectorAll('[data-testid="requisite-options"] button'))->toHaveCount(8)
-            ->and($queries)->toBe(5);
+            ->and($queries)->toBe(6);
     });
 });
 

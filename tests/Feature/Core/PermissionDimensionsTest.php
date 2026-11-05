@@ -45,6 +45,7 @@ function dimensionTables(): array
         'academic.career' => 'careers',
         'academic.subject' => 'subjects',
         'academic.study_plan' => 'study_plans',
+        'academic.placement' => 'study_plan_subject_pendings',
         'facilities.building' => 'buildings',
         'facilities.room' => 'rooms',
         'faculty.teacher' => 'teachers',

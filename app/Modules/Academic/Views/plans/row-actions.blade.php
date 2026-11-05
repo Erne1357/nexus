@@ -2,7 +2,8 @@
     Acciones de un plan, las mismas en la tabla y en los renglones apilados del celular
     (academic::pages.plans): «Retícula» y «Editar» visibles y lo demás plegado en «Acciones». «Retícula» enlaza a academic.plans.show solo cuando esa ruta existe
     (la crea la tarea 1.8.8). En la tabla (`$inTable`), «Editar» queda solo con su icono entre 768 y
-    1199 px y lleva el data-testid del browser test. No hay «Borrar»: un plan se desactiva.
+    1199 px y lleva el data-testid del browser test. No hay «Borrar»: un plan se desactiva. Quien no edita planes (el
+    jefe de Servicios Escolares, que entra a validar materias) ve «Editar» y «Desactivar» deshabilitados con su motivo.
 --}}
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
     @if (Route::has('academic.plans.show'))
@@ -16,23 +17,35 @@
         </x-button>
     @endif
 
-    <x-button
-        icon="o-pencil-square"
-        wire:click="edit('{{ $plan->id }}')"
-        aria-label="Editar {{ $plan->code }}"
-        :data-testid="$inTable ? 'edit-'.$plan->code : null"
-        class="btn-ghost btn-sm"
-        spinner="edit('{{ $plan->id }}')"
-    >
-        <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
-    </x-button>
+    @can('update', $plan)
+        <x-button
+            icon="o-pencil-square"
+            wire:click="edit('{{ $plan->id }}')"
+            aria-label="Editar {{ $plan->code }}"
+            :data-testid="$inTable ? 'edit-'.$plan->code : null"
+            class="btn-ghost btn-sm"
+            spinner="edit('{{ $plan->id }}')"
+        >
+            <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
+        </x-button>
+    @else
+        <span class="tooltip tooltip-left" data-tip="Solo el administrador edita planes.">
+            <x-button icon="o-pencil-square" aria-label="Editar {{ $plan->code }}" :data-testid="$inTable ? 'edit-'.$plan->code : null" class="btn-ghost btn-sm" disabled>
+                <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
+            </x-button>
+        </span>
+    @endcan
 
     <x-core::row-menu :name="$plan->code" :compact="$inTable">
-        <x-core::row-menu-item
-            :label="$plan->is_active ? 'Desactivar' : 'Activar'"
-            wire:click="toggleActive('{{ $plan->id }}')"
-            wire:confirm="{{ $plan->is_active ? '¿Desactivar el plan '.$plan->code.'?' : '¿Activar el plan '.$plan->code.'?' }}"
-            :spinner="'toggleActive(\''.$plan->id.'\')'"
-        />
+        @can('update', $plan)
+            <x-core::row-menu-item
+                :label="$plan->is_active ? 'Desactivar' : 'Activar'"
+                wire:click="toggleActive('{{ $plan->id }}')"
+                wire:confirm="{{ $plan->is_active ? '¿Desactivar el plan '.$plan->code.'?' : '¿Activar el plan '.$plan->code.'?' }}"
+                :spinner="'toggleActive(\''.$plan->id.'\')'"
+            />
+        @else
+            <x-core::row-menu-item :label="$plan->is_active ? 'Desactivar' : 'Activar'" reason="Solo el administrador activa o desactiva planes." disabled />
+        @endcan
     </x-core::row-menu>
 </div>
