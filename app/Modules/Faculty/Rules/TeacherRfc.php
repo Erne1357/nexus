@@ -7,9 +7,10 @@ use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
  * El RFC, clave natural y usuario del docente (reglas-de-negocio.md, "Reglas de datos", confirmado el 5 de
- * noviembre de 2026). Se normaliza a mayúsculas y sin espacios y debe tener la forma de un RFC de persona física:
- * 4 letras (`Ñ` y `&` valen), 6 dígitos de fecha y, de preferencia, 3 de homoclave. Sin homoclave (9 o 10
- * caracteres) se acepta, pero lo avisan las importaciones. Es el único lugar donde vive la forma.
+ * noviembre de 2026). Se normaliza a mayúsculas y sin espacios y debe tener la forma de un RFC (supuesto por
+ * confirmar): 3 o 4 letras (`Ñ` y `&` valen), 6 dígitos de fecha y, de preferencia, 3 de homoclave. Sin homoclave (9
+ * o 10 caracteres) se acepta, pero lo avisan las importaciones (supuesto por confirmar). Es el único lugar donde vive
+ * la forma.
  */
 final class TeacherRfc implements ValidationRule
 {
