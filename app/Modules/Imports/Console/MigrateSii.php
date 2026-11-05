@@ -77,6 +77,9 @@ final class MigrateSii extends Command
             ['Plantilla', 'Archivo', 'Filas', 'Válidas', 'Advertencias', 'Errores', 'Altas', 'Cambios'],
             array_map(fn ($batch): array => [$batch->template, $batch->file, $batch->rows, $batch->valid, $batch->warnings, $batch->errors, $batch->created, $batch->changed], $report->batches),
         );
+        if ($report->unreadable > 0) {
+            $this->components->warn("{$report->unreadable} renglones del SII no se pudieron leer y no se migran (ver «malformados» en _incidencias.csv).");
+        }
         $this->components->info(($this->option('dry-run') ? 'Ensayo terminado, sin cambios. ' : 'Migración terminada. ')."Incidencias: {$report->incidents} (ver _incidencias.csv).");
 
         return self::SUCCESS;

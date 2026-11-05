@@ -25,7 +25,8 @@ use Throwable;
  * intermedio en `<dir>/_nexus/` (encabezados = etiquetas de la plantilla, que ColumnMatcher reconoce) y pasa
  * por el motor de importación (StoreImportBatch, ValidateImportBatch, ApplyImportBatch), así que valen las
  * mismas reglas y la misma bitácora que en el asistente. Lo que valida la plantilla y lo que descarta un paso
- * queda en `<dir>/_incidencias.csv`, sin filas crudas.
+ * queda en `<dir>/_incidencias.csv`, sin filas crudas; también, una vez por archivo del SII, los renglones que no se
+ * pudieron leer (error: no se migran), los reparados por coma decimal y la anotación al final (`SiiFileRead`).
  *
  * Con `$dryRun` todo corre dentro de una transacción que se revierte, sin cola, y se borran los archivos
  * subidos; las incidencias se leen antes de revertir. Sin `$dryRun` los archivos subidos se conservan como
@@ -71,6 +72,7 @@ final class RunSiiMigration
 
         $migration = new SiiMigration($export, $this->curatedDir);
         $incidents = new Incidents;
+        $unreadable = 0;
         $reports = [];
         $stored = [];
         $queue = config('queue.default');
@@ -96,6 +98,8 @@ final class RunSiiMigration
                     $current[1] = $batch->file;
                     $reports[] = $this->run($dir, $user, $step, $batch, $incidents, $stored);
                 }
+
+                $unreadable += $this->collectReads($step->name(), $export, $incidents);
             }
         } catch (SiiMigrationStopped $stopped) {
             $pending = new SiiMigrationStopped($stopped->step, $stopped->batchFile, $stopped->cause, count($reports), $stopped->getPrevious());
@@ -104,6 +108,7 @@ final class RunSiiMigration
             $pending = new SiiMigrationStopped($current[0] ?? '-', $current[1], $this->causeOf($exception), count($reports), $exception);
         }
 
+        $unreadable += $this->collectReads($current[0] ?? '-', $export, $incidents);
         $cleanup = $this->cleanUp($dir, $dryRun, $queue, $level, $stored, $incidents);
 
         if ($pending !== null) {
@@ -114,7 +119,26 @@ final class RunSiiMigration
             throw new SiiMigrationStopped('-', null, 'falló la limpieza ('.class_basename($cleanup).')', count($reports), $cleanup);
         }
 
-        return new SiiMigrationReport($reports, $incidents->count());
+        return new SiiMigrationReport($reports, $incidents->count(), $unreadable);
+    }
+
+    /**
+     * Una incidencia por tipo de lo que dejaron las pasadas completas por los archivos del SII que terminaron en este
+     * paso (cada archivo una vez por corrida). Devuelve cuántos renglones no se pudieron leer.
+     */
+    private function collectReads(string $step, SiiExport $export, Incidents $incidents): int
+    {
+        $unreadable = 0;
+
+        foreach ($export->takeReads() as $read) {
+            $unreadable += $read->unreadable();
+
+            foreach ($read->incidents() as $incident) {
+                $incidents->add($step, $read->file, $incident['ref'], '', $incident['level'], $incident['message']);
+            }
+        }
+
+        return $unreadable;
     }
 
     /**

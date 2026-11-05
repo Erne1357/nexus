@@ -2,6 +2,7 @@
 
 namespace App\Modules\Imports\Sii;
 
+use Closure;
 use Generator;
 use RuntimeException;
 
@@ -16,7 +17,13 @@ use RuntimeException;
  *   campos. Un renglón con campos de más se repara solo si exactamente una combinación de columnas
  *   decimales (`SiiFile::decimalColumns()`) deja los campos con comillas en columnas de texto y los
  *   números en columnas numéricas; si no, va a `malformed()` y no se entrega;
- * - tras un renglón en blanco, lo que no se puede reparar es una anotación al final: se ignora.
+ * - lo que no se puede leer después de un renglón en blanco es una anotación al final (`trailing()`) solo si
+ *   de ahí al final del archivo nada es un renglón; si después vuelve a haber renglones, se siguen leyendo y lo
+ *   ignorado va a `malformed()` (un texto con un renglón en blanco dentro no corta el archivo). En esto se aparta
+ *   del perfilador, que corta en la primera línea ilegible tras un renglón en blanco y la cuenta como anotación.
+ *
+ * Al terminar una pasada completa por `rows()` llama a `$onPass` (si lo hay), para que quien abrió la exportación
+ * reporte lo malformado, lo reparado y la anotación de cada archivo. Una pasada que se deja a medias no avisa.
  *
  * Los valores se recortan. Una columna repetida en el encabezado se distingue con el sufijo `__<posición>`.
  */
@@ -36,12 +43,23 @@ final class SiiCsvReader
     /** @var list<bool|null>|null */
     private ?array $quoted = null;
 
-    private int $repaired = 0;
+    /** @var list<int> */
+    private array $repaired = [];
 
     /** @var list<int> */
     private array $malformed = [];
 
-    public function __construct(private readonly string $path, private readonly SiiFile $file) {}
+    /** @var list<int> */
+    private array $trailing = [];
+
+    /**
+     * @param  (Closure(self): void)|null  $onPass  se llama al terminar cada pasada completa por `rows()`
+     */
+    public function __construct(
+        private readonly string $path,
+        private readonly SiiFile $file,
+        private readonly ?Closure $onPass = null,
+    ) {}
 
     /**
      * Encabezados normalizados (minúsculas, sin acentos, `_`), en el orden del archivo.
@@ -66,10 +84,13 @@ final class SiiCsvReader
     public function rows(?array $columns = null): Generator
     {
         $this->prepare();
-        $this->repaired = 0;
+        $this->repaired = [];
         $this->malformed = [];
+        $this->trailing = [];
         $width = count($this->header);
         $afterBlank = false;
+        /** @var list<int> $unread líneas ilegibles tras un renglón en blanco: anotación si nada más sigue */
+        $unread = [];
 
         $handle = $this->open();
         try {
@@ -78,35 +99,34 @@ final class SiiCsvReader
             while (($line = $this->readLine($handle)) !== null) {
                 $lineNo++;
                 $tokens = $this->tokenize($line);
-                if ($tokens === null) {
-                    if ($afterBlank) {
-                        break;
-                    }
-                    $this->malformed[] = $lineNo;
-
-                    continue;
-                }
-                if ($this->isBlank($tokens)) {
+                if ($tokens !== null && $this->isBlank($tokens)) {
                     $afterBlank = true;
 
                     continue;
                 }
 
-                $values = array_column($tokens, 0);
-                if (count($tokens) !== $width) {
-                    $fixed = $this->repair($tokens);
-                    if ($fixed === null) {
-                        if ($afterBlank) {
-                            break;
-                        }
+                $values = match (true) {
+                    $tokens === null => null,
+                    count($tokens) === $width => array_column($tokens, 0),
+                    default => $this->repair($tokens),
+                };
+                if ($values === null) {
+                    if ($afterBlank) {
+                        $unread[] = $lineNo;
+                    } else {
                         $this->malformed[] = $lineNo;
-
-                        continue;
                     }
-                    $this->repaired++;
-                    $values = $fixed;
+
+                    continue;
+                }
+                if (count($tokens) !== $width) {
+                    $this->repaired[] = $lineNo;
                 }
                 $afterBlank = false;
+                if ($unread !== []) {
+                    array_push($this->malformed, ...$unread);
+                    $unread = [];
+                }
 
                 $row = array_combine($this->header, array_map('trim', $values));
 
@@ -115,24 +135,43 @@ final class SiiCsvReader
         } finally {
             fclose($handle);
         }
+
+        $this->trailing = $unread;
+        if ($this->onPass !== null) {
+            ($this->onPass)($this);
+        }
     }
 
     /**
-     * Renglones que se repararon uniendo una coma decimal, contados en el último recorrido de `rows()`.
+     * Números de línea de los renglones que se repararon uniendo una coma decimal, del último recorrido de `rows()`.
+     *
+     * @return list<int>
      */
-    public function repaired(): int
+    public function repaired(): array
     {
         return $this->repaired;
     }
 
     /**
-     * Números de línea con otro número de columnas que no se pudieron reparar, del último recorrido.
+     * Números de línea con otro número de columnas que no se pudieron reparar, del último recorrido. Incluye lo
+     * ilegible tras un renglón en blanco cuando después siguen renglones.
      *
      * @return list<int>
      */
     public function malformed(): array
     {
         return $this->malformed;
+    }
+
+    /**
+     * Números de línea de la anotación al final (lo ilegible del último renglón en blanco al final del archivo), del
+     * último recorrido completo.
+     *
+     * @return list<int>
+     */
+    public function trailing(): array
+    {
+        return $this->trailing;
     }
 
     /**

@@ -84,7 +84,7 @@ it('une la coma decimal de los promedios', function () {
 
     expect($rows)->toHaveCount(2)
         ->and($rows[3]['promedio_aritmetico_acumulado'])->toBe('87.50')
-        ->and($reader->repaired())->toBe(1)
+        ->and($reader->repaired())->toBe([3])
         ->and($reader->malformed())->toBe([]);
 });
 
@@ -97,7 +97,7 @@ it('no repara un renglón ambiguo', function () {
 
     expect(iterator_to_array($reader->rows()))->toBe([])
         ->and($reader->malformed())->toBe([2])
-        ->and($reader->repaired())->toBe(0);
+        ->and($reader->repaired())->toBe([]);
 });
 
 it('ignora los renglones en blanco y la anotación al final', function () {
@@ -110,7 +110,64 @@ it('ignora los renglones en blanco y la anotación al final', function () {
     $reader = new SiiCsvReader($this->path, SiiFile::Alumnos);
 
     expect(iterator_to_array($reader->rows()))->toHaveCount(1)
-        ->and($reader->malformed())->toBe([]);
+        ->and($reader->malformed())->toBe([])
+        ->and($reader->trailing())->toBe([4]);
+});
+
+it('un renglón en blanco a mitad del archivo no corta los renglones que siguen', function () {
+    SiiFixtures::write($this->path, SiiFile::Alumnos, [
+        SiiFixtures::line(SiiFile::Alumnos, ['no_de_control' => "'1'"]),
+        '',
+        "'Subtotal','1'",
+        SiiFixtures::line(SiiFile::Alumnos, ['no_de_control' => "'2'"]),
+        SiiFixtures::line(SiiFile::Alumnos, ['no_de_control' => "'3'"]),
+    ]);
+
+    $reader = new SiiCsvReader($this->path, SiiFile::Alumnos);
+    $rows = iterator_to_array($reader->rows());
+
+    expect(array_column($rows, 'no_de_control'))->toBe(['1', '2', '3'])
+        ->and($reader->malformed())->toBe([4])
+        ->and($reader->trailing())->toBe([]);
+});
+
+it('un texto con un renglón en blanco dentro no corta el archivo y sus pedazos van a malformados', function () {
+    SiiFixtures::write($this->path, SiiFile::Alumnos, [
+        SiiFixtures::line(SiiFile::Alumnos, ['no_de_control' => "'1'"]),
+        SiiFixtures::line(SiiFile::Alumnos, ['no_de_control' => "'2'", 'escuela_procedencia' => "'PRIMERA PARTE"]),
+        '',
+        "SEGUNDA PARTE','x','x'",
+        SiiFixtures::line(SiiFile::Alumnos, ['no_de_control' => "'3'"]),
+    ]);
+
+    $reader = new SiiCsvReader($this->path, SiiFile::Alumnos);
+    $rows = iterator_to_array($reader->rows());
+
+    expect(array_column($rows, 'no_de_control'))->toBe(['1', '3'])
+        ->and($reader->malformed())->toBe([3, 5])
+        ->and($reader->trailing())->toBe([]);
+});
+
+it('avisa al terminar una pasada completa con lo malformado, lo reparado y la anotación', function () {
+    SiiFixtures::write($this->path, SiiFile::Alumnos, [
+        SiiFixtures::line(SiiFile::Alumnos),
+        "'10','ISC'",
+        '',
+        "'Total de registros','1'",
+    ]);
+    $passes = [];
+
+    $reader = new SiiCsvReader($this->path, SiiFile::Alumnos, function (SiiCsvReader $done) use (&$passes): void {
+        $passes[] = [$done->malformed(), $done->repaired(), $done->trailing()];
+    });
+    $rows = $reader->rows();
+    $rows->current();
+
+    expect($passes)->toBe([]);
+
+    iterator_to_array($rows);
+
+    expect($passes)->toBe([[[3], [], [5]]]);
 });
 
 it('manda a malformados un renglón con una comilla sin cerrar', function () {
@@ -202,7 +259,7 @@ it('no repara si un texto aprendido entre comillas llega sin ellas', function ()
     $rows = iterator_to_array($reader->rows());
 
     expect(array_keys($rows))->toBe([2, 3])
-        ->and($reader->repaired())->toBe(1)
+        ->and($reader->repaired())->toBe([3])
         ->and($reader->malformed())->toBe([4]);
 });
 
