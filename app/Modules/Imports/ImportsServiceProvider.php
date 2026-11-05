@@ -6,8 +6,10 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Imports\Console\ExportDemoFiles;
+use App\Modules\Imports\Console\MigrateSii;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
+use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
 use App\Modules\Imports\Templates\EvaluationsTemplate;
@@ -47,6 +49,14 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         RoomsTemplate::class,
     ];
 
+    /**
+     * Pasos de la migración del SII, en el orden en que corren. Cada tarea que escribe un paso lo agrega aquí;
+     * las pruebas los sustituyen ligando `sii.steps`.
+     *
+     * @var list<class-string<SiiStep>>
+     */
+    public const array SII_STEPS = [];
+
     public function register(): void
     {
         // Singleton porque es inmutable: guarda clases, y cada get() crea una plantilla nueva.
@@ -71,7 +81,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExportDemoFiles::class]);
+            $this->commands([ExportDemoFiles::class, MigrateSii::class]);
         }
 
         // Como Navigation: se arma al arrancar, antes de la primera petición, para que Octane lo cree
