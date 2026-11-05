@@ -151,6 +151,43 @@ it('junta las claves que chocan al recortar espacios y avisa una vez', function 
         ->and(array_column($run['aulas-C1.csv']['rows'], 'code'))->toContain('910');
 });
 
+it('dos aulas curadas incluidas del mismo campus que chocan al normalizar detienen la migración nombrando ambas', function () {
+    writeSiiRooms($this->dir, [['LM1'], ['L M 1']]);
+    writeRoomsCurated($this->curated, ['LM1,si,C1,D,,aula,30,,5,', 'L M 1,si,C1,D2,,aula,35,,8,']);
+
+    expect(fn () => roomsStepRun($this->dir, $this->curated))->toThrow(SiiCuratedMismatch::class, 'LM1 y L M 1');
+});
+
+it('una aula curada con otra grafía se empareja con la del SII al normalizar', function () {
+    writeSiiRooms($this->dir, [['Lab CB']]);
+    writeRoomsCurated($this->curated, ['LabCB,si,C1,D,,laboratorio,30,,5,']);
+
+    $run = roomsStepRun($this->dir, $this->curated);
+
+    expect(array_column($run['aulas-C1.csv']['rows'], 'code'))->toBe(['LABCB']);
+});
+
+it('no entrega lotes vacíos de un campus sin aulas incluidas', function () {
+    writeSiiRooms($this->dir, [['A1'], ['X1']]);
+    writeRoomsCurated($this->curated, ['A1,si,C2,ED2,,aula,30,,5,']);
+
+    $run = roomsStepRun($this->dir, $this->curated);
+
+    expect(array_keys($run))->toBe(['aulas-C2.csv'])
+        ->and(collect($run['aulas-C2.csv']['incidents'])->contains(fn (array $i): bool => str_contains($i['message'], 'no están en el curado') || str_contains($i['message'], 'no está en el curado')))->toBeTrue();
+});
+
+it('sin aulas incluidas entrega un lote vacío de C1 que lleva las incidencias', function () {
+    writeSiiRooms($this->dir, [['A1'], ['X1']]);
+    writeRoomsCurated($this->curated, ['A1,no,C2,ED2,,aula,30,,5,']);
+
+    $run = roomsStepRun($this->dir, $this->curated);
+
+    expect(array_keys($run))->toBe(['aulas-C1.csv'])
+        ->and($run['aulas-C1.csv']['rows'])->toBe([])
+        ->and($run['aulas-C1.csv']['incidents'])->not->toBe([]);
+});
+
 it('migra las aulas de punta a punta y crea los edificios', function () {
     Storage::fake('imports');
     Campus::factory()->create(['code' => 'C1']);

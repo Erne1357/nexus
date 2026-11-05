@@ -106,7 +106,7 @@ S/S5,si,C1,C,,aula,40,,40,edificio por verificar (ubicación del SII ambigua)
 S/S7,si,C1,C,,aula,40,,4,edificio por verificar (ubicación del SII ambigua)
 EADLab,no,C1,CENTRO DE CÓMPUTO,,laboratorio,35,,3,ficticia/virtual/EAD/cubículo
 LabCon,si,C1,CENTRO DE CÓMPUTO,,laboratorio,35,,196,
-LabCB,si,C1,CIENCIAS BÁSICAS,,laboratorio,30,,15,
+LabCB,no,C1,CIENCIAS BÁSICAS,,laboratorio,30,,15,duplica la clave Lab CB al normalizar; se queda Lab CB: revisar
 310,si,C1,CIENCIAS BÁSICAS,,laboratorio,35,,283,
 403,si,C1,CIENCIAS BÁSICAS,,aula,40,,872,
 EAD403,no,C1,CIENCIAS BÁSICAS,,aula,40,,5,ficticia/virtual/EAD/cubículo
@@ -114,7 +114,7 @@ Lab CB,si,C1,CIENCIAS BÁSICAS,,laboratorio,30,,32,
 CMPS I,si,C2,CAMPUS II,,aula,35,,3,
 LM1,si,C1,D,,aula,35,,176,edificio por verificar (ubicación del SII ambigua)
 LM2,si,C1,D,,aula,35,,201,edificio por verificar (ubicación del SII ambigua)
-L M 1,si,C1,D2,,aula,35,,8,edificio por verificar (ubicación del SII ambigua)
+L M 1,no,C1,D2,,aula,35,,8,duplica la clave LM1 al normalizar; se queda LM1: revisar
 HUMAN,si,C1,DIVISIÓN DE ESTUDIOS,,aula,30,,19,
 EAD,no,C1,EAD,,aula,30,,643,ficticia/virtual/EAD/cubículo
 CEA,no,C1,ECONOMICO,,aula,30,,4,ficticia/virtual/EAD/cubículo
@@ -132,7 +132,7 @@ EAD806,no,C1,IND,,aula,40,,1,ficticia/virtual/EAD/cubículo
 EAD901,no,C1,IND,,aula,35,,2,ficticia/virtual/EAD/cubículo
 EAD904,no,C1,IND,,aula,30,,2,ficticia/virtual/EAD/cubículo
 EAD907,no,C1,IND,,aula,35,,4,ficticia/virtual/EAD/cubículo
-910,si,C1,INGENIERÍA INDUSTRIAL,,aula,24,,239,
+910,no,C1,INGENIERÍA INDUSTRIAL,,aula,24,,239,duplica la clave 910 al normalizar; se queda 910 del edificio T: revisar
 912,si,C1,INGENIERÍA INDUSTRIAL,,aula,28,,246,
 LIT,si,C1,INGENIERÍA INDUSTRIAL,,aula,41,,47,
 301,si,C1,J,,aula,35,,1004,
@@ -207,7 +207,7 @@ posgra,si,C1,POSGRADO,,aula,30,,58,
 603,no,C1,SIN EDIFICIO,,aula,0,,190,ficticia/virtual/EAD/cubículo; capacidad 0 en el SII
 A000,si,C1,SIN EDIFICIO,,aula,40,,5,edificio por verificar (ubicación del SII ambigua)
 AUDII,si,C1,SIN EDIFICIO,,auditorio,30,,40,edificio por verificar (ubicación del SII ambigua)
-AUDIOV,si,C1,SIN EDIFICIO,,auditorio,80,,60,edificio por verificar (ubicación del SII ambigua)
+AUDIOV,no,C1,SIN EDIFICIO,,auditorio,80,,60,duplica la clave Audiov al normalizar; se queda Audiov: revisar
 AUDI_Y,si,C1,SIN EDIFICIO,,auditorio,25,,60,edificio por verificar (ubicación del SII ambigua)
 AV1,si,C1,SIN EDIFICIO,,aula,25,,60,edificio por verificar (ubicación del SII ambigua)
 C04,no,C1,SIN EDIFICIO,,aula,10,,1,ficticia/virtual/EAD/cubículo

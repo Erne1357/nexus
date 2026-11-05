@@ -3,11 +3,13 @@
 namespace App\Modules\Imports\Sii\Steps;
 
 use App\Modules\Facilities\Enums\RoomType;
+use App\Modules\Facilities\Rules\RoomRules;
 use App\Modules\Imports\Sii\SiiBatch;
 use App\Modules\Imports\Sii\SiiCuratedMismatch;
 use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Imports\Sii\SiiStep;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Aulas (reglas-de-negocio.md "Reglas de datos"). `Curated/aulas.csv` lista solo las aulas que tuvieron sesiones
@@ -15,7 +17,8 @@ use App\Modules\Imports\Sii\SiiStep;
  * ficticias, virtuales, duplicadas `EAD<aula>`, cubículos, residencias y servicio social van con `incluir=no`
  * (supuesto por confirmar). `sesiones_desde_20251` y `nota` son para la revisión humana y el código los ignora.
  *
- * Las claves del aula se comparan tal cual vienen del SII, recortadas. Contrato, distinto al de otros pasos: un aula
+ * Las claves del aula se comparan normalizadas como las guarda Nexus (RoomRules: sin espacios, mayúsculas); dos filas
+ * curadas incluidas del mismo campus que chocan así son error: el curado debe dejar una en `incluir=no`. Contrato, distinto al de otros pasos: un aula
  * del SII que el curado no trae no es error (no tuvo uso): se omite con un solo aviso agregado y, si estaba activa
  * en el SII, con un aviso por aula. Una fila curada cuya aula no existe en el SII, o con valores inválidos
  * (`incluir`, `campus`, `tipo`, `capacidad`), detiene el paso antes de escribir (SiiCuratedMismatch).
@@ -37,23 +40,24 @@ final class RoomsStep implements SiiStep
     public function batches(SiiMigration $migration): iterable
     {
         $siiRooms = $this->siiRooms($migration);
-        [$curated, $incidents] = $this->curated($migration);
+        $curated = $this->curated($migration);
         $this->checkContract($siiRooms, $curated);
 
         $byCampus = array_fill_keys(self::CAMPUSES, ['rows' => [], 'excluded' => [], 'incidents' => []]);
 
-        foreach ($curated as $code => $row) {
+        foreach ($curated as $row) {
             $campus = $row['campus'];
+            $code = $row['code'];
 
             if ($row['incluir'] !== 'si') {
-                $byCampus[$campus]['excluded'][] = (string) $code;
+                $byCampus[$campus]['excluded'][] = $code;
 
                 continue;
             }
 
             $byCampus[$campus]['rows'][] = [
                 'building' => $row['edificio'],
-                'code' => (string) $code,
+                'code' => $code,
                 'name' => $row['nombre'],
                 'type' => $row['tipo'],
                 'capacity' => $row['capacidad'],
@@ -61,70 +65,97 @@ final class RoomsStep implements SiiStep
             ];
 
             if ($siiRooms[$code]['crossing'] === 'S') {
-                $byCampus[$campus]['incidents'][] = $this->warning((string) $code, "El aula {$code}: el SII permite cruces en esta aula; Nexus no: revisar (supuesto por confirmar).");
+                $byCampus[$campus]['incidents'][] = $this->warning($code, "El aula {$code}: el SII permite cruces en esta aula; Nexus no: revisar (supuesto por confirmar).");
             }
 
             if ($siiRooms[$code]['status'] === 'I') {
-                $byCampus[$campus]['incidents'][] = $this->warning((string) $code, "El aula {$code} está inactiva en el SII: se migra activa (la plantilla no trae estado; supuesto por confirmar).");
+                $byCampus[$campus]['incidents'][] = $this->warning($code, "El aula {$code} está inactiva en el SII: se migra activa (la plantilla no trae estado; supuesto por confirmar).");
             }
         }
 
-        $first = true;
+        $global = $this->uncuratedIncidents($siiRooms, array_column($curated, 'code'));
+        $batches = [];
 
         foreach ($byCampus as $campus => $batch) {
-            $batchIncidents = $batch['incidents'];
+            $incidents = $batch['incidents'];
 
             if ($batch['excluded'] !== []) {
-                $batchIncidents[] = $this->warning($campus, $this->excludedMessage($campus, $batch['excluded']));
+                $incidents[] = $this->warning($campus, $this->excludedMessage($campus, $batch['excluded']));
             }
 
-            if ($first) {
-                $batchIncidents = [...$incidents, ...$this->uncuratedIncidents($siiRooms, $curated), ...$batchIncidents];
-                $first = false;
+            if ($batch['rows'] !== []) {
+                $batches[] = [$campus, $batch['rows'], $incidents];
+            } elseif ($incidents !== []) {
+                $global = [...$global, ...$incidents];
             }
+        }
 
-            yield new SiiBatch('rooms', "aulas-{$campus}.csv", $batch['rows'], campus: $campus, incidents: $batchIncidents);
+        if ($batches === []) {
+            // Las incidencias solo viajan en los lotes: sin aulas incluidas, un lote vacío de C1 las lleva.
+            $batches[] = [self::CAMPUSES[0], [], []];
+        }
+
+        $batches[0][2] = [...$global, ...$batches[0][2]];
+
+        foreach ($batches as [$campus, $rows, $incidents]) {
+            yield new SiiBatch('rooms', "aulas-{$campus}.csv", $rows, campus: $campus, incidents: $incidents);
         }
     }
 
     /**
-     * Las aulas del SII por clave recortada. Dos claves que chocan al recortar (`' 910'` y `'910'`) son una sola.
+     * La clave del aula como la guarda Nexus (RoomRules): sin espacios y en mayúsculas.
+     */
+    private function normalize(string $code): string
+    {
+        try {
+            return app(RoomRules::class)->normalizeCode($code);
+        } catch (ValidationException) {
+            return trim($code);
+        }
+    }
+
+    /**
+     * Las aulas del SII por clave normalizada. Dos claves que chocan al normalizar (`' 910'` y `'910'`) son una sola.
      *
-     * @return array<string, array{crossing: string, status: string}>
+     * @return array<string, array{crossing: string, status: string, duplicates: int}>
      */
     private function siiRooms(SiiMigration $migration): array
     {
         $rooms = [];
 
         foreach ($migration->export()->reader(SiiFile::Aulas)->rows() as $row) {
-            $rooms[trim($row['aula'])] ??= [
+            $key = $this->normalize($row['aula']);
+            $rooms[$key] ??= [
                 'crossing' => strtoupper(trim($row['permite_cruce'])),
                 'status' => strtoupper(trim($row['estatus'])),
                 'duplicates' => 0,
             ];
-            $rooms[trim($row['aula'])]['duplicates']++;
+            $rooms[$key]['duplicates']++;
         }
 
         return $rooms;
     }
 
     /**
-     * Las filas curadas por aula, ya validadas. Una clave repetida en el curado conserva su primera fila y avisa.
+     * Las filas curadas, ya validadas y con su clave normalizada en `code`.
      *
-     * @return array{0: array<string, array<string, string>>, 1: list<array{level: 'error'|'warning', ref: string, message: string}>}
+     * @return list<array<string, string>>
      *
-     * @throws SiiCuratedMismatch si alguna fila trae un valor inválido
+     * @throws SiiCuratedMismatch si alguna fila trae un valor inválido, o si dos incluidas del mismo campus chocan
+     *                            al normalizar la clave (el curado debe decir cuál se queda)
      */
     private function curated(SiiMigration $migration): array
     {
         $curated = [];
-        $incidents = [];
         $invalid = [];
+        $included = [];
+        $collisions = [];
         $types = array_column(RoomType::cases(), 'value');
 
         foreach ($migration->curated('aulas') as $row) {
-            $code = trim($row['aula']);
+            $original = trim($row['aula']);
             $row = array_map(trim(...), $row);
+            $row['code'] = $this->normalize($original);
             $row['incluir'] = strtolower($row['incluir']);
             $problems = [];
 
@@ -145,36 +176,44 @@ final class RoomsStep implements SiiStep
             }
 
             if ($problems !== []) {
-                $invalid[] = "{$code} (".implode(', ', $problems).' inválido)';
+                $invalid[] = "{$original} (".implode(', ', $problems).' inválido)';
 
                 continue;
             }
 
-            if (isset($curated[$code])) {
-                $incidents[] = $this->warning($code, "El aula {$code} aparece más de una vez en el curado: se usa la primera fila (supuesto por confirmar).");
+            if ($row['incluir'] === 'si') {
+                $key = $row['campus'].'/'.$row['code'];
 
-                continue;
+                if (isset($included[$key])) {
+                    $collisions[] = "{$included[$key]} y {$original} (campus {$row['campus']}, ambas quedan como {$row['code']})";
+                } else {
+                    $included[$key] = $original;
+                }
             }
 
-            $curated[$code] = $row;
+            $curated[] = $row;
         }
 
         if ($invalid !== []) {
             throw new SiiCuratedMismatch('aulas', $this->capped($invalid), []);
         }
 
-        return [$curated, $incidents];
+        if ($collisions !== []) {
+            throw new SiiCuratedMismatch('aulas (claves que chocan al normalizar: deja una en incluir=no)', [], $this->capped($collisions));
+        }
+
+        return $curated;
     }
 
     /**
      * @param  array<string, array{crossing: string, status: string, duplicates: int}>  $siiRooms
-     * @param  array<string, array<string, string>>  $curated
+     * @param  list<array<string, string>>  $curated
      *
      * @throws SiiCuratedMismatch
      */
     private function checkContract(array $siiRooms, array $curated): void
     {
-        $extra = array_values(array_map('strval', array_diff(array_keys($curated), array_keys($siiRooms))));
+        $extra = array_values(array_unique(array_diff(array_column($curated, 'code'), array_map('strval', array_keys($siiRooms)))));
 
         if ($extra !== []) {
             throw new SiiCuratedMismatch('aulas', [], $this->capped($extra));
@@ -186,11 +225,12 @@ final class RoomsStep implements SiiStep
      * repetida al recortar.
      *
      * @param  array<string, array{crossing: string, status: string, duplicates: int}>  $siiRooms
-     * @param  array<string, array<string, string>>  $curated
+     * @param  list<string>  $curated  claves normalizadas del curado
      * @return list<array{level: 'error'|'warning', ref: string, message: string}>
      */
     private function uncuratedIncidents(array $siiRooms, array $curated): array
     {
+        $curated = array_flip($curated);
         $incidents = [];
         $skipped = 0;
 
