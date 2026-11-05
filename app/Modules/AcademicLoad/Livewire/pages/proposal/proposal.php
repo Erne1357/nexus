@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\ProposalLock;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
+use App\Modules\AcademicLoad\Enums\ProposalTileState;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
@@ -30,8 +31,11 @@ use Mary\Traits\Toast;
  * Propuesta de carrera (tarea 2.7, reglas-de-negocio.md, "Propuesta de carrera"): lo que una carrera pide a
  * los departamentos en el periodo y el campus activos de la credencial, en dos vistas que el usuario alterna
  * (`?vista=reticula|tabla`): la retícula por semestre con un panel lateral para corregir una materia, y la
- * tabla por semestre con captura en línea. En las dos, el resumen de cada departamento resalta sus materias
- * (`?depto=<código>`; en la tabla además puede filtrar, `?filtrar=1`).
+ * tabla por semestre con captura en línea. En las dos, el resumen de cada departamento elige sus materias
+ * (`?depto=<código>`) y el filtro de grupos, las que piden o no piden grupos (`?grupos=con|sin`). En la retícula
+ * las elegidas se marcan como una cadena de seriación resaltada, con la barra de selección (maqueta C, DESIGN.md,
+ * "Retícula de la propuesta de carrera"); en la tabla el filtro oculta las demás filas y el departamento las
+ * atenúa, o las oculta con `?filtrar=1`. Una cadena de la leyenda manda sobre esa marca mientras está resaltada.
  *
  * La carrera es la del coordinador en ese campus; con varias, o para subdirección y admin, `?carrera=<id>`
  * elige entre las ofrecidas en el campus. Lo ven el coordinador, subdirección y el admin; el rol sin alcance
@@ -46,6 +50,8 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     private const array VIEWS = ['reticula', 'tabla'];
 
+    private const array GROUP_FILTERS = ['', 'con', 'sin'];
+
     /** 'reticula' o 'tabla'; otro valor muestra la retícula. */
     #[Url(as: 'vista')]
     public string $view = 'reticula';
@@ -57,6 +63,27 @@ new #[Title('Propuesta de carrera')] class extends Component
     /** En la tabla, ocultar las filas de los demás departamentos. */
     #[Url(as: 'filtrar')]
     public bool $onlyDepartment = false;
+
+    /** Qué materias se eligen por sus grupos: '' todas, 'con' las que piden grupos y 'sin' las que no. */
+    #[Url(as: 'grupos')]
+    public string $groupsFilter = '';
+
+    /**
+     * La cadena de seriación resaltada en la retícula (su índice en ProposalOverview::chains), o null. Mientras
+     * está, manda sobre la marca del departamento y del filtro de grupos, que siguen elegidos.
+     */
+    #[Locked]
+    public ?int $chain = null;
+
+    /**
+     * Las filas guardadas desde el último cambio del filtro de grupos, de la vista o del departamento: la tabla las
+     * deja a la vista aunque ya no cumplan el filtro, para que no desaparezcan mientras se capturan (y el foco y el
+     * aviso «Guardado» tengan dónde quedarse).
+     *
+     * @var list<string>
+     */
+    #[Locked]
+    public array $editedRows = [];
 
     /** Id de la carrera elegida; '' es la primera que puede ver. */
     #[Url(as: 'carrera')]
@@ -118,6 +145,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         abort_unless($context->allowsAny(AcademicLoadPermission::ProposalView), 403);
 
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'reticula';
+        $this->groupsFilter = in_array($this->groupsFilter, self::GROUP_FILTERS, true) ? $this->groupsFilter : '';
         $this->resolve($context, $proposals);
     }
 
@@ -126,24 +154,36 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     public function updatedCareerId(Actor $context, CareerProposalQuery $proposals): void
     {
-        $this->reset('department', 'onlyDepartment', 'itemId', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
+        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'itemId', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
         $this->resolve($context, $proposals);
     }
 
     public function setView(string $view): void
     {
         $this->returnedAt = null;
+        $this->chain = null;
+        $this->editedRows = [];
         $this->view = in_array($view, self::VIEWS, true) ? $view : 'reticula';
         $this->cellErrors = [];
     }
 
     /**
-     * Elegir un departamento resalta sus materias; elegirlo otra vez lo quita.
+     * «Mostrar solo» cambia qué filas deja la tabla: las guardadas dejan de quedarse a la vista.
+     */
+    public function updatedOnlyDepartment(): void
+    {
+        $this->editedRows = [];
+    }
+
+    /**
+     * Elegir un departamento marca sus materias; elegirlo otra vez lo quita. Suelta la cadena resaltada.
      */
     public function pickDepartment(string $code): void
     {
         $this->department = $this->department === $code ? '' : $code;
         $this->returnedAt = null;
+        $this->chain = null;
+        $this->editedRows = [];
 
         if ($this->department === '') {
             $this->onlyDepartment = false;
@@ -151,9 +191,45 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * «Ver» en la alerta de un departamento que regresó su parte: lo resalta (en la tabla, además, deja solo sus
-     * filas) y lleva la vista a su primera materia, con el foco. Con varias, cada «Ver» va a la siguiente y da la
-     * vuelta (`proposal-focus`, que atiende la página).
+     * «Todas», «Con grupos» o «Sin grupos»: marca en la retícula, o deja en la tabla, las materias que piden o no
+     * piden grupos. Suelta la cadena resaltada.
+     */
+    public function filterGroups(string $filter): void
+    {
+        $this->groupsFilter = in_array($filter, self::GROUP_FILTERS, true) ? $filter : '';
+        $this->chain = null;
+        $this->editedRows = [];
+    }
+
+    /**
+     * Resalta una cadena de la leyenda de la retícula, por encima de la marca del departamento y del filtro;
+     * tocarla otra vez la quita.
+     */
+    public function focusChain(int $chain): void
+    {
+        $this->chain = $this->chain === $chain ? null : $chain;
+    }
+
+    /**
+     * «Quitar resaltado» (o Esc): con una cadena resaltada, la quita y vuelve a la marca del departamento y del
+     * filtro; si no, quita esa marca.
+     */
+    public function clearHighlight(): void
+    {
+        if ($this->chain !== null) {
+            $this->chain = null;
+
+            return;
+        }
+
+        $this->reset('department', 'onlyDepartment', 'groupsFilter', 'returnedAt', 'editedRows');
+    }
+
+    /**
+     * «Ver» en la alerta de un departamento que regresó su parte: lo marca (en la tabla, además, deja solo sus
+     * filas) sin la cadena ni el filtro de grupos, que podrían esconder lo que se le pide, y lleva la vista a su
+     * primera materia, con el foco. Con varias, cada «Ver» va a la siguiente y da la vuelta (`proposal-focus`, que
+     * atiende la página).
      */
     public function showDepartment(string $code, CareerProposalQuery $proposals): void
     {
@@ -169,6 +245,9 @@ new #[Title('Propuesta de carrera')] class extends Component
 
         $this->department = $code;
         $this->returnedAt = $next;
+        $this->chain = null;
+        $this->groupsFilter = '';
+        $this->editedRows = [];
 
         if ($this->view === 'tabla') {
             $this->onlyDepartment = true;
@@ -221,6 +300,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         if ($this->applyChange($update, $item, $this->expected_students, $this->requested_groups, $this->notes)) {
+            $this->keepRow($item);
             $this->showDrawer = false;
             $this->success('Materia guardada', e($item->load(['subject' => fn ($query) => $query->withTrashed()])->subject->code));
         }
@@ -258,6 +338,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         );
 
         if ($saved) {
+            $this->keepRow($item);
             unset($this->cellErrors["{$item->id}.expected_students"], $this->cellErrors["{$item->id}.requested_groups"]);
             $this->dispatch('cell-saved', id: $item->id, field: $field);
         }
@@ -313,11 +394,23 @@ new #[Title('Propuesta de carrera')] class extends Component
             $this->reset('department', 'onlyDepartment');
         }
 
+        if (! in_array($this->groupsFilter, self::GROUP_FILTERS, true)) {
+            $this->groupsFilter = '';
+        }
+
         $own = $this->department === '' ? null : ($walk['ids'][$this->department] ?? null);
 
         if ($this->returnedAt !== null && ($own === null || $this->returnedAt >= count($own['requested'] ?: $own['all']))) {
             $this->returnedAt = null;
         }
+
+        $chains = $overview->chains();
+
+        if ($this->chain !== null && ($this->view === 'tabla' || ! isset($chains['chains'][$this->chain]))) {
+            $this->chain = null;
+        }
+
+        $highlight = $this->highlight($gridSemesters, $chains, $departments);
 
         return [
             'proposal' => $proposal,
@@ -336,6 +429,10 @@ new #[Title('Propuesta de carrera')] class extends Component
             'canEdit' => Gate::allows('update', $proposal),
             'canSubmit' => Gate::allows('submit', $proposal),
             'gridSemesters' => $gridSemesters,
+            'chains' => $chains,
+            'highlight' => $highlight,
+            'figures' => $this->figures($gridSemesters, $highlight['marked']),
+            'tileStates' => ProposalTileState::cases(),
             'layout' => SemesterGrid::place(
                 array_map(fn (array $items): array => collect($items)->mapWithKeys(fn (ProposalItem $item): array => [$item->subject->code => $overview->specialtyFor($item)])->all(), $gridSemesters),
                 array_column($overview->specialties, 'id'),
@@ -420,6 +517,16 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->authorize($ability, $proposal);
 
         return $proposal->loadMissing(['term', 'career' => fn ($query) => $query->withTrashed()]);
+    }
+
+    /**
+     * Deja a la vista de la tabla la fila guardada aunque ya no cumpla el filtro (`editedRows`).
+     */
+    private function keepRow(ProposalItem $item): void
+    {
+        if (! in_array($item->id, $this->editedRows, true)) {
+            $this->editedRows[] = $item->id;
+        }
     }
 
     private function applyChange(UpdateProposalItem $update, ProposalItem $item, int $expected, int $groups, ?string $notes, ?string $cell = null): bool
@@ -587,20 +694,117 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Las filas de la tabla por semestre; con el filtro, solo las del departamento elegido.
+     * Las filas de la tabla por semestre: las del filtro de grupos y, con «Mostrar solo», del departamento elegido,
+     * más las que se guardaron desde el último cambio de filtro (`editedRows`).
      *
      * @return array<int, list<ProposalItem>>
      */
     private function tableSemesters(ProposalOverview $overview): array
     {
-        if ($this->department === '' || ! $this->onlyDepartment) {
+        $department = $this->onlyDepartment ? $this->department : '';
+
+        if ($department === '' && $this->groupsFilter === '') {
             return $overview->semesters;
         }
 
+        $edited = array_flip($this->editedRows);
+
         return array_filter(array_map(
-            fn (array $items): array => array_values(array_filter($items, fn (ProposalItem $item): bool => $item->subject->department->code === $this->department)),
+            fn (array $items): array => array_values(array_filter($items, fn (ProposalItem $item): bool => isset($edited[$item->id]) || $this->matches($item, $department))),
             $overview->semesters,
         ));
+    }
+
+    /**
+     * Si la fila es del departamento (`$department`, '' cualquiera) y cumple el filtro de grupos.
+     */
+    private function matches(ProposalItem $item, string $department): bool
+    {
+        return ($department === '' || $item->subject->department->code === $department)
+            && match ($this->groupsFilter) {
+                'con' => $item->requested_groups > 0,
+                'sin' => $item->requested_groups === 0,
+                default => true,
+            };
+    }
+
+    /**
+     * Lo que se marca en la retícula y lo que dice la barra de selección: la cadena resaltada, si hay; si no, las
+     * materias del departamento elegido y del filtro de grupos, lo que cumpla los dos si están los dos. `marked`
+     * es null sin nada marcado (la barra no se ve).
+     *
+     * @param  array<int, list<ProposalItem>>  $gridSemesters
+     * @param  array{of: array<string, int>, chains: list<array{index: int, name: string, size: int}>}  $chains
+     * @param  list<array{department: Department, subjects: int, groups: int, review: ?ProposalReview}>  $departments
+     * @return array{marked: array<string, true>|null, info: string}
+     */
+    private function highlight(array $gridSemesters, array $chains, array $departments): array
+    {
+        if ($this->view === 'tabla' || ($this->chain === null && $this->department === '' && $this->groupsFilter === '')) {
+            return ['marked' => null, 'info' => ''];
+        }
+
+        $items = array_merge(...array_values($gridSemesters));
+        $count = fn (int $subjects): string => $subjects.' '.($subjects === 1 ? 'materia' : 'materias');
+
+        if ($this->chain !== null) {
+            $chain = $chains['chains'][$this->chain];
+            $members = array_filter($items, fn (ProposalItem $item): bool => ($chains['of'][$item->subject_id] ?? null) === $this->chain);
+
+            return ['marked' => array_fill_keys(array_map(fn (ProposalItem $item): string => $item->id, $members), true), 'info' => "Cadena de {$chain['name']}: {$count(count($members))}."];
+        }
+
+        $members = array_values(array_filter($items, fn (ProposalItem $item): bool => $this->matches($item, $this->department)));
+        $marked = array_fill_keys(array_map(fn (ProposalItem $item): string => $item->id, $members), true);
+        $filter = match ($this->groupsFilter) {
+            'con' => 'con grupos',
+            'sin' => 'sin grupos',
+            default => null,
+        };
+
+        if ($this->department === '') {
+            return ['marked' => $marked, 'info' => ucfirst((string) $filter).": {$count(count($members))}."];
+        }
+
+        $name = collect($departments)->first(fn (array $row): bool => $row['department']->code === $this->department)['department']->name;
+        $groups = array_sum(array_map(fn (ProposalItem $item): int => $item->requested_groups, $members));
+
+        return ['marked' => $marked, 'info' => $filter === null
+            ? "{$name} ({$this->department}): {$count(count($members))} · {$groups} ".($groups === 1 ? 'grupo' : 'grupos').'.'
+            : "{$name} ({$this->department}), {$filter}: {$count(count($members))}."];
+    }
+
+    /**
+     * Lo que dice el encabezado de cada semestre de la retícula, a la vista y para lectores de pantalla: sus
+     * grupos; con el filtro de grupos, cuántas de sus materias lo cumplen («2 sin grupos»); con solo un
+     * departamento, los grupos de ese departamento («18 de SC»). Con una cadena resaltada, sus grupos.
+     *
+     * @param  array<int, list<ProposalItem>>  $gridSemesters
+     * @param  array<string, true>|null  $marked
+     * @return array<int, array{text: string, note: ?string}>
+     */
+    private function figures(array $gridSemesters, ?array $marked): array
+    {
+        $filter = $this->chain !== null || $marked === null ? null : match ($this->groupsFilter) {
+            'con' => 'con grupos',
+            'sin' => 'sin grupos',
+            default => null,
+        };
+        $department = $this->chain !== null || $marked === null ? '' : $this->department;
+
+        return array_map(function (array $items) use ($filter, $department, $marked): array {
+            if ($filter !== null) {
+                $subjects = count(array_filter($items, fn (ProposalItem $item): bool => isset($marked[$item->id])));
+
+                return ['text' => "{$subjects} {$filter}", 'note' => 'materias'.($department === '' ? '' : " de {$department}")." {$filter}"];
+            }
+
+            $groups = array_sum(array_map(fn (ProposalItem $item): int => $department === '' || $item->subject->department->code === $department ? $item->requested_groups : 0, $items));
+
+            return $department === ''
+                ? ['text' => $groups.' '.($groups === 1 ? 'grupo' : 'grupos'), 'note' => null]
+                : ['text' => "{$groups} de {$department}", 'note' => "grupos de {$department}"];
+        }, $gridSemesters);
     }
 
     private function findItem(ProposalOverview $overview, string $id): ?ProposalItem

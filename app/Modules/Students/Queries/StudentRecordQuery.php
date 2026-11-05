@@ -4,6 +4,7 @@ namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Support\SeriationChains;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Enums\SubjectStanding;
 use App\Modules\Students\Models\KardexRecord;
@@ -133,8 +134,8 @@ final class StudentRecordQuery
     }
 
     /**
-     * Las cadenas de seriación de la retícula que se muestra: cada grupo de dos o más materias unidas por su
-     * seriación, en el orden de su primera materia en la retícula, y nombrado por ella.
+     * Las cadenas de seriación de la retícula que se muestra (SeriationChains de Core): cada grupo de dos o más
+     * materias unidas por su seriación, en el orden de su primera materia en la retícula, y nombrado por ella.
      *
      * @param  list<string>  $shown
      * @param  array<string, list<string>>  $seriation
@@ -143,33 +144,10 @@ final class StudentRecordQuery
      */
     private function chains(array $shown, array $seriation, Collection $subjects): array
     {
-        $root = array_combine($shown, $shown);
-        $find = function (string $id) use (&$root): string {
-            while ($root[$id] !== $id) {
-                $id = $root[$id] = $root[$root[$id]];
-            }
-
-            return $id;
-        };
-
-        foreach ($shown as $subjectId) {
-            foreach ($seriation[$subjectId] ?? [] as $prerequisite) {
-                if (isset($root[$prerequisite])) {
-                    $root[$find($subjectId)] = $find($prerequisite);
-                }
-            }
-        }
-
-        $groups = [];
-
-        foreach ($shown as $subjectId) {
-            $groups[$find($subjectId)][] = $subjectId;
-        }
-
         $chainOf = [];
         $chains = [];
 
-        foreach (array_values(array_filter($groups, fn (array $members): bool => count($members) > 1)) as $index => $members) {
+        foreach (SeriationChains::of($shown, $seriation) as $index => $members) {
             $chainOf += array_fill_keys($members, $index);
             $chains[] = ['index' => $index, 'name' => $subjects[$members[0]]->name, 'size' => count($members)];
         }

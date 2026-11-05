@@ -28,6 +28,7 @@ class CareerProposalFactory extends Factory
             'term_id' => Term::factory(),
             'campus_id' => Campus::factory(),
             'career_id' => Career::factory(),
+            'eligible_students' => 0,
             'status' => ProposalStatus::Draft,
         ];
     }

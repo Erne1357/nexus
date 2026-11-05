@@ -1,12 +1,14 @@
 {{--
     La vista «Tabla» de la propuesta (maqueta B): una sección por semestre y una fila por materia, con los alumnos
     esperados y los grupos como campos de texto numérico (sin la rueda que cambia el número) que guardan al salir del
-    campo. Con volumen: el encabezado de columnas se queda fijo bajo la banda al desplazarse y los totales van en una
-    barra pegada al pie. Si toda la propuesta está bloqueada (`$generalLock`), el motivo se dice una vez, en una alerta
-    sobre la tabla; por fila solo lo que es distinto («CB ya aceptó su parte»). Una fila de solo lectura muestra sus
+    campo. Con volumen: el encabezado de columnas se queda fijo bajo la banda al desplazarse y los totales (materias
+    con grupos de todas, grupos y alumnos posibles) van en una barra pegada al pie. Si toda la propuesta está
+    bloqueada (`$generalLock`), el motivo se dice una vez, en una alerta sobre la tabla; por fila solo lo que es
+    distinto («CB ya aceptó su parte»). Una fila de solo lectura muestra sus
     números como texto, no como campos deshabilitados. La fila se pinta por el estado de la parte de su departamento
-    (regresada, aceptada o pendiente) y lleva su icono; las anomalías van con icono y texto. Con un departamento
-    elegido, las filas de los demás van con fondo tenue, o se ocultan con el filtro.
+    (regresada, aceptada o pendiente) y lleva su icono; las anomalías van con icono y texto. El filtro de grupos
+    («Con grupos», «Sin grupos») deja solo sus filas. Con un departamento elegido, las filas de los demás van con
+    fondo tenue, o se ocultan con «Mostrar solo».
 
     Cada fila tiene una acción que abre el mismo panel que el mosaico (también de solo lectura) y dice su nota a la
     vista. Una celda guardada lo dice con una palomita un instante (`cell-saved`, que atiende la página) y una
@@ -86,7 +88,8 @@
                                                 oninput="this.value = this.value.replace(/\D/g, '')" wire:change="saveCell('{{ $item->id }}', '{{ $field }}', $event.target.value)"
                                                 aria-label="{{ $label }} de {{ $item->subject->code }}" @if ($cellError) aria-invalid="true" aria-describedby="cell-error-{{ $item->id }}-{{ $field }}" @endif
                                                 @class(['input input-sm w-full text-right font-mono text-sm tabular-nums group-data-[saved]/cell:input-success', 'input-error' => $cellError]) data-field="{{ $field }}" />
-                                            <x-icon name="o-check" class="pointer-events-none absolute start-2 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-success group-data-[saved]/cell:block" aria-hidden="true" />
+                                            {{-- En un span: el icono de MaryUI trae `inline`, que le gana a `hidden`. --}}
+                                            <span class="pointer-events-none absolute start-2 top-1/2 hidden -translate-y-1/2 text-success group-data-[saved]/cell:block" aria-hidden="true"><x-icon name="o-check" class="block h-4 w-4" /></span>
                                         </div>
                                         <span class="sr-only" role="status" data-saved-status></span>
                                         @if ($cellError)

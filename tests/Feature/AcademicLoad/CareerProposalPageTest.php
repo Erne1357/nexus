@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
@@ -72,7 +73,7 @@ describe('coordinador', function () {
             ->assertSee('Borrador')
             ->assertSee('Cálculo Diferencial')
             ->assertSee('Redes de Computadoras')
-            ->assertViewHas('overview', fn ($overview): bool => $overview->totals === ['subjects' => 2, 'groups' => 3]);
+            ->assertViewHas('overview', fn ($overview): bool => $overview->totals === ['subjects' => 2, 'subjects_total' => 2, 'groups' => 3, 'eligible_students' => 0]);
     });
 
     it('no suma alumnos esperados entre materias en los totales ni en la confirmación de envío', function () {
@@ -672,16 +673,15 @@ describe('segunda crítica con volumen', function () {
         proposalPageAs($this->coordinator)->assertSeeHtml('<span data-anomaly-count>1</span>');
     });
 
-    it('distingue lo aceptado de lo que es de otro departamento', function () {
+    it('con un departamento elegido cada mosaico conserva el tono de su estado y solo se marcan los del departamento', function () {
         $this->proposal->update(['status' => ProposalStatus::Draft]);
         ProposalReview::query()->where('department_id', $this->sc->id)->delete();
         ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
 
         $html = proposalPageAs($this->coordinator, ['depto' => 'CB'])->html();
 
-        expect(proposalPageTag($html, 'tile-ACF-0901'))->toContain('data-tone="accepted"')
-            ->and(proposalPageTag($html, 'tile-SCD-1015'))->toContain('data-tone="other"')
-            ->and(proposalPageTag($html, 'tile-SCD-1015'))->not->toContain('data-tone="accepted"');
+        expect(proposalPageTag($html, 'tile-ACF-0901'))->toContain('data-tone="accepted"')->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'tile-SCD-1015'))->toContain('data-tone="pending"')->not->toContain('data-on-chain');
     });
 
     it('con un departamento elegido, el encabezado de semestre dice «N de SC» a la vista', function () {
@@ -772,5 +772,200 @@ describe('segunda crítica con volumen', function () {
         $html = proposalPageAs($this->subdirection, ['carrera' => $this->career->id, 'vista' => 'tabla'])->html();
 
         expect($html)->not->toContain('for="cell-'.$this->calculus->id.'-requested_groups"');
+    });
+});
+
+describe('retícula con estados, filtro de grupos y marcas (maqueta C)', function () {
+    beforeEach(function () {
+        $this->empty = proposalPageRow($this->proposal, $this->sc, 'SCD-1027', 'Tópicos Avanzados', 4, 0, 4);
+    });
+
+    it('los totales dicen las materias con grupos de todas, los grupos y los alumnos posibles, en la retícula y en la tabla', function () {
+        $this->proposal->update(['eligible_students' => 430]);
+
+        proposalPageAs($this->coordinator)
+            ->assertSeeHtml('<span class="font-normal text-neutral"> / 3</span>')
+            ->assertSeeTextInOrder(['Materias con grupos', '2 / 3', 'Grupos', '3', 'Alumnos posibles', '430']);
+
+        proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+            ->assertSeeTextInOrder(['Materias con grupos', '2 / 3', 'Grupos', '3', 'Alumnos posibles', '430']);
+    });
+
+    it('«Sin grupos» marca en la retícula solo las materias sin grupos, lo dice en la barra y va en la URL', function () {
+        $html = proposalPageAs($this->coordinator, ['grupos' => 'sin'])->assertSet('groupsFilter', 'sin')->html();
+
+        expect(proposalPageTag($html, 'proposal-grid'))->toContain('data-focus')
+            ->and(proposalPageTag($html, 'tile-SCD-1027'))->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'tile-ACF-0901'))->not->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'tile-SCD-1015'))->not->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'selection-bar'))->toContain('data-shown')
+            ->and(proposalPageTag($html, 'filter-sin'))->toContain('aria-pressed="true"')
+            ->and($html)->toContain('Sin grupos: 1 materia.')
+            ->toContain('data-figure="4">1 sin grupos<')
+            ->toContain('data-figure="1">0 sin grupos<');
+
+        proposalPageAs($this->coordinator, ['grupos' => 'con'])->assertSee('Con grupos: 2 materias.');
+        proposalPageAs($this->coordinator, ['grupos' => 'otra'])->assertSet('groupsFilter', '')->assertDontSeeHtml('data-focus');
+    });
+
+    it('cambia el filtro de grupos con sus botones y «Todas» lo quita', function () {
+        proposalPageAs($this->coordinator)
+            ->assertDontSeeHtml('data-shown')
+            ->call('filterGroups', 'con')
+            ->assertSet('groupsFilter', 'con')
+            ->assertSee('Con grupos: 2 materias.')
+            ->call('filterGroups', '')
+            ->assertSet('groupsFilter', '')
+            ->assertDontSeeHtml('data-focus')
+            ->call('filterGroups', 'otra')
+            ->assertSet('groupsFilter', '');
+    });
+
+    it('en la tabla el filtro de grupos oculta las filas que no coinciden', function () {
+        proposalPageAs($this->coordinator, ['vista' => 'tabla', 'grupos' => 'sin'])
+            ->assertSeeHtml('data-testid="row-SCD-1027"')
+            ->assertDontSeeHtml('data-testid="row-ACF-0901"')
+            ->assertDontSeeHtml('data-testid="row-SCD-1015"');
+
+        proposalPageAs($this->coordinator, ['vista' => 'tabla', 'grupos' => 'con'])
+            ->assertSeeHtml('data-testid="row-ACF-0901"')
+            ->assertSeeHtml('data-testid="row-SCD-1015"')
+            ->assertDontSeeHtml('data-testid="row-SCD-1027"');
+    });
+
+    it('en la tabla filtrada, la fila que se edita sigue a la vista hasta cambiar el filtro, la vista o el departamento', function () {
+        $page = proposalPageAs($this->coordinator, ['vista' => 'tabla', 'grupos' => 'con'])
+            ->call('saveCell', $this->networks->id, 'requested_groups', '0')
+            ->assertDispatched('cell-saved', id: $this->networks->id, field: 'requested_groups')
+            ->assertSeeHtml('data-testid="row-SCD-1015"');
+
+        expect($this->networks->fresh()->requested_groups)->toBe(0);
+
+        $page->call('filterGroups', 'con')->assertDontSeeHtml('data-testid="row-SCD-1015"');
+
+        $page->call('edit', $this->calculus->id)->set('requested_groups', 0)->call('save')
+            ->assertSeeHtml('data-testid="row-ACF-0901"')
+            ->call('pickDepartment', 'CB')
+            ->assertDontSeeHtml('data-testid="row-ACF-0901"');
+
+        proposalPageAs($this->coordinator, ['vista' => 'tabla', 'grupos' => 'sin'])
+            ->call('saveCell', $this->empty->id, 'requested_groups', '1')
+            ->assertSeeHtml('data-testid="row-SCD-1027"')
+            ->call('setView', 'tabla')
+            ->assertDontSeeHtml('data-testid="row-SCD-1027"');
+
+        $this->networks->update(['requested_groups' => 1]);
+
+        proposalPageAs($this->coordinator, ['vista' => 'tabla', 'grupos' => 'con', 'depto' => 'SC'])
+            ->call('saveCell', $this->networks->id, 'requested_groups', '0')
+            ->assertSeeHtml('data-testid="row-SCD-1015"')
+            ->set('onlyDepartment', true)
+            ->assertDontSeeHtml('data-testid="row-SCD-1015"');
+    });
+
+    it('un departamento elegido marca sus materias como una cadena y la barra dice cuántas son y sus grupos', function () {
+        $html = proposalPageAs($this->coordinator, ['depto' => 'SC'])->html();
+
+        expect(proposalPageTag($html, 'tile-SCD-1015'))->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'tile-SCD-1027'))->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'tile-ACF-0901'))->not->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'department-SC'))->toContain('aria-pressed="true"')
+            ->and(proposalPageTag($html, 'department-CB'))->toContain('aria-pressed="false"')
+            ->and($html)->toContain('Sistemas y Computación (SC): 2 materias · 1 grupo.');
+    });
+
+    it('el departamento y el filtro juntos marcan lo que cumple los dos y la barra nombra los dos', function () {
+        $page = proposalPageAs($this->coordinator, ['depto' => 'SC', 'grupos' => 'sin']);
+        $html = $page->html();
+
+        expect(proposalPageTag($html, 'tile-SCD-1027'))->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'tile-SCD-1015'))->not->toContain('data-on-chain')
+            ->and($html)->toContain('Sistemas y Computación (SC), sin grupos: 1 materia.');
+
+        $page->call('clearHighlight')
+            ->assertSet('department', '')
+            ->assertSet('groupsFilter', '')
+            ->assertDontSeeHtml('data-focus')
+            ->assertDontSeeHtml('data-shown');
+    });
+
+    it('«Ver» de una parte regresada marca su departamento sin el filtro de grupos, que escondería lo que se le pide', function () {
+        $this->proposal->update(['status' => ProposalStatus::Returned]);
+        ProposalReview::factory()->returned('Falta un grupo.')->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->sc->id]);
+
+        proposalPageAs($this->coordinator, ['grupos' => 'sin'])
+            ->call('showDepartment', 'SC')
+            ->assertSet('department', 'SC')
+            ->assertSet('groupsFilter', '')
+            ->assertDispatched('proposal-focus', id: $this->networks->id)
+            ->assertSee('Sistemas y Computación (SC): 2 materias · 1 grupo.');
+    });
+
+    it('pinta cada mosaico por su estado, con su icono para lectores de pantalla, y la leyenda los nombra', function () {
+        $this->proposal->update(['status' => ProposalStatus::Returned]);
+        ProposalReview::factory()->returned('Falta un grupo.')->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->sc->id]);
+        ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
+        $ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
+        proposalPageRow($this->proposal, $ii, 'INC-1001', 'Dibujo', 2, 1, 30);
+        proposalPageRow($this->proposal, $ii, 'INC-1002', 'Ergonomía', 3, 0, 30);
+
+        $html = proposalPageAs($this->coordinator)
+            ->assertSeeHtml('data-testid="state-legend"')
+            ->assertSeeInOrder(['Con grupos', 'Sin grupos', 'Aceptada por el departamento', 'Regresada por el departamento'])
+            ->html();
+
+        expect(proposalPageTag($html, 'tile-INC-1001'))->toContain('data-tone="pending"')->toContain('bg-base-100')
+            ->and(proposalPageTag($html, 'tile-INC-1002'))->toContain('data-tone="none"')->toContain('border-dashed')->toContain('bg-warning/10')
+            ->and(proposalPageTag($html, 'tile-ACF-0901'))->toContain('data-tone="accepted"')->toContain('bg-success/10')
+            ->and(proposalPageTag($html, 'tile-SCD-1027'))->toContain('data-tone="returned"')->toContain('bg-error/10')
+            ->and($html)->toContain('<span class="sr-only">Sin grupos</span>')
+            ->toContain('<span class="sr-only">Aceptada por CB: ya no cambia</span>')
+            ->toContain('<span class="sr-only">Regresada por SC</span>');
+    });
+
+    it('la leyenda de «Aceptada por el departamento» lleva el mismo icono que sus mosaicos, también con toda la propuesta bloqueada', function () {
+        ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
+
+        $legend = fn (): string => proposalPageTag(proposalPageAs($this->coordinator)->html(), 'state-accepted');
+
+        expect($legend())->toContain('data-icon="o-lock-closed"');
+
+        $this->proposal->update(['status' => ProposalStatus::Submitted]);
+
+        expect($legend())->toContain('data-icon="o-check-circle"');
+    });
+
+    it('pinta la franja de su cadena en cada mosaico y la leyenda de cadenas resalta una por encima del departamento', function () {
+        $plan = StudyPlan::factory()->create(['career_id' => $this->career->id]);
+        $integral = proposalPageRow($this->proposal, $this->cb, 'ACF-0902', 'Cálculo Integral', 2, 1, 30);
+        foreach ([$this->calculus, $integral, $this->networks, $this->empty] as $item) {
+            placeInPlan($plan, $item->subject, $item->semester);
+        }
+        ProposalItem::query()->update(['study_plan_id' => $plan->id]);
+        seriate($plan, $integral->subject, $this->calculus->subject);
+        seriate($plan, $this->empty->subject, $this->networks->subject, PrerequisiteKind::Correquisito);
+
+        $html = proposalPageAs($this->coordinator)->assertSeeHtml('data-testid="chain-legend"')->html();
+
+        expect(proposalPageTag($html, 'tile-ACF-0901'))->toContain('[--chain:var(--color-chain-1)]')
+            ->and(proposalPageTag($html, 'tile-ACF-0902'))->toContain('[--chain:var(--color-chain-1)]')
+            ->and(proposalPageTag($html, 'tile-SCD-1015'))->not->toContain('--chain')
+            ->and(proposalPageTag($html, 'chain-0'))->toContain('aria-pressed="false"')
+            ->and($html)->toContain('border-chain-1');
+
+        $page = proposalPageAs($this->coordinator, ['depto' => 'SC'])->call('focusChain', 0)->assertSet('chain', 0)->assertSet('department', 'SC');
+        $html = $page->html();
+
+        expect(proposalPageTag($html, 'tile-ACF-0901'))->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'tile-SCD-1015'))->not->toContain('data-on-chain')
+            ->and(proposalPageTag($html, 'chain-0'))->toContain('aria-pressed="true"')
+            ->and($html)->toContain('Cadena de Cálculo Diferencial: 2 materias.');
+
+        $page->call('clearHighlight')->assertSet('chain', null)->assertSet('department', 'SC')->assertSee('Sistemas y Computación (SC): 2 materias · 1 grupo.')
+            ->call('clearHighlight')->assertSet('department', '')->assertDontSeeHtml('data-shown')
+            ->call('focusChain', 0)->call('focusChain', 0)->assertSet('chain', null)
+            ->call('focusChain', 0)->call('pickDepartment', 'CB')->assertSet('chain', null)
+            ->call('focusChain', 0)->call('filterGroups', 'sin')->assertSet('chain', null)
+            ->call('focusChain', 9)->assertSet('chain', null)->assertSet('groupsFilter', 'sin')->assertSee('Ciencias Básicas (CB), sin grupos: 0 materias.');
     });
 });

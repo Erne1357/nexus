@@ -10,6 +10,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Core\Support\SeriationChains;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Query\JoinClause;
@@ -278,8 +279,9 @@ final class PlanGridEditorQuery
     }
 
     /**
-     * Las cadenas de seriación: grupos de materias unidas por su seriación (unión y búsqueda), en el orden de
-     * su primera materia en la retícula. Deja en `chain` de cada materia de una cadena su índice.
+     * Las cadenas de seriación (SeriationChains de Core, las mismas de la retícula del alumno y de la propuesta de
+     * carrera), en el orden de su primera materia en la retícula. Deja en `chain` de cada materia de una cadena su
+     * índice.
      *
      * @param  array<string, Row>  $grid  en el orden de la retícula
      * @param  array<string, list<string>>  $seriation
@@ -287,31 +289,9 @@ final class PlanGridEditorQuery
      */
     private function chains(array &$grid, array $seriation): array
     {
-        $ids = array_keys($grid);
-        $root = array_combine($ids, $ids);
-        $find = function (string $id) use (&$root): string {
-            while ($root[$id] !== $id) {
-                $id = $root[$id] = $root[$root[$id]];
-            }
-
-            return $id;
-        };
-
-        foreach ($seriation as $subjectId => $prerequisites) {
-            foreach ($prerequisites as $prerequisite) {
-                $root[$find($subjectId)] = $find($prerequisite);
-            }
-        }
-
-        $groups = [];
-
-        foreach ($ids as $id) {
-            $groups[$find($id)][] = $id;
-        }
-
         $chains = [];
 
-        foreach (array_values(array_filter($groups, fn (array $members): bool => count($members) > 1)) as $index => $members) {
+        foreach (SeriationChains::of(array_keys($grid), $seriation) as $index => $members) {
             foreach ($members as $id) {
                 $grid[$id]['chain'] = $index;
             }

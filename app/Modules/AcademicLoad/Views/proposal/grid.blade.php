@@ -1,98 +1,133 @@
 {{--
-    La vista «Retícula» de la propuesta (maqueta C; mismas piezas y medidas que "Retícula del alumno" y "Retícula del
-    plan (editor)" de DESIGN.md): semestres en columnas con los mosaicos de Core (core::semester-grid), uno por
-    materia, y las bandas de especialidad del plan. Cada mosaico dice, de arriba abajo, su clave y el icono del estado
-    de la parte de su departamento, el nombre, «Eleg. N · Esp. N» y, al pie, el código del departamento solo si no es el
-    mayoritario de la carrera (`$majority`), también en los regresados y aceptados, y «Grupos N» en Mono de 15 px con el conteo de anomalías a la vista. Lo
-    pinta el estado de esa parte (`$parts`, en `data-tone`): regresada en error con su icono, aceptada con relleno
-    tenue y candado (o palomita si toda la propuesta está bloqueada, `$generalLock`), pendiente neutra y sin grupos
-    punteada. Con un departamento elegido (`data-focus` en el marco) las materias de los demás (`other`) van sin
-    relleno, con borde y texto tenues, sin bajar la opacidad, y el encabezado de cada semestre dice «N de SC».
+    La vista «Retícula» de la propuesta (maqueta C «Las dos», elegida por el usuario el 4 de noviembre de 2026; DESIGN.md,
+    "Retícula de la propuesta de carrera"; mismas piezas y medidas que "Retícula del alumno"): arriba, la leyenda de
+    los estados; semestres en columnas con los mosaicos de Core (core::semester-grid), uno por materia, y las bandas
+    de especialidad del plan; debajo, la leyenda de las cadenas de seriación y la barra de selección.
+
+    Cada mosaico lleva la franja de su cadena (`$chains['of']`, la misma franja de la retícula del alumno) y el tinte
+    de su estado (ProposalTileState, en `data-tone`): regresada en error, aceptada en éxito con candado (o palomita si
+    toda la propuesta está bloqueada, `$generalLock`, en el mosaico y en la leyenda), sin grupos en advertencia
+    punteada y con grupos neutra. Dice, de
+    arriba abajo, su clave y el icono de su estado, el nombre, «Eleg. N · Esp. N» y, al pie, «Grupos N» en Mono de
+    15 px, el código del departamento solo si no es el mayoritario de la carrera (`$majority`) y el conteo de
+    anomalías.
+
+    Lo marcado (`$highlight`) se pinta como una cadena resaltada en la retícula del alumno: `data-focus` en la
+    cuadrícula, `data-on-chain` en lo marcado y lo demás muy atenuado. Es el departamento elegido, el filtro de grupos
+    o los dos; o, mientras está, la cadena que se tocó en la leyenda. La barra dice qué está marcado y «Quitar
+    resaltado» (o Esc, si no hay un panel, un diálogo ni el menú encima) lo quita: primero la cadena, luego lo demás.
+    El encabezado de cada semestre cuenta lo marcado (`$figures`). Lo pinta el servidor, como en el editor del plan.
 --}}
 @if ($layout->columns === [])
     <div class="rounded-box border border-base-300 bg-base-100 px-5 py-6 text-center text-neutral" data-testid="proposal-no-items">Esta propuesta no tiene materias.</div>
 @else
-    <x-core::semester-grid.frame :layout="$layout" data-testid="proposal-grid" :data-focus="$department !== '' ? $department : null">
-        @foreach ($overview->specialties as $specialty)
-            <x-core::semester-grid.band :specialty="$specialty['id']" :row="$layout->bands[$specialty['id']]" :name="$specialty['name']" :subjects="$specialty['subjects']" />
-        @endforeach
+    <div class="space-y-4"
+        x-on:keydown.escape.window="if (($wire.chain !== null || $wire.department !== '' || $wire.groupsFilter !== '') && ! $wire.showDrawer && ! $wire.showSubmit && document.body.dataset.menu !== 'open' && ! document.querySelector('dialog[open]')) { $wire.clearHighlight() }">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-neutral" data-testid="state-legend">
+            @foreach ($tileStates as $state)
+                @php
+                    $icon = $state->icon($generalLock !== null);
+                @endphp
+                <span class="inline-flex items-center gap-1">
+                    <span @class(['inline-flex w-6 h-6 shrink-0 items-center justify-center rounded border', $state->tileClasses()]) aria-hidden="true" data-testid="state-{{ $state->value }}" data-icon="{{ $icon }}">
+                        @if ($icon)
+                            <x-icon :name="$icon" class="w-4 h-4" />
+                        @endif
+                    </span>
+                    {{ $state->label() }}
+                </span>
+            @endforeach
+        </div>
 
-        @foreach ($gridSemesters as $semester => $items)
-            @php
-                $groups = collect($items)->when($department !== '', fn ($rows) => $rows->filter(fn ($item) => $item->subject->department->code === $department))->sum('requested_groups');
-                $figure = $department !== '' ? "{$groups} de {$department}" : $groups.' '.($groups === 1 ? 'grupo' : 'grupos');
-            @endphp
-            <x-core::semester-grid.semester :semester="$semester" :column="$layout->columns[$semester]" :note="$department !== '' ? 'grupos de '.$department : null" wire:key="semester-{{ $semester }}">
-                <x-slot:figures><span data-figure="{{ $semester }}">{{ $figure }}</span></x-slot:figures>
+        <x-core::semester-grid.frame :layout="$layout" data-testid="proposal-grid" :data-focus="$highlight['marked'] !== null ? '' : null">
+            @foreach ($overview->specialties as $specialty)
+                <x-core::semester-grid.band :specialty="$specialty['id']" :row="$layout->bands[$specialty['id']]" :name="$specialty['name']" :subjects="$specialty['subjects']" />
+            @endforeach
 
-                @foreach ($items as $item)
-                    @php
-                        $requested = $item->requested_groups > 0;
-                        $code = $item->subject->department->code;
-                        $part = $parts[$item->subject->department_id];
-                        $dimmed = $department !== '' && $code !== $department;
-                        $anomalies = $overview->anomaliesFor($item);
-                        $specialty = $overview->specialtyFor($item);
-                        $tone = match (true) {
-                            $dimmed => 'other',
-                            $part === 'returned' => 'returned',
-                            $part === 'accepted' => 'accepted',
-                            ! $requested => 'none',
-                            default => 'pending',
-                        };
-                        $classes = Illuminate\Support\Arr::toCssClasses([
-                            match ($tone) {
-                                'other' => 'border-base-300 bg-base-100 text-neutral',
-                                'returned' => 'border-error bg-error/10 text-error',
-                                'accepted' => 'border-base-300 bg-base-200 text-neutral',
-                                'none' => 'border-base-content/30 bg-base-200 text-base-content',
-                                default => 'border-base-content/30 bg-base-100 text-base-content',
-                            },
-                            'border-dashed' => ! $requested && $tone !== 'other',
-                            'data-[found]:ring-2 data-[found]:ring-error data-[found]:ring-offset-2 data-[found]:ring-offset-base-100',
-                        ]);
-                        $title = implode(' · ', array_filter([isset($locks[$item->id]) ? $locks[$item->id]->message($code) : null, ...$anomalies]));
-                    @endphp
-                    @if ($specialty !== null && ($loop->first || $overview->specialtyFor($items[$loop->index - 1]) !== $specialty))
-                        <x-core::semester-grid.separator :specialty="$specialty" :name="$specialtyNames[$specialty]" wire:key="separator-{{ $semester }}-{{ $specialty }}" />
-                    @endif
+            @foreach ($gridSemesters as $semester => $items)
+                <x-core::semester-grid.semester :semester="$semester" :column="$layout->columns[$semester]" :note="$figures[$semester]['note']" wire:key="semester-{{ $semester }}">
+                    <x-slot:figures><span data-figure="{{ $semester }}">{{ $figures[$semester]['text'] }}</span></x-slot:figures>
 
-                    <x-core::semester-grid.tile :row="$layout->rows[$item->subject->code]" :code="$item->subject->code" :name="$item->subject->name" soft :muted="$dimmed || $part === 'accepted' || ! $requested"
-                        :class="$classes"
-                        wire:click="edit('{{ $item->id }}')" wire:key="tile-{{ $item->id }}" :data-item="$item->id" :data-me="$itemId === $item->id ? '' : null"
-                        :data-on-chain="$department !== '' && $code === $department ? '' : null"
-                        :title="$title !== '' ? $title : null" data-opener data-testid="tile-{{ $item->subject->code }}" data-part="{{ $part }}" data-tone="{{ $tone }}">
-                        <x-slot:icon>
-                            @if ($part === 'returned')
-                                <x-icon name="o-arrow-uturn-left" class="w-4 h-4 shrink-0" aria-hidden="true" />
-                                <span class="sr-only">Regresada por {{ $code }}</span>
-                            @elseif ($part === 'accepted')
-                                @if ($generalLock === null)
-                                    <x-icon name="o-lock-closed" class="w-4 h-4 shrink-0" aria-hidden="true" data-lock />
-                                    <span class="sr-only">Aceptada por {{ $code }}: ya no cambia</span>
-                                @else
-                                    <x-icon name="o-check-circle" class="w-4 h-4 shrink-0" aria-hidden="true" />
-                                    <span class="sr-only">Aceptada por {{ $code }}</span>
+                    @foreach ($items as $item)
+                        @php
+                            $code = $item->subject->department->code;
+                            $state = \App\Modules\AcademicLoad\Enums\ProposalTileState::of($parts[$item->subject->department_id], $item->requested_groups);
+                            $icon = $state->icon($generalLock !== null);
+                            $stateText = match ($state) {
+                                \App\Modules\AcademicLoad\Enums\ProposalTileState::Returned => 'Regresada por '.$code,
+                                \App\Modules\AcademicLoad\Enums\ProposalTileState::Accepted => 'Aceptada por '.$code.($generalLock === null ? ': ya no cambia' : ''),
+                                default => 'Sin grupos',
+                            };
+                            $anomalies = $overview->anomaliesFor($item);
+                            $specialty = $overview->specialtyFor($item);
+                            $classes = Illuminate\Support\Arr::toCssClasses([
+                                $state->tileClasses(),
+                                'data-[found]:ring-2 data-[found]:ring-error data-[found]:ring-offset-2 data-[found]:ring-offset-base-100',
+                            ]);
+                            $title = implode(' · ', array_filter([isset($locks[$item->id]) ? $locks[$item->id]->message($code) : null, ...$anomalies]));
+                        @endphp
+                        @if ($specialty !== null && ($loop->first || $overview->specialtyFor($items[$loop->index - 1]) !== $specialty))
+                            <x-core::semester-grid.separator :specialty="$specialty" :name="$specialtyNames[$specialty]" wire:key="separator-{{ $semester }}-{{ $specialty }}" />
+                        @endif
+
+                        <x-core::semester-grid.tile :row="$layout->rows[$item->subject->code]" :code="$item->subject->code" :name="$item->subject->name" :chain="$chains['of'][$item->subject_id] ?? null"
+                            :class="$classes"
+                            wire:click="edit('{{ $item->id }}')" wire:key="tile-{{ $item->id }}" :data-item="$item->id" :data-me="$itemId === $item->id ? '' : null"
+                            :data-on-chain="isset($highlight['marked'][$item->id]) ? '' : null"
+                            :title="$title !== '' ? $title : null" data-opener data-testid="tile-{{ $item->subject->code }}" data-part="{{ $parts[$item->subject->department_id] }}" data-tone="{{ $state->value }}">
+                            <x-slot:icon>
+                                @if ($icon)
+                                    @if ($icon === 'o-lock-closed')
+                                        <x-icon :name="$icon" class="w-4 h-4 shrink-0" aria-hidden="true" data-lock />
+                                    @else
+                                        <x-icon :name="$icon" class="w-4 h-4 shrink-0" aria-hidden="true" />
+                                    @endif
+                                    <span class="sr-only">{{ $stateText }}</span>
                                 @endif
-                            @endif
-                        </x-slot:icon>
-                        <x-slot:requisites class="flex items-baseline" data-testid="figures-{{ $item->subject->code }}" title="Elegibles {{ $item->eligible_students }} · Esperados {{ $item->expected_students }}"><span class="truncate"><span class="min-[1600px]:hidden">El.</span><span class="max-[1599px]:hidden">Eleg.</span> <span class="font-mono">{{ $item->eligible_students }}</span> · <span class="min-[1600px]:hidden">Es.</span><span class="max-[1599px]:hidden">Esp.</span> <span class="font-mono">{{ $item->expected_students }}</span></span></x-slot:requisites>
-                        <x-slot:start><span data-testid="groups-{{ $item->subject->code }}"><span class="font-sans text-xs font-normal">Grupos</span> <span class="text-[15px] font-semibold">{{ $item->requested_groups }}</span></span></x-slot:start>
-                        <x-slot:end>
-                            @if ($code !== $majority)
-                                <span class="font-normal" data-testid="dept-{{ $item->subject->code }}" title="{{ $item->subject->department->name }}">{{ $code }}</span>
-                            @endif
-                            @if ($anomalies !== [])
-                                <span class="inline-flex items-center gap-0.5 font-semibold text-warning" data-testid="anomaly-{{ $item->subject->code }}">
-                                    <x-icon name="o-exclamation-triangle" class="w-4 h-4" aria-hidden="true" />
-                                    <span data-anomaly-count>{{ count($anomalies) }}</span>
-                                    <span class="sr-only">Revisar: {{ implode('; ', $anomalies) }}</span>
-                                </span>
-                            @endif
-                        </x-slot:end>
-                    </x-core::semester-grid.tile>
-                @endforeach
-            </x-core::semester-grid.semester>
-        @endforeach
-    </x-core::semester-grid.frame>
+                            </x-slot:icon>
+                            <x-slot:requisites class="flex items-baseline" data-testid="figures-{{ $item->subject->code }}" title="Elegibles {{ $item->eligible_students }} · Esperados {{ $item->expected_students }}"><span class="truncate"><span class="min-[1600px]:hidden">El.</span><span class="max-[1599px]:hidden">Eleg.</span> <span class="font-mono">{{ $item->eligible_students }}</span> · <span class="min-[1600px]:hidden">Es.</span><span class="max-[1599px]:hidden">Esp.</span> <span class="font-mono">{{ $item->expected_students }}</span></span></x-slot:requisites>
+                            <x-slot:start><span data-testid="groups-{{ $item->subject->code }}"><span class="font-sans text-xs font-normal">Grupos</span> <span class="text-[15px] font-semibold">{{ $item->requested_groups }}</span></span></x-slot:start>
+                            <x-slot:end>
+                                @if ($code !== $majority)
+                                    <span class="font-normal" data-testid="dept-{{ $item->subject->code }}" title="{{ $item->subject->department->name }}">{{ $code }}</span>
+                                @endif
+                                @if ($anomalies !== [])
+                                    <span class="inline-flex items-center gap-0.5 font-semibold text-warning" data-testid="anomaly-{{ $item->subject->code }}">
+                                        <x-icon name="o-exclamation-triangle" class="w-4 h-4" aria-hidden="true" />
+                                        <span data-anomaly-count>{{ count($anomalies) }}</span>
+                                        <span class="sr-only">Revisar: {{ implode('; ', $anomalies) }}</span>
+                                    </span>
+                                @endif
+                            </x-slot:end>
+                        </x-core::semester-grid.tile>
+                    @endforeach
+                </x-core::semester-grid.semester>
+            @endforeach
+        </x-core::semester-grid.frame>
+
+        @if ($chains['chains'] !== [])
+            <div x-data="{ open: false }" data-testid="chain-legend">
+                {{-- En celular (menos de 768 px) la leyenda va plegada tras este botón; desde md siempre está abierta. --}}
+                <button type="button" data-testid="chain-legend-toggle" class="btn btn-sm btn-ghost md:hidden" aria-controls="proposal-chain-chips" x-bind:aria-expanded="open.toString()" aria-expanded="false" @click="open = ! open">
+                    Cadenas de seriación ({{ count($chains['chains']) }})
+                </button>
+                <div id="proposal-chain-chips" class="flex flex-wrap items-center gap-1.5" x-bind:class="open ? '' : 'max-md:hidden'">
+                    <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral max-md:hidden">Cadenas de seriación</span>
+                    @foreach ($chains['chains'] as $link)
+                        <button type="button" wire:click="focusChain({{ $link['index'] }})" wire:key="chain-{{ $link['index'] }}" data-chain="{{ $link['index'] }}" aria-pressed="{{ $chain === $link['index'] ? 'true' : 'false' }}" data-testid="chain-{{ $link['index'] }}"
+                            class="inline-flex h-7 items-center gap-1.5 rounded-field border border-base-300 bg-base-100 px-2 text-[12.5px] aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary">
+                            <span @class(['size-3.5 rounded-sm border-[3px]', \App\Modules\Students\Enums\ChainColor::forChain($link['index'])->swatchClasses()]) aria-hidden="true"></span>
+                            {{ $link['name'] }}
+                            <span class="font-mono text-neutral">{{ $link['size'] }}</span>
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
+        <x-core::semester-grid.selection-bar :shown="$highlight['info'] !== ''">
+            <x-slot:info>{{ $highlight['info'] }}</x-slot:info>
+            <x-slot:clear wire:click="clearHighlight" data-testid="clear-highlight"></x-slot:clear>
+        </x-core::semester-grid.selection-bar>
+    </div>
 @endif

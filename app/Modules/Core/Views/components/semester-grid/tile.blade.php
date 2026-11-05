@@ -1,5 +1,6 @@
 {{--
-    El mosaico de una materia en core::semester-grid.frame, el mismo en la ficha del alumno y en el editor del plan:
+    El mosaico de una materia en core::semester-grid.frame, el mismo en la ficha del alumno, en el editor del plan y
+    en la propuesta de carrera:
     un botón de alto fijo (104 px) y el ancho de su columna, que nada estira, en su renglón (`$row`, de SemesterGrid).
     Sus márgenes y su relleno están medidos para que la clave (ocho caracteres en Mono) y el icono quepan con nueve
     semestres a 1366 px: 4 px a cada lado de la columna (el mismo hueco que entre renglones) y 8 px de relleno.
@@ -11,11 +12,9 @@
     El relleno, el borde y el color de su estado llegan en `class`. `$chain` es su cadena de seriación: la franja a
     la izquierda (una sombra interior con el token chain-N, que no toca el borde). Con algo resaltado (`data-focus`
     en el marco), lo que no está en la cadena (`data-on-chain`) se atenúa, y el elegido (`data-me`) lleva anillo.
-    `$soft` cambia ese atenuado por uno que conserva el contraste: quien llama pinta con tonos tenues lo que no está
-    resaltado (la propuesta de carrera) y el mosaico no baja la opacidad.
     `$muted` deja el nombre en el color del mosaico en lugar de `text-base-content`.
 --}}
-@props(['row', 'code', 'name', 'chain' => null, 'muted' => false, 'soft' => false])
+@props(['row', 'code', 'name', 'chain' => null, 'muted' => false])
 
 @php
     // Un color por cadena, en clases completas: Tailwind solo publica los tokens chain-N que encuentra escritos.
@@ -29,7 +28,7 @@
 
 <button type="button" {{ $attributes->class([
     'flex h-26 min-w-0 cursor-pointer flex-col overflow-hidden rounded-field border p-2 text-left transition-opacity motion-reduce:transition-none md:col-(--col) md:row-(--row) md:mx-1',
-    'group-data-[focus]/grid:not-data-[on-chain]:opacity-20 group-data-[focus]/grid:not-data-[on-chain]:grayscale' => ! $soft,
+    'group-data-[focus]/grid:not-data-[on-chain]:opacity-20 group-data-[focus]/grid:not-data-[on-chain]:grayscale',
     'data-[me]:ring-2 data-[me]:ring-primary data-[me]:ring-offset-2 data-[me]:ring-offset-base-100',
     $chain === null ? '' : $chainColors[$chain % 12].' shadow-[inset_5px_0_0_var(--chain)] pl-3',
 ]) }} style="--row: {{ $row }}">

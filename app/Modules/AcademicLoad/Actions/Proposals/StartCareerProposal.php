@@ -31,7 +31,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * y sin borrar de la retícula de los planes activos y sin borrar de la carrera (HC-13), una sola vez por materia,
  * con el plan y el semestre del primer plan por clave. Cada fila lleva los elegibles del momento
  * (EligibleStudentsQuery), esperados = elegibles y los grupos sugeridos (SuggestedGroups; confirmado el 2 de
- * noviembre de 2026). Deja bitácora de la propuesta y, después del commit, avisa con CareerProposalStarted.
+ * noviembre de 2026). La propuesta guarda los alumnos posibles: los distintos que son elegibles para alguna de
+ * sus materias (confirmado el 4 de noviembre de 2026). Deja bitácora de la propuesta, con sus alumnos posibles, y,
+ * después del commit, avisa con CareerProposalStarted.
  *
  * La propuesta se inserta ignorando la que ya exista (la unicidad por periodo, campus y carrera): si otra sesión
  * la armó entre la revisión y la escritura, devuelve esa sin agregarle filas. Quién puede armarla lo decide
@@ -84,6 +86,10 @@ final class StartCareerProposal
                 ProposalItem::query()->insert($rows);
             }
 
+            $proposal->forceFill([
+                'eligible_students' => $this->eligibleStudents->distinctFor($career, $campus, array_column($rows, 'subject_id')),
+            ])->saveQuietly();
+
             activity()
                 ->performedOn($proposal)
                 ->causedBy($actor)
@@ -93,6 +99,7 @@ final class StartCareerProposal
                     'campus_id' => $proposal->campus_id,
                     'career_id' => $proposal->career_id,
                     'status' => $proposal->status->value,
+                    'eligible_students' => $proposal->eligible_students,
                 ]])
                 ->withProperties(['items' => count($rows)])
                 ->log("Armó la propuesta de {$career->code} en {$campus->code} para el periodo {$term->code}");

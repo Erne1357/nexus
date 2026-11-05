@@ -258,7 +258,7 @@ El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados
 | Personas y puestos | Académico › Personas y puestos (solo admin) | **Decidido por el usuario el 3 de noviembre de 2026:** variante C, la ficha de la persona; ver "Personas y puestos", abajo |
 | Organigrama | Académico › Organigrama (solo admin) | **Decidido por el usuario el 3 de noviembre de 2026:** variante B, diagrama de cajas con el panel de la unidad a un lado; ver "Organigrama", abajo |
 | Ficha del docente | Docentes › Ficha | **Decidido por el usuario el 30 de octubre de 2026 (tarea 1.13):** variante A, pestañas; ver "Ficha del docente", abajo |
-| Retícula del alumno | Ficha del alumno; propuesta del coordinador (fase 2) | **Decidido (tarea 1.6):** ver "Retícula del alumno", abajo |
+| Retícula del alumno | Ficha del alumno; propuesta del coordinador (fase 2) | **Decidido (tarea 1.6):** ver "Retícula del alumno", abajo; la de la propuesta, **decidida por el usuario el 4 de noviembre de 2026** (maqueta C), en "Retícula de la propuesta de carrera" |
 | Editor de retícula del plan | Retícula de cada plan de estudios (Académico › Planes de estudio) | **Decidido (tarea 1.8):** variante A, columnas por semestre y panel lateral; ver "Retícula del plan (editor)", abajo |
 | Inicio por rol | Inicio | Palabra gigante y mosaicos vivos (por diseñar) |
 | Checklist con contadores | Validación de catálogos | **Decidido por el usuario el 2 de noviembre de 2026:** variante C, tablero de tarjetas: una tarjeta de avance («N de 5 validados») y una por catálogo, con altas y bajas contra la foto anterior o «Primer periodo en Nexus»; toda la tarjeta abre la lista del catálogo (`?catalogo=`), que sigue la anatomía de catálogo y edita en un drawer. **Ajustado el 2 de noviembre de 2026 con datos masivos:** la página lleva una fila de pestañas (`tabs tabs-border`, como la Ficha del docente): «Tablero» y una por catálogo con su estado, que cambian de catálogo sin recargar; la lista abre con un solo renglón (nombre, estado, cifras, Validar o Reabrir) y su barra de herramientas queda a la altura de los demás catálogos; las altas y bajas son solo cifras («+7 altas · −6 bajas», neutras si son 0), con el filtro «Cambio» (Altas) en la lista y las bajas en un drawer («Ver bajas»); en [`review.blade.php`](app/Modules/CatalogValidation/Livewire/pages/review/review.blade.php) |
@@ -433,6 +433,24 @@ El admin edita la retícula de un plan en `academic::pages.plan` (`/academic/pla
 
   Al final va «Nueva especialidad», con clave y nombre.
 - **El resaltado lo pinta el servidor** con `data-focus`, `data-me` y `data-on-chain`, que leen las mismas utilidades de la retícula del alumno. La retícula cambia con cada edición, y así no queda estado de Alpine desfasado.
+
+### Retícula de la propuesta de carrera
+La vista «Retícula» de la propuesta de carrera (`academic-load::pages.proposal`), decidida por el usuario el 4 de noviembre de 2026 (maqueta C «Las dos»; maquetas en `.impeccable/mocks/proposal-grid/`). Usa las piezas de Core de "Retícula del alumno"; en [`grid.blade.php`](app/Modules/AcademicLoad/Views/proposal/grid.blade.php).
+
+- **Renglón de la vista:** «Retícula · Tabla», el filtro «Todas · Con grupos · Sin grupos» (`?grupos=con|sin`, la elegida en `btn-primary`) y los totales: «MATERIAS CON GRUPOS 53 / 59» (las de todas, en `text-neutral`), «GRUPOS» y «ALUMNOS POSIBLES». En la tabla van en la barra pegada al pie.
+- **Departamentos:** «DEPARTAMENTOS» y una píldora por departamento con su clave, sus grupos y el estado de su parte. La elegida va sólida en `primary` con una × a la vista; en celular la franja se desplaza hasta ella.
+- **Estados** (`ProposalTileState`), con su leyenda arriba de la retícula; lo que decidió el departamento manda sobre los grupos:
+
+| Estado | Relleno y borde | Icono |
+|---|---|---|
+| Con grupos | `base-100`, filete | — |
+| Sin grupos (0 grupos) | `warning/10`, punteado `warning` | `o-minus-circle` |
+| Aceptada por el departamento | `success/10`, filete `success/40` | `o-lock-closed` (`o-check-circle` si toda la propuesta está bloqueada) |
+| Regresada por el departamento | `error/10`, filete `error/40` | `o-arrow-uturn-left` |
+
+- **Cadenas:** la franja de la retícula del alumno (las mismas cadenas, `SeriationChains` de Core, y los mismos colores, `ChainColor`) y, debajo, su leyenda, plegada en celular.
+- **Marcar:** el departamento elegido, el filtro o los dos (lo que cumple ambos) se marcan como una cadena resaltada: lo demás se atenúa al 20 % y en grises, el encabezado de cada semestre lo cuenta («18 de SC», «2 sin grupos») y la barra de selección lo dice («Sistemas y Computación (SC): 42 materias · 133 grupos.», «Sin grupos: 6 materias.», «Sistemas y Computación (SC), sin grupos: 2 materias.»). En la tabla, el filtro oculta las filas que no lo cumplen; el departamento las atenúa, o las oculta con «Mostrar solo».
+- **Cadena y marca:** tocar una cadena de la leyenda la resalta en lugar de la marca, que sigue elegida; «Quitar resaltado» o Esc quitan primero la cadena (vuelve la marca) y luego la marca. Elegir un departamento o un filtro suelta la cadena, y «Ver» de una parte regresada suelta también el filtro, que podría esconder lo que se le pide. Lo pinta el servidor, como en el editor del plan.
 
 ## Elevation & Depth
 

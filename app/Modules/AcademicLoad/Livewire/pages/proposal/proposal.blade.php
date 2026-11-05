@@ -1,8 +1,9 @@
 {{--
     Propuesta de carrera (tarea 2.7): encabezado con la carrera, el periodo y el estado; una alerta por cada
-    departamento que regresó su parte; los totales; el resumen de departamentos (elegir uno resalta sus materias, en
-    las dos vistas); y la vista que eligió el usuario, la retícula por semestre (maqueta C) o la tabla con captura
-    en línea (maqueta B). Una materia de la retícula se corrige en un panel a la derecha. El envío pide confirmación
+    departamento que regresó su parte; la vista, el filtro de grupos («Todas · Con grupos · Sin grupos») y los totales;
+    el resumen de departamentos (elegir uno marca sus materias, en las dos vistas); y la vista que eligió el usuario,
+    la retícula por semestre (maqueta C «Las dos», academic-load::proposal.grid) o la tabla con captura en línea
+    (maqueta B). Una materia de la retícula se corrige en un panel a la derecha. El envío pide confirmación
     con los totales y avisa, sin bloquear, de los catálogos sin validar. Todo lo que se pinta viene de
     CareerProposalQuery::overview.
 
@@ -99,11 +100,19 @@
         @endif
 
         <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <div role="group" aria-label="Vista" class="join">
-                <button type="button" wire:click="setView('reticula')" aria-pressed="{{ $view === 'reticula' ? 'true' : 'false' }}" data-testid="view-grid"
-                    @class(['btn btn-sm join-item', 'btn-primary' => $view === 'reticula'])><x-icon name="o-squares-2x2" class="w-4 h-4" />Retícula</button>
-                <button type="button" wire:click="setView('tabla')" aria-pressed="{{ $view === 'tabla' ? 'true' : 'false' }}" data-testid="view-table"
-                    @class(['btn btn-sm join-item', 'btn-primary' => $view === 'tabla'])><x-icon name="o-table-cells" class="w-4 h-4" />Tabla</button>
+            <div class="flex flex-wrap items-center gap-2">
+                <div role="group" aria-label="Vista" class="join">
+                    <button type="button" wire:click="setView('reticula')" aria-pressed="{{ $view === 'reticula' ? 'true' : 'false' }}" data-testid="view-grid"
+                        @class(['btn btn-sm join-item', 'btn-primary' => $view === 'reticula'])><x-icon name="o-squares-2x2" class="w-4 h-4" />Retícula</button>
+                    <button type="button" wire:click="setView('tabla')" aria-pressed="{{ $view === 'tabla' ? 'true' : 'false' }}" data-testid="view-table"
+                        @class(['btn btn-sm join-item', 'btn-primary' => $view === 'tabla'])><x-icon name="o-table-cells" class="w-4 h-4" />Tabla</button>
+                </div>
+                <div role="group" aria-label="Materias" class="join" data-testid="groups-filter">
+                    @foreach (['' => 'Todas', 'con' => 'Con grupos', 'sin' => 'Sin grupos'] as $filter => $filterLabel)
+                        <button type="button" wire:click="filterGroups('{{ $filter }}')" aria-pressed="{{ $groupsFilter === $filter ? 'true' : 'false' }}" data-testid="filter-{{ $filter === '' ? 'todas' : $filter }}"
+                            @class(['btn btn-sm join-item', 'btn-primary' => $groupsFilter === $filter])>{{ $filterLabel }}</button>
+                    @endforeach
+                </div>
             </div>
             @if ($view !== 'tabla')
                 @include('academic-load::proposal.totals')
