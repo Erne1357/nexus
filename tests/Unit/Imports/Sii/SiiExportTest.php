@@ -110,3 +110,21 @@ it('entrega lo leído de cada archivo una sola vez y solo tras una pasada comple
     expect(array_map(fn ($read) => [$read->file, $read->unreadable()], $reads))->toBe([['alumnos_todos.csv', 1], ['aulas.csv', 0]])
         ->and($export->takeReads())->toBe([]);
 });
+
+it('un archivo vacío o con el encabezado ilegible es un problema de contrato que solo nombra el archivo', function (string $content) {
+    writeExport($this->dir);
+    file_put_contents($this->dir.'/aulas.csv', $content);
+
+    try {
+        SiiExport::open($this->dir);
+        $this->fail('Debió lanzar SiiContractBroken.');
+    } catch (SiiContractBroken $e) {
+        expect($e->unreadable)->toBe(['aulas' => 'aulas.csv'])
+            ->and($e->differences)->toBe([])
+            ->and($e->getMessage())->toContain('aulas.csv')->toContain('no se pudo leer')
+            ->not->toContain($this->dir)->not->toContain('SIN CERRAR');
+    }
+})->with([
+    'vacío' => [''],
+    'comilla sin cerrar en el encabezado' => ["\"aula,SIN CERRAR\r\n"],
+]);

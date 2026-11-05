@@ -3,6 +3,7 @@
 namespace App\Modules\Imports\Sii;
 
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Una carpeta con la exportación del SII. Al abrirla busca cada archivo por su nombre normalizado
@@ -26,7 +27,7 @@ final class SiiExport
     private function __construct(private readonly string $dir, private readonly array $paths) {}
 
     /**
-     * @throws SiiContractBroken si falta un archivo obligatorio o cambian sus encabezados
+     * @throws SiiContractBroken si falta un archivo obligatorio, cambian sus encabezados o no se pueden leer
      */
     public static function open(string $dir): self
     {
@@ -41,6 +42,7 @@ final class SiiExport
 
         $paths = [];
         $differences = [];
+        $unreadable = [];
         foreach (SiiFile::cases() as $file) {
             $path = $found[$file->value] ?? null;
             if ($path === null) {
@@ -52,7 +54,13 @@ final class SiiExport
             }
 
             $paths[$file->value] = $path;
-            $actual = (new SiiCsvReader($path, $file))->header();
+            try {
+                $actual = (new SiiCsvReader($path, $file))->header();
+            } catch (RuntimeException) {
+                $unreadable[$file->value] = basename($path);
+
+                continue;
+            }
             $missing = array_values(array_diff($file->headers(), $actual));
             $extra = array_values(array_diff($actual, $file->headers()));
             if ($missing !== [] || $extra !== []) {
@@ -60,8 +68,8 @@ final class SiiExport
             }
         }
 
-        if ($differences !== []) {
-            throw new SiiContractBroken($differences);
+        if ($differences !== [] || $unreadable !== []) {
+            throw new SiiContractBroken($differences, $unreadable);
         }
 
         return new self($dir, $paths);

@@ -113,6 +113,19 @@ it('se detiene antes de escribir si el contrato no cuadra', function () {
         ->and(is_dir("{$this->dir}/_nexus"))->toBeFalse();
 });
 
+it('un archivo vacío de la exportación se reporta como contrato roto, sin escribir nada', function () {
+    File::put("{$this->dir}/aulas.csv", '');
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('contrato')->toContain('aulas.csv')
+        ->not->toContain('RuntimeException')->not->toContain('inesperado')->not->toContain($this->dir)
+        ->and(Department::count())->toBe(0)
+        ->and(is_dir("{$this->dir}/_nexus"))->toBeFalse();
+});
+
 it('exige un usuario con permiso de importar', function () {
     User::factory()->create(['username' => 'sinpermiso']);
 
