@@ -11,7 +11,7 @@ test('la matriz puesto→permisos es la que está en tests/Fixtures/Authorizatio
         ->toEqual(json_decode(file_get_contents(base_path('tests/Fixtures/Authorization/matrix.json')), true));
 });
 
-test('D20: todo permiso concedido al jefe de departamento declara a qué unidades aplica', function () {
+test('AZ-S16: todo permiso concedido al jefe de departamento declara a qué unidades aplica', function () {
     $registry = app(PermissionRegistry::class);
 
     $open = collect($registry->permissions())

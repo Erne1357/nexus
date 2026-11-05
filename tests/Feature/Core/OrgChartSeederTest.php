@@ -5,7 +5,7 @@ use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Models\OrgUnit;
 
-it('siembra el organigrama tipo bajo la Dirección (AZ-S1), con Servicios Escolares en la Subdirección Académica (D20)', function () {
+it('siembra el organigrama tipo bajo la Dirección (AZ-S1), con Servicios Escolares en la Subdirección Académica (AZ-02)', function () {
     $this->seed(OrgChartSeeder::class);
 
     $expected = [
@@ -58,7 +58,7 @@ it('si el admin borró una rama, sembrar no crea sus hijos', function () {
         ->and(OrgUnit::where('code', 'DIV-PROFESIONAL')->exists())->toBeTrue();
 });
 
-it('D20: en una instalación que ya tiene Servicios Escolares en otra subdirección no la mueve; eso es del Organigrama', function () {
+it('AZ-S1: en una instalación que ya tiene Servicios Escolares en otra subdirección no la mueve; eso es del Organigrama', function () {
     $planning = OrgUnit::factory()->create(['parent_id' => OrgUnit::where('code', 'DIRECCION')->value('id'), 'code' => 'SUB-PLANEACION', 'kind' => OrgUnitKind::Subdireccion]);
     OrgUnit::factory()->create(['parent_id' => $planning->id, 'code' => 'SERVICIOS-ESCOLARES', 'kind' => OrgUnitKind::Departamento]);
 

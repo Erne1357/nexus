@@ -79,7 +79,7 @@ final class AssignmentLabels
 
     /**
      * El título es el nombre del puesto para quien lo ocupa sobre su unidad (Role::titleOn(): el jefe de Servicios
-     * Escolares, «Jefe del Departamento de Servicios Escolares», D20); el resumen omite la unidad si el título ya la
+     * Escolares, «Jefe del Departamento de Servicios Escolares», AZ-02); el resumen omite la unidad si el título ya la
      * nombra.
      *
      * @param  array<string, array{name: string, kind: OrgUnitKind, code: string}>  $units

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Consulta del organigrama: si una unidad cubre a otra (ella misma o un descendiente) y si su subárbol tiene una unidad
- * a la que aplica un permiso (fits(), D20).
+ * a la que aplica un permiso (fits(), AZ-02 y AZ-S16).
  *
  * Se resuelve desde un mapa `unidad => [ella y todos sus descendientes]`, con el tipo y la clave de cada unidad,
  * guardado en caché. La llave lleva una huella de lo que define el mapa: el md5 de `id>parent_id:kind:code` de todas
@@ -62,7 +62,7 @@ final class OrgTree
     }
 
     /**
-     * D20: si la unidad o alguna de sus descendientes es de las que declara `$applicability` (UnitApplicability::matches():
+     * AZ-S16: si la unidad o alguna de sus descendientes es de las que declara `$applicability` (UnitApplicability::matches():
      * por tipo, o por clave si no es un departamento académico). Nunca por un ancestro: Servicios Escolares, debajo de
      * la Subdirección Académica, no cumple lo académico; la Subdirección sí. Las unidades borradas cuentan, como en el
      * resto del mapa. Una unidad que no existe no cumple.

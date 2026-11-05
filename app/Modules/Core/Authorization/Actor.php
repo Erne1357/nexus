@@ -36,9 +36,9 @@ use LogicException;
  * porque responden «quién podría», que es lo que preguntan los avisos y las policies sobre otra persona.
  *
  * API de permisos (spec 7.1; el registro de permisos dice qué puesto concede qué):
- * - Qué nombramientos aportan un permiso (D20, contributing()): los de un puesto al que el registro se lo concede y
- *   cuya unidad, o una de sus descendientes, es de las que el permiso declara en Permission::appliesTo()
- *   (OrgTree::fits()). Un nombramiento sin unidad, o un permiso sin aplicabilidad, lo aporta siempre. Así el jefe de
+ * - Qué nombramientos aportan un permiso (AZ-02; mecanismo AZ-S16, contributing()): los de un puesto al que el
+ *   registro se lo concede y cuya unidad, o una de sus descendientes, es de las que el permiso declara en
+ *   Permission::appliesTo() (OrgTree::fits()). Un nombramiento sin unidad, o un permiso sin aplicabilidad, lo aporta siempre. Así el jefe de
  *   Servicios Escolares no aporta lo académico aunque su puesto (jefe de departamento) lo tenga concedido. Todo lo de
  *   abajo cuenta solo esos nombramientos, y un puesto concede un permiso si el admin lo es o si alguno de sus
  *   nombramientos lo aporta (rolesGranting()): allows(), allowsAny(), constrain() y rolesAllowing() salen de esa
@@ -243,7 +243,7 @@ final class Actor
     /**
      * Si puede `$permission` sobre algo: para el menú y la entrada a una pantalla de lista, que luego se filtra con
      * constrain(). Uno personal lo da cualquier puesto que tenga; uno de gestión, un puesto efectivo; en los dos, el
-     * puesto debe concederlo con un nombramiento que lo aporte (D20, rolesGranting()).
+     * puesto debe concederlo con un nombramiento que lo aporte (AZ-02, AZ-S16; rolesGranting()).
      */
     public function allowsAny(Permission $permission): bool
     {
@@ -516,9 +516,9 @@ final class Actor
     }
 
     /**
-     * D20: los nombramientos de `$roles` que aportan `$permission`: sin unidad, o con una unidad a la que el permiso
-     * aplica (ella o una descendiente, OrgTree::fits()). Sin aplicabilidad declarada, todos. No revisa que el registro
-     * se lo conceda al puesto: eso es de rolesGranting(), que pasa antes.
+     * AZ-02 (mecanismo, AZ-S16): los nombramientos de `$roles` que aportan `$permission`: sin unidad, o con una unidad
+     * a la que el permiso aplica (ella o una descendiente, OrgTree::fits()). Sin aplicabilidad declarada, todos. No
+     * revisa que el registro se lo conceda al puesto: eso es de rolesGranting(), que pasa antes.
      *
      * @param  list<Role>  $roles
      * @return list<AssignmentScope>

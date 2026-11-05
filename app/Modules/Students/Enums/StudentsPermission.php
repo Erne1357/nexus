@@ -31,7 +31,7 @@ enum StudentsPermission: string implements Permission
     }
 
     /**
-     * Lo académico (D20): a los departamentos académicos y a la Subdirección Académica.
+     * Lo académico (AZ-02, AZ-S16): a los departamentos académicos y a la Subdirección Académica.
      */
     public function appliesTo(): ?UnitApplicability
     {

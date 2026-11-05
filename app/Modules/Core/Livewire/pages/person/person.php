@@ -85,7 +85,7 @@ new #[Title('Ficha de la persona')] class extends Component
             'offered' => $this->offeredOptions($rules),
             'roleCase' => $role,
             'options' => $role === null ? ['campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus)),
-            'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente)),
+            'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente)),
             'whoRoleCase' => $whoRole,
             'whoOptions' => $whoRole === null ? ['campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($whoRole, $this->uuid($this->whoCampus)),
             'who' => $whoRole === null ? null : $this->who($people, $labels, $whoRole),
@@ -205,7 +205,7 @@ new #[Title('Ficha de la persona')] class extends Component
      */
     private function offeredOptions(RoleAssignmentRules $rules): array
     {
-        return array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], $this->offered($rules));
+        return array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], $this->offered($rules));
     }
 
     /**
@@ -220,9 +220,10 @@ new #[Title('Ficha de la persona')] class extends Component
 
     /**
      * Quién ocupa el puesto sobre el alcance elegido en el panel: `incomplete` si falta elegir una columna del
-     * puesto, `none` si nadie lo ocupa hoy, `found` con los titulares.
+     * puesto, `none` si nadie lo ocupa hoy, `found` con los titulares. `title` es el nombre del puesto sobre esa unidad
+     * (AssignmentLabels: «Jefe del Departamento de Servicios Escolares», AZ-02).
      *
-     * @return array{state: string, summary: string, holders: Collection<int, RoleAssignment>}
+     * @return array{state: string, title: string, summary: string, holders: Collection<int, RoleAssignment>}
      */
     private function who(PeopleQuery $people, AssignmentLabels $labels, Role $role): array
     {
@@ -232,18 +233,18 @@ new #[Title('Ficha de la persona')] class extends Component
             'career_id' => $this->uuid($this->whoCareer),
         ];
         $columns = $role->scopeColumns();
-        $summary = $labels->one(new RoleAssignment([
+        $label = $labels->one(new RoleAssignment([
             'role' => $role,
             ...array_intersect_key($values, array_flip($columns)),
-        ]))->summary;
+        ]));
 
         if (array_filter($columns, fn (string $column): bool => $values[$column] === null) !== []) {
-            return ['state' => 'incomplete', 'summary' => $summary, 'holders' => collect()];
+            return ['state' => 'incomplete', 'title' => $label->title, 'summary' => $label->summary, 'holders' => collect()];
         }
 
         $holders = $people->holders($role, $values['campus_id'], $values['org_unit_id'], $values['career_id']);
 
-        return ['state' => $holders->isEmpty() ? 'none' : 'found', 'summary' => $summary, 'holders' => $holders];
+        return ['state' => $holders->isEmpty() ? 'none' : 'found', 'title' => $label->title, 'summary' => $label->summary, 'holders' => $holders];
     }
 
     /**

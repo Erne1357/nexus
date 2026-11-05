@@ -83,7 +83,7 @@ it('AZ-S13: la clave de DIRECCION y SUB-ACADEMICA no cambia, su nombre sí', fun
     expect($academic->fresh()->name)->toBe('Subdirección Académica del ITCJ');
 });
 
-it('D20: la clave de Servicios Escolares no cambia mientras tenga jefe vigente o por empezar', function () {
+it('AZ-S16: la clave de Servicios Escolares no cambia mientras tenga jefe vigente o por empezar', function () {
     $services = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento]);
     $head = RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeDepartamento, 'org_unit_id' => $services->id, 'valid_from' => today()->addWeek()]);
 
@@ -100,7 +100,7 @@ it('D20: la clave de Servicios Escolares no cambia mientras tenga jefe vigente o
     expect($services->fresh())->code->toBe('ESCOLARES')->name->toBe('Departamento de Servicios Escolares del ITCJ');
 });
 
-it('D20: Servicios Escolares con jefe no cambia a otro tipo, y el error nombra al jefe por su unidad', function () {
+it('AZ-S16: Servicios Escolares con jefe no cambia a otro tipo, y el error nombra al jefe por su unidad', function () {
     $services = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento]);
     RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeDepartamento, 'org_unit_id' => $services->id]);
 

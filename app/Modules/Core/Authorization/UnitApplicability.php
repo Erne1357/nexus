@@ -6,9 +6,10 @@ use App\Modules\Core\Enums\OrgUnitKind;
 use LogicException;
 
 /**
- * A qué unidades aplica un permiso (D20, confirmado el 5 de noviembre de 2026: lo que puede un jefe depende de su
- * unidad): tipos de unidad y claves de unidades estructurales. Lo declara cada permiso en Permission::appliesTo(); un
- * nombramiento con unidad aporta el permiso solo si su unidad, o una de sus descendientes, cumple (OrgTree::fits()).
+ * A qué unidades aplica un permiso: tipos de unidad y claves de unidades estructurales. AZ-02 (D20, confirmado el 5 de
+ * noviembre de 2026): lo que puede un jefe depende de su unidad. AZ-S16 (el mecanismo, supuesto por confirmar): lo
+ * declara cada permiso en Permission::appliesTo(), y un nombramiento con unidad aporta el permiso solo si su unidad, o
+ * una de sus descendientes, cumple (OrgTree::fits()).
  *
  * Una unidad cumple si su tipo es uno de los declarados, o si no es un departamento académico y su clave es una de
  * las declaradas: la clave es única solo entre las unidades estructurales (un departamento académico puede repetirla),
@@ -54,7 +55,7 @@ final readonly class UnitApplicability
     }
 
     /**
-     * Lo académico (D20): los departamentos académicos y la Subdirección Académica, por su clave, así que la
+     * Lo académico (AZ-02, AZ-S16): los departamentos académicos y la Subdirección Académica, por su clave, así que la
      * Subdirección cumple aunque todavía no tenga departamentos debajo.
      */
     public static function academic(): self

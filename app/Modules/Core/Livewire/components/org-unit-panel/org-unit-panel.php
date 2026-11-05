@@ -112,7 +112,7 @@ new class extends Component
             },
             'kinds' => $this->kinds($detail->unit, $rules),
             'fixedKind' => $this->mode === 'edit' ? $rules->fixedKindReason($detail->unit) : null,
-            'offered' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], $detail->appointRoles),
+            'offered' => $this->offeredOn($detail->unit, $detail->appointRoles),
             'roleCase' => Role::tryFrom($this->role),
             'options' => $this->showAppoint && Role::tryFrom($this->role) !== null
                 ? $people->scopeOptions(Role::from($this->role), Str::isUuid($this->campus) ? $this->campus : null)
@@ -272,7 +272,7 @@ new class extends Component
         }
 
         $person = $people->findOrFail($this->appointUserId);
-        $offered = array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], $rules->rolesForUnit($unit));
+        $offered = $this->offeredOn($unit, $rules->rolesForUnit($unit));
 
         $assignment = $this->appointPerson($appointRole, $people, $person, $offered, $unit);
 
@@ -499,6 +499,20 @@ new class extends Component
         $this->reset('name', 'code', 'kind', 'parent', 'showAppoint', 'endingId');
         $this->mode = $mode;
         $this->showForm = true;
+    }
+
+    /**
+     * Los puestos de «Nombrar» sobre la unidad, con su nombre para quien lo ocupe ahí (Role::titleOn(), AZ-02): en
+     * Servicios Escolares, «Jefe del Departamento de Servicios Escolares»; en un departamento académico, como siempre.
+     *
+     * @param  list<Role>  $roles
+     * @return list<array{id: string, name: string}>
+     */
+    private function offeredOn(OrgUnit $unit, array $roles): array
+    {
+        $facts = [['kind' => $unit->kind, 'code' => $unit->code, 'name' => $unit->name]];
+
+        return array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->titleOn($facts)], $roles);
     }
 
     /**

@@ -20,7 +20,7 @@ use App\Modules\Students\Enums\StudentsPermission;
 use Illuminate\Support\Facades\Cache;
 
 /*
-| D20 (confirmado el 5 de noviembre de 2026): lo que puede un jefe depende de SU unidad. Un permiso declara a qué
+| AZ-02 (D20, confirmado el 5 de noviembre de 2026): lo que puede un jefe depende de SU unidad. AZ-S16: un permiso declara a qué
 | unidades aplica (UnitApplicability: tipos y claves); un nombramiento con unidad aporta el permiso solo si su unidad, o
 | una de sus descendientes, es de las que declara. Lo académico aplica a los departamentos académicos y a la
 | Subdirección Académica; `academic.placement.validate`, a Servicios Escolares. Un nombramiento sin unidad (admin,
@@ -59,18 +59,18 @@ function effectivePermissions(User $user): array
     return $keys;
 }
 
-describe('lo que cada puesto ejerce', function () {
-    it('el jefe de Servicios Escolares solo ejerce academic.placement.validate', function () {
+describe('AZ-02: lo que cada puesto ejerce', function () {
+    it('AZ-02: el jefe de Servicios Escolares solo ejerce academic.placement.validate', function () {
         expect(effectivePermissions($this->servicesHead))->toBe(['academic.placement.validate']);
     });
 
-    it('el jefe de un departamento académico conserva todo lo de su puesto salvo academic.placement.validate, que nunca ejercía', function () {
+    it('AZ-S16: el jefe de un departamento académico conserva todo lo de su puesto salvo academic.placement.validate, que nunca ejercía', function () {
         $granted = array_values(array_diff(app(PermissionRegistry::class)->matrix()[Role::JefeDepartamento->value], ['academic.placement.validate']));
 
         expect(effectivePermissions($this->academicHead))->toBe($granted);
     });
 
-    it('la Subdirección, el jefe de proyecto docente, el coordinador y el docente ejercen lo que la matriz les concede', function (Role $role, Closure $scope) {
+    it('AZ-S16: la Subdirección, el jefe de proyecto docente, el coordinador y el docente ejercen lo que la matriz les concede', function (Role $role, Closure $scope) {
         $user = User::factory()->withRole($role, $scope($this))->create();
 
         expect(effectivePermissions($user))->toBe(app(PermissionRegistry::class)->matrix()[$role->value] ?? []);
@@ -81,7 +81,7 @@ describe('lo que cada puesto ejerce', function () {
         'docente' => [Role::Docente, fn (): array => []],
     ]);
 
-    it('el admin ejerce todo menos sus excepciones', function () {
+    it('AZ-S16: el admin ejerce todo menos sus excepciones', function () {
         $registry = app(PermissionRegistry::class);
         $all = collect($registry->permissions())->map(fn (Permission $permission): string => (string) $permission->value)
             ->reject(fn (string $key): bool => in_array($key, $registry->adminDenials(), true))->sort()->values()->all();
@@ -90,8 +90,8 @@ describe('lo que cada puesto ejerce', function () {
     });
 });
 
-describe('allows(), constrain() y rolesAllowing()', function () {
-    it('el jefe de Servicios Escolares no cubre lo académico ni sobre su propia unidad, y sí valida sobre ella', function () {
+describe('AZ-02: allows(), constrain() y rolesAllowing()', function () {
+    it('AZ-02: el jefe de Servicios Escolares no cubre lo académico ni sobre su propia unidad, y sí valida sobre ella', function () {
         $actor = app(Actor::class)->forUser($this->servicesHead);
 
         expect($actor->allows(FacultyPermission::TeacherView, Target::of(unit: $this->services->id)))->toBeFalse()
@@ -101,7 +101,7 @@ describe('allows(), constrain() y rolesAllowing()', function () {
             ->and($actor->rolesAllowing(AcademicPermission::PlacementValidate, Target::of(unit: $this->services->id)))->toBe([Role::JefeDepartamento]);
     });
 
-    it('el jefe de un departamento académico no valida pendientes', function () {
+    it('AZ-02: el jefe de un departamento académico no valida pendientes', function () {
         $actor = app(Actor::class)->forUser($this->academicHead);
 
         expect($actor->allowsAny(AcademicPermission::PlacementValidate))->toBeFalse()
@@ -109,7 +109,7 @@ describe('allows(), constrain() y rolesAllowing()', function () {
             ->and($actor->allows(FacultyPermission::TeacherView, Target::of(unit: $this->systems->id)))->toBeTrue();
     });
 
-    it('quien es jefe de un departamento académico y de Servicios Escolares ejerce cada permiso solo con el nombramiento cuya unidad cubre', function () {
+    it('AZ-S16: quien es jefe de un departamento académico y de Servicios Escolares ejerce cada permiso solo con el nombramiento cuya unidad cubre', function () {
         vacate(Role::JefeDepartamento, $this->services->id);
         RoleAssignment::factory()->create(['user_id' => $this->academicHead->id, 'role' => Role::JefeDepartamento, 'org_unit_id' => $this->services->id, 'valid_from' => today()->toDateString()]);
         $this->actingAs($this->academicHead->fresh());
@@ -127,7 +127,7 @@ describe('allows(), constrain() y rolesAllowing()', function () {
     });
 });
 
-describe('OrgTree::fits()', function () {
+describe('AZ-S16: OrgTree::fits()', function () {
     beforeEach(function () {
         Cache::flush();
         app()->forgetScopedInstances();

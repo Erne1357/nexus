@@ -10,7 +10,7 @@ use Illuminate\Database\Seeder;
 /**
  * Organigrama tipo del ITCJ bajo la Dirección y la Subdirección Académica que crea la migración.
  * Es el supuesto AZ-S1 (por confirmar), tomado del directorio de cdjuarez.tecnm.mx/nosotros consultado
- * el 2 de noviembre de 2026. Servicios Escolares pertenece a la Subdirección Académica (D20, confirmado el 5 de
+ * el 2 de noviembre de 2026. Servicios Escolares pertenece a la Subdirección Académica (AZ-02, confirmado el 5 de
  * noviembre de 2026); una instalación que ya la tiene en otra subdirección la mueve el admin en el Organigrama.
  *
  * Solo crea las claves que faltan (también entre las borradas: una unidad que el admin quitó no se

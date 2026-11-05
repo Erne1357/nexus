@@ -35,7 +35,7 @@ final class AcademicServiceProvider extends ModuleServiceProvider
 
     /**
      * El jefe de departamento valida las materias por validar de la migración del SII (D19); el permiso aplica solo a
-     * Servicios Escolares (D20, AcademicPermission::appliesTo()), así que solo lo ejerce el jefe de esa unidad, y
+     * Servicios Escolares (AZ-02, AcademicPermission::appliesTo()), así que solo lo ejerce el jefe de esa unidad, y
      * StudyPlanPolicy además lo pregunta sobre ella.
      */
     public function grants(): array

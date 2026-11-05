@@ -154,7 +154,7 @@ final class PermissionRegistry
     }
 
     /**
-     * D20: los permisos que declaran a qué unidades aplican, agrupados por UnitApplicability::key(); grupos y claves
+     * AZ-S16: los permisos que declaran a qué unidades aplican, agrupados por UnitApplicability::key(); grupos y claves
      * ordenados. Los que aplican a cualquier unidad no salen. Lo congela `matrix.json` junto con las concesiones.
      *
      * @return array<string, list<string>>

@@ -12,7 +12,7 @@ use Livewire\Component;
 /**
  * Página de inicio: saludo y el bloque del perfil activo (Actor::activeRole()), con su nombre y lo que ese puesto hace
  * en Nexus según el glosario, para quien lo ocupa (RoleTitleQuery: el jefe de Servicios Escolares se nombra por su
- * unidad, D20). A quien tiene al menos un rol le muestra además el bloque «Calendario»
+ * unidad, AZ-02). A quien tiene al menos un rol le muestra además el bloque «Calendario»
  * (core::terms.mini-timeline): las etapas en curso y las dos que siguen del periodo y el campus activos, según
  * TermCalendarQuery; sin periodo activo o sin etapas por ver, no aparece. A quien puede ver el periodo (TermPolicy) le enlaza su ficha.
  */

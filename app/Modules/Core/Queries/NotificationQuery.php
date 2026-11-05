@@ -2,12 +2,15 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Notifications\DatabaseNotification;
@@ -16,10 +19,17 @@ use Illuminate\Support\Str;
 
 /**
  * Lo que muestra la campana de la banda (tarea 2.9): cuántas notificaciones no ha leído el usuario y las más
- * recientes, de la más nueva a la más vieja. Solo las suyas: la consulta parte de su relación `notifications`.
+ * recientes, de la más nueva a la más vieja. Solo las suyas: la consulta parte de su relación `notifications`. El
+ * puesto de cada aviso se nombra como en su credencial (RoleTitleQuery: el jefe de Servicios Escolares, por su unidad,
+ * AZ-02), una consulta por puesto en cada lista.
  */
 final class NotificationQuery
 {
+    public function __construct(
+        private readonly Actor $context,
+        private readonly RoleTitleQuery $titles,
+    ) {}
+
     /** Cuántas muestra la tarjeta de la campana. */
     public const int RECENT = 15;
 
@@ -67,9 +77,10 @@ final class NotificationQuery
         $notifications = $this->newestFirst($user)->limit($limit)->get();
         $codes = $withCampus ? $this->campusCodes($notifications->all()) : [];
         $today = $this->today();
+        $roleTitle = $this->roleTitles($user);
 
         return $notifications
-            ->map(fn (DatabaseNotification $notification): array => $this->row($notification, $codes, $today))
+            ->map(fn (DatabaseNotification $notification): array => $this->row($notification, $codes, $today, $roleTitle))
             ->values();
     }
 
@@ -118,7 +129,9 @@ final class NotificationQuery
         $page = $query->paginate($perPage);
         $codes = $withCampus ? $this->campusCodes($page->items()) : [];
 
-        return $page->through(fn (DatabaseNotification $notification): array => $this->row($notification, $codes, $today));
+        $roleTitle = $this->roleTitles($user);
+
+        return $page->through(fn (DatabaseNotification $notification): array => $this->row($notification, $codes, $today, $roleTitle));
     }
 
     /**
@@ -130,10 +143,25 @@ final class NotificationQuery
     }
 
     /**
+     * El nombre de cada puesto de `$user` como en su credencial, calculado la primera vez que un aviso lo pide.
+     *
+     * @return Closure(Role): string
+     */
+    private function roleTitles(User $user): Closure
+    {
+        $titles = [];
+
+        return function (Role $role) use ($user, &$titles): string {
+            return $titles[$role->value] ??= $this->titles->of($this->context->forUser($user), $role)['title'];
+        };
+    }
+
+    /**
      * @param  array<string, string>  $campusCodes
+     * @param  Closure(Role): string  $roleTitle
      * @return array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string, role: ?string}
      */
-    private function row(DatabaseNotification $notification, array $campusCodes, CarbonImmutable $today): array
+    private function row(DatabaseNotification $notification, array $campusCodes, CarbonImmutable $today, Closure $roleTitle): array
     {
         $message = NotificationMessage::fromArray($notification->data);
         $at = CarbonImmutable::parse($notification->created_at);
@@ -150,7 +178,7 @@ final class NotificationQuery
             'group' => $group,
             'group_label' => $groupLabel,
             'campus' => $message->campusId === null ? null : ($campusCodes[$message->campusId] ?? null),
-            'role' => $message->role?->label(),
+            'role' => $message->role === null ? null : $roleTitle($message->role),
         ];
     }
 

@@ -20,9 +20,10 @@ use Illuminate\Validation\ValidationException;
  *   Académica tampoco cambia de tipo ni se desactiva, porque AZ-S10 y AZ-S13 se apoyan en ella (supuesto por
  *   confirmar).
  * - La clave es única entre las unidades que no son departamentos académicos, también las borradas.
- * - D20: la clave de Servicios Escolares (OrgTree::SCHOOL_SERVICES) no cambia mientras la unidad tenga un jefe vigente
- *   o por empezar, porque su permiso «Por validar» aplica a esa clave (supuesto por confirmar); un cambio de tipo
- *   tampoco deja sin lugar a ese jefe (RoleAssignmentRules::kindNeeded()).
+ * - AZ-S16 (supuesto por confirmar): la clave de Servicios Escolares (OrgTree::SCHOOL_SERVICES) no cambia mientras la
+ *   unidad tenga un jefe vigente o por empezar, porque su permiso «Por validar» aplica a esa clave; un cambio de tipo
+ *   tampoco deja sin lugar a ese jefe (RoleAssignmentRules::kindNeeded()); y la Subdirección Académica no se mueve,
+ *   para que ningún jefe la tenga debajo de su unidad.
  * - Un ciclo se revisa leyendo la base al momento (no OrgTree, que se memoriza por petición); el trigger
  *   `org_units_no_cycle` es la última defensa.
  */
@@ -37,11 +38,18 @@ final class OrgUnitRules
             : null;
     }
 
+    /**
+     * Por qué la unidad no se mueve; nulo si puede. La Dirección es la raíz; un departamento académico se queda bajo la
+     * Subdirección Académica (AZ-S13), y esta no se mueve (AZ-S16): lo académico aplica a una unidad y a las que
+     * cuelgan de ella, así que debajo de otra unidad (Servicios Escolares, por ejemplo) le daría al jefe de esa unidad
+     * todos los departamentos académicos.
+     */
     public function moveBlocker(OrgUnit $unit): ?string
     {
         return match (true) {
             $unit->kind === OrgUnitKind::Direccion => 'La Dirección es la raíz: no se mueve.',
             $unit->kind === OrgUnitKind::DepartamentoAcademico => 'Un departamento académico no se mueve desde el Organigrama.',
+            $this->isAcademic($unit) => 'Nexus usa la Subdirección Académica: no se mueve.',
             default => null,
         };
     }
@@ -175,7 +183,7 @@ final class OrgUnitRules
 
     /**
      * Por qué la clave de la unidad no cambia a `$code`; nulo si puede. La de la Dirección y la de Subdirección
-     * Académica, nunca (AZ-S13); la de Servicios Escolares, mientras tenga un jefe vigente o por empezar (D20).
+     * Académica, nunca (AZ-S13); la de Servicios Escolares, mientras tenga un jefe vigente o por empezar (AZ-S16).
      */
     public function fixedCodeProblem(OrgUnit $unit, string $code): ?string
     {

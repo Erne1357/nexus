@@ -8,7 +8,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\OrgUnit;
 
 /**
- * El nombre y la descripción de un puesto para quien lo ocupa (D20: la credencial nombra su unidad): Role::titleOn() y
+ * El nombre y la descripción de un puesto para quien lo ocupa (AZ-02: la credencial nombra su unidad): Role::titleOn() y
  * Role::descriptionOn() con las unidades de sus nombramientos de ese puesto. Lo usan la credencial de la banda e Inicio;
  * «Actuando como» (RoleSummaryQuery) y las etiquetas de los nombramientos (AssignmentLabels) llaman a Role con las
  * unidades que ya leyeron.

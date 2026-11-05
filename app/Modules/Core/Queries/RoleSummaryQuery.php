@@ -12,7 +12,7 @@ use App\Modules\Core\Models\RoleAssignment;
 
 /**
  * El renglón de cada puesto en la credencial: «Coordinador de carrera · ISC, IGE (C2)». El nombre del puesto para quien
- * lo ocupa (Role::titleOn() con las unidades de sus nombramientos: «Jefe del Departamento de Servicios Escolares», D20)
+ * lo ocupa (Role::titleOn() con las unidades de sus nombramientos: «Jefe del Departamento de Servicios Escolares», AZ-02)
  * y, si sus nombramientos lo tienen, los nombres de sus unidades (se omite el que el nombre del puesto ya dice), los
  * códigos de sus carreras (los pone ScopeLabels; sin ellos, «N carreras») y sus campus entre paréntesis. Un puesto sin
  * alcance es solo su nombre.

@@ -41,7 +41,7 @@ enum FacilitiesPermission: string implements Permission
     }
 
     /**
-     * A cualquier unidad: ningún permiso del módulo depende de la unidad del puesto (D20).
+     * A cualquier unidad: ningún permiso del módulo depende de la unidad del puesto (AZ-S16).
      */
     public function appliesTo(): ?UnitApplicability
     {

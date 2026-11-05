@@ -205,8 +205,9 @@ it('lo bloqueado se queda deshabilitado con su motivo escrito', function () {
     $dom = domOf($panel);
 
     expect($dom->querySelector('[data-testid="unit-deactivate"]')->hasAttribute('disabled'))->toBeTrue()
-        ->and($dom->querySelector('[data-testid="unit-move"]')->hasAttribute('disabled'))->toBeFalse()
-        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toContain('Tiene 6 unidades hijas activas; muévelas o desactívalas primero.');
+        ->and($dom->querySelector('[data-testid="unit-move"]')->hasAttribute('disabled'))->toBeTrue()
+        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toContain('Tiene 6 unidades hijas activas; muévelas o desactívalas primero.')
+        ->toContain('Mover: Nexus usa la Subdirección Académica: no se mueve.');
 
     $panel->dispatch('org-unit-picked', id: $this->systems->id);
     $dom = domOf($panel);

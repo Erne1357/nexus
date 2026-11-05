@@ -57,7 +57,7 @@ enum Role: string
     }
 
     /**
-     * El nombre del puesto para quien lo ocupa sobre `$units` (D20, confirmado el 5 de noviembre de 2026: la credencial
+     * El nombre del puesto para quien lo ocupa sobre `$units` (AZ-02, confirmado el 5 de noviembre de 2026: la credencial
      * nombra su unidad). El jefe de departamento de una sola unidad que no es departamento académico la nombra: «Jefe
      * del Departamento de Servicios Escolares» (si el nombre de la unidad no empieza con «Departamento», se lo
      * antepone). Con varias unidades que no lo son, o mezcladas con departamentos académicos, «Jefe de departamento»
@@ -83,7 +83,7 @@ enum Role: string
     }
 
     /**
-     * Lo que el puesto hace en Nexus para quien lo ocupa sobre `$units`, para Inicio (D20): el jefe del Departamento de
+     * Lo que el puesto hace en Nexus para quien lo ocupa sobre `$units`, para Inicio (AZ-02): el jefe del Departamento de
      * Servicios Escolares solo valida las materias de la migración del SII que esperan semestre (D19); el de otra
      * unidad que no es departamento académico, lo de su unidad. Si alguna de sus unidades es un departamento
      * académico, o el puesto no es el de jefe de departamento, description().
@@ -99,6 +99,33 @@ enum Role: string
         return array_all($units, fn (array $unit): bool => $unit['code'] === OrgTree::SCHOOL_SERVICES)
             ? 'Asignas semestre a las materias de la migración del SII que esperan validación, en la pestaña «Por validar» de cada plan de estudios.'
             : 'Atiendes en Nexus lo que corresponde a tu unidad; sus pantallas aparecen en el menú.';
+    }
+
+    /**
+     * El nombre del puesto en una lista para elegirlo, sin persona ni unidad (el filtro de «Personas y puestos», «¿Quién
+     * ocupa un puesto?» y «Nombrar» en la ficha de la persona): el jefe de departamento es «Jefe de departamento»,
+     * porque lo ocupan los jefes de departamentos académicos y el de Servicios Escolares (AZ-02, AZ-S16); los demás,
+     * label(). Con una persona o una unidad, titleOn().
+     */
+    public function listLabel(): string
+    {
+        return $this === self::JefeDepartamento ? 'Jefe de departamento' : $this->label();
+    }
+
+    /**
+     * La pista del formulario «Nombrar»: qué alcance pide el puesto y si tiene un solo titular (AZ-S7). Nulo para el
+     * docente, que no se nombra ahí (AZ-S11).
+     */
+    public function appointHint(): ?string
+    {
+        return match ($this) {
+            self::Admin => 'Este puesto no tiene alcance: vale en todo el sistema.',
+            self::Subdireccion => 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.',
+            self::JefeDepartamento => 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.',
+            self::JefeProyectoDocente => 'Este puesto pide campus y departamento académico.',
+            self::Coordinador => 'Este puesto pide campus y carrera.',
+            self::Docente => null,
+        };
     }
 
     /**

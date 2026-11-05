@@ -14,7 +14,7 @@ use Livewire\Component;
  *
  * El área de la ruta es la de la entrada del menú de la pantalla (Navigation::forRoute). La
  * credencial muestra el perfil activo (Actor::activeRole()) con su nombre para quien lo ocupa (RoleTitleQuery: el jefe
- * de Servicios Escolares, «Jefe del Departamento de Servicios Escolares», D20), y el campus y el periodo activos.
+ * de Servicios Escolares, «Jefe del Departamento de Servicios Escolares», AZ-02), y el campus y el periodo activos.
  */
 new class extends Component
 {
