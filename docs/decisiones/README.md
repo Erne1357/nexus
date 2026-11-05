@@ -22,5 +22,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0016](0016-btree-gist-para-exclusiones-por-fecha.md) | Extensión `btree_gist` para restricciones de exclusión por rango de fechas (un jefe a la vez) | Aceptada | 2026-10-29 |
 | [0017](0017-catalog-validation-antes-de-academic-load.md) | CatalogValidation a la izquierda de AcademicLoad: la carga lee el estado de las revisiones de catálogo (HC-14) | Aceptada | 2026-11-01 |
 | [0018](0018-permisos-por-puesto-y-perfil-activo.md) | Permisos por módulo, puestos en código, nombramientos, árbol de unidades y perfil activo; sale spatie/permission | Aceptada | 2026-11-02 |
+| [0019](0019-pandas-para-perfilar-exportaciones-del-sii.md) | pandas en un contenedor sin red para perfilar las exportaciones del SII; solo herramienta de análisis, no dependencia de la app | Aceptada | 2026-11-05 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.
