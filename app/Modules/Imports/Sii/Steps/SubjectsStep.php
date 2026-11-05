@@ -6,9 +6,9 @@ use App\Modules\Imports\Sii\SiiBatch;
 use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Imports\Sii\SiiStep;
+use App\Modules\Imports\Sii\SiiStepOutOfOrder;
 use App\Modules\Imports\Sii\SubjectName;
 use App\Modules\Imports\Sii\SubjectPlacements;
-use LogicException;
 
 /**
  * Materias, especialidades y retícula (D8, D15, D16, D18; reglas-de-negocio.md "Reglas de datos"). Cada renglón de
@@ -16,7 +16,8 @@ use LogicException;
  * Nexus con `plan_for` (las excluidas del curado solo dejan un aviso por retícula) y la materia se une por su clave
  * oficial del TecNM (SubjectPlacements). Los renglones con estatus `N` no se migran (R13, supuesto por confirmar).
  *
- * De cada materia de Nexus: el nombre del catálogo del SII normalizado (SubjectName, R12); el tipo por
+ * De cada materia de Nexus: el nombre más frecuente entre sus claves del SII, normalizado (SubjectPlacements y
+ * SubjectName, R12); el tipo por
  * `tipo_materia` (1 básica, 3 especialidad, 2 y 4 complementaria, supuesto por confirmar), salvo Residencia
  * Profesional y Servicio Social, que se reconocen por su nombre; el departamento por `department_for_area` de su
  * área y, si ninguna de sus claves del SII tiene área con departamento, el de la carrera de su primer plan, con
@@ -67,11 +68,11 @@ final class SubjectsStep implements SiiStep
      *
      * @return array<string|int, mixed>
      *
-     * @throws LogicException si ese paso no corrió antes
+     * @throws SiiStepOutOfOrder si ese paso no corrió antes (por ejemplo, con `--only materias`)
      */
     private function map(SiiMigration $migration, string $key): array
     {
-        return $migration->remember($key, fn () => throw new LogicException("El paso materias necesita el mapa {$key}: corre antes los pasos organigrama y carreras."));
+        return $migration->remember($key, fn () => throw new SiiStepOutOfOrder($this->name(), $key, ['organigrama', 'carreras']));
     }
 
     /**
@@ -106,7 +107,7 @@ final class SubjectsStep implements SiiStep
      */
     private function placements(SiiMigration $migration, array $planFor, array $catalog, array &$incidents): array
     {
-        $tecnm = $this->tecnmKeys($migration);
+        $tecnm = $this->tecnmKeys($migration, $incidents);
         $excluded = [];
         $placements = [];
 
@@ -161,19 +162,34 @@ final class SubjectsStep implements SiiStep
     }
 
     /**
-     * La clave TecNM de cada lugar, por `"{carrera}/{retícula}/{materia}"`.
+     * La clave TecNM de cada lugar, por `"{carrera}/{retícula}/{materia}"`. Si el SII trae varias para el mismo lugar,
+     * queda la menor y se avisa.
      *
+     * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
      * @return array<string, string>
      */
-    private function tecnmKeys(SiiMigration $migration): array
+    private function tecnmKeys(SiiMigration $migration, array &$incidents): array
     {
-        $keys = [];
+        $found = [];
 
         foreach ($migration->export()->reader(SiiFile::MateriasClavesTecnm)->rows() as $row) {
             $code = mb_strtoupper(trim($row['clave_tecnm']));
 
             if ($code !== '') {
-                $keys[trim($row['carrera']).'/'.trim($row['reticula']).'/'.trim($row['materia'])] ??= $code;
+                $found[trim($row['carrera']).'/'.trim($row['reticula']).'/'.trim($row['materia'])][$code] = true;
+            }
+        }
+
+        $keys = [];
+        ksort($found, SORT_STRING);
+
+        foreach ($found as $place => $codes) {
+            $codes = array_map('strval', array_keys($codes));
+            sort($codes, SORT_STRING);
+            $keys[(string) $place] = $codes[0];
+
+            if (count($codes) > 1) {
+                $incidents[] = $this->warning((string) $place, "El SII trae varias claves TecNM para la materia del lugar {$place} (".implode(', ', $codes)."): queda {$codes[0]}.");
             }
         }
 
@@ -194,7 +210,7 @@ final class SubjectsStep implements SiiStep
      * Un renglón de la plantilla `subjects` por lugar en la retícula, con el departamento y el tipo resueltos por
      * materia de Nexus.
      *
-     * @param  array<string, array{plan: string, career: string, modality: string, key: string, materia: string, code: string, credits: string, theory: string, practice: string, semester: int, specialty: string, materias: list<string>}>  $grid
+     * @param  array<string, array{plan: string, career: string, materia: string, code: string, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, materias: list<string>}>  $grid
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog
      * @param  array<string|int, string|null>  $departmentForArea
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
@@ -235,7 +251,7 @@ final class SubjectsStep implements SiiStep
             $rows[] = [
                 'plan' => $placement['plan'],
                 'code' => $placement['code'],
-                'name' => SubjectName::title($catalog[$placement['materia']]['name']),
+                'name' => $placement['name'],
                 'semester' => (string) $placement['semester'],
                 'theory_hours' => $placement['theory'],
                 'practice_hours' => $placement['practice'],

@@ -13,9 +13,11 @@ use App\Modules\Imports\Sii\RunSiiMigration;
 use App\Modules\Imports\Sii\SiiExport;
 use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
+use App\Modules\Imports\Sii\SiiStepOutOfOrder;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Tests\Unit\Imports\Sii\SiiFixtures;
@@ -146,12 +148,13 @@ function writeSiiSubjects(string $dir, array $catalog, array $placements, array 
  * Corre el paso con los mapas de los pasos anteriores armados a mano (`department_for_area` con llaves numéricas,
  * como lo deja el paso del organigrama).
  *
+ * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
  * @return array{migration: SiiMigration, subjects: array{rows: list<array<string, scalar|null>>, incidents: list<array{level: string, ref: string, message: string}>}, subject_aliases: array{rows: list<array<string, scalar|null>>, incidents: list<array{level: string, ref: string, message: string}>}}
  */
-function subjectsStepRun(string $dir, string $curated): array
+function subjectsStepRun(string $dir, string $curated, array $planFor = SUBJECTS_STEP_PLAN_FOR): array
 {
     $migration = new SiiMigration(SiiExport::open($dir), $curated);
-    $migration->remember('plan_for', fn (): array => SUBJECTS_STEP_PLAN_FOR);
+    $migration->remember('plan_for', fn (): array => $planFor);
     $migration->remember('plan_version', fn (): array => SUBJECTS_STEP_VERSIONS);
     $migration->remember('department_for_area', fn (): array => [110100 => '110100', 110600 => '110600', 999999 => null]);
     $out = ['migration' => $migration];
@@ -319,17 +322,145 @@ it('empata el nombre de cualquiera de las claves del SII que se unieron en una m
     writeSiiSubjects($this->dir, [
         ['K1', '1', '110100', 'FUNDAMENTOS DE INVESDTIGACION'],
         ['K2', '1', '110100', 'FUNDAMENTOS DE INVESTIGACION'],
-        ['OLDF', '1', '110100', 'FUNDAMENTOS DE INVESTIGACION'],
+        ['K3', '1', '110100', 'FUNDAMENTOS DE INVESTIGACION'],
+        ['OLDF', '1', '110100', 'FUNDAMENTOS DE INVESDTIGACION'],
     ], [
         ['A', '1', 'K1', '4', '2', '2', '1', '', 'A'],
         ['A2', '2', 'K2', '4', '2', '2', '1', '', 'A'],
+        ['B', '1', 'K3', '4', '2', '2', '2', '', 'A'],
         ['A', '3', 'OLDF', '4', '2', '2', '0', '', 'A'],
-    ], [['A', '1', 'K1', 'ACC-0906'], ['A2', '2', 'K2', 'ACC-0906']]);
+    ], [['A', '1', 'K1', 'ACC-0906'], ['A2', '2', 'K2', 'ACC-0906'], ['B', '1', 'K3', 'ACC-0906']]);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+    $warning = collect($subjects['incidents'])->first(fn (array $i): bool => $i['ref'] === 'ACC-0906');
+
+    expect(subjectsStepRow($subjects, 'AAA-2010-224', 'ACC-0906')['name'])->toBe('Fundamentos de Investigación')
+        ->and(subjectsStepRow($subjects, 'BBB-2010-300', 'ACC-0906')['name'])->toBe('Fundamentos de Investigación')
+        ->and($warning['message'])->toContain('Fundamentos de Invesdtigacion')
+        ->and(subjectsStepRow($subjects, 'AAA-2004-100', 'OLDF')['semester'])->toBe('1');
+});
+
+it('en un empate de nombres toma el del plan más reciente', function () {
+    writeSiiSubjects($this->dir, [['N1', '1', '110100', 'DIBUJO TECNICO'], ['N2', '1', '110100', 'DIBUJO INDUSTRIAL']], [
+        ['C', '1', 'N2', '4', '2', '2', '1', '', 'A'],
+        ['A', '1', 'N1', '4', '2', '2', '1', '', 'A'],
+    ], [['C', '1', 'N2', 'DIB-0002'], ['A', '1', 'N1', 'DIB-0002']]);
 
     $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
 
-    expect(subjectsStepRow($subjects, 'AAA-2010-224', 'ACC-0906')['name'])->toBe('Fundamentos de Invesdtigacion')
-        ->and(subjectsStepRow($subjects, 'AAA-2004-100', 'OLDF')['semester'])->toBe('1');
+    expect(subjectsStepRow($subjects, 'AAA-2010-224', 'DIB-0002')['name'])->toBe('Dibujo Tecnico')
+        ->and(subjectsStepRow($subjects, 'CCC-2009-201', 'DIB-0002')['name'])->toBe('Dibujo Tecnico');
+});
+
+it('funde la misma materia de dos variantes sin clave TecNM', function () {
+    writeSiiSubjects($this->dir, [['VZ', '1', '110100', 'DIBUJO'], ['VA', '1', '110100', 'DIBUJO ']], [
+        ['A2', '2', 'VA', '4', '2', '2', '3', '', 'A'],
+        ['A', '1', 'VZ', '4', '2', '2', '2', '', 'A'],
+    ]);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $placements = collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224');
+    $subjectFor = $run['migration']->remember('subject_for', fn () => throw new LogicException('debía estar armado'));
+
+    expect($placements->pluck('code')->all())->toBe(['VZ'])
+        ->and($placements->first()['semester'])->toBe('2')
+        ->and(collect($run['subject_aliases']['rows'])->keyBy('code')['VA'])->toBe(['code' => 'VA', 'subject' => 'VZ', 'plan' => 'AAA-2010-224'])
+        ->and($subjectFor['VA'])->toBe('VZ')
+        ->and(subjectsStepMessages($run['subjects']))->toContain('AAA-2010-224/VZ');
+
+    $withoutPresencial = subjectsStepRun($this->dir, $this->curated, [...SUBJECTS_STEP_PLAN_FOR, 'A/1' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'mixta']]);
+
+    expect(collect($withoutPresencial['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->all())->toBe(['VA']);
+});
+
+it('funde la variante sin clave TecNM en la materia con clave TecNM', function () {
+    writeSiiSubjects($this->dir, [['W1', '1', '110100', 'DIBUJO'], ['W2', '1', '110100', 'DIBUJO']], [
+        ['A', '1', 'W1', '4', '2', '2', '1', '', 'A'],
+        ['A2', '2', 'W2', '4', '2', '2', '1', '', 'A'],
+    ], [['A2', '2', 'W2', 'DIB-0001']]);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $aliases = collect($run['subject_aliases']['rows'])->keyBy('code');
+
+    expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->all())->toBe(['DIB-0001'])
+        ->and($aliases['W1']['subject'])->toBe('DIB-0001')
+        ->and($aliases['W2']['subject'])->toBe('DIB-0001');
+});
+
+it('no funde materias con el mismo nombre dentro de una retícula y lo reporta', function () {
+    writeSiiSubjects($this->dir, [['D1', '1', '110100', 'DIBUJO'], ['D2', '1', '110100', 'DIBUJO'], ['D3', '1', '110100', 'DIBUJO']], [
+        ['A', '1', 'D2', '4', '2', '2', '1', '', 'A'],
+        ['A', '1', 'D1', '4', '2', '2', '1', '', 'A'],
+        ['A2', '2', 'D3', '4', '2', '2', '1', '', 'A'],
+    ]);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $warnings = collect($run['subjects']['incidents'])->filter(fn (array $i): bool => $i['ref'] === 'A/1');
+
+    expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['D1', 'D2'])
+        ->and(collect($run['subject_aliases']['rows'])->keyBy('code')['D3']['subject'])->toBe('D1')
+        ->and($warnings)->toHaveCount(1)
+        ->and($warnings->first()['message'])->toContain('«Dibujo» 2 veces')->toContain('A/1')->toContain('D1, D2')->toContain('revisar');
+});
+
+it('no funde variantes con créditos distintos', function () {
+    writeSiiSubjects($this->dir, [
+        ['X1', '1', '110100', 'DIBUJO'], ['X2', '1', '110100', 'DIBUJO'],
+        ['Y1', '3', '110100', 'DIBUJO AVANZADO'], ['Y2', '3', '110100', 'DIBUJO AVANZADO'],
+    ], [
+        ['A', '1', 'X1', '4', '2', '2', '1', '', 'A'],
+        ['A2', '2', 'X2', '5', '3', '2', '1', '', 'A'],
+        ['A', '1', 'Y1', '4', '2', '2', '7', 'E1', 'A'],
+        ['A2', '2', 'Y2', '4', '2', '2', '7', 'E2', 'A'],
+    ], [], [['E1', 'A', '1', 'PRESENCIAL'], ['E2', 'A2', '2', 'EAD']]);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+
+    expect(collect($subjects['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['X1', 'X2', 'Y1', 'Y2']);
+});
+
+it('no depende del orden de los renglones del SII', function () {
+    $planFor = [...SUBJECTS_STEP_PLAN_FOR, 'A3/4' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'mixta']];
+    $catalog = [['Q1', '1', '110100', 'DIBUJO'], ['Q2', '1', '110100', 'DIBUJO']];
+    $placements = [['A3', '4', 'Q2', '4', '2', '2', '3', '', 'A'], ['A2', '2', 'Q1', '4', '2', '2', '2', '', 'A']];
+    $tecnm = [['A3', '4', 'Q2', 'QQQ-0001'], ['A2', '2', 'Q1', 'QQQ-0001']];
+
+    writeSiiSubjects($this->dir, $catalog, $placements, $tecnm);
+    $first = subjectsStepRun($this->dir, $this->curated, $planFor);
+    writeSiiSubjects($this->dir, array_reverse($catalog), array_reverse($placements), array_reverse($tecnm));
+    $second = subjectsStepRun($this->dir, $this->curated, $planFor);
+
+    expect(subjectsStepRow($first['subjects'], 'AAA-2010-224', 'QQQ-0001')['semester'])->toBe('2')
+        ->and(subjectsStepMessages($first['subjects']))->toContain('A2/2')
+        ->and($second['subjects'])->toBe($first['subjects'])
+        ->and($second['subject_aliases'])->toBe($first['subject_aliases']);
+});
+
+it('avisa si el SII trae dos claves TecNM para el mismo lugar y se queda con la menor', function () {
+    writeSiiSubjects($this->dir, SUBJECTS_STEP_CATALOG, SUBJECTS_STEP_PLACEMENTS, [['A', '1', 'CD1', 'ACF-0999'], ...SUBJECTS_STEP_TECNM], SUBJECTS_STEP_SPECIALTIES);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+    $warning = collect($subjects['incidents'])->first(fn (array $i): bool => $i['ref'] === 'A/1/CD1');
+
+    expect(subjectsStepRow($subjects, 'AAA-2010-224', 'ACF-0901'))->not->toBeNull()
+        ->and(collect($subjects['rows'])->pluck('code'))->not->toContain('ACF-0999')
+        ->and($warning['message'])->toContain('ACF-0901')->toContain('ACF-0999');
+});
+
+it('sin los mapas de organigrama y carreras se detiene con un mensaje claro', function () {
+    $migration = new SiiMigration(SiiExport::open($this->dir), $this->curated);
+
+    expect(fn () => iterator_to_array((new SubjectsStep)->batches($migration)))
+        ->toThrow(SiiStepOutOfOrder::class, 'el paso materias necesita que corran antes organigrama y carreras');
+
+    Storage::fake('imports');
+    User::factory()->admin()->create(['username' => 'migrador']);
+    app()->instance('sii.steps', [OrgChartStep::class, CareersStep::class, SubjectsStep::class]);
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador', '--only' => ['materias']]);
+
+    expect($exit)->toBe(1)
+        ->and(Artisan::output())->toContain('el paso materias necesita que corran antes organigrama y carreras')->not->toContain('error inesperado');
 });
 
 it('deja pendiente la materia sin semestre que no empata', function () {
