@@ -1,0 +1,333 @@
+aula,incluir,campus,edificio,nombre,tipo,capacidad,departamento,sesiones_desde_20251,nota
+SA3,si,C1,-,,aula,30,,8,edificio por verificar (ubicación del SII ambigua)
+RESIDE,no,C1,1,,aula,100,,35,ficticia/virtual/EAD/cubículo
+EAD106,no,C1,100,,aula,35,,11,ficticia/virtual/EAD/cubículo
+EAD112,no,C1,100,,aula,30,,1,ficticia/virtual/EAD/cubículo
+EAD120,no,C1,100,,aula,30,,6,ficticia/virtual/EAD/cubículo
+EAD124,no,C1,100,,aula,30,,3,ficticia/virtual/EAD/cubículo
+EAD125,no,C1,100,,aula,35,,4,ficticia/virtual/EAD/cubículo
+EAD132,no,C1,100,,aula,35,,18,ficticia/virtual/EAD/cubículo
+EAD134,no,C1,100,,aula,30,,10,ficticia/virtual/EAD/cubículo
+EAD135,no,C1,100,,aula,35,,8,ficticia/virtual/EAD/cubículo
+EAD136,no,C1,100,,aula,35,,14,ficticia/virtual/EAD/cubículo
+EAD207,no,C1,100,,aula,30,,9,ficticia/virtual/EAD/cubículo
+401,si,C1,13,,aula,35,,658,
+402,si,C1,13,,aula,35,,514,
+404,si,C1,13,,aula,36,,526,
+405,si,C1,13,,aula,40,,752,
+EAD401,no,C1,13,,aula,35,,4,ficticia/virtual/EAD/cubículo
+EAD402,no,C1,13,,aula,35,,19,ficticia/virtual/EAD/cubículo
+EAD307,no,C1,300,,aula,35,,5,ficticia/virtual/EAD/cubículo
+EAD308,no,C1,300,,aula,25,,3,ficticia/virtual/EAD/cubículo
+EAD404,no,C1,400,,aula,35,,5,ficticia/virtual/EAD/cubículo
+EAD706,no,C1,700,,aula,35,,2,ficticia/virtual/EAD/cubículo
+resid,no,C1,900,,aula,99,,20,ficticia/virtual/EAD/cubículo
+105,si,C1,A,,aula,35,,664,
+106,si,C1,A,,aula,35,,344,
+108,si,C1,A,,aula,35,,399,
+112,si,C1,A,,aula,35,,468,
+113,si,C1,A,,aula,40,,269,
+115,si,C1,A,,aula,40,,1622,
+116,si,C1,A,,aula,40,,947,
+117,si,C1,A,,aula,40,,1663,
+118,si,C1,A,,aula,30,,883,
+119,si,C1,A,,aula,40,,1420,
+120,si,C1,A,,aula,42,,571,
+121,si,C1,A,,aula,40,,254,
+122,si,C1,A,,aula,35,,738,
+123,si,C1,A,,aula,25,,474,
+124,si,C1,A,,aula,40,,697,
+125,si,C1,A,,aula,30,,300,
+126,si,C1,A,,aula,35,,161,
+128,si,C1,A,,aula,30,,451,
+130,si,C1,A,,aula,25,,288,
+132,si,C1,A,,aula,40,,396,
+133,si,C1,A,,aula,40,,14,
+134,si,C1,A,,aula,40,,282,
+135,si,C1,A,,aula,30,,203,
+136,si,C1,A,,aula,41,,278,
+138,si,C1,A,,aula,15,,125,
+202,si,C1,A,,aula,35,,237,
+203,si,C1,A,,aula,35,,292,
+204,si,C1,A,,aula,35,,282,
+205,si,C1,A,,aula,35,,407,
+206,si,C1,A,,aula,35,,220,
+207,si,C1,A,,aula,35,,409,
+208,si,C1,A,,aula,35,,315,
+212,si,C1,A,,aula,35,,214,
+213,si,C1,A,,aula,35,,538,
+217,si,C1,A,,aula,40,,251,
+218,si,C1,A,,aula,30,,211,
+219,si,C1,A,,aula,40,,185,
+220,si,C1,A,,aula,40,,414,
+221,si,C1,A,,aula,40,,275,
+222,si,C1,A,,aula,40,,280,
+223,si,C1,A,,aula,40,,239,
+224,si,C1,A,,aula,40,,291,
+225,si,C1,A,,aula,40,,273,
+226,si,C1,A,,aula,40,,305,
+228,si,C1,A,,aula,40,,576,
+229,si,C1,A,,aula,35,,202,
+230,si,C1,A,,aula,40,,233,
+231,si,C1,A,,aula,40,,185,
+232,si,C1,A,,aula,30,,241,
+233,si,C1,A,,aula,20,,106,
+234,si,C1,A,,aula,20,,187,
+235,si,C1,A,,aula,40,,222,
+236,si,C1,A,,aula,40,,230,
+237,si,C1,A,,aula,40,,318,
+238,si,C1,A,,aula,30,,193,
+239,si,C1,A,,aula,40,,256,
+240,si,C1,A,,aula,40,,178,
+EAD 11,no,C1,A,,aula,40,,1,ficticia/virtual/EAD/cubículo
+EAD108,no,C1,A,,aula,35,,3,ficticia/virtual/EAD/cubículo
+EAD113,no,C1,A,,aula,40,,13,ficticia/virtual/EAD/cubículo
+EAD115,no,C1,A,,aula,40,,14,ficticia/virtual/EAD/cubículo
+EAD117,no,C1,A,,aula,40,,15,ficticia/virtual/EAD/cubículo
+EAD119,no,C1,A,,aula,40,,2,ficticia/virtual/EAD/cubículo
+EAD121,no,C1,A,,aula,40,,5,ficticia/virtual/EAD/cubículo
+EAD123,no,C1,A,,aula,25,,3,ficticia/virtual/EAD/cubículo
+EAD126,no,C1,A,,aula,35,,1,ficticia/virtual/EAD/cubículo
+EAD203,no,C1,A,,aula,35,,5,ficticia/virtual/EAD/cubículo
+EAD221,no,C1,A,,aula,40,,2,ficticia/virtual/EAD/cubículo
+EAD238,no,C1,A,,aula,30,,2,ficticia/virtual/EAD/cubículo
+Audiov,si,C1,AUDIOVISUAL,,auditorio,90,,60,
+EAD405,no,C1,AUDIOVISUAL,,aula,400,,6,ficticia/virtual/EAD/cubículo
+GLOBAL,no,C1,AULAS,,aula,12,,26,ficticia/virtual/EAD/cubículo
+NEV1,si,C1,B,,aula,30,,3,edificio por verificar (ubicación del SII ambigua)
+BIBLIO,no,C1,BIBLIOTECA,,aula,8,,168,ficticia/virtual/EAD/cubículo
+S/A10,si,C1,C,,aula,30,,94,edificio por verificar (ubicación del SII ambigua)
+S/A9,si,C1,C,,aula,30,,14,edificio por verificar (ubicación del SII ambigua)
+S/S,si,C1,C,,aula,40,,287,edificio por verificar (ubicación del SII ambigua)
+S/S2,si,C1,C,,aula,40,,80,edificio por verificar (ubicación del SII ambigua)
+S/S3,si,C1,C,,aula,40,,65,edificio por verificar (ubicación del SII ambigua)
+S/S4,si,C1,C,,aula,40,,19,edificio por verificar (ubicación del SII ambigua)
+S/S5,si,C1,C,,aula,40,,40,edificio por verificar (ubicación del SII ambigua)
+S/S7,si,C1,C,,aula,40,,4,edificio por verificar (ubicación del SII ambigua)
+EADLab,no,C1,CENTRO DE CÓMPUTO,,laboratorio,35,,3,ficticia/virtual/EAD/cubículo
+LabCon,si,C1,CENTRO DE CÓMPUTO,,laboratorio,35,,196,
+LabCB,si,C1,CIENCIAS BÁSICAS,,laboratorio,30,,15,
+310,si,C1,CIENCIAS BÁSICAS,,laboratorio,35,,283,
+403,si,C1,CIENCIAS BÁSICAS,,aula,40,,872,
+EAD403,no,C1,CIENCIAS BÁSICAS,,aula,40,,5,ficticia/virtual/EAD/cubículo
+Lab CB,si,C1,CIENCIAS BÁSICAS,,laboratorio,30,,32,
+CMPS I,si,C2,CAMPUS II,,aula,35,,3,
+LM1,si,C1,D,,aula,35,,176,edificio por verificar (ubicación del SII ambigua)
+LM2,si,C1,D,,aula,35,,201,edificio por verificar (ubicación del SII ambigua)
+L M 1,si,C1,D2,,aula,35,,8,edificio por verificar (ubicación del SII ambigua)
+HUMAN,si,C1,DIVISIÓN DE ESTUDIOS,,aula,30,,19,
+EAD,no,C1,EAD,,aula,30,,643,ficticia/virtual/EAD/cubículo
+CEA,no,C1,ECONOMICO,,aula,30,,4,ficticia/virtual/EAD/cubículo
+IGE,no,C1,ECONOMICO,,aula,1,,27,ficticia/virtual/EAD/cubículo; capacidad 1 en el SII
+604,si,C1,ELÉCTRICA Y ELECTRÓNICA,,aula,10,,192,
+SS,si,C1,ELÉCTRICA Y ELECTRÓNICA,,aula,25,,6,
+B50,si,C1,G,,aula,30,,6,
+LAT,si,C1,G,,aula,35,,367,
+restad,si,C1,G,,aula,50,,1,
+GYM,no,C1,GIMNASIO,,aula,1,,1,ficticia/virtual/EAD/cubículo; capacidad 1 en el SII
+G911,si,C1,GUILLOT,,aula,25,,496,
+EAD802,no,C1,IND,,aula,30,,2,ficticia/virtual/EAD/cubículo
+EAD803,no,C1,IND,,aula,30,,2,ficticia/virtual/EAD/cubículo
+EAD806,no,C1,IND,,aula,40,,1,ficticia/virtual/EAD/cubículo
+EAD901,no,C1,IND,,aula,35,,2,ficticia/virtual/EAD/cubículo
+EAD904,no,C1,IND,,aula,30,,2,ficticia/virtual/EAD/cubículo
+EAD907,no,C1,IND,,aula,35,,4,ficticia/virtual/EAD/cubículo
+910,si,C1,INGENIERÍA INDUSTRIAL,,aula,24,,239,
+912,si,C1,INGENIERÍA INDUSTRIAL,,aula,28,,246,
+LIT,si,C1,INGENIERÍA INDUSTRIAL,,aula,41,,47,
+301,si,C1,J,,aula,35,,1004,
+302,si,C1,J,,aula,25,,309,
+303,si,C1,J,,aula,30,,1264,
+304,si,C1,J,,aula,40,,771,
+305,si,C1,J,,aula,40,,1230,
+306,si,C1,J,,aula,35,,772,
+307,si,C1,J,,aula,40,,1046,
+308,si,C1,J,,aula,40,,1217,
+309,si,C1,J,,aula,25,,247,
+EAD301,no,C1,J,,aula,35,,2,ficticia/virtual/EAD/cubículo
+EAD302,no,C1,J,,aula,25,,1,ficticia/virtual/EAD/cubículo
+EAD303,no,C1,J,,aula,30,,4,ficticia/virtual/EAD/cubículo
+EAD304,no,C1,J,,aula,40,,4,ficticia/virtual/EAD/cubículo
+EAD305,no,C1,J,,aula,40,,6,ficticia/virtual/EAD/cubículo
+EAD306,no,C1,J,,aula,35,,6,ficticia/virtual/EAD/cubículo
+RIGE,si,C1,LARA,,aula,40,,1,
+999,si,C1,MECATRÓNICA,,aula,35,,180,
+501,si,C1,O,,aula,20,,670,
+502,si,C1,O,,laboratorio,20,,838,
+503,si,C1,O,,aula,20,,862,
+504,si,C1,O,,aula,10,,330,
+801,si,C1,P,,aula,40,,243,
+802,si,C1,P,,aula,40,,308,
+803,si,C1,P,,aula,35,,194,
+804,si,C1,P,,aula,40,,351,
+805,si,C1,P,,aula,40,,272,
+806,si,C1,P,,aula,42,,265,
+807,si,C1,P,,aula,40,,292,
+808,si,C1,P,,aula,40,,195,
+951,si,C1,POSGRADO,,aula,30,,218,
+952,si,C1,POSGRADO,,aula,30,,190,
+953,si,C1,POSGRADO,,aula,30,,221,
+954,si,C1,POSGRADO,,aula,30,,122,
+955,no,C1,POSGRADO,,aula,1,,3,ficticia/virtual/EAD/cubículo; capacidad 1 en el SII; inactiva en el SII
+956,no,C1,POSGRADO,,aula,1,,13,ficticia/virtual/EAD/cubículo; capacidad 1 en el SII; inactiva en el SII
+957,si,C1,POSGRADO,,aula,30,,199,
+958,si,C1,POSGRADO,,aula,30,,9,
+959,si,C1,POSGRADO,,aula,20,,16,
+960,si,C1,POSGRADO,,aula,20,,5,
+961,si,C1,POSGRADO,,aula,20,,7,
+962,si,C1,POSGRADO,,aula,20,,2,
+CP-01,no,C1,POSGRADO,,aula,10,,6,ficticia/virtual/EAD/cubículo
+CP-02,no,C1,POSGRADO,,aula,10,,1,ficticia/virtual/EAD/cubículo
+CP-05,no,C1,POSGRADO,,aula,10,,9,ficticia/virtual/EAD/cubículo
+CP-06,no,C1,POSGRADO,,aula,10,,5,ficticia/virtual/EAD/cubículo
+CP-07,no,C1,POSGRADO,,aula,10,,5,ficticia/virtual/EAD/cubículo
+CP-08,no,C1,POSGRADO,,aula,10,,15,ficticia/virtual/EAD/cubículo
+CP-09,no,C1,POSGRADO,,aula,10,,4,ficticia/virtual/EAD/cubículo
+CP-11,no,C1,POSGRADO,,aula,10,,11,ficticia/virtual/EAD/cubículo
+CP-12,no,C1,POSGRADO,,aula,10,,16,ficticia/virtual/EAD/cubículo
+CP-13,no,C1,POSGRADO,,aula,10,,18,ficticia/virtual/EAD/cubículo
+CP-14,no,C1,POSGRADO,,aula,10,,3,ficticia/virtual/EAD/cubículo
+CP-15,no,C1,POSGRADO,,aula,10,,4,ficticia/virtual/EAD/cubículo
+CP-16,no,C1,POSGRADO,,aula,10,,9,ficticia/virtual/EAD/cubículo
+CP-18,no,C1,POSGRADO,,aula,10,,1,ficticia/virtual/EAD/cubículo
+CP-19,no,C1,POSGRADO,,aula,10,,12,ficticia/virtual/EAD/cubículo
+CP-20,no,C1,POSGRADO,,aula,10,,9,ficticia/virtual/EAD/cubículo
+CP-22,no,C1,POSGRADO,,aula,10,,14,ficticia/virtual/EAD/cubículo
+CP-24,no,C1,POSGRADO,,aula,10,,20,ficticia/virtual/EAD/cubículo
+CP-27,no,C1,POSGRADO,,aula,10,,1,ficticia/virtual/EAD/cubículo
+CP-28,no,C1,POSGRADO,,aula,10,,3,ficticia/virtual/EAD/cubículo
+CP-29,no,C1,POSGRADO,,aula,10,,7,ficticia/virtual/EAD/cubículo
+CP-30,no,C1,POSGRADO,,aula,10,,12,ficticia/virtual/EAD/cubículo
+CP-35,no,C1,POSGRADO,,aula,10,,8,ficticia/virtual/EAD/cubículo
+CP-36,no,C1,POSGRADO,,aula,10,,24,ficticia/virtual/EAD/cubículo
+CP-37,no,C1,POSGRADO,,aula,10,,22,ficticia/virtual/EAD/cubículo
+CP-38,no,C1,POSGRADO,,aula,10,,8,ficticia/virtual/EAD/cubículo
+posgra,si,C1,POSGRADO,,aula,30,,58,
+502.5,si,C1,SIN EDIFICIO,,aula,20,,161,edificio por verificar (ubicación del SII ambigua)
+603,no,C1,SIN EDIFICIO,,aula,0,,190,ficticia/virtual/EAD/cubículo; capacidad 0 en el SII
+A000,si,C1,SIN EDIFICIO,,aula,40,,5,edificio por verificar (ubicación del SII ambigua)
+AUDII,si,C1,SIN EDIFICIO,,auditorio,30,,40,edificio por verificar (ubicación del SII ambigua)
+AUDIOV,si,C1,SIN EDIFICIO,,auditorio,80,,60,edificio por verificar (ubicación del SII ambigua)
+AUDI_Y,si,C1,SIN EDIFICIO,,auditorio,25,,60,edificio por verificar (ubicación del SII ambigua)
+AV1,si,C1,SIN EDIFICIO,,aula,25,,60,edificio por verificar (ubicación del SII ambigua)
+C04,no,C1,SIN EDIFICIO,,aula,10,,1,ficticia/virtual/EAD/cubículo
+C07,no,C1,SIN EDIFICIO,,aula,10,,7,ficticia/virtual/EAD/cubículo
+EAD105,no,C1,SIN EDIFICIO,,aula,40,,13,ficticia/virtual/EAD/cubículo
+EAD116,no,C1,SIN EDIFICIO,,aula,35,,1,ficticia/virtual/EAD/cubículo
+EAD118,no,C1,SIN EDIFICIO,,aula,35,,6,ficticia/virtual/EAD/cubículo
+EAD122,no,C1,SIN EDIFICIO,,aula,35,,5,ficticia/virtual/EAD/cubículo
+EAD205,no,C1,SIN EDIFICIO,,aula,30,,9,ficticia/virtual/EAD/cubículo
+EAD206,no,C1,SIN EDIFICIO,,aula,35,,10,ficticia/virtual/EAD/cubículo
+EAD213,no,C1,SIN EDIFICIO,,aula,42,,2,ficticia/virtual/EAD/cubículo
+EAD225,no,C1,SIN EDIFICIO,,aula,35,,3,ficticia/virtual/EAD/cubículo
+EAD226,no,C1,SIN EDIFICIO,,aula,30,,3,ficticia/virtual/EAD/cubículo
+EAD232,no,C1,SIN EDIFICIO,,aula,30,,3,ficticia/virtual/EAD/cubículo
+EAD237,no,C1,SIN EDIFICIO,,aula,30,,3,ficticia/virtual/EAD/cubículo
+EAD240,no,C1,SIN EDIFICIO,,aula,30,,2,ficticia/virtual/EAD/cubículo
+EAD310,no,C1,SIN EDIFICIO,,aula,35,,1,ficticia/virtual/EAD/cubículo
+LAB A5,si,C1,SIN EDIFICIO,,laboratorio,40,,27,edificio por verificar (ubicación del SII ambigua)
+NEV2,si,C1,SIN EDIFICIO,,aula,30,,2,edificio por verificar (ubicación del SII ambigua)
+SL,no,C1,SIN EDIFICIO,,aula,35,,3,ficticia/virtual/EAD/cubículo
+VI1,no,C1,SIN EDIFICIO,,aula,30,,57,ficticia/virtual/EAD/cubículo
+VI2,no,C1,SIN EDIFICIO,,aula,30,,70,ficticia/virtual/EAD/cubículo
+VI3,no,C1,SIN EDIFICIO,,aula,30,,32,ficticia/virtual/EAD/cubículo
+VI4,no,C1,SIN EDIFICIO,,aula,30,,4,ficticia/virtual/EAD/cubículo
+VI5,no,C1,SIN EDIFICIO,,aula,30,,6,ficticia/virtual/EAD/cubículo
+VI6,no,C1,SIN EDIFICIO,,aula,30,,31,ficticia/virtual/EAD/cubículo
+VIGE1,si,C1,SIN EDIFICIO,,aula,40,,27,edificio por verificar (ubicación del SII ambigua)
+VS1,no,C1,SIN EDIFICIO,,aula,30,,62,ficticia/virtual/EAD/cubículo
+VS2,no,C1,SIN EDIFICIO,,aula,30,,79,ficticia/virtual/EAD/cubículo
+VS3,no,C1,SIN EDIFICIO,,aula,30,,33,ficticia/virtual/EAD/cubículo
+VS4,no,C1,SIN EDIFICIO,,aula,30,,5,ficticia/virtual/EAD/cubículo
+VS5,no,C1,SIN EDIFICIO,,aula,30,,4,ficticia/virtual/EAD/cubículo
+VS6,no,C1,SIN EDIFICIO,,aula,30,,5,ficticia/virtual/EAD/cubículo
+YDA,si,C1,SIN EDIFICIO,,aula,30,,4,edificio por verificar (ubicación del SII ambigua)
+901,no,C1,T,,aula,1,,285,ficticia/virtual/EAD/cubículo; capacidad 1 en el SII
+902,si,C1,T,,aula,40,,258,
+903,si,C1,T,,aula,25,,389,
+904,si,C1,T,,aula,40,,227,
+905,si,C1,T,,aula,40,,359,
+906,si,C1,T,,aula,35,,511,
+907,si,C1,T,,aula,35,,309,
+910,si,C1,T,,aula,30,,239,
+SS1,si,C1,T,,aula,40,,53,
+A.GUIL,si,C1,TITULACION,,aula,15,,1,
+701,si,C1,U,,aula,42,,442,
+702,si,C1,U,,aula,30,,117,
+703,si,C1,U,,aula,35,,250,
+704,si,C1,U,,aula,30,,247,
+705,si,C1,U,,aula,35,,334,
+706,si,C1,U,,aula,40,,267,
+707,si,C1,U,,laboratorio,35,,117,
+S/S11,si,C1,X,,aula,40,,15,edificio por verificar (ubicación del SII ambigua)
+S/S8,si,C1,X,,aula,40,,1,edificio por verificar (ubicación del SII ambigua)
+S/S9,si,C1,X,,aula,40,,10,edificio por verificar (ubicación del SII ambigua)
+SA1,si,C1,X,,aula,40,,67,edificio por verificar (ubicación del SII ambigua)
+SA2,si,C1,X,,aula,40,,21,edificio por verificar (ubicación del SII ambigua)
+1,si,C2,CAMPUS II,,aula,40,,214,
+10,si,C2,CAMPUS II,,aula,40,,135,
+11,si,C2,CAMPUS II,,aula,40,,41,
+12,si,C2,CAMPUS II,,aula,40,,29,
+13,si,C2,CAMPUS II,,aula,30,,14,
+14,si,C2,CAMPUS II,,aula,30,,22,
+15,si,C2,CAMPUS II,,aula,30,,5,
+16,si,C2,CAMPUS II,,aula,30,,5,
+2,si,C2,CAMPUS II,,aula,40,,8,
+21,si,C2,CAMPUS II,,aula,30,,10,
+22,si,C2,CAMPUS II,,aula,40,,5,
+3,si,C2,CAMPUS II,,aula,40,,8,
+4,si,C2,CAMPUS II,,aula,40,,5,
+7,si,C2,CAMPUS II,,aula,40,,1,
+8,si,C2,CAMPUS II,,aula,40,,3,
+A1,si,C2,CAMPUS II,,aula,40,,70,
+A2,si,C2,CAMPUS II,,aula,40,,75,
+A3,si,C2,CAMPUS II,,aula,40,,58,
+A4,si,C2,CAMPUS II,,aula,40,,58,
+A5,si,C2,CAMPUS II,,aula,40,,73,
+A6,si,C2,CAMPUS II,,aula,40,,48,
+A7,si,C2,CAMPUS II,,aula,40,,76,
+AUD A,si,C2,CAMPUS II,,auditorio,30,,27,
+B1,si,C2,CAMPUS II,,aula,40,,58,
+B10,si,C2,CAMPUS II,,aula,40,,64,
+B11,si,C2,CAMPUS II,,aula,40,,67,
+B12,si,C2,CAMPUS II,,aula,40,,61,
+B13,si,C2,CAMPUS II,,aula,40,,49,
+B14,si,C2,CAMPUS II,,aula,40,,35,
+B15,si,C2,CAMPUS II,,aula,20,,12,
+B2,si,C2,CAMPUS II,,aula,40,,70,
+B3,si,C2,CAMPUS II,,aula,50,,69,
+B4,si,C2,CAMPUS II,,aula,40,,50,
+B5,si,C2,CAMPUS II,,aula,40,,61,
+B6,si,C2,CAMPUS II,,aula,40,,56,
+B7,si,C2,CAMPUS II,,aula,40,,61,
+B8,si,C2,CAMPUS II,,aula,40,,61,
+B9,si,C2,CAMPUS II,,aula,40,,53,
+CMP2,si,C2,CAMPUS II,,aula,50,,8,
+CMPS 2,si,C2,CAMPUS II,,aula,35,,4,
+D1,si,C2,CAMPUS II,,aula,30,,51,
+D11,si,C2,CAMPUS II,,aula,35,,32,
+D12,si,C2,CAMPUS II,,aula,35,,38,
+D14,si,C2,CAMPUS II,,aula,35,,38,
+D15,si,C2,CAMPUS II,,aula,35,,18,
+D16,si,C2,CAMPUS II,,aula,35,,18,
+D2,si,C2,CAMPUS II,,aula,30,,51,
+D3,si,C2,CAMPUS II,,aula,30,,47,
+D4,si,C2,CAMPUS II,,aula,30,,65,
+D5,si,C2,CAMPUS II,,aula,30,,2,
+D6,si,C2,CAMPUS II,,aula,35,,59,
+D7,si,C2,CAMPUS II,,aula,35,,56,
+D8,si,C2,CAMPUS II,,aula,35,,26,
+D9,si,C2,CAMPUS II,,aula,35,,12,
+LAB A1,si,C2,CAMPUS II,,laboratorio,30,,41,
+LAB A2,si,C2,CAMPUS II,,laboratorio,21,,54,
+LAB A3,si,C2,CAMPUS II,,laboratorio,18,,49,
+LAB A4,si,C2,CAMPUS II,,laboratorio,18,,27,
+S/A1,si,C2,CAMPUS II,,aula,40,,128,
+S/A2,si,C2,CAMPUS II,,aula,40,,33,
+S/A3,si,C2,CAMPUS II,,aula,40,,63,
+S/A4,si,C2,CAMPUS II,,aula,40,,9,
+S/A5,si,C2,CAMPUS II,,aula,40,,10,
+S/aula,si,C2,CAMPUS II,,aula,40,,26,
+X,si,C2,CAMPUS II,,aula,35,,21,
+Y,si,C2,CAMPUS II,,aula,35,,8,
+Z,si,C2,CAMPUS II,,aula,35,,11,

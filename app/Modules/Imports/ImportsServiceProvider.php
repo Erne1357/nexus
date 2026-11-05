@@ -12,6 +12,7 @@ use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
+use App\Modules\Imports\Sii\Steps\RoomsStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
@@ -66,6 +67,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         OrgChartStep::class,
         CareersStep::class,
         SubjectsStep::class,
+        RoomsStep::class,
     ];
 
     public function register(): void
