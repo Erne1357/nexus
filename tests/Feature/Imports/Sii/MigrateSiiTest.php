@@ -196,6 +196,48 @@ it('las incidencias no traen el valor crudo de la fila', function () {
     expect($text)->not->toContain('VALOR-PERSONAL')->toContain('departamentos.csv,4,code,error');
 });
 
+it('un fallo de limpieza no tapa el motivo original ni se imprime crudo', function () {
+    app()->instance('sii.steps', [ExplodingStep::class]);
+    mkdir("{$this->dir}/_incidencias.csv");
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('paso explota')->not->toContain('VALOR-PERSONAL-123')
+        ->not->toContain('fopen')->not->toContain('Failed to open');
+});
+
+it('un fallo de limpieza sin otro error sale con mensaje fijo', function () {
+    mkdir("{$this->dir}/_incidencias.csv");
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)->and($output)->toContain('limpieza')->not->toContain('fopen')->not->toContain('Failed to open');
+});
+
+it('cuenta los lotes anteriores aplicados cuando un lote posterior falla', function () {
+    app()->instance('sii.steps', [FakeDepartmentsStep::class, BadTemplateStep::class]);
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+
+    expect($exit)->toBe(1)->and(Artisan::output())->toContain('ya se aplicaron (1)');
+});
+
+final class BadTemplateStep implements SiiStep
+{
+    public function name(): string
+    {
+        return 'mala';
+    }
+
+    public function batches(SiiMigration $migration): iterable
+    {
+        yield new SiiBatch('no_existe', 'x.csv', [['code' => 'A']]);
+    }
+}
+
 final class ExplodingStep implements SiiStep
 {
     public function name(): string

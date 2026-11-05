@@ -37,7 +37,7 @@ use Throwable;
  * siempre al terminar.
  *
  * @throws SiiContractBroken antes de escribir nada, si la exportación no cumple el contrato
- * @throws SiiMigrationStopped si un paso o lote falla
+ * @throws SiiMigrationStopped si un paso o lote falla o la limpieza final falla; el mensaje es fijo y la causa original queda en getPrevious()
  */
 final class RunSiiMigration
 {
@@ -52,7 +52,8 @@ final class RunSiiMigration
      * @param  list<string>  $only  nombres de pasos; vacío corre todos
      *
      * @throws SiiContractBroken
-     * @throws InvalidArgumentException campus desconocido o plantilla inexistente
+     * @throws SiiMigrationStopped
+     * @throws InvalidArgumentException si `--only` nombra un paso que no existe
      */
     public function handle(string $dir, User $user, bool $dryRun, array $only = []): SiiMigrationReport
     {
@@ -78,6 +79,8 @@ final class RunSiiMigration
             DB::beginTransaction();
         }
 
+        $pending = null;
+
         try {
             foreach ($steps as $step) {
                 if ($only !== [] && ! in_array($step->name(), $only, true)) {
@@ -92,34 +95,55 @@ final class RunSiiMigration
                 }
             }
         } catch (SiiMigrationStopped $stopped) {
-            throw $stopped;
+            $pending = new SiiMigrationStopped($stopped->step, $stopped->batchFile, $stopped->cause, count($reports), $stopped->getPrevious());
         } catch (Throwable $exception) {
             report($exception);
+            $pending = new SiiMigrationStopped($current[0] ?? '-', $current[1], $this->causeOf($exception), count($reports), $exception);
+        }
 
-            throw new SiiMigrationStopped($current[0] ?? '-', $current[1], $this->causeOf($exception), count($reports), $exception);
-        } finally {
-            if ($dryRun) {
-                config(['queue.default' => $queue]);
-            }
+        $cleanup = $this->cleanUp($dir, $dryRun, $queue, $level, $stored, $incidents);
 
-            try {
-                if ($dryRun) {
-                    DB::rollBack($level);
-                }
-            } finally {
-                try {
-                    foreach ($stored as $path) {
-                        if ($dryRun) {
-                            Storage::disk('imports')->delete($path);
-                        }
-                    }
-                } finally {
-                    $incidents->write(rtrim($dir, '/').'/_incidencias.csv');
-                }
-            }
+        if ($pending !== null) {
+            throw $pending;
+        }
+
+        if ($cleanup !== null) {
+            throw new SiiMigrationStopped('-', null, 'falló la limpieza ('.class_basename($cleanup).')', count($reports), $cleanup);
         }
 
         return new SiiMigrationReport($reports, $incidents->count());
+    }
+
+    /**
+     * Revierte el ensayo, borra lo subido y reescribe las incidencias. Cada paso corre aunque otro falle; un
+     * fallo se reporta al log y se devuelve el primero, sin tapar un error pendiente.
+     *
+     * @param  list<string>  $stored
+     */
+    private function cleanUp(string $dir, bool $dryRun, mixed $queue, int $level, array $stored, Incidents $incidents): ?Throwable
+    {
+        $first = null;
+        $steps = [
+            fn () => $dryRun ? config(['queue.default' => $queue]) : null,
+            fn () => $dryRun ? DB::rollBack($level) : null,
+            function () use ($dryRun, $stored): void {
+                foreach ($dryRun ? $stored : [] as $path) {
+                    Storage::disk('imports')->delete($path);
+                }
+            },
+            fn () => $incidents->write(rtrim($dir, '/').'/_incidencias.csv'),
+        ];
+
+        foreach ($steps as $step) {
+            try {
+                $step();
+            } catch (Throwable $failure) {
+                report($failure);
+                $first ??= $failure;
+            }
+        }
+
+        return $first;
     }
 
     /**

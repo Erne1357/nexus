@@ -10,6 +10,7 @@ use App\Modules\Imports\Sii\SiiContractBroken;
 use App\Modules\Imports\Sii\SiiMigrationStopped;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * Migra la exportación del SII a Nexus por el motor de importación. Con `--dry-run` corre todo y lo revierte.
@@ -63,6 +64,11 @@ final class MigrateSii extends Command
             return self::FAILURE;
         } catch (InvalidArgumentException $exception) {
             $this->components->error($exception->getMessage());
+
+            return self::FAILURE;
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->components->error('La migración se detuvo por un error inesperado ('.class_basename($exception).'). Detalle en el log.');
 
             return self::FAILURE;
         }
