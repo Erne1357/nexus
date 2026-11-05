@@ -4,6 +4,7 @@ namespace App\Modules\Imports\Templates;
 
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Rules\OrgUnitRules;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,12 @@ use Illuminate\Validation\Rule;
  *
  * Nunca crea ni modifica una unidad de tipo `departamento_academico`: esa unidad nace con el departamento y solo se
  * edita desde él (ADR-0018, triggers de `departments`). Una fila con esa clave o ese tipo es error.
+ *
+ * Una unidad existente solo se mueve o cambia de tipo si el Organigrama lo permite: OrgUnitRules decide, con el mismo
+ * mensaje que muestra la pantalla (`moveBlocker()` en `parent`, `kindProblem()` en `kind`; AZ-S13 y AZ-S16: la
+ * Dirección y la Subdirección Académica no se mueven ni cambian de tipo, y Servicios Escolares no cambia de tipo
+ * mientras su jefe lo necesite). Un alta tampoco puede ser una segunda Dirección. La madre puede estar inactiva o ser
+ * un departamento académico (las coordinaciones del SII cuelgan de él), a diferencia de la pantalla.
  *
  * `active` funciona como en departamentos y docentes: un alta con «No» nace inactiva; un cambio nunca reactiva ni
  * desactiva. No ofrece "desactivar faltantes": el archivo no trae el organigrama completo.
@@ -104,9 +111,19 @@ class OrgUnitsTemplate extends ImportTemplate
 
         $issues = parent::check($row, $context, $issues);
         $existing = OrgUnit::query()->where('code', $row['code'])->first();
+        $rules = app(OrgUnitRules::class);
+        $kind = OrgUnitKind::from($row['kind']);
+
+        if (($existing === null || $existing->kind !== $kind) && ($problem = $rules->kindProblem($kind, $existing)) !== null) {
+            return $issues->withError('kind', $problem);
+        }
 
         if ($existing === null) {
             return $issues;
+        }
+
+        if ($existing->parent_id !== $parent->getKey() && ($problem = $rules->moveBlocker($existing)) !== null) {
+            return $issues->withError('parent', $problem);
         }
 
         if ($this->descendsFrom($parent, $existing)) {
