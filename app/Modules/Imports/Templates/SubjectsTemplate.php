@@ -2,14 +2,17 @@
 
 namespace App\Modules\Imports\Templates;
 
+use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectAlias;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * «Materias por plan» del SII (tarea 1.9): cada renglón es una materia en la retícula de un plan, con su clave,
@@ -30,6 +33,11 @@ use Illuminate\Support\Str;
  * materia, una especialidad o un lugar en la retícula borrados son error. No ofrece "desactivar faltantes": quitar
  * una materia de la retícula cambia el avance de los alumnos y se hace a mano. Al terminar el lote recalcula el
  * avance, porque cambió la retícula. Busca cada plan y departamento una vez por corrida.
+ *
+ * `sii_code` es la clave con que el SII conoce la materia en ese plan: se guarda como alias de la materia
+ * (`subject_aliases`), y un alias que ya apunta a otra materia es error; a la misma, no hace nada. `kind` es el tipo
+ * (`SubjectKind`): se escribe al dar de alta y, en un cambio, solo si el archivo lo trae. Ambos, confirmado el 5 de
+ * noviembre de 2026 (D15); que el alias y el tipo se comporten así es un supuesto por confirmar.
  */
 class SubjectsTemplate extends ImportTemplate
 {
@@ -68,6 +76,8 @@ class SubjectsTemplate extends ImportTemplate
             'department' => 'departamento',
             'specialty' => 'especialidad',
             'specialty_name' => 'nombre de especialidad',
+            'sii_code' => 'clave del SII',
+            'kind' => 'tipo',
         ];
     }
 
@@ -113,6 +123,8 @@ class SubjectsTemplate extends ImportTemplate
             'department' => ['required', 'string'],
             'specialty' => ['nullable', 'string', 'max:30'],
             'specialty_name' => ['nullable', 'string', 'max:255'],
+            'sii_code' => ['nullable', 'string', 'max:20'],
+            'kind' => ['nullable', Rule::enum(SubjectKind::class)],
         ];
     }
 
@@ -120,7 +132,7 @@ class SubjectsTemplate extends ImportTemplate
     {
         $row = parent::normalize($row);
 
-        foreach (['plan', 'code', 'department', 'specialty'] as $field) {
+        foreach (['plan', 'code', 'department', 'specialty', 'sii_code'] as $field) {
             $row[$field] = self::asText($row[$field]);
             $row[$field] = is_string($row[$field]) ? Str::upper($row[$field]) : $row[$field];
         }
@@ -129,6 +141,9 @@ class SubjectsTemplate extends ImportTemplate
             $value = self::asText($row[$field]);
             $row[$field] = is_string($value) && ctype_digit($value) ? (int) $value : $row[$field];
         }
+
+        $kind = self::asText($row['kind']);
+        $row['kind'] = is_string($kind) ? (SubjectKind::tryFrom(self::slug($kind))?->value ?? $kind) : $kind;
 
         return $row;
     }
@@ -148,7 +163,13 @@ class SubjectsTemplate extends ImportTemplate
             'theory_hours' => $row['theory_hours'],
             'practice_hours' => $row['practice_hours'],
             'credits' => $row['credits'],
+            ...($row['kind'] === null ? [] : ['kind' => $row['kind']]),
         ])->save();
+
+        $alias = $row['sii_code'] === null ? null : SubjectAlias::query()->firstOrCreate(
+            ['code' => $row['sii_code']],
+            ['subject_id' => $subject->getKey(), 'study_plan_id' => $plan->getKey()],
+        );
 
         $specialty = $row['specialty'] === null ? null : Specialty::query()->firstOrCreate(
             ['study_plan_id' => $plan->getKey(), 'code' => $row['specialty']],
@@ -166,7 +187,7 @@ class SubjectsTemplate extends ImportTemplate
         unset($this->subjectOnly[$placement->getKey()]);
 
         if (! $placement->wasRecentlyCreated && ! $placement->wasChanged()
-            && ($subject->wasRecentlyCreated || $subject->wasChanged() || $specialty?->wasRecentlyCreated || $specialty?->wasChanged())) {
+            && ($subject->wasRecentlyCreated || $subject->wasChanged() || $specialty?->wasRecentlyCreated || $specialty?->wasChanged() || $alias?->wasRecentlyCreated)) {
             $this->subjectOnly[$placement->getKey()] = true;
         }
 
@@ -209,6 +230,12 @@ class SubjectsTemplate extends ImportTemplate
 
         if ($subject !== null && ! $subject->is_active) {
             $issues = $issues->withWarning('code', "La materia {$row['code']} está inactiva: se actualizan sus datos, pero sigue inactiva.");
+        }
+
+        $alias = $row['sii_code'] === null ? null : SubjectAlias::query()->where('code', $row['sii_code'])->first(['subject_id']);
+
+        if ($alias !== null && $alias->subject_id !== $subject?->getKey()) {
+            $issues = $issues->withError('sii_code', "La clave del SII {$row['sii_code']} ya es de otra materia.");
         }
 
         $twin = collect($this->codesByName()[mb_strtolower($row['name'])] ?? [])->first(fn (string $code): bool => $code !== $row['code']);

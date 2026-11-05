@@ -124,3 +124,32 @@ it('un plan inactivo se actualiza y sigue inactivo, y uno borrado es solo error 
 it('no ofrece desactivar faltantes: los planes son globales y la exportación puede ser de un campus', function () {
     expect($this->template->deactivatesMissing())->toBeFalse();
 });
+
+it('un plan importado como nuevo ingreso queda actual y el anterior deja de serlo con advertencia', function () {
+    $old = StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2004-296', 'is_current' => true]);
+    $row = studyPlanRow(['intake' => 'Sí']);
+
+    $issues = $this->template->validate($row, $this->context);
+    $plan = $this->template->apply($row, $this->context);
+
+    expect($issues->errors)->toBe([])
+        ->and($issues->warnings)->toBe(['intake' => ['El plan ISIC-2004-296 deja de ser el actual de la carrera ISIC.']])
+        ->and($plan->fresh()->is_current)->toBeTrue()
+        ->and($old->fresh()->is_current)->toBeFalse();
+});
+
+it('dos planes de nuevo ingreso de la misma carrera en un archivo: el posterior es error', function () {
+    $first = studyPlanRow(['intake' => 'Sí']);
+    $second = studyPlanRow(['code' => 'ISIC-2004-296', 'intake' => 'Sí']);
+
+    expect($this->template->validate($first, $this->context)->errors)->toBe([])
+        ->and($this->template->validate($second, $this->context)->errors)->toHaveKey('intake');
+});
+
+it('un plan sin nuevo ingreso no cambia cuál es el actual', function () {
+    $current = StudyPlan::factory()->for($this->career)->create(['code' => 'ISIC-2004-296', 'is_current' => true]);
+
+    $plan = $this->template->apply(studyPlanRow(['intake' => 'No']), $this->context);
+
+    expect($plan->fresh()->is_current)->toBeFalse()->and($current->fresh()->is_current)->toBeTrue();
+});

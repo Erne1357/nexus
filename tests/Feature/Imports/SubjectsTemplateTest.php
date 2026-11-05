@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectAlias;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\Actions\ValidateImportBatch;
 use App\Modules\Imports\Enums\RowStatus;
@@ -240,4 +241,25 @@ it('al terminar el lote recalcula el avance de los alumnos, porque cambió la re
 
 it('no ofrece desactivar faltantes: quitar una materia de la retícula cambia el avance y se hace a mano', function () {
     expect($this->template->deactivatesMissing())->toBeFalse();
+});
+
+it('un alias que ya apunta a otra materia es error; a la misma, no hace nada', function () {
+    $other = Subject::factory()->create(['code' => 'OTRA-0001']);
+    SubjectAlias::create(['subject_id' => $other->id, 'code' => 'ACF0901']);
+
+    expect($this->template->validate(subjectRow(['sii_code' => 'ACF0901']), $this->context)->errors)->toHaveKey('sii_code');
+
+    $own = Subject::factory()->create(['code' => 'ACF-0901', 'department_id' => $this->department->id]);
+    SubjectAlias::create(['subject_id' => $own->id, 'code' => 'ACF0902']);
+
+    expect($this->template->validate(subjectRow(['sii_code' => 'ACF0902']), $this->context)->errors)->toBe([]);
+});
+
+it('el tipo de materia debe ser uno de Nexus y un cambio no lo pisa con vacío', function () {
+    expect($this->template->validate(subjectRow(['kind' => 'Quizá']), $this->context)->errors)->toHaveKey('kind');
+
+    $this->template->apply(subjectRow(['kind' => 'Especialidad']), $this->context);
+    $this->template->apply(subjectRow(['kind' => null]), $this->context);
+
+    expect(Subject::query()->where('code', 'ACF-0901')->firstOrFail()->kind->value)->toBe('especialidad');
 });

@@ -15,9 +15,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Plan de estudios de una carrera: una retícula por versión. `code` es la clave natural. Los inactivos se
- * conservan porque hay alumnos cursándolos.
+ * conservan porque hay alumnos cursándolos. Una carrera tiene un solo plan actual (`is_current`), el que se asigna a
+ * los alumnos de nuevo ingreso.
  */
-#[Fillable(['career_id', 'code', 'name', 'version', 'semesters_count', 'total_credits', 'is_active', 'valid_from'])]
+#[Fillable(['career_id', 'code', 'name', 'version', 'semesters_count', 'total_credits', 'is_active', 'is_current', 'valid_from'])]
 #[UseFactory(StudyPlanFactory::class)]
 class StudyPlan extends Model
 {
@@ -33,6 +34,7 @@ class StudyPlan extends Model
             'semesters_count' => 'integer',
             'total_credits' => 'integer',
             'is_active' => 'boolean',
+            'is_current' => 'boolean',
             'valid_from' => 'immutable_date',
         ];
     }
