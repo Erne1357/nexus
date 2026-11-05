@@ -175,13 +175,24 @@ describe('pantalla del plan', function () {
         $tab->set('semester', '7')->call('place')->assertHasErrors('semester');
         expect($tab->errors()->get('semester'))->toBe(['El semestre debe ser de 1 a 4: el plan tiene 4 semestres.']);
 
-        $this->plan->update(['is_active' => false]);
+        $this->modern->subject->update(['is_active' => false]);
         $tab->set('semester', '3')->call('place')->assertHasErrors('pending');
-        expect($tab->errors()->get('pending'))->toBe(['El plan IIND-2004 está inactivo: actívalo antes de validar sus materias.']);
+        expect($tab->errors()->get('pending'))->toBe(['AE22 está inactiva en el catálogo: actívala antes de ponerla en una retícula.']);
 
-        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-error"]')))->toBe('El plan IIND-2004 está inactivo: actívalo antes de validar sus materias.')
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-error"]')))->toBe('AE22 está inactiva en el catálogo: actívala antes de ponerla en una retícula.')
             ->and($this->modern->fresh()->resolved_at)->toBeNull();
         $tab->assertSet('showDrawer', true);
+    });
+
+    it('D22: en un plan inactivo también se colocan las materias por validar', function () {
+        $this->plan->update(['is_active' => false]);
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 2)->call('place');
+
+        $tab->assertHasNoErrors();
+        expect(lastToastOf($tab))->toMatchArray(['type' => 'success', 'title' => '«Física Moderna» agregada al semestre 2'])
+            ->and($this->modern->fresh()->resolved_at)->not->toBeNull()
+            ->and(StudyPlanSubject::query()->where('study_plan_id', $this->plan->id)->where('subject_id', $this->modern->subject_id)->value('semester'))->toBe(2);
     });
 
     it('si otra sesión ya la resolvió, lo dice y la quita de la bandeja', function () {

@@ -17,7 +17,10 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * el semestre, cuándo y quién (`attributes`) y el estado anterior, sin resolver (`old`), todo en una transacción. Quién puede lo decide StudyPlanPolicy (`validatePlacements`) antes de llamarla.
  *
  * - Un pendiente ya resuelto no se vuelve a resolver.
- * - R23: un plan borrado o inactivo es un error sobre `pending`, sin tocar nada.
+ * - R23: un plan borrado es un error sobre `pending`, sin tocar nada.
+ * - D22 (confirmado el 5 de noviembre de 2026): uno de un plan inactivo se resuelve igual, porque la retícula de un
+ *   plan viejo sigue sirviendo para el kárdex de sus egresados. PlaceSubject no pide plan activo, así que esto no
+ *   abre nada en el editor de la retícula.
  * - R23 (supuesto por confirmar): si la materia ya está en la retícula del plan (alguien la puso después de la
  *   migración), el pendiente queda resuelto sin crear otro lugar ni moverla, y la bitácora dice en qué semestre estaba;
  *   devuelve ese lugar sin cambios (ni `wasRecentlyCreated` ni `wasChanged()`). Una materia que se quitó de la
@@ -61,7 +64,7 @@ final class ResolvePendingPlacement
     }
 
     /**
-     * El plan del pendiente, bloqueado para compartir, si se le pueden poner materias: sin borrar y activo (R23).
+     * El plan del pendiente, bloqueado para compartir, si no está borrado (R23); activo o no (D22).
      *
      * @throws ValidationException sobre `pending`
      */
@@ -71,10 +74,6 @@ final class ResolvePendingPlacement
 
         if ($plan->trashed()) {
             throw ValidationException::withMessages(['pending' => "El plan {$plan->code} ya no existe."]);
-        }
-
-        if (! $plan->is_active) {
-            throw ValidationException::withMessages(['pending' => "El plan {$plan->code} está inactivo: actívalo antes de validar sus materias."]);
         }
 
         return $plan;
