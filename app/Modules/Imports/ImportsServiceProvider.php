@@ -12,6 +12,7 @@ use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
+use App\Modules\Imports\Sii\Steps\SubjectsStep;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
 use App\Modules\Imports\Templates\EvaluationsTemplate;
@@ -23,6 +24,7 @@ use App\Modules\Imports\Templates\PrerequisitesTemplate;
 use App\Modules\Imports\Templates\RoomsTemplate;
 use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\StudyPlansTemplate;
+use App\Modules\Imports\Templates\SubjectAliasesTemplate;
 use App\Modules\Imports\Templates\SubjectsTemplate;
 use App\Modules\Imports\Templates\TeacherHistoryTemplate;
 use App\Modules\Imports\Templates\TeachersTemplate;
@@ -43,6 +45,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         CareersTemplate::class,
         StudyPlansTemplate::class,
         SubjectsTemplate::class,
+        SubjectAliasesTemplate::class,
         PrerequisitesTemplate::class,
         StudentsTemplate::class,
         KardexTemplate::class,
@@ -62,6 +65,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
     public const array SII_STEPS = [
         OrgChartStep::class,
         CareersStep::class,
+        SubjectsStep::class,
     ];
 
     public function register(): void

@@ -22,8 +22,9 @@ use App\Modules\Imports\Sii\SiiStep;
  * valores personales): la oferta por campus, el plan vigente y el plan de nuevo ingreso (el que más nuevo
  * ingreso recibió en el último periodo de admisión regular, supuesto por confirmar).
  *
- * Recuerda `plan_for`: `"{carrera}/{retícula}"` del SII → plan, carrera y modalidad de Nexus, solo de lo incluido.
- * Entrega dos lotes, en este orden: `careers` y `study_plans`.
+ * Recuerda `plan_for`: `"{carrera}/{retícula}"` del SII → plan, carrera y modalidad de Nexus, solo de lo incluido; y
+ * `plan_version`: clave del plan de Nexus → su versión (texto vacío si no se sabe). Entrega dos lotes, en este orden:
+ * `careers` y `study_plans`.
  */
 final class CareersStep implements SiiStep
 {
@@ -47,10 +48,11 @@ final class CareersStep implements SiiStep
         $this->checkContract($plans, $careers, array_keys($siiRows));
 
         $planFor = $migration->remember('plan_for', fn (): array => $this->planFor($plans));
+        $versions = $migration->remember('plan_version', fn (): array => $this->versions($planFor, $siiRows));
         $facts = $this->studentFacts($migration, $planFor);
 
         yield $this->careersBatch($plans, $careers, $planFor, $facts);
-        yield $this->plansBatch($planFor, $siiRows, $facts);
+        yield $this->plansBatch($planFor, $versions, $facts);
     }
 
     /**
@@ -171,6 +173,28 @@ final class CareersStep implements SiiStep
     }
 
     /**
+     * La versión de cada plan de Nexus, por su clave (version()).
+     *
+     * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
+     * @param  array<string, list<string>>  $siiRows
+     * @return array<string, string>
+     */
+    private function versions(array $planFor, array $siiRows): array
+    {
+        $keys = [];
+        foreach ($planFor as $key => $info) {
+            $keys[$info['plan']][] = (string) $key;
+        }
+
+        $versions = [];
+        foreach ($keys as $code => $planKeys) {
+            $versions[(string) $code] = $this->version((string) $code, $planKeys, $siiRows);
+        }
+
+        return $versions;
+    }
+
+    /**
      * Recorre una vez a los alumnos y agrega: campus por carrera de Nexus, retícula con alumnos activos y nuevo
      * ingreso por periodo regular y retícula. Un campus que no es `1` ni `2` queda contado, sin valores personales.
      *
@@ -258,10 +282,10 @@ final class CareersStep implements SiiStep
 
     /**
      * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
-     * @param  array<string, list<string>>  $siiRows
+     * @param  array<string, string>  $versions
      * @param  array{campuses: array<string, array<string, true>>, unknownCampuses: array<string, int>, active: array<string, true>, entrants: array<string, array<string, int>>}  $facts
      */
-    private function plansBatch(array $planFor, array $siiRows, array $facts): SiiBatch
+    private function plansBatch(array $planFor, array $versions, array $facts): SiiBatch
     {
         $period = $facts['entrants'] === [] ? null : (string) max(array_map('strval', array_keys($facts['entrants'])));
         $entrants = $period === null ? [] : $facts['entrants'][$period];
@@ -304,7 +328,7 @@ final class CareersStep implements SiiStep
                 'code' => (string) $code,
                 'career' => $plan['career'],
                 'name' => '',
-                'version' => $this->version((string) $code, $plan['keys'], $siiRows),
+                'version' => $versions[(string) $code],
                 'current' => $hasActive || isset($intake[$code]) ? 'Sí' : 'No',
                 'intake' => isset($intake[$code]) ? 'Sí' : 'No',
             ];

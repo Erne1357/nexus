@@ -36,6 +36,8 @@ use Throwable;
  * un ensayo. Cualquier fallo se reporta como SiiMigrationStopped, sin valores. `_incidencias.csv` se reescribe
  * siempre al terminar.
  *
+ * Los catálogos curados se leen de `Sii/Curated/`; las pruebas pasan otra carpeta como `$curatedDir`.
+ *
  * @throws SiiContractBroken antes de escribir nada, si la exportación no cumple el contrato
  * @throws SiiMigrationStopped si un paso o lote falla o la limpieza final falla; el mensaje es fijo y la causa original queda en getPrevious()
  */
@@ -46,6 +48,7 @@ final class RunSiiMigration
         private readonly ValidateImportBatch $validate,
         private readonly ApplyImportBatch $apply,
         private readonly TemplateRegistry $templates,
+        private readonly string $curatedDir = __DIR__.'/Curated',
     ) {}
 
     /**
@@ -66,7 +69,7 @@ final class RunSiiMigration
             throw new InvalidArgumentException('Paso desconocido: '.implode(', ', $unknown).'. Pasos válidos: '.implode(', ', $names).'.');
         }
 
-        $migration = new SiiMigration($export, __DIR__.'/Curated');
+        $migration = new SiiMigration($export, $this->curatedDir);
         $incidents = new Incidents;
         $reports = [];
         $stored = [];
@@ -147,12 +150,13 @@ final class RunSiiMigration
     }
 
     /**
-     * Una causa fija: nunca el mensaje de la excepción, que puede traer valores. Solo SiiCuratedMismatch, que solo nombra claves.
+     * Una causa fija: nunca el mensaje de la excepción, que puede traer valores. Solo SiiCuratedMismatch, que solo nombra
+     * claves, y SiiStepOutOfOrder, que solo nombra pasos y mapas.
      */
     private function causeOf(Throwable $exception): string
     {
         return match (true) {
-            $exception instanceof SiiCuratedMismatch => $exception->getMessage(),
+            $exception instanceof SiiCuratedMismatch, $exception instanceof SiiStepOutOfOrder => $exception->getMessage(),
             $exception instanceof InvalidArgumentException => 'campus o plantilla desconocidos',
             default => 'error inesperado ('.class_basename($exception).')',
         };

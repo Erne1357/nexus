@@ -136,6 +136,15 @@ it('marca como actual el plan con nuevo ingreso', function () {
         ->and($plans->count())->toBe(6);
 });
 
+it('recuerda la versión de cada plan para los pasos siguientes', function () {
+    $migration = new SiiMigration(SiiExport::open($this->dir), $this->curated);
+    iterator_to_array((new CareersStep)->batches($migration));
+
+    expect($migration->remember('plan_version', fn () => throw new LogicException('debía estar armado')))
+        ->toMatchArray(['AAA-2010-224' => '2010', 'AAA-2004-100' => '2004', 'DDD-IS-80-160' => '1980'])
+        ->not->toHaveKey('XXX-2010-999');
+});
+
 it('marca como no vigente un plan sin alumnos activos', function () {
     $plans = collect(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'])->keyBy('code');
 
