@@ -14,9 +14,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Una materia que la migración del SII no pudo poner en la retícula de un plan porque no tiene semestre (D18):
  * espera a que Servicios Escolares le asigne uno (D19). Una vez por plan y materia. Resuelta, conserva su fila con
- * `resolved_at` y `resolved_by`; no tiene borrado lógico (supuesto por confirmar).
+ * `resolved_at` y `resolved_by`; no tiene borrado lógico (supuesto por confirmar). `sii_grid` es la retícula del SII
+ * de la que salió (`carrera/retícula`).
  */
-#[Fillable(['study_plan_id', 'subject_id', 'specialty_id', 'source', 'note', 'resolved_at', 'resolved_by'])]
+#[Fillable(['study_plan_id', 'subject_id', 'specialty_id', 'source', 'sii_grid', 'note', 'resolved_at', 'resolved_by'])]
 #[UseFactory(StudyPlanSubjectPendingFactory::class)]
 class StudyPlanSubjectPending extends Model
 {

@@ -10,6 +10,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 
@@ -30,6 +31,17 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     public function permissions(): array
     {
         return [AcademicPermission::class];
+    }
+
+    /**
+     * El jefe de departamento valida las materias por validar de la migración del SII; el permiso declara la unidad y
+     * StudyPlanPolicy lo pregunta sobre Servicios Escolares, así que solo lo ejerce el jefe de esa unidad (D19).
+     */
+    public function grants(): array
+    {
+        return [
+            Role::JefeDepartamento->value => [AcademicPermission::PlacementValidate],
+        ];
     }
 
     public function navigation(): array

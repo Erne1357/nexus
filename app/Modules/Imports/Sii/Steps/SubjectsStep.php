@@ -27,7 +27,7 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  *
  * Entrega tres lotes, en este orden: `subjects` (sin `sii_code`), `pending_placements` (los lugares sin semestre
  * que no empataron con ninguna materia, D18 y D19: la materia se da de alta y el lugar queda en la lista de
- * pendientes de Servicios Escolares) y `subject_aliases`, con cada clave del SII de cada lugar emitido o pendiente,
+ * pendientes de Servicios Escolares, con la retícula del SII de la que salió en `sii_grid`) y `subject_aliases`, con cada clave del SII de cada lugar emitido o pendiente,
  * también las que se unieron en una clave TecNM. Recuerda `subject_for`: clave del SII →
  * clave de materia de Nexus, para los pasos de grupos y kárdex (las claves numéricas quedan como llaves int de
  * PHP: búscalas con `$map[$clave] ?? null`).
@@ -64,8 +64,8 @@ final class SubjectsStep implements SiiStep
 
         yield new SiiBatch('subjects', 'materias.csv', array_values(array_diff_key($rows, $pending)), incidents: $incidents);
         yield new SiiBatch('pending_placements', 'materias_pendientes.csv', array_values(array_map(
-            fn (array $row): array => array_diff_key($row, ['semester' => true, 'sii_code' => true]),
-            array_intersect_key($rows, $pending),
+            fn (string $ref): array => [...array_diff_key($rows[$ref], ['semester' => true, 'sii_code' => true]), 'sii_grid' => $pending[$ref]['key']],
+            array_keys(array_intersect_key($pending, $rows)),
         )));
         yield new SiiBatch('subject_aliases', 'claves_materias.csv', $aliases, incidents: $aliasIncidents);
     }

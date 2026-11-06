@@ -10,6 +10,12 @@
     materia» y la confirmación de quitar son x-modal de la página, fuera del panel. El resaltado lo pinta el
     servidor con data-focus, data-me y data-on-chain, que leen las utilidades de Tailwind: la retícula cambia con
     cada edición y así no hay estado que se desfase.
+
+    Para quien valida las materias de la migración del SII (`$pendingCount` no es null), el segmentado «Retícula | Por
+    validar N» va bajo los datos del plan (maqueta B, `.impeccable/mocks/por-validar/b.html`); «Por validar» es
+    academic::components.pending-placements, con su bandeja y su retícula. Quien no edita la retícula la ve de solo
+    lectura: «Gestionar especialidades» y «Agregar materia» deshabilitados con su motivo, y tocar una materia solo la
+    resalta.
 --}}
 <div class="space-y-5">
     <a href="{{ route('academic.plans') }}" wire:navigate data-testid="back-to-plans" class="inline-flex items-center gap-1.5 font-medium text-primary">
@@ -31,6 +37,24 @@
         </p>
     </div>
 
+    @if ($pendingCount !== null)
+        <div role="group" aria-label="Vista del plan" class="join max-md:flex max-md:w-full" data-testid="plan-views">
+            <button type="button" wire:click="setView('reticula')" aria-pressed="{{ $view === 'reticula' ? 'true' : 'false' }}" data-testid="view-grid"
+                @class(['btn join-item max-md:flex-1', 'btn-primary' => $view === 'reticula', 'border-base-300 bg-base-100' => $view !== 'reticula'])>Retícula</button>
+            <button type="button" wire:click="setView('por-validar')" aria-pressed="{{ $view === 'por-validar' ? 'true' : 'false' }}" data-testid="view-pending"
+                @class(['btn join-item max-md:flex-1', 'btn-primary' => $view === 'por-validar', 'border-base-300 bg-base-100' => $view !== 'por-validar'])>
+                Por validar
+                @if ($pendingCount > 0)
+                    <span @class(['badge badge-sm font-mono', 'badge-warning badge-soft' => $view !== 'por-validar', 'bg-base-100 text-base-content border-transparent' => $view === 'por-validar'])>{{ $pendingCount }}</span>
+                @endif
+            </button>
+        </div>
+    @endif
+
+    @if ($view === 'por-validar')
+        <livewire:academic::components.pending-placements :plan-id="$plan->id" wire:key="pending-placements-{{ $plan->id }}" />
+    @else
+
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-1.5" data-testid="specialty-chips">
             <span class="mr-1 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Especialidades</span>
@@ -47,7 +71,13 @@
             @endforelse
         </div>
 
-        <x-button label="Gestionar especialidades" icon="o-tag" class="btn-outline btn-sm border-base-300 max-md:w-full" wire:click="openSpecialties" spinner="openSpecialties" data-testid="open-specialties" />
+        @if ($canEditGrid)
+            <x-button label="Gestionar especialidades" icon="o-tag" class="btn-outline btn-sm border-base-300 max-md:w-full" wire:click="openSpecialties" spinner="openSpecialties" data-testid="open-specialties" />
+        @else
+            <span class="tooltip tooltip-left max-md:w-full" data-tip="Solo el administrador edita la retícula.">
+                <x-button label="Gestionar especialidades" icon="o-tag" class="btn-outline btn-sm border-base-300 max-md:w-full" data-testid="open-specialties" disabled />
+            </span>
+        @endif
     </div>
 
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-neutral" data-testid="plan-legend">
@@ -58,11 +88,13 @@
         <span><span class="font-semibold text-base-content">Pide</span> seriación · <span class="font-semibold text-base-content">Correq.</span> correquisito</span>
     </div>
 
-    <div class="space-y-4" x-on:keydown.escape.window="if ($wire.chainFocus !== null && ! $wire.showDrawer && document.body.dataset.menu !== 'open') $wire.clearFocus()">
+    <div class="space-y-4" x-on:keydown.escape.window="if (($wire.chainFocus !== null || $wire.selectedId !== null) && ! $wire.showDrawer && document.body.dataset.menu !== 'open') $wire.clearFocus()">
         @if ($grid['semesters'] === [])
             <div class="rounded-box border border-base-300 bg-base-100 px-5 py-6 text-center" data-testid="empty-grid">
                 <p class="text-neutral">Este plan todavía no tiene semestres ni materias en su retícula.</p>
-                <x-button label="Agregar materia" icon="o-plus" class="btn-primary btn-sm mt-3" wire:click="openAdd(1)" spinner="openAdd(1)" data-testid="add-first-subject" />
+                @if ($canEditGrid)
+                    <x-button label="Agregar materia" icon="o-plus" class="btn-primary btn-sm mt-3" wire:click="openAdd(1)" spinner="openAdd(1)" data-testid="add-first-subject" />
+                @endif
             </div>
         @else
             <x-core::semester-grid.frame :layout="$layout" data-testid="plan-grid" :data-focus="$focused">
@@ -76,15 +108,21 @@
                         @if ($semester <= $offeredSemesters)
                             {{-- El tooltip va a la izquierda: arriba, el del último semestre se saldría de la caja y la desplazaría. --}}
                             <x-slot:actions>
-                                <x-button
-                                    icon="o-plus"
-                                    class="btn-ghost btn-xs btn-square -my-1 -mr-1 shrink-0 text-neutral hover:text-base-content"
-                                    tooltip-left="Agregar materia"
-                                    wire:click="openAdd({{ $semester }})"
-                                    spinner="openAdd({{ $semester }})"
-                                    aria-label="Agregar materia al semestre {{ $semester }}"
-                                    data-add-semester="{{ $semester }}"
-                                />
+                                @if ($canEditGrid)
+                                    <x-button
+                                        icon="o-plus"
+                                        class="btn-ghost btn-xs btn-square -my-1 -mr-1 shrink-0 text-neutral hover:text-base-content"
+                                        tooltip-left="Agregar materia"
+                                        wire:click="openAdd({{ $semester }})"
+                                        spinner="openAdd({{ $semester }})"
+                                        aria-label="Agregar materia al semestre {{ $semester }}"
+                                        data-add-semester="{{ $semester }}"
+                                    />
+                                @else
+                                    <span class="tooltip tooltip-left -my-1 -mr-1" data-tip="Solo el administrador edita la retícula.">
+                                        <x-button icon="o-plus" class="btn-ghost btn-xs btn-square shrink-0" aria-label="Agregar materia al semestre {{ $semester }}" data-add-semester="{{ $semester }}" disabled />
+                                    </span>
+                                @endif
                             </x-slot:actions>
                         @endif
 
@@ -126,6 +164,7 @@
             <x-slot:clear wire:click="clearFocus"></x-slot:clear>
         </x-core::semester-grid.selection-bar>
     </div>
+    @endif
 
     {{--
         «Agregar materia» y la confirmación de quitar van en la página y no dentro del panel: el panel se desliza
@@ -148,7 +187,7 @@
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="plan-drawer-title" data-testid="plan-drawer">
         @if ($panel === 'specialties')
             @include('academic::plan.specialties-panel')
-        @elseif ($selected !== null)
+        @elseif ($selected !== null && $showDrawer)
             @include('academic::plan.subject-panel', ['row' => $selected])
         @endif
     </x-drawer>

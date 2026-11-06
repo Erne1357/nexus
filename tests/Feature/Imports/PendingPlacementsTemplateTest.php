@@ -40,13 +40,13 @@ it('está registrada en Imports sin campo de semestre', function () {
     $template = app(TemplateRegistry::class)->get('pending_placements');
 
     expect($template)->toBeInstanceOf(PendingPlacementsTemplate::class)
-        ->and(array_keys($template->fields()))->toBe(['plan', 'code', 'name', 'theory_hours', 'practice_hours', 'credits', 'department', 'specialty', 'specialty_name', 'kind'])
+        ->and(array_keys($template->fields()))->toBe(['plan', 'code', 'name', 'theory_hours', 'practice_hours', 'credits', 'department', 'specialty', 'specialty_name', 'kind', 'sii_grid'])
         ->and($template->naturalKey())->toBe(['plan', 'code'])
         ->and($template->deactivatesMissing())->toBeFalse();
 });
 
 it('importar un pendiente crea la materia y el pendiente', function () {
-    $row = pendingPlacementRow(['specialty' => 'esp-1', 'specialty_name' => 'Especialidad uno']);
+    $row = pendingPlacementRow(['specialty' => 'esp-1', 'specialty_name' => 'Especialidad uno', 'sii_grid' => ' 5/5 ']);
 
     expect($this->template->validate($row, $this->context)->errors)->toBe([]);
 
@@ -54,6 +54,7 @@ it('importar un pendiente crea la materia y el pendiente', function () {
     $subject = Subject::query()->where('code', 'ZZZ-1')->sole();
 
     expect($pending)->toBeInstanceOf(StudyPlanSubjectPending::class)->and($pending->wasRecentlyCreated)->toBeTrue()
+        ->and($pending->fresh()->sii_grid)->toBe('5/5')
         ->and($pending->subject_id)->toBe($subject->id)->and($pending->study_plan_id)->toBe($this->plan->id)
         ->and($pending->specialty->code)->toBe('ESP-1')->and($pending->specialty->name)->toBe('Especialidad uno')
         ->and($pending->resolved_at)->toBeNull()

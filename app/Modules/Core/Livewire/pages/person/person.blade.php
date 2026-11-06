@@ -8,7 +8,11 @@
 --}}
 @php
     $person = $record->person;
-    $whoUnitLabel = $whoRoleCase?->unitKind() === \App\Modules\Core\Enums\OrgUnitKind::Subdireccion ? 'Subdirección' : 'Departamento académico';
+    $whoUnitLabel = match ($whoRoleCase?->value) {
+        'subdireccion' => 'Subdirección',
+        'jefe_departamento' => 'Departamento',
+        default => 'Departamento académico',
+    };
     $whoColumns = $whoRoleCase?->scopeColumns() ?? [];
 @endphp
 

@@ -23,6 +23,9 @@ use Illuminate\Validation\ValidationException;
  *
  * - AZ-S10 (confirmado el 3 de noviembre de 2026): el puesto Subdirección Académica solo va sobre la unidad
  *   Subdirección Académica.
+ * - D19 (confirmado el 5 de noviembre de 2026): el jefe de departamento va sobre un departamento académico o sobre el
+ *   Departamento de Servicios Escolares (OrgTree::SCHOOL_SERVICES), que valida las materias de la migración del SII;
+ *   los demás departamentos que no son académicos no tienen jefe en Nexus (supuesto por confirmar).
  * - AZ-S11: todos los puestos salvo el de docente se nombran en «Personas y puestos»; el docente lo da la ficha del
  *   docente (`managedElsewhere()`).
  * - AZ-S12 (confirmado el 3 de noviembre de 2026): el admin puede terminar su propio puesto de Administración si
@@ -66,7 +69,7 @@ final class RoleAssignmentRules
         if (in_array('org_unit_id', $columns, true)) {
             if ($unit === null) {
                 $errors['unit'] = $role->unitKind() === OrgUnitKind::Subdireccion ? 'Elige la subdirección.' : 'Elige el departamento académico.';
-            } elseif ($unit->kind !== $role->unitKind()) {
+            } elseif ($unit->kind !== $role->unitKind() && ! $this->isSchoolServicesHead($role, $unit)) {
                 $errors['unit'] = $role->unitKind() === OrgUnitKind::Subdireccion
                     ? "{$unit->name} no es una subdirección."
                     : "{$unit->name} no es un departamento académico.";
@@ -96,17 +99,30 @@ final class RoleAssignmentRules
 
     /**
      * Si el puesto se nombra sobre esa unidad: el tipo es `Role::unitKind()` y, para la Subdirección, además es
-     * Subdirección Académica (AZ-S10), sin borrar. Se decide con la unidad, sin consultar la base: la clave de una
-     * unidad estructural es única aun entre las borradas y la de Subdirección Académica no cambia (AZ-S13), así que es
-     * la misma que daría `OrgTree::idOf(OrgTree::ACADEMIC)`, y el Organigrama la pregunta por cada caja.
+     * Subdirección Académica (AZ-S10), sin borrar; el jefe de departamento también va sobre Servicios Escolares (D19).
+     * Se decide con la unidad, sin consultar la base: la clave de una unidad estructural es única aun entre las
+     * borradas y la de Subdirección Académica no cambia (AZ-S13), así que es la misma que daría
+     * `OrgTree::idOf(OrgTree::ACADEMIC)`, y el Organigrama la pregunta por cada caja.
      */
     public function allowsUnit(Role $role, OrgUnit $unit): bool
     {
+        if ($this->isSchoolServicesHead($role, $unit)) {
+            return true;
+        }
+
         if ($role->unitKind() === null || $unit->kind !== $role->unitKind()) {
             return false;
         }
 
         return $role !== Role::Subdireccion || ($unit->code === OrgTree::ACADEMIC && ! $unit->trashed());
+    }
+
+    /**
+     * D19: el jefe del Departamento de Servicios Escolares, un departamento que no es académico.
+     */
+    private function isSchoolServicesHead(Role $role, OrgUnit $unit): bool
+    {
+        return $role === Role::JefeDepartamento && $unit->kind === OrgUnitKind::Departamento && $unit->code === OrgTree::SCHOOL_SERVICES;
     }
 
     /**

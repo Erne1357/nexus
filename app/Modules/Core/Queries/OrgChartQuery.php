@@ -390,9 +390,11 @@ final class OrgChartQuery
         $assignment = RoleAssignment::query()->current()->where('role', $role)->where('org_unit_id', $unit->id)->with('user:id,name')->orderBy('valid_from')->first();
 
         if ($assignment === null) {
-            return [null, $role === Role::JefeDepartamento
-                ? 'Sin jefe vigente. El jefe se nombra en la ficha del docente, en «Personas y puestos» o aquí.'
-                : 'Sin titular vigente.'];
+            return [null, match (true) {
+                $role !== Role::JefeDepartamento => 'Sin titular vigente.',
+                $unit->kind === OrgUnitKind::DepartamentoAcademico => 'Sin jefe vigente. El jefe se nombra en la ficha del docente, en «Personas y puestos» o aquí.',
+                default => 'Sin jefe vigente. El jefe se nombra en «Personas y puestos» o aquí.',
+            }];
         }
 
         return [[
