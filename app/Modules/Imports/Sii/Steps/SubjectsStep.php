@@ -25,8 +25,10 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * departamento y el primer tipo, y se avisa (supuesto por confirmar). La especialidad es la clave del SII con el
  * nombre de `especialidades`; si no está ahí, solo la clave, y se avisa.
  *
- * Entrega dos lotes, en este orden: `subjects` (sin `sii_code`) y `subject_aliases`, con cada clave del SII de
- * cada lugar emitido, también las que se unieron en una clave TecNM. Recuerda `subject_for`: clave del SII →
+ * Entrega tres lotes, en este orden: `subjects` (sin `sii_code`), `pending_placements` (los lugares sin semestre
+ * que no empataron con ninguna materia, D18 y D19: la materia se da de alta y el lugar queda en la lista de
+ * pendientes de Servicios Escolares) y `subject_aliases`, con cada clave del SII de cada lugar emitido o pendiente,
+ * también las que se unieron en una clave TecNM. Recuerda `subject_for`: clave del SII →
  * clave de materia de Nexus, para los pasos de grupos y kárdex (las claves numéricas quedan como llaves int de
  * PHP: búscalas con `$map[$clave] ?? null`).
  */
@@ -55,11 +57,16 @@ final class SubjectsStep implements SiiStep
         $grid = $placements->grid($this->placements($migration, $planFor, $catalog, $incidents));
         $incidents = [...$incidents, ...$placements->incidents()];
 
-        $rows = $this->subjectRows($migration, $grid, $catalog, $departmentForArea, $incidents);
-        [$subjectFor, $aliases, $aliasIncidents] = $placements->aliases($grid);
+        $pending = $placements->pending();
+        $rows = $this->subjectRows($migration, [...$grid, ...$pending], $catalog, $departmentForArea, $incidents);
+        [$subjectFor, $aliases, $aliasIncidents] = $placements->aliases($grid, $pending);
         $migration->remember('subject_for', fn (): array => $subjectFor);
 
-        yield new SiiBatch('subjects', 'materias.csv', $rows, incidents: $incidents);
+        yield new SiiBatch('subjects', 'materias.csv', array_values(array_diff_key($rows, $pending)), incidents: $incidents);
+        yield new SiiBatch('pending_placements', 'materias_pendientes.csv', array_values(array_map(
+            fn (array $row): array => array_diff_key($row, ['semester' => true, 'sii_code' => true]),
+            array_intersect_key($rows, $pending),
+        )));
         yield new SiiBatch('subject_aliases', 'claves_materias.csv', $aliases, incidents: $aliasIncidents);
     }
 
@@ -214,7 +221,7 @@ final class SubjectsStep implements SiiStep
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog
      * @param  array<string|int, string|null>  $departmentForArea
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
-     * @return list<array<string, string>>
+     * @return array<string, array<string, string>> por `"{plan}/{clave}"`
      */
     private function subjectRows(SiiMigration $migration, array $grid, array $catalog, array $departmentForArea, array &$incidents): array
     {
@@ -248,7 +255,7 @@ final class SubjectsStep implements SiiStep
                 $incidents[] = $this->warning($placement['plan'].'/'.$specialty, "La especialidad {$specialty} del plan {$placement['plan']} no está en el catálogo de especialidades del SII: se crea con su clave como nombre.");
             }
 
-            $rows[] = [
+            $rows[(string) $ref] = [
                 'plan' => $placement['plan'],
                 'code' => $placement['code'],
                 'name' => $placement['name'],

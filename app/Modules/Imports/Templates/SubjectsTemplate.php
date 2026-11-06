@@ -2,17 +2,12 @@
 
 namespace App\Modules\Imports\Templates;
 
-use App\Modules\Academic\Enums\SubjectKind;
-use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
-use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectAlias;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use LogicException;
 
 /**
@@ -42,17 +37,10 @@ use LogicException;
  */
 class SubjectsTemplate extends ImportTemplate
 {
-    /** @var array<string, StudyPlan|null> plan por clave, en esta corrida */
-    private array $plans = [];
-
-    /** @var array<string, Department|null> departamento por clave, en esta corrida */
-    private array $departments = [];
+    use UpsertsSubjects;
 
     /** @var array<string, true> lugares en la retícula cuya última fila aplicada solo cambió la materia */
     private array $subjectOnly = [];
-
-    /** @var array<string, list<string>>|null claves de materia por nombre en minúsculas, en esta corrida */
-    private ?array $codesByName = null;
 
     public function key(): string
     {
@@ -113,45 +101,21 @@ class SubjectsTemplate extends ImportTemplate
     }
 
     /**
-     * Solo los límites del modelo de datos: semestre desde 1, horas y créditos no negativos; el tope es el de la
-     * columna (smallint), no una regla.
+     * Solo los límites del modelo de datos: semestre desde 1 y los de los campos que comparte con
+     * `pending_placements`.
      */
     public function rules(): array
     {
         return [
-            'plan' => ['required', 'string'],
-            'code' => ['required', 'string', 'max:20'],
-            'name' => ['required', 'string', 'max:255'],
+            ...$this->subjectRules(),
             'semester' => ['required', 'integer', 'min:1', 'max:32767'],
-            'theory_hours' => ['required', 'integer', 'min:0', 'max:32767'],
-            'practice_hours' => ['required', 'integer', 'min:0', 'max:32767'],
-            'credits' => ['required', 'integer', 'min:0', 'max:32767'],
-            'department' => ['required', 'string'],
-            'specialty' => ['nullable', 'string', 'max:30'],
-            'specialty_name' => ['nullable', 'string', 'max:255'],
             'sii_code' => ['nullable', 'string', 'max:20'],
-            'kind' => ['nullable', Rule::enum(SubjectKind::class)],
         ];
     }
 
     public function normalize(array $row): array
     {
-        $row = parent::normalize($row);
-
-        foreach (['plan', 'code', 'department', 'specialty', 'sii_code'] as $field) {
-            $row[$field] = self::asText($row[$field]);
-            $row[$field] = is_string($row[$field]) ? Str::upper($row[$field]) : $row[$field];
-        }
-
-        foreach (['semester', 'theory_hours', 'practice_hours', 'credits'] as $field) {
-            $value = self::asText($row[$field]);
-            $row[$field] = is_string($value) && ctype_digit($value) ? (int) $value : $row[$field];
-        }
-
-        $kind = self::asText($row['kind']);
-        $row['kind'] = is_string($kind) ? (SubjectKind::tryFrom(self::slug($kind))?->value ?? $kind) : $kind;
-
-        return $row;
+        return $this->normalizeSubjectFields(parent::normalize($row), ['sii_code'], ['semester']);
     }
 
     /**
@@ -162,15 +126,7 @@ class SubjectsTemplate extends ImportTemplate
     public function apply(array $row, ImportContext $context): Model
     {
         $plan = $this->plan($row['plan']);
-        $subject = Subject::query()->where('code', $row['code'])->first() ?? new Subject(['code' => $row['code']]);
-        $subject->fill([
-            'name' => $row['name'],
-            'department_id' => $this->department($row['department'])?->getKey(),
-            'theory_hours' => $row['theory_hours'],
-            'practice_hours' => $row['practice_hours'],
-            'credits' => $row['credits'],
-            ...($row['kind'] === null ? [] : ['kind' => $row['kind']]),
-        ])->save();
+        $subject = $this->upsertSubject($row);
 
         $alias = $row['sii_code'] === null ? null : SubjectAlias::query()->firstOrCreate(
             ['code' => $row['sii_code']],
@@ -181,14 +137,7 @@ class SubjectsTemplate extends ImportTemplate
             throw new LogicException("La clave del SII {$row['sii_code']} ya es de otra materia: validate() lo reporta como error.");
         }
 
-        $specialty = $row['specialty'] === null ? null : Specialty::query()->firstOrCreate(
-            ['study_plan_id' => $plan->getKey(), 'code' => $row['specialty']],
-            ['name' => $row['specialty_name'] ?? $row['specialty'], 'is_active' => (bool) $plan->is_active],
-        );
-
-        if ($specialty !== null && ! $specialty->wasRecentlyCreated && $row['specialty_name'] !== null) {
-            $specialty->fill(['name' => $row['specialty_name']])->save();
-        }
+        $specialty = $this->upsertSpecialty($row, $plan);
 
         $placement = StudyPlanSubject::query()->where(['study_plan_id' => $plan->getKey(), 'subject_id' => $subject->getKey()])->first()
             ?? new StudyPlanSubject(['study_plan_id' => $plan->getKey(), 'subject_id' => $subject->getKey()]);
@@ -217,20 +166,7 @@ class SubjectsTemplate extends ImportTemplate
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
         $plan = $this->plan($row['plan']);
-
-        if ($plan === null) {
-            $issues = $issues->withError('plan', "No hay un plan con la clave {$row['plan']}.");
-        } elseif (! $plan->is_active) {
-            $issues = $issues->withWarning('plan', "El plan {$row['plan']} está inactivo.");
-        }
-
-        $department = $this->department($row['department']);
-
-        if ($department === null) {
-            $issues = $issues->withError('department', "No hay un departamento con la clave {$row['department']}.");
-        } elseif (! $department->is_active) {
-            $issues = $issues->withWarning('department', "El departamento {$row['department']} está inactivo.");
-        }
+        $issues = $this->checkPlanAndDepartment($row, $issues);
 
         $subject = Subject::withTrashed()->where('code', $row['code'])->first(['id', 'is_active', 'deleted_at']);
 
@@ -248,11 +184,7 @@ class SubjectsTemplate extends ImportTemplate
             $issues = $issues->withError('sii_code', "La clave del SII {$row['sii_code']} ya es de otra materia.");
         }
 
-        $twin = collect($this->codesByName()[mb_strtolower($row['name'])] ?? [])->first(fn (string $code): bool => $code !== $row['code']);
-
-        if ($twin !== null) {
-            $issues = $issues->withWarning('name', "La materia {$twin} tiene el mismo nombre con otra clave; no se unifican.");
-        }
+        $issues = $this->checkSubjectTwin($row, $issues);
 
         if ($plan === null) {
             return $issues;
@@ -281,26 +213,5 @@ class SubjectsTemplate extends ImportTemplate
         }
 
         return $issues;
-    }
-
-    /**
-     * @return array<string, list<string>>
-     */
-    private function codesByName(): array
-    {
-        return $this->codesByName ??= Subject::query()->get(['code', 'name'])
-            ->groupBy(fn (Subject $subject): string => mb_strtolower($subject->name))
-            ->map(fn ($subjects): array => $subjects->pluck('code')->all())
-            ->all();
-    }
-
-    private function plan(string $code): ?StudyPlan
-    {
-        return array_key_exists($code, $this->plans) ? $this->plans[$code] : $this->plans[$code] = StudyPlan::query()->where('code', $code)->first(['id', 'is_active']);
-    }
-
-    private function department(string $code): ?Department
-    {
-        return array_key_exists($code, $this->departments) ? $this->departments[$code] : $this->departments[$code] = Department::query()->where('code', $code)->first(['id', 'is_active']);
     }
 }

@@ -4,6 +4,7 @@ use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectAlias;
 use App\Modules\Core\Models\Campus;
@@ -258,11 +259,11 @@ it('deja todas las claves del SII como alias', function () {
 
     expect($aliases['CD1']['subject'])->toBe('ACF-0901')
         ->and($aliases['CD1D'])->toBe(['code' => 'CD1D', 'subject' => 'ACF-0901', 'plan' => 'AAA-2010-224'])
-        ->and($aliases->keys()->sort()->values()->all())->toBe(['CD1', 'CD1D', 'CD2', 'CD3', 'ESP', 'ESQ', 'ETB', 'ETC', 'ETI', 'OLD', 'OLDP', 'OPT', 'PRB1', 'PRB2', 'PRG', 'RES', 'SS'])
+        ->and($aliases->keys()->sort()->values()->all())->toBe(['CD1', 'CD1D', 'CD2', 'CD3', 'ESP', 'ESQ', 'ETB', 'ETC', 'ETI', 'OLD', 'OLDP', 'OPT', 'PRB1', 'PRB2', 'PRG', 'RES', 'SS', 'ZZZ'])
         ->and(collect($run['subjects']['rows'])->pluck('sii_code')->unique()->all())->toBe([''])
         ->and($subjectFor['CD1D'])->toBe('ACF-0901')
         ->and($subjectFor['CD3'])->toBe('CD3')
-        ->and(array_key_exists('ZZZ', $subjectFor))->toBeFalse()
+        ->and($subjectFor['ZZZ'])->toBe('ZZZ')
         ->and(array_key_exists('NNN', $subjectFor))->toBeFalse();
 });
 
@@ -468,10 +469,22 @@ it('deja pendiente la materia sin semestre que no empata', function () {
     $pending = collect($run['subjects']['incidents'])->filter(fn (array $i): bool => $i['ref'] === 'AAA-2004-100/ZZZ');
 
     expect(collect($run['subjects']['rows'])->pluck('code'))->not->toContain('ZZZ')
-        ->and(collect($run['subject_aliases']['rows'])->pluck('code'))->not->toContain('ZZZ')
+        ->and(array_keys($run))->toBe(['migration', 'subjects', 'pending_placements', 'subject_aliases'])
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'ZZZ'))->toMatchArray([
+            'name' => 'Materia Sin Par', 'credits' => '4', 'theory_hours' => '2', 'practice_hours' => '2', 'department' => '110100',
+        ])
+        ->and($run['pending_placements']['rows'][0])->not->toHaveKey('semester')
         ->and($pending)->toHaveCount(1)
         ->and($pending->first()['level'])->toBe('warning')
-        ->and($pending->first()['message'])->toContain('Servicios Escolares');
+        ->and($pending->first()['message'])->toContain('lista de pendientes')->toContain('Servicios Escolares');
+});
+
+it('las claves del SII de los pendientes quedan como alias y en subject_for', function () {
+    $run = subjectsStepRun($this->dir, $this->curated);
+
+    expect(collect($run['subject_aliases']['rows'])->first(fn (array $row): bool => $row['code'] === 'ZZZ'))
+        ->toBe(['code' => 'ZZZ', 'subject' => 'ZZZ', 'plan' => 'AAA-2004-100'])
+        ->and($run['migration']->remember('subject_for', fn () => []))->toHaveKey('ZZZ');
 });
 
 it('no migra un lugar con estatus N', function () {
@@ -532,11 +545,14 @@ it('migra las materias de punta a punta después del organigrama y las carreras'
         ->and($semester('AAA-2004-100', 'OLD'))->toBe(1)
         ->and($semester('CCC-2009-201', 'CD3'))->toBe(1)
         ->and(Subject::query()->where('code', 'AEB-1055')->sole()->department->code)->toBe('110700')
-        ->and(Subject::query()->where('code', 'ZZZ')->exists())->toBeFalse()
+        ->and(Subject::query()->where('code', 'ZZZ')->exists())->toBeTrue()
+        ->and(StudyPlanSubject::query()->where('subject_id', Subject::query()->where('code', 'ZZZ')->value('id'))->exists())->toBeFalse()
+        ->and(StudyPlanSubjectPending::query()->where('study_plan_id', $plan('AAA-2004-100'))->whereNull('resolved_at')->count())->toBe(1)
+        ->and(SubjectAlias::query()->where('code', 'ZZZ')->sole()->subject->code)->toBe('ZZZ')
         ->and(SubjectAlias::query()->where('code', 'CD1D')->sole()->subject_id)->toBe($calculus->id)
         ->and(SubjectAlias::query()->where('code', 'CD3')->sole()->subject->code)->toBe('CD3')
         ->and(Specialty::query()->where('code', 'ESP-01')->sole()->name)->toBe('INTELIGENCIA DE NEGOCIOS')
-        ->and(ImportBatch::query()->whereIn('template', ['subjects', 'subject_aliases'])->pluck('error_rows', 'template')->all())
-        ->toBe(['subjects' => 0, 'subject_aliases' => 0])
+        ->and(ImportBatch::query()->whereIn('template', ['subjects', 'pending_placements', 'subject_aliases'])->pluck('error_rows', 'template')->all())
+        ->toBe(['subjects' => 0, 'pending_placements' => 0, 'subject_aliases' => 0])
         ->and(file_get_contents($this->dir.'/_incidencias.csv'))->toContain('AAA-2004-100/ZZZ')->toContain('Servicios Escolares');
 });
