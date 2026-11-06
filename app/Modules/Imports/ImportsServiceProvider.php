@@ -12,6 +12,7 @@ use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
+use App\Modules\Imports\Sii\Steps\PositionsStep;
 use App\Modules\Imports\Sii\Steps\RoomsStep;
 use App\Modules\Imports\Sii\Steps\StudentsStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
@@ -74,6 +75,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         SubjectsStep::class,
         RoomsStep::class,
         TeachersStep::class,
+        PositionsStep::class,
         TeacherHistoryStep::class,
         StudentsStep::class,
     ];

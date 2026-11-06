@@ -24,7 +24,7 @@ Si las cuentas cuadran, la corrida real es la misma línea sin `--dry-run`.
 | Opción | Qué hace |
 |---|---|
 | `--dry-run` | Corre todo dentro de una transacción que se revierte, sin cola, y borra los archivos subidos. Sí deja `_incidencias.csv` y `_nexus/`. La tabla de la consola dice cuántas altas y cambios haría cada lote |
-| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `historial_docente` y `alumnos`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `historial_docente`, docentes y materias; `alumnos`, carreras |
+| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente` y `alumnos`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `historial_docente`, docentes y materias; `alumnos`, carreras |
 | `--user=<username>` | Quién aplica los lotes; debe tener permiso de aplicar importaciones |
 | `--force` | Obligatorio en producción |
 
@@ -53,6 +53,7 @@ Toda plantilla da de alta lo que falta por su clave natural y, en lo que ya exis
 | | `subject_aliases` | Nada: solo da de alta las claves que faltan | Las que ya existen |
 | `aulas` | `rooms` | Edificio (lo crea si el campus no lo tiene), nombre, tipo, capacidad y departamento dueño, del curado `aulas.csv` | Estado, características y los edificios que ya existen |
 | `docentes` | `teachers` | Nombre, correo (si es válido) y fecha de ingreso; agrega las adscripciones nuevas | Estado, grado (el SII no lo trae), adscripción principal; nunca quita adscripciones |
+| `plazas` | `positions` | Horas base de la plaza de cada tipo (la suma de las claves de ese tipo) | Tipo y vigencia; nunca quita una plaza que ya no venga |
 | `historial_docente` | `teacher_history` | Nada: solo agrega los grupos que faltan | Lo que ya existe |
 | `alumnos` | `students` | Nombre, carrera, plan, campus, semestre (si es válido), estatus (si el código del SII es uno de los conocidos), modalidad y motivo del SII | Estado activo y número de control |
 
@@ -69,6 +70,7 @@ El usuario decidió el 5 de noviembre de 2026 que si una segunda corrida pisa lo
 | `materias` | Se queda Nexus (retículas) | Gana el SII |
 | `aulas` | Se queda Nexus (aulas y edificios) | Gana el curado; los edificios que existen no se tocan |
 | `docentes` | Probablemente el SII | Gana el SII |
+| `plazas` | Por decidir (no lo mencionó) | Gana el SII; no quita plazas |
 | `historial_docente` | El SII (horarios) | Solo agrega |
 | `alumnos` | Probablemente el SII | Gana el SII |
 
@@ -81,4 +83,5 @@ De la revisión de la rama (5 de noviembre de 2026), para hacer antes de la corr
 - **Curados:** `SiiMigration::curated()` no revisa que abra el archivo, el BOM ni encabezados repetidos (un BOM de Excel da un ErrorException). En `organigrama.csv`: claves repetidas, un `destino` desconocido que se trata como omitir, `departamento_de` sin revisar y valores laxos («Sí» con acento cuenta como No); hacerlos estrictos como en `aulas.csv`. `SiiCuratedMismatch` del organigrama no limita cuántas claves lista.
 - **Perfilador y lector:** el perfilador corta en la primera línea ilegible después de un renglón en blanco y cuenta el resto como anotación al final; la migración sigue leyendo los renglones que vengan después (y cuenta como malformadas las líneas ilegibles). Si el perfil muestra una anotación al final de más de unas líneas, revísala antes de migrar.
 - **Fallas secundarias del motor:** `ValidateImportBatch` y `ApplyImportBatch` todavía mandan al log con `report()` las fallas al marcar un lote fallido (la original sí llega limpia a la migración), y `ApplyImportBatch` guarda el mensaje de la excepción en el lote.
+- **Plazas** (paso del 6 de noviembre de 2026): confirmar con Recursos Humanos que E35, E36, E37 y E38 son asignatura, medio tiempo, tres cuartos y tiempo completo, que la jornada de apoyo es de 36 horas y qué significan los códigos 10, 20 y 95 de `tipo_nombramiento`; averiguar por qué 117 docentes con grupos en 20263 no están en `docentes2` (se quedan sin plaza y sin horas base).
 - **Lo demás** (seguimientos de la revisión): el lector abre cada archivo tres veces; `ext-intl` no está en `composer.json`; dos lotes con el mismo nombre en `_nexus/`; la fusión de materias que ignora el semestre (T7 M1) y el mapa de alias por plan para el kárdex van al plan de la parte 2.
