@@ -1,0 +1,29 @@
+carrera,nombre,departamento,departamento_nombre,nota
+COPU,Contador Público,110700,Ciencias Económico Administrativas,
+DCII,Doctorado Interinstitucional en Ciencias en Ingeniería Industrial,110900,Estudios de Posgrado e Investigación,
+DING,Doctorado en Ciencias de la Ingeniería,110900,Estudios de Posgrado e Investigación,
+EIAM,Especialización en Ingeniería Ambiental,110900,Estudios de Posgrado e Investigación,
+ICBS,Ingeniería en Ciberseguridad,110600,Sistemas y Computación,
+IE,Ingeniería Electromecánica en Planta y Mantenimiento,110200,Metal Mecánica,supuesto por nombre (electromecánica)
+IELA,Ingeniería en Electrónica y Sistemas Digitales,110500,Ingeniería Eléctrica y Electrónica,supuesto por nombre
+IELC,Ingeniería Electrónica,110500,Ingeniería Eléctrica y Electrónica,
+IELE,Ingeniería Eléctrica,110500,Ingeniería Eléctrica y Electrónica,
+IEME,Ingeniería Electromecánica,110200,Metal Mecánica,
+IGEM,Ingeniería en Gestión Empresarial,110700,Ciencias Económico Administrativas,
+II,Ingeniería Industrial en Producción,110300,Ingeniería Industrial,supuesto por nombre
+IIND,Ingeniería Industrial,110300,Ingeniería Industrial,
+ILOG,Ingeniería en Logística,110300,Ingeniería Industrial,
+IMCT,Ingeniería Mecatrónica,110500,Ingeniería Eléctrica y Electrónica,
+IMEC,Ingeniería Mecánica,110200,Metal Mecánica,
+IS,Ingeniería en Sistemas Computacionales en Programación,110600,Sistemas y Computación,supuesto por nombre
+ISEM,Ingeniería en Semiconductores,110500,Ingeniería Eléctrica y Electrónica,verificar: el cálculo dio Metal Mecánica
+ISIC,Ingeniería en Sistemas Computacionales,110600,Sistemas y Computación,
+ITIC,Ingeniería en Tecnologías de la Información y Comunicaciones,110600,Sistemas y Computación,
+LADM,Licenciatura en Administración,110700,Ciencias Económico Administrativas,
+LAEM,Licenciatura en Administración de Empresas,110700,Ciencias Económico Administrativas,supuesto por nombre
+LCON,Licenciatura en Contaduría,110700,Ciencias Económico Administrativas,
+LINF,Licenciatura en Informática,110600,Sistemas y Computación,
+LT,"Licenciatura en Administración de Empresas Turísticas, Hotelería y Restaurantes",110700,Ciencias Económico Administrativas,supuesto por nombre
+MPANI,Maestría en Administración de Negocios Internacionales,110900,Estudios de Posgrado e Investigación,
+MPIAD,Maestría en Ingeniería Administrativa,110900,Estudios de Posgrado e Investigación,
+MPIIN,Maestría en Ingeniería Industrial,110900,Estudios de Posgrado e Investigación,

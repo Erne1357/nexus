@@ -10,6 +10,7 @@ use App\Modules\Imports\Console\MigrateSii;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiStep;
+use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
@@ -60,6 +61,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
      */
     public const array SII_STEPS = [
         OrgChartStep::class,
+        CareersStep::class,
     ];
 
     public function register(): void
