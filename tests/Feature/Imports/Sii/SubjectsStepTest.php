@@ -554,8 +554,8 @@ it('migra las materias de punta a punta después del organigrama y las carreras'
         ->and(SubjectAlias::query()->where('code', 'CD1D')->sole()->subject_id)->toBe($calculus->id)
         ->and(SubjectAlias::query()->where('code', 'CD3')->sole()->subject->code)->toBe('CD3')
         ->and(Specialty::query()->where('code', 'ESP-01')->sole()->name)->toBe('INTELIGENCIA DE NEGOCIOS')
-        ->and(ImportBatch::query()->whereIn('template', ['subjects', 'pending_placements', 'subject_aliases'])->pluck('error_rows', 'template')->all())
-        ->toBe(['subjects' => 0, 'pending_placements' => 0, 'subject_aliases' => 0])
+        ->and(ImportBatch::query()->whereIn('template', ['subjects', 'pending_placements', 'subject_aliases'])->orderBy('template')->pluck('error_rows', 'template')->all())
+        ->toBe(['pending_placements' => 0, 'subject_aliases' => 0, 'subjects' => 0])
         ->and(file_get_contents($this->dir.'/_incidencias.csv'))->toContain('AAA-2004-100/ZZZ')->toContain('Servicios Escolares');
 });
 
