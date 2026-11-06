@@ -30,15 +30,22 @@ use Illuminate\Validation\Rule;
  * `modality` (presencial, a distancia, mixta; «EAD» es a distancia) es del alumno y `status_reason` es el motivo del
  * SII (BD1, BT1, TIT…), que se guarda junto al estatus de Nexus y se escribe en mayúsculas (D12 y D15, confirmados
  * el 5 de noviembre de 2026; lo de «EAD» y las mayúsculas, supuesto por confirmar). Como los demás campos, un
- * cambio no los pisa con vacío.
+ * cambio no los pisa con vacío. `active` (el SII lo da por estatus: inscritos y bajas temporales cuentan como activos)
+ * hace nacer inactivo al alumno que el archivo marca así; un cambio nunca activa ni desactiva, solo avisa (D11, confirmado
+ * el 5 de noviembre de 2026; el campo, supuesto por confirmar).
  */
 class StudentsTemplate extends ImportTemplate
 {
+    use ParsesActiveFlag;
+
     /** @var array<string, Career|null> carrera por clave, en esta corrida */
     private array $careers = [];
 
     /** @var array<string, StudyPlan|null> plan por clave, en esta corrida */
     private array $plans = [];
+
+    /** @var array<string, Student|null> alumno por número de control, en esta corrida */
+    private array $students = [];
 
     /** @var array<string, string|null> id de campus por clave, en esta corrida */
     private array $campuses = [];
@@ -65,6 +72,7 @@ class StudentsTemplate extends ImportTemplate
             'status' => 'estatus',
             'modality' => 'modalidad',
             'status_reason' => 'motivo del SII',
+            'active' => 'activo',
         ];
     }
 
@@ -95,6 +103,7 @@ class StudentsTemplate extends ImportTemplate
             'status' => ['nullable', 'string'],
             'modality' => ['nullable', Rule::enum(StudentModality::class)],
             'status_reason' => ['nullable', 'string', 'max:10'],
+            'active' => ['nullable', 'boolean'],
         ];
     }
 
@@ -117,6 +126,7 @@ class StudentsTemplate extends ImportTemplate
         $row['modality'] = is_string($modality) ? $this->modality($modality) : $modality;
         $reason = self::asText($row['status_reason']);
         $row['status_reason'] = is_string($reason) ? Str::upper($reason) : $reason;
+        $row['active'] = self::activeFlag($row['active']);
 
         return $row;
     }
@@ -162,6 +172,12 @@ class StudentsTemplate extends ImportTemplate
             $issues = $issues->withError('campus', "No hay un campus con la clave {$row['campus']}.");
         }
 
+        if ($row['active'] === false) {
+            if ($this->student($row['control_number'])?->is_active) {
+                $issues = $issues->withWarning('active', 'El archivo lo marca inactivo, pero el alumno sigue activo: una importación no lo da de baja.');
+            }
+        }
+
         if ($row['status'] !== null && StudentStatus::tryFrom($row['status']) === null) {
             $issues = $issues->withWarning('status', "El estatus «{$row['status']}» no está en Nexus: el alumno queda sin estatus.");
         }
@@ -180,6 +196,7 @@ class StudentsTemplate extends ImportTemplate
             'status' => StudentStatus::tryFrom((string) $row['status']),
             'modality' => StudentModality::tryFrom((string) $row['modality']),
             'status_reason' => $row['status_reason'],
+            'is_active' => $row['active'] ?? true,
         ];
     }
 
@@ -217,5 +234,10 @@ class StudentsTemplate extends ImportTemplate
     private function campus(string $code): ?string
     {
         return array_key_exists($code, $this->campuses) ? $this->campuses[$code] : $this->campuses[$code] = Campus::query()->where('code', $code)->value('id');
+    }
+
+    private function student(string $number): ?Student
+    {
+        return array_key_exists($number, $this->students) ? $this->students[$number] : $this->students[$number] = Student::query()->where('control_number', $number)->first(['id', 'is_active']);
     }
 }

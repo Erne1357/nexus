@@ -31,6 +31,7 @@ describe('students', function () {
             'status' => 'activo',
             'modality' => null,
             'status_reason' => null,
+            'active' => null,
         ]);
     });
 

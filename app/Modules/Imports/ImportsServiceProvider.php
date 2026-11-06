@@ -13,6 +13,7 @@ use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\RoomsStep;
+use App\Modules\Imports\Sii\Steps\StudentsStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
 use App\Modules\Imports\Sii\Steps\TeacherHistoryStep;
 use App\Modules\Imports\Sii\Steps\TeachersStep;
@@ -72,6 +73,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         RoomsStep::class,
         TeachersStep::class,
         TeacherHistoryStep::class,
+        StudentsStep::class,
     ];
 
     public function register(): void
