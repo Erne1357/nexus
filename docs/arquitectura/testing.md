@@ -80,6 +80,10 @@ docker compose exec app php artisan test --testsuite=Browser
 - Una prueba que use el teclado o el shell justo al entrar espera a que Alpine arranque (`assertScript('window.Alpine?.$data(document.body).menuOpen === false')`): un atajo que llega antes no tiene quién lo escuche.
 - El servidor de los browser tests atiende todas las peticiones de una prueba con la misma aplicación, y el `Store` de la sesión conservaba en memoria lo de la petición anterior: una petición tardía de la página que la prueba anterior cerraba dejaba su `url.intended`, y el login de la siguiente llevaba a `/imports` en vez de `/`. `tests/Pest.php` vacía la sesión al terminar cada petición (`RequestHandled`), como en FPM u Octane, y `tests/Browser/Core/ShellTest.php` lo prueba con dos páginas en la misma prueba. Si una prueba hereda estado de otra página, revisa primero ese listener.
 
+## Perfilar exportaciones del SII
+
+Antes de migrar una exportación del SII (tarea 1.16 y el corte oficial), se perfila sin tocar la base: `.github/scripts/sii-profile.sh storage/app/imports/sii/<fecha>` deja `_perfil.md` en esa carpeta, con codificación, comillas, renglones reparados por coma decimal, vacíos, formas de los valores, claves repetidas y cobertura entre archivos. Corre en un contenedor con pandas y sin red, y no imprime valores personales ([ADR-0019](../decisiones/0019-pandas-para-perfilar-exportaciones-del-sii.md)). Las exportaciones viven solo en `storage/app/imports/` (fuera de git); los fixtures de pruebas son sintéticos con los encabezados reales.
+
 ## Revisión visual con volumen
 
 Antes del PR de una pantalla, DESIGN.md pide revisarla a 390, 768 y 1440 px en claro y oscuro. Con pocos datos una pantalla puede verse bien y romperse con nombres reales y miles de filas, así que se revisa con el `MassiveSeeder` en una base aparte, sin tocar la de desarrollo:
