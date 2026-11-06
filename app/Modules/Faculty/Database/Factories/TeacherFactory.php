@@ -22,7 +22,7 @@ class TeacherFactory extends Factory
     public function definition(): array
     {
         return [
-            'employee_number' => fake()->unique()->numerify('#######'),
+            'rfc' => strtoupper(fake()->unique()->lexify('????')).fake()->date('ymd').strtoupper(fake()->bothify('???')),
             'user_id' => null,
             'name' => fake()->name(),
             'email' => null,

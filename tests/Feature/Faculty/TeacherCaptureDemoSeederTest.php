@@ -27,7 +27,7 @@ function seedCaptureScenario(bool $open = true): Term
     }
 
     foreach (range(1, 200) as $n) {
-        $teacher = Teacher::factory()->create(['employee_number' => sprintf('T%04d', $n)]);
+        $teacher = Teacher::factory()->create(['rfc' => sprintf('T%04d', $n)]);
         TeacherAvailability::factory()->create(['teacher_id' => $teacher->id, 'term_id' => $term->id]);
         TeacherSubjectQualification::factory()->create(['teacher_id' => $teacher->id]);
     }

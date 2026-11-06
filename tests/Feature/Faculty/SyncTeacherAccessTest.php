@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Hash;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| SyncTeacherAccess (spec 4.1): todo docente activo tiene usuario (username = número de empleado, contraseña por
+| SyncTeacherAccess (spec 4.1): todo docente activo tiene usuario (username = RFC, contraseña por
 | defecto y cambio obligatorio) con el rol `docente`. El docente no es de un campus (confirmado el 30 de octubre de
 | 2026); de ahí sale que su alcance sea uno solo, sin campus, tenga o no departamento, y que se cierren los
 | alcances de `docente` por campus que quedaron de antes. Reutiliza un usuario existente con su número sin tocar su contraseña, salvo que esté ligado
@@ -78,7 +78,7 @@ function teachingScopes(User $user): array
 
 it('da usuario a un docente activo sin usuario: su número, la contraseña por defecto y cambio obligatorio', function () {
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create([
-        'employee_number' => '1234567',
+        'rfc' => '1234567',
         'name' => 'Ana Pérez',
         'email' => 'ana@example.test',
     ]);
@@ -110,7 +110,7 @@ it('da usuario a un docente activo sin usuario: su número, la contraseña por d
 });
 
 it('deja en la bitácora el alta del usuario, la liga con el docente y su acceso, sin la contraseña', function () {
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
 
     syncAccess($teacher);
 
@@ -135,7 +135,7 @@ it('deja en la bitácora el alta del usuario, la liga con el docente y su acceso
 });
 
 it('no le da usuario a un docente inactivo', function () {
-    $teacher = Teacher::factory()->inactive()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->inactive()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Unchanged)
         ->and($teacher->fresh()->user_id)->toBeNull()
@@ -157,7 +157,7 @@ it('correrlo dos veces da unchanged y no escribe bitácora', function () {
 it('liga un usuario existente con su número sin cambiar su contraseña', function () {
     $user = User::factory()->create(['username' => '1234567', 'must_change_password' => false]);
     $password = $user->password;
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Linked);
 
@@ -172,7 +172,7 @@ it('liga un usuario existente con su número sin cambiar su contraseña', functi
 it('un usuario con su número ligado a otro docente da conflict y no toca nada', function () {
     $user = User::factory()->create(['username' => '1234567', 'is_active' => false]);
     Teacher::factory()->create(['user_id' => $user->id])->delete();
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Conflict);
 
@@ -198,7 +198,7 @@ it('cierra los alcances de docente por campus que quedaron de antes y abre el de
         ->withRole(Role::Docente, ['campus_id' => $this->c1->id])
         ->withRole(Role::Docente, ['campus_id' => $this->c2->id])
         ->create(['username' => '1234567']);
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567', 'user_id' => $user->id]);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Updated);
 
@@ -226,7 +226,7 @@ it('con el alcance de todo el Tec y uno por campus que quedó de antes, solo cie
         ->withRole(Role::Docente, ['campus_id' => $this->c1->id])
         ->create(['username' => '1234567']);
     $general = RoleAssignment::query()->whereNull('campus_id')->sole();
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567', 'user_id' => $user->id]);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Updated);
 
@@ -245,7 +245,7 @@ it('con el alcance de todo el Tec y uno por campus que quedó de antes, solo cie
 
 it('un alcance de todo el Tec que todavía no empieza cuenta como el suyo y no abre otro (supuesto por confirmar)', function () {
     $user = User::factory()->withRole(Role::Docente, ['valid_from' => today()->addDays(3)->toDateString()])->create(['username' => '1234567']);
-    $teacher = Teacher::factory()->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+    $teacher = Teacher::factory()->create(['rfc' => '1234567', 'user_id' => $user->id]);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Unchanged)
         ->and(RoleAssignment::count())->toBe(1)
@@ -286,7 +286,7 @@ it('a un docente nuevo sin departamento le da usuario, rol y alcance', function 
 
 it('dar de baja desactiva su usuario y termina su jefatura vigente', function () {
     $this->travelTo('2026-11-03 10:00:00');
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
     syncAccess($teacher);
     $user = $teacher->fresh()->user;
     $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, '2026-10-03');
@@ -342,7 +342,7 @@ it('la baja no termina los puestos que no son jefaturas', function () {
 });
 
 it('la baja de un docente sin departamento desactiva su usuario', function () {
-    $teacher = Teacher::factory()->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->create(['rfc' => '1234567']);
     syncAccess($teacher);
 
     $teacher->update(['is_active' => false]);
@@ -353,7 +353,7 @@ it('la baja de un docente sin departamento desactiva su usuario', function () {
 
 it('un docente que también es admin queda activo al darlo de baja, pero su jefatura termina', function () {
     $user = User::factory()->admin()->create(['username' => '1234567']);
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567', 'user_id' => $user->id]);
     $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, today()->subMonth()->toDateString());
 
     $teacher->update(['is_active' => false]);
@@ -380,7 +380,7 @@ function scheduledAdminTeacher(string $from, string $anaTo, bool $withBeto): Tea
         RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::Admin, 'valid_from' => '2026-01-01', 'valid_to' => null]);
     }
 
-    return Teacher::factory()->inactive()->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+    return Teacher::factory()->inactive()->create(['rfc' => '1234567', 'user_id' => $user->id]);
 }
 
 it('P3: el docente queda dado de baja pero su usuario sigue activo si se necesita como admin', function () {
@@ -424,7 +424,7 @@ it('AZ-S12: la baja toma el candado de los puestos de Administración antes que 
 it('reactivar al docente reactiva su usuario sin tocar su contraseña', function () {
     $user = User::factory()->create(['username' => '1234567', 'is_active' => false]);
     $password = $user->password;
-    $teacher = Teacher::factory()->inactive()->adscribedTo($this->sis)->create(['employee_number' => '1234567', 'user_id' => $user->id]);
+    $teacher = Teacher::factory()->inactive()->adscribedTo($this->sis)->create(['rfc' => '1234567', 'user_id' => $user->id]);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Unchanged)
         ->and($user->fresh()->is_active)->toBeFalse();
@@ -468,7 +468,7 @@ it('usa el hash de contraseña que se le da', function () {
 
 it('no liga un usuario inactivo con su número: conflict y sigue inactivo', function () {
     $user = User::factory()->create(['username' => '1234567', 'is_active' => false]);
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Conflict);
 
@@ -487,7 +487,7 @@ it('no liga un usuario con su número que tiene otro rol: conflict y no lo toca'
     };
     $user = User::factory()->withRole($role, $scope)->create(['username' => '1234567']);
     $scopes = RoleAssignment::count();
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Conflict);
 
@@ -508,7 +508,7 @@ it('no liga la cuenta de quien fue personal aunque su nombramiento ya terminó',
         'valid_from' => today()->subYear()->toDateString(),
         'valid_to' => today()->subMonth()->toDateString(),
     ])->create(['username' => '1234567']);
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Conflict)
         ->and($teacher->fresh()->user_id)->toBeNull()
@@ -517,7 +517,7 @@ it('no liga la cuenta de quien fue personal aunque su nombramiento ya terminó',
 
 it('liga un usuario activo con su número que solo tiene el rol docente', function () {
     $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create(['username' => '1234567']);
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
 
     expect(syncAccess($teacher))->toBe(AccessSync::Linked)
         ->and($teacher->fresh()->user_id)->toBe($user->id)
@@ -550,7 +550,7 @@ it('avisa con TeacherAccessChanged después del commit solo cuando cambia algo',
     Event::fake([TeacherAccessChanged::class]);
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
     $taken = User::factory()->create(['username' => '7654321', 'is_active' => false]);
-    $conflicted = Teacher::factory()->create(['employee_number' => '7654321']);
+    $conflicted = Teacher::factory()->create(['rfc' => '7654321']);
 
     syncAccess($teacher);
     syncAccess($teacher->fresh());

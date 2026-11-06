@@ -5,7 +5,7 @@
     disponibilidad (docentes), «Agregar observación» y «Activar/Desactivar». Lo que el rol o el estado no permite se
     queda en el menú, deshabilitado y con su motivo escrito. `$card` es de review.php.
 --}}
-@php($code = $record->code ?? $record->employee_number)
+@php($code = $record->code ?? $record->rfc)
 @php($teachers = $card['review']->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers)
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
     @if ($teachers)

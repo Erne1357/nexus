@@ -62,6 +62,6 @@ final class SetPrimaryAdscription
             ->event(ActivityEvent::Updated)
             ->withChanges(['attributes' => ['is_primary' => $primary], 'old' => ['is_primary' => ! $primary]])
             ->withProperties(['teacher_id' => $teacher->getKey()])
-            ->log(($primary ? 'Hizo principal' : 'Dejó de ser principal')." una adscripción del docente {$teacher->employee_number}");
+            ->log(($primary ? 'Hizo principal' : 'Dejó de ser principal')." una adscripción del docente {$teacher->rfc}");
     }
 }

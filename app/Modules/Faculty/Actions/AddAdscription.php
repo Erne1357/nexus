@@ -75,7 +75,7 @@ final class AddAdscription
                     throw $alreadyThere;
                 }
 
-                $this->record($adscription, ActivityEvent::Created, "Adscribió al docente {$locked->employee_number} a {$department->code}{$mark}", [
+                $this->record($adscription, ActivityEvent::Created, "Adscribió al docente {$locked->rfc} a {$department->code}{$mark}", [
                     'attributes' => $adscription->only(['department_id', 'is_primary']),
                 ]);
             } else {
@@ -83,7 +83,7 @@ final class AddAdscription
                 $adscription->is_primary = $becomesPrimary;
                 $adscription->restore();
 
-                $this->record($adscription, ActivityEvent::Restored, "Volvió a adscribir al docente {$locked->employee_number} a {$department->code}{$mark}", [
+                $this->record($adscription, ActivityEvent::Restored, "Volvió a adscribir al docente {$locked->rfc} a {$department->code}{$mark}", [
                     'attributes' => $adscription->only(['department_id', 'is_primary']),
                     'old' => $old,
                 ]);

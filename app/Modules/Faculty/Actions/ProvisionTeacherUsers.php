@@ -17,7 +17,7 @@ use Spatie\Activitylog\Support\CauserResolver;
  * antes de tocar a ningún docente.
  *
  * Cada docente que cambia deja su propia bitácora (SyncTeacherAccess), y la corrida, una entrada más con las
- * cuentas y los números de empleado en conflicto (S15), aunque no haya cambiado nada. Con `$actor`, todas esas
+ * cuentas y los RFC en conflicto (S15), aunque no haya cambiado nada. Con `$actor`, todas esas
  * entradas quedan a su nombre, también cuando corre en la cola (ProvisionTeacherUsersJob). Cada docente va en su
  * propia transacción: si la corrida se interrumpe, lo ya sincronizado se queda y repetirla es seguro.
  */
@@ -53,13 +53,13 @@ final class ProvisionTeacherUsers
         $summary = ['created' => 0, 'linked' => 0, 'updated' => 0, 'unchanged' => 0, 'conflicts' => []];
 
         Teacher::withTrashed()
-            ->select(['id', 'employee_number'])
+            ->select(['id', 'rfc'])
             ->chunkById(self::CHUNK, function (Collection $teachers) use (&$summary, $passwordHash): void {
                 foreach ($teachers as $teacher) {
                     $result = $this->syncTeacherAccess->handle($teacher, $passwordHash);
 
                     if ($result === AccessSync::Conflict) {
-                        $summary['conflicts'][] = $teacher->employee_number;
+                        $summary['conflicts'][] = $teacher->rfc;
                     } else {
                         $summary[$result->value]++;
                     }

@@ -30,16 +30,16 @@ beforeEach(function () {
     $this->term = Term::factory()->current()->create(['starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
 
     $this->ana = Teacher::factory()->adscribedTo($this->ii)->adscribedTo($this->sc, primary: false)
-        ->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
-    $this->beto = Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
-    $this->carla = Teacher::factory()->adscribedTo($this->ii)->inactive()->create(['employee_number' => '1000003', 'name' => 'Carla 50%_Díaz']);
-    $this->borrado = Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000005']);
+        ->create(['rfc' => 'PRUE000001AB1', 'name' => 'Ana Pérez']);
+    $this->beto = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'PRUE000002AB1', 'name' => 'Beto Ruiz']);
+    $this->carla = Teacher::factory()->adscribedTo($this->ii)->inactive()->create(['rfc' => 'PRUE000003AB1', 'name' => 'Carla 50%_Díaz']);
+    $this->borrado = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'PRUE000005AB1']);
     $this->borrado->delete();
     // Su adscripción a SC se quitó; queda II.
-    $this->ex = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000006', 'name' => 'Elena Vega']);
+    $this->ex = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => 'PRUE000006AB1', 'name' => 'Elena Vega']);
     TeacherDepartment::factory()->for($this->ex)->for($this->sc)->create(['is_primary' => false])->delete();
     // Sin departamento.
-    $this->sin = Teacher::factory()->create(['employee_number' => '1000007', 'name' => 'Fausto Gil']);
+    $this->sin = Teacher::factory()->create(['rfc' => 'PRUE000007AB1', 'name' => 'Fausto Gil']);
 });
 
 /**
@@ -52,11 +52,11 @@ function teacherNumbersFor(User $user, array $filters = []): array
 {
     test()->actingAs($user);
 
-    return app(TeacherQuery::class)->forTable(app(Actor::class), ...$filters)->pluck('employee_number')->all();
+    return app(TeacherQuery::class)->forTable(app(Actor::class), ...$filters)->pluck('rfc')->all();
 }
 
 it('al admin y a la Subdirección les trae a todos los docentes sin borrar, también sin departamento, activos e inactivos', function () {
-    $all = ['1000001', '1000002', '1000003', '1000006', '1000007'];
+    $all = ['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000006AB1', 'PRUE000007AB1'];
 
     expect(teacherNumbersFor(User::factory()->admin()->create()))->toBe($all)
         ->and(teacherNumbersFor(User::factory()->withRole(Role::Subdireccion)->create()))->toBe($all);
@@ -65,13 +65,13 @@ it('al admin y a la Subdirección les trae a todos los docentes sin borrar, tamb
 it('el jefe de SC, de todo el Tec, solo ve a los adscritos a SC, aunque su principal sea otra', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
 
-    expect(teacherNumbersFor($jefe))->toBe(['1000001', '1000002']);
+    expect(teacherNumbersFor($jefe))->toBe(['PRUE000001AB1', 'PRUE000002AB1']);
 });
 
 it('el jefe de proyecto docente de SC en un campus ve a todos los adscritos a SC: el docente no es de un campus', function () {
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
 
-    expect(teacherNumbersFor($jpd))->toBe(['1000001', '1000002']);
+    expect(teacherNumbersFor($jpd))->toBe(['PRUE000001AB1', 'PRUE000002AB1']);
 });
 
 it('con varios alcances ve la unión, y al coordinador y al docente no les trae a nadie', function () {
@@ -82,7 +82,7 @@ it('con varios alcances ve la unión, y al coordinador y al docente no les trae 
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
     $docente = User::factory()->withRole(Role::Docente)->create();
 
-    expect(teacherNumbersFor($both))->toBe(['1000001', '1000002', '1000003', '1000006'])
+    expect(teacherNumbersFor($both))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000006AB1'])
         ->and(teacherNumbersFor($coordinador))->toBe([])
         ->and(teacherNumbersFor($docente))->toBe([]);
 });
@@ -94,14 +94,14 @@ it('con varios puestos ve solo lo del perfil activo', function () {
         ->create();
 
     actingAsRole($both, Role::JefeDepartamento);
-    $asJefe = app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('employee_number')->all();
+    $asJefe = app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('rfc')->all();
 
     actingAsRole($both, Role::JefeProyectoDocente);
-    $asJefeProyecto = app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('employee_number')->all();
+    $asJefeProyecto = app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('rfc')->all();
 
     // Ana está adscrita a SC y a II: sale con los dos perfiles. Beto solo es de SC; Carla y Elena, solo de II.
-    expect($asJefe)->toBe(['1000001', '1000002'])
-        ->and($asJefeProyecto)->toBe(['1000001', '1000003', '1000006']);
+    expect($asJefe)->toBe(['PRUE000001AB1', 'PRUE000002AB1'])
+        ->and($asJefeProyecto)->toBe(['PRUE000001AB1', 'PRUE000003AB1', 'PRUE000006AB1']);
 });
 
 it('lo que lista a cada rol coincide con lo que TeacherPolicy le deja ver', function () {
@@ -114,9 +114,9 @@ it('lo que lista a cada rol coincide con lo que TeacherPolicy le deja ver', func
     ];
 
     foreach ($users as $user) {
-        $allowed = Teacher::query()->orderBy('employee_number')->get()
+        $allowed = Teacher::query()->orderBy('rfc')->get()
             ->filter(fn (Teacher $teacher): bool => Gate::forUser($user)->allows('view', $teacher))
-            ->pluck('employee_number')->values()->all();
+            ->pluck('rfc')->values()->all();
 
         expect(teacherNumbersFor($user))->toBe($allowed);
     }
@@ -125,16 +125,16 @@ it('lo que lista a cada rol coincide con lo que TeacherPolicy le deja ver', func
 it('busca por número o por nombre, con %, _ y \\ literales', function (string $search, array $expected) {
     expect(teacherNumbersFor(User::factory()->admin()->create(), ['search' => $search]))->toBe($expected);
 })->with([
-    'número' => ['000002', ['1000002']],
-    'nombre sin mayúsculas' => ['ana pé', ['1000001']],
-    'porcentaje literal' => ['50%_', ['1000003']],
-    'comodín que no está' => ['%', ['1000003']],
+    'número' => ['000002', ['PRUE000002AB1']],
+    'nombre sin mayúsculas' => ['ana pé', ['PRUE000001AB1']],
+    'porcentaje literal' => ['50%_', ['PRUE000003AB1']],
+    'comodín que no está' => ['%', ['PRUE000003AB1']],
 ]);
 
 it('filtra por el departamento de una adscripción sin borrar', function () {
     $admin = User::factory()->admin()->create();
 
-    expect(teacherNumbersFor($admin, ['departmentId' => $this->sc->id]))->toBe(['1000001', '1000002'])
+    expect(teacherNumbersFor($admin, ['departmentId' => $this->sc->id]))->toBe(['PRUE000001AB1', 'PRUE000002AB1'])
         ->and(teacherNumbersFor($admin, ['departmentId' => 'no-es-uuid']))->toBe([]);
 });
 
@@ -143,28 +143,28 @@ it('filtra por el tipo de una plaza vigente al inicio del periodo activo', funct
     TeacherPosition::factory()->for($this->beto)->tiempoCompleto()->create(['valid_from' => '2020-01-01', 'valid_to' => '2026-12-31']);
     TeacherPosition::factory()->for($this->sin)->asignatura(12)->create();
 
-    expect(teacherNumbersFor(User::factory()->admin()->create(), ['kind' => PositionKind::TiempoCompleto]))->toBe(['1000001'])
-        ->and(teacherNumbersFor(User::factory()->admin()->create(), ['kind' => PositionKind::Asignatura]))->toBe(['1000007']);
+    expect(teacherNumbersFor(User::factory()->admin()->create(), ['kind' => PositionKind::TiempoCompleto]))->toBe(['PRUE000001AB1'])
+        ->and(teacherNumbersFor(User::factory()->admin()->create(), ['kind' => PositionKind::Asignatura]))->toBe(['PRUE000007AB1']);
 });
 
 it('filtra por estado', function () {
     $admin = User::factory()->admin()->create();
 
-    expect(teacherNumbersFor($admin, ['active' => false]))->toBe(['1000003'])
-        ->and(teacherNumbersFor($admin, ['active' => true]))->toBe(['1000001', '1000002', '1000006', '1000007']);
+    expect(teacherNumbersFor($admin, ['active' => false]))->toBe(['PRUE000003AB1'])
+        ->and(teacherNumbersFor($admin, ['active' => true]))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000006AB1', 'PRUE000007AB1']);
 });
 
 it('trae las adscripciones sin borrar de cada docente con su departamento, la principal primero', function () {
     $this->actingAs(User::factory()->admin()->create());
 
     $page = app(TeacherQuery::class)->forTable(app(Actor::class));
-    $ana = $page->firstWhere('employee_number', '1000001');
+    $ana = $page->firstWhere('rfc', 'PRUE000001AB1');
 
     expect($ana->relationLoaded('adscriptions'))->toBeTrue()
         ->and($ana->adscriptions->map(fn (TeacherDepartment $adscription): string => "{$adscription->department->code}/".(int) $adscription->is_primary)->all())
         ->toBe(['II/1', 'SC/0'])
-        ->and($page->firstWhere('employee_number', '1000006')->adscriptions)->toHaveCount(1)
-        ->and($page->firstWhere('employee_number', '1000007')->adscriptions)->toHaveCount(0);
+        ->and($page->firstWhere('rfc', 'PRUE000006AB1')->adscriptions)->toHaveCount(1)
+        ->and($page->firstWhere('rfc', 'PRUE000007AB1')->adscriptions)->toHaveCount(0);
 });
 
 it('las opciones de departamento marcan los inactivos', function () {
@@ -240,15 +240,15 @@ it('carga 40 docentes con 3 adscripciones cada uno y sus horas base sin N+1', fu
         ->and(count(DB::getQueryLog()))->toBeLessThanOrEqual(5);
 });
 
-it('findOrFail no trae borrados ni acepta un id que no es uuid; findByEmployeeNumber solo a los no borrados', function () {
+it('findOrFail no trae borrados ni acepta un id que no es uuid; findByRfc solo a los no borrados', function () {
     $query = app(TeacherQuery::class);
 
     expect($query->findOrFail($this->ana->id)->is($this->ana))->toBeTrue()
         ->and(fn () => $query->findOrFail($this->borrado->id))->toThrow(ModelNotFoundException::class)
         ->and(fn () => $query->findOrFail('no-es-uuid'))->toThrow(ModelNotFoundException::class)
-        ->and($query->findByEmployeeNumber('1000002')?->is($this->beto))->toBeTrue()
-        ->and($query->findByEmployeeNumber('1000005'))->toBeNull()
-        ->and($query->findByEmployeeNumber('9999999'))->toBeNull();
+        ->and($query->findByRfc('PRUE000002AB1')?->is($this->beto))->toBeTrue()
+        ->and($query->findByRfc('PRUE000005AB1'))->toBeNull()
+        ->and($query->findByRfc('PRUE999999AB1'))->toBeNull();
 });
 
 it('la lista de docentes da las mismas filas que antes por puesto', function () {
@@ -262,15 +262,15 @@ it('la lista de docentes da las mismas filas que antes por puesto', function () 
 
     // La Subdirección, también a Fausto, que no tiene departamento; el jefe de II, a Ana, Carla y Elena; el JPD de SC
     // en C2, a los de SC, porque el docente no es de un campus.
-    expect(teacherNumbersFor($subdireccion))->toBe(['1000001', '1000002', '1000003', '1000006', '1000007'])
-        ->and(teacherNumbersFor($jefe))->toBe(['1000001', '1000003', '1000006'])
-        ->and(teacherNumbersFor($jpd))->toBe(['1000001', '1000002']);
+    expect(teacherNumbersFor($subdireccion))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000006AB1', 'PRUE000007AB1'])
+        ->and(teacherNumbersFor($jefe))->toBe(['PRUE000001AB1', 'PRUE000003AB1', 'PRUE000006AB1'])
+        ->and(teacherNumbersFor($jpd))->toBe(['PRUE000001AB1', 'PRUE000002AB1']);
 
     actingAsRole($both, Role::JefeDepartamento);
-    expect(app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('employee_number')->all())->toBe(['1000001', '1000002']);
+    expect(app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('rfc')->all())->toBe(['PRUE000001AB1', 'PRUE000002AB1']);
 
     actingAsRole($both, Role::Coordinador);
-    expect(app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('employee_number')->all())->toBe([]);
+    expect(app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('rfc')->all())->toBe([]);
 });
 
 it('los departamentos del perfil de materias y del alta son los de antes por puesto', function () {

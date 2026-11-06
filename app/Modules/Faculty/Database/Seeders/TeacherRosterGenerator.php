@@ -8,7 +8,7 @@ use Random\Randomizer;
  * Plantillas de docentes ficticios para los seeders demo y masivo (FacultyDemoSeeder). Clase pura, sin base: con
  * el mismo Randomizer y los mismos datos da los mismos docentes, así que el seeder los puede insertar por bloques.
  *
- * Cada plantilla trae nombre (de listas, nunca reales), número de empleado (`D` + dígito del campus + consecutivo),
+ * Cada plantilla trae nombre (de listas, nunca reales), RFC (sintético, con la forma de un RFC: 4 letras, fecha y homoclave),
  * adscripciones (`dept` es la posición del departamento en la lista del seeder; sin campus, porque el docente no es
  * de un campus, y sin repetir departamento), plazas, disponibilidad del periodo actual, horas fuera del ITCJ, perfil, historial y evaluaciones. Las materias
  * van por su posición en la lista de materias del departamento (`$subjectCounts`); un departamento sin materias no
@@ -70,7 +70,7 @@ final class TeacherRosterGenerator
     public function __construct(private readonly Randomizer $random) {}
 
     /**
-     * @param  string  $campusCode  clave del campus (da el prefijo del número de empleado)
+     * @param  string  $campusCode  clave del campus (da la primera letra del RFC)
      * @param  list<int>  $subjectCounts  materias de cada departamento, en el orden de la lista del seeder
      * @return list<array<string, mixed>>
      */
@@ -91,7 +91,7 @@ final class TeacherRosterGenerator
      */
     private function teacher(string $campusCode, int $i, array $subjectCounts): array
     {
-        $employeeNumber = sprintf('D%s%04d', $this->campusDigit($campusCode), $i + 1);
+        $rfc = $this->rfc($campusCode, $i);
         $isActive = $i % 17 !== 5;
         $deleted = $i % 23 === 7;
         $adscriptions = $this->adscriptions($i, $subjectCounts);
@@ -101,9 +101,9 @@ final class TeacherRosterGenerator
         [$history, $evaluations] = $this->historyAndEvaluations($profile);
 
         return [
-            'employee_number' => $employeeNumber,
+            'rfc' => $rfc,
             'name' => $name,
-            'email' => $i % 13 === 3 ? null : strtolower($employeeNumber).'@example.test',
+            'email' => $i % 13 === 3 ? null : strtolower($rfc).'@example.test',
             'degree' => $i % 11 === 4 ? null : self::DEGREES[$this->random->getInt(0, count(self::DEGREES) - 1)],
             'hired_on' => $i % 20 === 6 ? null : sprintf('%d-%02d-%02d', $this->random->getInt(1995, 2025), $this->random->getInt(1, 12), $this->random->getInt(1, 28)),
             'is_active' => $isActive,
@@ -116,6 +116,19 @@ final class TeacherRosterGenerator
             'history' => $history,
             'evaluations' => $evaluations,
         ];
+    }
+
+    /**
+     * Un RFC sintético con la forma de uno de persona física: 4 letras (la del campus y 3 que cuentan al docente),
+     * una fecha válida y 3 caracteres de homoclave. Sale solo del campus y del consecutivo, sin gastar el
+     * generador aleatorio, y es único por campus hasta 17 576 docentes. Nunca es el de una persona real.
+     */
+    private function rfc(string $campusCode, int $i): string
+    {
+        $letters = chr(65 + (int) $this->campusDigit($campusCode)).chr(65 + intdiv($i, 676) % 26).chr(65 + intdiv($i, 26) % 26).chr(65 + $i % 26);
+        $birth = sprintf('%02d%02d%02d', (60 + $i % 40) % 100, 1 + $i % 12, 1 + $i % 28);
+
+        return $letters.$birth.strtoupper(substr(dechex(crc32($campusCode.$i)), 0, 3));
     }
 
     private function campusDigit(string $campusCode): string

@@ -27,7 +27,7 @@ beforeEach(function () {
     $this->ii = Department::factory()->create(['code' => 'II']);
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
     $this->user = User::factory()->create(['username' => '1000001']);
-    $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000001', 'user_id' => $this->user->id]);
+    $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => '1000001', 'user_id' => $this->user->id]);
     TeacherDepartment::factory()->for($this->ana)->for($this->sc)->create(['is_primary' => false]);
 });
 

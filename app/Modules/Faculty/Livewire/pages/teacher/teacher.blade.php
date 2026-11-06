@@ -18,7 +18,7 @@
         <div class="min-w-0">
             <h1 class="flex flex-wrap items-center gap-3 text-[1.625rem] font-bold leading-tight md:text-3xl">
                 {{ $record->teacher->name }}
-                <span class="font-mono text-xl font-semibold text-neutral tabular-nums">{{ $record->teacher->employee_number }}</span>
+                <span class="font-mono text-xl font-semibold text-neutral tabular-nums">{{ $record->teacher->rfc }}</span>
                 <x-core::status-badge :tone="$record->teacher->is_active ? 'success' : 'neutral'" :label="$record->teacher->is_active ? 'Activo' : 'Inactivo'" />
             </h1>
             <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
@@ -35,12 +35,12 @@
         <div class="flex gap-2 max-md:w-full">
             <x-button label="Editar datos" icon="o-pencil-square" class="btn-outline" wire:click="editData" spinner="editData" data-testid="edit-data" />
 
-            <x-core::row-menu :name="$record->teacher->employee_number">
+            <x-core::row-menu :name="$record->teacher->rfc">
                 @if ($canDeactivate)
                     <x-core::row-menu-item
                         :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'"
                         wire:click="toggleActive"
-                        wire:confirm="{{ $record->teacher->is_active ? '¿Dar de baja al docente '.$record->teacher->employee_number.'? Se desactiva su usuario y terminan sus jefaturas vigentes.' : '¿Activar al docente '.$record->teacher->employee_number.'? Su usuario vuelve a estar activo.' }}"
+                        wire:confirm="{{ $record->teacher->is_active ? '¿Dar de baja al docente '.$record->teacher->rfc.'? Se desactiva su usuario y terminan sus jefaturas vigentes.' : '¿Activar al docente '.$record->teacher->rfc.'? Su usuario vuelve a estar activo.' }}"
                         spinner="toggleActive"
                         data-testid="toggle-active"
                     />
@@ -51,7 +51,7 @@
                     <x-core::row-menu-item
                         label="Restablecer contraseña"
                         wire:click="resetPassword"
-                        wire:confirm="¿Restablecer la contraseña de {{ $record->teacher->employee_number }}? Vuelve a la contraseña por defecto y tendrá que cambiarla al entrar."
+                        wire:confirm="¿Restablecer la contraseña de {{ $record->teacher->rfc }}? Vuelve a la contraseña por defecto y tendrá que cambiarla al entrar."
                         spinner="resetPassword"
                         data-testid="reset-password"
                     />
@@ -262,7 +262,7 @@
                     </header>
                     <dl class="divide-y divide-base-300">
                         @foreach ([
-                            ['Número de empleado', '<span class="font-mono">'.e($record->teacher->employee_number).'</span>'],
+                            ['RFC', '<span class="font-mono">'.e($record->teacher->rfc).'</span>'],
                             ['Nombre', e($record->teacher->name)],
                             ['Correo', $record->teacher->email ? e($record->teacher->email) : '<span class="text-neutral">Sin correo</span>'],
                             ['Grado', $record->teacher->degree ? e($record->teacher->degree->label()) : '<span class="text-neutral">Sin grado</span>'],
@@ -411,7 +411,7 @@
         <x-form wire:submit="saveData" no-separator>
             <div class="grid gap-4 md:grid-cols-6">
                 <div class="md:col-span-2">
-                    <x-input label="Número de empleado" value="{{ $record->teacher->employee_number }}" disabled hint="No se cambia: es su usuario." />
+                    <x-input label="RFC" value="{{ $record->teacher->rfc }}" disabled hint="No se cambia: es su usuario." />
                 </div>
                 <div class="md:col-span-4">
                     <x-input label="Nombre" name="name" wire:model="name" />

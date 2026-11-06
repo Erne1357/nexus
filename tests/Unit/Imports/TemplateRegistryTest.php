@@ -27,7 +27,7 @@ class KeyOutsideFieldsTemplate extends CampusesTemplate
 
     public function naturalKey(): array
     {
-        return ['employee_number'];
+        return ['rfc'];
     }
 }
 

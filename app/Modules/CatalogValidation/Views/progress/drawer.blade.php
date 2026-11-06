@@ -51,7 +51,7 @@
                     @foreach ($catalogFlags->groupBy(fn ($flag) => $flag->flaggable_type.'|'.$flag->flaggable_id) as $recordFlags)
                         @php($record = $recordFlags->first()->flaggable)
                         <article wire:key="record-{{ $recordFlags->first()->flaggable_type }}-{{ $recordFlags->first()->flaggable_id }}" class="space-y-2 rounded-box border border-base-300 bg-base-100 p-3.5" data-testid="drawer-record-{{ \Illuminate\Support\Str::kebab(class_basename($recordFlags->first()->flaggable_type)) }}-{{ $recordFlags->first()->flaggable_id }}">
-                            <p class="font-semibold"><span class="font-mono">{{ $record?->code ?? $record?->employee_number }}</span>@if ($record === null) · Registro ya no disponible @elseif (filled($record->name)) · {{ $record->name }}@endif</p>
+                            <p class="font-semibold"><span class="font-mono">{{ $record?->code ?? $record?->rfc }}</span>@if ($record === null) · Registro ya no disponible @elseif (filled($record->name)) · {{ $record->name }}@endif</p>
                             <ul class="divide-y divide-base-300">
                                 @foreach ($recordFlags as $flag)
                                     <li wire:key="flag-{{ $flag->id }}" class="space-y-1.5 py-2 first:pt-0 last:pb-0" data-testid="drawer-flag-{{ $flag->id }}">

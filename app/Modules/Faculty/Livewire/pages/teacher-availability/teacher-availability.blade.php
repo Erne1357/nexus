@@ -36,7 +36,7 @@
                         <x-core::status-badge tone="primary" :label="$term->name" />
                     </h1>
                     <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
-                        <span>Docente <span class="font-mono text-base-content">{{ $teacher->employee_number }}</span> <span class="font-medium text-base-content">{{ $teacher->name }}</span></span>
+                        <span>Docente <span class="font-mono text-base-content">{{ $teacher->rfc }}</span> <span class="font-medium text-base-content">{{ $teacher->name }}</span></span>
                         <span>{{ $campus ? 'Horario de '.$campus->name : 'Horario presencial por omisión' }} <span class="font-medium text-base-content">{{ $grid['schedule'] }}</span></span>
                         <span>Bloques de <span class="font-medium text-base-content">{{ $blocks }}</span></span>
                     </p>

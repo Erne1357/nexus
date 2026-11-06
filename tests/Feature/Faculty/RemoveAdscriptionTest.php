@@ -44,7 +44,7 @@ function removeAdscription(TeacherDepartment $adscription): ?TeacherDepartment
  */
 function teacherInThreeDepartments(Department $sis, Department $ind, Department $civ): Teacher
 {
-    $teacher = Teacher::factory()->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->create(['rfc' => '1234567']);
     TeacherDepartment::factory()->for($teacher)->for($sis)->create(['is_primary' => true, 'created_at' => now()->subYears(3)]);
     TeacherDepartment::factory()->for($teacher)->for($civ)->create(['is_primary' => false, 'created_at' => now()->subYear()]);
     TeacherDepartment::factory()->for($teacher)->for($ind)->create(['is_primary' => false, 'created_at' => now()->subYears(2)]);
@@ -99,7 +99,7 @@ it('deja en la bitácora la adscripción quitada y la principal nueva', function
 });
 
 it('quitar la única deja al docente activo y sin departamento, con su usuario, su rol y su alcance', function () {
-    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['employee_number' => '1234567']);
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
     app(SyncTeacherAccess::class)->handle($teacher);
     $user = $teacher->fresh()->user;
     $sis = adscriptionOf($teacher, $this->sis);

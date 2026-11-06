@@ -39,7 +39,7 @@ final class CatalogRecordsQuery
             default => null,
         };
 
-        TextSearch::apply($query, [$review->catalog === Catalog::Teachers ? 'employee_number' : 'code', 'name'], $search);
+        TextSearch::apply($query, [$review->catalog === Catalog::Teachers ? 'rfc' : 'code', 'name'], $search);
 
         if ($active !== null) {
             $query->where($model->qualifyColumn('is_active'), $active);

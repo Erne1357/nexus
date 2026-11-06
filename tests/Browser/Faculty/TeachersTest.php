@@ -15,7 +15,7 @@ use App\Modules\Faculty\Models\Teacher;
 
 beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-    Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
+    Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'PRUE000001AB1', 'name' => 'Ana Pérez']);
 
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create(['username' => 'jefe.sc', 'name' => 'Julia Jefa']);
 });
@@ -33,19 +33,19 @@ it('el jefe de SC da de alta un docente y lo ve en su lista', function () {
         ->assertSee('Das de alta docentes solo en este departamento.')
         ->assertScript("document.querySelector('select[name=department_id]').selectedOptions[0].text", 'SC · Sistemas y Computación')
         ->assertScript("document.querySelector('select[name=department_id]').disabled", true)
-        ->fill('employee_number', '2000010')
+        ->fill('rfc', 'NUEV000010AB1')
         ->fill('name', 'Gabriel Mora')
         ->press('Guardar')
         ->waitForText('Docente creado')
         ->assertSee('Gabriel Mora')
         ->assertNoJavaScriptErrors();
 
-    expect(Teacher::where('employee_number', '2000010')->sole()->adscriptions()->sole()->department_id)->toBe($this->sc->id);
+    expect(Teacher::where('rfc', 'NUEV000010AB1')->sole()->adscriptions()->sole()->department_id)->toBe($this->sc->id);
 });
 
 it('al escribir el número de un docente que ya existe, al jefe solo le dice que está registrado, sin decir de quién (S9)', function () {
     $industrial = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
-    Teacher::factory()->adscribedTo($industrial)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
+    Teacher::factory()->adscribedTo($industrial)->create(['rfc' => 'PRUE000002AB1', 'name' => 'Beto Ruiz']);
 
     visit('/login')
         ->fill('username', 'jefe.sc')
@@ -53,16 +53,16 @@ it('al escribir el número de un docente que ya existe, al jefe solo le dice que
         ->press('Entrar')
         ->navigate('/faculty/teachers')
         ->press('Nuevo docente')
-        ->fill('employee_number', '1000002')
-        ->keys('input[name="employee_number"]', 'Tab')
-        ->waitForText('Ese número ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.')
+        ->fill('rfc', 'PRUE000002AB1')
+        ->keys('input[name="rfc"]', 'Tab')
+        ->waitForText('Ese RFC ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.')
         ->assertDontSee('Beto Ruiz')
         ->assertNoJavaScriptErrors();
 });
 
 it('la Subdirección escribe el número de un docente que ya existe y lo adscribe a un departamento sin darlo de alta otra vez (S9)', function () {
     $industrial = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
-    $existing = Teacher::factory()->adscribedTo($industrial)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
+    $existing = Teacher::factory()->adscribedTo($industrial)->create(['rfc' => 'PRUE000002AB1', 'name' => 'Beto Ruiz']);
     User::factory()->withRole(Role::Subdireccion)->create(['username' => 'subdir']);
 
     visit('/login')
@@ -72,9 +72,9 @@ it('la Subdirección escribe el número de un docente que ya existe y lo adscrib
         ->navigate('/faculty/teachers')
         ->press('Nuevo docente')
         ->select('department_id', $this->sc->id)
-        ->fill('employee_number', '1000002')
-        ->keys('input[name="employee_number"]', 'Tab')
-        ->waitForText('Ya existe el docente 1000002 · Beto Ruiz')
+        ->fill('rfc', 'PRUE000002AB1')
+        ->keys('input[name="rfc"]', 'Tab')
+        ->waitForText('Ya existe el docente PRUE000002AB1 · Beto Ruiz')
         ->press('Adscribir a SC')
         ->waitForText('Docente adscrito a SC')
         ->assertNoJavaScriptErrors();

@@ -639,7 +639,7 @@ new #[Title('Validación de catálogos')] class extends Component
             ],
             Catalog::Careers => [['key' => 'code', 'label' => 'Clave'], [...$name, 'label' => 'Carrera']],
             Catalog::Teachers => [
-                ['key' => 'employee_number', 'label' => 'Número'],
+                ['key' => 'rfc', 'label' => 'RFC'],
                 [...$name, 'label' => 'Docente'],
                 ['key' => 'availability', 'label' => 'Disponibilidad'],
                 ['key' => 'profile', 'label' => 'Perfil', 'class' => $this->missing === 'perfil' ? 'text-end' : 'text-end max-[1199px]:hidden'],
@@ -697,7 +697,7 @@ new #[Title('Validación de catálogos')] class extends Component
                 ['label' => 'Edificio', 'value' => $record->building?->name ?? $record->building?->code],
                 ['label' => 'Departamento', 'value' => $review->department?->name],
             ],
-            Catalog::Teachers => [['label' => 'Número de empleado', 'value' => $record->employee_number, 'mono' => true]],
+            Catalog::Teachers => [['label' => 'RFC', 'value' => $record->rfc, 'mono' => true]],
         };
     }
 
@@ -823,7 +823,7 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     private function describe(CatalogReview $review, Model $record): string
     {
-        $code = $review->catalog === Catalog::Teachers ? $record->employee_number : $record->code;
+        $code = $review->catalog === Catalog::Teachers ? $record->rfc : $record->code;
 
         return e("{$code} · {$record->name}");
     }

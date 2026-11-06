@@ -19,7 +19,7 @@ use Spatie\Activitylog\Models\Activity;
 */
 
 beforeEach(function () {
-    $this->teacher = Teacher::factory()->create(['employee_number' => '1000001']);
+    $this->teacher = Teacher::factory()->create(['rfc' => '1000001']);
     $this->term = Term::factory()->current()->create(['code' => '20271']);
     $this->activityBase = (int) Activity::max('id');
 });

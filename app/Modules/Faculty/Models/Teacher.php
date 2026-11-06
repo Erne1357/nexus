@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * quedarse sin ninguna y seguir activo); sus horas base, sus plazas. El usuario es opcional: algunos docentes son
  * solo registro para RH.
  */
-#[Fillable(['employee_number', 'user_id', 'name', 'email', 'degree', 'hired_on', 'is_active'])]
+#[Fillable(['rfc', 'user_id', 'name', 'email', 'degree', 'hired_on', 'is_active'])]
 #[UseFactory(TeacherFactory::class)]
 class Teacher extends Model
 {

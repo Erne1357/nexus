@@ -41,7 +41,7 @@ final class AddPosition
                 ->event(ActivityEvent::Created)
                 ->withChanges(['attributes' => $this->rules->logged($position)])
                 ->withProperties(['teacher_id' => $locked->getKey()])
-                ->log("Agregó una plaza de {$data['kind']->label()} al docente {$locked->employee_number}");
+                ->log("Agregó una plaza de {$data['kind']->label()} al docente {$locked->rfc}");
 
             PositionChanged::dispatch($position, auth()->user());
 

@@ -40,18 +40,18 @@ beforeEach(function () {
     $this->term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
 
     // Principal en II y otra adscripción a SC; dos plazas vigentes.
-    $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['employee_number' => '1000001', 'name' => 'Ana Pérez']);
+    $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => 'PRUE000001AB1', 'name' => 'Ana Pérez']);
     TeacherDepartment::factory()->for($this->ana)->for($this->sc)->create(['is_primary' => false, 'created_at' => now()->addSecond()]);
     TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create();
     TeacherPosition::factory()->for($this->ana)->asignatura(5)->create();
-    $this->beto = Teacher::factory()->adscribedTo($this->cb)->create(['employee_number' => '1000002', 'name' => 'Beto Ruiz']);
-    $this->carla = Teacher::factory()->adscribedTo($this->ii)->inactive()->create(['employee_number' => '1000003', 'name' => 'Carla Díaz']);
+    $this->beto = Teacher::factory()->adscribedTo($this->cb)->create(['rfc' => 'PRUE000002AB1', 'name' => 'Beto Ruiz']);
+    $this->carla = Teacher::factory()->adscribedTo($this->ii)->inactive()->create(['rfc' => 'PRUE000003AB1', 'name' => 'Carla Díaz']);
     $this->dario = Teacher::factory()->adscribedTo($this->sc)->create([
-        'employee_number' => '1000004',
+        'rfc' => 'PRUE000004AB1',
         'name' => 'Darío Soto',
-        'user_id' => User::factory()->withRole(Role::Docente)->create(['username' => '1000004'])->id,
+        'user_id' => User::factory()->withRole(Role::Docente)->create(['username' => 'PRUE000004AB1'])->id,
     ]);
-    $this->sin = Teacher::factory()->create(['employee_number' => '1000005', 'name' => 'Elsa Mora']);
+    $this->sin = Teacher::factory()->create(['rfc' => 'PRUE000005AB1', 'name' => 'Elsa Mora']);
 
     $this->admin = User::factory()->admin()->create();
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
@@ -67,7 +67,7 @@ function seesTeachersMenu(User $user): bool
 }
 
 /**
- * Los renglones de la tabla, por número de empleado, con su texto.
+ * Los renglones de la tabla, por RFC, con su texto.
  *
  * @return array<string, string>
  */
@@ -81,7 +81,7 @@ function teacherRowsFor(User $user): array
 }
 
 /**
- * Los números de empleado de la tabla que ve `$user`.
+ * Los RFC de la tabla que ve `$user`.
  *
  * @return list<string>
  */
@@ -111,12 +111,12 @@ describe('admin', function () {
             ->assertSeeInOrder(['Número', 'Nombre', 'Adscripción', 'Horas base', 'Usuario', 'Estado']);
         $rows = teacherRowsFor($this->admin);
 
-        expect(array_map('strval', array_keys($rows)))->toBe(['1000001', '1000002', '1000003', '1000004', '1000005'])
-            ->and($rows['1000001'])->toContain('Ana Pérez', 'II', 'También SC', '45', 'No', 'Activo')->not->toContain(' en C')
-            ->and($rows['1000003'])->toContain('Carla Díaz', 'II', 'Inactivo')
-            ->and($rows['1000004'])->toContain('Darío Soto', 'SC', 'Sí')
-            ->and($rows['1000005'])->toContain('Elsa Mora', 'Sin departamento')
-            ->and(domOf($response)->querySelector('table tbody tr td span.font-mono')?->textContent)->toBe('1000001');
+        expect(array_map('strval', array_keys($rows)))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000004AB1', 'PRUE000005AB1'])
+            ->and($rows['PRUE000001AB1'])->toContain('Ana Pérez', 'II', 'También SC', '45', 'No', 'Activo')->not->toContain(' en C')
+            ->and($rows['PRUE000003AB1'])->toContain('Carla Díaz', 'II', 'Inactivo')
+            ->and($rows['PRUE000004AB1'])->toContain('Darío Soto', 'SC', 'Sí')
+            ->and($rows['PRUE000005AB1'])->toContain('Elsa Mora', 'Sin departamento')
+            ->and(domOf($response)->querySelector('table tbody tr td span.font-mono')?->textContent)->toBe('PRUE000001AB1');
     });
 
     it('nunca dice «horas extras»: las horas son las base del periodo activo', function () {
@@ -151,7 +151,7 @@ describe('admin', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->assertSet('showModal', true)
-            ->set('employee_number', ' 2000001 ')
+            ->set('rfc', ' NUEV000001AB1 ')
             ->set('name', 'Elena Vega')
             ->set('email', 'elena@example.test')
             ->set('degree', 'doctorado')
@@ -161,13 +161,13 @@ describe('admin', function () {
             ->assertHasNoErrors()
             ->assertSet('showModal', false);
 
-        $teacher = Teacher::where('employee_number', '2000001')->sole();
+        $teacher = Teacher::where('rfc', 'NUEV000001AB1')->sole();
 
         expect($teacher->adscriptions()->sole())
             ->department_id->toBe($this->cb->id)
             ->is_primary->toBeTrue()
-            ->and($teacher->user?->username)->toBe('2000001')
-            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Docente creado')->description->toBe('2000001 · Elena Vega');
+            ->and($teacher->user?->username)->toBe('NUEV000001AB1')
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Docente creado')->description->toBe('NUEV000001AB1 · Elena Vega');
     });
 
     it('muestra los errores en español junto a su campo', function () {
@@ -176,8 +176,8 @@ describe('admin', function () {
             ->call('create')
             ->set('email', 'no-es-correo')
             ->call('save')
-            ->assertHasErrors(['employee_number' => 'required', 'name' => 'required', 'email' => 'email', 'department_id' => 'required'])
-            ->assertSee('El campo número de empleado es obligatorio.')
+            ->assertHasErrors(['rfc' => 'required', 'name' => 'required', 'email' => 'email', 'department_id' => 'required'])
+            ->assertSee('El campo RFC es obligatorio.')
             ->assertSee('El campo departamento es obligatorio.');
 
         expect(Teacher::count())->toBe(5);
@@ -197,7 +197,7 @@ describe('admin', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
-            ->set('employee_number', '100 0002')
+            ->set('rfc', 'prue 000002 ab1')
             ->assertSee('Ya existe el docente')
             ->assertSee('Adscribir a SC')
             ->call('adscribeExisting')
@@ -207,7 +207,7 @@ describe('admin', function () {
         expect($this->beto->fresh()->name)->toBe('Beto Ruiz')
             ->and($this->beto->adscriptions()->pluck('department_id')->sort()->values()->all())->toBe(collect([$this->cb->id, $this->sc->id])->sort()->values()->all())
             ->and($this->beto->adscriptions()->where('department_id', $this->sc->id)->sole()->is_primary)->toBeFalse()
-            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Docente adscrito a SC')->description->toBe('1000002 · Beto Ruiz');
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Docente adscrito a SC')->description->toBe('PRUE000002AB1 · Beto Ruiz');
     });
 
     it('guardar con un número que ya existe no da de alta otro: ofrece adscribirlo', function () {
@@ -216,7 +216,7 @@ describe('admin', function () {
             ->call('create')
             ->set('department_id', $this->sc->id)
             ->set('name', 'Otro nombre')
-            ->set('employee_number', '1000002')
+            ->set('rfc', 'PRUE000002AB1')
             ->call('save')
             ->assertSet('showModal', true)
             ->assertSee('Adscribir a SC');
@@ -230,7 +230,7 @@ describe('admin', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->cb->id)
-            ->set('employee_number', '1000002')
+            ->set('rfc', 'PRUE000002AB1')
             ->call('adscribeExisting')
             ->assertHasErrors('adscription')
             ->assertSee('Beto Ruiz ya está adscrito a CB.');
@@ -243,9 +243,9 @@ describe('admin', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
-            ->set('employee_number', '1000003')
-            ->assertHasErrors('employee_number')
-            ->assertSee('Ese número es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.')
+            ->set('rfc', 'PRUE000003AB1')
+            ->assertHasErrors('rfc')
+            ->assertSee('Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.')
             ->assertDontSee('Adscribir a SC');
     });
 
@@ -254,17 +254,17 @@ describe('admin', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
-            ->set('employee_number', '1000002')
+            ->set('rfc', 'PRUE000002AB1')
             ->assertSee('Adscribir a SC');
 
         $change === 'baja' ? $this->beto->update(['is_active' => false]) : $this->beto->delete();
 
         $page->call('adscribeExisting')
             ->assertOk()
-            ->assertHasErrors('employee_number')
+            ->assertHasErrors('rfc')
             ->assertSee($change === 'baja'
-                ? 'Ese número es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.'
-                : 'Ese número pertenece a un docente borrado; pide a Subdirección que lo revise.');
+                ? 'Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.'
+                : 'Ese RFC pertenece a un docente borrado; pide a Subdirección que lo revise.');
 
         expect(TeacherDepartment::withTrashed()->where('teacher_id', $this->beto->id)->count())->toBe(1);
     })->with(['dado de baja' => 'baja', 'borrado' => 'borrado']);
@@ -277,28 +277,28 @@ describe('admin', function () {
             ->call('create')
             ->set('department_id', $this->sc->id)
             ->set('name', 'Otro')
-            ->set('employee_number', '1000002')
-            ->assertHasErrors('employee_number')
-            ->assertSee('Ese número pertenece a un docente borrado; pide a Subdirección que lo revise.')
+            ->set('rfc', 'PRUE000002AB1')
+            ->assertHasErrors('rfc')
+            ->assertSee('Ese RFC pertenece a un docente borrado; pide a Subdirección que lo revise.')
             ->call('save')
-            ->assertHasErrors('employee_number')
+            ->assertHasErrors('rfc')
             ->assertSet('showModal', true);
 
-        expect(Teacher::withTrashed()->where('employee_number', '1000002')->count())->toBe(1);
+        expect(Teacher::withTrashed()->where('rfc', 'PRUE000002AB1')->count())->toBe(1);
     });
 
-    it('edita los datos de un docente sin cambiar su número', function () {
+    it('edita los datos de un docente sin cambiar su RFC', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
             ->call('edit', $this->ana->id)
-            ->assertSet('employee_number', '1000001')
+            ->assertSet('rfc', 'PRUE000001AB1')
             ->assertSet('name', 'Ana Pérez')
             ->set('name', 'Ana Pérez Soto')
-            ->set('employee_number', '9999999')
+            ->set('rfc', 'PRUE999999AB1')
             ->call('save')
             ->assertHasNoErrors();
 
-        expect($this->ana->fresh())->name->toBe('Ana Pérez Soto')->employee_number->toBe('1000001')
+        expect($this->ana->fresh())->name->toBe('Ana Pérez Soto')->rfc->toBe('PRUE000001AB1')
             ->and(lastToastOf($page))->title->toBe('Docente actualizado');
     });
 
@@ -307,7 +307,7 @@ describe('admin', function () {
 
         expect($this->dario->fresh()->is_active)->toBeFalse()
             ->and($this->dario->fresh()->user->is_active)->toBeFalse()
-            ->and(lastToastOf($page))->title->toBe('Docente desactivado')->description->toBe('1000004 · Darío Soto');
+            ->and(lastToastOf($page))->title->toBe('Docente desactivado')->description->toBe('PRUE000004AB1 · Darío Soto');
 
         $page->call('toggleActive', $this->dario->id);
 
@@ -317,16 +317,16 @@ describe('admin', function () {
     });
 
     it('«Acciones» de cada fila ofrece «Quitar de <código>» por cada departamento que cubre y «Desactivar» o «Activar»', function () {
-        expect(textOf(teacherRowMenu($this->admin, '1000001')))->toContain('Quitar de II', 'Quitar de SC', 'Desactivar')
-            ->and(textOf(teacherRowMenu($this->admin, '1000003')))->toContain('Activar')
+        expect(textOf(teacherRowMenu($this->admin, 'PRUE000001AB1')))->toContain('Quitar de II', 'Quitar de SC', 'Desactivar')
+            ->and(textOf(teacherRowMenu($this->admin, 'PRUE000003AB1')))->toContain('Activar')
             // Sin departamento no hay nada que quitar.
-            ->and(textOf(teacherRowMenu($this->admin, '1000005')))->not->toContain('Quitar');
+            ->and(textOf(teacherRowMenu($this->admin, 'PRUE000005AB1')))->not->toContain('Quitar');
     });
 
     it('en la fila de su propio docente, «Quitar de <código>» y «Desactivar» salen deshabilitados con su motivo', function (string $viewer) {
         $user = $this->{$viewer};
-        $own = Teacher::factory()->adscribedTo($this->sc)->create(['employee_number' => '1000009', 'user_id' => $user->id]);
-        $items = collect(teacherRowMenu($user, '1000009')->querySelectorAll('[role="menuitem"]'));
+        $own = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'PRUE000009AB1', 'user_id' => $user->id]);
+        $items = collect(teacherRowMenu($user, 'PRUE000009AB1')->querySelectorAll('[role="menuitem"]'));
         $remove = $items->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de SC'));
         $deactivate = $items->first(fn ($item): bool => str_starts_with(textOf($item), 'Desactivar'));
 
@@ -346,11 +346,11 @@ describe('admin', function () {
 
         expect($this->ana->adscriptions()->sole())->department_id->toBe($this->sc->id)->is_primary->toBeTrue()
             ->and($this->ana->fresh()->is_active)->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Docente quitado de II')->description->toBe('1000001 · Ana Pérez; su adscripción principal pasa a SC');
+            ->and(lastToastOf($page))->title->toBe('Docente quitado de II')->description->toBe('PRUE000001AB1 · Ana Pérez; su adscripción principal pasa a SC');
     });
 
     it('el aviso de quitar la principal dice qué principal queda', function () {
-        $menu = teacherRowMenu($this->admin, '1000001');
+        $menu = teacherRowMenu($this->admin, 'PRUE000001AB1');
         $item = collect($menu->querySelectorAll('[role="menuitem"]'))->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de II'));
 
         expect($item->getAttribute('wire:confirm'))->toContain('su adscripción principal pasa a SC');
@@ -391,12 +391,12 @@ describe('admin', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
             ->call('create')
-            ->set('employee_number', '2000002')
+            ->set('rfc', 'NUEV000002AB1')
             ->set('name', 'Fernanda Luna')
             ->set('department_id', $this->sc->id)
             ->call('save');
 
-        expect(Teacher::where('employee_number', '2000002')->exists())->toBeFalse()
+        expect(Teacher::where('rfc', 'NUEV000002AB1')->exists())->toBeFalse()
             ->and(lastToastOf($page))->type->toBe('error')->description->toContain('NEXUS_DEFAULT_PASSWORD');
     });
 
@@ -425,7 +425,7 @@ describe('admin', function () {
 
 describe('Subdirección, una para todo el Tec', function () {
     it('ve a todos los docentes, también sin departamento', function () {
-        expect(teacherNumbersOnPage($this->subdireccion))->toBe(['1000001', '1000002', '1000003', '1000004', '1000005']);
+        expect(teacherNumbersOnPage($this->subdireccion))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000004AB1', 'PRUE000005AB1']);
     });
 
     it('elige el departamento del alta', function () {
@@ -433,13 +433,13 @@ describe('Subdirección, una para todo el Tec', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->assertSet('department_id', '')
-            ->set('employee_number', '2000005')
+            ->set('rfc', 'NUEV000005AB1')
             ->set('name', 'Irene Paz')
             ->set('department_id', $this->cb->id)
             ->call('save')
             ->assertHasNoErrors();
 
-        expect(Teacher::where('employee_number', '2000005')->sole()->adscriptions()->sole()->department_id)->toBe($this->cb->id);
+        expect(Teacher::where('rfc', 'NUEV000005AB1')->sole()->adscriptions()->sole()->department_id)->toBe($this->cb->id);
     });
 
     it('adscribe a un departamento a un docente que ya existe, sin cambiar sus datos (S9)', function () {
@@ -447,8 +447,8 @@ describe('Subdirección, una para todo el Tec', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
-            ->set('employee_number', '1000002')
-            ->assertSee('Ya existe el docente 1000002 · Beto Ruiz')
+            ->set('rfc', 'PRUE000002AB1')
+            ->assertSee('Ya existe el docente PRUE000002AB1 · Beto Ruiz')
             ->call('adscribeExisting')
             ->assertHasNoErrors();
 
@@ -470,7 +470,7 @@ describe('Subdirección, una para todo el Tec', function () {
 
 describe('jefe de departamento de SC, de todo el Tec', function () {
     it('solo ve a los docentes adscritos a SC, aunque su principal sea otra', function () {
-        expect(teacherNumbersOnPage($this->jefe))->toBe(['1000001', '1000004']);
+        expect(teacherNumbersOnPage($this->jefe))->toBe(['PRUE000001AB1', 'PRUE000004AB1']);
     });
 
     it('da de alta con su departamento, sin elegirlo, y ve al nuevo en su lista', function () {
@@ -478,13 +478,13 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->assertSet('department_id', $this->sc->id)
-            ->set('employee_number', '2000003')
+            ->set('rfc', 'NUEV000003AB1')
             ->set('name', 'Gabriel Mora')
             ->call('save')
             ->assertHasNoErrors()
             ->assertSee('Gabriel Mora');
 
-        expect(Teacher::where('employee_number', '2000003')->sole()->adscriptions()->sole()->department_id)->toBe($this->sc->id)
+        expect(Teacher::where('rfc', 'NUEV000003AB1')->sole()->adscriptions()->sole()->department_id)->toBe($this->sc->id)
             ->and(lastToastOf($page))->title->toBe('Docente creado');
     });
 
@@ -492,13 +492,13 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
         Livewire::actingAs($this->jefe)
             ->test('faculty::pages.teachers')
             ->call('create')
-            ->set('employee_number', '2000004')
+            ->set('rfc', 'NUEV000004AB1')
             ->set('name', 'Hugo León')
             ->set('department_id', $this->ii->id)
             ->call('save')
             ->assertHasErrors('department_id');
 
-        expect(Teacher::where('employee_number', '2000004')->exists())->toBeFalse();
+        expect(Teacher::where('rfc', 'NUEV000004AB1')->exists())->toBeFalse();
     });
 
     it('con el número de un docente que ya existe solo le dice que está registrado, sin decir de quién (S9, supuesto por confirmar)', function () {
@@ -506,13 +506,13 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('name', 'Otro nombre')
-            ->set('employee_number', '1000002')
-            ->assertHasErrors('employee_number')
-            ->assertSee('Ese número ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.')
+            ->set('rfc', 'PRUE000002AB1')
+            ->assertHasErrors('rfc')
+            ->assertSee('Ese RFC ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.')
             ->assertDontSee('Beto Ruiz')
             ->assertDontSee('Adscribir a')
             ->call('save')
-            ->assertHasErrors('employee_number')
+            ->assertHasErrors('rfc')
             ->assertDontSee('Beto Ruiz');
 
         expect(Teacher::count())->toBe(5)
@@ -524,7 +524,7 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
-            ->set('employee_number', '1000002')
+            ->set('rfc', 'PRUE000002AB1')
             ->assertSee('Adscribir a SC');
 
         $this->actingAs($this->jefe);
@@ -534,7 +534,7 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
     });
 
     it('en «Acciones» solo ofrece «Quitar de SC»; «Desactivar» queda deshabilitado con su motivo', function () {
-        $menu = teacherRowMenu($this->jefe, '1000001');
+        $menu = teacherRowMenu($this->jefe, 'PRUE000001AB1');
         $deactivate = collect($menu->querySelectorAll('[role="menuitem"]'))->first(fn ($item): bool => str_starts_with(textOf($item), 'Desactivar'));
 
         expect(textOf($menu))->toContain('Quitar de SC')->not->toContain('Quitar de II')
@@ -552,7 +552,7 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
         expect($this->dario->adscriptions()->count())->toBe(0)
             ->and($this->dario->fresh()->is_active)->toBeTrue()
             ->and($this->dario->fresh()->user->is_active)->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Docente quitado de SC')->description->toBe('1000004 · Darío Soto; queda sin departamento');
+            ->and(lastToastOf($page))->title->toBe('Docente quitado de SC')->description->toBe('PRUE000004AB1 · Darío Soto; queda sin departamento');
     });
 
     it('recibe 403 al dar de baja, aun a uno de su departamento', function () {
@@ -614,7 +614,7 @@ describe('jefe de proyecto docente de SC en C2', function () {
     });
 
     it('ve a los mismos docentes que su jefe: el docente no es de un campus', function () {
-        expect(teacherNumbersOnPage($this->jpd))->toBe(['1000001', '1000004']);
+        expect(teacherNumbersOnPage($this->jpd))->toBe(['PRUE000001AB1', 'PRUE000004AB1']);
     });
 
     it('quita a un docente de SC; la principal en II no cambia', function () {
@@ -623,7 +623,7 @@ describe('jefe de proyecto docente de SC en C2', function () {
             ->call('removeAdscription', $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole()->id);
 
         expect($this->ana->adscriptions()->sole())->department_id->toBe($this->ii->id)->is_primary->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Docente quitado de SC')->description->toBe('1000001 · Ana Pérez');
+            ->and(lastToastOf($page))->title->toBe('Docente quitado de SC')->description->toBe('PRUE000001AB1 · Ana Pérez');
     });
 
     it('recibe 403 al quitar a un docente de otro departamento', function () {
@@ -657,7 +657,7 @@ describe('otros roles e invitados', function () {
         if ($editFirst) {
             $page->call('edit', $this->ana->id)->set('name', 'Cambiado');
         } else {
-            $page->call('create')->set('employee_number', '1000002')->set('department_id', $this->sc->id);
+            $page->call('create')->set('rfc', 'PRUE000002AB1')->set('department_id', $this->sc->id);
         }
 
         $this->actingAs($user);
@@ -709,8 +709,8 @@ describe('menú', function () {
 
 it('cada docente de la lista enlaza a su ficha, y el menú de Docentes se queda marcado dentro de ella', function () {
     $admin = User::factory()->admin()->create();
-    $teacher = Teacher::factory()->create(['employee_number' => '9000001']);
-    $link = domOf($this->actingAs($admin)->get(route('faculty.teachers'))->assertOk())->querySelector('a[data-testid="record-9000001"]');
+    $teacher = Teacher::factory()->create(['rfc' => 'PRUE900001AB1']);
+    $link = domOf($this->actingAs($admin)->get(route('faculty.teachers'))->assertOk())->querySelector('a[data-testid="record-PRUE900001AB1"]');
 
     expect($link)->not->toBeNull()
         ->and($link->getAttribute('href'))->toBe(route('faculty.teachers.show', $teacher->id));

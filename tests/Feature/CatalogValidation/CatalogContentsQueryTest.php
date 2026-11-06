@@ -73,13 +73,13 @@ it('lista los planes de las carreras del departamento', function () {
     expect(contentsCodes(contentsReview(Catalog::StudyPlans, $this->department)))->toBe(['ISIC-2004', 'ISIC-2010']);
 });
 
-it('lista los docentes con una adscripción sin borrar al departamento, aunque no sea la principal, por número de empleado', function () {
-    Teacher::factory()->adscribedTo($this->department)->create(['employee_number' => '200', 'name' => 'Ana']);
-    Teacher::factory()->adscribedTo($this->other)->adscribedTo($this->department, primary: false)->create(['employee_number' => '100']);
+it('lista los docentes con una adscripción sin borrar al departamento, aunque no sea la principal, por RFC', function () {
+    Teacher::factory()->adscribedTo($this->department)->create(['rfc' => '200', 'name' => 'Ana']);
+    Teacher::factory()->adscribedTo($this->other)->adscribedTo($this->department, primary: false)->create(['rfc' => '100']);
     Teacher::factory()->adscribedTo($this->department)->create()->delete();
-    $removed = Teacher::factory()->adscribedTo($this->department)->create(['employee_number' => '300']);
+    $removed = Teacher::factory()->adscribedTo($this->department)->create(['rfc' => '300']);
     TeacherDepartment::where('teacher_id', $removed->id)->sole()->delete();
-    Teacher::factory()->adscribedTo($this->other)->create(['employee_number' => '400']);
+    Teacher::factory()->adscribedTo($this->other)->create(['rfc' => '400']);
 
     $records = app(CatalogContentsQuery::class)->records(contentsReview(Catalog::Teachers, $this->department));
 

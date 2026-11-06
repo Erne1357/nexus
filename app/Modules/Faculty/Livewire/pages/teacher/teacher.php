@@ -307,7 +307,7 @@ new #[Title('Ficha del docente')] class extends Component
             'hired_on' => (string) $data['hired_on'],
         ]);
 
-        $this->success('Datos actualizados', e("{$teacher->employee_number} · {$teacher->name}"));
+        $this->success('Datos actualizados', e("{$teacher->rfc} · {$teacher->name}"));
         $this->showDataModal = false;
     }
 
@@ -327,7 +327,7 @@ new #[Title('Ficha del docente')] class extends Component
             return;
         }
 
-        $this->success($teacher->is_active ? 'Docente activado' : 'Docente desactivado', e("{$teacher->employee_number} · {$teacher->name}"));
+        $this->success($teacher->is_active ? 'Docente activado' : 'Docente desactivado', e("{$teacher->rfc} · {$teacher->name}"));
     }
 
     /**
@@ -432,7 +432,7 @@ new #[Title('Ficha del docente')] class extends Component
         }
 
         $this->showHeadshipModal = false;
-        $this->success('Jefatura nombrada', e($labels->one($assignment)->summary.' · '.$teacher->employee_number));
+        $this->success('Jefatura nombrada', e($labels->one($assignment)->summary.' · '.$teacher->rfc));
     }
 
     public function confirmEndHeadship(string $id, TeacherQuery $teachers, TeacherRecordQuery $records): void
@@ -524,7 +524,7 @@ new #[Title('Ficha del docente')] class extends Component
         // Quien quitó la última adscripción de su alcance ya no cubre al docente: vuelve a la lista en lugar de un 403.
         $stillVisible = Gate::allows('view', $teachers->findOrFail($this->teacherId));
 
-        $this->success(e("Quitado de {$code}"), e($teacher->employee_number.$outcome), redirectTo: $stillVisible ? null : route('faculty.teachers'));
+        $this->success(e("Quitado de {$code}"), e($teacher->rfc.$outcome), redirectTo: $stillVisible ? null : route('faculty.teachers'));
     }
 
     public function setPrimary(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, SetPrimaryAdscription $setPrimaryAdscription): void
@@ -867,7 +867,7 @@ new #[Title('Ficha del docente')] class extends Component
             default => 'Sigue activo y su adscripción principal no cambia.',
         };
 
-        return "¿Quitar al docente {$record->teacher->employee_number} de {$adscription->department?->code}? {$outcome} Queda en la bitácora.";
+        return "¿Quitar al docente {$record->teacher->rfc} de {$adscription->department?->code}? {$outcome} Queda en la bitácora.";
     }
 
     /**

@@ -10,7 +10,7 @@ use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use Illuminate\Support\Str;
 
 /**
- * Historial docente del SII (tarea 1.13): una fila por grupo que el docente impartió, con número de empleado,
+ * Historial docente del SII (tarea 1.13): una fila por grupo que el docente impartió, con RFC,
  * clave de materia, periodo, campus y grupo; los cinco son la clave natural (una fila por grupo, confirmado el
  * 30 de octubre de 2026, y la columna «grupo» es obligatoria, S13). La tabla guarda `teacher_id`, `subject_id`
  * y `campus_id`: recordKey() los busca, y check() reporta el docente, la materia o el campus que no existen.
@@ -23,7 +23,9 @@ use Illuminate\Support\Str;
  */
 class TeacherHistoryTemplate extends ImportTemplate
 {
-    /** @var array<string, string|null> id de docente por número de empleado, en esta corrida */
+    use ChecksTeacherRfc;
+
+    /** @var array<string, string|null> id de docente por RFC, en esta corrida */
     private array $teachers = [];
 
     /** @var array<string, string|null> id de materia por clave, en esta corrida */
@@ -45,7 +47,7 @@ class TeacherHistoryTemplate extends ImportTemplate
     public function fields(): array
     {
         return [
-            'employee_number' => 'número de empleado',
+            'rfc' => 'RFC',
             'subject_code' => 'clave de materia',
             'term_code' => 'periodo',
             'campus_code' => 'campus',
@@ -55,7 +57,7 @@ class TeacherHistoryTemplate extends ImportTemplate
 
     public function naturalKey(): array
     {
-        return ['employee_number', 'subject_code', 'term_code', 'campus_code', 'group_code'];
+        return ['rfc', 'subject_code', 'term_code', 'campus_code', 'group_code'];
     }
 
     public function model(): string
@@ -66,7 +68,7 @@ class TeacherHistoryTemplate extends ImportTemplate
     public function rules(): array
     {
         return [
-            'employee_number' => ['required', 'string', 'max:20'],
+            'rfc' => $this->rfcRules(),
             'subject_code' => ['required', 'string'],
             'term_code' => ['required', 'string', 'regex:/^[0-9]{4}[123]$/'],
             'campus_code' => ['nullable', 'string'],
@@ -78,9 +80,11 @@ class TeacherHistoryTemplate extends ImportTemplate
     {
         $row = parent::normalize($row);
 
-        foreach (['employee_number', 'subject_code', 'term_code', 'campus_code', 'group_code'] as $field) {
+        foreach (['rfc', 'subject_code', 'term_code', 'campus_code', 'group_code'] as $field) {
             $row[$field] = self::asText($row[$field]);
         }
+
+        $row['rfc'] = self::normalizedRfc($row['rfc']);
 
         foreach (['subject_code', 'campus_code', 'group_code'] as $field) {
             $row[$field] = is_string($row[$field]) ? Str::upper($row[$field]) : $row[$field];
@@ -107,8 +111,10 @@ class TeacherHistoryTemplate extends ImportTemplate
 
     protected function check(array $row, ImportContext $context, RowIssues $issues): RowIssues
     {
-        if ($this->teacherId($row['employee_number']) === null) {
-            $issues = $issues->withError('employee_number', "No hay un docente con el número de empleado {$row['employee_number']}.");
+        $issues = $this->warnWithoutHomoclave($issues, $row['rfc']);
+
+        if ($this->teacherId($row['rfc']) === null) {
+            $issues = $issues->withError('rfc', "No hay un docente con el RFC {$row['rfc']}.");
         }
 
         if ($this->subjectId($row['subject_code']) === null) {
@@ -124,7 +130,7 @@ class TeacherHistoryTemplate extends ImportTemplate
 
     protected function recordKey(array $row, ImportContext $context): ?array
     {
-        $teacher = $this->teacherId($row['employee_number']);
+        $teacher = $this->teacherId($row['rfc']);
         $subject = $this->subjectId($row['subject_code']);
         $campus = $row['campus_code'] === null ? null : $this->campusId($row['campus_code']);
 
@@ -151,11 +157,11 @@ class TeacherHistoryTemplate extends ImportTemplate
         return ['source' => HistorySource::Import];
     }
 
-    private function teacherId(string $employeeNumber): ?string
+    private function teacherId(string $rfc): ?string
     {
-        return array_key_exists($employeeNumber, $this->teachers)
-            ? $this->teachers[$employeeNumber]
-            : $this->teachers[$employeeNumber] = Teacher::query()->where('employee_number', $employeeNumber)->value('id');
+        return array_key_exists($rfc, $this->teachers)
+            ? $this->teachers[$rfc]
+            : $this->teachers[$rfc] = Teacher::query()->where('rfc', $rfc)->value('id');
     }
 
     private function subjectId(string $code): ?string

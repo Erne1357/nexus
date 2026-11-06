@@ -3,13 +3,13 @@
 use App\Modules\Imports\Templates\TeachersTemplate;
 
 /*
-| Lo que normaliza la plantilla `teachers` antes de validar (tarea 10): el número de empleado como lo
+| Lo que normaliza la plantilla `teachers` antes de validar (tarea 10): el RFC como lo
 | normaliza Faculty, las claves en mayúsculas, el activo del SII y las fechas dd/mm/aaaa a ISO.
 */
 
-it('normaliza el número de empleado como Docentes y deja las claves en mayúsculas', function () {
+it('normaliza el RFC como Docentes y deja las claves en mayúsculas', function () {
     $row = (new TeachersTemplate)->normalize([
-        'employee_number' => ' 12 345 ',
+        'rfc' => ' prue 012345 ab1 ',
         'name' => ' Ana  López ',
         'department' => ' sc ',
         'email' => 'ana@example.test',
@@ -19,7 +19,7 @@ it('normaliza el número de empleado como Docentes y deja las claves en mayúscu
     ]);
 
     expect($row)->toBe([
-        'employee_number' => '12345',
+        'rfc' => 'PRUE012345AB1',
         'name' => 'Ana López',
         'department' => 'SC',
         'email' => 'ana@example.test',
@@ -29,8 +29,8 @@ it('normaliza el número de empleado como Docentes y deja las claves en mayúscu
     ]);
 });
 
-it('pasa a texto el número de empleado que un Excel lee como número', function () {
-    expect((new TeachersTemplate)->normalize(['employee_number' => 98765.0])['employee_number'])->toBe('98765');
+it('pasa a texto el RFC que un Excel lee como número, para que la validación lo rechace', function () {
+    expect((new TeachersTemplate)->normalize(['rfc' => 98765.0])['rfc'])->toBe('98765');
 });
 
 it('reconoce el activo del SII y deja lo que no entiende para que la validación lo rechace', function (mixed $value, mixed $expected) {

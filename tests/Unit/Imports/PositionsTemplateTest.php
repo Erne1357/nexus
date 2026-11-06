@@ -23,9 +23,9 @@ it('un tipo desconocido se queda como texto', function () {
     expect((new PositionsTemplate)->normalize(['kind' => 'Interino'])['kind'])->toBe('Interino');
 });
 
-it('normaliza el número de empleado, las horas y las fechas del SII', function () {
+it('normaliza el RFC, las horas y las fechas del SII', function () {
     $row = (new PositionsTemplate)->normalize([
-        'employee_number' => ' 12 345',
+        'rfc' => ' prue 012345 ab1',
         'kind' => 'asignatura',
         'base_hours' => '12',
         'valid_from' => '01/08/2026',
@@ -33,7 +33,7 @@ it('normaliza el número de empleado, las horas y las fechas del SII', function 
     ]);
 
     expect($row)->toBe([
-        'employee_number' => '12345',
+        'rfc' => 'PRUE012345AB1',
         'kind' => 'asignatura',
         'base_hours' => 12,
         'valid_from' => '2026-08-01',

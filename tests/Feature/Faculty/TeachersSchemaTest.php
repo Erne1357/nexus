@@ -19,10 +19,10 @@ use Illuminate\Support\Str;
 */
 
 describe('docentes', function () {
-    it('el número de empleado es único, también contra un docente borrado', function () {
-        Teacher::factory()->create(['employee_number' => '1234'])->delete();
+    it('el RFC es único, también contra un docente borrado', function () {
+        Teacher::factory()->create(['rfc' => '1234'])->delete();
 
-        expect(fn () => Teacher::factory()->create(['employee_number' => '1234']))->toThrow(UniqueConstraintViolationException::class);
+        expect(fn () => Teacher::factory()->create(['rfc' => '1234']))->toThrow(UniqueConstraintViolationException::class);
     });
 
     it('un usuario liga a un solo docente', function () {

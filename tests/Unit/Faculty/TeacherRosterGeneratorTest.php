@@ -23,11 +23,11 @@ it('con la misma semilla da los mismos docentes y con otra semilla, otros', func
         ->and(roster(seed: 1))->not->toBe(roster());
 });
 
-it('da un número de empleado único por docente y por campus', function () {
-    $numbers = array_column(roster(80), 'employee_number');
+it('da un RFC único por docente y por campus', function () {
+    $numbers = array_column(roster(80), 'rfc');
 
     expect(array_unique($numbers))->toHaveCount(80)
-        ->and(array_intersect($numbers, array_column(roster(80, 'C1'), 'employee_number')))->toBe([]);
+        ->and(array_intersect($numbers, array_column(roster(80, 'C1'), 'rfc')))->toBe([]);
 });
 
 it('cubre los cinco tipos de plaza, varias plazas a la vez, vencidas, futuras y docentes sin plaza', function () {

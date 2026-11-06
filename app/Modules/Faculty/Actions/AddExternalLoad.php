@@ -58,7 +58,7 @@ final class AddExternalLoad
                 ->event(ActivityEvent::Created)
                 ->withChanges(['attributes' => $this->rules->logged($load)])
                 ->withProperties(['teacher_id' => $locked->getKey(), 'term_id' => $term->getKey()])
-                ->log("Agregó {$data['hours']} h fuera del ITCJ ({$data['source']}) al docente {$locked->employee_number}");
+                ->log("Agregó {$data['hours']} h fuera del ITCJ ({$data['source']}) al docente {$locked->rfc}");
 
             ExternalLoadChanged::dispatch($load, auth()->user());
 

@@ -20,7 +20,7 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $department = Department::factory()->create(['code' => 'SC']);
-    $this->teacher = app(CreateTeacher::class)->handle(['employee_number' => '1234567', 'name' => 'Ana Pérez Soto'], $department);
+    $this->teacher = app(CreateTeacher::class)->handle(['rfc' => '1234567', 'name' => 'Ana Pérez Soto'], $department);
     $this->activityBase = (int) Activity::max('id');
 });
 

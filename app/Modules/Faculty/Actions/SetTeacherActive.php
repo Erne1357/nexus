@@ -39,7 +39,7 @@ final class SetTeacherActive
                 ->performedOn($teacher)
                 ->event(ActivityEvent::Updated)
                 ->withChanges(['attributes' => ['is_active' => $active], 'old' => ['is_active' => ! $active]])
-                ->log(($active ? 'Reactivó al docente ' : 'Dio de baja al docente ').$teacher->employee_number);
+                ->log(($active ? 'Reactivó al docente ' : 'Dio de baja al docente ').$teacher->rfc);
 
             $this->syncTeacherAccess->handle($teacher);
 
