@@ -58,7 +58,7 @@ it('migra un paso y deja su CSV intermedio', function () {
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
 
     expect(Department::count())->toBe(2)
-        ->and(file_get_contents("{$this->dir}/_nexus/departamentos.csv"))->toStartWith("clave,nombre\n")
+        ->and(file_get_contents("{$this->dir}/_nexus/departamentos.csv"))->toStartWith("clave,nombre,activo\n")
         ->and(ImportBatch::count())->toBe(1);
     Storage::disk('imports')->assertExists(ImportBatch::sole()->file_path);
 });

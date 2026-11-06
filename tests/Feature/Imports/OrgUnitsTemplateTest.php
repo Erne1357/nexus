@@ -1,0 +1,74 @@
+<?php
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Models\User;
+use App\Modules\Imports\Templates\ImportContext;
+use App\Modules\Imports\Templates\OrgUnitsTemplate;
+use App\Modules\Imports\Templates\TemplateRegistry;
+
+/*
+| Plantilla `org_units`: unidades del organigrama por clave. Nunca crea ni toca una unidad de departamento
+| académico (eso es del alta del departamento, ADR-0018) y el padre debe existir.
+*/
+
+beforeEach(function () {
+    $this->context = new ImportContext(User::factory()->admin()->create());
+    $this->template = new OrgUnitsTemplate;
+    $this->department = Department::factory()->create(['code' => 'DEP1']);
+});
+
+/**
+ * @param  array<string, mixed>  $changes
+ * @return array<string, mixed>
+ */
+function orgUnitRow(array $changes = []): array
+{
+    return (new OrgUnitsTemplate)->normalize(['code' => 'cs-1', 'name' => 'Coordinación 1', 'kind' => 'oficina', 'parent' => 'DEP1', 'active' => 'No', ...$changes]);
+}
+
+it('está registrada en Imports', function () {
+    expect(app(TemplateRegistry::class)->get('org_units'))->toBeInstanceOf(OrgUnitsTemplate::class);
+});
+
+it('da de alta bajo su padre y respeta el estado inactivo de un alta', function () {
+    $unit = $this->template->apply(orgUnitRow(), $this->context);
+
+    expect($unit->fresh())->code->toBe('CS-1')->kind->value->toBe('oficina')->is_active->toBeFalse()
+        ->and($unit->parent_id)->toBe($this->department->id);
+});
+
+it('no reactiva ni cambia el estado de una unidad existente', function () {
+    $this->template->apply(orgUnitRow(), $this->context);
+
+    $issues = $this->template->validate(orgUnitRow(['active' => 'Sí']), $this->context);
+    $this->template->apply(orgUnitRow(['active' => 'Sí', 'name' => 'Nuevo nombre']), $this->context);
+
+    expect($issues->hasErrors())->toBeFalse()
+        ->and(OrgUnit::query()->where('code', 'CS-1')->sole())->name->toBe('Nuevo nombre')->is_active->toBeFalse();
+});
+
+it('rechaza un padre que no existe', function () {
+    expect($this->template->validate(orgUnitRow(['parent' => 'NOEXISTE']), $this->context)->errors)->toHaveKey('parent');
+});
+
+it('rechaza el tipo departamento académico y una clave que ya es de un departamento', function () {
+    expect($this->template->validate(orgUnitRow(['kind' => 'departamento_academico']), $this->context)->errors)->toHaveKey('kind')
+        ->and($this->template->validate(orgUnitRow(['code' => 'dep1']), $this->context)->errors)->toHaveKey('code');
+});
+
+it('rechaza un tipo que Nexus no conoce y los campos vacíos', function () {
+    expect($this->template->validate(orgUnitRow(['kind' => 'otra']), $this->context)->errors)->toHaveKey('kind')
+        ->and($this->template->validate(orgUnitRow(['name' => null, 'parent' => null]), $this->context)->errors)->toHaveKeys(['name', 'parent']);
+});
+
+it('rechaza mover una unidad bajo su propio descendiente', function () {
+    $this->template->apply(orgUnitRow(), $this->context);
+    $this->template->apply(orgUnitRow(['code' => 'CS-2', 'parent' => 'CS-1']), $this->context);
+
+    expect($this->template->validate(orgUnitRow(['code' => 'CS-1', 'parent' => 'CS-2']), $this->context)->errors)->toHaveKey('parent');
+});
+
+it('no ofrece desactivar faltantes', function () {
+    expect($this->template->deactivatesMissing())->toBeFalse();
+});

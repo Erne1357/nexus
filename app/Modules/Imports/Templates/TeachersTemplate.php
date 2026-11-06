@@ -34,6 +34,7 @@ use Illuminate\Validation\ValidationException;
  */
 class TeachersTemplate extends ImportTemplate
 {
+    use ParsesActiveFlag;
     use ParsesSiiDates;
 
     /** @var array<string, Department|null> departamento por clave, en esta corrida */
@@ -123,7 +124,7 @@ class TeachersTemplate extends ImportTemplate
         $row['department'] = is_string($row['department']) ? Str::upper($row['department']) : $row['department'];
 
         $row['degree'] = is_string($row['degree']) ? (TeacherDegree::tryFrom(self::slug($row['degree']))?->value ?? $row['degree']) : $row['degree'];
-        $row['active'] = $this->active($row['active']);
+        $row['active'] = self::activeFlag($row['active']);
         $row['hired_on'] = self::siiDate($row['hired_on']);
 
         return $row;
@@ -232,23 +233,6 @@ class TeachersTemplate extends ImportTemplate
             'hired_on' => $row['hired_on'],
             'is_active' => $row['active'] ?? true,
         ];
-    }
-
-    /**
-     * El «activo» del SII como booleano; vacío es null (nace activo) y lo que no entiende se queda como texto,
-     * para que `rules()` lo rechace.
-     */
-    private function active(mixed $value): mixed
-    {
-        if (! is_string($value) && ! is_int($value)) {
-            return $value;
-        }
-
-        return match (self::slug((string) $value)) {
-            'si', 's', 'activo', '1', 'true', 'verdadero' => true,
-            'no', 'n', 'inactivo', '0', 'false', 'falso', 'baja' => false,
-            default => $value,
-        };
     }
 
     private function department(string $code): ?Department

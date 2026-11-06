@@ -10,11 +10,13 @@ use App\Modules\Imports\Console\MigrateSii;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiStep;
+use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
 use App\Modules\Imports\Templates\EvaluationsTemplate;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\KardexTemplate;
+use App\Modules\Imports\Templates\OrgUnitsTemplate;
 use App\Modules\Imports\Templates\PositionsTemplate;
 use App\Modules\Imports\Templates\PrerequisitesTemplate;
 use App\Modules\Imports\Templates\RoomsTemplate;
@@ -36,6 +38,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
      */
     private const array TEMPLATES = [
         DepartmentsTemplate::class,
+        OrgUnitsTemplate::class,
         CareersTemplate::class,
         StudyPlansTemplate::class,
         SubjectsTemplate::class,
@@ -55,7 +58,9 @@ final class ImportsServiceProvider extends ModuleServiceProvider
      *
      * @var list<class-string<SiiStep>>
      */
-    public const array SII_STEPS = [];
+    public const array SII_STEPS = [
+        OrgChartStep::class,
+    ];
 
     public function register(): void
     {
