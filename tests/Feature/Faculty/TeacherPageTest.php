@@ -219,7 +219,7 @@ describe('plazas', function () {
             ->set('kind', 'asignatura')->set('base_hours', '44')->set('valid_from', '2027-02-01')->set('valid_to', '2027-01-01')
             ->call('savePosition')
             ->assertHasErrors(['base_hours', 'valid_to'])
-            ->assertSee('Las horas base de una asignatura van de 1 a 40.')
+            ->assertSee('Las horas base de una plaza de asignatura van de 1 a 40.')
             ->assertSee('La vigencia no puede terminar antes de empezar.');
 
         expect($this->ana->positions()->count())->toBe(1);

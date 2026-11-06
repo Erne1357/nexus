@@ -18,10 +18,12 @@ use App\Modules\Imports\Sii\TeacherRoster;
  * cuentan como cualquier otra (confirmado el 6 de noviembre de 2026). Sin vigencia, porque el SII no la trae
  * (supuesto por confirmar: vigentes sin fecha de inicio ni de fin).
  *
- * El RFC viejo de estatus 04 pasa al docente del RFC nuevo (`teacher_roster`). Se reporta por archivo y línea, sin RFC
- * ni número de plaza: la clave que no se entiende, la categoría sin tipo, la asignatura sin horas o con más de 40, dos
- * plazas del mismo tipo fijo y la suma que no cuadra con `cantidad_horas_nombramiento`; agregados, los renglones de quien no se
- * migró como docente y los docentes activos sin plaza.
+ * El RFC viejo de estatus 04 pasa al docente del RFC nuevo (`teacher_roster`); si los dos renglones están, se toman las
+ * plazas del que las trae, de preferencia el del RFC nuevo. Se reporta por archivo y línea, sin RFC ni número de plaza:
+ * la clave que no se entiende (toda o en parte), la categoría sin tipo, la asignatura sin horas o con más de 40, dos
+ * plazas del mismo tipo fijo, un tipo cuyas plazas suman más de 40 y la suma que no cuadra con
+ * `cantidad_horas_nombramiento`; agregados, los renglones de quien no se migró como docente y los docentes activos
+ * sin plaza.
  */
 final class PositionsStep implements SiiStep
 {
@@ -50,14 +52,13 @@ final class PositionsStep implements SiiStep
     {
         $export = $migration->export();
         $file = $export->fileName(SiiFile::Docentes2);
-        /** @var array<string, array<string, int>> $hoursByTeacher horas por RFC del docente en Nexus y tipo de plaza */
-        $hoursByTeacher = [];
-        $incidents = [];
+        /** @var array<string, list<array{line: int, own: bool, row: array<string, string>}>> $candidates renglones por RFC del docente en Nexus */
+        $candidates = [];
         $unmigrated = 0;
-        $repeated = 0;
 
         foreach ($export->reader(SiiFile::Docentes2)->rows(self::COLUMNS) as $line => $row) {
-            $teacher = $roster->teacherFor[TeacherRoster::normalizeRfc($row['rfc'])] ?? null;
+            $rfc = TeacherRoster::normalizeRfc($row['rfc']);
+            $teacher = $roster->teacherFor[$rfc] ?? null;
 
             if ($teacher === null) {
                 $unmigrated++;
@@ -65,65 +66,25 @@ final class PositionsStep implements SiiStep
                 continue;
             }
 
-            if (isset($hoursByTeacher[$teacher])) {
-                $repeated++;
+            $candidates[$teacher][] = ['line' => $line, 'own' => $rfc === $teacher, 'row' => $row];
+        }
 
-                continue;
-            }
+        /** @var array<string, array<string, int>> $hoursByTeacher horas por RFC del docente en Nexus y tipo de plaza */
+        $hoursByTeacher = [];
+        $incidents = [];
+        $repeated = 0;
 
-            $ref = "{$file}:{$line}";
-            $hoursByTeacher[$teacher] = [];
-            $plazas = PlazaKeys::parse($row['claves_plazas']);
-
-            if ($plazas === []) {
-                if (trim($row['claves_plazas']) !== '') {
-                    $incidents[] = $this->warning($ref, 'La clave de plaza de esta línea no se entiende: el docente queda sin plaza.');
-                }
-
-                continue;
-            }
-
-            foreach ($plazas as $plaza) {
-                if ($plaza['kind'] === null) {
-                    $incidents[] = $this->warning($ref, "La plaza de categoría {$plaza['category']} de esta línea no tiene tipo en Nexus: no se migra.");
-
-                    continue;
-                }
-
-                if ($plaza['hours'] === null) {
-                    $incidents[] = $this->warning($ref, "La plaza de asignatura {$plaza['category']} de esta línea no trae horas en la clave: no se migra.");
-
-                    continue;
-                }
-
-                if ($plaza['hours'] > PositionKind::MAX_HOURS) {
-                    $incidents[] = $this->warning($ref, "La plaza {$plaza['category']} de esta línea trae {$plaza['hours']} horas en la clave, más de las ".PositionKind::MAX_HOURS.' de una plaza: no se migra.');
-
-                    continue;
-                }
-
-                $kind = $plaza['kind'];
-                if ($kind->fixedHours() !== null && isset($hoursByTeacher[$teacher][$kind->value])) {
-                    $incidents[] = $this->warning($ref, "El docente de esta línea trae dos plazas de {$kind->label()}: se migra una.");
-
-                    continue;
-                }
-
-                $hoursByTeacher[$teacher][$kind->value] = ($hoursByTeacher[$teacher][$kind->value] ?? 0) + $plaza['hours'];
-            }
-
-            $total = array_sum($hoursByTeacher[$teacher]);
-            $declared = trim($row['cantidad_horas_nombramiento']);
-            if (ctype_digit($declared) && (int) $declared !== $total) {
-                $incidents[] = $this->warning($ref, "Las plazas de esta línea suman {$total} horas y el SII dice {$declared} (cantidad_horas_nombramiento).");
-            }
+        foreach ($candidates as $teacher => $rows) {
+            $repeated += count($rows) - 1;
+            $chosen = $this->chosen($rows);
+            $hoursByTeacher[(string) $teacher] = $this->hoursByKind($chosen['row'], "{$file}:{$chosen['line']}", $incidents);
         }
 
         $rows = [];
         foreach ($hoursByTeacher as $teacher => $hoursByKind) {
             foreach (PositionKind::cases() as $kind) {
                 if (isset($hoursByKind[$kind->value])) {
-                    $rows[] = ['rfc' => (string) $teacher, 'kind' => $kind->value, 'base_hours' => $hoursByKind[$kind->value], 'valid_from' => '', 'valid_to' => ''];
+                    $rows[] = ['rfc' => $teacher, 'kind' => $kind->value, 'base_hours' => $hoursByKind[$kind->value], 'valid_from' => '', 'valid_to' => ''];
                 }
             }
         }
@@ -132,7 +93,7 @@ final class PositionsStep implements SiiStep
 
         foreach ([
             [$unmigrated, 'renglones de docentes2 no son de un docente migrado (administrativos o sin departamento): sus plazas no se migran.'],
-            [$repeated, 'renglones de docentes2 repiten un docente ya leído (RFC viejo y nuevo): se toman las plazas del primero.'],
+            [$repeated, 'renglones de docentes2 repiten un docente (RFC viejo y nuevo): se toman las plazas del renglón que las trae, de preferencia el del RFC nuevo.'],
             [$withoutPlaza, 'docentes activos no tienen plaza en docentes2: quedan sin horas base.'],
         ] as [$count, $text]) {
             if ($count > 0) {
@@ -141,6 +102,77 @@ final class PositionsStep implements SiiStep
         }
 
         return [$rows, $incidents];
+    }
+
+    /**
+     * De los renglones de un mismo docente, el primero que trae claves, de preferencia el de su RFC en Nexus (el nuevo
+     * si hubo cambio de RFC); si ninguno trae claves, el primero.
+     *
+     * @param  list<array{line: int, own: bool, row: array<string, string>}>  $rows
+     * @return array{line: int, own: bool, row: array<string, string>}
+     */
+    private function chosen(array $rows): array
+    {
+        $ranked = $rows;
+        usort($ranked, fn (array $a, array $b): int => [trim($a['row']['claves_plazas']) === '', ! $a['own']] <=> [trim($b['row']['claves_plazas']) === '', ! $b['own']]);
+
+        return $ranked[0];
+    }
+
+    /**
+     * Las horas por tipo de plaza de un renglón de docentes2, con sus avisos por línea.
+     *
+     * @param  array<string, string>  $row
+     * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
+     * @return array<string, int>
+     */
+    private function hoursByKind(array $row, string $ref, array &$incidents): array
+    {
+        $plazas = PlazaKeys::parse($row['claves_plazas']);
+
+        if ($plazas === []) {
+            if (trim($row['claves_plazas']) !== '') {
+                $incidents[] = $this->warning($ref, 'La clave de plaza de esta línea no se entiende: el docente queda sin plaza.');
+            }
+
+            return [];
+        }
+
+        if (PlazaKeys::leftover($row['claves_plazas']) !== '') {
+            $incidents[] = $this->warning($ref, 'Parte de la clave de plaza de esta línea no se entiende: esa parte no se migra.');
+        }
+
+        $hours = [];
+        foreach ($plazas as $plaza) {
+            $kind = $plaza['kind'];
+
+            if ($kind === null) {
+                $incidents[] = $this->warning($ref, "La plaza de categoría {$plaza['category']} de esta línea no tiene tipo en Nexus: no se migra.");
+            } elseif ($plaza['hours'] === null) {
+                $incidents[] = $this->warning($ref, "La plaza de asignatura {$plaza['category']} de esta línea no trae horas en la clave: no se migra.");
+            } elseif ($plaza['hours'] > PositionKind::MAX_HOURS) {
+                $incidents[] = $this->warning($ref, "La plaza {$plaza['category']} de esta línea trae {$plaza['hours']} horas en la clave, más de las ".PositionKind::MAX_HOURS.' de una plaza: no se migra.');
+            } elseif ($kind->fixedHours() !== null && isset($hours[$kind->value])) {
+                $incidents[] = $this->warning($ref, "El docente de esta línea trae dos plazas de {$kind->label()}: se migra una.");
+            } else {
+                $hours[$kind->value] = ($hours[$kind->value] ?? 0) + $plaza['hours'];
+            }
+        }
+
+        foreach ($hours as $value => $sum) {
+            if ($sum > PositionKind::MAX_HOURS) {
+                $incidents[] = $this->warning($ref, 'Las plazas de '.PositionKind::from($value)->label()." de esta línea suman {$sum} horas, más de las ".PositionKind::MAX_HOURS.' de una plaza: no se migran.');
+                unset($hours[$value]);
+            }
+        }
+
+        $total = array_sum($hours);
+        $declared = trim($row['cantidad_horas_nombramiento']);
+        if (is_numeric($declared) && (float) $declared !== (float) $total) {
+            $incidents[] = $this->warning($ref, "Las plazas de esta línea suman {$total} horas y el SII dice {$declared} (cantidad_horas_nombramiento).");
+        }
+
+        return $hours;
     }
 
     /**

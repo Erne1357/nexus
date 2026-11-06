@@ -20,15 +20,14 @@ final class PlazaKeys
     /** Horas de la jornada de una plaza de apoyo cuya clave trae `00` (supuesto por confirmar). */
     public const int SUPPORT_HOURS = 36;
 
-    private const string PATTERN = '/(?<support>[A-Z]{2})(?<supportCategory>\d{5})\s?(?<supportHours>\d{2})|(?<![A-Z])(?<letter>[A-Z])(?<category>\d{4})\s?(?<hours>\d{2})/';
+    private const string PATTERN = '/(?<![A-Z])(?<support>[A-Z]{2})(?<supportCategory>\d{5})\s?(?<supportHours>\d{2})|(?<![A-Z])(?<letter>[A-Z])(?<category>\d{4})\s?(?<hours>\d{2})/';
 
     /**
      * @return list<array{category: string, kind: PositionKind|null, hours: int|null}>
      */
     public static function parse(string $field): array
     {
-        $field = mb_strtoupper(str_replace('\\x09', ' ', $field));
-        preg_match_all(self::PATTERN, $field, $matches, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL);
+        preg_match_all(self::PATTERN, self::normalize($field), $matches, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL);
         $plazas = [];
 
         foreach ($matches as $match) {
@@ -50,6 +49,24 @@ final class PlazaKeys
         }
 
         return $plazas;
+    }
+
+    /**
+     * Lo que queda del campo sin entender: quita las claves, los números de plaza (`.0100001`), los números sueltos
+     * (prefijos como `1403`), las letras sueltas que el SII deja entre claves y los separadores. Vacío si todo se entendió. Puede traer datos de la plaza: no se imprime.
+     */
+    public static function leftover(string $field): string
+    {
+        $rest = preg_replace(self::PATTERN, ' ', self::normalize($field)) ?? '';
+        $rest = preg_replace('/\.\s?\d*/', ' ', $rest) ?? '';
+        $rest = preg_replace('/(?<![A-Z\d])(\d+|[A-Z])(?![A-Z\d])/', ' ', $rest) ?? '';
+
+        return trim(preg_replace('/[\s,;\/\\\\]+/', ' ', $rest) ?? '');
+    }
+
+    private static function normalize(string $field): string
+    {
+        return mb_strtoupper(str_replace('\\x09', ' ', $field));
     }
 
     private static function teachingKind(string $category): ?PositionKind

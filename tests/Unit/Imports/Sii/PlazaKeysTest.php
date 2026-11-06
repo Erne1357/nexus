@@ -37,3 +37,17 @@ it('una categoría sin tipo conocido o una asignatura sin horas quedan sin tipo 
 it('un campo vacío o ilegible no trae plazas', function (string $field) {
     expect(PlazaKeys::parse($field))->toBe([]);
 })->with(['vacío' => [''], 'basura' => [', ,'], 'solo números' => ['99.0100001']]);
+
+it('una categoría de dos letras pegada a otra letra no es plaza de apoyo', function () {
+    expect(PlazaKeys::parse('1403 XIA0200100.0100001'))->toBe([]);
+});
+
+it('devuelve lo que queda sin entender, sin contar prefijos, números de plaza ni separadores', function (string $field, bool $leftover) {
+    expect(PlazaKeys::leftover($field) !== '')->toBe($leftover);
+})->with([
+    'todo se entiende' => ["1403 E352504.0100001  1403\\x09E352508.0100002, 14 03 E3525 06.0100003\n1456 E371700. 0100004", false],
+    'números sueltos' => ['110071 1456 E361700. 0730009', false],
+    'una letra suelta entre claves sin punto' => ['1403 E352104100001 A 1403 E352106100002', false],
+    'una clave de dos letras sin sus dígitos' => ['1403 E352520.0100001, 1403 IT123400.0100002', true],
+    'texto' => ['SIN CLAVE', true],
+]);

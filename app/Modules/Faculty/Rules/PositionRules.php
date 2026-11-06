@@ -115,7 +115,7 @@ final class PositionRules
 
         if (! $kind->allows($hours)) {
             throw ValidationException::withMessages(['base_hours' => $fixed === null
-                ? 'Las horas base de '.($kind === PositionKind::Apoyo ? 'una plaza de apoyo' : 'una asignatura').' van de 1 a '.PositionKind::MAX_HOURS.'.'
+                ? 'Las horas base de una plaza de '.mb_strtolower($kind->label()).' van de 1 a '.PositionKind::MAX_HOURS.'.'
                 : 'Las horas base de '.mb_strtolower($kind->label())." son {$fixed}."]);
         }
 

@@ -146,6 +146,50 @@ it('señala por archivo y línea, sin RFC, las plazas que no cuadran, no se enti
         ]);
 });
 
+it('avisa la parte de una clave que no se entiende aunque otra sí se migre', function () {
+    SiiFixtures::writeStaff($this->dir, [positionsStaffRow('PRUE800101AB1')], [
+        positionsStaff2Row('PRUE800101AB1', '1403 E352504.0100001, 1403 IT123400.0100002', '4'),
+    ]);
+
+    $run = positionsStepRun($this->dir);
+
+    expect(array_column($run['rows'], 'base_hours'))->toBe([4])
+        ->and(positionsLineIncidents($run['incidents']))->toBe(['docentes2.csv:2' => 'Parte de la clave de plaza de esta línea no se entiende: esa parte no se migra.']);
+});
+
+it('no migra un tipo cuyas plazas suman más de 40 horas y lo avisa por línea', function () {
+    SiiFixtures::writeStaff($this->dir, [positionsStaffRow('PRUE800101AB1')], [
+        positionsStaff2Row('PRUE800101AB1', '1403 IA0801600.0100001 1403 IS0700200.0100002 1403 E352504.0100003', '76'),
+    ]);
+
+    $run = positionsStepRun($this->dir);
+
+    expect(array_map(fn (array $row): array => [$row['kind'], $row['base_hours']], $run['rows']))->toBe([['asignatura', 4]])
+        ->and(positionsLineIncidents($run['incidents'])['docentes2.csv:2'])->toContain('Apoyo y asistencia de esta línea suman 72 horas');
+});
+
+it('si el RFC viejo y el nuevo están en docentes2, toma las plazas del renglón del RFC nuevo', function () {
+    SiiFixtures::writeStaff($this->dir, [positionsStaffRow('PRUE800101OLD', '04'), positionsStaffRow('PRUE800101NEW')], [
+        positionsStaff2Row('PRUE800101OLD', '', ''),
+        positionsStaff2Row('PRUE800101NEW', '1403 E381700.0100001', '40'),
+    ]);
+
+    $run = positionsStepRun($this->dir);
+
+    expect($run['rows'])->toBe([['rfc' => 'PRUE800101NEW', 'kind' => 'tiempo_completo', 'base_hours' => 40, 'valid_from' => '', 'valid_to' => '']])
+        ->and(collect($run['incidents'])->pluck('message')->implode("\n"))->toContain('1 renglones de docentes2 repiten un docente');
+});
+
+it('compara la suma con las horas del SII aunque vengan con decimales', function () {
+    SiiFixtures::writeStaff($this->dir, [positionsStaffRow('PRUE800101AB1')], [
+        positionsStaff2Row('PRUE800101AB1', '1403 E361700.0100001', '40.00'),
+    ]);
+
+    expect(positionsLineIncidents(positionsStepRun($this->dir)['incidents']))->toBe([
+        'docentes2.csv:2' => 'Las plazas de esta línea suman 20 horas y el SII dice 40.00 (cantidad_horas_nombramiento).',
+    ]);
+});
+
 it('sin el paso de docentes pide correrlo antes', function () {
     $migration = new SiiMigration(SiiExport::open($this->dir), '/nonexistent');
 

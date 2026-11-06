@@ -24,7 +24,7 @@ Si las cuentas cuadran, la corrida real es la misma línea sin `--dry-run`.
 | Opción | Qué hace |
 |---|---|
 | `--dry-run` | Corre todo dentro de una transacción que se revierte, sin cola, y borra los archivos subidos. Sí deja `_incidencias.csv` y `_nexus/`. La tabla de la consola dice cuántas altas y cambios haría cada lote |
-| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente` y `alumnos`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `historial_docente`, docentes y materias; `alumnos`, carreras |
+| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente` y `alumnos`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras |
 | `--user=<username>` | Quién aplica los lotes; debe tener permiso de aplicar importaciones |
 | `--force` | Obligatorio en producción |
 
