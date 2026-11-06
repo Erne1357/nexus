@@ -295,3 +295,25 @@ it('en un archivo, la clave del SII que dos materias distintas comparten es erro
     // Y si apply() se llamara sin validar, nunca lo pasa en silencio.
     expect(fn () => $this->template->apply(subjectRow(['sii_code' => 'X1']), $this->context))->toThrow(LogicException::class);
 });
+
+it('el renglón (`position`) se escribe al dar de alta y al cambiar solo si el archivo lo trae', function () {
+    expect($this->template->fields())->toHaveKey('position', 'renglón');
+
+    $this->template->apply(subjectRow(['position' => '3']), $this->context);
+    expect(StudyPlanSubject::sole()->position)->toBe(3);
+
+    $this->template->apply(subjectRow(['credits' => 4]), $this->context);
+    expect(StudyPlanSubject::sole()->position)->toBe(3);
+
+    $this->template->apply(subjectRow(['position' => '1']), $this->context);
+    expect(StudyPlanSubject::sole()->position)->toBe(1);
+});
+
+it('el renglón va de 1 a 99 o vacío', function () {
+    $errors = fn (array $changes): array => $this->template->validate(subjectRow($changes), $this->context)->errors;
+
+    expect($errors(['position' => '0']))->toHaveKey('position')
+        ->and($errors(['position' => '100']))->toHaveKey('position')
+        ->and($errors(['position' => '7']))->toBe([])
+        ->and($errors(['position' => null]))->toBe([]);
+});

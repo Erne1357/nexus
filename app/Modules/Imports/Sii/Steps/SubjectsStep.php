@@ -15,6 +15,8 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * `materias_carreras` es el lugar de una materia del SII en una retícula del SII; la retícula se lleva a su plan de
  * Nexus con `plan_for` (las excluidas del curado solo dejan un aviso por retícula) y la materia se une por su clave
  * oficial del TecNM (SubjectPlacements). Los renglones con estatus `N` no se migran (R13, supuesto por confirmar).
+ * El orden dentro del semestre (D21, confirmado el 5 de noviembre de 2026) sale de `renglon` de la variante que se
+ * queda con el lugar (la presencial al fundir); 0 o vacío queda vacío y la materia va al final, por clave.
  *
  * De cada materia de Nexus: el nombre más frecuente entre sus claves del SII, normalizado (SubjectPlacements y
  * SubjectName, R12); el tipo por
@@ -110,7 +112,7 @@ final class SubjectsStep implements SiiStep
      * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
-     * @return list<array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string}>
+     * @return list<array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}>
      */
     private function placements(SiiMigration $migration, array $planFor, array $catalog, array &$incidents): array
     {
@@ -143,6 +145,7 @@ final class SubjectsStep implements SiiStep
             }
 
             $semester = trim($row['semestre_reticula']);
+            $line = trim($row['renglon']);
 
             $placements[] = [
                 'plan' => $plan,
@@ -156,6 +159,7 @@ final class SubjectsStep implements SiiStep
                 'practice' => $this->number($row['horas_practicas']),
                 'semester' => ctype_digit($semester) ? (int) $semester : 0,
                 'specialty' => trim($row['especialidad']),
+                'position' => ctype_digit($line) && (int) $line > 0 ? (int) $line : 0,
             ];
         }
 
@@ -217,7 +221,7 @@ final class SubjectsStep implements SiiStep
      * Un renglón de la plantilla `subjects` por lugar en la retícula, con el departamento y el tipo resueltos por
      * materia de Nexus.
      *
-     * @param  array<string, array{plan: string, career: string, materia: string, code: string, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, materias: list<string>}>  $grid
+     * @param  array<string, array{plan: string, career: string, materia: string, code: string, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, materias: list<string>}>  $grid
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog
      * @param  array<string|int, string|null>  $departmentForArea
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
@@ -267,6 +271,7 @@ final class SubjectsStep implements SiiStep
                 'specialty' => $specialty,
                 'specialty_name' => $specialty === '' ? '' : ($specialties[$specialty] ?? ''),
                 'sii_code' => '',
+                'position' => $placement['position'] > 0 ? (string) $placement['position'] : '',
                 'kind' => $subjects[$placement['code']]['kind'],
             ];
         }

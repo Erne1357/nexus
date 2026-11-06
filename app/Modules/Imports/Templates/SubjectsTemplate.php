@@ -34,6 +34,9 @@ use LogicException;
  * (`subject_aliases`), y un alias que ya apunta a otra materia es error; a la misma, no hace nada. `kind` es el tipo
  * (`SubjectKind`): se escribe al dar de alta y, en un cambio, solo si el archivo lo trae. Ambos, confirmado el 5 de
  * noviembre de 2026 (D15); que el alias y el tipo se comporten así es un supuesto por confirmar.
+ *
+ * `position` es el renglón de la materia dentro de su semestre (D21, confirmado el 5 de noviembre de 2026; de 1 a 99,
+ * opcional): se escribe al dar de alta el lugar y, en un cambio, solo si el archivo lo trae (supuesto por confirmar).
  */
 class SubjectsTemplate extends ImportTemplate
 {
@@ -67,6 +70,7 @@ class SubjectsTemplate extends ImportTemplate
             'specialty_name' => 'nombre de especialidad',
             'sii_code' => 'clave del SII',
             'kind' => 'tipo',
+            'position' => 'renglón',
         ];
     }
 
@@ -110,12 +114,13 @@ class SubjectsTemplate extends ImportTemplate
             ...$this->subjectRules(),
             'semester' => ['required', 'integer', 'min:1', 'max:32767'],
             'sii_code' => ['nullable', 'string', 'max:20'],
+            'position' => ['nullable', 'integer', 'min:1', 'max:99'],
         ];
     }
 
     public function normalize(array $row): array
     {
-        return $this->normalizeSubjectFields(parent::normalize($row), ['sii_code'], ['semester']);
+        return $this->normalizeSubjectFields(parent::normalize($row), ['sii_code'], ['semester', 'position']);
     }
 
     /**
@@ -141,7 +146,11 @@ class SubjectsTemplate extends ImportTemplate
 
         $placement = StudyPlanSubject::query()->where(['study_plan_id' => $plan->getKey(), 'subject_id' => $subject->getKey()])->first()
             ?? new StudyPlanSubject(['study_plan_id' => $plan->getKey(), 'subject_id' => $subject->getKey()]);
-        $placement->fill(['semester' => $row['semester'], ...($specialty === null ? [] : ['specialty_id' => $specialty->getKey()])])->save();
+        $placement->fill([
+            'semester' => $row['semester'],
+            ...($specialty === null ? [] : ['specialty_id' => $specialty->getKey()]),
+            ...($row['position'] === null ? [] : ['position' => $row['position']]),
+        ])->save();
 
         unset($this->subjectOnly[$placement->getKey()]);
 

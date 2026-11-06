@@ -4,6 +4,7 @@ namespace App\Modules\Academic\Rules;
 
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Queries\KeyLookup;
 use Illuminate\Validation\ValidationException;
@@ -46,6 +47,39 @@ final class PlacementRules
     public function lockPlan(string $planId): StudyPlan
     {
         return StudyPlan::query()->sharedLock()->findOrFail($planId);
+    }
+
+    /**
+     * La posición que deja una materia al final de su semestre (D21). Bloquea las filas del semestre. Si alguna no
+     * tiene posición (se creó antes de D21 o el SII no trajo renglón), numera primero todo el semestre 1..n en el orden
+     * en que se ve (posición, las nulas al final, y clave de materia): así «al final» lo es de verdad y nada cambia de
+     * lugar. La numeración no deja bitácora: no cambia el orden que ya se veía.
+     */
+    public function endOfSemester(StudyPlan $plan, int $semester): int
+    {
+        $positions = StudyPlanSubject::query()
+            ->join('subjects', 'subjects.id', '=', 'study_plan_subjects.subject_id')
+            ->where('study_plan_subjects.study_plan_id', $plan->getKey())
+            ->where('study_plan_subjects.semester', $semester)
+            ->orderByRaw('study_plan_subjects.position asc nulls last')
+            ->orderBy('subjects.code')
+            ->lock('for update of study_plan_subjects')
+            ->toBase()
+            ->pluck('study_plan_subjects.position', 'study_plan_subjects.id');
+
+        if ($positions->contains(null)) {
+            $number = 0;
+
+            foreach ($positions as $id => $position) {
+                if ($position !== ++$number) {
+                    StudyPlanSubject::query()->whereKey($id)->toBase()->update(['position' => $number]);
+                }
+            }
+
+            return $number + 1;
+        }
+
+        return (int) $positions->max() + 1;
     }
 
     /**

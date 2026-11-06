@@ -103,7 +103,7 @@
                 @endforeach
 
                 @foreach ($grid['semesters'] as $semester => $rows)
-                    <x-core::semester-grid.semester :semester="$semester" :column="$layout->columns[$semester]" wire:key="semester-{{ $semester }}">
+                    <x-core::semester-grid.semester :semester="$semester" :column="$layout->columns[$semester]" :sortable="$canEditGrid ? 'sortPlacement' : null" wire:key="semester-{{ $semester }}">
                         <x-slot:figures>{{ $commonCredits[$semester] }} cr</x-slot:figures>
                         @if ($semester <= $offeredSemesters)
                             {{-- El tooltip va a la izquierda: arriba, el del último semestre se saldría de la caja y la desplazaría. --}}
@@ -131,7 +131,7 @@
                                 <x-core::semester-grid.separator :specialty="$row['specialty_id']" :name="$specialtiesById[$row['specialty_id']]['name'] ?? 'Quitada'" wire:key="separator-{{ $semester }}-{{ $row['specialty_id'] }}" />
                             @endif
 
-                            @include('academic::plan.tile', ['row' => $row, 'gridRow' => $layout->rows[$row['placement_id']], 'isSelected' => $selected !== null && $selected['placement_id'] === $row['placement_id']])
+                            @include('academic::plan.tile', ['canEditGrid' => $canEditGrid, 'row' => $row, 'gridRow' => $layout->rows[$row['placement_id']], 'isSelected' => $selected !== null && $selected['placement_id'] === $row['placement_id']])
                         @endforeach
                     </x-core::semester-grid.semester>
                 @endforeach

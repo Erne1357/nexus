@@ -21,7 +21,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * valor anterior de la bitácora es el confirmado aunque `$placement` llegue vieja, y la deja en `$placement`; una
  * fila que otra sesión quitó no existe. Si nada cambió, no escribe, no registra ni avisa; si algo cambió, guarda,
  * deja en la bitácora el valor anterior y el nuevo y, después del commit, avisa con CurriculumChanged. Deja la
- * materia en la relación `subject` de la fila.
+ * materia en la relación `subject` de la fila. D21: al cambiar de semestre, la materia queda al final del nuevo
+ * (su posición no entra a la bitácora: se sigue de la nueva).
  */
 final class UpdatePlacement
 {
@@ -52,7 +53,14 @@ final class UpdatePlacement
             $subject = $placement->subject()->withTrashed()->firstOrFail();
             $placement->setRelation('subject', $subject);
             $placement->fill($data);
+
+            // D21: una materia que cambia de semestre queda al final del nuevo.
+            if ($placement->isDirty('semester')) {
+                $placement->position = $this->rules->endOfSemester($plan, $placement->semester);
+            }
+
             $changed = array_keys($placement->getDirty());
+            $logged = array_values(array_intersect($changed, PlaceSubject::FIELDS));
 
             if ($changed === []) {
                 return $placement;
@@ -64,8 +72,8 @@ final class UpdatePlacement
                 ->performedOn($placement)
                 ->event(ActivityEvent::Updated)
                 ->withChanges([
-                    'attributes' => $placement->only($changed),
-                    'old' => Arr::only($old, $changed),
+                    'attributes' => $placement->only($logged),
+                    'old' => Arr::only($old, $logged),
                 ])
                 ->log("Cambió el lugar de la materia {$subject->code} en el plan {$plan->code}");
 

@@ -34,6 +34,7 @@ final class PlanGridQuery
             ->whereNull('subjects.deleted_at')
             ->where('study_plan_subjects.study_plan_id', $studyPlanId)
             ->orderBy('study_plan_subjects.semester')
+            ->orderByRaw('study_plan_subjects.position asc nulls last')
             ->orderBy('subjects.code')
             ->toBase()
             ->get(['study_plan_subjects.subject_id', 'study_plan_subjects.specialty_id', 'study_plan_subjects.semester', 'subjects.credits', 'subjects.kind']);

@@ -20,6 +20,8 @@ use Illuminate\Database\Eloquent\Model;
  * resuelto no se reabre (su materia ya está en la retícula). La especialidad del archivo se pone al crear el
  * pendiente, y en uno sin resolver se actualiza si el archivo la trae (supuesto por confirmar); lo mismo la retícula
  * del SII de la que salió (`sii_grid`, «carrera/retícula»), que Servicios Escolares ve al validarla. Nunca desactiva.
+ * `position` (renglón del SII, de 1 a 99, opcional; D21) se guarda en el pendiente para no perder el dato; al
+ * resolverlo, la materia queda al final del semestre que se le asigne (supuesto por confirmar).
  */
 class PendingPlacementsTemplate extends ImportTemplate
 {
@@ -52,6 +54,7 @@ class PendingPlacementsTemplate extends ImportTemplate
             'specialty_name' => 'nombre de especialidad',
             'kind' => 'tipo',
             'sii_grid' => 'retícula del sii',
+            'position' => 'renglón',
         ];
     }
 
@@ -82,12 +85,12 @@ class PendingPlacementsTemplate extends ImportTemplate
 
     public function rules(): array
     {
-        return [...$this->subjectRules(), 'sii_grid' => ['nullable', 'string', 'max:50']];
+        return [...$this->subjectRules(), 'sii_grid' => ['nullable', 'string', 'max:50'], 'position' => ['nullable', 'integer', 'min:1', 'max:99']];
     }
 
     public function normalize(array $row): array
     {
-        return $this->normalizeSubjectFields(parent::normalize($row));
+        return $this->normalizeSubjectFields(parent::normalize($row), [], ['position']);
     }
 
     /**
@@ -107,6 +110,7 @@ class PendingPlacementsTemplate extends ImportTemplate
             $target->fill([
                 'specialty_id' => $specialty?->getKey() ?? $target->specialty_id,
                 'sii_grid' => $row['sii_grid'] ?? $target->sii_grid,
+                'position' => $row['position'] ?? $target->position,
             ])->save();
         }
 
