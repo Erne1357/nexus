@@ -58,6 +58,15 @@ it('mueve una unidad con sus hijas, al final de sus nuevas hermanas, con bitáco
     Event::assertDispatched(OrgUnitMoved::class, fn (OrgUnitMoved $event): bool => $event->unit->is($unit));
 });
 
+it('AZ-S16: la Subdirección Académica no se mueve, así ningún jefe la tiene debajo de su unidad', function () {
+    $academic = OrgUnit::where('code', OrgTree::ACADEMIC)->sole();
+
+    moveInvalid(fn () => app(MoveOrgUnit::class)->handle($academic, $this->services), 'unit', 'Nexus usa la Subdirección Académica: no se mueve.');
+
+    expect($academic->fresh()->parent_id)->toBe($this->root->id)
+        ->and(activitySince()->count())->toBe(0);
+});
+
 it('rechaza ciclos', function () {
     $message = 'Subdirección de Planeación y Vinculación no puede depender de sí misma ni de una de sus hijas.';
 

@@ -25,4 +25,11 @@ interface Permission extends \BackedEnum
      * Si el permiso es sobre lo propio (el dueño del registro es el usuario) y no sobre un alcance.
      */
     public function isPersonal(): bool;
+
+    /**
+     * A qué unidades aplica (AZ-02; mecanismo, AZ-S16): un nombramiento con unidad aporta el permiso solo si su unidad, o una de sus
+     * descendientes, cumple (OrgTree::fits()). Nulo: a cualquiera, y entonces lo aporta todo nombramiento de un puesto
+     * que lo tiene concedido. Un nombramiento sin unidad (admin, coordinador, docente) lo aporta siempre.
+     */
+    public function appliesTo(): ?UnitApplicability;
 }

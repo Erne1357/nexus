@@ -13,8 +13,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Resuelve un lugar pendiente de la migración del SII (D18 y D19): le asigna semestre y lo pone en la retícula del
  * plan, con su especialidad, reutilizando PlaceSubject (semestre de 1 a los del plan, materia activa, especialidad
- * del plan; avisa con CurriculumChanged). Marca `resolved_at` y `resolved_by` y deja bitácora sobre el pendiente,
- * todo en una transacción. Quién puede lo decide StudyPlanPolicy (`validatePlacements`) antes de llamarla.
+ * del plan; avisa con CurriculumChanged). Marca `resolved_at` y `resolved_by` y deja bitácora sobre el pendiente, con
+ * el semestre, cuándo y quién (`attributes`) y el estado anterior, sin resolver (`old`), todo en una transacción. Quién puede lo decide StudyPlanPolicy (`validatePlacements`) antes de llamarla.
  *
  * - Un pendiente ya resuelto no se vuelve a resolver.
  * - R23: un plan borrado o inactivo es un error sobre `pending`, sin tocar nada.
@@ -85,13 +85,18 @@ final class ResolvePendingPlacement
      */
     private function resolve(StudyPlanSubjectPending $pending, User $user, array $attributes, string $description): void
     {
-        $pending->forceFill(['resolved_at' => now(), 'resolved_by' => $user->getKey()])->save();
+        $old = ['resolved_at' => $pending->resolved_at?->toIso8601String(), 'resolved_by' => $pending->resolved_by];
+        $now = now();
+        $pending->forceFill(['resolved_at' => $now, 'resolved_by' => $user->getKey()])->save();
 
         activity()
             ->performedOn($pending)
             ->causedBy($user)
             ->event(ActivityEvent::Updated)
-            ->withChanges(['attributes' => [...$attributes, 'resolved_by' => $user->getKey()]])
+            ->withChanges([
+                'attributes' => [...$attributes, 'resolved_at' => $now->toIso8601String(), 'resolved_by' => $user->getKey()],
+                'old' => $old,
+            ])
             ->log($description);
     }
 }

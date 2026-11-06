@@ -4,6 +4,7 @@ namespace Tests\Fixtures\Modules\DemoCatalog\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo de ejemplo DemoCatalog, solo para pruebas: la clave es `demo_catalog.<recurso>.<accion>`.
@@ -37,5 +38,10 @@ enum DemoCatalogPermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    public function appliesTo(): ?UnitApplicability
+    {
+        return null;
     }
 }

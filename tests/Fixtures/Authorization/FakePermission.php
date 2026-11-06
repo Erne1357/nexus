@@ -4,6 +4,7 @@ namespace Tests\Fixtures\Authorization;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos de prueba: un caso por combinación de dimensiones y uno personal.
@@ -40,5 +41,10 @@ enum FakePermission: string implements Permission
     public function isPersonal(): bool
     {
         return $this === self::ViewOwn;
+    }
+
+    public function appliesTo(): ?UnitApplicability
+    {
+        return null;
     }
 }

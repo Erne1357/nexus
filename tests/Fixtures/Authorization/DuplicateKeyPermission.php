@@ -3,6 +3,7 @@
 namespace Tests\Fixtures\Authorization;
 
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 enum DuplicateKeyPermission: string implements Permission
 {
@@ -21,5 +22,10 @@ enum DuplicateKeyPermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    public function appliesTo(): ?UnitApplicability
+    {
+        return null;
     }
 }

@@ -34,8 +34,9 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * El jefe de departamento valida las materias por validar de la migración del SII; el permiso declara la unidad y
-     * StudyPlanPolicy lo pregunta sobre Servicios Escolares, así que solo lo ejerce el jefe de esa unidad (D19).
+     * El jefe de departamento valida las materias por validar de la migración del SII (D19); el permiso aplica solo a
+     * Servicios Escolares (AZ-02, AcademicPermission::appliesTo()), así que solo lo ejerce el jefe de esa unidad, y
+     * StudyPlanPolicy además lo pregunta sobre ella.
      */
     public function grants(): array
     {

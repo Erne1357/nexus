@@ -3,6 +3,7 @@
 namespace App\Modules\Imports\Enums;
 
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo Imports: lotes de importación. La clave es `imports.<recurso>.<accion>`. Todos son solo del admin: ningún rol los recibe por concesión.
@@ -30,5 +31,13 @@ enum ImportsPermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    /**
+     * A cualquier unidad: ningún permiso del módulo depende de la unidad del puesto (AZ-S16).
+     */
+    public function appliesTo(): ?UnitApplicability
+    {
+        return null;
     }
 }

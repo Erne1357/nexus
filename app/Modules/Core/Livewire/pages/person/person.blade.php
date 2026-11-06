@@ -8,11 +8,7 @@
 --}}
 @php
     $person = $record->person;
-    $whoUnitLabel = match ($whoRoleCase?->value) {
-        'subdireccion' => 'Subdirección',
-        'jefe_departamento' => 'Departamento',
-        default => 'Departamento académico',
-    };
+    $whoUnitLabel = $whoRoleCase?->unitLabel() ?? 'Departamento académico';
     $whoColumns = $whoRoleCase?->scopeColumns() ?? [];
 @endphp
 
@@ -156,7 +152,7 @@
                                 <p class="text-sm text-neutral">Elige el alcance para ver quién ocupa el puesto.</p>
                             @elseif ($who['state'] === 'none')
                                 <x-alert class="alert-warning" icon="o-exclamation-triangle">
-                                    <span><b>Sin {{ mb_strtolower($whoRoleCase->label()) }} vigente.</b><br>Nadie ocupa {{ $who['summary'] }} hoy.</span>
+                                    <span><b>Sin {{ mb_strtolower($who['title']) }} vigente.</b><br>Nadie ocupa {{ $who['summary'] }} hoy.</span>
                                 </x-alert>
                             @else
                                 <div class="space-y-2">

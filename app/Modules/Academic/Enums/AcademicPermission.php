@@ -3,13 +3,16 @@
 namespace App\Modules\Academic\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo Academic: catálogos de departamentos, carreras, materias y planes de estudio. La clave es
  * `academic.<recurso>.<accion>`. Todos son solo del admin, salvo `academic.placement.validate`: validar las materias
- * de la migración del SII que esperan semestre (D19). Se concede al jefe de departamento y declara la unidad: solo lo
- * tiene el jefe nombrado sobre Servicios Escolares, porque StudyPlanPolicy lo pregunta sobre esa unidad.
+ * de la migración del SII que esperan semestre (D19). Se concede al jefe de departamento, declara la unidad y aplica
+ * solo a Servicios Escolares (AZ-02, AZ-S16): solo lo ejerce el jefe nombrado sobre esa unidad, y StudyPlanPolicy lo pregunta
+ * sobre ella.
  */
 enum AcademicPermission: string implements Permission
 {
@@ -60,5 +63,16 @@ enum AcademicPermission: string implements Permission
     public function isPersonal(): bool
     {
         return false;
+    }
+
+    /**
+     * AZ-02, AZ-S16: validar los pendientes de la migración del SII, a Servicios Escolares; lo demás es académico (los
+     * departamentos académicos y la Subdirección Académica).
+     */
+    public function appliesTo(): ?UnitApplicability
+    {
+        return $this === self::PlacementValidate
+            ? UnitApplicability::of(codes: [OrgTree::SCHOOL_SERVICES])
+            : UnitApplicability::academic();
     }
 }

@@ -4,19 +4,8 @@
     (la unidad, deshabilitada si viene fija) y las fechas. Espera $offered, $roleCase, $options, $roleNote y $lockedUnit.
 --}}
 @php
-    $unitLabel = match ($roleCase?->value) {
-        'subdireccion' => 'Subdirección',
-        'jefe_departamento' => 'Departamento',
-        default => 'Departamento académico',
-    };
+    $unitLabel = $roleCase?->unitLabel() ?? 'Departamento académico';
     $columns = $roleCase?->scopeColumns() ?? [];
-    $hints = [
-        'admin' => 'Este puesto no tiene alcance: vale en todo el sistema.',
-        'subdireccion' => 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.',
-        'coordinador' => 'Este puesto pide campus y carrera.',
-        'jefe_departamento' => 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.',
-        'jefe_proyecto_docente' => 'Este puesto pide campus y departamento académico.',
-    ];
 @endphp
 
 @error('user')
@@ -29,7 +18,7 @@
 </div>
 
 @if ($roleCase !== null)
-    <p class="text-sm" data-testid="role-hint">{{ $hints[$roleCase->value] ?? '' }}</p>
+    <p class="text-sm" data-testid="role-hint">{{ $roleCase->appointHint() ?? '' }}</p>
 @endif
 
 @if ($columns !== [])

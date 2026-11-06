@@ -41,6 +41,20 @@ describe('ResolvePendingPlacement', function () {
         Event::assertDispatched(CurriculumChanged::class, fn (CurriculumChanged $event): bool => $event->studyPlanId === $this->plan->id);
     });
 
+    it('la bitácora guarda cuándo y quién lo resolvió y el estado anterior', function () {
+        $this->travelTo('2026-11-05 10:30:00');
+        $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
+
+        app(ResolvePendingPlacement::class)->handle($pending, 4, $this->user);
+
+        $entry = Activity::where('subject_type', (new StudyPlanSubjectPending)->getMorphClass())->where('subject_id', $pending->id)->sole();
+        $resolvedAt = $pending->fresh()->resolved_at;
+
+        expect($entry->attribute_changes['attributes'])->toBe(['semester' => 4, 'resolved_at' => $resolvedAt->toIso8601String(), 'resolved_by' => $this->user->id])
+            ->and($entry->attribute_changes['old'])->toBe(['resolved_at' => null, 'resolved_by' => null])
+            ->and($resolvedAt->equalTo(now()))->toBeTrue();
+    });
+
     it('un pendiente resuelto no se vuelve a resolver', function () {
         $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
         app(ResolvePendingPlacement::class)->handle($pending, 2, $this->user);

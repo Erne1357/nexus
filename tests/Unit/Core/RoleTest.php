@@ -52,3 +52,37 @@ it('cada puesto describe lo que hace en Nexus para Inicio', function () {
         expect($role->description())->not->toBe('');
     }
 });
+
+it('AZ-02: el jefe de una unidad que no es departamento académico se nombra por ella; los demás conservan su nombre', function () {
+    $services = ['kind' => OrgUnitKind::Departamento, 'code' => 'SERVICIOS-ESCOLARES', 'name' => 'Departamento de Servicios Escolares'];
+    $systems = ['kind' => OrgUnitKind::DepartamentoAcademico, 'code' => 'SC', 'name' => 'Sistemas y Computación'];
+
+    expect(Role::JefeDepartamento->titleOn([$services]))->toBe('Jefe del Departamento de Servicios Escolares')
+        ->and(Role::JefeDepartamento->titleOn([[...$services, 'name' => 'Servicios Escolares']]))->toBe('Jefe del Departamento de Servicios Escolares')
+        ->and(Role::JefeDepartamento->titleOn([$systems]))->toBe('Jefe de departamento académico')
+        ->and(Role::JefeDepartamento->titleOn([$systems, $services]))->toBe('Jefe de departamento')
+        ->and(Role::JefeDepartamento->titleOn([]))->toBe('Jefe de departamento académico')
+        ->and(Role::JefeProyectoDocente->titleOn([$systems]))->toBe('Jefe de proyecto docente');
+});
+
+it('AZ-S16: en una lista para elegir el puesto, sin persona ni unidad, el jefe de departamento es «Jefe de departamento»', function (Role $role, string $label) {
+    expect($role->listLabel())->toBe($label);
+})->with([
+    [Role::Admin, 'Administración'],
+    [Role::Subdireccion, 'Subdirección Académica'],
+    [Role::JefeDepartamento, 'Jefe de departamento'],
+    [Role::JefeProyectoDocente, 'Jefe de proyecto docente'],
+    [Role::Coordinador, 'Coordinador de carrera'],
+    [Role::Docente, 'Docente'],
+]);
+
+it('la pista del formulario «Nombrar» dice qué alcance pide cada puesto', function (Role $role, ?string $hint) {
+    expect($role->appointHint())->toBe($hint);
+})->with([
+    [Role::Admin, 'Este puesto no tiene alcance: vale en todo el sistema.'],
+    [Role::Subdireccion, 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.'],
+    [Role::JefeDepartamento, 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.'],
+    [Role::JefeProyectoDocente, 'Este puesto pide campus y departamento académico.'],
+    [Role::Coordinador, 'Este puesto pide campus y carrera.'],
+    [Role::Docente, null],
+]);

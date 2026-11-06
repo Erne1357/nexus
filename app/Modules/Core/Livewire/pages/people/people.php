@@ -60,7 +60,7 @@ new #[Title('Personas y puestos')] class extends Component
                 ['key' => 'is_active', 'label' => 'Estado', 'sortable' => false],
             ],
             'rowDecoration' => ['text-neutral' => fn (User $user): bool => ! $user->is_active],
-            'roles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], Role::cases()),
+            'roles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], Role::cases()),
         ];
     }
 

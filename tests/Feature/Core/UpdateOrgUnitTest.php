@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Actions\UpdateOrgUnit;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\OrgUnitUpdated;
@@ -80,6 +81,36 @@ it('AZ-S13: la clave de DIRECCION y SUB-ACADEMICA no cambia, su nombre sí', fun
     app(UpdateOrgUnit::class)->handle($academic, ['code' => 'SUB-ACADEMICA', 'name' => 'Subdirección Académica del ITCJ']);
 
     expect($academic->fresh()->name)->toBe('Subdirección Académica del ITCJ');
+});
+
+it('AZ-S16: la clave de Servicios Escolares no cambia mientras tenga jefe vigente o por empezar', function () {
+    $services = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento]);
+    $head = RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeDepartamento, 'org_unit_id' => $services->id, 'valid_from' => today()->addWeek()]);
+
+    updateUnitInvalid(
+        fn () => app(UpdateOrgUnit::class)->handle($services, ['code' => 'ESCOLARES']),
+        'code',
+        'Nexus usa la clave SERVICIOS-ESCOLARES para el jefe de Servicios Escolares; termina su nombramiento antes de cambiarla.',
+    );
+
+    app(UpdateOrgUnit::class)->handle($services, ['name' => 'Departamento de Servicios Escolares del ITCJ']);
+    $head->update(['valid_from' => today()->subMonth(), 'valid_to' => today()->subDay()]);
+    app(UpdateOrgUnit::class)->handle($services->fresh(), ['code' => 'ESCOLARES']);
+
+    expect($services->fresh())->code->toBe('ESCOLARES')->name->toBe('Departamento de Servicios Escolares del ITCJ');
+});
+
+it('AZ-S16: Servicios Escolares con jefe no cambia a otro tipo, y el error nombra al jefe por su unidad', function () {
+    $services = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento]);
+    RoleAssignment::factory()->create(['user_id' => User::factory()->create()->id, 'role' => Role::JefeDepartamento, 'org_unit_id' => $services->id]);
+
+    updateUnitInvalid(
+        fn () => app(UpdateOrgUnit::class)->handle($services, ['kind' => OrgUnitKind::Oficina]),
+        'kind',
+        'Tiene nombramientos de Jefe del Departamento de Servicios Escolares; ese puesto pide una unidad de tipo Departamento.',
+    );
+
+    expect($services->fresh()->kind)->toBe(OrgUnitKind::Departamento);
 });
 
 it('la clave nueva no puede ser de otra unidad', function () {

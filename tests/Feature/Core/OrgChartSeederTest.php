@@ -5,7 +5,7 @@ use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Models\OrgUnit;
 
-it('siembra el organigrama tipo bajo la Dirección (AZ-S1)', function () {
+it('siembra el organigrama tipo bajo la Dirección (AZ-S1), con Servicios Escolares en la Subdirección Académica (AZ-02)', function () {
     $this->seed(OrgChartSeeder::class);
 
     $expected = [
@@ -15,7 +15,7 @@ it('siembra el organigrama tipo bajo la Dirección (AZ-S1)', function () {
         'DIV-POSGRADO' => [OrgUnitKind::Division, 'SUB-ACADEMICA'],
         'DESARROLLO-ACADEMICO' => [OrgUnitKind::Departamento, 'SUB-ACADEMICA'],
         'EDUCACION-DISTANCIA' => [OrgUnitKind::Departamento, 'SUB-ACADEMICA'],
-        'SERVICIOS-ESCOLARES' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
+        'SERVICIOS-ESCOLARES' => [OrgUnitKind::Departamento, 'SUB-ACADEMICA'],
         'VINCULACION' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
         'EXTRAESCOLARES' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
     ];
@@ -53,9 +53,18 @@ it('si el admin borró una rama, sembrar no crea sus hijos', function () {
 
     $this->seed(OrgChartSeeder::class);
 
-    expect(OrgUnit::whereIn('code', ['SERVICIOS-ESCOLARES', 'VINCULACION', 'EXTRAESCOLARES'])->exists())->toBeFalse()
+    expect(OrgUnit::whereIn('code', ['VINCULACION', 'EXTRAESCOLARES'])->exists())->toBeFalse()
         ->and(OrgUnit::withTrashed()->where('code', 'SUB-PLANEACION')->sole()->trashed())->toBeTrue()
         ->and(OrgUnit::where('code', 'DIV-PROFESIONAL')->exists())->toBeTrue();
+});
+
+it('AZ-S1: en una instalación que ya tiene Servicios Escolares en otra subdirección no la mueve; eso es del Organigrama', function () {
+    $planning = OrgUnit::factory()->create(['parent_id' => OrgUnit::where('code', 'DIRECCION')->value('id'), 'code' => 'SUB-PLANEACION', 'kind' => OrgUnitKind::Subdireccion]);
+    OrgUnit::factory()->create(['parent_id' => $planning->id, 'code' => 'SERVICIOS-ESCOLARES', 'kind' => OrgUnitKind::Departamento]);
+
+    $this->seed(OrgChartSeeder::class);
+
+    expect(OrgUnit::where('code', 'SERVICIOS-ESCOLARES')->sole()->parent->code)->toBe('SUB-PLANEACION');
 });
 
 it('el sembrador ignora un departamento académico con la clave de una unidad estructural', function () {

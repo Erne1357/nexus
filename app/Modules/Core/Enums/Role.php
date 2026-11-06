@@ -2,6 +2,8 @@
 
 namespace App\Modules\Core\Enums;
 
+use App\Modules\Core\Authorization\OrgTree;
+
 /**
  * Puestos de R1 (PROJECT.md, "Actores y roles"). El valor es el de `role_assignments.role`. R3 añade `alumno` y `servicios_escolares`.
  */
@@ -51,6 +53,93 @@ enum Role: string
             self::JefeProyectoDocente => 'Junto con el jefe de departamento, asignas docentes a los grupos según la prioridad de base.',
             self::Coordinador => 'Analizas el avance de los alumnos de tu carrera, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre.',
             self::Docente => 'Consultas tu propia carga: los grupos que impartes y sus horarios.',
+        };
+    }
+
+    /**
+     * El nombre del puesto para quien lo ocupa sobre `$units` (AZ-02, confirmado el 5 de noviembre de 2026: la credencial
+     * nombra su unidad). El jefe de departamento de una sola unidad que no es departamento académico la nombra: «Jefe
+     * del Departamento de Servicios Escolares» (si el nombre de la unidad no empieza con «Departamento», se lo
+     * antepone). Con varias unidades que no lo son, o mezcladas con departamentos académicos, «Jefe de departamento»
+     * (supuesto por confirmar). En los demás casos, label().
+     *
+     * @param  list<array{kind: OrgUnitKind, code: string, name: string}>  $units
+     */
+    public function titleOn(array $units): string
+    {
+        $outside = array_filter($units, fn (array $unit): bool => $unit['kind'] !== OrgUnitKind::DepartamentoAcademico);
+
+        if ($this !== self::JefeDepartamento || $outside === []) {
+            return $this->label();
+        }
+
+        $names = array_values(array_unique(array_column($units, 'name')));
+
+        if (count($names) > 1) {
+            return 'Jefe de departamento';
+        }
+
+        return 'Jefe del '.(mb_stripos($names[0], 'departamento ') === 0 ? $names[0] : "Departamento de {$names[0]}");
+    }
+
+    /**
+     * Lo que el puesto hace en Nexus para quien lo ocupa sobre `$units`, para Inicio (AZ-02): el jefe del Departamento de
+     * Servicios Escolares solo valida las materias de la migración del SII que esperan semestre (D19); el de otra
+     * unidad que no es departamento académico, lo de su unidad. Si alguna de sus unidades es un departamento
+     * académico, o el puesto no es el de jefe de departamento, description().
+     *
+     * @param  list<array{kind: OrgUnitKind, code: string, name: string}>  $units
+     */
+    public function descriptionOn(array $units): string
+    {
+        if ($this !== self::JefeDepartamento || $units === [] || array_any($units, fn (array $unit): bool => $unit['kind'] === OrgUnitKind::DepartamentoAcademico)) {
+            return $this->description();
+        }
+
+        return array_all($units, fn (array $unit): bool => $unit['code'] === OrgTree::SCHOOL_SERVICES)
+            ? 'Asignas semestre a las materias de la migración del SII que esperan validación, en la pestaña «Por validar» de cada plan de estudios.'
+            : 'Atiendes en Nexus lo que corresponde a tu unidad; sus pantallas aparecen en el menú.';
+    }
+
+    /**
+     * El nombre del puesto en una lista para elegirlo, sin persona ni unidad (el filtro de «Personas y puestos», «¿Quién
+     * ocupa un puesto?» y «Nombrar» en la ficha de la persona): el jefe de departamento es «Jefe de departamento»,
+     * porque lo ocupan los jefes de departamentos académicos y el de Servicios Escolares (AZ-02, AZ-S16); los demás,
+     * label(). Con una persona o una unidad, titleOn().
+     */
+    public function listLabel(): string
+    {
+        return $this === self::JefeDepartamento ? 'Jefe de departamento' : $this->label();
+    }
+
+    /**
+     * La pista del formulario «Nombrar»: qué alcance pide el puesto y si tiene un solo titular (AZ-S7). Nulo para el
+     * docente, que no se nombra ahí (AZ-S11).
+     */
+    public function appointHint(): ?string
+    {
+        return match ($this) {
+            self::Admin => 'Este puesto no tiene alcance: vale en todo el sistema.',
+            self::Subdireccion => 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.',
+            self::JefeDepartamento => 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.',
+            self::JefeProyectoDocente => 'Este puesto pide campus y departamento académico.',
+            self::Coordinador => 'Este puesto pide campus y carrera.',
+            self::Docente => null,
+        };
+    }
+
+    /**
+     * Cómo se llama la unidad sobre la que se nombra el puesto, para el formulario «Nombrar» y la ficha de la persona:
+     * la subdirección; el departamento del jefe, académico o Servicios Escolares (D19); el departamento académico del
+     * jefe de proyecto docente. Nulo si el puesto no lleva unidad.
+     */
+    public function unitLabel(): ?string
+    {
+        return match ($this) {
+            self::Subdireccion => 'Subdirección',
+            self::JefeDepartamento => 'Departamento',
+            self::JefeProyectoDocente => 'Departamento académico',
+            default => null,
         };
     }
 

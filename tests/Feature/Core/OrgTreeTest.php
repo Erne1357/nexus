@@ -123,6 +123,26 @@ it('idOf ignora las unidades borradas', function () {
     expect(app(OrgTree::class)->idOf('XYZ'))->toBeNull();
 });
 
+it('idOf consulta la base una vez por clave en cada petición', function () {
+    $unit = OrgUnit::factory()->create(['code' => 'XYZ']);
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $tree = app(OrgTree::class);
+
+    expect($tree->idOf('XYZ'))->toBe($unit->id)
+        ->and($tree->idOf('XYZ'))->toBe($unit->id)
+        ->and($tree->idOf('NOPE'))->toBeNull()
+        ->and($tree->idOf('NOPE'))->toBeNull()
+        ->and(orgUnitQueries())->toHaveCount(2);
+
+    app()->forgetScopedInstances();
+    DB::flushQueryLog();
+    app(OrgTree::class)->idOf('XYZ');
+
+    expect(orgUnitQueries())->toHaveCount(1);
+});
+
 it('el árbol termina aunque haya un ciclo', function () {
     $a = OrgUnit::factory()->create();
     $b = OrgUnit::factory()->create(['parent_id' => $a->id]);
