@@ -63,4 +63,28 @@ final class SiiFixtures
     {
         file_put_contents($path, ($header ?? self::headerLine($file->headers()))."\r\n".implode("\r\n", $lines)."\r\n");
     }
+
+    /**
+     * Docentes y docentes2 sintéticos.
+     *
+     * @param  list<array<string, string>>  $staff  columnas de `docentes` por nombre (texto sin comillas)
+     * @param  list<array<string, string>>  $staff2  columnas de `docentes2` por nombre
+     */
+    public static function writeStaff(string $dir, array $staff, array $staff2 = []): void
+    {
+        $quote = fn (array $row): array => array_map(fn (string $value): string => "'{$value}'", $row);
+
+        self::write($dir.'/docentes.csv', SiiFile::Docentes, array_map(fn (array $row): string => self::line(SiiFile::Docentes, $quote($row)), $staff));
+        self::write($dir.'/docentes2.csv', SiiFile::Docentes2, array_map(fn (array $row): string => self::line(SiiFile::Docentes2, $quote($row)), $staff2));
+    }
+
+    /**
+     * @param  list<array{0: string, 1: string, 2: string, 3: string, 4?: string}>  $groups  periodo, materia, grupo, RFC y `paralelo_de`
+     */
+    public static function writeGroups(string $dir, array $groups): void
+    {
+        self::write($dir.'/grupos.csv', SiiFile::Grupos, array_map(fn (array $g): string => self::line(SiiFile::Grupos, [
+            'periodo' => "'{$g[0]}'", 'materia' => "'{$g[1]}'", 'grupo' => "'{$g[2]}'", 'rfc' => "'{$g[3]}'", 'paralelo_de' => "'".($g[4] ?? '')."'",
+        ]), $groups));
+    }
 }

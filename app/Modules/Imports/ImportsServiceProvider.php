@@ -14,6 +14,8 @@ use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\RoomsStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
+use App\Modules\Imports\Sii\Steps\TeacherHistoryStep;
+use App\Modules\Imports\Sii\Steps\TeachersStep;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
 use App\Modules\Imports\Templates\EvaluationsTemplate;
@@ -68,6 +70,8 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         CareersStep::class,
         SubjectsStep::class,
         RoomsStep::class,
+        TeachersStep::class,
+        TeacherHistoryStep::class,
     ];
 
     public function register(): void
