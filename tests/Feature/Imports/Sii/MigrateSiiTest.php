@@ -4,12 +4,17 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiBatch;
+use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Imports\Sii\SiiStep;
+use Illuminate\Database\QueryException;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
 | `imports:migrate-sii`: corre pasos en orden por el motor de importación existente (guardar, validar y
@@ -108,6 +113,19 @@ it('se detiene antes de escribir si el contrato no cuadra', function () {
         ->and(is_dir("{$this->dir}/_nexus"))->toBeFalse();
 });
 
+it('un archivo vacío de la exportación se reporta como contrato roto, sin escribir nada', function () {
+    File::put("{$this->dir}/aulas.csv", '');
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('contrato')->toContain('aulas.csv')
+        ->not->toContain('RuntimeException')->not->toContain('inesperado')->not->toContain($this->dir)
+        ->and(Department::count())->toBe(0)
+        ->and(is_dir("{$this->dir}/_nexus"))->toBeFalse();
+});
+
 it('exige un usuario con permiso de importar', function () {
     User::factory()->create(['username' => 'sinpermiso']);
 
@@ -148,6 +166,25 @@ it('no imprime en consola el mensaje de una excepción inesperada', function () 
     expect($exit)->toBe(1)
         ->and($output)->not->toContain('VALOR-PERSONAL-123')
         ->and($output)->toContain('RuntimeException')->toContain('paso explota');
+});
+
+it('el log de una falla trae la clase, el lugar y el SQLSTATE, nunca el mensaje ni los valores', function () {
+    app()->instance('sii.steps', [QueryFailingStep::class]);
+    $logged = [];
+    Event::listen(MessageLogged::class, function (MessageLogged $event) use (&$logged): void {
+        $logged[] = $event->message.' '.json_encode(array_map(
+            fn (mixed $value): mixed => $value instanceof Throwable ? [$value::class, $value->getMessage(), $value instanceof QueryException ? $value->getBindings() : null] : $value,
+            $event->context,
+        ));
+    });
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $text = implode("\n", $logged);
+
+    expect($exit)->toBe(1)
+        ->and($logged)->not->toBeEmpty()
+        ->and($text)->not->toContain('VALOR-PERSONAL-555')
+        ->toContain('QueryException')->toContain('23505')->toContain('MigrateSiiTest.php:');
 });
 
 it('restaura la cola después de un ensayo', function () {
@@ -217,6 +254,38 @@ it('un fallo de limpieza sin otro error sale con mensaje fijo', function () {
     expect($exit)->toBe(1)->and($output)->toContain('limpieza')->not->toContain('fopen')->not->toContain('Failed to open');
 });
 
+it('reporta una vez por archivo los renglones malformados, reparados y la anotación al final, sin su contenido', function () {
+    app()->instance('sii.steps', [ReadingStep::class, FakeDepartmentsStep::class]);
+    $blankNumbers = ['promedio_periodo_anterior' => '', 'creditos_aprobados' => '', 'creditos_cursados' => '', 'promedio_final_alcanzado' => '', 'indice_reprobacion_acumulado' => ''];
+    SiiFixtures::write("{$this->dir}/alumnos_todos.csv", SiiFile::Alumnos, [
+        SiiFixtures::line(SiiFile::Alumnos),
+        "'VALOR-PERSONAL-77','ISC'",
+        SiiFixtures::line(SiiFile::Alumnos, [...$blankNumbers, 'promedio_aritmetico_acumulado' => '87,50']),
+        '',
+        "'Subtotal','VALOR-PERSONAL-88'",
+        SiiFixtures::line(SiiFile::Alumnos),
+        '',
+        "'Total de registros','3'",
+    ]);
+
+    $exit = Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador']);
+    $output = Artisan::output();
+    $rows = array_map(fn (string $line): array => str_getcsv($line, escape: ''), file("{$this->dir}/_incidencias.csv", FILE_IGNORE_NEW_LINES));
+    $reads = array_values(array_filter($rows, fn (array $row): bool => $row[1] === 'alumnos_todos.csv'));
+
+    expect($exit)->toBe(0)
+        ->and(array_map(fn (array $row): array => array_slice($row, 0, 5), $reads))->toBe([
+            ['lee', 'alumnos_todos.csv', 'malformados', '', 'error'],
+            ['lee', 'alumnos_todos.csv', 'reparados', '', 'warning'],
+            ['lee', 'alumnos_todos.csv', 'anotación al final', '', 'warning'],
+        ])
+        ->and($reads[0][5])->toContain('2 renglón(es)')->toEndWith('Líneas 3, 6.')
+        ->and($reads[1][5])->toEndWith('Líneas 4.')
+        ->and($reads[2][5])->toEndWith('Líneas 9.')
+        ->and(file_get_contents("{$this->dir}/_incidencias.csv"))->not->toContain('VALOR-PERSONAL')
+        ->and($output)->toContain('2 renglones del SII no se pudieron leer')->not->toContain('VALOR-PERSONAL');
+});
+
 it('cuenta los lotes anteriores aplicados cuando un lote posterior falla', function () {
     app()->instance('sii.steps', [FakeDepartmentsStep::class, BadTemplateStep::class]);
 
@@ -224,6 +293,25 @@ it('cuenta los lotes anteriores aplicados cuando un lote posterior falla', funct
 
     expect($exit)->toBe(1)->and(Artisan::output())->toContain('ya se aplicaron (1)');
 });
+
+/**
+ * Paso de prueba que lee completo dos veces el archivo de alumnos (como carreras y alumnos) y no entrega lotes.
+ */
+final class ReadingStep implements SiiStep
+{
+    public function name(): string
+    {
+        return 'lee';
+    }
+
+    public function batches(SiiMigration $migration): iterable
+    {
+        iterator_to_array($migration->export()->reader(SiiFile::Alumnos)->rows());
+        iterator_to_array($migration->export()->reader(SiiFile::Alumnos)->rows(['no_de_control']));
+
+        return [];
+    }
+}
 
 final class BadTemplateStep implements SiiStep
 {
@@ -235,6 +323,26 @@ final class BadTemplateStep implements SiiStep
     public function batches(SiiMigration $migration): iterable
     {
         yield new SiiBatch('no_existe', 'x.csv', [['code' => 'A']]);
+    }
+}
+
+/**
+ * Paso de prueba que falla como una escritura rechazada por la base, con un valor personal en el SQL y en el mensaje.
+ */
+final class QueryFailingStep implements SiiStep
+{
+    public function name(): string
+    {
+        return 'consulta';
+    }
+
+    public function batches(SiiMigration $migration): iterable
+    {
+        $pdo = new PDOException('SQLSTATE[23505]: Unique violation: Key (rfc)=(VALOR-PERSONAL-555) already exists.');
+        $pdo->errorInfo = ['23505', 7, 'Key (rfc)=(VALOR-PERSONAL-555) already exists.'];
+
+        throw new QueryException('pgsql', 'insert into teachers (rfc) values (?)', ['VALOR-PERSONAL-555'], $pdo);
+        yield;
     }
 }
 

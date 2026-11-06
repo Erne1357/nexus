@@ -74,21 +74,29 @@ describe('ResolvePendingPlacement', function () {
             ->and(StudyPlanSubject::where('subject_id', $pending->subject_id)->exists())->toBeFalse();
     });
 
-    it('R23: un plan inactivo o borrado es un error en español sobre el pendiente, sin tocarlo', function (Closure $breakPlan, string $message) {
+    it('D22: un pendiente de un plan inactivo se resuelve igual, porque su retícula sirve para el kárdex de sus egresados', function () {
         $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
-        $breakPlan($this->plan);
+        $this->plan->update(['is_active' => false]);
+
+        $placement = app(ResolvePendingPlacement::class)->handle($pending, 2, $this->user);
+
+        expect($placement->fresh())->study_plan_id->toBe($this->plan->id)->semester->toBe(2)
+            ->and($pending->fresh()->resolved_by)->toBe($this->user->id)
+            ->and($this->plan->fresh()->is_active)->toBeFalse();
+    });
+
+    it('R23: un plan borrado es un error en español sobre el pendiente, sin tocarlo', function () {
+        $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
+        $this->plan->delete();
 
         expect(fn () => app(ResolvePendingPlacement::class)->handle($pending, 2, $this->user))
-            ->toThrow(function (ValidationException $exception) use ($message): void {
-                expect($exception->errors())->toBe(['pending' => [$message]]);
+            ->toThrow(function (ValidationException $exception): void {
+                expect($exception->errors())->toBe(['pending' => ['El plan ISIC-2010-224 ya no existe.']]);
             });
 
         expect($pending->fresh()->resolved_at)->toBeNull()
             ->and(StudyPlanSubject::where('subject_id', $pending->subject_id)->exists())->toBeFalse();
-    })->with([
-        'inactivo' => [fn (StudyPlan $plan) => $plan->update(['is_active' => false]), 'El plan ISIC-2010-224 está inactivo: actívalo antes de validar sus materias.'],
-        'borrado' => [fn (StudyPlan $plan) => $plan->delete(), 'El plan ISIC-2010-224 ya no existe.'],
-    ]);
+    });
 
     it('R23: si la materia ya está en la retícula, marca el pendiente resuelto sin crear otro lugar y lo deja en la bitácora', function () {
         Event::fake([CurriculumChanged::class]);

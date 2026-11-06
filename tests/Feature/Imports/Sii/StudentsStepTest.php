@@ -192,6 +192,12 @@ it('un alumno de una retícula excluida se reporta sin datos personales', functi
         ->and($message)->not->toContain('S2')->not->toContain('SECRETA');
 });
 
+it('solo lee las columnas que usa', function () {
+    expect(StudentsStep::COLUMNS)->toEqualCanonicalizing([
+        'no_de_control', 'carrera', 'reticula', 'semestre', 'estatus_alumno', 'apellido_paterno', 'apellido_materno', 'nombre_alumno', 'campus',
+    ]);
+});
+
 it('nunca lee el NIP ni la CURP', function () {
     writeSiiStudents($this->dir, [['no_de_control' => 'S1', 'nip' => 'secreto', 'curp_alumno' => 'CURPSECRETA']]);
 

@@ -163,3 +163,17 @@ it('un cambio no reactiva ni desactiva y avisa si el archivo no coincide', funct
         ->and($student->fresh()->is_active)->toBeTrue()
         ->and($this->template->validate(studentRow(['active' => 'tal vez']), $this->context)->errors)->toHaveKey('active');
 });
+
+it('advierte solo de los alumnos existentes y activos al validar varias filas, sin guardar modelos', function () {
+    Student::factory()->create(['control_number' => '19111001', 'is_active' => true]);
+    Student::factory()->create(['control_number' => '19111002', 'is_active' => false]);
+
+    $warns = fn (string $number): bool => $this->template
+        ->validate(studentRow(['control_number' => $number, 'active' => 'No']), $this->context)->warnings !== []
+        && array_key_exists('active', $this->template->validate(studentRow(['control_number' => $number, 'active' => 'No']), $this->context)->warnings);
+
+    expect($warns('19111001'))->toBeTrue()
+        ->and($warns('19111002'))->toBeFalse()
+        ->and($warns('19119999'))->toBeFalse()
+        ->and($warns('19111001'))->toBeTrue();
+});

@@ -148,7 +148,8 @@ it('el historial del RFC viejo pasa al docente del RFC nuevo', function () {
         ->and($teacherFor['PRUE800101NEW'])->toBe('PRUE800101NEW')
         ->and(array_column($run['rows'], 'rfc'))->toBe(['PRUE800101NEW', 'SOLO800202OLD'])
         ->and(teacherRowFor($run['rows'], 'SOLO800202OLD')['active'])->toBe('No')
-        ->and(collect($run['incidents'])->where('ref', 'SOLO800202OLD')->pluck('message')->implode(''))->toContain('estatus 04');
+        ->and(collect($run['incidents'])->where('ref', 'docentes.csv:4')->pluck('message')->implode(''))->toContain('estatus 04')
+        ->and(json_encode($run['incidents']))->not->toContain('SOLO800202OLD')->not->toContain('PRUE800101OLD');
 });
 
 it('un 04 con varios candidatos no se funde', function () {
@@ -162,7 +163,8 @@ it('un 04 con varios candidatos no se funde', function () {
     $run = teachersStepRun($this->dir);
 
     expect(array_column($run['rows'], 'rfc'))->toBe(['PRUE800101NE1', 'PRUE800101NE2', 'PRUE800101OLD'])
-        ->and(collect($run['incidents'])->where('ref', 'PRUE800101OLD')->pluck('message')->implode(''))->toContain('varios');
+        ->and(collect($run['incidents'])->where('ref', 'docentes.csv:2')->pluck('message')->implode(''))->toContain('varios')
+        ->and(json_encode($run['incidents']))->not->toContain('PRUE800101');
 });
 
 it('convierte la quincena de ingreso a fecha', function (string $plantel, string $date) {
@@ -215,7 +217,25 @@ it('un docente sin departamento académico toma el de sus grupos', function () {
 
     expect(array_column($run['rows'], 'rfc'))->toBe(['PRUE800101AB1'])
         ->and($run['rows'][0]['department'])->toBe('110600')
-        ->and($messages)->toContain('PRUE800202AB2')->toContain('1 docentes no se migran');
+        ->and(collect($run['incidents'])->where('ref', 'docentes.csv:3')->pluck('message')->implode(''))->toContain('no tiene departamento académico')
+        ->and($messages)->not->toContain('PRUE800202AB2')->toContain('1 docentes no se migran');
+});
+
+it('las incidencias de un docente lo señalan por archivo y línea, sin RFC ni nombre', function () {
+    SiiFixtures::writeStaff($this->dir, [
+        teacherStaffRow('PRUE800101AB1'),
+        teacherStaffRow('SINN800101AB1', ['nombre_empleado' => '', 'apellidos_empleado' => '']),
+    ], [
+        teacherStaff2Row('PRUE800101AB1'),
+        teacherStaff2Row('DOS2800101AB1', ['id_unidad_organica' => '999999', 'nombre_empleado' => 'ROSA', 'apellidop' => 'VEGA']),
+    ]);
+    SiiFixtures::writeGroups($this->dir, [['20263', 'M9', 'A', 'DOS2800101AB1']]);
+
+    $incidents = collect(teachersStepRun($this->dir)['incidents']);
+
+    expect($incidents->where('ref', 'docentes.csv:3')->pluck('message')->implode(''))->toContain('no trae nombre')
+        ->and($incidents->where('ref', 'docentes2.csv:3')->pluck('message')->implode(''))->toContain('no tiene departamento académico')
+        ->and($incidents->toJson())->not->toContain('SINN800101AB1')->not->toContain('DOS2800101AB1')->not->toContain('Rosa')->not->toContain('VEGA');
 });
 
 it('un docente antiguo toma el departamento de sus últimos grupos', function () {

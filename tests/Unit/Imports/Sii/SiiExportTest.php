@@ -88,3 +88,43 @@ it('normaliza el nombre del archivo con acentos y símbolos', function () {
     expect(SiiFile::normalize('Organigrama Ñ (2).csv'))->toBe('organigrama_n_2_csv')
         ->and(SiiFile::normalize('ÁREAS técnicas'))->toBe('areas_tecnicas');
 });
+
+it('entrega lo leído de cada archivo una sola vez y solo tras una pasada completa', function () {
+    writeExport($this->dir);
+    SiiFixtures::write($this->dir.'/alumnos_todos.csv', SiiFile::Alumnos, [
+        SiiFixtures::line(SiiFile::Alumnos),
+        "'10','ISC'",
+    ]);
+    $export = SiiExport::open($this->dir);
+
+    $partial = $export->reader(SiiFile::Alumnos)->rows();
+    $partial->current();
+
+    expect($export->takeReads())->toBe([]);
+
+    iterator_to_array($export->reader(SiiFile::Alumnos)->rows());
+    iterator_to_array($export->reader(SiiFile::Alumnos)->rows(['no_de_control']));
+    iterator_to_array($export->reader(SiiFile::Aulas)->rows());
+    $reads = $export->takeReads();
+
+    expect(array_map(fn ($read) => [$read->file, $read->unreadable()], $reads))->toBe([['alumnos_todos.csv', 1], ['aulas.csv', 0]])
+        ->and($export->takeReads())->toBe([]);
+});
+
+it('un archivo vacío o con el encabezado ilegible es un problema de contrato que solo nombra el archivo', function (string $content) {
+    writeExport($this->dir);
+    file_put_contents($this->dir.'/aulas.csv', $content);
+
+    try {
+        SiiExport::open($this->dir);
+        $this->fail('Debió lanzar SiiContractBroken.');
+    } catch (SiiContractBroken $e) {
+        expect($e->unreadable)->toBe(['aulas' => 'aulas.csv'])
+            ->and($e->differences)->toBe([])
+            ->and($e->getMessage())->toContain('aulas.csv')->toContain('no se pudo leer')
+            ->not->toContain($this->dir)->not->toContain('SIN CERRAR');
+    }
+})->with([
+    'vacío' => [''],
+    'comilla sin cerrar en el encabezado' => ["\"aula,SIN CERRAR\r\n"],
+]);

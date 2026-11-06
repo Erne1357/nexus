@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Validator;
  * o está en `docentes2` con nombramiento D); lo demás son supuestos por confirmar: el estatus 04 (cambio de RFC) se
  * funde con el RFC nuevo, el departamento cae al de sus grupos recientes, el grado queda vacío.
  *
- * De `grupos` (79 mil renglones) solo guarda conteos por RFC, periodo y materia. Nada de lo que reporta nombra
- * personas salvo por RFC, y solo en `_incidencias.csv`.
+ * De `grupos` (79 mil renglones) solo guarda conteos por RFC, periodo y materia. Lo que reporta nunca nombra
+ * personas: un docente se señala por archivo y línea (`docentes.csv:12`), nunca por RFC ni nombre.
  */
 final class TeacherRoster
 {
@@ -86,22 +86,10 @@ final class TeacherRoster
     private function fill(SiiMigration $migration, array $departmentForArea): void
     {
         $export = $migration->export();
-        $staff = [];
-        $staff2 = [];
-
-        foreach ($export->reader(SiiFile::Docentes)->rows(self::STAFF_COLUMNS) as $row) {
-            $rfc = self::normalizeRfc($row['rfc']);
-            if ($rfc !== '') {
-                $staff[$rfc] ??= $row;
-            }
-        }
-
-        foreach ($export->reader(SiiFile::Docentes2)->rows(self::STAFF2_COLUMNS) as $row) {
-            $rfc = self::normalizeRfc($row['rfc']);
-            if ($rfc !== '') {
-                $staff2[$rfc] ??= $row;
-            }
-        }
+        /** @var array<string, string> $lineOf dónde está cada RFC: `<archivo>:<línea>` de docentes, si no de docentes2 */
+        $lineOf = [];
+        $staff = $this->readStaff($export, SiiFile::Docentes, self::STAFF_COLUMNS, $lineOf);
+        $staff2 = $this->readStaff($export, SiiFile::Docentes2, self::STAFF2_COLUMNS, $lineOf);
 
         [$raw, $periods, $rawKeys] = $this->readGroups($export);
         $currentPeriod = $periods === [] ? '' : max($periods);
@@ -122,7 +110,7 @@ final class TeacherRoster
         }
         ksort($included);
 
-        $merge = $this->mergeChangedRfcs(array_keys($included), $staff);
+        $merge = $this->mergeChangedRfcs(array_keys($included), $staff, $lineOf);
         $materiaArea = $this->materiaAreas($export);
 
         $emails = 0;
@@ -142,7 +130,7 @@ final class TeacherRoster
             $name = $this->name($d, $d2);
             if ($name === '') {
                 $nameless++;
-                $this->incidents[] = $this->warning($rfc, "El docente {$rfc} no trae nombre: no se migra.");
+                $this->incidents[] = $this->warning($lineOf[$rfc], 'El docente de esta línea no trae nombre: no se migra.');
 
                 continue;
             }
@@ -150,7 +138,7 @@ final class TeacherRoster
             $department = $this->department($d, $d2, $cells, $materiaArea, $departmentForArea);
             if ($department === null) {
                 $noDepartment++;
-                $this->incidents[] = $this->warning($rfc, "El docente {$rfc} no tiene departamento académico (ni por su adscripción ni por sus grupos recientes): no se migra.");
+                $this->incidents[] = $this->warning($lineOf[$rfc], 'El docente de esta línea no tiene departamento académico (ni por su adscripción ni por sus grupos recientes): no se migra.');
 
                 continue;
             }
@@ -199,6 +187,29 @@ final class TeacherRoster
     }
 
     /**
+     * El primer renglón de cada RFC del archivo, y dónde está (`<archivo>:<línea>`) si aún no se sabe.
+     *
+     * @param  list<string>  $columns
+     * @param  array<string, string>  $lineOf
+     * @return array<string, array<string, string>>
+     */
+    private function readStaff(SiiExport $export, SiiFile $file, array $columns, array &$lineOf): array
+    {
+        $name = $export->fileName($file);
+        $byRfc = [];
+
+        foreach ($export->reader($file)->rows($columns) as $line => $row) {
+            $rfc = self::normalizeRfc($row['rfc']);
+            if ($rfc !== '') {
+                $byRfc[$rfc] ??= $row;
+                $lineOf[$rfc] ??= "{$name}:{$line}";
+            }
+        }
+
+        return $byRfc;
+    }
+
+    /**
      * @return array{0: array<string, array<string, array<string, int>>>, 1: list<string>} conteos por RFC, periodo
      *                                                                                     y materia, y los periodos que hay
      */
@@ -234,9 +245,10 @@ final class TeacherRoster
      *
      * @param  list<string>  $included
      * @param  array<string, array<string, string>>  $staff
+     * @param  array<string, string>  $lineOf
      * @return array<string, string> RFC viejo al nuevo
      */
-    private function mergeChangedRfcs(array $included, array $staff): array
+    private function mergeChangedRfcs(array $included, array $staff, array $lineOf): array
     {
         $merge = [];
 
@@ -257,9 +269,9 @@ final class TeacherRoster
                 continue;
             }
 
-            $this->incidents[] = $this->warning($old, count($candidates) === 0
-                ? "El RFC {$old} es de estatus 04 (cambio de RFC) y no hay RFC nuevo que coincida: se migra como docente inactivo (supuesto por confirmar)."
-                : "El RFC {$old} es de estatus 04 (cambio de RFC) y coincide con varios RFC nuevos: se migra como docente inactivo (supuesto por confirmar).");
+            $this->incidents[] = $this->warning($lineOf[$old], count($candidates) === 0
+                ? 'El docente de esta línea es de estatus 04 (cambio de RFC) y no hay RFC nuevo que coincida: se migra como docente inactivo (supuesto por confirmar).'
+                : 'El docente de esta línea es de estatus 04 (cambio de RFC) y coincide con varios RFC nuevos: se migra como docente inactivo (supuesto por confirmar).');
         }
 
         return $merge;

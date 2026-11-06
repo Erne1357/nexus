@@ -25,10 +25,10 @@ use Generator;
  */
 final class StudentsStep implements SiiStep
 {
-    /** @var list<string> */
+    /** @var list<string> las únicas columnas que se leen: las que el paso usa, ninguna más */
     public const array COLUMNS = [
-        'no_de_control', 'carrera', 'reticula', 'nivel_escolar', 'semestre', 'estatus_alumno',
-        'apellido_paterno', 'apellido_materno', 'nombre_alumno', 'periodo_ingreso_it', 'campus',
+        'no_de_control', 'carrera', 'reticula', 'semestre', 'estatus_alumno',
+        'apellido_paterno', 'apellido_materno', 'nombre_alumno', 'campus',
     ];
 
     private const array CAMPUSES = ['1' => 'C1', '2' => 'C2'];

@@ -146,6 +146,8 @@ Validar y aplicar corren en la cola con `Jobs/ValidateQueuedBatch` y `Jobs/Apply
 
 Pruebas de una plantilla: unit para `normalize()` y lo puro; feature para `validate()` (cada regla con su mensaje y cada clave cruzada) y `apply()` (alta, cambio, aplicar dos veces sin cambios). Copia `tests/Unit/Imports/ImportTemplateTest.php` y `tests/Feature/Imports/ImportTemplateTest.php`.
 
+La migración repetible del SII (`imports:migrate-sii`, tarea 1.16) pasa la exportación cruda por estas mismas plantillas, paso por paso. Cómo se corre, qué deja y qué pisa una segunda corrida: [migracion-sii.md](migracion-sii.md).
+
 ## Módulos
 
 | Módulo | Responsabilidad | Entrega |

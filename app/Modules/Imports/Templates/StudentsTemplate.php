@@ -44,7 +44,7 @@ class StudentsTemplate extends ImportTemplate
     /** @var array<string, StudyPlan|null> plan por clave, en esta corrida */
     private array $plans = [];
 
-    /** @var array<string, Student|null> alumno por número de control, en esta corrida */
+    /** @var array<string, bool|null> si el alumno está activo (null si no existe), por número de control, en esta corrida */
     private array $students = [];
 
     /** @var array<string, string|null> id de campus por clave, en esta corrida */
@@ -173,7 +173,7 @@ class StudentsTemplate extends ImportTemplate
         }
 
         if ($row['active'] === false) {
-            if ($this->student($row['control_number'])?->is_active) {
+            if ($this->studentIsActive($row['control_number'])) {
                 $issues = $issues->withWarning('active', 'El archivo lo marca inactivo, pero el alumno sigue activo: una importación no lo da de baja.');
             }
         }
@@ -236,8 +236,17 @@ class StudentsTemplate extends ImportTemplate
         return array_key_exists($code, $this->campuses) ? $this->campuses[$code] : $this->campuses[$code] = Campus::query()->where('code', $code)->value('id');
     }
 
-    private function student(string $number): ?Student
+    /**
+     * Si el alumno con ese número está activo (null si no existe). Solo se guarda el booleano: con decenas de miles
+     * de alumnos, conservar los modelos agotaría la memoria en una segunda corrida.
+     */
+    private function studentIsActive(string $number): ?bool
     {
-        return array_key_exists($number, $this->students) ? $this->students[$number] : $this->students[$number] = Student::query()->where('control_number', $number)->first(['id', 'is_active']);
+        if (! array_key_exists($number, $this->students)) {
+            $active = Student::query()->where('control_number', $number)->toBase()->value('is_active');
+            $this->students[$number] = $active === null ? null : (bool) $active;
+        }
+
+        return $this->students[$number];
     }
 }

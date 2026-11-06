@@ -2,7 +2,7 @@
 
 > Archivo de estado. Se actualiza en cada PR que cierre o abra tareas de una fase. Contexto en [PROJECT.md](PROJECT.md); reglas de trabajo en [CLAUDE.md](CLAUDE.md).
 
-**Última actualización:** 2026-11-04 · **Fase activa:** 1 (falta la 1.16, con datos reales del SII); la fase 2 se cerró el 2 de noviembre (2.1 a 2.9) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
+**Última actualización:** 2026-11-05 · **Fase activa:** 1 (1.16 en curso: migración repetible del SII, parte 1 en #257 a #271; la parte 2 espera el kárdex, la seriación, los periodos y la evaluación docente); la fase 2 se cerró el 2 de noviembre (2.1 a 2.9) · **Entrega en curso:** R1 · **Tablero:** https://github.com/users/Erne1357/projects/3
 
 > El prerrequisito de la fase 3 ya está en `develop`: las tareas 3.P1 a 3.P4 (permisos por puesto y perfil activo, [ADR-0018](docs/decisiones/0018-permisos-por-puesto-y-perfil-activo.md); #216, #217, #220 y #221, 3 de noviembre). Las pantallas nuevas de la fase 3 usan `allows()` y `constrain()` con permisos declarados por su módulo, nunca listas de roles. Las 3.P5 a 3.P9 migraron los módulos actuales y cerraron la transición el 4 de noviembre (#223 a #253): ya no queda la API vieja de `ScopedContext`; toda Policy usa `AuthorizesActor`. Detalle en [fase-3-captura-de-carga.md](docs/plan/fase-3-captura-de-carga.md).
 
@@ -53,7 +53,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Facilities | 1 | ✅ (1.15 hecha: modelos #158; pantallas de edificios y salones #161; plantilla `rooms` #162; seeders demo y masivo #163) |
 | Faculty | 1 | ✅ (modelos #159 y #160; usuarios, roles y jefaturas #164; seeders #165; adscripción sin campus #168; pantalla de docentes #169; ficha #170; perfil y horas fuera del ITCJ #173; jefaturas en la ficha #174; editor de disponibilidad #175; perfil y disponibilidad desde la validación, 2.6, #190. Sus plantillas de 1.13 están en Imports: #171 y #172) |
 | Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
-| Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120) |
+| Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120; migración del SII `imports:migrate-sii`, 1.16 parte 1, #257 a #271) |
 | CatalogValidation | 2 | ✅ (base y revisiones al abrir el periodo #179; validación del jefe, 2.4, #184 y #185; tablero de avance con recordatorios, 2.5, #191; captura docente desde la validación, 2.6, #190) |
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179; máquina de estados con HC-14 #180; propuesta de carrera #187; bandeja del departamento con HC-20 y paralelos #188) |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
