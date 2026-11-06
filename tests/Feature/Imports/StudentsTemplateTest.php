@@ -7,6 +7,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
+use App\Modules\Students\Enums\StudentModality;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\Student;
@@ -125,4 +126,21 @@ it('al terminar el lote despacha el recálculo del progreso', function () {
     $this->template->afterApply($this->context);
 
     Queue::assertPushed(RecomputeStudentProgress::class);
+});
+
+it('guarda la modalidad y el motivo del SII, y un cambio no los pisa con vacío', function () {
+    $row = studentRow(['modality' => 'Distancia', 'status_reason' => 'bt1']);
+
+    expect($this->template->validate($row, $this->context)->errors)->toBe([]);
+    $this->template->apply($row, $this->context);
+    $this->template->apply(studentRow(), $this->context);
+
+    expect(Student::query()->where('control_number', '19111234')->firstOrFail())
+        ->modality->toBe(StudentModality::Distancia)
+        ->status_reason->toBe('BT1');
+});
+
+it('una modalidad que Nexus no conoce o un motivo demasiado largo son error', function () {
+    expect($this->template->validate(studentRow(['modality' => 'Híbrida']), $this->context)->errors)->toHaveKey('modality')
+        ->and($this->template->validate(studentRow(['status_reason' => 'ABCDEFGHIJK']), $this->context)->errors)->toHaveKey('status_reason');
 });

@@ -29,6 +29,8 @@ describe('students', function () {
             'campus' => 'C2',
             'semester' => 3,
             'status' => 'activo',
+            'modality' => null,
+            'status_reason' => null,
         ]);
     });
 

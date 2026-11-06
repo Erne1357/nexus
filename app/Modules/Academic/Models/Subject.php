@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -59,5 +60,15 @@ class Subject extends Model
             ->withPivot(['semester', 'specialty_id', 'is_required'])
             ->withTimestamps()
             ->wherePivotNull('deleted_at');
+    }
+
+    /**
+     * Las claves con que el SII la conoce.
+     *
+     * @return HasMany<SubjectAlias, $this>
+     */
+    public function aliases(): HasMany
+    {
+        return $this->hasMany(SubjectAlias::class);
     }
 }

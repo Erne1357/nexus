@@ -5,11 +5,13 @@ namespace App\Modules\Imports\Templates;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Students\Enums\StudentModality;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\Student;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Alumnos del SII (tarea 1.4): número de control, nombre, carrera, plan, campus, semestre y estatus. El número
@@ -24,6 +26,11 @@ use Illuminate\Support\Str;
  * No ofrece "desactivar faltantes": una exportación suele ser de un campus y el número de control es de todo el
  * Tec, así que desactivaría a los alumnos de los demás campus; las bajas llegan en el estatus. Busca cada
  * carrera, plan y campus una vez por corrida. Al terminar el lote despacha el recálculo del progreso.
+ *
+ * `modality` (presencial, a distancia, mixta; «EAD» es a distancia) es del alumno y `status_reason` es el motivo del
+ * SII (BD1, BT1, TIT…), que se guarda junto al estatus de Nexus y se escribe en mayúsculas (D12 y D15, confirmados
+ * el 5 de noviembre de 2026; lo de «EAD» y las mayúsculas, supuesto por confirmar). Como los demás campos, un
+ * cambio no los pisa con vacío.
  */
 class StudentsTemplate extends ImportTemplate
 {
@@ -56,6 +63,8 @@ class StudentsTemplate extends ImportTemplate
             'campus' => 'campus',
             'semester' => 'semestre',
             'status' => 'estatus',
+            'modality' => 'modalidad',
+            'status_reason' => 'motivo del SII',
         ];
     }
 
@@ -84,6 +93,8 @@ class StudentsTemplate extends ImportTemplate
             'campus' => ['required', 'string'],
             'semester' => ['nullable', 'integer', 'min:1', 'max:20'],
             'status' => ['nullable', 'string'],
+            'modality' => ['nullable', Rule::enum(StudentModality::class)],
+            'status_reason' => ['nullable', 'string', 'max:10'],
         ];
     }
 
@@ -101,6 +112,11 @@ class StudentsTemplate extends ImportTemplate
 
         $row['semester'] = is_string($row['semester']) && ctype_digit($row['semester']) ? (int) $row['semester'] : $row['semester'];
         $row['status'] = is_string($row['status']) ? $this->status($row['status']) : $row['status'];
+
+        $modality = self::asText($row['modality']);
+        $row['modality'] = is_string($modality) ? $this->modality($modality) : $modality;
+        $reason = self::asText($row['status_reason']);
+        $row['status_reason'] = is_string($reason) ? Str::upper($reason) : $reason;
 
         return $row;
     }
@@ -162,6 +178,8 @@ class StudentsTemplate extends ImportTemplate
             'campus_id' => $this->campus($row['campus']),
             'current_semester' => $row['semester'],
             'status' => StudentStatus::tryFrom((string) $row['status']),
+            'modality' => StudentModality::tryFrom((string) $row['modality']),
+            'status_reason' => $row['status_reason'],
         ];
     }
 
@@ -171,6 +189,19 @@ class StudentsTemplate extends ImportTemplate
     private function status(string $value): string
     {
         return StudentStatus::tryFrom(self::slug($value))?->value ?? $value;
+    }
+
+    /**
+     * El valor de StudentModality que corresponde al texto, o el texto tal cual si no lo conoce.
+     */
+    private function modality(string $value): string
+    {
+        $slug = self::slug($value);
+
+        return StudentModality::tryFrom($slug)?->value ?? match ($slug) {
+            'ead', 'a_distancia' => StudentModality::Distancia->value,
+            default => $value,
+        };
     }
 
     private function career(string $code): ?Career

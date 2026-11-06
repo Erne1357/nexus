@@ -83,6 +83,7 @@ final class ValidateImportBatch
 
             $this->markRepeatedKeys($batch, $template);
             $this->markInconsistentRows($batch, $template);
+            $this->markConflictingRows($batch, $template);
             $this->markTwinRows($batch, $template);
 
             return $this->finish($batch, $template);
@@ -249,6 +250,41 @@ final class ValidateImportBatch
                     SQL, [...$setBindings, $field, $field, $batch->id, RowStatus::Error->value, ...$rule['group']]);
             }
         }
+    }
+
+    /**
+     * Marca como error la fila que trae un valor que una anterior sin error ya dio a otro dueño
+     * (exclusiveAcrossRows()), con el número de esa fila.
+     */
+    private function markConflictingRows(ImportBatch $batch, ImportTemplate $template): void
+    {
+        $rule = $template->exclusiveAcrossRows();
+
+        if ($rule === null) {
+            return;
+        }
+
+        DB::update(<<<'SQL'
+            UPDATE import_rows AS r
+            SET status = ?,
+                errors = jsonb_set(r.errors, ARRAY[?], COALESCE(r.errors -> ?, '[]'::jsonb) || to_jsonb(format('La clave %s ya viene en la fila %s para %s.', d.value, d.row_number, d.owner))),
+                updated_at = now()
+            FROM (
+                SELECT DISTINCT ON (later.id) later.id AS target, earlier.row_number, earlier.normalized ->> ? AS value, earlier.normalized ->> ? AS owner
+                FROM import_rows AS later
+                JOIN import_rows AS earlier ON earlier.batch_id = later.batch_id
+                    AND earlier.row_number < later.row_number
+                    AND earlier.normalized ->> ? = later.normalized ->> ?
+                    AND earlier.normalized ->> ? <> later.normalized ->> ?
+                WHERE later.batch_id = ? AND later.status <> ? AND earlier.status <> ?
+                ORDER BY later.id, earlier.row_number
+            ) AS d
+            WHERE r.id = d.target
+            SQL, [
+            RowStatus::Error->value, $rule['value'], $rule['value'],
+            $rule['value'], $rule['owner'], $rule['value'], $rule['value'], $rule['owner'], $rule['owner'],
+            $batch->id, RowStatus::Error->value, RowStatus::Error->value,
+        ]);
     }
 
     /**

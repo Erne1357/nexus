@@ -6,7 +6,9 @@ use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectAlias;
 use App\Modules\Core\Models\User;
+use App\Modules\Imports\Actions\ApplyImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
 use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Models\ImportBatch;
@@ -240,4 +242,56 @@ it('al terminar el lote recalcula el avance de los alumnos, porque cambió la re
 
 it('no ofrece desactivar faltantes: quitar una materia de la retícula cambia el avance y se hace a mano', function () {
     expect($this->template->deactivatesMissing())->toBeFalse();
+});
+
+it('un alias que ya apunta a otra materia es error; a la misma, no hace nada', function () {
+    $other = Subject::factory()->create(['code' => 'OTRA-0001']);
+    SubjectAlias::create(['subject_id' => $other->id, 'code' => 'ACF0901']);
+
+    expect($this->template->validate(subjectRow(['sii_code' => 'ACF0901']), $this->context)->errors)->toHaveKey('sii_code');
+
+    $own = Subject::factory()->create(['code' => 'ACF-0901', 'department_id' => $this->department->id]);
+    SubjectAlias::create(['subject_id' => $own->id, 'code' => 'ACF0902']);
+
+    expect($this->template->validate(subjectRow(['sii_code' => 'ACF0902']), $this->context)->errors)->toBe([]);
+});
+
+it('el tipo de materia debe ser uno de Nexus y un cambio no lo pisa con vacío', function () {
+    expect($this->template->validate(subjectRow(['kind' => 'Quizá']), $this->context)->errors)->toHaveKey('kind');
+
+    $this->template->apply(subjectRow(['kind' => 'Especialidad']), $this->context);
+    $this->template->apply(subjectRow(['kind' => null]), $this->context);
+
+    expect(Subject::query()->where('code', 'ACF-0901')->firstOrFail()->kind->value)->toBe('especialidad');
+});
+
+it('en un archivo, la clave del SII que dos materias distintas comparten es error en la posterior; apply nunca la pasa en silencio', function () {
+    Storage::fake('imports');
+    $header = 'clave de plan,clave de materia,nombre,semestre,horas teoría,horas práctica,créditos,departamento,clave del SII';
+    $batch = ImportBatch::factory()->create(['template' => 'subjects', 'uploaded_by' => $this->context->user->id]);
+    $batch->update(['file_path' => "{$batch->id}.csv"]);
+    Storage::disk('imports')->put($batch->file_path, implode("\n", [
+        $header,
+        'ISIC-2010-224,ACF-0901,Cálculo Diferencial,1,3,2,5,CB,X1',
+        'ISIC-2010-224,MAT-0101,Álgebra,1,3,2,5,CB,X1',
+    ]));
+
+    app(ValidateImportBatch::class)->handle($batch);
+    $rows = $batch->rows()->orderBy('row_number')->get()->keyBy('row_number');
+
+    expect($rows[2]->status)->toBe(RowStatus::Valid)
+        ->and($rows[3])->status->toBe(RowStatus::Error)
+        ->errors->toBe(['sii_code' => ['La clave X1 ya viene en la fila 2 para ACF-0901.']]);
+
+    $other = Subject::factory()->create(['code' => 'MAT-0101']);
+    SubjectAlias::create(['subject_id' => $other->id, 'code' => 'X1']);
+
+    app(ApplyImportBatch::class)->handle($batch->refresh(), $this->context->user);
+
+    // El motor revalida al aplicar: la fila ya no pasa y el alias de la otra materia queda intacto.
+    expect($batch->rows()->where('row_number', 2)->firstOrFail()->status)->toBe(RowStatus::Error)
+        ->and(SubjectAlias::query()->where('code', 'X1')->firstOrFail()->subject_id)->toBe($other->id);
+
+    // Y si apply() se llamara sin validar, nunca lo pasa en silencio.
+    expect(fn () => $this->template->apply(subjectRow(['sii_code' => 'X1']), $this->context))->toThrow(LogicException::class);
 });

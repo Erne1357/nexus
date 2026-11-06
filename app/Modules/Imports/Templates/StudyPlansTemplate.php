@@ -17,6 +17,12 @@ use Illuminate\Support\Str;
  * advertencia. Un plan tampoco cambia de carrera por importación, porque la llave compuesta de `students` haría
  * que sus alumnos cambiaran de carrera con él; eso es una edición a mano. No ofrece "desactivar faltantes": los
  * planes son globales y la exportación puede ser de un solo campus. Busca cada carrera una vez por corrida.
+ *
+ * «Nuevo ingreso» (`intake`, se reconoce como «vigente») marca el plan actual de la carrera, el que se asigna a los
+ * alumnos de nuevo ingreso: una carrera tiene uno solo (D15, confirmado el 5 de noviembre de 2026). Si dos planes de
+ * una carrera vienen marcados en el archivo, el posterior es error; si en la base el actual es otro, el importado
+ * pasa a serlo y el otro deja de serlo, con advertencia que dice cuál (supuesto por confirmar). Un archivo que no lo
+ * marca no cambia cuál es el actual.
  */
 class StudyPlansTemplate extends ImportTemplate
 {
@@ -28,6 +34,9 @@ class StudyPlansTemplate extends ImportTemplate
 
     /** @var array<string, Career|null> carrera por clave, en esta corrida */
     private array $careers = [];
+
+    /** @var array<string, string> clave del plan marcado de nuevo ingreso por carrera, en esta corrida */
+    private array $intakePlans = [];
 
     public function key(): string
     {
@@ -47,6 +56,7 @@ class StudyPlansTemplate extends ImportTemplate
             'name' => 'nombre',
             'version' => 'versión',
             'current' => 'vigente',
+            'intake' => 'nuevo ingreso',
         ];
     }
 
@@ -73,6 +83,7 @@ class StudyPlansTemplate extends ImportTemplate
             'name' => ['nullable', 'string', 'max:255'],
             'version' => ['required', 'string', 'max:20'],
             'current' => ['nullable', 'boolean'],
+            'intake' => ['nullable', 'boolean'],
         ];
     }
 
@@ -89,6 +100,7 @@ class StudyPlansTemplate extends ImportTemplate
         }
 
         $row['current'] = $this->current($row['current']);
+        $row['intake'] = $this->current($row['intake']);
 
         return $row;
     }
@@ -100,6 +112,14 @@ class StudyPlansTemplate extends ImportTemplate
     {
         if ($row['name'] === null && ! StudyPlan::withTrashed()->where('code', $row['code'])->exists()) {
             $row['name'] = $row['code'];
+        }
+
+        if ($row['intake'] === true) {
+            StudyPlan::query()
+                ->where('career_id', $this->career($row['career'])?->id)
+                ->where('is_current', true)
+                ->where('code', '!=', $row['code'])
+                ->update(['is_current' => false]);
         }
 
         return parent::apply($row, $context);
@@ -135,7 +155,33 @@ class StudyPlansTemplate extends ImportTemplate
             $issues = $issues->withWarning('current', "El SII ya no marca vigente el plan {$row['code']}: sigue activo; desactívalo a mano si ya no se ofrece.");
         }
 
+        if ($row['intake'] === true) {
+            $issues = $this->checkIntake($row, $career, $issues);
+        }
+
         return $issues;
+    }
+
+    /**
+     * Un solo plan de nuevo ingreso por carrera en el archivo, y aviso si deja de ser el actual otro de la base.
+     */
+    private function checkIntake(array $row, Career $career, RowIssues $issues): RowIssues
+    {
+        if ($row['current'] === false || ! $career->is_active) {
+            $issues = $issues->withWarning('intake', "El plan {$row['code']} queda inactivo y se marca como el actual de la carrera {$row['career']}.");
+        }
+
+        $first = $this->intakePlans[$career->id] ?? null;
+
+        if ($first !== null && $first !== $row['code']) {
+            return $issues->withError('intake', "El plan {$first} ya viene como nuevo ingreso de la carrera {$row['career']}: una carrera tiene un solo plan actual.");
+        }
+
+        $this->intakePlans[$career->id] = $row['code'];
+
+        $previous = StudyPlan::query()->where('career_id', $career->id)->where('is_current', true)->where('code', '!=', $row['code'])->value('code');
+
+        return $previous === null ? $issues : $issues->withWarning('intake', "El plan {$previous} deja de ser el actual de la carrera {$row['career']}.");
     }
 
     protected function attributes(array $row, ImportContext $context): array
@@ -145,6 +191,7 @@ class StudyPlansTemplate extends ImportTemplate
             'name' => $row['name'],
             'version' => $row['version'],
             'is_active' => ($row['current'] ?? true) && (bool) $this->career($row['career'])?->is_active,
+            ...($row['intake'] === true ? ['is_current' => true] : []),
         ];
     }
 

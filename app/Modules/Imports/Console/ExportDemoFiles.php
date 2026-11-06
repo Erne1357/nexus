@@ -132,8 +132,8 @@ final class ExportDemoFiles extends Command
                 ->join('careers as c', 'c.id', '=', 'p.career_id')
                 ->whereNull('p.deleted_at')->whereNull('c.deleted_at')
                 ->orderBy('p.code')
-                ->get(['p.code', 'c.code as career', 'p.name', 'p.version', 'p.is_active'])
-                ->map(fn (object $r): array => [$r->code, $r->career, $r->name, $r->version, $r->is_active ? 'Sí' : 'No']),
+                ->get(['p.code', 'c.code as career', 'p.name', 'p.version', 'p.is_active', 'p.is_current'])
+                ->map(fn (object $r): array => [$r->code, $r->career, $r->name, $r->version, $r->is_active ? 'Sí' : 'No', $r->is_current ? 'Sí' : 'No']),
 
             // Una fila por lugar en la retícula; la especialidad solo si no está borrada.
             'subjects' => fn (): iterable => DB::table('study_plan_subjects as sp')
@@ -143,8 +143,8 @@ final class ExportDemoFiles extends Command
                 ->leftJoin('specialties as e', fn ($join) => $join->on('e.id', '=', 'sp.specialty_id')->whereNull('e.deleted_at'))
                 ->whereNull('sp.deleted_at')->whereNull('p.deleted_at')->whereNull('s.deleted_at')->whereNull('d.deleted_at')
                 ->orderBy('p.code')->orderBy('sp.semester')->orderBy('s.code')
-                ->get(['p.code as plan', 's.code', 's.name', 'sp.semester', 's.theory_hours', 's.practice_hours', 's.credits', 'd.code as department', 'e.code as specialty', 'e.name as specialty_name'])
-                ->map(fn (object $r): array => [$r->plan, $r->code, $r->name, $r->semester, $r->theory_hours, $r->practice_hours, $r->credits, $r->department, $r->specialty, $r->specialty_name]),
+                ->get(['p.code as plan', 's.code', 's.name', 'sp.semester', 's.theory_hours', 's.practice_hours', 's.credits', 'd.code as department', 'e.code as specialty', 'e.name as specialty_name', 's.kind', DB::raw('(select min(a.code) from subject_aliases a where a.subject_id = s.id and a.study_plan_id = p.id) as sii_code')])
+                ->map(fn (object $r): array => [$r->plan, $r->code, $r->name, $r->semester, $r->theory_hours, $r->practice_hours, $r->credits, $r->department, $r->specialty, $r->specialty_name, $r->sii_code, $r->kind]),
 
             // Solo seriaciones entre materias que siguen en la retícula del plan.
             'prerequisites' => fn (): iterable => DB::table('subject_prerequisites as r')
@@ -189,9 +189,9 @@ final class ExportDemoFiles extends Command
                     ->join('study_plans as p', 'p.id', '=', 'st.study_plan_id')
                     ->join('campuses as k', 'k.id', '=', 'st.campus_id')
                     ->whereNull('st.deleted_at')->whereNull('c.deleted_at')->whereNull('p.deleted_at')
-                    ->select(['st.id', 'st.control_number', 'st.name', 'c.code as career', 'p.code as plan', 'k.code as campus', 'st.current_semester', 'st.status']),
+                    ->select(['st.id', 'st.control_number', 'st.name', 'c.code as career', 'p.code as plan', 'k.code as campus', 'st.current_semester', 'st.status', 'st.modality', 'st.status_reason']),
                 'st.id',
-                fn (object $r): array => [$r->control_number, $r->name, $r->career, $r->plan, $r->campus, $r->current_semester, $r->status],
+                fn (object $r): array => [$r->control_number, $r->name, $r->career, $r->plan, $r->campus, $r->current_semester, $r->status, $r->modality, $r->status_reason],
             ),
 
             'kardex' => fn (): iterable => $this->chunked(
