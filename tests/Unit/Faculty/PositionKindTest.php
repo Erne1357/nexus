@@ -11,14 +11,15 @@ it('cada tipo de plaza tiene sus horas fijas (S3)', function (PositionKind $kind
     [PositionKind::MedioTiempo, 20],
     [PositionKind::Asignatura, null],
     [PositionKind::Honorarios, 0],
+    [PositionKind::Apoyo, null],
 ]);
 
-it('asignatura acepta de 1 a 40 horas', function () {
-    expect(PositionKind::Asignatura->allows(1))->toBeTrue()
-        ->and(PositionKind::Asignatura->allows(40))->toBeTrue()
-        ->and(PositionKind::Asignatura->allows(0))->toBeFalse()
-        ->and(PositionKind::Asignatura->allows(41))->toBeFalse();
-});
+it('asignatura y apoyo aceptan de 1 a 40 horas', function (PositionKind $kind) {
+    expect($kind->allows(1))->toBeTrue()
+        ->and($kind->allows(40))->toBeTrue()
+        ->and($kind->allows(0))->toBeFalse()
+        ->and($kind->allows(41))->toBeFalse();
+})->with([PositionKind::Asignatura, PositionKind::Apoyo]);
 
 it('los tipos fijos solo aceptan sus horas y honorarios solo 0', function () {
     expect(PositionKind::TiempoCompleto->allows(40))->toBeTrue()
@@ -33,6 +34,7 @@ it('cada tipo de plaza y cada grado tienen su etiqueta', function () {
         ->and(PositionKind::MedioTiempo->label())->toBe('Medio tiempo')
         ->and(PositionKind::Asignatura->label())->toBe('Asignatura')
         ->and(PositionKind::Honorarios->label())->toBe('Honorarios')
+        ->and(PositionKind::Apoyo->label())->toBe('Apoyo y asistencia')
         ->and(TeacherDegree::Licenciatura->label())->toBe('Licenciatura')
         ->and(TeacherDegree::Especialidad->label())->toBe('Especialidad')
         ->and(TeacherDegree::Maestria->label())->toBe('Maestría')

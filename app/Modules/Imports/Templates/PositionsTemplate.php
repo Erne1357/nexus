@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
  * con otro tipo u otro «desde» no son repetidas.
  *
  * El tipo se reconoce por el nombre del SII, sin importar acentos ni mayúsculas (`TIEMPO COMPLETO`, `3/4`,
- * `MEDIO TIEMPO`, `ASIGNATURA`, `HONORARIOS`). Las horas deben cuadrar con el tipo (S3, supuesto por confirmar)
+ * `MEDIO TIEMPO`, `ASIGNATURA`, `HONORARIOS`, `APOYO Y ASISTENCIA`). Las horas deben cuadrar con el tipo (S3, supuesto por confirmar)
  * y «hasta» no puede ser anterior a «desde». Un docente que no existe o está borrado es error.
  */
 class PositionsTemplate extends ImportTemplate
@@ -150,6 +150,7 @@ class PositionsTemplate extends ImportTemplate
             'medio_tiempo' => PositionKind::MedioTiempo,
             'asignatura' => PositionKind::Asignatura,
             'honorarios' => PositionKind::Honorarios,
+            'apoyo', 'apoyo_y_asistencia' => PositionKind::Apoyo,
             default => null,
         };
     }

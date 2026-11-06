@@ -118,6 +118,9 @@ describe('plazas', function () {
         'asignatura 41' => ['asignatura', 41, false],
         'honorarios 0' => ['honorarios', 0, true],
         'honorarios 5' => ['honorarios', 5, false],
+        'apoyo 36' => ['apoyo', 36, true],
+        'apoyo 0' => ['apoyo', 0, false],
+        'apoyo 41' => ['apoyo', 41, false],
     ]);
 
     it('el tipo solo acepta sus valores', function () {
