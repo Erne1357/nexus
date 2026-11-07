@@ -10,7 +10,11 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
 use App\Modules\Scheduling\Rules\Constraints\Constraint;
+use App\Modules\Scheduling\Rules\Constraints\QuotasWithinCapacity;
+use App\Modules\Scheduling\Rules\Constraints\RoomLoan;
 use App\Modules\Scheduling\Rules\Constraints\RoomOverlap;
+use App\Modules\Scheduling\Rules\Constraints\TeacherAvailability;
+use App\Modules\Scheduling\Rules\Constraints\TeacherHours;
 use App\Modules\Scheduling\Rules\Constraints\TeacherOverlap;
 use Illuminate\Contracts\Container\Container;
 
@@ -34,6 +38,10 @@ final class ScheduleValidator
     public const array CONSTRAINTS = [
         TeacherOverlap::class,
         RoomOverlap::class,
+        QuotasWithinCapacity::class,
+        TeacherHours::class,
+        TeacherAvailability::class,
+        RoomLoan::class,
     ];
 
     /**
