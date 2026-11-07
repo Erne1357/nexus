@@ -22,8 +22,8 @@ use Illuminate\Validation\ValidationException;
  * (reglas-de-negocio.md, "Acuerdos entre departamentos"; HC-10). El salón debe ser del campus y tener dueño
  * distinto de quien pide (AgreementRules), sobre `room_id`; el día y las horas, sobre `day` y `starts_at`.
  *
- * Idempotente: si el departamento ya tiene un préstamo vivo del mismo grupo, salón, día y horas, o uno aceptado que
- * cubre la sesión (RoomLoansQuery::covers), lo regresa sin escribir. Si no, crea uno propuesto dirigido al dueño del
+ * Idempotente: si el departamento ya tiene un préstamo vivo del mismo grupo, salón, día y horas, o uno aceptado del grupo que
+ * cubre la sesión, solo o junto a otros contiguos (RoomLoansQuery::covers), lo regresa sin escribir. Si no, crea uno propuesto dirigido al dueño del
  * salón. Si la exclusión `interdepartmental_agreements_room_no_overlap` lo rechaza (otro préstamo vivo a esa hora),
  * lanza una ValidationException sobre `room_id`; el INSERT corre en un savepoint para no abortar la transacción de
  * quien llama. Deja bitácora `requested` y, después del commit, avisa con AgreementRequested. Quién puede lo decide
@@ -63,8 +63,8 @@ final class RequestRoomLoan
                 return $existing;
             }
 
-            if ($this->loans->covers($term->getKey(), $room->getKey(), $from->getKey(), $day, $startsAt, $endsAt)) {
-                return $this->loans->loanFor($term->getKey(), $room->getKey(), $from->getKey(), $day, $startsAt, $endsAt);
+            if ($this->loans->covers($term->getKey(), $room->getKey(), $groupId, $day, $startsAt, $endsAt)) {
+                return $this->loans->loanFor($term->getKey(), $room->getKey(), $groupId, $day, $startsAt, $endsAt);
             }
 
             try {

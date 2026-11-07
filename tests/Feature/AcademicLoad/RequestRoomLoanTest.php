@@ -104,13 +104,37 @@ it('es idempotente: el mismo préstamo vivo se regresa sin escribir', function (
 it('un préstamo aceptado que cubre la sesión se regresa sin escribir', function () {
     $accepted = InterdepartmentalAgreement::factory()->accepted()->create([
         'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->from->id,
-        'to_department_id' => $this->owner->id, 'room_id' => $this->room->id, 'starts_at' => '08:00', 'ends_at' => '12:00',
+        'to_department_id' => $this->owner->id, 'room_id' => $this->room->id, 'group_id' => $this->groupId, 'starts_at' => '08:00', 'ends_at' => '12:00',
     ]);
 
-    $loan = requestLoan(['groupId' => (string) Str::uuid7()]);
+    $loan = requestLoan();
 
     expect($loan->is($accepted))->toBeTrue()
         ->and(InterdepartmentalAgreement::query()->count())->toBe(1)
+        ->and(Activity::query()->count())->toBe(0);
+});
+
+it('un préstamo aceptado de otro grupo no cubre la sesión: pide el suyo si el salón está libre', function () {
+    InterdepartmentalAgreement::factory()->accepted()->create([
+        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->from->id,
+        'to_department_id' => $this->owner->id, 'room_id' => $this->room->id, 'starts_at' => '13:00', 'ends_at' => '15:00',
+    ]);
+
+    expect(requestLoan()->status)->toBe(AgreementStatus::Proposed)
+        ->and(InterdepartmentalAgreement::query()->count())->toBe(2);
+});
+
+it('dos préstamos aceptados contiguos del grupo cubren juntos la sesión y se regresa sin escribir', function () {
+    foreach ([['09:00', '10:00'], ['10:00', '11:00']] as [$start, $end]) {
+        InterdepartmentalAgreement::factory()->accepted()->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->from->id,
+            'to_department_id' => $this->owner->id, 'room_id' => $this->room->id, 'group_id' => $this->groupId, 'starts_at' => $start, 'ends_at' => $end,
+        ]);
+    }
+
+    requestLoan();
+
+    expect(InterdepartmentalAgreement::query()->count())->toBe(2)
         ->and(Activity::query()->count())->toBe(0);
 });
 
