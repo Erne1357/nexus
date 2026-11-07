@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
@@ -108,4 +109,17 @@ it('sin campus trae solo los grupos activos con docente del periodo, y los docen
         ->and($state->subject($subject->id)->name)->toBe($subject->name)
         ->and($query->teachers($this->term, []))->toBe([])
         ->and($query->teachers($this->term, [$teacher->id])[0]->id)->toBe($teacher->id);
+});
+
+it('trae los préstamos de salón vivos del campus, aceptados o propuestos (HC-10)', function () {
+    $group = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+    $accepted = InterdepartmentalAgreement::factory()->accepted()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $group->id, 'day' => 2]);
+    InterdepartmentalAgreement::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $group->id, 'day' => 3]);
+    InterdepartmentalAgreement::factory()->rejected()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $group->id, 'day' => 4]);
+
+    $loans = app(ScheduleStateQuery::class)->forCampus($this->term, $this->campus)->loansOf($group->id);
+
+    expect($loans)->toHaveCount(2)
+        ->and(collect($loans)->firstWhere('day', 2))->roomId->toBe($accepted->room_id)->start->toBe(540)->end->toBe(660)->isAccepted->toBeTrue()
+        ->and(collect($loans)->firstWhere('day', 3)->isAccepted)->toBeFalse();
 });
