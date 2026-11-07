@@ -27,7 +27,7 @@ flowchart LR
     Students --> Demand --> AcademicLoad
     AcademicLoad --> Scheduling
     Facilities --> Scheduling
-    Faculty --> Staffing --> Scheduling
+    Faculty --> Scheduling --> Staffing
     Scheduling --> Solver
     Scheduling --> Enrollment
     Students --> Enrollment
@@ -161,7 +161,6 @@ erDiagram
     CAREER_PROPOSALS ||--o{ PROPOSAL_REVIEWS : partes
     DEPARTMENTS ||--o{ PROPOSAL_REVIEWS : decide
     TERMS ||--o{ INTERDEPARTMENTAL_AGREEMENTS : acuerdos
-    GROUPS ||--o{ CHANGE_REQUESTS : solicitudes
 ```
 
 | Tabla | Campos clave | Notas |
@@ -173,7 +172,6 @@ erDiagram
 | `proposal_items` | `career_proposal_id`, `subject_id`, `study_plan_id`, `semester` (≥ 1, CHECK), `eligible_students`, `expected_students`, `requested_groups` (los tres ≥ 0, CHECK), `notes?` | Una fila por materia activa de la retícula de los planes activos de la carrera (HC-13), única por propuesta y materia; el plan y el semestre son los del primer plan activo, por clave, que la tiene. `eligible_students` lo cuenta Nexus desde `student_progress` al armar la propuesta (`EligibleStudentsQuery`). `expected_students` nace igual a los elegibles y `requested_groups` con los grupos sugeridos (`SuggestedGroups`: `ceil(esperados / 35)`, o 25 si la materia lleva laboratorio, `demand.target_group_size`); los dos los corrige el coordinador (R2: los sugiere Demand). Cero grupos es no pedir la materia. El departamento de la fila es el de su materia. |
 | `proposal_reviews` | `career_proposal_id`, `department_id`, `status` (enum `ProposalReviewStatus`: `pending`, `accepted`, `returned`; CHECK; nace `pending`), `comment?`, `decided_by?`, `decided_at?` (usuario y timestamptz) | La **parte** de cada departamento involucrado en una propuesta: todas las filas con grupos de sus materias, que el departamento acepta o regresa con comentario desde su bandeja (`AcceptProposalReview`, `ReturnProposalReview`), con la parte pendiente y la propuesta enviada o regresada por otro departamento; `decided_by` y `decided_at` son de esa decisión. Las Actions que la deciden y la corrección de una fila (`UpdateProposalItem`) bloquean la propuesta y luego la parte. Única por propuesta y departamento; una regresada exige comentario no vacío (CHECK `proposal_reviews_returned_comment_check`). La escribe el envío (`SubmitCareerProposal`): crea la de cada departamento al que se le piden grupos y, al reenviar, deja la aceptada como está, regresa la regresada a `pending` sin comentario ni decisión, deja la pendiente como está y borra la de un departamento al que ya no se le piden grupos (no es catálogo; lo que tenía queda en la bitácora del envío). |
 | `interdepartmental_agreements` | `term_id`, `campus_id`, `kind` (`room_loan` / `shared_group`), `from_department_id`, `to_department_id`, `room_id?`, `group_id?`, `details` (json), `status` (`proposed` / `accepted` / `rejected`), `decided_by/at` | Lo que hoy se acuerda en la junta queda registrado y es verificable por el validador. |
-| `change_requests` | `term_id`, `group_id`, `requested_by`, `kind` (`schedule` / `room` / `teacher`), `current` (json), `proposed` (json), `reason`, `status` (`pending` / `approved` / `rejected` / `applied`), `decided_by/at`, `impact` (json, R2) | Solicitudes de cambio de docentes. R1: flujo simple; R2: impacto calculado por el validador. |
 
 ## Scheduling
 
@@ -199,11 +197,14 @@ En PostgreSQL los empalmes de **salón** y de **docente** se pueden garantizar a
 
 ## Staffing
 
+Staffing está a la derecha de Scheduling ([ADR-0020](../decisiones/0020-staffing-a-la-derecha-de-scheduling.md)): lee grupos, sesiones y el validador, y escucha los eventos de Scheduling. El docente vigente del grupo es `groups.teacher_id`, que solo cambia la Action de Scheduling `SetGroupTeacher`; Staffing la llama al asignar y guarda aquí el historial.
+
 | Tabla | Campos clave | Notas |
 |---|---|---|
 | `staffing_rankings` | `group_id`, `teacher_id`, `rank`, `score` (decimal), `breakdown` (json: `base_hours`, `history_count`, `qualification`, `evaluation`, `remaining_hours`), `computed_at` | Ranking **visible** por grupo. Se recalcula cuando cambia cualquiera de sus entradas. |
 | `group_teacher_assignments` | `group_id`, `teacher_id`, `assigned_by`, `assigned_at`, `replaced_at?`, `reason`, `ranking_position_at_assignment` | Historial de asignaciones. Si se asigna a alguien que no era el primero del ranking, `reason` es obligatorio. |
 | `teacher_term_loads` | `teacher_id`, `term_id`, `base_hours`, `external_hours`, `assigned_hours`, `remaining_hours`, `computed_at` | Tabla derivada para tableros y validación de horas. |
+| `change_requests` | `term_id`, `group_id`, `requested_by`, `kind` (`schedule` / `room` / `teacher`), `current` (json), `proposed` (json), `reason`, `status` (`pending` / `approved` / `rejected` / `applied`), `decided_by/at`, `impact` (json, R2) | Solicitudes de cambio de docentes. R1: flujo simple; R2: impacto calculado por el validador. Vive en Staffing y no en AcademicLoad porque apunta a un grupo de Scheduling, que AcademicLoad no ve ([ADR-0020](../decisiones/0020-staffing-a-la-derecha-de-scheduling.md)); el estado de la carga lo cambia con las Actions de AcademicLoad. |
 
 ## Demand (R2)
 

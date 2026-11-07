@@ -81,6 +81,7 @@ Decisión en [ADR-0018](../decisiones/0018-permisos-por-puesto-y-perfil-activo.m
 
 ## Riesgos y notas
 
+- **Mapa de módulos (7 de noviembre de 2026, [ADR-0020](../decisiones/0020-staffing-a-la-derecha-de-scheduling.md)):** Staffing queda a la derecha de Scheduling (`Faculty --> Scheduling --> Staffing`). El docente vigente es `groups.teacher_id` y solo lo cambia `SetGroupTeacher` (Scheduling), que `AssignTeacher` (Staffing) llama; HC-08 y HC-09 viven en el validador de Scheduling; `change_requests` (3.11) es de Staffing.
 - **Pendiente de la planeación (usuario, 5 de noviembre de 2026, D17 de la migración del SII):** una carrera tiene varias retículas activas a la vez (la actual para quien entra y las que siguen cursando alumnos de generaciones anteriores). La planeación de la carga debe considerarlas todas y **dar prioridad a las materias de retículas y especialidades viejas**, porque ahí ya no puede haber más alumnos. El detalle se define al planear esta fase.
 - El editor de horarios es la pieza con más riesgo de UI. Primero una versión por clic (seleccionar grupo, clic en celda) y solo si sobra tiempo arrastrar y soltar.
 - El ranking expone información sensible (evaluación docente): solo lo ven jefes, jefe de proyecto docente, Subdirección y admin; el docente ve su posición y su desglose, no el de los demás.

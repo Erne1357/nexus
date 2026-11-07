@@ -23,5 +23,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0017](0017-catalog-validation-antes-de-academic-load.md) | CatalogValidation a la izquierda de AcademicLoad: la carga lee el estado de las revisiones de catálogo (HC-14) | Aceptada | 2026-11-01 |
 | [0018](0018-permisos-por-puesto-y-perfil-activo.md) | Permisos por módulo, puestos en código, nombramientos, árbol de unidades y perfil activo; sale spatie/permission | Aceptada | 2026-11-02 |
 | [0019](0019-pandas-para-perfilar-exportaciones-del-sii.md) | pandas en un contenedor sin red para perfilar las exportaciones del SII; solo herramienta de análisis, no dependencia de la app | Aceptada | 2026-11-05 |
+| [0020](0020-staffing-a-la-derecha-de-scheduling.md) | Staffing a la derecha de Scheduling (`Faculty --> Scheduling --> Staffing`): ranking, asignación, vista docente y solicitudes de cambio leen grupos y el validador; `change_requests` pasa a Staffing | Aceptada | 2026-11-07 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.
