@@ -5,6 +5,9 @@
             "academic_load.proposal.submit",
             "academic_load.proposal.update",
             "academic_load.proposal.view",
+            "scheduling.group.manage",
+            "scheduling.schedule.view",
+            "scheduling.session.edit",
             "students.student.view"
         ],
         "jefe_departamento": [
@@ -31,6 +34,11 @@
             "faculty.teacher_department.remove",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
+            "scheduling.group.manage",
+            "scheduling.quota.manage",
+            "scheduling.room.assign",
+            "scheduling.schedule.view",
+            "scheduling.session.edit",
             "students.student.view"
         ],
         "jefe_proyecto_docente": [
@@ -45,7 +53,8 @@
             "faculty.teacher.view",
             "faculty.teacher_department.remove",
             "faculty.teacher_department.set_primary",
-            "faculty.teacher_qualification.manage"
+            "faculty.teacher_qualification.manage",
+            "scheduling.schedule.view"
         ],
         "subdireccion": [
             "academic_load.agreement.view",
@@ -82,6 +91,7 @@
             "faculty.teacher_department.remove",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
+            "scheduling.schedule.view",
             "students.student.view"
         ]
     },
@@ -144,6 +154,11 @@
             "faculty.teacher_qualification.manage",
             "faculty.teacher_user.provision",
             "faculty.teacher_user.reset_password",
+            "scheduling.group.manage",
+            "scheduling.quota.manage",
+            "scheduling.room.assign",
+            "scheduling.schedule.view",
+            "scheduling.session.edit",
             "students.student.view"
         ]
     }
