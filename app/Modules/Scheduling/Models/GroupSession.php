@@ -5,6 +5,7 @@ namespace App\Modules\Scheduling\Models;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Database\Factories\GroupSessionFactory;
 use App\Modules\Scheduling\Enums\SessionKind;
+use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -62,13 +63,6 @@ class GroupSession extends Model
     {
         return Attribute::get(fn (): ?int => $this->starts_at === null || $this->ends_at === null
             ? null
-            : self::minutesOf($this->ends_at) - self::minutesOf($this->starts_at));
-    }
-
-    private static function minutesOf(string $time): int
-    {
-        [$hours, $minutes] = array_map('intval', explode(':', $time));
-
-        return $hours * 60 + $minutes;
+            : Minutes::of($this->ends_at) - Minutes::of($this->starts_at));
     }
 }

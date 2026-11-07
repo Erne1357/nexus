@@ -3,6 +3,7 @@
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Rules\Constraints\TeacherOverlap;
 use App\Modules\Scheduling\Validation\ScheduleState;
+use App\Modules\Scheduling\Validation\ValidationResult;
 use App\Modules\Scheduling\Validation\ValidationScope;
 use App\Modules\Scheduling\Validation\Violation;
 use Tests\Support\Scheduling\States;
@@ -84,4 +85,19 @@ it('HC-01: un grupo sin docente no choca con nadie', function () {
         ->build();
 
     expect(teacherOverlapsIn($state, ValidationScope::groups('A', 'B')))->toBe([]);
+});
+
+it('HC-01: dos sesiones contiguas de un grupo que chocan con la misma sesión de otro son dos choques', function () {
+    $state = States::builder()
+        ->group(States::group('A', teacher: 'T1'))
+        ->group(States::group('B', teacher: 'T1'))
+        ->session('A', 1, '07:00', '08:00', id: 'a1')
+        ->session('A', 1, '08:00', '09:00', id: 'a2')
+        ->session('B', 1, '07:00', '09:00', id: 'b1')
+        ->build();
+
+    $result = new ValidationResult(teacherOverlapsIn($state, ValidationScope::groups('A')));
+
+    expect($result->forGroup('A'))->toHaveCount(2)
+        ->and($result->forGroup('B'))->toHaveCount(2);
 });

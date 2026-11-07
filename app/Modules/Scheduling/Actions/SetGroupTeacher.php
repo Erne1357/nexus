@@ -20,8 +20,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * historial y exige el motivo de HC-16; esta Action no sabe de puestos.
  *
  * En una transacción relee el grupo con bloqueo. Un grupo cancelado no recibe docente. Antes de escribir pregunta al
- * validador por HC-01 (empalme del docente en cualquier campus) y lo rechaza con su mensaje; si otra sesión gana la
- * carrera, la exclusión de la base (`group_sessions_teacher_no_overlap`) lo rechaza igual. Las demás reglas del
+ * validador, con una foto leída después del bloqueo, por HC-01 (empalme del docente en cualquier campus) y lo rechaza
+ * con su mensaje; si otra sesión gana la carrera, la exclusión de la base (`group_sessions_teacher_no_overlap`) lo
+ * rechaza igual. Las demás reglas del
  * docente (horas, disponibilidad) no bloquean aquí: las decide quien asigna. Si el docente no cambia, no escribe, no
  * registra ni avisa; si cambia, deja la bitácora con el anterior y el nuevo y, después del commit, avisa con
  * GroupTeacherChanged.
@@ -51,6 +52,7 @@ final class SetGroupTeacher
             }
 
             if ($teacher !== null) {
+                $this->validator->forget();
                 $this->ensureNoOverlap($group, $teacher);
             }
 

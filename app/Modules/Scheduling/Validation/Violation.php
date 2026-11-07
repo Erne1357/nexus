@@ -49,10 +49,14 @@ final readonly class Violation
     }
 
     /**
-     * Llave para no repetir la misma violación: regla, sujeto, grupo y mensaje.
+     * Llave para no repetir la misma violación: regla, sujeto, grupo, mensaje y las sesiones que la causan (dos sesiones
+     * contiguas del mismo grupo que chocan con la misma sesión de otro dan el mismo mensaje, pero son dos choques).
      */
     public function key(): string
     {
-        return implode('|', [$this->rule, $this->subjectType, $this->subjectId, $this->groupId ?? '', $this->message]);
+        return implode('|', [
+            $this->rule, $this->subjectType, $this->subjectId, $this->groupId ?? '', $this->message,
+            (string) ($this->related['session_id'] ?? ''), (string) ($this->related['other_session_id'] ?? ''),
+        ]);
     }
 }

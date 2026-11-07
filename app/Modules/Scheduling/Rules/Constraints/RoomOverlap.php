@@ -2,7 +2,9 @@
 
 namespace App\Modules\Scheduling\Rules\Constraints;
 
+use App\Modules\Scheduling\Rules\OverlappingPairs;
 use App\Modules\Scheduling\Validation\ScheduleState;
+use App\Modules\Scheduling\Validation\State\StateSession;
 use App\Modules\Scheduling\Validation\ValidationScope;
 use App\Modules\Scheduling\Validation\Violation;
 
@@ -21,35 +23,23 @@ final class RoomOverlap implements Constraint
     public function check(ScheduleState $state, ValidationScope $scope): iterable
     {
         foreach ($scope->roomIds($state) as $roomId) {
-            $sessions = $state->roomSessions($roomId);
-            $count = count($sessions);
             $code = $state->room($roomId)?->code ?? 'El salón';
 
-            for ($i = 0; $i < $count; $i++) {
-                for ($j = $i + 1; $j < $count; $j++) {
-                    [$a, $b] = [$sessions[$i], $sessions[$j]];
-
-                    if ($a->groupId === $b->groupId || ! $a->overlaps($b) || ! $scope->touches($a->groupId, $b->groupId, roomId: $roomId)) {
-                        continue;
-                    }
-
-                    foreach ([[$a, $b], [$b, $a]] as [$mine, $other]) {
-                        yield Violation::hard(
-                            $this->rule(),
-                            "El salón {$code} ya está ocupado por {$state->labelOf($other->groupId)} el {$other->describe()}.",
-                            'room',
-                            $roomId,
-                            $mine->groupId,
-                            [
-                                'room_id' => $roomId,
-                                'session_id' => $mine->id,
-                                'other_group_id' => $other->groupId,
-                                'other_session_id' => $other->id,
-                                'day' => $other->day,
-                            ],
-                        );
-                    }
-                }
+            foreach (OverlappingPairs::of($state->roomSessions($roomId), fn (StateSession $a, StateSession $b): bool => $scope->touches($a->groupId, $b->groupId, roomId: $roomId)) as [$mine, $other]) {
+                yield Violation::hard(
+                    $this->rule(),
+                    "El salón {$code} ya está ocupado por {$state->labelOf($other->groupId)} el {$other->describe()}.",
+                    'room',
+                    $roomId,
+                    $mine->groupId,
+                    [
+                        'room_id' => $roomId,
+                        'session_id' => $mine->id,
+                        'other_group_id' => $other->groupId,
+                        'other_session_id' => $other->id,
+                        'day' => $other->day,
+                    ],
+                );
             }
         }
     }

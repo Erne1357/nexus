@@ -130,3 +130,15 @@ it('lee la base una vez por periodo y campus hasta que se le pide olvidar', func
     expect($cached)->toBe(0)
         ->and(count(DB::getQueryLog()))->toBeGreaterThan(0);
 });
+
+it('checkTeacher solo corre las reglas del docente', function () {
+    $group = validatorGroup();
+    GroupSession::factory()->for($group)->inRoom($this->room)->on(1, '07:00', '09:00')->create();
+    $other = validatorGroup();
+    $session = GroupSession::factory()->for($other)->on(1, '07:00', '09:00')->create();
+    DB::statement('set constraints group_sessions_room_no_overlap deferred');
+    DB::table('group_sessions')->where('id', $session->id)->update(['room_id' => $this->room->id]);
+
+    expect($this->validator->validateGroup($group)->forRule('HC-02'))->not->toBe([])
+        ->and($this->validator->checkTeacher($group, $this->teacher)->forRule('HC-02'))->toBe([]);
+});
