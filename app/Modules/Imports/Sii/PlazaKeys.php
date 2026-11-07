@@ -9,11 +9,11 @@ use App\Modules\Faculty\Enums\PositionKind;
  * ejemplo `1403 E352504.0100001`), separadas por espacios, comas, saltos de línea o el texto `\x09` que deja el
  * SII. Solo toma la categoría y las horas; el prefijo y el número de plaza no se guardan.
  *
- * El tipo sale de la categoría (supuesto por confirmar con Recursos Humanos, sacado de los datos del 5 de noviembre
- * de 2026: cada familia cuadra con las horas del nombramiento): E35xx asignatura, con sus horas en la clave; E36xx
- * medio tiempo; E37xx tres cuartos; E38xx tiempo completo; las de dos letras (IA, IP, IS, IT…) son de apoyo y
- * asistencia, con jornada de 36 horas si la clave no trae otras (supuesto por confirmar). Otra categoría queda sin
- * tipo, y una asignatura sin horas en la clave, sin horas.
+ * El tipo sale de la categoría: E36xx medio tiempo, E37xx tres cuartos y E38xx tiempo completo, con las horas fijas
+ * del tipo (20, 30 y 40; el número de la familia no son las horas, confirmado el 6 de noviembre de 2026); E35xx
+ * asignatura, con sus horas en la clave, y las de dos letras (IA, IP, IS, IT…) de apoyo y asistencia, con jornada
+ * de 36 horas si la clave no trae otras (supuestos por confirmar con Recursos Humanos, sacados de los datos del 5 de
+ * noviembre de 2026). Otra categoría queda sin tipo, y una asignatura sin horas en la clave, sin horas.
  */
 final class PlazaKeys
 {
