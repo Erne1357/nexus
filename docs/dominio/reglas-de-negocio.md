@@ -243,7 +243,9 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
-| Proponer o aceptar préstamo de salón | `jefe_departamento` de ambos departamentos | |
+| Ver acuerdos entre departamentos | `admin`, `subdireccion`, `jefe_departamento` y `jefe_proyecto_docente` de cualquiera de los dos departamentos | Préstamos de salón y grupos compartidos (`academic_load.agreement.view`; supuesto por confirmar para `subdireccion` y `jefe_proyecto_docente`, solo lectura) |
+| Proponer o aceptar préstamo de salón | `jefe_departamento` del departamento que lo pide (propone y cancela) y del dueño del salón (acepta o rechaza, con motivo) | Un salón sin dueño o del propio departamento no necesita préstamo; la sesión solo cuenta con un préstamo aceptado (HC-10) |
+| Proponer o aceptar grupo compartido | `jefe_departamento` del departamento que imparte (propone y cancela) y del departamento de la carrera (acepta o rechaza, con motivo) | Confirmado el 7 de noviembre de 2026. Una carrera tiene a lo más un acuerdo vivo por grupo; el cupo nace al aceptarse (HC-07) |
 | Cerrar carga | `jefe_departamento` | HC-15 |
 | Visto bueno | `subdireccion` | solo si `requires_subdireccion_approval` |
 | Publicar | `subdireccion`, o `jefe_departamento` si el campus no exige visto bueno | carga `closed` o `approved` |
