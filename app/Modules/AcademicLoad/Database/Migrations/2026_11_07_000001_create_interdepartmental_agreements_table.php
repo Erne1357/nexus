@@ -15,12 +15,13 @@ use Illuminate\Support\Facades\Schema;
  *   departamento que imparte la materia (`from`) y lo acepta el jefe del departamento de esa carrera (`to`;
  *   confirmado el 7 de noviembre de 2026). El cupo nace al aceptarse.
  *
- * `group_id` no lleva llave foránea: los grupos son de Scheduling, a la derecha de AcademicLoad en el mapa. La
+ * `group_id` (siempre presente) no lleva llave foránea: los grupos son de Scheduling, a la derecha de AcademicLoad en el mapa. La
  * llave compuesta (`room_id`, `campus_id`) a `rooms` exige un salón del campus del acuerdo. Un CHECK amarra la forma
  * de cada tipo; otros, los departamentos distintos, el día, las horas, los lugares, el motivo al rechazar y que
  * quién decidió y cuándo vayan juntos y solo fuera de `proposed`. Un salón no se presta dos veces a la misma hora del
  * mismo día y periodo, y una carrera tiene a lo más un acuerdo vivo (propuesto o aceptado) por grupo. No se borra:
- * se rechaza o se cancela.
+ * se rechaza o se cancela. Que `to` sea el dueño del salón o el departamento de la carrera lo aseguran las Actions que
+ * los crean (RequestRoomLoan, ProposeSharedGroup), porque el dueño de un salón puede cambiar entre periodos.
  */
 return new class extends Migration
 {
@@ -35,7 +36,7 @@ return new class extends Migration
             $table->string('kind');
             $table->foreignUuid('from_department_id')->constrained('departments');
             $table->foreignUuid('to_department_id')->constrained('departments');
-            $table->uuid('group_id')->nullable();
+            $table->uuid('group_id');
             $table->uuid('room_id')->nullable();
             $table->unsignedSmallInteger('day')->nullable();
             $table->time('starts_at')->nullable();
@@ -60,12 +61,10 @@ return new class extends Migration
             'status_check' => "status in ('proposed', 'accepted', 'rejected', 'cancelled')",
             'departments_check' => 'from_department_id <> to_department_id',
             'shape_check' => <<<'SQL'
-                group_id is not null and (
-                    (kind = 'room_loan' and room_id is not null and day is not null and starts_at is not null and ends_at is not null
-                        and career_id is null and max_seats is null)
-                    or (kind = 'shared_group' and career_id is not null and max_seats is not null
-                        and room_id is null and day is null and starts_at is null and ends_at is null)
-                )
+                (kind = 'room_loan' and room_id is not null and day is not null and starts_at is not null and ends_at is not null
+                    and career_id is null and max_seats is null)
+                or (kind = 'shared_group' and career_id is not null and max_seats is not null
+                    and room_id is null and day is null and starts_at is null and ends_at is null)
                 SQL,
             'day_check' => 'day between 1 and 6',
             'time_check' => 'ends_at > starts_at',

@@ -65,7 +65,7 @@ El puntaje y su desglose se guardan en `staffing_rankings` y se muestran complet
 Lo que la junta interdepartamental acuerda de palabra (proceso-actual.md, D7) queda en Nexus como acuerdos: préstamos de salón y grupos compartidos (tareas 3.6 y 3.7).
 
 - Un salón de otro departamento se asigna a la sesión de inmediato y se pide el préstamo al jefe del departamento dueño. Mientras no lo acepte, la sesión tiene choque duro HC-10 «préstamo pendiente» y la carga no se cierra; si lo rechaza, el salón se quita de la sesión y se avisa a quien lo pidió (confirmado el 7 de noviembre de 2026).
-- Un préstamo es un salón, un día y unas horas para un grupo; cubre una sesión de ese departamento que cae dentro de esas horas, ese día y en ese periodo (supuesto por confirmar).
+- Un préstamo es un salón, un día y unas horas para un grupo; cubre las sesiones de ese grupo en ese salón que caen dentro de esas horas, ese día y en ese periodo, y varios préstamos aceptados contiguos del grupo cubren juntos una sesión (supuesto por confirmar). Mientras un préstamo está propuesto o aceptado, nadie más puede pedir ese salón a esa hora (supuesto por confirmar).
 - El grupo compartido lo acepta o lo rechaza el jefe del departamento de la otra carrera, y el cupo de esa carrera se crea al aceptarlo (confirmado el 7 de noviembre de 2026). Si la otra carrera es del mismo departamento que imparte, no hace falta acuerdo (supuesto por confirmar).
 - Rechazar un acuerdo exige un motivo escrito; aceptarlo no (supuesto por confirmar).
 - Quien pidió un acuerdo lo cancela si ya no lo necesita: su sesión cambió de salón, de día o de horas, o quitó el cupo. Un acuerdo cancelado o rechazado no aparta el salón ni el cupo, y ningún acuerdo se borra (supuesto por confirmar).
