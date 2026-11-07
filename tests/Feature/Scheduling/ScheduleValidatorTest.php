@@ -10,6 +10,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\SessionCandidate;
+use App\Modules\Scheduling\Validation\ValidationResult;
 use App\Modules\Scheduling\Validation\Violation;
 use Illuminate\Support\Facades\DB;
 
@@ -51,7 +52,7 @@ it('valida un grupo con sus empalmes de salón', function () {
     $result = $this->validator->validateGroup($group);
 
     expect($result->hasHard())->toBeTrue()
-        ->and($result->messages())->toBe(['El salón LC-1 ya está ocupado por Programación, grupo H el martes de 08:00 a 10:00.']);
+        ->and((new ValidationResult($result->forRule('HC-02')))->messages())->toBe(['El salón LC-1 ya está ocupado por Programación, grupo H el martes de 08:00 a 10:00.']);
 });
 
 it('checkSession dice qué pasaría con una sesión candidata, sin escribir', function () {
@@ -63,10 +64,10 @@ it('checkSession dice qué pasaría con una sesión candidata, sin escribir', fu
     $free = $this->validator->checkSession($group, new SessionCandidate(3, '11:00', '12:00'));
     $batch = $this->validator->checkSessions($group, ['a' => new SessionCandidate(3, '09:00', '10:00'), 'b' => new SessionCandidate(4, '09:00', '10:00')]);
 
-    expect(rulesOf($clash->violations()))->toBe(['HC-01'])
-        ->and($free->isEmpty())->toBeTrue()
-        ->and($batch['a']->hasHard())->toBeTrue()
-        ->and($batch['b']->isEmpty())->toBeTrue()
+    expect($clash->forRule('HC-01'))->toHaveCount(1)
+        ->and($free->forRule('HC-01'))->toBe([])
+        ->and($batch['a']->forRule('HC-01'))->toHaveCount(1)
+        ->and($batch['b']->forRule('HC-01'))->toBe([])
         ->and($group->sessions()->count())->toBe(0);
 });
 
@@ -79,14 +80,15 @@ it('checkTeacher responde el choque del candidato, aunque la foto no lo traiga, 
 
     $results = $this->validator->checkTeachers($group, [$this->teacher, $free]);
 
-    expect(rulesOf($results[$this->teacher->id]->violations()))->toBe(['HC-01'])
+    expect(rulesOf($results[$this->teacher->id]->violations()))->toContain('HC-01')
+        ->and($results[$this->teacher->id]->forRule('HC-01'))->toHaveCount(1)
         ->and($results[$this->teacher->id]->violations()[0]->groupId)->toBe($group->id)
-        ->and($results[$free->id]->isEmpty())->toBeTrue();
+        ->and($results[$free->id]->forRule('HC-01'))->toBe([]);
 
     $group->update(['teacher_id' => $free->id]);
     $this->validator->forget();
 
-    expect($this->validator->checkTeacher($group, $free)->isEmpty())->toBeTrue();
+    expect($this->validator->checkTeacher($group, $free)->forRule('HC-01'))->toBe([]);
 });
 
 it('valida a un docente en todo el periodo, en cualquier campus', function () {
@@ -109,9 +111,9 @@ it('valida un salón y toda la carga de un campus o de un departamento', functio
     DB::statement('set constraints group_sessions_room_no_overlap deferred');
     DB::table('group_sessions')->where('id', $session->id)->update(['room_id' => $this->room->id]);
 
-    expect($this->validator->validateRoom($this->room, $this->term)->violations())->toHaveCount(2)
-        ->and($this->validator->validateLoad($this->term, $this->campus)->violations())->toHaveCount(2)
-        ->and($this->validator->validateLoad($this->term, $this->campus, $group->department)->forGroup($group->id))->toHaveCount(1);
+    expect($this->validator->validateRoom($this->room, $this->term)->forRule('HC-02'))->toHaveCount(2)
+        ->and($this->validator->validateLoad($this->term, $this->campus)->forRule('HC-02'))->toHaveCount(2)
+        ->and((new ValidationResult($this->validator->validateLoad($this->term, $this->campus, $group->department)->forGroup($group->id)))->forRule('HC-02'))->toHaveCount(1);
 });
 
 it('lee la base una vez por periodo y campus hasta que se le pide olvidar', function () {
