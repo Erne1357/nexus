@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
  * Quien pidió un acuerdo vivo lo cancela porque ya no lo necesita (reglas-de-negocio.md, "Acuerdos entre departamentos"; supuesto por confirmar).
  *
  * Relee el acuerdo con bloqueo (el estado que vale es el de la base) y exige que siga vivo, propuesto o aceptado (AgreementRules::ensureLive), sobre `status`. Lo deja cancelado
- * con quién y cuándo, deja bitácora `cancelled` y, después del commit, avisa con AgreementCancelled. Quién puede lo decide
+ * con quién y cuándo (`cancelled_by/at`; la decisión, si hubo, queda como estaba), deja bitácora `cancelled` y, después del commit, avisa con AgreementCancelled. Quién puede lo decide
  * InterdepartmentalAgreementPolicy antes de llamarla; quien actúa se recibe como parámetro.
  */
 final class CancelAgreement
@@ -26,14 +26,13 @@ final class CancelAgreement
      */
     public function handle(InterdepartmentalAgreement $agreement, User $actor): InterdepartmentalAgreement
     {
-
         return DB::transaction(function () use ($agreement, $actor): InterdepartmentalAgreement {
             $agreement->setRawAttributes($agreement->newQuery()->lockForUpdate()->findOrFail($agreement->getKey())->getAttributes(), sync: true);
 
             $this->rules->ensureLive($agreement);
 
             $old = $agreement->status;
-            $agreement->update(['status' => AgreementStatus::Cancelled, 'decided_by' => $actor->getKey(), 'decided_at' => now()]);
+            $agreement->update(['status' => AgreementStatus::Cancelled, 'cancelled_by' => $actor->getKey(), 'cancelled_at' => now()]);
 
             activity()
                 ->performedOn($agreement)

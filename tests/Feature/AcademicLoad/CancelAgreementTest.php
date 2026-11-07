@@ -25,9 +25,22 @@ it('cancela un acuerdo propuesto o aceptado con quién y cuándo', function (Agr
     $cancelled = app(CancelAgreement::class)->handle($agreement, $this->actor)->fresh();
 
     expect($cancelled->status)->toBe(AgreementStatus::Cancelled)
-        ->and($cancelled->decided_by)->toBe($this->actor->id)
-        ->and($cancelled->decided_at)->not->toBeNull();
+        ->and($cancelled->cancelled_by)->toBe($this->actor->id)
+        ->and($cancelled->cancelled_at)->not->toBeNull()
+        ->and($cancelled->canceller->is($this->actor))->toBeTrue();
 })->with([AgreementStatus::Proposed, AgreementStatus::Accepted]);
+
+it('cancelar uno aceptado conserva quién lo aceptó y cuándo; cancelar uno propuesto no inventa decisión', function () {
+    $accepted = InterdepartmentalAgreement::factory()->accepted()->create();
+    $before = $accepted->fresh();
+    $proposed = InterdepartmentalAgreement::factory()->create();
+
+    app(CancelAgreement::class)->handle($accepted, $this->actor);
+    app(CancelAgreement::class)->handle($proposed, $this->actor);
+
+    expect($accepted->fresh())->decided_by->toBe($before->decided_by)->decided_at->toEqual($before->decided_at)
+        ->and($proposed->fresh())->decided_by->toBeNull()->decided_at->toBeNull();
+});
 
 it('deja bitácora con el estado anterior', function () {
     $agreement = InterdepartmentalAgreement::factory()->accepted()->create();
