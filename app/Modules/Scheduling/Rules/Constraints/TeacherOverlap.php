@@ -2,7 +2,9 @@
 
 namespace App\Modules\Scheduling\Rules\Constraints;
 
+use App\Modules\Scheduling\Rules\OverlappingPairs;
 use App\Modules\Scheduling\Validation\ScheduleState;
+use App\Modules\Scheduling\Validation\State\StateSession;
 use App\Modules\Scheduling\Validation\ValidationScope;
 use App\Modules\Scheduling\Validation\Violation;
 
@@ -21,35 +23,23 @@ final class TeacherOverlap implements Constraint
     public function check(ScheduleState $state, ValidationScope $scope): iterable
     {
         foreach ($scope->teacherIds($state) as $teacherId) {
-            $sessions = $state->teacherSessions($teacherId);
-            $count = count($sessions);
             $name = $state->teacher($teacherId)?->name ?? 'El docente';
 
-            for ($i = 0; $i < $count; $i++) {
-                for ($j = $i + 1; $j < $count; $j++) {
-                    [$a, $b] = [$sessions[$i], $sessions[$j]];
-
-                    if ($a->groupId === $b->groupId || ! $a->overlaps($b) || ! $scope->touches($a->groupId, $b->groupId, $teacherId)) {
-                        continue;
-                    }
-
-                    foreach ([[$a, $b], [$b, $a]] as [$mine, $other]) {
-                        yield Violation::hard(
-                            $this->rule(),
-                            "{$name} ya da {$state->labelOf($other->groupId)} el {$other->describe()}.",
-                            'teacher',
-                            $teacherId,
-                            $mine->groupId,
-                            [
-                                'teacher_id' => $teacherId,
-                                'session_id' => $mine->id,
-                                'other_group_id' => $other->groupId,
-                                'other_session_id' => $other->id,
-                                'day' => $other->day,
-                            ],
-                        );
-                    }
-                }
+            foreach (OverlappingPairs::of($state->teacherSessions($teacherId), fn (StateSession $a, StateSession $b): bool => $scope->touches($a->groupId, $b->groupId, $teacherId)) as [$mine, $other]) {
+                yield Violation::hard(
+                    $this->rule(),
+                    "{$name} ya da {$state->labelOf($other->groupId)} el {$other->describe()}.",
+                    'teacher',
+                    $teacherId,
+                    $mine->groupId,
+                    [
+                        'teacher_id' => $teacherId,
+                        'session_id' => $mine->id,
+                        'other_group_id' => $other->groupId,
+                        'other_session_id' => $other->id,
+                        'day' => $other->day,
+                    ],
+                );
             }
         }
     }

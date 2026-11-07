@@ -123,7 +123,8 @@ final class ScheduleStateQuery
     }
 
     /**
-     * Docentes que la foto no trae (los candidatos del ranking): su nombre, horas y no disponibilidad del periodo.
+     * Docentes que la foto no trae (los candidatos del ranking): su nombre, horas y no disponibilidad del periodo. Un
+     * docente borrado no entra (sus horas base ya no cuentan), así que las reglas de horas no lo revisan.
      *
      * @param  list<string>  $teacherIds
      * @return list<StateTeacher>
@@ -153,7 +154,7 @@ final class ScheduleStateQuery
             ->where('kind', PositionKind::Honorarios->value)
             ->distinct()->pluck('teacher_id')->flip();
 
-        return Teacher::query()->withTrashed()->whereIn('id', $teacherIds)->orderBy('id')->get(['id', 'name'])
+        return Teacher::query()->whereIn('id', $teacherIds)->orderBy('id')->get(['id', 'name'])
             ->map(fn (Teacher $teacher): StateTeacher => new StateTeacher(
                 $teacher->id,
                 $teacher->name,

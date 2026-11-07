@@ -44,6 +44,9 @@ final class ScheduleValidator
     /** @var array<string, ScheduleState> */
     private array $states = [];
 
+    /** @var list<Constraint>|null */
+    private ?array $constraints = null;
+
     public function __construct(
         private readonly ScheduleStateQuery $query,
         private readonly Container $container,
@@ -54,17 +57,21 @@ final class ScheduleValidator
      */
     public function constraints(): array
     {
-        return array_map(fn (string $constraint): Constraint => $this->container->make($constraint), self::CONSTRAINTS);
+        return $this->constraints ??= array_map(fn (string $constraint): Constraint => $this->container->make($constraint), self::CONSTRAINTS);
     }
 
     /**
-     * El corazón puro: todas las reglas sobre una foto y un alcance.
+     * El corazón puro: las reglas sobre una foto y un alcance; todas, o solo las de los ids indicados.
+     *
+     * @param  list<string>|null  $rules
      */
-    public function validate(ScheduleState $state, ValidationScope $scope): ValidationResult
+    public function validate(ScheduleState $state, ValidationScope $scope, ?array $rules = null): ValidationResult
     {
-        return new ValidationResult((function () use ($state, $scope): iterable {
+        return new ValidationResult((function () use ($state, $scope, $rules): iterable {
             foreach ($this->constraints() as $constraint) {
-                yield from $constraint->check($state, $scope);
+                if ($rules === null || in_array($constraint->rule(), $rules, true)) {
+                    yield from $constraint->check($state, $scope);
+                }
             }
         })());
     }
@@ -162,10 +169,9 @@ final class ScheduleValidator
         $results = [];
 
         foreach ($ids as $id) {
-            $result = $this->validate($state->withTeacher($group->id, $id), new ValidationScope([$group->id], [$id]));
+            $result = $this->validate($state->withTeacher($group->id, $id), new ValidationScope([$group->id], [$id]), self::TEACHER_RULES);
 
-            $results[$id] = new ValidationResult(array_filter($result->violations(), fn (Violation $violation): bool => in_array($violation->rule, self::TEACHER_RULES, true)
-                && ($violation->groupId === $group->id || ($violation->groupId === null && $violation->subjectType === 'teacher' && $violation->subjectId === $id))));
+            $results[$id] = new ValidationResult($result->forGroup($group->id));
         }
 
         return $results;
