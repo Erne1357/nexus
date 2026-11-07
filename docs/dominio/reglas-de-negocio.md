@@ -63,6 +63,7 @@ Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
 - Una sesión que rompe una regla dura se guarda y queda como choque en el tablero, salvo los empalmes de docente (HC-01), de salón (HC-02) y de dos sesiones del mismo grupo, que la base rechaza; HC-15 impide cerrar la carga con choques duros (confirmado el 7 de noviembre de 2026).
 - HC-03 se revisa dentro de cada plan y semestre reticular del campus: el alumno tipo necesita al menos una combinación de un grupo por materia sin empalmes. Una carrera puede tener varias retículas activas; las viejas llevan la marca «Prioridad» en el editor (confirmado el 7 de noviembre de 2026).
 - Supuestos de las reglas HC-04 a HC-13 (supuesto por confirmar): la alineación de HC-04 se cuenta desde `day_start`; HC-12 no revisa grupos sin sesiones (el tablero los cuenta como «sin horario») ni campus sin bloques de tiempo, y su tolerancia es la configuración `scheduling.weekly_hours_tolerance`, en minutos y 0 sin configurar; HC-13 reporta una violación por cada razón (materia inactiva, plan inactivo, carrera no ofrecida).
+- Las horas de un grupo para HC-08 son las de su materia, teoría más práctica, sumadas por grupo no cancelado en todos los campus del periodo; con docente de honorarios y `staffing.honorarios_max_hours` definido, ese tope sustituye a base más tolerancia. En HC-10 los préstamos aceptados contiguos del mismo grupo, salón y día cubren juntos una sesión (supuesto por confirmar).
 
 ## Cupos por carrera
 
