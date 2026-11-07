@@ -26,7 +26,9 @@ use Illuminate\Validation\ValidationException;
  * cubre la sesión, solo o junto a otros contiguos (RoomLoansQuery::covers), lo regresa sin escribir. Si no, crea uno propuesto dirigido al dueño del
  * salón. Si la exclusión `interdepartmental_agreements_room_no_overlap` lo rechaza (otro préstamo vivo a esa hora),
  * lanza una ValidationException sobre `room_id`; el INSERT corre en un savepoint para no abortar la transacción de
- * quien llama. Deja bitácora `requested` y, después del commit, avisa con AgreementRequested. Quién puede lo decide
+ * quien llama. Deja bitácora `requested` y, después del commit, avisa con AgreementRequested. El grupo y su departamento (`from`) los da quien llama (Scheduling, que sí ve el grupo; AcademicLoad no). Al mover
+ * una sesión, quien llama cancela antes los préstamos de su horario anterior: si no, la exclusión rechaza su propia petición.
+ * Quién puede lo decide
  * InterdepartmentalAgreementPolicy::request antes de llamarla.
  */
 final class RequestRoomLoan

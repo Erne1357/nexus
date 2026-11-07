@@ -4,6 +4,7 @@ namespace App\Modules\AcademicLoad\Rules;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
@@ -85,7 +86,7 @@ final class AgreementRules
     }
 
     /**
-     * El día es de 1 (lunes) a 6 (sábado) y la hora de fin es posterior a la de inicio (`H:i` o `H:i:s`).
+     * El día es de 1 (lunes) a 6 (sábado), las horas son válidas (ClockTime) y la de fin es posterior a la de inicio.
      *
      * @throws ValidationException
      */
@@ -97,12 +98,45 @@ final class AgreementRules
             $errors['day'] = 'El día va de lunes a sábado.';
         }
 
-        if (strcmp($this->seconds($endsAt), $this->seconds($startsAt)) <= 0) {
+        if (! ClockTime::isValid($startsAt)) {
+            $errors['starts_at'] = 'La hora de inicio no es válida.';
+        }
+
+        if (! ClockTime::isValid($endsAt)) {
+            $errors['ends_at'] = 'La hora de fin no es válida.';
+        }
+
+        if ($errors === [] && ClockTime::toSeconds($endsAt) <= ClockTime::toSeconds($startsAt)) {
             $errors['starts_at'] = 'La hora de fin debe ser posterior a la de inicio.';
         }
 
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
+        }
+    }
+
+    /**
+     * Antes de aceptar: el departamento al que va dirigido (`to`) sigue siendo el dueño del salón (préstamo) o de la
+     * carrera (grupo compartido), con la lectura bloqueada en compartido para que no cambie durante la aceptación.
+     *
+     * @throws ValidationException
+     */
+    public function ensureRecipientStillOwns(InterdepartmentalAgreement $agreement): void
+    {
+        if ($agreement->kind === AgreementKind::RoomLoan) {
+            $owner = Room::query()->whereKey($agreement->room_id)->sharedLock()->value('department_id');
+
+            if ($owner !== $agreement->to_department_id) {
+                throw ValidationException::withMessages(['room_id' => 'El salón ya no es de tu departamento.']);
+            }
+
+            return;
+        }
+
+        $owner = Career::query()->withTrashed()->whereKey($agreement->career_id)->sharedLock()->value('department_id');
+
+        if ($owner !== $agreement->to_department_id) {
+            throw ValidationException::withMessages(['career_id' => 'La carrera ya no es de tu departamento.']);
         }
     }
 
@@ -126,10 +160,5 @@ final class AgreementRules
         if ($seats < 1 || $seats > self::MAX_SEATS) {
             throw ValidationException::withMessages(['max_seats' => 'Los lugares van de 1 a '.self::MAX_SEATS.'.']);
         }
-    }
-
-    private function seconds(string $time): string
-    {
-        return strlen($time) === 5 ? "{$time}:00" : $time;
     }
 }

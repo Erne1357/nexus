@@ -22,7 +22,9 @@ use Illuminate\Validation\ValidationException;
  * departamento de la carrera. La carrera debe ser de otro departamento (`career_id`) y los lugares de 1 a 999
  * (`max_seats`). Si la carrera ya tiene un acuerdo vivo (propuesto o aceptado) en ese grupo, lanza una
  * ValidationException sobre `career_id`, también cuando lo gana el índice `interdepartmental_agreements_shared_unique`
- * (savepoint propio). Deja bitácora `proposed` y, después del commit, avisa con AgreementRequested.
+ * (savepoint propio). El grupo y su departamento (`from`) los da quien llama (Scheduling, que sí ve el grupo; AcademicLoad no). Al quitar o
+ * mover un grupo, quien llama cancela antes sus acuerdos vivos.
+ * Deja bitácora `proposed` y, después del commit, avisa con AgreementRequested.
  */
 final class ProposeSharedGroup
 {

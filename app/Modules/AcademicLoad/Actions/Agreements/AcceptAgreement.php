@@ -11,9 +11,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * El departamento al que va dirigido un acuerdo propuesto lo acepta (reglas-de-negocio.md, "Acuerdos entre departamentos"; HC-07 y HC-10).
+ * El departamento al que va dirigido un acuerdo propuesto lo acepta (reglas-de-negocio.md, "Acuerdos entre departamentos"). Aceptar no crea el cupo: el cupo y HC-07 los resuelve Scheduling, cuya
+ * Action orquesta AcceptAgreement y el cupo en la misma transacción; AcademicLoad no ve grupos.
  *
- * Relee el acuerdo con bloqueo (el estado que vale es el de la base) y exige que siga propuesto (AgreementRules::ensureProposed), sobre `status`. Lo deja aceptado
+ * Relee el acuerdo con bloqueo (el estado que vale es el de la base) y exige que siga propuesto (AgreementRules::ensureProposed), sobre `status`, y que `to` siga siendo el dueño del salón
+ * o de la carrera (AgreementRules::ensureRecipientStillOwns), sobre `room_id` o `career_id`. Lo deja aceptado
  * con quién y cuándo, deja bitácora `accepted` y, después del commit, avisa con AgreementAccepted. Quién puede lo decide
  * InterdepartmentalAgreementPolicy antes de llamarla; quien actúa se recibe como parámetro.
  */
@@ -26,11 +28,11 @@ final class AcceptAgreement
      */
     public function handle(InterdepartmentalAgreement $agreement, User $actor): InterdepartmentalAgreement
     {
-
         return DB::transaction(function () use ($agreement, $actor): InterdepartmentalAgreement {
             $agreement->setRawAttributes($agreement->newQuery()->lockForUpdate()->findOrFail($agreement->getKey())->getAttributes(), sync: true);
 
             $this->rules->ensureProposed($agreement);
+            $this->rules->ensureRecipientStillOwns($agreement);
 
             $old = $agreement->status;
             $agreement->update(['status' => AgreementStatus::Accepted, 'decided_by' => $actor->getKey(), 'decided_at' => now()]);

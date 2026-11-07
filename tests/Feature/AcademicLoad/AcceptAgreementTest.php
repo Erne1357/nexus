@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Agreements\AcceptAgreement;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Events\AgreementAccepted;
@@ -57,10 +58,36 @@ it('no decide un acuerdo ya decidido ni cancelado, sin escribir', function (Agre
         ->and(Activity::query()->count())->toBe(0);
 })->with([AgreementStatus::Accepted, AgreementStatus::Rejected, AgreementStatus::Cancelled]);
 
+it('un préstamo cuyo salón ya no es del departamento no se acepta, sin escribir', function () {
+    $this->agreement->room->update(['department_id' => Department::factory()->create()->id]);
+
+    expect(fn () => app(AcceptAgreement::class)->handle($this->agreement, $this->actor))
+        ->toThrow(ValidationException::class, 'El salón ya no es de tu departamento.')
+        ->and($this->agreement->fresh()->status)->toBe(AgreementStatus::Proposed)
+        ->and(Activity::query()->count())->toBe(0);
+});
+
+it('un préstamo cuyo salón perdió su dueño no se acepta', function () {
+    $this->agreement->room->update(['department_id' => null]);
+
+    expect(fn () => app(AcceptAgreement::class)->handle($this->agreement, $this->actor))
+        ->toThrow(ValidationException::class, 'El salón ya no es de tu departamento.');
+});
+
+it('un grupo compartido cuya carrera ya no es del departamento no se acepta, sin escribir', function () {
+    $shared = InterdepartmentalAgreement::factory()->sharedGroup()->create();
+    $shared->career->update(['department_id' => Department::factory()->create()->id]);
+
+    expect(fn () => app(AcceptAgreement::class)->handle($shared, $this->actor))
+        ->toThrow(ValidationException::class, 'La carrera ya no es de tu departamento.')
+        ->and($shared->fresh()->status)->toBe(AgreementStatus::Proposed)
+        ->and(Activity::query()->count())->toBe(0);
+});
+
 it('lee el estado con bloqueo: si otro proceso lo decidió antes, rechaza aunque el modelo esté desactualizado', function () {
     $stale = InterdepartmentalAgreement::query()->findOrFail($this->agreement->id);
     DB::table('interdepartmental_agreements')->where('id', $this->agreement->id)
-        ->update(['status' => 'cancelled', 'decided_by' => $this->actor->id, 'decided_at' => now()]);
+        ->update(['status' => 'cancelled', 'cancelled_by' => $this->actor->id, 'cancelled_at' => now()]);
 
     expect(fn () => app(AcceptAgreement::class)->handle($stale, $this->actor))->toThrow(ValidationException::class)
         ->and($this->agreement->fresh()->status)->toBe(AgreementStatus::Cancelled);

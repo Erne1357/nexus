@@ -177,14 +177,30 @@ it('rechaza un salón sin dueño, del propio departamento o de otro campus, sin 
 ]);
 
 it('rechaza el día y las horas inválidos sobre su campo', function (array $overrides, array $errors) {
-    expect(requestLoanErrors($overrides))->toHaveKeys(array_keys($errors))
+    $found = requestLoanErrors($overrides);
+
+    if ($errors === []) {
+        expect($found)->toBeNull();
+
+        return;
+    }
+
+    expect($found)->toHaveKeys(array_keys($errors))
         ->and(InterdepartmentalAgreement::query()->count())->toBe(0);
 })->with([
     'domingo' => [['day' => 7], ['day' => 1]],
     'día cero' => [['day' => 0], ['day' => 1]],
     'fin igual al inicio' => [['endsAt' => '09:00'], ['starts_at' => 1]],
+    'hora inválida' => [['startsAt' => '25:00'], ['starts_at' => 1]],
+    'texto' => [['endsAt' => 'tarde'], ['ends_at' => 1]],
+    'sin cero inicial' => [['startsAt' => '9:00', 'endsAt' => '10:00'], []],
     'fin antes del inicio' => [['startsAt' => '11:00', 'endsAt' => '09:00'], ['starts_at' => 1]],
 ]);
+
+it('9:00 y 09:00 son la misma hora: la comparación es por valor', function () {
+    expect(requestLoanErrors(['startsAt' => '9:00', 'endsAt' => '10:00']))->toBeNull()
+        ->and(requestLoanErrors(['startsAt' => '10:00', 'endsAt' => '9:00']))->toHaveKey('starts_at');
+});
 
 it('avisa con AgreementRequested solo después del commit', function () {
     Event::fake([AgreementRequested::class]);
