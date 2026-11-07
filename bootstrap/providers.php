@@ -8,6 +8,7 @@ use App\Modules\Core\Providers\FortifyServiceProvider;
 use App\Modules\Facilities\FacilitiesServiceProvider;
 use App\Modules\Faculty\FacultyServiceProvider;
 use App\Modules\Imports\ImportsServiceProvider;
+use App\Modules\Scheduling\SchedulingServiceProvider;
 use App\Modules\Staffing\StaffingServiceProvider;
 use App\Modules\Students\StudentsServiceProvider;
 use App\Providers\AppServiceProvider;
@@ -25,5 +26,6 @@ return [
     ImportsServiceProvider::class,
     CatalogValidationServiceProvider::class,
     AcademicLoadServiceProvider::class,
-    StaffingServiceProvider::class,
+    SchedulingServiceProvider::class,
+    StaffingServiceProvider::class, // a la derecha de Scheduling (ADR-0020)
 ];
