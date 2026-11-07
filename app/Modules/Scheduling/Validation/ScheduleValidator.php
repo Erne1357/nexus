@@ -12,6 +12,7 @@ use App\Modules\Scheduling\Queries\ScheduleStateQuery;
 use App\Modules\Scheduling\Rules\Constraints\Constraint;
 use App\Modules\Scheduling\Rules\Constraints\RoomOverlap;
 use App\Modules\Scheduling\Rules\Constraints\TeacherOverlap;
+use App\Modules\Scheduling\Rules\Constraints\TypicalStudentSchedule;
 use Illuminate\Contracts\Container\Container;
 
 /**
@@ -34,6 +35,7 @@ final class ScheduleValidator
     public const array CONSTRAINTS = [
         TeacherOverlap::class,
         RoomOverlap::class,
+        TypicalStudentSchedule::class,
     ];
 
     /**
