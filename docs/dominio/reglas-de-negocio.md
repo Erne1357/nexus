@@ -53,6 +53,18 @@ Para cada grupo, se ordenan los docentes activos del departamento que imparte la
 
 El puntaje y su desglose se guardan en `staffing_rankings` y se muestran completos. Los pesos de 2 y 3 son configurables (`staffing.weights`). Si dos docentes empatan en todo, se conserva el orden del periodo anterior para la misma materia y, en última instancia, el orden alfabético, para que el resultado sea determinista y reproducible.
 
+Decisiones del 7 de noviembre de 2026 sobre el cálculo:
+
+- **Puntaje** (confirmado el 7 de noviembre de 2026): grupos impartidos en la ventana × 1, más 3 si el perfil es `preferente` o 1 si es `apto` (no se suman), más la evaluación promedio (0 a 5) × 2. Los pesos por omisión son esos y se cambian en `staffing.weights` (objeto json con `per_group_taught`, `preferente`, `apto` y `evaluation`).
+- **Ventana de historial** (confirmado el 7 de noviembre de 2026): los últimos 6 semestres (Ene-Jun y Ago-Dic) antes del periodo que se rankea. Los grupos de verano no cuentan como historial.
+- **Evaluación** (confirmado el 7 de noviembre de 2026): la de los últimos 2 semestres. Un docente sin evaluación recibe 0 puntos de evaluación y la marca «sin evaluación».
+- **Cuándo se asigna** (confirmado el 7 de noviembre de 2026): solo se asignan docentes mientras la carga está en `staffing` o `adjusting`.
+- **Promedio de evaluaciones** (supuesto por confirmar): es el promedio simple de todas las evaluaciones (estudiantil y departamental) de esos semestres.
+- **Un solo bloque final** (supuesto por confirmar): «sin horas», «choque» y «no disponible» (HC-09) bajan juntos al final, después de todos los demás, y dentro del bloque se ordenan con los mismos criterios.
+- **Historial de cualquier campus** (supuesto por confirmar): cuenta los grupos de cualquier campus y de cualquier origen (Nexus o SII).
+- **Desempate final** (supuesto por confirmar): el orden alfabético no distingue acentos ni mayúsculas y, si dos nombres coinciden, decide el id del docente, para que el orden sea siempre el mismo.
+- **Ventana en verano** (supuesto por confirmar): para un periodo de verano, la ventana empieza en el Ene-Jun del mismo año.
+
 ## Cupos por carrera
 
 - Todo grupo tiene al menos un cupo: el de su carrera dueña (`is_owner`).
