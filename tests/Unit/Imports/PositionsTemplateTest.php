@@ -16,6 +16,7 @@ it('reconoce el tipo de plaza por el nombre del SII, sin importar acentos ni may
     'medio tiempo' => ['Medio Tiempo', 'medio_tiempo'],
     'asignatura' => ['ASIGNATURA', 'asignatura'],
     'honorarios' => ['Honorarios', 'honorarios'],
+    'apoyo' => ['Apoyo y asistencia', 'apoyo'],
     'valor de Nexus' => ['tres_cuartos', 'tres_cuartos'],
 ]);
 

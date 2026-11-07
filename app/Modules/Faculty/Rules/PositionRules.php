@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
  *
  * - El tipo es un valor de PositionKind.
  * - Las horas base son las que admite el tipo (S3, supuesto por confirmar): tiempo completo 40, tres cuartos 30,
- *   medio tiempo 20, honorarios 0 y asignatura de 1 a 40. Si el tipo las fija y no llegan, las toma de sí mismo.
+ *   medio tiempo 20, honorarios 0, y asignatura y apoyo de 1 a 40. Si el tipo las fija y no llegan, las toma de sí mismo.
  * - La vigencia: fechas `Y-m-d` o vacías (sin límite); el último día cuenta, así que puede terminar el mismo día
  *   que empieza, pero no antes.
  */
@@ -115,7 +115,7 @@ final class PositionRules
 
         if (! $kind->allows($hours)) {
             throw ValidationException::withMessages(['base_hours' => $fixed === null
-                ? 'Las horas base de una asignatura van de 1 a '.PositionKind::MAX_HOURS.'.'
+                ? 'Las horas base de una plaza de '.mb_strtolower($kind->label()).' van de 1 a '.PositionKind::MAX_HOURS.'.'
                 : 'Las horas base de '.mb_strtolower($kind->label())." son {$fixed}."]);
         }
 

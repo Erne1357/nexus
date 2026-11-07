@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Storage;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| `imports:migrate-sii` con los siete pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
+| `imports:migrate-sii` con los ocho pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
 | una exportación sintética pequeña que toca cada paso: corre sin filas con error y repetirla no da ni altas ni
 | cambios en ningún lote.
 */
@@ -79,6 +79,7 @@ beforeEach(function () {
         'nombre_empleado' => 'JUAN', 'apellidos_empleado' => 'PEREZ CRUZ', 'correo_electronico' => '', 'inicio_plantel' => '201702',
     ]], [[
         'rfc' => 'PRUE800101AB1', 'apellidop' => 'PEREZ', 'apellidom' => 'CRUZ', 'nombre_empleado' => 'JUAN', 'id_unidad_organica' => '110100', 'fecha_ingreso_institucion' => '',
+        'claves_plazas' => '1403 E371700.0100001 1403 E352504.0100002', 'cantidad_horas_nombramiento' => '34',
     ]]);
     SiiFixtures::writeGroups($this->dir, [['20261', 'CD1', 'A', 'PRUE800101AB1'], ['20263', 'CD1', 'B', 'PRUE800101AB1']]);
 
@@ -90,22 +91,23 @@ afterEach(function () {
     File::deleteDirectory($this->curated);
 });
 
-it('corre los siete pasos de producción sin errores y repetirla no da altas ni cambios', function () {
+it('corre los ocho pasos de producción sin errores y repetirla no da altas ni cambios', function () {
     expect(app()->bound('sii.steps'))->toBeFalse()
-        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(7);
+        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(8);
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
 
     $first = ImportBatch::query()->get();
 
     expect($first->pluck('template')->unique()->sort()->values()->all())->toBe([
-        'careers', 'departments', 'org_units', 'pending_placements', 'rooms', 'students', 'study_plans', 'subject_aliases', 'subjects', 'teacher_history', 'teachers',
+        'careers', 'departments', 'org_units', 'pending_placements', 'positions', 'rooms', 'students', 'study_plans', 'subject_aliases', 'subjects', 'teacher_history', 'teachers',
     ])
         ->and($first->sum('error_rows'))->toBe(0)
         ->and(Subject::query()->where('code', 'ACF-0901')->exists())->toBeTrue()
         ->and(StudyPlanSubjectPending::query()->count())->toBe(1)
         ->and(Room::query()->count())->toBe(2)
         ->and(Teacher::query()->sole()->history()->count())->toBe(2)
+        ->and(Teacher::query()->sole()->positions()->orderBy('kind')->pluck('base_hours', 'kind')->map(fn ($hours): int => (int) $hours)->all())->toBe(['asignatura' => 4, 'tres_cuartos' => 30])
         ->and(Student::query()->count())->toBe(2);
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
