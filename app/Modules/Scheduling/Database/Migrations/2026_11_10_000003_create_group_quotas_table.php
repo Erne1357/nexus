@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Schema;
  * Uno por grupo y carrera; a lo más un dueño por grupo, y el dueño es la carrera dueña del grupo.
  *
  * HC-07: la suma de `max_seats` de un grupo no excede su capacidad. Un CHECK no ve otras filas, así que lo revisa un
- * trigger de restricción al escribir un cupo y al cambiar la capacidad del grupo; es diferible (inicialmente
- * inmediato) para que una Action baje capacidad y cupos en una misma transacción. Que todo grupo tenga el cupo de
+ * trigger de restricción al escribir un cupo y al cambiar la capacidad del grupo, que bloquea la fila del grupo para
+ * que dos cupos concurrentes no pasen la revisión cada uno sin ver al otro; es diferible (inicialmente inmediato)
+ * para que una Action baje capacidad y cupos en una misma transacción. Que todo grupo tenga el cupo de
  * su carrera dueña lo asegura la Action que lo crea.
  */
 return new class extends Migration
@@ -39,7 +40,7 @@ return new class extends Migration
                 seats bigint;
                 group_capacity integer;
             begin
-                select capacity into group_capacity from groups where id = target;
+                select capacity into group_capacity from groups where id = target for no key update;
                 select coalesce(sum(max_seats), 0) into seats from group_quotas where group_id = target;
 
                 if seats > group_capacity then

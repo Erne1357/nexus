@@ -54,13 +54,15 @@ class GroupSession extends Model
     }
 
     /**
-     * Duración de la sesión en minutos.
+     * Duración de la sesión en minutos; null mientras le falta el inicio o el fin.
      *
-     * @return Attribute<int, never>
+     * @return Attribute<?int, never>
      */
     protected function minutes(): Attribute
     {
-        return Attribute::get(fn (): int => self::minutesOf($this->ends_at) - self::minutesOf($this->starts_at));
+        return Attribute::get(fn (): ?int => $this->starts_at === null || $this->ends_at === null
+            ? null
+            : self::minutesOf($this->ends_at) - self::minutesOf($this->starts_at));
     }
 
     private static function minutesOf(string $time): int

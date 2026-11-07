@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Schema;
  * de inicio a fin (bloques consecutivos se guardan como una sola sesión), con su salón y su tipo.
  *
  * `term_id`, `campus_id`, `teacher_id` e `is_active` son copia del grupo, porque una restricción de exclusión solo
- * mira una tabla: un trigger los toma del grupo al escribir la sesión (no se pueden falsear) y otro los actualiza
- * cuando el grupo cambia de docente, de estado, de periodo o de campus. Con ellos la base es la red de seguridad de:
+ * mira una tabla: un trigger los toma del grupo al escribir la sesión (no se pueden falsear), con el grupo bloqueado
+ * para compartir para que un cambio de docente concurrente no deje una sesión con el docente viejo, y otro los
+ * actualiza cuando el grupo cambia de docente, de periodo, de campus o entra o sale de cancelado. Con ellos la base es la red de seguridad de:
  *
  * - HC-01: un docente no tiene dos sesiones que se empalmen el mismo día y periodo, en ningún campus;
  * - HC-02: un salón no tiene dos sesiones que se empalmen el mismo día y periodo;
@@ -71,7 +72,8 @@ return new class extends Migration
                 select g.term_id, g.campus_id, g.teacher_id, g.status <> 'cancelled'
                   into new.term_id, new.campus_id, new.teacher_id, new.is_active
                   from groups g
-                 where g.id = new.group_id;
+                 where g.id = new.group_id
+                   for share;
 
                 return new;
             end
@@ -93,7 +95,7 @@ return new class extends Migration
                 when (old.term_id is distinct from new.term_id
                     or old.campus_id is distinct from new.campus_id
                     or old.teacher_id is distinct from new.teacher_id
-                    or old.status is distinct from new.status)
+                    or (old.status = 'cancelled') is distinct from (new.status = 'cancelled'))
                 execute function groups_sync_sessions();
             SQL);
     }

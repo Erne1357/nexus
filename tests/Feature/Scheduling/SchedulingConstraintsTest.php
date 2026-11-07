@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -80,6 +81,28 @@ describe('grupos', function () {
             ->toThrow(QueryException::class, 'groups_study_plan_career_foreign');
     });
 
+    it('el departamento del grupo es el de su materia y la sigue si la materia cambia de departamento', function () {
+        $group = Group::factory()->create();
+        $other = Department::factory()->create();
+
+        expect(fn () => DB::transaction(fn () => DB::table('groups')->where('id', $group->id)->update(['department_id' => $other->id])))
+            ->toThrow(QueryException::class, 'groups_subject_department_foreign');
+
+        $group->subject->update(['department_id' => $other->id]);
+
+        expect($group->fresh()->department_id)->toBe($other->id);
+    });
+
+    it('un grupo cancelado suelta su clave', function () {
+        $cancelled = Group::factory()->cancelled()->create(['code' => 'D']);
+
+        $replacement = Group::factory()->create(['code' => 'D', 'term_id' => $cancelled->term_id, 'subject_id' => $cancelled->subject_id]);
+
+        expect($replacement->exists)->toBeTrue()
+            ->and(fn () => DB::transaction(fn () => $cancelled->update(['status' => GroupStatus::Planned])))
+            ->toThrow(UniqueConstraintViolationException::class);
+    });
+
     it('la clave es única por periodo y materia, en cualquier campus; otra materia u otro periodo la repiten', function () {
         $group = Group::factory()->create(['code' => 'D']);
 
@@ -126,6 +149,8 @@ describe('sesiones', function () {
             ->and(GroupSession::factory()->for($group)->practica()->on(2, '07:30', '08:20')->create()->fresh())
             ->kind->toBe(SessionKind::Practica)
             ->minutes->toBe(50);
+
+        expect((new GroupSession(['day' => 2]))->minutes)->toBeNull();
     });
 
     it('la copia no se puede falsear al escribir la sesión', function () {
@@ -352,6 +377,13 @@ describe('choques', function () {
             ->and($conflict->subject_id)->toBe($group->id)
             ->and($conflict->related)->toBe(['groups' => [$group->id]])
             ->and($conflict->resolved_at)->toBeNull();
+    });
+
+    it('el detalle se guarda siempre como objeto JSON, aun vacío', function () {
+        $conflict = ScheduleConflict::factory()->create(['related' => []]);
+
+        expect(DB::table('schedule_conflicts')->where('id', $conflict->id)->value(DB::raw('jsonb_typeof(related)')))->toBe('object')
+            ->and($conflict->fresh()->related)->toBe([]);
     });
 
     it('el choque rechaza otra gravedad, otro tipo de sujeto y una regla sin id', function () {

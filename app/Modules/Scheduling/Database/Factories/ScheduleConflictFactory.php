@@ -21,22 +21,32 @@ class ScheduleConflictFactory extends Factory
      */
     public function definition(): array
     {
-        $group = Group::factory();
-
         return [
-            'group_id' => $group,
-            'term_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->term_id,
-            'campus_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->campus_id,
-            'department_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->department_id,
-            'career_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->owner_career_id,
+            'group_id' => Group::factory(),
             'rule' => 'HC-02',
             'severity' => ConflictSeverity::Hard,
             'subject_type' => 'group',
-            'subject_id' => fn (array $attributes): string => $attributes['group_id'],
             'related' => [],
             'message' => 'El salón ya está ocupado a esa hora.',
             'resolved_at' => null,
         ];
+    }
+
+    /**
+     * Lo que no se indicó sale del grupo, leído una sola vez: su periodo, campus, departamento, carrera dueña y el
+     * grupo como sujeto.
+     */
+    public function configure(): static
+    {
+        return $this->afterMaking(function (ScheduleConflict $conflict): void {
+            $group = Group::query()->findOrFail($conflict->group_id);
+
+            $conflict->term_id ??= $group->term_id;
+            $conflict->campus_id ??= $group->campus_id;
+            $conflict->department_id ??= $group->department_id;
+            $conflict->career_id ??= $group->owner_career_id;
+            $conflict->subject_id ??= $group->id;
+        });
     }
 
     /**
