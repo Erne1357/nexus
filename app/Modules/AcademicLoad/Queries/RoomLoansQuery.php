@@ -13,31 +13,43 @@ use Illuminate\Database\Eloquent\Collection;
  * departamento con un préstamo **aceptado** que cubra el día y las horas de la sesión. Mientras el préstamo está
  * propuesto la sesión tiene choque duro «préstamo pendiente» (confirmado el 7 de noviembre de 2026).
  *
- * Las horas llegan como `H:i` o `H:i:s`. «Cubrir» es que el préstamo empiece a la hora de la sesión o antes y
- * termine a su hora de fin o después, el mismo día y periodo, en el mismo salón y para el departamento que lo pidió.
+ * Un préstamo es de un grupo: cubre las sesiones de ese grupo, en ese salón, ese día y periodo, dentro de sus horas.
+ * Varios préstamos aceptados contiguos del mismo grupo (9–10 y 10–11) cubren juntos una sesión de 9 a 11. Las horas
+ * llegan como `H:i` o `H:i:s`.
  */
 final class RoomLoansQuery
 {
     /**
-     * HC-10: ¿un préstamo aceptado cubre esta sesión del departamento en ese salón?
+     * HC-10: ¿los préstamos aceptados del grupo cubren toda esta sesión en ese salón?
      */
-    public function covers(string $termId, string $roomId, string $departmentId, int $day, string $startsAt, string $endsAt): bool
+    public function covers(string $termId, string $roomId, string $groupId, int $day, string $startsAt, string $endsAt): bool
     {
-        return $this->covering($termId, $roomId, $departmentId, $day, $startsAt, $endsAt)
+        $loans = $this->overlapping($termId, $roomId, $groupId, $day, $startsAt, $endsAt)
             ->where('status', AgreementStatus::Accepted->value)
-            ->exists();
+            ->orderBy('starts_at')
+            ->get(['starts_at', 'ends_at']);
+
+        $reached = $this->seconds($startsAt);
+        foreach ($loans as $loan) {
+            if ($this->seconds($loan->starts_at) > $reached) {
+                return false;
+            }
+            $reached = max($reached, $this->seconds($loan->ends_at));
+        }
+
+        return $reached >= $this->seconds($endsAt);
     }
 
     /**
-     * El préstamo vivo que cubre la sesión: el aceptado o, si no hay, el propuesto más reciente; nulo si no hay
-     * ninguno. Sirve para decir «préstamo pendiente» o «sin préstamo».
+     * Un préstamo vivo del grupo que toca la sesión, primero uno propuesto: sirve para decir «préstamo pendiente» si
+     * la sesión no está cubierta y hay uno propuesto, o «sin préstamo» si no hay ninguno.
      */
-    public function loanFor(string $termId, string $roomId, string $departmentId, int $day, string $startsAt, string $endsAt): ?InterdepartmentalAgreement
+    public function loanFor(string $termId, string $roomId, string $groupId, int $day, string $startsAt, string $endsAt): ?InterdepartmentalAgreement
     {
-        return $this->covering($termId, $roomId, $departmentId, $day, $startsAt, $endsAt)
+        return $this->overlapping($termId, $roomId, $groupId, $day, $startsAt, $endsAt)
             ->live()
-            ->orderByRaw('status = ? desc', [AgreementStatus::Accepted->value])
-            ->latest('created_at')
+            ->orderByRaw('status = ? desc', [AgreementStatus::Proposed->value])
+            ->orderBy('starts_at')
             ->first();
     }
 
@@ -59,17 +71,26 @@ final class RoomLoansQuery
     }
 
     /**
+     * Los préstamos del grupo en ese salón, día y periodo cuyas horas se cruzan con las de la sesión.
+     *
      * @return Builder<InterdepartmentalAgreement>
      */
-    private function covering(string $termId, string $roomId, string $departmentId, int $day, string $startsAt, string $endsAt): Builder
+    private function overlapping(string $termId, string $roomId, string $groupId, int $day, string $startsAt, string $endsAt): Builder
     {
         return InterdepartmentalAgreement::query()
             ->where('kind', AgreementKind::RoomLoan->value)
             ->where('term_id', $termId)
             ->where('room_id', $roomId)
-            ->where('from_department_id', $departmentId)
+            ->where('group_id', $groupId)
             ->where('day', $day)
-            ->where('starts_at', '<=', $startsAt)
-            ->where('ends_at', '>=', $endsAt);
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt);
+    }
+
+    private function seconds(string $time): int
+    {
+        $parts = array_map('intval', explode(':', $time));
+
+        return $parts[0] * 3600 + ($parts[1] ?? 0) * 60 + ($parts[2] ?? 0);
     }
 }

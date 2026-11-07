@@ -70,7 +70,14 @@ it('acepta sus dos tipos y sus cuatro estados y rechaza otros', function () {
         ->toThrow(QueryException::class, 'interdepartmental_agreements_status_check');
 });
 
-it('un préstamo pide salón, día y horas para un grupo, y no lleva carrera ni lugares', function (array $change) {
+it('todo acuerdo es de un grupo', function () {
+    $agreement = InterdepartmentalAgreement::factory()->create();
+
+    expect(fn () => DB::table('interdepartmental_agreements')->where('id', $agreement->id)->update(['group_id' => null]))
+        ->toThrow(QueryException::class, 'group_id');
+});
+
+it('un préstamo pide salón, día y horas, y no lleva carrera ni lugares', function (array $change) {
     $agreement = InterdepartmentalAgreement::factory()->create();
 
     expect(fn () => DB::table('interdepartmental_agreements')->where('id', $agreement->id)->update($change))
@@ -79,7 +86,6 @@ it('un préstamo pide salón, día y horas para un grupo, y no lleva carrera ni 
     'sin salón' => [['room_id' => null]],
     'sin día' => [['day' => null]],
     'sin inicio' => [['starts_at' => null]],
-    'sin grupo' => [['group_id' => null]],
     'con lugares' => [['max_seats' => 5]],
 ]);
 
@@ -91,7 +97,6 @@ it('un grupo compartido pide grupo, carrera y lugares, y no lleva salón ni hora
 })->with([
     'sin carrera' => [['career_id' => null]],
     'sin lugares' => [['max_seats' => null]],
-    'sin grupo' => [['group_id' => null]],
     'con día' => [['day' => 2]],
 ]);
 
