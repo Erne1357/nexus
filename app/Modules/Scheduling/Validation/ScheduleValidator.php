@@ -9,9 +9,15 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Rules\Constraints\CampusWindow;
 use App\Modules\Scheduling\Rules\Constraints\Constraint;
+use App\Modules\Scheduling\Rules\Constraints\LabRoom;
+use App\Modules\Scheduling\Rules\Constraints\OfferableGroup;
+use App\Modules\Scheduling\Rules\Constraints\RoomBlocked;
+use App\Modules\Scheduling\Rules\Constraints\RoomCapacity;
 use App\Modules\Scheduling\Rules\Constraints\RoomOverlap;
 use App\Modules\Scheduling\Rules\Constraints\TeacherOverlap;
+use App\Modules\Scheduling\Rules\Constraints\WeeklyHours;
 use Illuminate\Contracts\Container\Container;
 
 /**
@@ -34,6 +40,12 @@ final class ScheduleValidator
     public const array CONSTRAINTS = [
         TeacherOverlap::class,
         RoomOverlap::class,
+        CampusWindow::class,
+        RoomCapacity::class,
+        LabRoom::class,
+        RoomBlocked::class,
+        WeeklyHours::class,
+        OfferableGroup::class,
     ];
 
     /**
