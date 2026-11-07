@@ -53,6 +53,16 @@ Para cada grupo, se ordenan los docentes activos del departamento que imparte la
 
 El puntaje y su desglose se guardan en `staffing_rankings` y se muestran completos. Los pesos de 2 y 3 son configurables (`staffing.weights`). Si dos docentes empatan en todo, se conserva el orden del periodo anterior para la misma materia y, en última instancia, el orden alfabético, para que el resultado sea determinista y reproducible.
 
+## Grupos y horarios
+
+Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
+
+- Los grupos nacen solos cuando el jefe acepta la parte de su departamento en una propuesta de carrera: uno por cada grupo pedido de sus materias, con la carrera de la propuesta como dueña y el plan y semestre de la fila (confirmado el 7 de noviembre de 2026). Lo aceptado ya no cambia, así que no se duplican.
+- Un grupo nace con la capacidad del salón por defecto de su materia en el campus (`subject_room_defaults`, el de menor prioridad); sin salón por defecto, con 35 lugares, o 25 si la materia lleva laboratorio. El cupo de su carrera dueña nace igual a esa capacidad. Asignarle salón después no cambia la capacidad: HC-05 avisa si el salón es más chico (confirmado el 7 de noviembre de 2026).
+- La clave del grupo sigue la nomenclatura del SII, donde la letra es la hora de inicio: A = 7:00, B = 8:00 … O = 21:00 (confirmado el 7 de noviembre de 2026). Mientras no tiene sesiones lleva una clave provisional, un número consecutivo por materia y periodo (1, 2, …), que ninguna clave del SII usa (supuesto por confirmar). Al acomodar sesiones toma la letra de la hora de inicio más temprana de sus sesiones y, si otro grupo de la misma materia y periodo ya tiene esa letra, un número detrás (D2, D3…); se recalcula cada vez que cambian sus sesiones, hasta que la carga se publica (supuesto por confirmar). Las claves especiales del SII (SM, RM, TM, NE…) no se generan (supuesto por confirmar).
+- Una sesión que rompe una regla dura se guarda y queda como choque en el tablero, salvo los empalmes de docente (HC-01) y de salón (HC-02), que la base rechaza; HC-15 impide cerrar la carga con choques duros (confirmado el 7 de noviembre de 2026).
+- HC-03 se revisa dentro de cada plan y semestre reticular del campus: el alumno tipo necesita al menos una combinación de un grupo por materia sin empalmes. Una carrera puede tener varias retículas activas; las viejas llevan la marca «Prioridad» en el editor (confirmado el 7 de noviembre de 2026).
+
 ## Cupos por carrera
 
 - Todo grupo tiene al menos un cupo: el de su carrera dueña (`is_owner`).
@@ -227,6 +237,7 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Armar, corregir y enviar la propuesta de carrera | `coordinador` de la carrera y campus | catálogos de los departamentos involucrados validados (aviso, no bloqueo) |
 | Ver la bandeja del departamento | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` | Los mismos que ven la carga del departamento en el campus (supuesto por confirmar) |
 | Aceptar o regresar la parte del departamento en una propuesta de carrera | `admin`, `jefe_departamento` del departamento | Aceptar exige HC-14; regresar no, y lleva comentario (confirmado el 2 de noviembre de 2026). Decide el jefe del departamento, como quien propone la carga (supuesto por confirmar) |
+| Ver los horarios y el tablero de choques | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente`, `coordinador` | Quienes ven la carga, con el mismo alcance, y el coordinador los grupos de su carrera dueña en su campus (confirmado el 7 de noviembre de 2026) |
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
