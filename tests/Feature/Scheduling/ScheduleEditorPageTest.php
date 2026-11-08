@@ -385,7 +385,7 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSee('Cálculo Vectorial')
             ->assertSee('CB · Ciencias Básicas')
             ->assertSee('Lo asigna Asignación docente')
-            ->assertSee('2 de 2 h')
+            ->assertSeeText('2 de 2 h')
             ->assertSee('Cupos por carrera');
     });
 
