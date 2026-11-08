@@ -337,6 +337,9 @@ Supuestos por confirmar:
 - Si Scheduling veta el regreso a `staffing` al aplicar la última solicitud, la solicitud queda aplicada y la carga se queda en `adjusting` hasta la siguiente solicitud aplicada (o el reintento que traiga la pantalla); los motivos del veto se le muestran a quien aplicó.
 - El coordinador también puede pedir, sin el límite de una abierta (aplica por docente).
 - Aprobar con la carga en otro estado distinto de `staffing` no la toca.
+- Quién ve qué en la pantalla «Solicitudes de cambio» (tarea 3.11): la lista es de un departamento en el periodo y el campus de la credencial; los jefes, el jefe de proyecto docente y la Subdirección ven todas las del departamento; el coordinador, las de horario de los grupos de su carrera en su campus (las que aplica), en cualquier estado, y quien pidió, las suyas. Las de salón no las ve el coordinador.
+- Lo que se propone, el motivo y el comentario del jefe llevan hasta 500 caracteres.
+- «Mi carga» solo ofrece «Solicitar cambio» en los grupos cuya carga está en Asignación o Ajustes; en los demás dice en qué estado está la carga.
 
 ## Pantalla de acceso
 
