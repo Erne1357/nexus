@@ -1040,7 +1040,9 @@ document.addEventListener('alpine:init', () => {
 | - La bandeja también es una sola parada (trayRove, trayKey) y «Ir a la semana» (toWeek) salta a la semana sin
 |   recorrer la bandeja ni los choques.
 | - El motivo de una celda que choca o no se puede (data-why) se ve junto a ella con el foco o bajo el puntero (tip,
-|   `position: fixed` para que la caja de la semana no lo recorte) y se mueve con ella al desplazar.
+|   `position: fixed` para que la caja de la semana no lo recorte), se mueve con ella al desplazar y, cuando Livewire
+|   vuelve a pintar, se acomoda o se esconde si la celda ya no está (MutationObserver).
+| - Las flechas no se tocan con Alt, Ctrl o Cmd (Alt+← es «atrás»).
 */
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('scheduleEditor', (day) => ({
@@ -1049,6 +1051,31 @@ document.addEventListener('alpine:init', () => {
         switching: false,
         tipFor: null,
         tip: { text: '', left: 0, top: 0, above: false },
+        tipObserver: null,
+        tipQueued: false,
+
+        /**
+         * Livewire puede cambiar o quitar la celda del aviso al volver a pintar (colocar, elegir otro grupo): después
+         * de cada cambio del DOM el aviso se vuelve a poner junto a ella o se esconde si ya no está o no tiene motivo.
+         */
+        init() {
+            this.tipObserver = new MutationObserver(() => {
+                if (!this.tipFor || this.tipQueued) {
+                    return;
+                }
+
+                this.tipQueued = true;
+                requestAnimationFrame(() => {
+                    this.tipQueued = false;
+                    this.placeTip();
+                });
+            });
+            this.tipObserver.observe(this.$el, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-why'] });
+        },
+
+        destroy() {
+            this.tipObserver?.disconnect();
+        },
 
         /** El motivo de la celda (data-why) con el foco o bajo el puntero; cualquier otro destino lo esconde. */
         explain(event) {
@@ -1060,7 +1087,7 @@ document.addEventListener('alpine:init', () => {
         placeTip() {
             const cell = this.tipFor;
 
-            if (!cell?.isConnected) {
+            if (!cell?.isConnected || !cell.dataset.why) {
                 this.tipFor = null;
                 this.tip.text = '';
 
@@ -1168,29 +1195,38 @@ document.addEventListener('alpine:init', () => {
         },
 
         /**
-         * La bandeja es una sola parada: arriba y abajo, Inicio y Fin cambian de grupo (en la misma columna: la pieza o
-         * el botón de su cajón); la derecha va al botón del cajón y la izquierda regresa a la pieza.
+         * La bandeja es una sola parada. Desde 768 px las piezas van en columna: arriba y abajo cambian de grupo (en la
+         * misma columna: la pieza o el botón de su cajón), la derecha va al botón del cajón y la izquierda regresa.
+         * En celular cada materia es una tira de lado: izquierda y derecha cambian de grupo, abajo va al botón del
+         * cajón y arriba regresa. Inicio y Fin van al primero y al último. Con Alt, Ctrl o Cmd no se toca la tecla
+         * (Alt+← es «atrás» del navegador).
          */
         trayKey(event) {
             const current = event.target.closest('[data-tray-item]');
 
-            if (!current || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) {
+            if (event.altKey || event.ctrlKey || event.metaKey || !current
+                || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) {
                 return;
             }
 
+            const strip = !matchMedia('(min-width: 48rem)').matches;
             const pieces = [...event.currentTarget.querySelectorAll('[data-piece]')];
             const piece = current.closest('[data-piece]');
             const index = pieces.indexOf(piece);
             const onDrawer = current.hasAttribute('data-group-drawer');
             const column = (element) => element?.querySelector(onDrawer ? '[data-group-drawer]' : '[data-group]');
-            const next = {
-                ArrowDown: () => column(pieces[index + 1]),
-                ArrowUp: () => column(pieces[index - 1]),
-                Home: () => column(pieces[0]),
-                End: () => column(pieces.at(-1)),
-                ArrowRight: () => (onDrawer ? null : piece.querySelector('[data-group-drawer]')),
-                ArrowLeft: () => (onDrawer ? piece.querySelector('[data-group]') : null),
-            }[event.key]();
+            const moves = {
+                next: () => column(pieces[index + 1]),
+                previous: () => column(pieces[index - 1]),
+                first: () => column(pieces[0]),
+                last: () => column(pieces.at(-1)),
+                drawer: () => (onDrawer ? null : piece.querySelector('[data-group-drawer]')),
+                piece: () => (onDrawer ? piece.querySelector('[data-group]') : null),
+            };
+            const keys = strip
+                ? { ArrowRight: 'next', ArrowLeft: 'previous', ArrowDown: 'drawer', ArrowUp: 'piece', Home: 'first', End: 'last' }
+                : { ArrowDown: 'next', ArrowUp: 'previous', ArrowRight: 'drawer', ArrowLeft: 'piece', Home: 'first', End: 'last' };
+            const next = moves[keys[event.key]]();
 
             event.preventDefault();
             next?.focus();
@@ -1212,7 +1248,8 @@ document.addEventListener('alpine:init', () => {
         key(event) {
             const current = event.target.closest('[data-nav]');
 
-            if (!current || !['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            if (event.altKey || event.ctrlKey || event.metaKey || !current
+                || !['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
                 return;
             }
 

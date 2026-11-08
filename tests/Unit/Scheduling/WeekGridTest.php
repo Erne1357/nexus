@@ -120,6 +120,15 @@ it('la parada de tabulación es la primera celda que coloca o, sin ella, la prim
         ->and($grid->tabStop($laid, null, false))->toBe('session:s');
 });
 
+it('si todo lo libre no se puede (HC-01, HC-02) y no hay sesiones que se abran, la parada es la primera celda que no se puede', function () {
+    $grid = weekGrid(['days' => [1], 'day_start' => '07:00', 'day_end' => '09:00']);
+    $blocked = ['fits' => false, 'rules' => ['HC-01'], 'messages' => ['Ana ya da clase.']];
+    $cells = $grid->cells(['1|07:00' => $blocked, '1|08:00' => $blocked], ['HC-01']);
+
+    expect($grid->tabStop($grid->lay([]), $cells, true))->toBe('cell:1|07:00')
+        ->and($grid->tabStop($grid->lay([]), $cells, false))->toBeNull();
+});
+
 it('extiende la ventana a las sesiones que caen fuera del horario o de los días del perfil, alineada a sus bloques', function () {
     $grid = weekGrid(['days' => [1, 2, 3, 4, 5], 'day_start' => '07:00', 'day_end' => '21:00', 'block_minutes' => 60])
         ->covering([weekItem('sabado', 6, '06:30', '08:00'), weekItem('noche', 2, '20:00', '22:00')]);

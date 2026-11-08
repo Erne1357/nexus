@@ -3,8 +3,10 @@
     y su nombre). Cada grupo es una pieza que lo elige (`aria-pressed`) con la franja de su materia, «CLAVE · grupo»,
     sus horas «N de M h» (Mono solo en las cifras) con su icono y el docente o «Sin docente»; el botón de su esquina
     abre el cajón del grupo con el icono de lo que hace ahí: editar cupos (`o-pencil-square`) o verlos (`o-eye`).
-    La bandeja es una sola parada de tabulación (`trayKey` y `trayRove` de `scheduleEditor`): arriba y abajo, Inicio y
-    Fin cambian de grupo; la derecha va al botón de su cajón y la izquierda regresa; Enter o Espacio los tocan.
+    La bandeja es una sola parada de tabulación (`trayKey` y `trayRove` de `scheduleEditor`): desde 768 px arriba y
+    abajo cambian de grupo y la derecha va al botón de su cajón (la izquierda regresa); en celular, donde cada materia
+    es una tira de lado, izquierda y derecha cambian de grupo y abajo va al botón (arriba regresa). Inicio y Fin van al
+    primero y al último; Enter o Espacio los tocan. Con Alt, Ctrl o Cmd las flechas son del navegador.
     Desde 1200 px siempre abierta y con su propio desplazamiento; antes, plegable (abierta desde 768 px; en celular
     cerrada, y se cierra al elegir un grupo). En celular las piezas de cada materia se desplazan de lado.
 --}}
@@ -32,7 +34,7 @@
     </h2>
 
     <div id="tray-body" x-show="open || wide" class="grid min-h-0 content-start gap-3 overflow-y-auto px-3 pb-3" x-on:keydown="trayKey($event)" x-on:focusin="trayRove($event)">
-        <p id="tray-keys" class="sr-only">Las flechas arriba y abajo cambian de grupo; la flecha derecha lleva a sus cupos y sesiones.</p>
+        <p id="tray-keys" class="sr-only"><span class="max-md:hidden">Las flechas arriba y abajo cambian de grupo; la flecha derecha lleva a sus cupos y sesiones.</span><span class="md:hidden">Las flechas izquierda y derecha cambian de grupo; la flecha abajo lleva a sus cupos y sesiones.</span></p>
         @forelse ($subjects as $row)
             <div class="grid min-w-0 gap-1.5" role="group" aria-label="{{ $row['subject']['code'] }} {{ $row['subject']['name'] }}">
                 <h3 class="flex min-w-0 items-baseline gap-2 px-0.5 text-[13px] font-bold">

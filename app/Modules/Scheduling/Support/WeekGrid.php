@@ -251,7 +251,8 @@ final readonly class WeekGrid
 
     /**
      * La única parada de tabulación de la semana: la primera celda que coloca o la primera sesión que se abre y no
-     * queda bajo las celdas del grupo elegido (`covered`).
+     * queda bajo las celdas del grupo elegido (`covered`); si no hay ninguna, la primera celda que no se puede
+     * (`blocked`, que también recorren las flechas para leer su motivo), así Tab siempre entra a la semana.
      *
      * @param  array<int, list<array{id: string, open: bool, covered?: bool}>>  $laid
      * @param  array<int, list<array{key: string, state: string}>>|null  $cells
@@ -272,7 +273,9 @@ final readonly class WeekGrid
             }
         }
 
-        return null;
+        $blocked = $canPlace ? array_find(array_merge(...array_values($cells ?? [])), fn (array $cell): bool => $cell['state'] === 'blocked') : null;
+
+        return $blocked === null ? null : 'cell:'.$blocked['key'];
     }
 
     /**

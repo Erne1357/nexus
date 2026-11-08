@@ -1,7 +1,7 @@
 {{--
     La semana (DESIGN.md, "Cuadrícula día x hora" y "Editor de horarios"), desde 768 px: una columna por día del perfil
     del campus, tan ancha como sus carriles (`--cols`), y un renglón de 3.25rem por bloque. Cada carril mide al menos
-    `--lane` (un día sin sesiones, un carril), así «CLAVE · grupo» se lee aunque el día tenga varios carriles; lo que
+    `--lane-min` (un día sin sesiones, un carril; `--lane` es el carril de cada sesión), así «CLAVE · grupo» se lee aunque el día tenga varios carriles; lo que
     no cabe se ve desplazando de lado la caja (nunca la página), que mide a lo más el alto de la ventana bajo la banda.
     Al desplazarla, la columna de horas y el encabezado de los días (su nombre y sus horas ocupadas) se quedan pegados,
     y `scroll-padding` deja lo que toma el foco fuera de ellos. Cada columna lleva sus renglones (o, con un grupo
@@ -11,7 +11,8 @@
     Con un grupo elegido cada celda dice si cabe (`fits`, `success/15` y «+»), si choca con una regla que se guarda
     marcada (`clash`, rayas `error` con su regla) o si no se puede (`blocked`, HC-01 o HC-02: rayas neutras). Quien
     puede acomodar el grupo coloca tocando una celda que cabe o choca; la que no se puede es un botón deshabilitado
-    (`aria-disabled`) que las flechas también recorren. El motivo de las que chocan o no se pueden va en
+    (`aria-disabled`) que las flechas también recorren y que deja pasar los clics a la sesión de abajo, salvo su
+    marca (la regla y el icono, `data-why-target`), que muestra el motivo bajo el puntero. El motivo de las que chocan o no se pueden va en
     `aria-describedby` y, con el foco o bajo el puntero, en un aviso junto a la celda (`data-why`, `explain()` de
     `scheduleEditor`). Quien no acomoda el grupo ve lo mismo sin botones, con el motivo para lectores de pantalla y sin
     tapar los clics a las sesiones (`pointer-events-none`). Las celdas van sobre las sesiones de los demás grupos, que se atenúan; las del grupo
@@ -23,8 +24,8 @@
     $headBg = 'bg-[color-mix(in_oklab,var(--color-secondary)_40%,var(--color-base-100))]';
 @endphp
 <div id="editor-week" tabindex="-1" x-on:scroll="placeTip()" class="max-h-[calc(100dvh-var(--shell-top)-2rem)] scroll-pt-13 scroll-ps-13 overflow-auto rounded-box [scrollbar-color:var(--color-base-300)_transparent] [scrollbar-width:thin] border border-base-300 bg-base-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary max-md:hidden" data-testid="week">
-    <div class="grid min-w-[calc(3.25rem+var(--units)*var(--lane))] grid-cols-[3.25rem_var(--cols)] select-none [--lane:7rem]"
-        style="--cols: {{ implode(' ', array_map(fn (int $lanes): string => "minmax(calc({$lanes}*var(--lane)),{$lanes}fr)", $lanes)) }}; --units: {{ array_sum($lanes) }}"
+    <div class="grid min-w-[calc(3.25rem+var(--units)*var(--lane-min))] grid-cols-[3.25rem_var(--cols)] select-none [--lane-min:7rem]"
+        style="--cols: {{ implode(' ', array_map(fn (int $lanes): string => "minmax(calc({$lanes}*var(--lane-min)),{$lanes}fr)", $lanes)) }}; --units: {{ array_sum($lanes) }}"
         role="group" aria-label="Semana de {{ $grid->days[0]['name'] ?? '' }} a {{ mb_strtolower(array_last($grid->days)['name'] ?? '') }}"
         x-on:keydown="key($event)" x-on:focusin="rove($event); explain($event)" x-on:focusout="explain({ target: $event.relatedTarget ?? document.body })"
         x-on:mouseover="explain($event)" x-on:mouseleave="explain({ target: document.activeElement })">
@@ -60,7 +61,7 @@
                                 $fills[$cell['state']],
                                 $canPlace ? 'w-[calc(100%-2px)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary' : '',
                                 $canPlace && $cell['state'] !== 'blocked' ? 'cursor-pointer hover:brightness-95' : '',
-                                $canPlace && $cell['state'] === 'blocked' ? 'cursor-not-allowed' : '',
+                                $canPlace && $cell['state'] === 'blocked' ? 'pointer-events-none' : '',
                                 $cell['state'] === 'fits' && $canPlace ? 'hover:bg-success/30' : '',
                             ];
                         @endphp
@@ -83,8 +84,10 @@
                             @if ($cell['state'] === 'fits')
                                 <x-icon name="o-plus" class="h-4 w-4" aria-hidden="true" />
                             @else
-                                <span aria-hidden="true">{{ implode(' ', $cell['rules']) }}</span>
-                                <x-icon :name="$cell['state'] === 'clash' ? 'o-exclamation-triangle' : 'o-no-symbol'" class="h-4 w-4 shrink-0" aria-hidden="true" />
+                                <span @class(['inline-flex items-center gap-1', 'pointer-events-auto cursor-not-allowed' => $canPlace && $cell['state'] === 'blocked']) @if ($canPlace && $cell['state'] === 'blocked') data-why-target @endif aria-hidden="true">
+                                    {{ implode(' ', $cell['rules']) }}
+                                    <x-icon :name="$cell['state'] === 'clash' ? 'o-exclamation-triangle' : 'o-no-symbol'" class="h-4 w-4 shrink-0" />
+                                </span>
                             @endif
                         @if ($canPlace)
                             </button>
