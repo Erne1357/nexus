@@ -8,18 +8,20 @@ use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Scheduling\Rules\TeacherHourLimit;
 use App\Modules\Scheduling\Validation\Minutes;
+use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
-use App\Modules\Staffing\Rules\TravelGap;
+use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Support\SessionLabels;
 
 /**
  * «Mi carga» (tarea 3.10): los grupos no cancelados del docente en el periodo, de todos los campus, acomodados por día
  * (lunes a viernes; el sábado solo si tiene sesiones ese día) con los huecos y los traslados entre campus de una
  * sesión a la siguiente, y la cuenta de sus horas (la misma de HC-08, TeacherHourLimit). Un traslado lleva sus minutos
- * libres y si son menos de los que pide SC-09 (TravelGap); entonces no se marca aparte el hueco. Un número constante
- * de consultas.
+ * libres y si el validador lo avisa por SC-09 (CampusTravel, en Scheduling); entonces no se marca aparte el hueco. Un
+ * número constante de consultas.
  */
 final class MyLoadQuery
 {
@@ -52,8 +54,11 @@ final class MyLoadQuery
             }
         }
 
+        // El validador es scoped y guarda la foto que ya leyó en la petición: se olvida para leer la de ahora.
+        $this->validator->forget();
+        $tight = self::tightTransfers($this->validator->validateTeacher($teacher, $term)->forRule('SC-09'));
+        $state = $this->validator->stateFor($term->id, null);
         $days = [];
-        $travel = TravelGap::fromSettings();
 
         foreach (SessionLabels::DAY_NAMES as $number => $name) {
             if ($number === 6 && ! isset($blocks[6])) {
@@ -64,9 +69,13 @@ final class MyLoadQuery
 
             foreach ($day as $index => &$block) {
                 $previous = $day[$index - 1] ?? null;
-                $transfer = $previous === null ? null : $travel->between($previous['campus_code'], $previous['end'], $block['campus_code'], $block['start']);
-                $block['transfer'] = $transfer === null ? null : ['from' => $previous['campus_code'], ...$transfer];
-                $block['gap'] = $transfer === null && $previous !== null && $block['start'] > $previous['end'] ? $block['start'] - $previous['end'] : null;
+                $moves = $previous !== null && $previous['campus_code'] !== $block['campus_code'];
+                $block['transfer'] = $moves ? [
+                    'from' => $previous['campus_code'],
+                    'free_minutes' => $block['start'] - $previous['end'],
+                    'short' => isset($tight[$previous['session_id'].'|'.$block['session_id']]),
+                ] : null;
+                $block['gap'] = ! $moves && $previous !== null && $block['start'] > $previous['end'] ? $block['start'] - $previous['end'] : null;
             }
             unset($block);
 
@@ -88,8 +97,8 @@ final class MyLoadQuery
             ])->all(),
             'days' => $days,
             'home' => $groups->countBy(fn (Group $group): string => $group->campus->code)->sortDesc()->keys()->first(),
-            'travel_minutes' => $travel->minimumMinutes,
-            'hours' => $this->hours($teacher, $term),
+            'travel_minutes' => (int) $state->setting('staffing.min_campus_travel_minutes', CampusTravel::DEFAULT_MINUTES),
+            'hours' => $this->hours($teacher, $term, $state),
         ];
     }
 
@@ -99,6 +108,7 @@ final class MyLoadQuery
     private static function block(Group $group, GroupSession $session): array
     {
         return [
+            'session_id' => $session->id,
             'group_id' => $group->id,
             'group_code' => $group->code,
             'subject_name' => $group->subject->name,
@@ -114,14 +124,29 @@ final class MyLoadQuery
     }
 
     /**
+     * Los traslados que SC-09 avisa, como «sesión anterior|sesión siguiente»: el aviso sale en los dos grupos, con las
+     * sesiones al revés en cada uno, y se guardan las dos llaves.
+     *
+     * @param  list<Violation>  $warnings
+     * @return array<string, true>
+     */
+    private static function tightTransfers(array $warnings): array
+    {
+        $tight = [];
+
+        foreach ($warnings as $warning) {
+            $tight[$warning->related['session_id'].'|'.$warning->related['other_session_id']] = true;
+            $tight[$warning->related['other_session_id'].'|'.$warning->related['session_id']] = true;
+        }
+
+        return $tight;
+    }
+
+    /**
      * @return array{base: int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, sources: list<array{source: string, hours: int}>}
      */
-    private function hours(Teacher $teacher, Term $term): array
+    private function hours(Teacher $teacher, Term $term, ScheduleState $state): array
     {
-        // El validador es scoped y guarda la foto que ya leyó en la petición: se olvida para leer la de ahora.
-        $this->validator->forget();
-        $state = $this->validator->stateFor($term->id, null);
-
         // La foto solo trae a los docentes con grupos activos: sin ellos, se completa para mostrar base y externas.
         if ($state->teacher($teacher->id) === null) {
             $state = $state->withTeachers($this->states->teachers($term, [$teacher->id]));
