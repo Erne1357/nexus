@@ -18,7 +18,7 @@ use Illuminate\Validation\ValidationException;
  * El jefe de la carrera de otro departamento acepta el cupo que le propusieron en un grupo (reglas-de-negocio.md,
  * "Cupos por carrera" y "Acuerdos entre departamentos"; HC-07). AcademicLoad no ve grupos: esta Action orquesta
  * AcceptAgreement y el cupo en una misma transacción, con el grupo bloqueado. Acepta el acuerdo (que exige que siga
- * propuesto), revisa HC-07 con los lugares del acuerdo (sobre `max_seats`; al aceptar se revisa otra vez porque los
+ * propuesto), revisa HC-07 con los lugares del acuerdo (sobre `max_seats`, también cuando lo dice la base; al aceptar se revisa otra vez porque los
  * propuestos no contaban; supuesto por confirmar) y crea el cupo de la carrera con los lugares acordados. Si algo
  * falla, el acuerdo queda propuesto. Deja bitácora `quotas_updated` en el grupo y avisa con GroupQuotasChanged después
  * del commit. Quién puede lo decide InterdepartmentalAgreementPolicy antes de llamarla.
@@ -42,6 +42,12 @@ final class AcceptSharedGroup
         try {
             return DB::transaction(function () use ($agreement, $actor): GroupQuota {
                 $group = Group::query()->lockForUpdate()->findOrFail($agreement->group_id);
+
+                $this->rules->ensureEditable($group);
+
+                if (GroupQuota::query()->where('group_id', $group->id)->where('career_id', $agreement->career_id)->exists()) {
+                    throw ValidationException::withMessages(['career_id' => 'La carrera ya tiene cupo en este grupo.']);
+                }
 
                 $this->accept->handle($agreement, $actor);
 
@@ -68,7 +74,7 @@ final class AcceptSharedGroup
                 return $quota;
             });
         } catch (QueryException $e) {
-            throw $this->rules->fromDatabase($e) ?? $e;
+            throw $this->rules->fromDatabase($e, 'max_seats') ?? $this->rules->fromUnique($e) ?? $e;
         }
     }
 }

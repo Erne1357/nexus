@@ -5,12 +5,8 @@ namespace App\Modules\Scheduling\Actions\Quotas;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Agreements\CancelAgreement;
-use App\Modules\AcademicLoad\Actions\Agreements\ProposeSharedGroup;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
-use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
-use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Events\GroupQuotasChanged;
 use App\Modules\Scheduling\Models\Group;
@@ -26,13 +22,16 @@ use Illuminate\Validation\ValidationException;
  * carrera"; HC-07). Recibe `[careerId => lugares]` con todas las carreras que deben quedar: la dueña siempre (no se
  * quita) y cada cupo de 1 a 999 lugares. Quien puede lo decide GroupPolicy::manageQuotas antes de llamarla.
  *
- * - La dueña y las carreras del departamento que imparte se crean, cambian o quitan directo.
- * - Una carrera de otro departamento que ya tiene cupo (aceptado antes) cambia sus lugares directo y, si deja de
- *   venir, su cupo se borra y su acuerdo se cancela (supuesto por confirmar). Si no tiene cupo, se propone con
- *   ProposeSharedGroup: queda «Propuesto» y no cuenta hasta que su jefe lo acepta (AcceptSharedGroup). Un propuesto
- *   con otros lugares se cancela y se propone de nuevo; uno que deja de venir se cancela.
- * - HC-07: la suma de los cupos que quedan (sin los propuestos) no pasa la capacidad; se revisa antes de escribir y
- *   también se traduce el rechazo del trigger de la base. Las bajas y bajadas de lugares se escriben primero.
+ * Solo maneja cupos que ya existen y carreras del mismo departamento que imparte (que además deben estar activas y
+ * ofrecerse en el campus del grupo): se crean, cambian o quitan directo. Una carrera de otro departamento sin cupo no
+ * se agrega aquí, sino que se propone con ProposeGroupQuota (error `quotas.<id>`: «Propón primero el cupo a
+ * <depto>.»). Si de otro departamento ya tiene cupo, cambia sus lugares directo y, si deja de venir, su cupo se borra
+ * y su acuerdo aceptado se cancela (supuesto por confirmar). Las propuestas no se tocan: se retiran con
+ * WithdrawGroupQuotaProposal.
+ *
+ * HC-07: la suma de los cupos que quedan no pasa la capacidad; se revisa antes de escribir y también se traduce el
+ * rechazo del trigger de la base. Las bajas y bajadas de lugares se escriben primero. No edita un grupo cancelado ni
+ * con la carga fuera de proposed, staffing o adjusting (QuotaRules::ensureEditable).
  *
  * En una transacción, con el grupo bloqueado. Deja bitácora `quotas_updated` en el grupo (cupos antes y después) y,
  * después del commit, avisa con GroupQuotasChanged; sin cambios no escribe ni avisa.
@@ -41,7 +40,6 @@ final class SetGroupQuotas
 {
     public function __construct(
         private readonly QuotaRules $rules,
-        private readonly ProposeSharedGroup $propose,
         private readonly CancelAgreement $cancel,
     ) {}
 
@@ -57,22 +55,31 @@ final class SetGroupQuotas
         try {
             DB::transaction(function () use ($group, $seatsByCareer, $careers, $actor): void {
                 $group = Group::query()->lockForUpdate()->findOrFail($group->getKey());
+                $this->rules->ensureEditable($group);
 
                 $quotas = GroupQuota::query()->where('group_id', $group->id)->get()->keyBy('career_id');
-                $agreements = InterdepartmentalAgreement::query()
+                $accepted = InterdepartmentalAgreement::query()
                     ->where('kind', AgreementKind::SharedGroup->value)
                     ->where('group_id', $group->id)
                     ->live()
+                    ->whereIn('career_id', $quotas->keys()->all())
                     ->get()
                     ->keyBy('career_id');
 
-                $plan = $this->plan($group, $seatsByCareer, $careers, $quotas, $agreements);
-                $this->rules->ensureWithinCapacity(array_sum($plan['after']), $group->capacity);
+                $this->ensureReachable($group, $seatsByCareer, $careers, $quotas);
+                $this->rules->ensureWithinCapacity(array_sum($seatsByCareer), $group->capacity);
 
                 $before = $quotas->map(fn (GroupQuota $quota): int => $quota->max_seats)->all();
-                $proposalsChanged = $this->write($group, $plan, $quotas, $agreements, $careers, $actor);
 
-                if ($before == $plan['after'] && ! $proposalsChanged) {
+                foreach ($accepted as $careerId => $agreement) {
+                    if (! array_key_exists($careerId, $seatsByCareer)) {
+                        $this->cancel->handle($agreement, $actor);
+                    }
+                }
+
+                $this->write($group, $seatsByCareer, $quotas);
+
+                if ($before == $seatsByCareer) {
                     return;
                 }
 
@@ -80,7 +87,7 @@ final class SetGroupQuotas
                     ->performedOn($group)
                     ->causedBy($actor)
                     ->event('quotas_updated')
-                    ->withChanges(['old' => ['quotas' => $before], 'attributes' => ['quotas' => $plan['after']]])
+                    ->withChanges(['old' => ['quotas' => $before], 'attributes' => ['quotas' => $seatsByCareer]])
                     ->log('Repartió los cupos por carrera del grupo');
 
                 GroupQuotasChanged::dispatch($group);
@@ -126,100 +133,60 @@ final class SetGroupQuotas
     }
 
     /**
-     * Qué cupos quedan (`after`: sin los propuestos), cuáles se proponen y cuáles acuerdos se cancelan.
+     * Una carrera sin cupo solo entra si es del departamento que imparte y se ofrece en el campus; la de otro
+     * departamento se propone primero.
      *
      * @param  array<string, int>  $seatsByCareer
      * @param  Collection<string, Career>  $careers
      * @param  Collection<string, GroupQuota>  $quotas
-     * @param  Collection<string, InterdepartmentalAgreement>  $agreements
-     * @return array{after: array<string, int>, propose: array<string, int>, cancel: list<string>}
+     *
+     * @throws ValidationException
      */
-    private function plan(Group $group, array $seatsByCareer, $careers, $quotas, $agreements): array
+    private function ensureReachable(Group $group, array $seatsByCareer, Collection $careers, Collection $quotas): void
     {
-        $after = [];
-        $propose = [];
-        $cancel = [];
-
-        foreach ($seatsByCareer as $careerId => $seats) {
-            $direct = $careerId === $group->owner_career_id
-                || $quotas->has($careerId)
-                || $careers[$careerId]->department_id === $group->department_id;
-
-            if ($direct) {
-                $after[$careerId] = $seats;
-
+        foreach (array_keys($seatsByCareer) as $careerId) {
+            if ($quotas->has($careerId)) {
                 continue;
             }
 
-            $live = $agreements->get($careerId);
+            $career = $careers[$careerId];
 
-            if ($live?->status === AgreementStatus::Proposed && $live->max_seats !== $seats) {
-                $cancel[] = $careerId;
-                $propose[$careerId] = $seats;
-            } elseif ($live === null) {
-                $propose[$careerId] = $seats;
+            if ($career->department_id !== $group->department_id) {
+                $department = Department::withTrashed()->find($career->department_id)?->name;
+
+                throw ValidationException::withMessages(["quotas.{$careerId}" => "Propón primero el cupo a {$department}."]);
             }
-        }
 
-        foreach ($agreements as $careerId => $agreement) {
-            if (! array_key_exists($careerId, $seatsByCareer)) {
-                $cancel[] = $careerId;
-            }
+            $this->rules->ensureOffered($career, $group);
         }
-
-        foreach ($quotas as $careerId => $quota) {
-            if (! array_key_exists($careerId, $seatsByCareer) && $agreements->has($careerId) && ! in_array($careerId, $cancel, true)) {
-                $cancel[] = $careerId;
-            }
-        }
-
-        return ['after' => $after, 'propose' => $propose, 'cancel' => $cancel];
     }
 
     /**
-     * Escribe el plan: cancela, borra, baja, sube, crea y propone, en ese orden para que ninguna suma intermedia
-     * pase la capacidad. Dice si cambió alguna propuesta.
+     * Borra, baja, sube y crea, en ese orden para que ninguna suma intermedia pase la capacidad.
      *
-     * @param  array{after: array<string, int>, propose: array<string, int>, cancel: list<string>}  $plan
+     * @param  array<string, int>  $after
      * @param  Collection<string, GroupQuota>  $quotas
-     * @param  Collection<string, InterdepartmentalAgreement>  $agreements
-     * @param  Collection<string, Career>  $careers
      */
-    private function write(Group $group, array $plan, $quotas, $agreements, $careers, User $actor): bool
+    private function write(Group $group, array $after, Collection $quotas): void
     {
-        foreach ($plan['cancel'] as $careerId) {
-            $this->cancel->handle($agreements[$careerId], $actor);
-        }
-
         foreach ($quotas as $careerId => $quota) {
-            if (! array_key_exists($careerId, $plan['after'])) {
+            if (! array_key_exists($careerId, $after)) {
                 $quota->delete();
             }
         }
 
-        $changes = collect($plan['after'])->filter(fn (int $seats, string $careerId): bool => $quotas->has($careerId) && $quotas[$careerId]->max_seats !== $seats)
+        $changes = collect($after)
+            ->filter(fn (int $seats, string $careerId): bool => $quotas->has($careerId) && $quotas[$careerId]->max_seats !== $seats)
             ->sortBy(fn (int $seats, string $careerId): int => $seats - $quotas[$careerId]->max_seats);
 
         foreach ($changes as $careerId => $seats) {
             $quotas[$careerId]->update(['max_seats' => $seats]);
         }
 
-        foreach ($plan['after'] as $careerId => $seats) {
+        foreach ($after as $careerId => $seats) {
             if (! $quotas->has($careerId)) {
                 GroupQuota::query()->create(['group_id' => $group->id, 'career_id' => $careerId, 'max_seats' => $seats, 'is_owner' => false]);
             }
         }
-
-        if ($plan['propose'] !== []) {
-            $term = Term::query()->findOrFail($group->term_id);
-            $campus = Campus::query()->findOrFail($group->campus_id);
-            $from = Department::withTrashed()->findOrFail($group->department_id);
-
-            foreach ($plan['propose'] as $careerId => $seats) {
-                $this->propose->handle($term, $campus, $from, $group->id, $careers[$careerId], $seats, $actor);
-            }
-        }
-
-        return $plan['propose'] !== [] || $plan['cancel'] !== [];
     }
 }

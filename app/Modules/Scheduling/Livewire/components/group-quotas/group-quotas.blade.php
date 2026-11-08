@@ -10,6 +10,15 @@
 <section aria-labelledby="quotas-title-{{ $groupId }}" class="grid gap-3" data-testid="group-quotas">
     <h3 id="quotas-title-{{ $groupId }}" class="text-base font-semibold">Cupos por carrera</h3>
 
+    @php($alerts = collect($errors->getBag('default')->toArray())->except(['newCareer', 'newSeats'])->flatten()->unique()->values())
+    @if ($alerts->isNotEmpty())
+        <div role="alert" class="grid gap-1 rounded-field border border-error/40 bg-error/10 px-3 py-2 text-sm" data-testid="quotas-error">
+            @foreach ($alerts as $message)
+                <span class="flex items-start gap-2"><x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0 text-error" aria-hidden="true" />{{ $message }}</span>
+            @endforeach
+        </div>
+    @endif
+
     @php($shared = min(100, $capacity > 0 ? $counted / $capacity * 100 : 0))
     @php($pending = min(100 - $shared, $capacity > 0 ? $proposed / $capacity * 100 : 0))
     <div class="flex h-2.5 overflow-hidden rounded-full border border-base-300 bg-base-200" role="meter" aria-valuemin="0" aria-valuemax="{{ $capacity }}" aria-valuenow="{{ $counted }}" aria-label="Lugares repartidos">
@@ -23,15 +32,11 @@
         @endif
     </div>
 
+
     @if ($over > 0)
         <div role="alert" class="flex items-start gap-2 rounded-field border border-error/40 bg-error/10 px-3 py-2 text-sm text-error" data-testid="quotas-over">
             <x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <span class="text-base-content"><b class="font-mono">HC-07</b> La suma de lugares por carrera no puede pasar la capacidad del grupo (<span class="font-mono">{{ $capacity }}</span>). Quita <span class="font-mono">{{ $over }}</span> lugares.</span>
-        </div>
-    @elseif ($errors->has('quotas'))
-        <div role="alert" class="flex items-start gap-2 rounded-field border border-error/40 bg-error/10 px-3 py-2 text-sm text-error" data-testid="quotas-error">
-            <x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span class="text-base-content">{{ $errors->first('quotas') }}</span>
         </div>
     @endif
 
@@ -67,6 +72,9 @@
                     @elseif ($proposedRow)
                         <x-core::status-badge tone="warning" label="Propuesto" />
                         <small>Espera al jefe de {{ $row['decides']['name'] }}. Todavía no cuenta.</small>
+                        @if ($row['edited'] && $canManage)
+                            <button type="button" wire:click="changeProposal('{{ $row['career_id'] }}')" class="btn btn-xs btn-outline">Cambiar lugares (se propone de nuevo)</button>
+                        @endif
                     @else
                         <x-core::status-badge tone="draft" label="Sin guardar" />
                     @endif

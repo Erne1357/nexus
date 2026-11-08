@@ -4,9 +4,12 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\Quotas\AcceptSharedGroup;
+use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupQuotasChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
@@ -102,4 +105,46 @@ it('avisa con GroupQuotasChanged solo después del commit', function () {
 
     app(AcceptSharedGroup::class)->handle($agreement->fresh(), $this->actor);
     Event::assertDispatched(GroupQuotasChanged::class, fn (GroupQuotasChanged $event): bool => $event->group->is($this->group));
+});
+
+it('no acepta si la carrera ya tiene cupo en el grupo', function () {
+    GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $this->foreign->id, 'max_seats' => 3]);
+    $agreement = proposedFor(8);
+
+    try {
+        app(AcceptSharedGroup::class)->handle($agreement, $this->actor);
+        $errors = null;
+    } catch (ValidationException $e) {
+        $errors = $e->errors();
+    }
+
+    expect($errors)->toBe(['career_id' => ['La carrera ya tiene cupo en este grupo.']])
+        ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed);
+});
+
+it('HC-07: si lo dice la base, el error también sale en max_seats', function () {
+    $other = Career::factory()->create(['department_id' => $this->imparte->id]);
+    GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $other->id, 'max_seats' => 5]);
+    GroupQuota::addGlobalScope('hide', fn ($query) => $query->where('is_owner', true));
+    $agreement = proposedFor(8);
+
+    try {
+        expect(fn () => app(AcceptSharedGroup::class)->handle($agreement, $this->actor))
+            ->toThrow(fn (ValidationException $e) => expect(array_keys($e->errors()))->toBe(['max_seats']));
+    } finally {
+        GroupQuota::clearBootedModels();
+    }
+});
+
+it('no acepta en un grupo cancelado ni con la carga fuera de proposed, staffing o adjusting', function () {
+    $agreement = proposedFor(8);
+    $this->group->update(['status' => GroupStatus::Cancelled]);
+
+    expect(fn () => app(AcceptSharedGroup::class)->handle($agreement, $this->actor))->toThrow(ValidationException::class, 'cancelado')
+        ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed);
+
+    $this->group->update(['status' => GroupStatus::Planned]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+
+    expect(fn () => app(AcceptSharedGroup::class)->handle($agreement, $this->actor))->toThrow(ValidationException::class, 'no se editan cupos.');
 });

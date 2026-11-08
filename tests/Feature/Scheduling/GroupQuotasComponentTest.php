@@ -5,6 +5,8 @@ use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -90,18 +92,61 @@ it('proponer a otra carrera de otro departamento crea el acuerdo y la muestra «
         ->and(GroupQuota::query()->where('group_id', $this->group->id)->count())->toBe(1);
 });
 
-it('quitar un propuesto y guardar cancela su acuerdo', function () {
-    InterdepartmentalAgreement::factory()->sharedGroup(5)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
-        'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $this->foreign->id,
+function proposedForeign(object $test, int $seats = 5): InterdepartmentalAgreement
+{
+    return InterdepartmentalAgreement::factory()->sharedGroup($seats)->create([
+        'term_id' => $test->group->term_id, 'campus_id' => $test->group->campus_id, 'group_id' => $test->group->id,
+        'from_department_id' => $test->imparte->id, 'to_department_id' => $test->otro->id, 'career_id' => $test->foreign->id,
     ]);
+}
+
+it('quitar un propuesto retira su acuerdo al instante', function () {
+    proposedForeign($this);
 
     quotasAs($this->jefe, $this->group)
         ->call('removeCareer', $this->foreign->id)
-        ->call('save')
-        ->assertHasNoErrors();
+        ->assertHasNoErrors()
+        ->assertDispatched('quotas-saved')
+        ->assertDontSee('Propuesto');
 
     expect(InterdepartmentalAgreement::query()->sole()->status)->toBe(AgreementStatus::Cancelled);
+});
+
+it('cambiar los lugares de un propuesto lo retira y lo propone de nuevo solo al pedirlo en su renglón', function () {
+    $old = proposedForeign($this);
+
+    quotasAs($this->jefe, $this->group)
+        ->set('quotas.'.$this->foreign->id, 9)
+        ->assertSee('Cambiar lugares')
+        ->call('changeProposal', $this->foreign->id)
+        ->assertHasNoErrors()
+        ->assertDispatched('quotas-saved');
+
+    $live = InterdepartmentalAgreement::query()->live()->sole();
+    expect($old->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and($live->max_seats)->toBe(9);
+});
+
+it('un borrador viejo no vuelve a proponer un acuerdo que ya no está vivo: pide proponerlo primero', function () {
+    $agreement = proposedForeign($this);
+    $component = quotasAs($this->jefe, $this->group);
+
+    $agreement->update(['status' => AgreementStatus::Rejected, 'comment' => 'No', 'decided_by' => $this->jefe->id, 'decided_at' => now()]);
+    $component->set('quotas.'.$this->owner->id, 22)->call('save')->assertHasErrors('quotas.'.$this->foreign->id);
+
+    expect(InterdepartmentalAgreement::query()->live()->count())->toBe(0)
+        ->and(GroupQuota::query()->sole()->max_seats)->toBe(20);
+});
+
+it('muestra arriba los errores de cualquier llave que regrese una Action', function () {
+    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+
+    quotasAs($this->jefe, $this->group)
+        ->set('newCareer', $this->foreign->id)
+        ->set('newSeats', 4)
+        ->call('addCareer')
+        ->assertSeeHtml('data-testid="quotas-error"')
+        ->assertSee('no se editan cupos.');
 });
 
 it('HC-07: si los lugares pasan la capacidad, el error sale junto a los cupos y no guarda', function () {

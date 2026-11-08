@@ -1,10 +1,15 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Scheduling\Actions\Quotas\ProposeGroupQuota;
 use App\Modules\Scheduling\Actions\Quotas\SetGroupQuotas;
+use App\Modules\Scheduling\Actions\Quotas\WithdrawGroupQuotaProposal;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\GroupQuotasQuery;
 use App\Modules\Scheduling\Rules\QuotaRules;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -15,7 +20,9 @@ use Mary\Traits\Toast;
  * estado `#grupo`): un renglón por carrera con su clave en Mono, su nombre, sus lugares y su estado («Dueña», que no
  * se quita; «Aceptado»; «Propuesto · espera al jefe de <depto>», que todavía no cuenta), la barra «N de M lugares
  * repartidos» con los propuestos aparte, el error HC-07 si se pasa, «Agregar carrera» (con «Proponer a <depto>» si la
- * carrera es de otro departamento, que crea el acuerdo al instante) y «Guardar cupos» (SetGroupQuotas).
+ * carrera es de otro departamento, que propone al instante con ProposeGroupQuota; quitar un «Propuesto» lo retira al
+ * instante y «Cambiar lugares» lo retira y lo propone de nuevo, solo cuando se pide en su renglón) y «Guardar cupos»
+ * (SetGroupQuotas, que no toca las propuestas). Los errores de cualquier llave de una Action salen en un aviso arriba.
  *
  * Lo edita quien reparte cupos (GroupPolicy::manageQuotas: el jefe del departamento que imparte); quien solo ve el
  * grupo lo ve igual, de solo lectura, con «Guardar cupos» deshabilitado y su motivo escrito (DESIGN.md, «Nada oculto
@@ -38,33 +45,37 @@ new class extends Component
 
     public int|string|null $newSeats = null;
 
-    public function mount(string $groupId, GroupQuotasQuery $query): void
+    /** El grupo y lo que dice la Query, leídos una vez por petición; se sueltan después de escribir. */
+    protected ?Group $loadedGroup = null;
+
+    /** @var array<string, mixed>|null */
+    protected ?array $loaded = null;
+
+    public function mount(string $groupId): void
     {
         $this->groupId = $groupId;
         $this->authorize('view', $this->group());
 
-        $this->quotas = $this->persisted($query);
+        $this->quotas = $this->persisted();
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function with(GroupQuotasQuery $query): array
+    public function with(): array
     {
         $group = $this->group();
         $this->authorize('view', $group);
 
-        $data = $query->for($group);
+        $data = $this->data();
         $rows = [];
         $counted = 0;
         $proposed = 0;
 
         foreach ($data['rows'] as $row) {
-            if (! array_key_exists($row['career_id'], $this->quotas)) {
-                continue;
+            if (array_key_exists($row['career_id'], $this->quotas)) {
+                $rows[] = $row;
             }
-
-            $rows[] = $row;
         }
 
         $present = array_column($rows, 'career_id');
@@ -75,8 +86,9 @@ new class extends Component
             }
         }
 
-        foreach ($rows as $row) {
+        foreach ($rows as $index => $row) {
             $seats = $this->seatsOf($row['career_id']);
+            $rows[$index]['edited'] = $row['state'] === 'proposed' && $seats !== $row['seats'] && $seats > 0;
 
             if ($row['state'] === 'proposed') {
                 $proposed += $seats;
@@ -86,8 +98,6 @@ new class extends Component
         }
 
         $addable = array_values(array_filter($data['addable'], fn (array $career): bool => ! array_key_exists($career['id'], $this->quotas)));
-        $selected = collect($addable)->firstWhere('id', $this->newCareer);
-        $over = $counted - $data['capacity'];
         $canManage = $this->can('manageQuotas', $group);
 
         return [
@@ -95,18 +105,20 @@ new class extends Component
             'capacity' => $data['capacity'],
             'counted' => $counted,
             'proposed' => $proposed,
-            'over' => $over,
-            'department' => $data['department'],
+            'over' => $counted - $data['capacity'],
             'options' => array_map(fn (array $career): array => ['id' => $career['id'], 'label' => $career['code'].' · '.$career['name']], $addable),
             'hasAddable' => $addable !== [],
-            'selected' => $selected,
+            'selected' => collect($addable)->firstWhere('id', $this->newCareer),
             'canManage' => $canManage,
             'reason' => $canManage ? null : "Los cupos los reparte el jefe de {$data['department']['name']}.",
             'maxSeats' => QuotaRules::MAX_SEATS,
         ];
     }
 
-    public function removeCareer(string $careerId): void
+    /**
+     * Quita un renglón del borrador; si es una propuesta, la retira al instante (WithdrawGroupQuotaProposal).
+     */
+    public function removeCareer(string $careerId, WithdrawGroupQuotaProposal $withdraw): void
     {
         $group = $this->group();
         $this->authorize('manageQuotas', $group);
@@ -117,28 +129,66 @@ new class extends Component
             return;
         }
 
+        $row = $this->rowOf($careerId);
+
+        if ($row !== null && $row['state'] === 'proposed') {
+            $withdraw->handle($this->agreementOf($row), auth()->user());
+            $this->written();
+            $this->success('Propuesta retirada', e("{$row['code']} · {$row['name']}"));
+            $this->dispatch('quotas-saved', groupId: $group->id);
+        }
+
         unset($this->quotas[$careerId]);
         $this->resetErrorBag();
     }
 
     /**
-     * Una carrera del mismo departamento entra al borrador; una de otro departamento se propone al instante (con lo
-     * ya guardado, sin los cambios sin guardar).
+     * Cambiar los lugares de una propuesta es retirarla y proponerla de nuevo, y solo se hace cuando se pide en su
+     * renglón.
      */
-    public function addCareer(GroupQuotasQuery $query, SetGroupQuotas $set): void
+    public function changeProposal(string $careerId, WithdrawGroupQuotaProposal $withdraw, ProposeGroupQuota $propose): void
     {
         $group = $this->group();
         $this->authorize('manageQuotas', $group);
 
-        $data = $query->for($group);
-        $addable = collect($data['addable'])->keyBy('id');
+        $row = $this->rowOf($careerId);
+
+        if ($row === null || $row['state'] !== 'proposed') {
+            return;
+        }
+
+        $this->validate(["quotas.{$careerId}" => $this->seatRules()], ["quotas.{$careerId}.*" => $this->seatMessage()]);
+
+        $seats = (int) $this->quotas[$careerId];
+        $career = KeyLookup::findOrFail(Career::query(), $careerId);
+
+        DB::transaction(function () use ($withdraw, $propose, $row, $group, $career, $seats): void {
+            $withdraw->handle($this->agreementOf($row), auth()->user());
+            $propose->handle($group, $career, $seats, auth()->user());
+        });
+
+        $this->written();
+        $this->success('Propuesta cambiada', e("{$row['code']}: {$seats} lugares"));
+        $this->dispatch('quotas-saved', groupId: $group->id);
+    }
+
+    /**
+     * Una carrera del mismo departamento entra al borrador; una de otro departamento se propone al instante
+     * (ProposeGroupQuota), sin tocar el borrador.
+     */
+    public function addCareer(ProposeGroupQuota $propose): void
+    {
+        $group = $this->group();
+        $this->authorize('manageQuotas', $group);
+
+        $addable = collect($this->data()['addable'])->keyBy('id');
 
         $this->validate([
             'newCareer' => ['required', Rule::in($addable->keys()->all())],
-            'newSeats' => ['required', 'integer', 'min:1', 'max:'.QuotaRules::MAX_SEATS],
+            'newSeats' => $this->seatRules(),
         ], [
             'newCareer.*' => 'Elige una carrera.',
-            'newSeats.*' => 'Los lugares van de 1 a '.QuotaRules::MAX_SEATS.'.',
+            'newSeats.*' => $this->seatMessage(),
         ]);
 
         $seats = (int) $this->newSeats;
@@ -151,39 +201,29 @@ new class extends Component
             return;
         }
 
-        $saved = $this->persisted($query);
-        $set->handle($group, array_map('intval', $saved) + [$career['id'] => $seats], auth()->user());
+        $propose->handle($group, KeyLookup::findOrFail(Career::query(), $career['id']), $seats, auth()->user());
 
         $this->reset('newCareer', 'newSeats');
+        $this->written();
         $this->quotas[$career['id']] = $seats;
         $this->success('Propuesta enviada', e("Espera al jefe de {$career['department']['name']}."));
         $this->dispatch('quotas-saved', groupId: $group->id);
     }
 
-    public function save(SetGroupQuotas $set, GroupQuotasQuery $query): void
+    public function save(SetGroupQuotas $set): void
     {
         $group = $this->group();
         $this->authorize('manageQuotas', $group);
 
-        $this->validate(['quotas.*' => ['required', 'integer', 'min:1', 'max:'.QuotaRules::MAX_SEATS]], [
-            'quotas.*' => 'Los lugares van de 1 a '.QuotaRules::MAX_SEATS.'.',
-        ]);
+        $this->validate(['quotas.*' => $this->seatRules()], ['quotas.*' => $this->seatMessage()]);
 
-        $set->handle($group, array_map('intval', $this->quotas), auth()->user());
+        $proposed = collect($this->data()['rows'])->where('state', 'proposed')->pluck('career_id')->all();
+        $set->handle($group, array_map('intval', array_diff_key($this->quotas, array_flip($proposed))), auth()->user());
 
-        $this->quotas = $this->persisted($query);
+        $this->written();
+        $this->quotas = array_replace($this->persisted(), array_intersect_key($this->quotas, array_flip($proposed)));
         $this->success('Cupos guardados', e("Grupo {$group->code}"));
         $this->dispatch('quotas-saved', groupId: $group->id);
-    }
-
-    private function group(): Group
-    {
-        return KeyLookup::findOrFail(Group::query(), $this->groupId);
-    }
-
-    private function can(string $ability, Group $group): bool
-    {
-        return auth()->user()?->can($ability, $group) ?? false;
     }
 
     private function seatsOf(string $careerId): int
@@ -194,18 +234,66 @@ new class extends Component
     }
 
     /**
+     * @return array<string, mixed>|null
+     */
+    private function rowOf(string $careerId): ?array
+    {
+        return collect($this->data()['rows'])->firstWhere('career_id', $careerId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function agreementOf(array $row): InterdepartmentalAgreement
+    {
+        return KeyLookup::findOrFail(InterdepartmentalAgreement::query(), $row['agreement_id']);
+    }
+
+    /**
      * Lo guardado: los lugares de la dueña, los aceptados y los propuestos.
      *
      * @return array<string, int>
      */
-    private function persisted(GroupQuotasQuery $query): array
+    private function persisted(): array
     {
-        $seats = [];
+        return collect($this->data()['rows'])->pluck('seats', 'career_id')->all();
+    }
 
-        foreach ($query->for($this->group())['rows'] as $row) {
-            $seats[$row['career_id']] = $row['seats'];
-        }
+    private function group(): Group
+    {
+        return $this->loadedGroup ??= KeyLookup::findOrFail(Group::query(), $this->groupId);
+    }
 
-        return $seats;
+    /**
+     * @return array<string, mixed>
+     */
+    private function data(): array
+    {
+        return $this->loaded ??= app(GroupQuotasQuery::class)->for($this->group());
+    }
+
+    private function can(string $ability, Group $group): bool
+    {
+        return auth()->user()?->can($ability, $group) ?? false;
+    }
+
+    /** Después de escribir, lo leído ya no vale. */
+    private function written(): void
+    {
+        $this->loadedGroup = null;
+        $this->loaded = null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function seatRules(): array
+    {
+        return ['required', 'integer', 'min:1', 'max:'.QuotaRules::MAX_SEATS];
+    }
+
+    private function seatMessage(): string
+    {
+        return 'Los lugares van de 1 a '.QuotaRules::MAX_SEATS.'.';
     }
 };
