@@ -196,15 +196,50 @@ it('HC-10: cambiar a otro salón cancela el préstamo del anterior y pide el del
         ->and(InterdepartmentalAgreement::query()->where('room_id', $second->id)->sole()->status)->toBe(AgreementStatus::Proposed);
 });
 
-it('HC-10: si el salón ya está pedido para otro grupo a esa hora, no lo asigna', function () {
-    $foreign = assignRoomOf(['department_id' => $this->owner->id]);
-    InterdepartmentalAgreement::factory()->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => otherGroupOfAssign()->id, 'room_id' => $foreign->id,
-        'from_department_id' => $this->department->id, 'to_department_id' => $this->owner->id, 'day' => 2, 'starts_at' => '16:00', 'ends_at' => '17:00',
+/**
+ * Un préstamo vivo de otro grupo de la materia en el salón, el martes.
+ */
+function otherGroupLoanOfAssign(Room $room, string $startsAt, string $endsAt, AgreementStatus $status = AgreementStatus::Proposed): InterdepartmentalAgreement
+{
+    return InterdepartmentalAgreement::factory()->inStatus($status)->create([
+        'term_id' => test()->term->id, 'campus_id' => test()->campus->id, 'room_id' => $room->id,
+        'group_id' => otherGroupOfAssign(['code' => '3A', 'subject_id' => test()->subject->id])->id,
+        'from_department_id' => test()->department->id === $room->department_id ? test()->owner->id : test()->department->id,
+        'to_department_id' => $room->department_id, 'day' => 2, 'starts_at' => $startsAt, 'ends_at' => $endsAt,
     ]);
+}
 
-    expect(fn () => assignRoom($foreign))->toThrow(ValidationException::class, 'El salón ya está prestado o pedido a esa hora.')
+it('HC-10: si otro grupo ya tiene el salón pedido o prestado a esa hora, no lo asigna y dice para quién', function (AgreementStatus $status, string $message) {
+    $foreign = assignRoomOf(['code' => 'MM-L2', 'department_id' => $this->owner->id]);
+    otherGroupLoanOfAssign($foreign, '16:00', '17:00', $status);
+
+    expect(fn () => assignRoom($foreign))->toThrow(ValidationException::class, $message)
+        ->and($this->session->fresh()->room_id)->toBeNull()
+        ->and(InterdepartmentalAgreement::query()->where('group_id', $this->group->id)->count())->toBe(0);
+})->with([
+    'pedido' => [AgreementStatus::Proposed, 'El salón MM-L2 ya está pedido para Estructura de Datos, grupo 3A el martes de 16:00 a 17:00.'],
+    'prestado' => [AgreementStatus::Accepted, 'El salón MM-L2 ya está prestado a Estructura de Datos, grupo 3A el martes de 16:00 a 17:00.'],
+]);
+
+it('HC-10: tampoco asigna al departamento dueño un salón que prestó a otro grupo a esa hora', function () {
+    $own = assignRoomOf(['code' => 'SC-L1', 'department_id' => $this->department->id]);
+    otherGroupLoanOfAssign($own, '15:00', '16:00', AgreementStatus::Accepted);
+
+    expect(fn () => assignRoom($own))->toThrow(ValidationException::class, 'El salón SC-L1 ya está prestado a Estructura de Datos, grupo 3A')
         ->and($this->session->fresh()->room_id)->toBeNull();
+});
+
+it('HC-10: el hueco bloqueado de otra sesión del grupo en ese salón no detiene la asignación', function () {
+    $foreign = assignRoomOf(['code' => 'MM-L2', 'department_id' => $this->owner->id]);
+    GroupSession::factory()->for($this->group)->inRoom($foreign)->on(2, '10:00', '12:00')->create();
+    otherGroupLoanOfAssign($foreign, '10:00', '12:00');
+
+    $result = assignRoom($foreign);
+
+    expect($this->session->fresh()->room_id)->toBe($foreign->id)
+        ->and($result->loanRequested)->toBeTrue()
+        ->and($result->loanBlocked)->toBeTrue()
+        ->and(InterdepartmentalAgreement::query()->where('group_id', $this->group->id)->live()->pluck('starts_at')->all())->toBe(['15:00:00']);
 });
 
 it('rechaza un salón de otro campus o inactivo, sin escribir', function (Closure $room, string $message) {

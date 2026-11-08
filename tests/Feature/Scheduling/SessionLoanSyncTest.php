@@ -23,11 +23,11 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | SyncSessionLoans (tarea 3.7, HC-10): deja los préstamos de un grupo en un salón de otro departamento, en un día, al
-| tamaño de sus sesiones. Un aceptado se conserva mientras todas sus horas caigan en sesiones del grupo; si aparta horas
-| sin sesión se cancela y se pide de nuevo lo que sí se usa. Lo que no cubren los aceptados se pide; un propuesto exacto
-| se queda y uno que no coincide se cancela y se pide de nuevo; lo que ya no toca ninguna sesión se cancela. Si el
-| préstamo vivo de otro grupo ocupa el hueco, no se pide y se dice (o, en modo estricto, se detiene con su mensaje). Un
-| salón sin dueño o del mismo departamento no necesita préstamo (supuesto por confirmar).
+| tamaño de sus sesiones. Un aceptado se conserva mientras alguna sesión del grupo siga dentro de sus horas (acortar no
+| lo cancela); lo que no cubren los aceptados se pide aparte; un propuesto exacto se queda y uno que no coincide se
+| cancela y se pide de nuevo; lo que ya no toca ninguna sesión se cancela. Si el préstamo vivo de otro grupo ocupa el
+| hueco, no se pide y se dice (o, en modo estricto para la sesión que se asigna, se detiene con su mensaje). Un salón
+| sin dueño o del mismo departamento no necesita préstamo (supuesto por confirmar).
 */
 
 beforeEach(function () {
@@ -70,9 +70,9 @@ function syncLoan(int $day, string $startsAt, string $endsAt, AgreementStatus $s
     ]);
 }
 
-function resyncLoans(?Room $room = null, int $day = 1, bool $strict = false): LoanSyncResult
+function resyncLoans(?Room $room = null, int $day = 1, ?GroupSession $strictFor = null): LoanSyncResult
 {
-    return app(SyncSessionLoans::class)->resync(test()->group, $room ?? test()->room, $day, test()->actor, $strict);
+    return app(SyncSessionLoans::class)->resync(test()->group, $room ?? test()->room, $day, test()->actor, $strictFor);
 }
 
 /**
@@ -202,14 +202,24 @@ it('deja en la bitácora cada préstamo cancelado y pedido, causados por quien a
         ->and(Activity::query()->pluck('causer_id')->unique()->all())->toBe([$this->actor->id]);
 });
 
-it('HC-10: un aceptado que aparta horas sin sesión se cancela y se pide de nuevo lo que sí se usa (supuesto por confirmar)', function () {
+it('HC-10: un aceptado se conserva mientras alguna sesión siga dentro de sus horas: acortar la sesión no lo cancela ni pide otro (supuesto por confirmar)', function () {
     syncSession(1, '09:00', '10:00');
     $wide = syncLoan(1, '09:00', '11:00', AgreementStatus::Accepted);
 
+    $result = resyncLoans();
+
+    expect($result->requested)->toBeFalse()
+        ->and($wide->fresh()->status)->toBe(AgreementStatus::Accepted)
+        ->and(liveLoansOfSync())->toBe(['1 09:00-11:00 accepted']);
+});
+
+it('HC-10: un aceptado que la sesión sigue tocando se conserva y lo que no cubre se pide aparte', function () {
+    syncSession(1, '10:00', '12:00');
+    syncLoan(1, '09:00', '11:00', AgreementStatus::Accepted);
+
     resyncLoans();
 
-    expect($wide->fresh()->status)->toBe(AgreementStatus::Cancelled)
-        ->and(liveLoansOfSync())->toBe(['1 09:00-10:00 proposed']);
+    expect(liveLoansOfSync())->toBe(['1 09:00-11:00 accepted', '1 11:00-12:00 proposed']);
 });
 
 it('HC-10: un aceptado que cae dentro de dos sesiones pegadas del grupo se conserva', function () {
@@ -235,13 +245,24 @@ it('HC-10: si el préstamo vivo de otro grupo ocupa el hueco, no lo pide, cancel
         ->and(liveLoansOfSync())->toBe([]);
 });
 
-it('HC-10: en modo estricto, el préstamo vivo de otro grupo detiene con su mensaje y no cancela nada', function () {
-    syncSession(1, '09:00', '12:00');
+it('HC-10: en modo estricto para una sesión, el préstamo vivo de otro grupo en su hueco detiene con su mensaje y no cancela nada', function () {
+    $session = syncSession(1, '09:00', '12:00');
     $stale = syncLoan(1, '09:00', '10:00');
     otherGroupLoanOfSync(1, '11:00', '13:00');
 
-    expect(fn () => resyncLoans(strict: true))->toThrow(ValidationException::class, 'El salón ya está prestado o pedido a esa hora.')
+    expect(fn () => resyncLoans(strictFor: $session))->toThrow(ValidationException::class, 'El salón ya está prestado o pedido a esa hora.')
         ->and($stale->fresh()->status)->toBe(AgreementStatus::Proposed);
+});
+
+it('HC-10: el modo estricto vale solo para la sesión indicada: el hueco bloqueado de otra sesión del grupo no detiene', function () {
+    $assigned = syncSession(1, '09:00', '10:00');
+    syncSession(1, '11:00', '12:00');
+    otherGroupLoanOfSync(1, '11:00', '12:00');
+
+    $result = resyncLoans(strictFor: $assigned);
+
+    expect($result)->requested->toBeTrue()->blocked->toBeTrue()
+        ->and(liveLoansOfSync())->toBe(['1 09:00-10:00 proposed']);
 });
 
 it('avisa al dueño una vez por préstamo pedido: un propuesto que ya coincide no vuelve a avisar y el aviso del cancelado ya no se abre', function () {

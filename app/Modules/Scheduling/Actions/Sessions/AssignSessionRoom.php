@@ -2,12 +2,16 @@
 
 namespace App\Modules\Scheduling\Actions\Sessions;
 
+use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Rules\SessionRules;
+use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\SessionCandidate;
 use Illuminate\Database\QueryException;
@@ -26,7 +30,8 @@ use Illuminate\Validation\ValidationException;
  * gana la carrera. Luego deja los préstamos del salón de antes y del nuevo al tamaño de las sesiones del grupo
  * (SyncSessionLoans): un salón de otro departamento se queda asignado y se pide su préstamo al dueño; mientras no lo
  * acepte, HC-10 «préstamo pendiente» (confirmado el 7 de noviembre de 2026). Si el préstamo vivo de otro grupo ya
- * aparta ese salón a esa hora, no se asigna y da el mensaje de RequestRoomLoan (modo estricto). Deja la bitácora en el grupo
+ * aparta ese salón a la hora de la sesión, no se asigna, tampoco al departamento dueño, y dice para quién; los huecos
+ * de las otras sesiones del grupo en ese salón no detienen la asignación (`loanBlocked`). Deja la bitácora en el grupo
  * (`session_room_assigned`, con la sesión de antes y de después) y avisa con GroupScheduleChanged después del commit.
  * Sin cambios no escribe, no registra ni avisa. El resultado dice si se pidió préstamo.
  */
@@ -60,6 +65,7 @@ final class AssignSessionRoom
             if ($room !== null) {
                 $room = Room::withTrashed()->sharedLock()->findOrFail($room->getKey());
                 $this->rules->ensureRoomUsable($group, $room);
+                $this->ensureNotLoanedToOthers($group, $session, $room);
                 $this->rules->ensureNoOverlaps($this->validator->checkSession($group, new SessionCandidate(
                     $session->day, $old['starts_at'], $old['ends_at'], $room->id, $session->kind, $session->id,
                 )), $session->id, ['HC-02']);
@@ -77,7 +83,7 @@ final class AssignSessionRoom
                 $this->loans->resync($group, $previous, $session->day, $actor);
             }
 
-            $loans = $room === null ? new LoanSyncResult : $this->loans->resync($group, $room, $session->day, $actor, strict: true);
+            $loans = $room === null ? new LoanSyncResult : $this->loans->resync($group, $room, $session->day, $actor, strictFor: $session);
 
             $session->refresh();
 
@@ -92,8 +98,41 @@ final class AssignSessionRoom
 
             $this->validator->forget();
 
-            return new SessionResult($session, $this->validator->validateGroup($group), loanRequested: $loans->requested);
+            return new SessionResult($session, $this->validator->validateGroup($group), loanRequested: $loans->requested, loanBlocked: $loans->blocked);
         });
+    }
+
+    /**
+     * HC-10: un salón que el préstamo vivo de otro grupo aparta a la hora de la sesión no se asigna, tampoco al
+     * departamento dueño (supuesto por confirmar): «El salón MM-L2 ya está pedido para Estructura de Datos, grupo 3A el
+     * martes de 16:00 a 17:00.».
+     *
+     * @throws ValidationException
+     */
+    private function ensureNotLoanedToOthers(Group $group, GroupSession $session, Room $room): void
+    {
+        $loan = InterdepartmentalAgreement::query()
+            ->where('kind', AgreementKind::RoomLoan->value)
+            ->where('term_id', $group->term_id)
+            ->where('room_id', $room->id)
+            ->where('group_id', '<>', $group->id)
+            ->where('day', $session->day)
+            ->where('starts_at', '<', $session->ends_at)
+            ->where('ends_at', '>', $session->starts_at)
+            ->live()
+            ->orderBy('starts_at')
+            ->first();
+
+        if ($loan === null) {
+            return;
+        }
+
+        $holder = Group::query()->whereKey($loan->group_id)->first();
+        $state = $loan->status === AgreementStatus::Accepted ? 'prestado a' : 'pedido para';
+        $label = $holder === null ? 'otro grupo' : $this->rules->label($holder);
+
+        throw ValidationException::withMessages(['session' => "El salón {$room->code} ya está {$state} {$label} el "
+            .Minutes::dayName($loan->day).' de '.substr($loan->starts_at, 0, 5).' a '.substr($loan->ends_at, 0, 5).'.']);
     }
 
     private function describe(Group $group, GroupSession $session, ?Room $previous, ?Room $room): string

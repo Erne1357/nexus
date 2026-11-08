@@ -236,13 +236,22 @@ it('HC-10: mover una sesión en un salón de otro departamento cancela el prést
         ->and(liveLoansOfMove())->toBe(['3 10:00-12:00 proposed']);
 });
 
-it('HC-10: un préstamo aceptado que deja de coincidir con la sesión movida se cancela y se pide de nuevo por sus horas (supuesto por confirmar)', function () {
-    $accepted = inForeignRoomOfMove(AgreementStatus::Accepted);
+it('HC-10: un préstamo aceptado que la sesión movida sigue tocando se conserva y se pide solo lo que no cubre (supuesto por confirmar)', function () {
+    inForeignRoomOfMove(AgreementStatus::Accepted);
 
     moveSession($this->session, 1, '08:00', '10:00');
 
-    expect($accepted->fresh()->status)->toBe(AgreementStatus::Cancelled)
-        ->and(liveLoansOfMove())->toBe(['1 08:00-10:00 proposed']);
+    expect(liveLoansOfMove())->toBe(['1 07:00-09:00 accepted', '1 09:00-10:00 proposed']);
+});
+
+it('HC-10: acortar la sesión no cancela su préstamo aceptado ni pide otro', function () {
+    $accepted = inForeignRoomOfMove(AgreementStatus::Accepted);
+
+    $result = moveSession($this->session, 1, '07:00', '08:00');
+
+    expect($result->loanRequested)->toBeFalse()
+        ->and($accepted->fresh()->status)->toBe(AgreementStatus::Accepted)
+        ->and(liveLoansOfMove())->toBe(['1 07:00-09:00 accepted']);
 });
 
 it('HC-10: alargar la sesión conserva el préstamo aceptado que sigue dentro de ella y pide solo lo que falta', function () {
@@ -255,12 +264,12 @@ it('HC-10: alargar la sesión conserva el préstamo aceptado que sigue dentro de
 });
 
 it('HC-10: cambiar solo el tipo de la sesión no revisa sus préstamos', function () {
-    $loan = inForeignRoomOfMove(AgreementStatus::Accepted);
-    $loan->update(['ends_at' => '10:00']);
+    $loan = inForeignRoomOfMove();
+    $loan->update(['ends_at' => '08:00']);
 
     moveSession($this->session, 1, '07:00', '09:00', SessionKind::Practica);
 
-    expect($loan->fresh()->status)->toBe(AgreementStatus::Accepted)
+    expect($loan->fresh()->status)->toBe(AgreementStatus::Proposed)
         ->and(InterdepartmentalAgreement::query()->count())->toBe(1);
 });
 
