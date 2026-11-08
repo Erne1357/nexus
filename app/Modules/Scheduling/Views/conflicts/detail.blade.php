@@ -6,19 +6,26 @@
 @php($group = fn (array $g): string => $g['subject_code'].' · '.$g['code'])
 <div class="divide-y divide-base-300">
     @if ($detail['conflicts'] !== [])
+        @php($total = array_sum(array_map(fn (array $entry): int => count($entry['items']), $detail['conflicts'])))
         <section class="py-3" aria-labelledby="{{ $prefix }}-hard">
-            <h3 id="{{ $prefix }}-hard" class="mb-2 flex items-center gap-2 font-semibold"><x-icon name="o-x-circle" class="h-5 w-5 text-error" aria-hidden="true" />Choques duros <span class="badge badge-error badge-soft font-mono">{{ count($detail['conflicts']) }}</span></h3>
+            <h3 id="{{ $prefix }}-hard" class="mb-2 flex flex-wrap items-center gap-2 font-semibold"><x-icon name="o-x-circle" class="h-5 w-5 text-error" aria-hidden="true" />Choques duros <span class="badge badge-error badge-soft font-mono">{{ $total }}</span><span class="text-sm font-normal text-neutral">en {{ count($detail['conflicts']) }} {{ count($detail['conflicts']) === 1 ? 'grupo' : 'grupos' }}</span></h3>
             <ul class="grid gap-2 {{ $wide ?? false ? '@3xl:grid-cols-2' : '' }}">
-                @foreach ($detail['conflicts'] as $conflict)
-                    <li wire:key="{{ $prefix }}-c-{{ $conflict['id'] }}" class="grid gap-1 rounded-field border border-base-300 px-3 py-2.5" data-testid="conflict-{{ $conflict['rule'] }}">
-                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <x-core::status-badge tone="error" icon="o-x-circle" :label="$conflict['rule']" class="font-mono" />
-                            <span class="font-mono font-semibold whitespace-nowrap">{{ $group($conflict['group']) }}</span>
-                            <span class="font-semibold">{{ $conflict['group']['subject_name'] }}</span>
-                            <span class="text-sm text-neutral">{{ $conflict['group']['career_code'] }} · sem. {{ $conflict['group']['semester'] }}</span>
+                @foreach ($detail['conflicts'] as $entry)
+                    <li wire:key="{{ $prefix }}-g-{{ $entry['group']['id'] }}" class="grid content-start gap-2 rounded-field border border-base-300 px-3 py-2.5" data-testid="conflict-group-{{ $entry['group']['id'] }}">
+                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span class="font-mono font-semibold whitespace-nowrap">{{ $group($entry['group']) }}</span>
+                            <span class="font-semibold">{{ $entry['group']['subject_name'] }}</span>
+                            <span class="text-sm text-neutral">{{ $entry['group']['career_code'] }} · sem. {{ $entry['group']['semester'] }}</span>
                         </div>
-                        <p>{{ $conflict['message'] }}</p>
-                        <div>@include('scheduling::conflicts.fix', ['to' => 'editor', 'group' => $conflict['group']['id'], 'label' => 'Corregir en el editor'])</div>
+                        <ul class="grid gap-1.5">
+                            @foreach ($entry['items'] as $item)
+                                <li class="flex items-start gap-2" data-testid="conflict-{{ $item['rule'] }}">
+                                    <x-core::status-badge tone="error" icon="o-x-circle" :label="$item['rule']" class="mt-px shrink-0 font-mono" />
+                                    <span>{{ $item['message'] }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
+                        <div>@include('scheduling::conflicts.fix', ['to' => 'editor', 'group' => $entry['group']['id'], 'label' => 'Corregir en el editor'])</div>
                     </li>
                 @endforeach
             </ul>

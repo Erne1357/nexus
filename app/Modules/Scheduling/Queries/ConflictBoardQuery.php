@@ -132,7 +132,9 @@ final class ConflictBoardQuery
      * sin docente y sin salón, con la clave y el nombre de su materia.
      *
      * @param  Collection<int, GroupBoardStatus>  $statuses
-     * @return array{conflicts: list<array<string, mixed>>, unscheduled: list<array<string, mixed>>, withoutTeacher: list<array<string, mixed>>, withoutRoom: list<array<string, mixed>>}
+     *                                                       Los choques van agrupados por grupo (un grupo con varios choques es una sola entrada), por semestre, materia y
+     *                                                       clave.
+     * @return array{conflicts: list<array{group: array<string, mixed>, items: list<array{id: string, rule: string, message: string}>}>, unscheduled: list<array<string, mixed>>, withoutTeacher: list<array<string, mixed>>, withoutRoom: list<array<string, mixed>>}
      */
     public function detail(Collection $statuses): array
     {
@@ -156,13 +158,18 @@ final class ConflictBoardQuery
             ->where('severity', ConflictSeverity::Hard)
             ->whereIn('group_id', $missing->where('hard', true)->pluck('id')->all())
             ->orderBy('rule')->orderBy('created_at')
-            ->get(['id', 'group_id', 'rule', 'message', 'subject_type'])
-            ->map(fn (ScheduleConflict $conflict): array => [
-                'id' => $conflict->id,
-                'rule' => $conflict->rule,
-                'message' => $conflict->message,
-                'group' => $describe($missing->firstWhere('id', $conflict->group_id)),
-            ])->all();
+            ->get(['id', 'group_id', 'rule', 'message'])
+            ->groupBy('group_id')
+            ->map(fn (Collection $ofGroup, string $groupId): array => [
+                'group' => $describe($missing->firstWhere('id', $groupId)),
+                'items' => $ofGroup->map(fn (ScheduleConflict $conflict): array => [
+                    'id' => $conflict->id,
+                    'rule' => $conflict->rule,
+                    'message' => $conflict->message,
+                ])->values()->all(),
+            ])
+            ->sortBy(fn (array $entry): string => $entry['group']['semester'].'|'.$entry['group']['subject_code'].'|'.$entry['group']['code'])
+            ->values()->all();
 
         return [
             'conflicts' => $conflicts,

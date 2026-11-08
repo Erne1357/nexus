@@ -43,7 +43,7 @@
                 <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">Los grupos nacen cuando un jefe acepta la parte de su departamento en una propuesta de carrera.</p>
             </div>
         @elseif ($view === 'reticula')
-            <div class="mb-3 flex gap-1 overflow-x-auto border-b border-base-300 [scrollbar-width:thin]" role="tablist" aria-label="Carreras" data-testid="career-tabs">
+            <div class="mb-3 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-base-300 [scrollbar-width:none]" role="tablist" aria-label="Carreras" data-testid="career-tabs">
                 @foreach ($careers as $tab)
                     @php($active = $tab['id'] === $careerId)
                     <button type="button" role="tab" aria-selected="{{ $active ? 'true' : 'false' }}" wire:key="tab-{{ $tab['id'] }}" wire:click="$set('career', '{{ $tab['id'] }}')"
@@ -68,7 +68,7 @@
             </p>
 
             <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100" data-testid="career-grid">
-                <table class="w-full min-w-[58rem] table-fixed border-separate border-spacing-0 text-sm">
+                <table class="w-full min-w-[66rem] table-fixed border-separate border-spacing-0 text-sm">
                     <caption class="sr-only">Grupos de {{ $careerTab['name'] }} por retícula y semestre</caption>
                     <colgroup><col class="w-48 md:w-56">@for ($s = 1; $s <= $grid['semesters']; $s++)<col>@endfor</colgroup>
                     <thead>
@@ -94,7 +94,7 @@
                                     <td class="border-t border-base-300 p-1.5 align-top">
                                         @if ($count === null)
                                             <div class="flex h-16 flex-col justify-between rounded-field border border-base-300 bg-[repeating-linear-gradient(135deg,var(--color-base-200)_0_6px,var(--color-base-100)_6px_12px)] px-2 py-1.5 text-xs text-neutral/70" aria-label="Semestre {{ $s }}: sin grupos">
-                                                <span class="font-mono">—</span><span>Sin grupos</span>
+                                                <span class="font-mono">—</span><span class="whitespace-nowrap">Sin grupos</span>
                                             </div>
                                         @else
                                             @php($state = $count->isReady() ? 'ready' : ($count->hard > 0 ? 'hard' : 'pending'))
@@ -108,7 +108,7 @@
                                                 ])
                                                 aria-label="{{ $plan['name'] }}, semestre {{ $s }}: {{ $count->groups }} {{ $count->groups === 1 ? 'grupo' : 'grupos' }}{{ $state === 'ready' ? ', listo' : '' }}{{ $count->hard ? ", {$count->hard} con choque duro" : '' }}{{ $count->pending ? ", {$count->pending} con pendientes" : '' }}"
                                                 data-testid="cell-{{ $plan['code'] }}-{{ $s }}">
-                                                <span class="font-mono text-xs font-semibold text-neutral">{{ $count->groups }} {{ $count->groups === 1 ? 'grupo' : 'grupos' }}</span>
+                                                <span class="font-mono text-xs font-semibold whitespace-nowrap text-neutral">{{ $count->groups }} {{ $count->groups === 1 ? 'grupo' : 'grupos' }}</span>
                                                 <span class="flex items-center gap-2 font-mono text-[13px] font-semibold">
                                                     @if ($state === 'ready')
                                                         <x-icon name="o-check-circle" class="h-4 w-4 text-success" aria-hidden="true" />

@@ -117,15 +117,18 @@ it('cuenta por departamento y por carrera', function () {
         ->and($board->byCareer($statuses)[0])->code->toBe('ISC');
 });
 
-it('el detalle trae los choques con su grupo y los grupos de cada pendiente', function () {
+it('el detalle trae los choques agrupados por grupo y los grupos de cada pendiente', function () {
     $clash = readyBoardGroup(['code' => 'D']);
     ScheduleConflict::factory()->forGroup($clash)->create(['rule' => 'HC-03', 'message' => 'Se empalma con Química.']);
+    ScheduleConflict::factory()->forGroup($clash)->create(['rule' => 'HC-02']);
     boardGroup(['code' => '2']);
 
     $detail = app(ConflictBoardQuery::class)->detail(boardStatuses(User::factory()->admin()->create()));
 
     expect($detail['conflicts'])->toHaveCount(1)
-        ->and($detail['conflicts'][0])->toMatchArray(['rule' => 'HC-03', 'message' => 'Se empalma con Química.'])
+        ->and($detail['conflicts'][0]['items'])->toHaveCount(2)
+        ->and($detail['conflicts'][0]['items'][0])->toMatchArray(['rule' => 'HC-02'])
+        ->and($detail['conflicts'][0]['items'][1])->toMatchArray(['rule' => 'HC-03', 'message' => 'Se empalma con Química.'])
         ->and($detail['conflicts'][0]['group'])->toMatchArray(['code' => 'D', 'subject_code' => $this->subject->code, 'career_code' => 'ISC'])
         ->and(array_column($detail['unscheduled'], 'code'))->toBe(['2'])
         ->and(array_column($detail['withoutTeacher'], 'code'))->toBe(['2']);
