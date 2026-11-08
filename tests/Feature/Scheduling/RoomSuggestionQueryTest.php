@@ -141,18 +141,18 @@ it('HC-02, HC-05, HC-06, HC-10 y HC-11: da el estado de cada salón para esta se
     expect($rooms['CC-05']['state'])->toMatchArray(['free' => true, 'busy' => null, 'blocked' => null, 'needsLoan' => false, 'tooSmall' => false, 'wrongType' => false])
         ->and($rooms['CC-05']['selectable'])->toBeTrue()
         ->and($rooms['CC-05']['conflicts'])->toBe([])
-        ->and($rooms['CC-03']['state'])->toMatchArray(['free' => false, 'busy' => 'Ocupado · AED-1026 3A · mar 15:00–16:00', 'busyNote' => 'HC-02: no se puede elegir.'])
+        ->and($rooms['CC-03']['state'])->toMatchArray(['free' => false, 'busy' => 'Ocupado', 'busyDetail' => 'AED-1026 3A · mar 15:00–16:00', 'busyNote' => 'HC-02: no se puede elegir.'])
         ->and($rooms['CC-03']['selectable'])->toBeFalse()
         ->and($rooms['CC-04']['state']['blocked'])->toBe('Mantenimiento · mar 16:00–18:00')
-        ->and($rooms['CC-04']['conflicts'])->toBe([['rule' => 'HC-11', 'label' => 'Bloqueado · Mantenimiento', 'message' => 'CC-04 está bloqueado el martes de 16:00 a 18:00: Mantenimiento.']])
+        ->and($rooms['CC-04']['conflicts'])->toBe([['rule' => 'HC-11', 'label' => 'Bloqueado', 'detail' => 'Mantenimiento · mar 16:00–18:00', 'message' => 'CC-04 está bloqueado el martes de 16:00 a 18:00: Mantenimiento.']])
         ->and($rooms['MM-L2']['state'])->toMatchArray(['free' => false, 'needsLoan' => true, 'covered' => false, 'pending' => false])
         ->and($rooms['MM-L2']['owner'])->toBe(['code' => 'MM', 'name' => 'Metal-Mecánica'])
-        ->and($rooms['MM-L2']['conflicts'])->toBe([['rule' => 'HC-10', 'label' => 'De Metal-Mecánica · pide préstamo', 'message' => 'MM-L2 es de Metal-Mecánica: el préstamo del martes de 15:00 a 17:00 queda pendiente hasta que su jefe lo acepte.']])
+        ->and($rooms['MM-L2']['conflicts'])->toBe([['rule' => 'HC-10', 'label' => 'Pide préstamo', 'detail' => 'De Metal-Mecánica', 'message' => 'MM-L2 es de Metal-Mecánica: el préstamo del martes de 15:00 a 17:00 queda pendiente hasta que su jefe lo acepte.']])
         ->and($rooms['LF-01']['state']['tooSmall'])->toBeTrue()
         ->and($rooms['LF-01']['reasons'])->toContain('No cabe: 30 de 28')
-        ->and($rooms['LF-01']['conflicts'])->toBe([['rule' => 'HC-05', 'label' => 'No cabe', 'message' => 'AED-1026 3B es de 30 lugares y LF-01 tiene 28.']])
+        ->and($rooms['LF-01']['conflicts'])->toBe([['rule' => 'HC-05', 'label' => 'No cabe', 'detail' => null, 'message' => 'AED-1026 3B es de 30 lugares y LF-01 tiene 28.']])
         ->and($rooms['LC-106']['state']['wrongType'])->toBeTrue()
-        ->and($rooms['LC-106']['conflicts'])->toBe([['rule' => 'HC-06', 'label' => 'Aula: no sirve para práctica', 'message' => 'LC-106 es aula: las prácticas de AED-1026 piden laboratorio, taller o sala de cómputo.']]);
+        ->and($rooms['LC-106']['conflicts'])->toBe([['rule' => 'HC-06', 'label' => 'No sirve para práctica', 'detail' => null, 'message' => 'LC-106 es aula: las prácticas de AED-1026 piden laboratorio, taller o sala de cómputo.']]);
 });
 
 it('HC-10: un salón del mismo departamento no pide préstamo; uno cubierto por préstamos aceptados del grupo queda cubierto', function () {
@@ -220,6 +220,8 @@ it('busca otro salón por clave o nombre entre los que no están sugeridos, con 
         ->and($codes('0%'))->toBe(['AU-05'])
         ->and($codes('%'))->toBe(['AU-05'])
         ->and($codes('l-1'))->toBe([])
+        ->and(suggestionsFor(limit: 2, search: 'l-1')['matched'])->toBe([Room::query()->where('code', 'L-1')->value('id')])
+        ->and(suggestionsFor(limit: 2, search: 'lc')['matched'])->toBe([])
         ->and($codes('lc'))->toBe(['LC-106', 'LC-201']);
 });
 
@@ -239,9 +241,9 @@ it('HC-10: un salón que otro grupo ya tiene pedido o prestado a esa hora se ve 
 
     $rooms = suggestionsByCode();
 
-    expect($rooms['MM-L1']['state'])->toMatchArray(['busy' => 'Pedido para AED-1026 3A · SC', 'busyNote' => 'HC-10: el salón ya está apartado para otro grupo; no se puede elegir.'])
+    expect($rooms['MM-L1']['state'])->toMatchArray(['busy' => 'Apartado', 'busyDetail' => 'Pedido para AED-1026 3A · SC', 'busyNote' => 'HC-10: el salón ya está apartado para otro grupo; no se puede elegir.'])
         ->and($rooms['MM-L1']['selectable'])->toBeFalse()
-        ->and($rooms['MM-L2']['state']['busy'])->toBe('Prestado a AED-1026 3A · SC')
+        ->and($rooms['MM-L2']['state']['busyDetail'])->toBe('Prestado a AED-1026 3A · SC')
         ->and($rooms['MM-L3']['state'])->toMatchArray(['busy' => null, 'pending' => true])
         ->and($rooms['MM-L3']['selectable'])->toBeTrue();
 });

@@ -43,8 +43,11 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * pedir). Los demás se pueden elegir y sus choques duros se guardan marcados (confirmado el 7 de noviembre de 2026). Si
  * el préstamo aceptado del grupo cubre la sesión, se ve cubierto; la cobertura es la de RoomLoansQuery::uncovered().
  *
- * @phpstan-type Conflict array{rule: string, label: string, message: string}
- * @phpstan-type State array{free: bool, busy: ?string, busyNote: ?string, blocked: ?string, needsLoan: bool, covered: bool, pending: bool, tooSmall: bool, wrongType: bool}
+ * Cada choque y cada «ocupado» trae una etiqueta corta para la insignia (`label`, `busy`) y el texto libre aparte
+ * (`detail`, `busyDetail`), para que la pantalla lo parta en renglones y no desborde a 390 px.
+ *
+ * @phpstan-type Conflict array{rule: string, label: string, detail: ?string, message: string}
+ * @phpstan-type State array{free: bool, busy: ?string, busyDetail: ?string, busyNote: ?string, blocked: ?string, needsLoan: bool, covered: bool, pending: bool, tooSmall: bool, wrongType: bool}
  * @phpstan-type Row array{id: string, code: string, name: ?string, type: string, capacity: int, building: ?string, owner: array{code: string, name: string}|null, score: int, reasons: list<string>, state: State, conflicts: list<Conflict>, selectable: bool, current: bool}
  */
 final class RoomSuggestionQuery
@@ -81,9 +84,10 @@ final class RoomSuggestionQuery
     /**
      * El departamento del grupo (el que asigna), el salón actual de la sesión (aunque ya no esté activo), los
      * `$limit` mejores salones y, con `$search`, hasta `$limit` más que contienen el texto en su clave o nombre y no
-     * están entre los sugeridos. Todo sale del mismo contexto: buscar no vuelve a leer la base.
+     * están entre los sugeridos (`results`) y los ids de los sugeridos que también lo contienen (`matched`). Todo sale
+     * del mismo contexto: buscar no vuelve a leer la base.
      *
-     * @return array{department: array{code: string, name: string}, current: Row|null, rooms: list<Row>, results: list<Row>}
+     * @return array{department: array{code: string, name: string}, current: Row|null, rooms: list<Row>, results: list<Row>, matched: list<string>}
      */
     public function for(GroupSession $session, int $limit = 8, string $search = ''): array
     {
@@ -119,19 +123,16 @@ final class RoomSuggestionQuery
             ->map(fn (Room $room): array => $this->row($room, $context))
             ->sort(fn (array $a, array $b): int => [$b['score'], $a['code']] <=> [$a['score'], $b['code']])
             ->values();
-        $suggested = $ranked->take($limit);
         $needle = mb_strtolower(trim($search));
+        $matches = fn (array $row): bool => $needle !== ''
+            && (str_contains(mb_strtolower($row['code']), $needle) || str_contains(mb_strtolower((string) $row['name']), $needle));
 
         return [
             'department' => ['code' => $department->code, 'name' => $department->name],
             'current' => $currentRoom === null ? null : $this->row($currentRoom, $context),
-            'rooms' => $suggested->all(),
-            'results' => $needle === '' ? [] : $ranked
-                ->skip($limit)
-                ->filter(fn (array $row): bool => str_contains(mb_strtolower($row['code']), $needle) || str_contains(mb_strtolower((string) $row['name']), $needle))
-                ->take($limit)
-                ->values()
-                ->all(),
+            'rooms' => $ranked->take($limit)->all(),
+            'results' => $ranked->skip($limit)->filter($matches)->take($limit)->values()->all(),
+            'matched' => $ranked->take($limit)->filter($matches)->pluck('id')->values()->all(),
         ];
     }
 
@@ -198,18 +199,18 @@ final class RoomSuggestionQuery
 
         if ($block !== null) {
             $score -= self::BLOCKED_PENALTY;
-            $conflicts[] = ['rule' => 'HC-11', 'label' => "Bloqueado · {$block['reason']}", 'message' => "{$room->code} está bloqueado el {$block['when']}: {$block['reason']}."];
+            $conflicts[] = ['rule' => 'HC-11', 'label' => 'Bloqueado', 'detail' => "{$block['reason']} · {$block['short']}", 'message' => "{$room->code} está bloqueado el {$block['when']}: {$block['reason']}."];
         }
 
         if ($wrongType) {
             $score -= self::WRONG_TYPE_PENALTY;
             $type = $room->type->label();
-            $conflicts[] = ['rule' => 'HC-06', 'label' => "{$type}: no sirve para práctica", 'message' => "{$room->code} es ".mb_strtolower($type).": las prácticas de {$context['subject']->code} piden laboratorio, taller o sala de cómputo."];
+            $conflicts[] = ['rule' => 'HC-06', 'label' => 'No sirve para práctica', 'detail' => null, 'message' => "{$room->code} es ".mb_strtolower($type).": las prácticas de {$context['subject']->code} piden laboratorio, taller o sala de cómputo."];
         }
 
         if ($tooSmall) {
             $score -= self::TOO_SMALL_PENALTY;
-            $conflicts[] = ['rule' => 'HC-05', 'label' => 'No cabe', 'message' => "{$subjectGroup} es de {$group->capacity} lugares y {$room->code} tiene {$room->capacity}."];
+            $conflicts[] = ['rule' => 'HC-05', 'label' => 'No cabe', 'detail' => null, 'message' => "{$subjectGroup} es de {$group->capacity} lugares y {$room->code} tiene {$room->capacity}."];
         }
 
         if ($needsLoan && ! $covered) {
@@ -217,7 +218,8 @@ final class RoomSuggestionQuery
             $owner = $room->department?->name;
             $conflicts[] = [
                 'rule' => 'HC-10',
-                'label' => $pending ? 'Préstamo pendiente' : "De {$owner} · pide préstamo",
+                'label' => $pending ? 'Préstamo pendiente' : 'Pide préstamo',
+                'detail' => "De {$owner}",
                 'message' => "{$room->code} es de {$owner}: el préstamo del ".SessionRules::describe($session).' '.($pending ? 'está' : 'queda').' pendiente hasta que su jefe lo acepte.',
             ];
         }
@@ -235,6 +237,7 @@ final class RoomSuggestionQuery
             'state' => [
                 'free' => $busy === null && $conflicts === [],
                 'busy' => $busy['label'] ?? null,
+                'busyDetail' => $busy['detail'] ?? null,
                 'busyNote' => $busy['note'] ?? null,
                 'blocked' => $block === null ? null : "{$block['reason']} · {$block['short']}",
                 'needsLoan' => $needsLoan,
@@ -316,9 +319,9 @@ final class RoomSuggestionQuery
     }
 
     /**
-     * HC-02: quién ocupa cada salón del campus a la hora de la sesión: «Ocupado · AED-1026 3A · mar 15:00–16:00».
+     * HC-02: quién ocupa cada salón del campus a la hora de la sesión: «Ocupado», «AED-1026 3A · mar 15:00–16:00».
      *
-     * @return array<string, array{label: string, note: string}>
+     * @return array<string, array{label: string, detail: string, note: string}>
      */
     private function busy(Group $group, GroupSession $session): array
     {
@@ -337,7 +340,8 @@ final class RoomSuggestionQuery
             ->get(['group_sessions.room_id', 'group_sessions.starts_at', 'group_sessions.ends_at', 'groups.code as group_code', 'subjects.code as subject_code'])
             ->each(function (object $row) use (&$busy, $session): void {
                 $busy[$row->room_id] ??= [
-                    'label' => "Ocupado · {$row->subject_code} {$row->group_code} · ".self::shortWhen($session->day, $row->starts_at, $row->ends_at),
+                    'label' => 'Ocupado',
+                    'detail' => "{$row->subject_code} {$row->group_code} · ".self::shortWhen($session->day, $row->starts_at, $row->ends_at),
                     'note' => 'HC-02: no se puede elegir.',
                 ];
             });
@@ -373,10 +377,10 @@ final class RoomSuggestionQuery
 
     /**
      * HC-10: los préstamos vivos del campus que tocan la sesión, en una sola lectura: los del grupo por salón (`own`,
-     * ordenados por inicio) y, de los de otros grupos, quién aparta cada salón (`taken`): «Pedido para AED-1026 3A ·
-     * SC» o «Prestado a …», con el departamento que lo pidió.
+     * ordenados por inicio) y, de los de otros grupos, quién aparta cada salón (`taken`): «Apartado», «Pedido para
+     * AED-1026 3A · SC» o «Prestado a …», con el departamento que lo pidió.
      *
-     * @return array{own: array<string, list<array{start: int, end: int, accepted: bool}>>, taken: array<string, array{label: string, note: string}>}
+     * @return array{own: array<string, list<array{start: int, end: int, accepted: bool}>>, taken: array<string, array{label: string, detail: string, note: string}>}
      */
     private function loans(Group $group, GroupSession $session): array
     {
@@ -408,7 +412,8 @@ final class RoomSuggestionQuery
                 }
 
                 $taken[$loan->room_id] ??= [
-                    'label' => ($accepted ? 'Prestado a ' : 'Pedido para ').trim("{$loan->subject_code} {$loan->group_code}")." · {$loan->department_code}",
+                    'label' => 'Apartado',
+                    'detail' => ($accepted ? 'Prestado a ' : 'Pedido para ').trim("{$loan->subject_code} {$loan->group_code}")." · {$loan->department_code}",
                     'note' => 'HC-10: el salón ya está apartado para otro grupo; no se puede elegir.',
                 ];
             });

@@ -65,12 +65,10 @@ it('el jefe del departamento ve el salón actual, los sugeridos con sus motivos 
         ->assertSee('Cabe: 30 de 32')
         ->assertSee('Libre')
         ->assertDontSee('Lo asigna el jefe')
-        ->set('roomId', $this->free->id)
         ->assertSee('Asignar salón')
-        ->call('assign')
+        ->call('assign', $this->free->id)
         ->assertHasNoErrors()
         ->assertDispatched('session-room-saved', sessionId: $this->session->id)
-        ->assertSet('roomId', '')
         ->assertSee('Asignado');
 
     expect($this->session->fresh()->room_id)->toBe($this->free->id)
@@ -79,11 +77,12 @@ it('el jefe del departamento ve el salón actual, los sugeridos con sus motivos 
 
 it('HC-10: un salón de otro departamento cambia el botón a «Asignar y pedir préstamo», lo asigna y pide el préstamo', function () {
     $component = sessionRoomAs($this->jefe)
-        ->assertSee('De Metal-Mecánica · pide préstamo')
-        ->set('roomId', $this->foreign->id)
-        ->assertSee('Asignar y pedir préstamo')
+        ->assertSee('Pide préstamo')
+        ->assertSee('De Metal-Mecánica')
+        ->assertSeeHtml('data-room="MM-L2" data-asks-loan="1"')
+        ->assertSeeHtml('data-room="CC-05" data-asks-loan="0"')
         ->assertSee('Si eliges MM-L2, la sesión se guarda y queda marcada:')
-        ->call('assign')
+        ->call('assign', $this->foreign->id)
         ->assertHasNoErrors()
         ->assertSee('Préstamo pendiente');
 
@@ -98,10 +97,10 @@ it('HC-02: un salón ocupado se ve deshabilitado con quién lo ocupa y, pedido d
     GroupSession::factory()->for($other)->inRoom($busy)->on(2, '15:00', '16:00')->create();
 
     sessionRoomAs($this->jefe)
-        ->assertSee('Ocupado · AED-1026 3A · mar 15:00–16:00')
+        ->assertSee('Ocupado')
+        ->assertSee('AED-1026 3A · mar 15:00–16:00')
         ->assertSee('HC-02: no se puede elegir.')
-        ->set('roomId', $busy->id)
-        ->call('assign')
+        ->call('assign', $busy->id)
         ->assertHasErrors('session')
         ->assertSee('ya está ocupado');
 
@@ -112,18 +111,17 @@ it('HC-05 y HC-06: muestra el choque que causaría cada salón y lo asigna marca
     $aula = sessionRoomOf('LC-106', RoomType::Aula, 25);
 
     sessionRoomAs($this->jefe)
-        ->assertSee('Aula: no sirve para práctica')
+        ->assertSee('No sirve para práctica')
         ->assertSee('No cabe')
-        ->set('roomId', $aula->id)
         ->assertSee('LC-106 es aula: las prácticas de AED-1026 piden laboratorio, taller o sala de cómputo.')
-        ->call('assign')
+        ->call('assign', $aula->id)
         ->assertHasNoErrors();
 
     expect($this->session->fresh()->room_id)->toBe($aula->id);
 });
 
 it('quita el salón de la sesión, cancela su préstamo y avisa al editor', function () {
-    sessionRoomAs($this->jefe)->set('roomId', $this->foreign->id)->call('assign');
+    sessionRoomAs($this->jefe)->call('assign', $this->foreign->id);
 
     $component = sessionRoomAs($this->jefe)
         ->assertSee('MM-L2')
@@ -151,7 +149,9 @@ it('busca otro salón por clave entre los que no están sugeridos', function () 
         ->set('search', 'zzz')
         ->assertSee('Sin resultados para «zzz».')
         ->set('search', 'cc-11')
-        ->assertSee('Sin resultados para «cc-11».');
+        ->assertDontSee('Sin resultados para «cc-11».')
+        ->assertSee('«cc-11» ya está entre los sugeridos, resaltado arriba.')
+        ->assertSeeHtml('data-room="CC-11" data-asks-loan="0" data-matched="1"');
 });
 
 it('con la carga fuera de propuesta, asignación o ajustes, el jefe lo ve de solo lectura con ese motivo', function () {
@@ -166,19 +166,18 @@ it('con la carga fuera de propuesta, asignación o ajustes, el jefe lo ve de sol
         ->assertSeeHtml('data-testid="session-room-reason"');
 });
 
-it('quitar el salón limpia la elección y la búsqueda', function () {
+it('quitar el salón limpia la búsqueda', function () {
     $this->session->update(['room_id' => $this->free->id]);
 
     sessionRoomAs($this->jefe)
-        ->set('roomId', $this->foreign->id)
         ->set('search', 'mm')
         ->call('removeRoom')
-        ->assertSet('roomId', '')
+        ->assertHasNoErrors()
         ->assertSet('search', '');
 });
 
 it('pide elegir un salón antes de asignar', function () {
-    sessionRoomAs($this->jefe)->call('assign')->assertHasErrors(['roomId' => 'required']);
+    sessionRoomAs($this->jefe)->call('assign', '')->assertHasErrors('roomId');
 
     expect($this->session->fresh()->room_id)->toBeNull();
 });
@@ -190,8 +189,7 @@ it('el coordinador de la carrera dueña lo ve de solo lectura con el motivo y no
         ->assertOk()
         ->assertSee('CC-05')
         ->assertSee('Lo asigna el jefe de Sistemas y Computación.')
-        ->set('roomId', $this->free->id)
-        ->call('assign')
+        ->call('assign', $this->free->id)
         ->assertForbidden();
 
     sessionRoomAs($coordinador)->call('removeRoom')->assertForbidden();
@@ -207,12 +205,12 @@ it('el jefe de otro departamento no ve la sesión', function () {
 
 it('un jefe que pierde el permiso después de montar recibe 403 al asignar o quitar', function () {
     $jefeOtro = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->metal->id])->create();
-    $assigning = sessionRoomAs($this->jefe)->set('roomId', $this->free->id);
+    $assigning = sessionRoomAs($this->jefe);
     $removing = sessionRoomAs($this->jefe);
 
     $this->actingAs($jefeOtro);
 
-    $assigning->call('assign')->assertForbidden();
+    $assigning->call('assign', $this->free->id)->assertForbidden();
     $removing->call('removeRoom')->assertForbidden();
     expect($this->session->fresh()->room_id)->toBeNull();
 });
@@ -224,5 +222,23 @@ it('el coordinador de la carrera en otro campus no ve la sesión', function () {
 });
 
 it('un salón que no existe no llega a la base', function () {
-    sessionRoomAs($this->jefe)->set('roomId', 'no-es-uuid')->call('assign')->assertNotFound();
+    sessionRoomAs($this->jefe)->call('assign', 'no-es-uuid')->assertNotFound();
+});
+
+it('HC-10: un salón apartado por el préstamo de otro grupo se ve apartado y no se asigna, aunque el grupo sea del departamento dueño', function () {
+    $own = sessionRoomOf('SC-L1', RoomType::Laboratorio, 30, $this->imparte);
+    $other = Group::factory()->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'subject_id' => $this->subject->id, 'code' => '3A']);
+    InterdepartmentalAgreement::factory()->accepted()->create([
+        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $other->id, 'room_id' => $own->id,
+        'from_department_id' => $this->metal->id, 'to_department_id' => $this->imparte->id, 'day' => 2, 'starts_at' => '15:00', 'ends_at' => '16:00',
+    ]);
+
+    sessionRoomAs($this->jefe)
+        ->assertSee('Apartado')
+        ->assertSee('Prestado a AED-1026 3A · MM')
+        ->call('assign', $own->id)
+        ->assertHasErrors('session')
+        ->assertSee('El salón SC-L1 ya está prestado a');
+
+    expect($this->session->fresh()->room_id)->toBeNull();
 });
