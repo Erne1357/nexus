@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
@@ -15,6 +16,7 @@ use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 
 /*
@@ -125,10 +127,20 @@ it('HC-07: la propuesta aparta sus lugares: una nueva cabe solo junto a los cupo
         ->and(app(ProposeGroupQuota::class)->handle($this->group, $second, 5, $this->actor)->max_seats)->toBe(5);
 });
 
-it('HC-07: una propuesta que no cabe en lo que dejan los cupos no se crea ni avisa', function () {
+it('HC-07: una propuesta que no cabe en lo que dejan los cupos se rechaza antes de escribir: ni acuerdo, ni bitácora, ni aviso', function () {
+    Event::fake([AgreementRequested::class]);
+    $inserts = [];
+    DB::listen(function ($query) use (&$inserts): void {
+        if (str_starts_with($query->sql, 'insert into "interdepartmental_agreements"') || str_starts_with($query->sql, 'insert into "activity_log"')) {
+            $inserts[] = $query->sql;
+        }
+    });
+
     expect(errorsOf(fn () => app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 21, $this->actor)))
         ->toBe(['max_seats' => ['HC-07: el grupo ya tiene 20 de 40 lugares repartidos o apartados; caben 20.']])
+        ->and($inserts)->toBe([])
         ->and(InterdepartmentalAgreement::query()->count())->toBe(0);
+    Event::assertNotDispatched(AgreementRequested::class);
 });
 
 it('HC-07: al retirar la propuesta, sus lugares se pueden proponer otra vez', function () {
