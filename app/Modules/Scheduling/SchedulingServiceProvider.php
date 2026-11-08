@@ -25,6 +25,7 @@ use App\Modules\Scheduling\Listeners\AssignCodeOnScheduleChange;
 use App\Modules\Scheduling\Listeners\BlockStaffingWithHardConflicts;
 use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -50,6 +51,17 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         ExternalLoadChanged::class,
         PositionChanged::class,
     ];
+
+    /**
+     * Un validador por petición o job (Octane): varias preguntas de la misma petición (una Action y el tablero, o una
+     * celda tras otra del editor) leen la foto una sola vez; quien escribe llama `forget()`.
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->scoped(ScheduleValidator::class);
+    }
 
     public function boot(): void
     {
