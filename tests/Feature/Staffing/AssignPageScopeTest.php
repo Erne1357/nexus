@@ -75,7 +75,7 @@ it('el coordinador y el docente no entran', function (Role $role) {
     'docente' => [Role::Docente],
 ]);
 
-it('la Subdirección ve el departamento que elige y su ranking, sin «Asignar», y no puede asignar', function () {
+it('la Subdirección ve el departamento que elige y su ranking, con «Asignar» deshabilitado y su motivo, y no puede asignar', function () {
     $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
 
     scopedAssignPage($subdireccion, ['depto' => 'SC'])
@@ -83,6 +83,8 @@ it('la Subdirección ve el departamento que elige y su ranking, sin «Asignar»,
         ->assertSee('Ana Ruiz')
         ->assertSeeHtml('data-testid="read-only"')
         ->assertDontSeeHtml('data-testid="assign-button"')
+        ->assertSeeHtml('data-testid="assign-disabled"')
+        ->assertSeeHtml('title="Solo consulta: asignan el jefe del departamento y el jefe de proyecto docente."')
         ->assertDontSee('Cambiar')
         ->call('assign', $this->group->id, $this->teacher->id)
         ->assertForbidden();

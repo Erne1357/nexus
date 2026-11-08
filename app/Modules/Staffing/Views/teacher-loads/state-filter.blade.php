@@ -2,7 +2,7 @@
     «Todos · Exceden · Sin carga · Libres · Completa · Honorarios», con cuántos docentes hay de cada estado; el elegido
     en primary. Mismo marcado que el filtro de estado de Asignación; en celular se desplaza dentro de su caja.
 --}}
-<div class="max-w-full overflow-x-auto" data-testid="state-filter">
+<div class="relative max-w-full overflow-x-auto" data-testid="state-filter">
     <div role="group" aria-label="Estado de la carga" class="join w-max">
         @foreach ($stateOptions as $option => $optionLabel)
             <button type="button" wire:click="$set('state', '{{ $option }}')" aria-pressed="{{ $state === $option ? 'true' : 'false' }}" data-testid="state-{{ $option }}"

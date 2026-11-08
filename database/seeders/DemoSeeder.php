@@ -16,8 +16,10 @@ use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Scheduling\Events\GroupsCreated;
+use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -58,7 +60,10 @@ class DemoSeeder extends Seeder
         // Aceptar una parte crea grupos (3.3) y GroupsCreated recalcularía los choques del campus en cada aceptación;
         // SchedulingDemoSeeder los recalcula una vez al final.
         Event::fakeFor(fn () => $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C2']]), [GroupsCreated::class]);
-        $this->callWith(SchedulingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2']]);
+        $scheduling = $this->resolve(SchedulingDemoSeeder::class);
+        $scheduling->__invoke(['profile' => 'demo', 'campuses' => ['C2']]);
+        $this->callWith(SchedulingAgreementsDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'cleanDepartments' => $scheduling->cleanDepartments()]);
+        $this->callWith(StaffingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2']]);
         $this->call(LoginScreenDemoSeeder::class);
     }
 }

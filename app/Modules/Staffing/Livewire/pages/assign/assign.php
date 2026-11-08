@@ -15,6 +15,7 @@ use App\Modules\Staffing\Queries\AssignmentBoard;
 use App\Modules\Staffing\Queries\AssignmentBoardQuery;
 use App\Modules\Staffing\Queries\BoardGroup;
 use App\Modules\Staffing\Queries\GroupRankingQuery;
+use App\Modules\Staffing\Queries\StaffingBlockersQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -35,7 +36,8 @@ use Mary\Traits\Toast;
  *
  * Asignar al primer lugar es un clic; fuera de él (o fuera del ranking) pide el motivo en el renglón con el lugar que
  * ocupa. Lo que rechaza AssignTeacher se ve en su lugar. Si la carga está en propuesta, quien puede la pasa a
- * asignación (StartStaffing) y ve los motivos si Scheduling lo veta; en otro estado que no sea asignación ni ajustes
+ * asignación (StartStaffing): si ya se sabe que Scheduling lo vetaría (StaffingBlockersQuery), el botón sale
+ * deshabilitado con los motivos, y si lo veta al pasarla, ve los motivos; en otro estado que no sea asignación ni ajustes
  * es de solo lectura. La ven quienes ven el ranking del departamento (StaffingRankingPolicy::viewAny) y asignan
  * quienes pueden (GroupTeacherAssignmentPolicy::create), con la policy antes de cada método. Lo que muestra sale de
  * AssignmentBoardQuery y GroupRankingQuery; mientras algún grupo a la vista espera su ranking, consulta cada 5 s.
@@ -68,7 +70,7 @@ new #[Title('Asignación docente')] class extends Component
     #[Url(as: 'q')]
     public string $search = '';
 
-    /** 'todos', 'sin' (sin docente) o 'con' (con docente). */
+    /** 'todos', 'sin' (sin docente) o 'con' (con docente); sin `?estado=`, el de entrada (openOnGroupsWithoutTeacher). */
     #[Url(as: 'estado')]
     public string $state = 'todos';
 
@@ -122,6 +124,15 @@ new #[Title('Asignación docente')] class extends Component
     #[Locked]
     public array $expanded = [];
 
+    /**
+     * Los grupos con el bloque final de su ranking abierto (los que no pueden tomarlo: sin horas, choque, no
+     * disponible); plegado, el ranking muestra solo cuántos son y por qué.
+     *
+     * @var list<string>
+     */
+    #[Locked]
+    public array $finalTierOpen = [];
+
     /** El grupo al que se desplaza la página al abrirse. */
     #[Locked]
     public ?string $scrollTo = null;
@@ -144,14 +155,23 @@ new #[Title('Asignación docente')] class extends Component
     public ?array $failure = null;
 
     /**
-     * Por qué no pasó la carga a asignación (el veto de Scheduling o del diagrama).
+     * Por qué no pasó la carga a asignación (el veto de Scheduling o del diagrama), sin ids de regla.
      *
      * @var list<string>
      */
     #[Locked]
     public array $vetoReasons = [];
 
-    public function mount(Actor $context, AssignmentBoardQuery $query): void
+    /**
+     * Lo que ya se sabe que vetaría pasar la carga a asignación (StaffingBlockersQuery), calculado al entrar para
+     * quien puede pasarla: cuántos grupos tienen choques duros y cuántos no tienen horario, solo los que no son cero.
+     *
+     * @var array{conflicted?: int, unscheduled?: int}
+     */
+    #[Locked]
+    public array $blockers = [];
+
+    public function mount(Actor $context, AssignmentBoardQuery $query, StaffingBlockersQuery $blockers): void
     {
         abort_unless($context->allowsAny(StaffingPermission::RankingView), 403);
 
@@ -163,15 +183,18 @@ new #[Title('Asignación docente')] class extends Component
         $this->updatedState();
         $this->resolve($context, $query);
         $this->openRequestedGroup($query);
+        $this->openOnGroupsWithoutTeacher($query);
+        $this->checkBlockers($query, $blockers);
     }
 
     /**
      * Cambiar de departamento suelta lo elegido del anterior.
      */
-    public function updatedDepartment(Actor $context, AssignmentBoardQuery $query): void
+    public function updatedDepartment(Actor $context, AssignmentBoardQuery $query, StaffingBlockersQuery $blockers): void
     {
-        $this->reset('groupId', 'subjectFilter', 'careerFilter', 'semesterFilter', 'expanded', 'scrollTo', 'pending', 'failure', 'vetoReasons', 'sheet', 'reason', 'tab');
+        $this->reset('groupId', 'subjectFilter', 'careerFilter', 'semesterFilter', 'expanded', 'finalTierOpen', 'scrollTo', 'pending', 'failure', 'vetoReasons', 'sheet', 'reason', 'tab');
         $this->resolve($context, $query);
+        $this->checkBlockers($query, $blockers);
     }
 
     public function updatedState(): void
@@ -214,6 +237,18 @@ new #[Title('Asignación docente')] class extends Component
         }
 
         $this->expanded[] = $group->id;
+    }
+
+    /**
+     * Abre o pliega el bloque final del ranking de un grupo (en las dos vistas).
+     */
+    public function toggleFinalTier(string $groupId, AssignmentBoardQuery $query): void
+    {
+        $group = $this->groupOrFail($groupId, $query);
+
+        $this->finalTierOpen = in_array($group->id, $this->finalTierOpen, true)
+            ? array_values(array_diff($this->finalTierOpen, [$group->id]))
+            : [...$this->finalTierOpen, $group->id];
     }
 
     /**
@@ -298,13 +333,12 @@ new #[Title('Asignación docente')] class extends Component
         try {
             $action->handle($load, auth()->user());
         } catch (ValidationException $e) {
-            $this->vetoReasons = collect($e->errors())->flatten()->map(fn ($reason): string => (string) $reason)->values()->all();
-            $this->error('No pasó a asignación', e($this->vetoReasons[0] ?? ''));
+            $this->vetoReasons = collect($e->errors())->flatten()->map(fn ($reason): string => self::withoutRuleIds((string) $reason))->values()->all();
 
             return;
         }
 
-        $this->vetoReasons = [];
+        $this->vetoReasons = $this->blockers = [];
         $this->success('La carga pasó a Asignación', e('Ya puedes asignar los docentes de los grupos.'));
     }
 
@@ -326,6 +360,8 @@ new #[Title('Asignación docente')] class extends Component
             : array_values(array_intersect($this->expanded, $visibleIds));
         $load = $board->load;
         $assignable = $load !== null && in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true);
+        $canAssign = $assignable && Gate::allows('create', [GroupTeacherAssignment::class, $this->scopeGroup()]);
+        $stateMessage = $this->stateMessage($board);
 
         return [
             'board' => $board,
@@ -333,14 +369,16 @@ new #[Title('Asignación docente')] class extends Component
             'sections' => $this->view === 'materia' ? $this->sections($board, $visible) : [],
             'selected' => $selected,
             'rankings' => $rankings->forGroups($board->term, $openIds),
-            'canAssign' => $assignable && Gate::allows('create', [GroupTeacherAssignment::class, $this->scopeGroup()]),
+            'canAssign' => $canAssign,
             'canStart' => $load?->status === LoadStatus::Proposed && Gate::allows('startStaffing', $load),
-            'stateMessage' => $this->stateMessage($board),
+            'stateMessage' => $stateMessage,
+            'readOnlyReason' => $canAssign ? null : ($stateMessage ?? 'Solo consulta: asignan el jefe del departamento y el jefe de proyecto docente.'),
             'counts' => ['todos' => $board->total(), 'sin' => $board->total() - $board->assignedCount(), 'con' => $board->assignedCount()],
             'subjects' => $this->subjectOptions($board),
             'careers' => $this->careerOptions($board),
             'semesters' => $this->semesterOptions($board),
             'polling' => collect($visible)->contains(fn (BoardGroup $row): bool => $row->rankingState === RankingState::Pending),
+            'nextWithoutTeacher' => self::nextWithoutTeacher($visible),
         ];
     }
 
@@ -433,6 +471,40 @@ new #[Title('Asignación docente')] class extends Component
         } else {
             $this->sheet = true;
         }
+    }
+
+    /**
+     * Sin `?estado=`, la vista por materia abre en «Sin docente» mientras la carga se asigna (asignación o ajustes) y
+     * algún grupo no tiene docente; así la tarea queda arriba y los grupos con docente no la tapan. Con `?grupo=` no,
+     * para que el grupo pedido se vea aunque tenga docente.
+     */
+    private function openOnGroupsWithoutTeacher(AssignmentBoardQuery $query): void
+    {
+        if (request()->query->has('estado') || $this->view !== 'materia' || $this->groupId !== '' || $this->departmentId === null) {
+            return;
+        }
+
+        $load = $query->load((string) $this->termId, (string) $this->campusId, $this->departmentId);
+
+        if (in_array($load?->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true) && $query->hasGroupWithoutTeacher((string) $this->termId, (string) $this->campusId, $this->departmentId)) {
+            $this->state = 'sin';
+        }
+    }
+
+    /**
+     * Si la carga está en propuesta y el usuario puede pasarla a asignación, lo que hoy la vetaría (choques duros,
+     * grupos sin horario), para deshabilitar el botón con su motivo; si no, nada.
+     */
+    private function checkBlockers(AssignmentBoardQuery $query, StaffingBlockersQuery $blockers): void
+    {
+        $this->blockers = [];
+        $load = $this->departmentId === null ? null : $query->load((string) $this->termId, (string) $this->campusId, $this->departmentId);
+
+        if ($load?->status !== LoadStatus::Proposed || ! Gate::allows('startStaffing', $load)) {
+            return;
+        }
+
+        $this->blockers = array_filter($blockers->of($load));
     }
 
     /**
@@ -643,6 +715,42 @@ new #[Title('Asignación docente')] class extends Component
             ->map(fn (int $semester): array => ['id' => (string) $semester, 'name' => "Semestre {$semester}"])
             ->values()
             ->all();
+    }
+
+    /**
+     * Para cada grupo a la vista, el siguiente sin docente en el orden de la lista (después del último, el primero);
+     * un grupo sin otro después no aparece. Lo usa «Siguiente sin docente».
+     *
+     * @param  list<BoardGroup>  $visible
+     * @return array<string, string> id del grupo => id del siguiente sin docente
+     */
+    private static function nextWithoutTeacher(array $visible): array
+    {
+        $count = count($visible);
+        $next = [];
+        $following = null;
+
+        for ($index = 2 * $count - 1; $index >= 0; $index--) {
+            $row = $visible[$index % $count];
+
+            if ($index < $count && $following !== null && $following !== $row->group->id) {
+                $next[$row->group->id] = $following;
+            }
+
+            if (! $row->hasTeacher()) {
+                $following = $row->group->id;
+            }
+        }
+
+        return $next;
+    }
+
+    /**
+     * Un motivo sin el id de regla entre paréntesis («… antes de asignar docentes (HC-15).»): en pantalla va en palabras.
+     */
+    private static function withoutRuleIds(string $reason): string
+    {
+        return (string) preg_replace('/\s*\((?:HC|SC)-\d+\)/u', '', $reason);
     }
 
     private static function fold(string $text): string

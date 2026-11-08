@@ -75,6 +75,7 @@ class AcademicDemoSeeder extends Seeder
             $careerIds = $this->seedCareers($careers, $departmentIds);
             $this->seedOfferings($careers, $careerIds, $campuses, $campusIds);
             $planIds = $this->seedPlans($plans, $careers, $careerIds);
+            $this->markCurrentPlans($careerIds);
             $subjectIds = $this->seedSubjects($subjects, $departmentIds, $now);
             $specialtyIds = $this->seedSpecialties($plans, $planIds, $now);
             $this->seedPlacements($plans, $planIds, $subjectIds, $specialtyIds, $now);
@@ -247,6 +248,26 @@ class AcademicDemoSeeder extends Seeder
         }
 
         return $this->upsert(StudyPlan::class, $rows, ['code'], ['name', 'version', 'semesters_count', 'total_credits', 'is_active', 'valid_from']);
+    }
+
+    /**
+     * La retícula vigente de cada carrera sembrada (`study_plans.is_current`, la que se ofrece a quien entra): la activa
+     * más reciente por `valid_from` y clave, solo si la carrera todavía no tiene una, para no pisar lo que se haya
+     * editado. Sin ella, el editor de horarios mostraría todas las retículas como «Prioridad».
+     *
+     * @param  array<string, string>  $careerIds
+     */
+    private function markCurrentPlans(array $careerIds): void
+    {
+        foreach ($careerIds as $careerId) {
+            $hasCurrent = StudyPlan::query()->where('career_id', $careerId)->where('is_current', true)->exists();
+            $newest = StudyPlan::query()->where('career_id', $careerId)->where('is_active', true)
+                ->orderByDesc('valid_from')->orderByDesc('code')->first();
+
+            if (! $hasCurrent && $newest !== null) {
+                $newest->forceFill(['is_current' => true])->save();
+            }
+        }
     }
 
     /**
