@@ -1,7 +1,9 @@
 {{--
     Selectores del editor de horarios: Carrera; Retícula, un segmentado con la vigente («Vigente») y cada vieja
-    («Prioridad» y cuántos grupos tiene sin acomodar; «Inactiva» si el plan ya no está activo pero tiene grupos); Semestre («Semestre 3 · 4 sin acomodar»); el docente o el salón
-    en esas vistas, y «Ver por». Debajo de 768 px cada control ocupa el ancho.
+    («Prioridad» y cuántos grupos tiene sin acomodar; «Inactiva» si el plan ya no está activo pero tiene grupos), o su
+    clave como texto si la carrera tiene una sola (un segmentado de una opción no elige nada); Semestre («Semestre 3 · 4
+    sin acomodar»); el docente o el salón en esas vistas, y «Ver por». El semestre, el docente o el salón y «Ver por» se
+    parten juntos, así «Ver por» nunca queda solo en un renglón. Debajo de 768 px cada control ocupa el ancho.
 --}}
 @php
     $careerOptions = array_map(fn (array $row): array => ['id' => $row['id'], 'name' => $row['code'].' · '.$row['name']], $careers);
@@ -20,6 +22,22 @@
     @isset($plan)
         <fieldset class="fieldset py-0 max-md:w-full">
             <legend class="fieldset-legend mb-0.5">Retícula</legend>
+            @if (count($plans) === 1)
+                <div class="flex h-10 items-center gap-2 text-sm font-medium whitespace-nowrap" data-testid="plan-{{ $plans[0]['code'] }}">
+                    <span class="font-mono">{{ $plans[0]['code'] }}</span>
+                    @if (! ($plans[0]['is_active'] ?? true))
+                        <x-core::status-badge tone="neutral" label="Inactiva" />
+                    @endif
+                    @if ($plans[0]['is_current'])
+                        <x-core::status-badge tone="success" label="Vigente" />
+                    @else
+                        <x-core::status-badge tone="warning" icon="o-exclamation-triangle" label="Prioridad" />
+                        @if ($plans[0]['unscheduled'] > 0)
+                            <span class="badge badge-warning badge-sm font-mono">{{ $plans[0]['unscheduled'] }}<span class="sr-only"> {{ $plans[0]['unscheduled'] === 1 ? 'grupo' : 'grupos' }} sin acomodar</span></span>
+                        @endif
+                    @endif
+                </div>
+            @else
             <div class="join max-md:join-vertical max-md:w-full" role="group" aria-label="Retícula">
                 @foreach ($plans as $row)
                     <button type="button" wire:click="choosePlan('{{ $row['id'] }}')" aria-pressed="{{ $row['id'] === $plan->id ? 'true' : 'false' }}" @class([$segment, 'max-md:justify-start']) data-testid="plan-{{ $row['code'] }}">
@@ -38,8 +56,10 @@
                     </button>
                 @endforeach
             </div>
+            @endif
         </fieldset>
 
+        <div class="flex grow flex-wrap items-end gap-x-4 gap-y-3 max-md:w-full">
         <div class="max-md:w-full md:min-w-56">
             <x-select label="Semestre" wire:model.live="semester" data-testid="editor-semester"
                 :options="array_map(fn (array $row): array => ['id' => (string) $row['semester'], 'name' => 'Semestre '.$row['semester'].($row['unscheduled'] > 0 ? ' · '.$row['unscheduled'].' sin acomodar' : '')], $semesters)" />
@@ -65,5 +85,6 @@
                 @endforeach
             </div>
         </fieldset>
+        </div>
     @endisset
 </div>

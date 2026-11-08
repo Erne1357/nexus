@@ -5,9 +5,13 @@
     - El error HC-07 cuando la suma pasa la capacidad.
     - Un renglón por carrera: clave en Mono, nombre, lugares, quitar y, debajo, su estado (Dueña, Aceptado,
       Propuesto con su motivo). En celular el renglón se apila (clave y nombre, luego lugares).
-    - «Agregar carrera» y «Guardar cupos». Sin permiso, lo mismo en solo lectura y con su motivo.
+    - «Agregar carrera», que dice junto a él qué pasará: una carrera del departamento que imparte entra al borrador y
+      cuenta al guardar; una de otro departamento se propone en ese momento a su jefe. Quitar una propuesta la retira
+      en ese momento, así que pide confirmar.
+    - «Guardar cupos» en el pie fijo del cajón (`sticky`, como el de la sesión). Sin permiso, lo mismo en solo lectura
+      y con su motivo.
 --}}
-<section aria-labelledby="quotas-title-{{ $groupId }}" class="grid gap-3" data-testid="group-quotas">
+<section aria-labelledby="quotas-title-{{ $groupId }}" class="flex flex-1 flex-col gap-3" data-testid="group-quotas">
     <h3 id="quotas-title-{{ $groupId }}" class="text-base font-semibold">Cupos por carrera</h3>
 
     @php($alerts = collect($errors->getBag('default')->toArray())->except(['newCareer', 'newSeats'])->flatten()->unique()->values())
@@ -26,7 +30,7 @@
         <i class="block h-full bg-warning/70" style="width: {{ $pending }}%"></i>
     </div>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <b class="font-mono font-semibold" data-testid="quotas-sum">{{ $counted }} de {{ $capacity }} lugares repartidos</b>
+        <b class="font-semibold" data-testid="quotas-sum"><span class="font-mono">{{ $counted }}</span> de <span class="font-mono">{{ $capacity }}</span> lugares repartidos</b>
         @if ($proposed > 0)
             <x-core::status-badge tone="warning" :label="'+'.$proposed.' propuestos · no cuentan'" />
         @endif
@@ -59,7 +63,8 @@
                     <span class="grid size-10 place-items-center text-base-content/30"><x-icon name="o-lock-closed" class="h-4 w-4" aria-hidden="true" /><span class="sr-only">La carrera dueña no se quita</span></span>
                 @else
                     <button type="button" wire:click="removeCareer('{{ $row['career_id'] }}')" @disabled(! $canManage)
-                        class="btn btn-ghost btn-sm size-10 p-0 text-base-content/60" aria-label="Quitar {{ $row['code'] }}">
+                        @if ($proposedRow) wire:confirm="¿Retirar la propuesta de {{ $row['code'] }}? Se retira en este momento y el jefe de {{ $row['decides']['name'] }} ya no la verá." @endif
+                        class="btn btn-ghost btn-sm size-10 p-0 text-base-content/60" aria-label="{{ $proposedRow ? 'Retirar la propuesta de' : 'Quitar' }} {{ $row['code'] }}">
                         <x-icon name="o-x-mark" class="h-4 w-4" aria-hidden="true" />
                     </button>
                 @endif
@@ -98,21 +103,27 @@
         </div>
         @error('newCareer') <p class="text-sm text-error" role="alert">{{ $message }}</p> @enderror
         @error('newSeats') <p class="text-sm text-error" role="alert">{{ $message }}</p> @enderror
-        @if ($selected && $selected['needs_agreement'])
-            <p class="flex items-start gap-2 text-sm"><x-icon name="o-information-circle" class="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />Se crea un acuerdo: el cupo cuenta cuando el jefe de {{ $selected['department']['name'] }} lo acepta.</p>
-        @endif
+        <p class="flex items-start gap-2 text-sm" data-testid="quota-add-hint">
+            @if ($selected && $selected['needs_agreement'])
+                <x-icon name="o-paper-airplane" class="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" /><span>Es de otro departamento: se propone en este momento al jefe de {{ $selected['department']['name'] }} y el cupo cuenta cuando lo acepta.</span>
+            @elseif ($selected)
+                <x-icon name="o-pencil" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" aria-hidden="true" /><span>Es del departamento que imparte: entra a los cupos y cuenta al «Guardar cupos».</span>
+            @else
+                <x-icon name="o-information-circle" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" aria-hidden="true" /><span class="text-neutral">Una carrera del departamento que imparte cuenta al «Guardar cupos»; una de otro departamento se propone en este momento a su jefe.</span>
+            @endif
+        </p>
         <div>
             <x-button wire:click="addCareer" icon="o-plus" class="btn-outline" :disabled="! $canManage || ! $hasAddable" spinner="addCareer"
                 :label="$selected && $selected['needs_agreement'] ? 'Proponer a '.$selected['department']['name'] : 'Agregar carrera'" />
         </div>
     </div>
 
-    <div class="flex flex-wrap items-center justify-end gap-3 border-t border-base-300 pt-3">
+    <footer class="sticky bottom-0 -mx-5 mt-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2 border-t border-base-300 bg-base-100 px-5 py-3.5" data-testid="quotas-footer">
         @if ($reason)
-            <span class="flex items-center gap-1.5 text-sm text-neutral" data-testid="quotas-reason"><x-icon name="o-lock-closed" class="h-4 w-4" aria-hidden="true" />{{ $reason }}</span>
+            <span class="me-auto flex min-w-0 items-start gap-1.5 text-sm text-neutral" data-testid="quotas-reason"><x-icon name="o-lock-closed" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{{ $reason }}</span>
         @elseif ($over > 0)
-            <span class="flex items-center gap-1.5 text-sm text-error"><x-icon name="o-x-circle" class="h-4 w-4" aria-hidden="true" />Corrige los lugares para guardar.</span>
+            <span class="me-auto flex items-center gap-1.5 text-sm text-error"><x-icon name="o-x-circle" class="h-4 w-4" aria-hidden="true" />Corrige los lugares para guardar.</span>
         @endif
-        <x-button wire:click="save" class="btn-primary" label="Guardar cupos" spinner="save" :disabled="! $canManage || $over > 0" />
-    </div>
+        <x-button wire:click="save" class="btn-primary" label="Guardar cupos" icon="o-check" spinner="save" :disabled="! $canManage || $over > 0" data-testid="save-quotas" />
+    </footer>
 </section>

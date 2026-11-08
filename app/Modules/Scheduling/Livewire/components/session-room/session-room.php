@@ -13,7 +13,8 @@ use Mary\Traits\Toast;
 /**
  * La sección de salón del cajón de la sesión en el editor de horarios (tarea 3.7; maqueta `cajones`, estado
  * `#sesion`): el salón actual con su estado («Asignado», «Préstamo pendiente · HC-10»…) y «Quitar salón»; los salones
- * sugeridos (RoomSuggestionQuery) como radios, con su clave en Mono, tipo, capacidad, motivos y estado; los ocupados
+ * sugeridos (RoomSuggestionQuery) como radios, los tres mejores a la vista y los demás con «Ver N más», con su clave
+ * en Mono, tipo, si cabe el grupo, por qué se sugiere y su estado («Libre» solo si alguno no lo está); los ocupados
  * (HC-02) o apartados por el préstamo de otro grupo, deshabilitados con quién los tiene; los que causarían HC-05,
  * HC-06, HC-10 u HC-11 muestran el choque que dejarían; el buscador de otro salón y «Asignar salón», o «Asignar y pedir
  * préstamo» si el elegido es de otro departamento (AssignSessionRoom). Los errores de la Action salen en un aviso arriba.
@@ -33,6 +34,9 @@ use Mary\Traits\Toast;
 new class extends Component
 {
     use Toast;
+
+    /** Cuántos sugeridos se ven de entrada; los demás, con «Ver N más». */
+    private const int SHOWN = 3;
 
     /** La sesión del cajón. El navegador no la puede cambiar. */
     #[Locked]
@@ -67,10 +71,14 @@ new class extends Component
             ? app(LoadEditability::class)->blockedReasons([$session->group])[$session->group->id]
             : "Lo asigna el jefe de {$data['department']['name']}.";
         $listed = [...$data['rooms'], ...$data['results']];
+        $hidden = array_column(array_slice($data['rooms'], self::SHOWN), 'id');
 
         return [
             'current' => $data['current'],
             'rooms' => $data['rooms'],
+            'shown' => self::SHOWN,
+            'revealed' => array_intersect($hidden, $data['matched']) !== [],
+            'allFree' => array_all($listed, fn (array $row): bool => $row['state']['free']),
             'results' => $data['results'],
             'matched' => $data['matched'],
             'searched' => $searched,

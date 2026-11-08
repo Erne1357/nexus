@@ -53,11 +53,15 @@ it('el jefe del departamento que imparte ve el panel con la dueña, la barra y �
         ->assertSee('Cupos por carrera')
         ->assertSee('ISC')
         ->assertSee('Dueña')
-        ->assertSee('20 de 40 lugares repartidos')
+        ->assertSeeText('20 de 40 lugares repartidos')
         ->assertSee('Guardar cupos')
         ->assertSee('Agregar carrera')
+        ->assertSee('una de otro departamento se propone en este momento a su jefe')
+        ->set('newCareer', $this->sameDept->id)
+        ->assertSee('Es del departamento que imparte: entra a los cupos y cuenta al «Guardar cupos».')
         ->set('newCareer', $this->foreign->id)
         ->assertSee('Proponer a Sistemas')
+        ->assertSee('Es de otro departamento: se propone en este momento al jefe de Sistemas y el cupo cuenta cuando lo acepta.')
         ->assertDontSee('Los cupos los reparte');
 });
 
@@ -71,7 +75,7 @@ it('guarda los cupos, avisa y despacha quotas-saved', function () {
         ->call('save')
         ->assertHasNoErrors()
         ->assertDispatched('quotas-saved')
-        ->assertSee('35 de 40 lugares repartidos');
+        ->assertSeeText('35 de 40 lugares repartidos');
 
     expect(GroupQuota::query()->where('group_id', $this->group->id)->orderByDesc('is_owner')->orderBy('id')->pluck('max_seats', 'career_id')->all())
         ->toBe([$this->owner->id => 25, $this->sameDept->id => 10]);
@@ -86,7 +90,7 @@ it('proponer a otra carrera de otro departamento crea el acuerdo y la muestra «
         ->assertDispatched('quotas-saved')
         ->assertSee('Propuesto')
         ->assertSee('Espera al jefe de Sistemas')
-        ->assertSee('20 de 40 lugares repartidos')
+        ->assertSeeText('20 de 40 lugares repartidos')
         ->assertSee('+5 propuestos');
 
     expect(InterdepartmentalAgreement::query()->live()->sole()->career_id)->toBe($this->foreign->id)
@@ -101,10 +105,15 @@ function proposedForeign(object $test, int $seats = 5): InterdepartmentalAgreeme
     ]);
 }
 
-it('quitar un propuesto retira su acuerdo al instante', function () {
+it('quitar un propuesto pide confirmar y retira su acuerdo al instante', function () {
     proposedForeign($this);
 
-    quotasAs($this->jefe, $this->group)
+    $component = quotasAs($this->jefe, $this->group);
+    $remove = domOf($component)->querySelector('[data-quota="IIND"] button[aria-label="Retirar la propuesta de IIND"]');
+
+    expect($remove?->getAttribute('wire:confirm'))->toBe('¿Retirar la propuesta de IIND? Se retira en este momento y el jefe de Sistemas ya no la verá.');
+
+    $component
         ->call('removeCareer', $this->foreign->id)
         ->assertHasNoErrors()
         ->assertDispatched('quotas-saved')
@@ -179,7 +188,7 @@ it('el coordinador de la carrera dueña lo ve en solo lectura con el motivo', fu
     quotasAs($coordinador, $this->group)
         ->assertOk()
         ->assertSee('ISC')
-        ->assertSee('20 de 40 lugares repartidos')
+        ->assertSeeText('20 de 40 lugares repartidos')
         ->assertSee('Los cupos los reparte el jefe de Ciencias Básicas.')
         ->call('save')
         ->assertForbidden();
