@@ -113,8 +113,8 @@ final class ScheduleStateQuery
         }
         $this->addTeachers($builder, $term, $groups->pluck('teacher_id')->filter()->unique()->values()->all());
 
-        foreach (Campus::query()->get(['id', 'settings']) as $each) {
-            $builder->profile($each->id, $each->profile);
+        foreach (Campus::query()->get(['id', 'code', 'settings']) as $each) {
+            $builder->profile($each->id, $each->profile)->campusCode($each->id, $each->code);
         }
 
         CareerCampus::query()->where('is_active', true)->get(['career_id', 'campus_id'])

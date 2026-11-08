@@ -39,6 +39,7 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 | SC-06 | Un docente no cambia de edificio entre horas consecutivas. | 2 | R2 |
 | SC-07 | Materias de semestres consecutivos de una carrera no se empalman entre sí (para alumnos irregulares). | 3 | R2 |
 | SC-08 | Un grupo con docente de honorarios se programa en los turnos donde hay disponibilidad declarada. | 2 | R2 |
+| SC-09 | Si un docente tiene dos sesiones seguidas el mismo día en campus distintos, entre el fin de una y el inicio de la otra quedan al menos los minutos de traslado (`staffing.min_campus_travel_minutes`, 60 por omisión); si no, es un aviso en los dos grupos que no bloquea (confirmado el 7 de noviembre de 2026). «Seguidas» es sin otra sesión del docente en medio; dos que se empalman ya son HC-01. Cuentan todas las sesiones, también las virtuales (supuesto por confirmar). | — | R1 (aviso) |
 
 Los pesos son configurables por campus (`settings`, clave `solver.weights`).
 
@@ -296,6 +297,9 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
+| Ver la carga por docente | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` (su departamento y campus) | Las horas asignadas suman todos los campus; las categorías son las de HC-08 (supuesto por confirmar en los nombres de las categorías) |
+| Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
+| Aprobar o rechazar cambio | `jefe_departamento` | |
 | Quitar el docente de un grupo | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | Con motivo; queda en el historial de asignaciones (supuesto por confirmar) |
 | Solicitar cambio | `docente` asignado al grupo (permiso personal `staffing.change_request.request_own`), `coordinador` de la carrera dueña y campus (`staffing.change_request.request`) | carga del departamento en `staffing` o `adjusting`; grupo no cancelado. El docente, una solicitud abierta por grupo (confirmado el 7 de noviembre de 2026). Ver "Solicitudes de cambio" |
 | Ver las solicitudes de cambio | quien la pidió, `jefe_departamento`, `jefe_proyecto_docente`, `subdireccion` | Alcance de campus y departamento del grupo (`staffing.change_request.view`; supuesto por confirmar para `jefe_proyecto_docente` y `subdireccion`, solo lectura) |

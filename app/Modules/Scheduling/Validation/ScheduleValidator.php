@@ -9,6 +9,7 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Scheduling\Rules\Constraints\CampusWindow;
 use App\Modules\Scheduling\Rules\Constraints\Constraint;
 use App\Modules\Scheduling\Rules\Constraints\LabRoom;
@@ -57,12 +58,14 @@ final class ScheduleValidator
         RoomBlocked::class,
         WeeklyHours::class,
         OfferableGroup::class,
+        CampusTravel::class,
     ];
 
     /**
-     * Lo que checkTeacher() responde: choque (HC-01), horas (HC-08) y disponibilidad (HC-09) del docente.
+     * Lo que checkTeacher() responde: choque (HC-01), horas (HC-08) y disponibilidad (HC-09) del docente, y el aviso de
+     * traslado justo entre campus (SC-09).
      */
-    public const array TEACHER_RULES = ['HC-01', 'HC-08', 'HC-09'];
+    public const array TEACHER_RULES = ['HC-01', 'HC-08', 'HC-09', 'SC-09'];
 
     /** @var array<string, ScheduleState> */
     private array $states = [];
