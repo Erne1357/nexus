@@ -107,3 +107,25 @@ it('avisa con AgreementCancelled solo después del commit', function () {
     app(CancelAgreement::class)->handle($agreement, $this->actor);
     Event::assertDispatched(AgreementCancelled::class, fn (AgreementCancelled $event): bool => $event->agreement->is($agreement));
 });
+
+it('con announce: false cancela sin avisar, y quien llama avisa después con announce(), diciendo si se reemplaza', function () {
+    Event::fake([AgreementCancelled::class]);
+    $agreement = InterdepartmentalAgreement::factory()->create();
+
+    app(CancelAgreement::class)->handle($agreement, $this->actor, announce: false);
+
+    expect($agreement->fresh()->status)->toBe(AgreementStatus::Cancelled);
+    Event::assertNotDispatched(AgreementCancelled::class);
+
+    app(CancelAgreement::class)->announce($agreement, replaced: true);
+    Event::assertDispatched(AgreementCancelled::class, fn (AgreementCancelled $event): bool => $event->agreement->is($agreement) && $event->replaced);
+});
+
+it('al cancelar con aviso, el evento dice que no se reemplaza', function () {
+    Event::fake([AgreementCancelled::class]);
+    $agreement = InterdepartmentalAgreement::factory()->create();
+
+    app(CancelAgreement::class)->handle($agreement, $this->actor);
+
+    Event::assertDispatched(AgreementCancelled::class, fn (AgreementCancelled $event): bool => ! $event->replaced);
+});
