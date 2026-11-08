@@ -256,6 +256,8 @@ describe('aplicar', function () {
     });
 
     it('el coordinador de la carrera dueña marca aplicada una de horario y la última regresa la carga a Asignación', function () {
+        // El veto real de Scheduling (BlockStaffingWithHardConflicts) tiene sus pruebas; aquí se aísla la pantalla.
+        Event::forget(LoadTransitioning::class);
         $request = crRequest($this->g1, $this->w->teacherUser, 'approved');
 
         crPage($this->w->coordIsc, ['solicitud' => $request->id])
@@ -295,6 +297,8 @@ describe('aplicar', function () {
     });
 
     it('el jefe marca aplicada una de salón', function () {
+        // El veto real de Scheduling (BlockStaffingWithHardConflicts) tiene sus pruebas; aquí se aísla la pantalla.
+        Event::forget(LoadTransitioning::class);
         $request = crRequest($this->g1, $this->w->teacherUser, 'approved', ['kind' => 'room']);
 
         crPage($this->w->jefeSc, ['solicitud' => $request->id])
@@ -307,6 +311,8 @@ describe('aplicar', function () {
     });
 
     it('si Scheduling veta el regreso, muestra los motivos y la carga sigue en Ajustes', function () {
+        // El veto real de Scheduling (BlockStaffingWithHardConflicts) tiene sus pruebas; aquí se aísla la pantalla.
+        Event::forget(LoadTransitioning::class);
         Event::listen(LoadTransitioning::class, function (LoadTransitioning $event): void {
             if ($event->to === LoadStatus::Staffing) {
                 $event->block('Hay 2 choques duros en el horario.');
