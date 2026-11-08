@@ -10,7 +10,8 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Fila de primer semestre con 30 elegibles, 30 esperados y un grupo solicitado.
+ * Fila de primer semestre con 30 elegibles, 30 esperados y un grupo solicitado, con un plan de la carrera de la
+ * propuesta (como las arma StartCareerProposal).
  *
  * @extends Factory<ProposalItem>
  */
@@ -25,7 +26,9 @@ class ProposalItemFactory extends Factory
         return [
             'career_proposal_id' => CareerProposal::factory(),
             'subject_id' => Subject::factory(),
-            'study_plan_id' => StudyPlan::factory(),
+            'study_plan_id' => fn (array $attributes): string => StudyPlan::factory()->create([
+                'career_id' => CareerProposal::query()->findOrFail($attributes['career_proposal_id'])->career_id,
+            ])->id,
             'semester' => 1,
             'eligible_students' => 30,
             'expected_students' => 30,
