@@ -20,7 +20,8 @@ use Mary\Traits\Toast;
  * estado `#grupo`): un renglón por carrera con su clave en Mono, su nombre, sus lugares y su estado («Dueña», que no
  * se quita; «Aceptado»; «Propuesto · aparta N lugares», que espera al jefe de <depto> y ya aparta sus lugares), la
  * barra «N de M lugares repartidos», que suma los propuestos (aparte, en rayas), el error HC-07 si la suma con lo
- * apartado se pasa (confirmado el 8 de noviembre de 2026), «Agregar carrera» (con «Proponer a <depto>» si la
+ * apartado se pasa (confirmado el 8 de noviembre de 2026; lo apartado son los lugares guardados de cada propuesta, como
+ * los cuenta SetGroupQuotas: un cambio pendiente cuenta hasta «Cambiar lugares»), «Agregar carrera» (con «Proponer a <depto>» si la
  * carrera es de otro departamento, que propone al instante con ProposeGroupQuota; quitar un «Propuesto» lo retira al
  * instante y «Cambiar lugares» lo retira y lo propone de nuevo, solo cuando se pide en su renglón) y «Guardar cupos»
  * (SetGroupQuotas, que no toca las propuestas). Los errores de cualquier llave de una Action salen en un aviso arriba.
@@ -92,7 +93,7 @@ new class extends Component
             $rows[$index]['edited'] = $row['state'] === 'proposed' && $seats !== $row['seats'] && $seats > 0;
 
             if ($row['state'] === 'proposed') {
-                $proposed += $seats;
+                $proposed += $row['seats'];
             } else {
                 $counted += $seats;
             }

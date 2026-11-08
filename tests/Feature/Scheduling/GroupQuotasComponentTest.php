@@ -186,6 +186,40 @@ it('HC-07: los lugares que aparta una propuesta cuentan para el error y no dejan
     expect(GroupQuota::query()->sole()->max_seats)->toBe(20);
 });
 
+it('HC-07: lo apartado son los lugares guardados de la propuesta: bajarlos en el borrador no libera nada hasta «Cambiar lugares»', function () {
+    proposedForeign($this, 15);
+
+    $component = quotasAs($this->jefe, $this->group)
+        ->set('quotas.'.$this->foreign->id, 5)
+        ->set('quotas.'.$this->owner->id, 30)
+        ->assertSeeText('45 de 40 lugares repartidos')
+        ->assertSeeText('Quita 5 lugares.')
+        ->call('save')
+        ->assertHasErrors('quotas');
+
+    $component->set('quotas.'.$this->owner->id, 20)
+        ->set('quotas.'.$this->foreign->id, 18)
+        ->assertSeeText('35 de 40 lugares repartidos')
+        ->call('changeProposal', $this->foreign->id)
+        ->assertHasNoErrors()
+        ->assertSeeText('38 de 40 lugares repartidos');
+});
+
+it('HC-07: subir en el borrador los lugares de una propuesta no cuenta hasta «Cambiar lugares», así que no impide guardar lo que sí cabe', function () {
+    proposedForeign($this, 15);
+
+    quotasAs($this->jefe, $this->group)
+        ->set('quotas.'.$this->foreign->id, 18)
+        ->set('quotas.'.$this->owner->id, 25)
+        ->assertSeeText('40 de 40 lugares repartidos')
+        ->assertDontSeeHtml('data-testid="quotas-over"')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(GroupQuota::query()->sole()->max_seats)->toBe(25)
+        ->and(InterdepartmentalAgreement::query()->live()->sole()->max_seats)->toBe(15);
+});
+
 it('valida que los lugares sean enteros de 1 en adelante', function (mixed $value) {
     quotasAs($this->jefe, $this->group)
         ->set('quotas.'.$this->owner->id, $value)
