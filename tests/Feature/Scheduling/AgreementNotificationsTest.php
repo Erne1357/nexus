@@ -3,7 +3,6 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
-use App\Modules\AcademicLoad\Actions\Agreements\RejectAgreement;
 use App\Modules\AcademicLoad\Events\AgreementRejected;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
@@ -22,8 +21,8 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Notifications\AgreementAnswered;
 use App\Modules\Scheduling\Notifications\AgreementReceived;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Validation\ValidationException;
 
 /*
 | Avisos de los acuerdos (tareas 3.6 y 3.7; supuesto por confirmar): al pedirse, a los titulares de
@@ -148,12 +147,21 @@ it('al rechazarse un grupo compartido, avisa con el motivo sin hablar de salón'
     Notification::assertSentTo($this->jefeIi, AgreementAnswered::class, fn (AgreementAnswered $notification): bool => $notification->message($this->jefeIi)->body === 'Motivo: Sin lugares.');
 });
 
-it('un rechazo sin motivo no avisa: el evento sale después del commit', function () {
+it('el aviso sale después del commit: lo que se revierte no avisa', function () {
     Notification::fake();
+    $loan = ($this->loan)();
 
-    expect(fn () => app(RejectAgreement::class)->handle(($this->loan)(), '', $this->jefeSc))->toThrow(ValidationException::class);
+    try {
+        DB::transaction(function () use ($loan): void {
+            app(RejectRoomLoan::class)->handle($loan, 'Se cruza.', $this->jefeSc);
+
+            throw new RuntimeException('se revierte');
+        });
+    } catch (RuntimeException) {
+    }
 
     Notification::assertNothingSent();
+    expect($loan->fresh()->status->value)->toBe('proposed');
 });
 
 it('se abre en Acuerdos y deja de abrirse si el acuerdo ya no existe o ya no se ve', function () {

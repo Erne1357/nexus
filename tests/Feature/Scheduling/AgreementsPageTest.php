@@ -4,6 +4,8 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -56,6 +58,7 @@ beforeEach(function () {
         'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'career_id' => $this->career->id,
     ]);
 
+    AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->ii->id]);
     $this->jefeSc = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
     $this->jefeIi = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->ii->id])->create();
 });
@@ -93,16 +96,6 @@ describe('jefe del departamento que decide', function () {
         expect($this->loan->fresh()->status)->toBe(AgreementStatus::Rejected)
             ->and($this->loan->fresh()->comment)->toBe('Se cruza con una práctica.')
             ->and($this->session->fresh()->room_id)->toBeNull();
-    });
-
-    it('aceptar un préstamo que empalma lo rechaza la Action aunque se llame directo', function () {
-        $this->session->delete();
-        $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
-        GroupSession::factory()->for($other)->on(1, '10:00', '12:00')->inRoom($this->room)->create();
-
-        agreementsAs($this->jefeSc)->call('accept', $this->loan->id)->assertHasErrors(['room_id']);
-
-        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
     });
 
     it('rechazar sin motivo muestra el error y no rechaza', function () {
@@ -143,15 +136,30 @@ describe('jefe del departamento que decide', function () {
             ->and(GroupQuota::query()->where('career_id', $other->career_id)->exists())->toBeFalse();
     });
 
-    it('un préstamo que empalma con otro grupo no se puede aceptar: el motivo va escrito y deshabilitado', function () {
-        RoomBlock::factory()->create(['room_id' => $this->room->id, 'term_id' => $this->term->id, 'day' => 1, 'starts_at' => '10:00', 'ends_at' => '12:00', 'reason' => 'Mantenimiento']);
+    it('HC-02: un préstamo que empalma con otro grupo no se puede aceptar; el motivo va escrito y la Action lo rechaza', function () {
+        $this->session->delete();
+        $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => Subject::factory()->create(['code' => 'ACF-0901'])->id, 'code' => '1B']);
+        GroupSession::factory()->for($other)->on(1, '10:00', '12:00')->inRoom($this->room)->create();
 
         agreementsAs($this->jefeSc)
             ->call('pick', $this->loan->id)
             ->assertSee('No se puede aceptar.')
-            ->assertSee('LC-201 ya está ocupado el lunes de 10:00 a 12:00 por Mantenimiento (HC-02).')
+            ->assertSee('LC-201 ya está ocupado el lunes de 10:00 a 12:00 por ACF-0901 1B (HC-02).')
             ->assertSee('Empalma')
-            ->call('accept', $this->loan->id);
+            ->call('accept', $this->loan->id)
+            ->assertHasErrors(['room_id']);
+
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
+    });
+
+    it('HC-11: un bloqueo del salón también impide aceptar y la pantalla cita HC-11', function () {
+        RoomBlock::factory()->create(['room_id' => $this->room->id, 'term_id' => $this->term->id, 'day' => 1, 'starts_at' => '10:00', 'ends_at' => '12:00', 'reason' => 'Mantenimiento']);
+
+        agreementsAs($this->jefeSc)
+            ->call('pick', $this->loan->id)
+            ->assertSee('LC-201 ya está ocupado el lunes de 10:00 a 12:00 por Mantenimiento (HC-11).')
+            ->call('accept', $this->loan->id)
+            ->assertHasErrors(['room_id']);
 
         expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
     });
@@ -219,6 +227,46 @@ describe('cancelar un préstamo', function () {
     });
 });
 
+describe('negativas por id', function () {
+    it('un jefe de un tercer departamento no encuentra el acuerdo II→SC: aceptar y rechazar por id dan 404', function () {
+        $third = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->cb->id])->create();
+
+        agreementsAs($third)->call('accept', $this->loan->id)->assertNotFound();
+        agreementsAs($third)->set('comment', 'No.')->call('reject', $this->loan->id)->assertNotFound();
+        agreementsAs($third)->call('cancel', $this->loan->id)->assertNotFound();
+
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
+    });
+
+    it('rechazar directo lo prohíbe a quien pidió y a la Subdirección, y no cambia nada', function () {
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        foreach ([$this->jefeIi, $subdireccion] as $user) {
+            agreementsAs($user)->set('comment', 'No.')->call('reject', $this->loan->id)->assertForbidden();
+        }
+
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed)
+            ->and($this->session->fresh()->room_id)->toBe($this->room->id);
+    });
+
+    it('cancelar uno ya aceptado o rechazado no hace nada: dice que ya se decidió', function () {
+        $this->loan->update(['status' => AgreementStatus::Accepted, 'decided_by' => $this->jefeSc->id, 'decided_at' => now()]);
+        $this->share->update(['status' => AgreementStatus::Rejected, 'comment' => 'No.', 'decided_by' => $this->jefeSc->id, 'decided_at' => now()]);
+
+        foreach ([$this->loan, $this->share] as $agreement) {
+            agreementsAs($this->jefeIi)->call('cancel', $agreement->id);
+            expect($agreement->fresh()->status)->not->toBe(AgreementStatus::Cancelled);
+        }
+    });
+
+    it('los toasts escapan las claves: una materia con HTML no se pinta como HTML', function () {
+        $this->group->subject->update(['code' => '<b>X</b>']);
+        $component = agreementsAs($this->jefeSc)->call('accept', $this->share->id);
+
+        expect(json_encode($component->effects['xjs'] ?? []))->not->toContain('<b>X</b>');
+    });
+});
+
 describe('subdirección', function () {
     it('ve los acuerdos del campus sin poder decidir ni cancelar', function () {
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
@@ -243,6 +291,18 @@ describe('otros puestos', function () {
 
         agreementsAs($coordinador)->assertForbidden();
         agreementsAs($docente)->assertForbidden();
+
+        foreach ([$coordinador, $docente] as $user) {
+            foreach (['pick', 'accept', 'confirmReject', 'reject', 'cancel'] as $method) {
+                $component = agreementsAs($this->jefeSc);
+                $this->actingAs($user);
+                app()->forgetScopedInstances();
+
+                $component->call($method, $this->loan->id)->assertForbidden();
+            }
+        }
+
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
     });
 
     it('un jefe de otro campus no ve nada: ni la lista ni el acuerdo por ?acuerdo=', function () {
