@@ -8,6 +8,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\Clock;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
@@ -46,8 +47,8 @@ final class TeacherScheduleQuery
                 'campus_code' => $session->group->campus->code,
                 'campus_name' => $session->group->campus->name,
                 'day' => $session->day,
-                'starts_at' => substr($session->starts_at, 0, 5),
-                'ends_at' => substr($session->ends_at, 0, 5),
+                'starts_at' => Clock::of($session->starts_at),
+                'ends_at' => Clock::of($session->ends_at),
                 'kind' => $session->kind,
                 'room' => $session->room === null ? null : ['id' => $session->room->id, 'code' => $session->room->code],
             ])
@@ -61,8 +62,8 @@ final class TeacherScheduleQuery
             ->get(['day', 'starts_at', 'ends_at', 'kind'])
             ->map(fn (TeacherAvailability $block): array => [
                 'day' => (int) $block->day,
-                'starts_at' => substr($block->starts_at, 0, 5),
-                'ends_at' => substr($block->ends_at, 0, 5),
+                'starts_at' => Clock::of($block->starts_at),
+                'ends_at' => Clock::of($block->ends_at),
                 'kind' => $block->kind,
             ])
             ->all();
