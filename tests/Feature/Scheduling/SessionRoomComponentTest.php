@@ -33,7 +33,7 @@ beforeEach(function () {
     $this->career = Career::factory()->create(['department_id' => $this->imparte->id]);
     $this->subject = Subject::factory()->create(['code' => 'AED-1026', 'department_id' => $this->imparte->id, 'needs_lab' => true]);
     $this->group = Group::factory()->create(['subject_id' => $this->subject->id, 'owner_career_id' => $this->career->id, 'code' => '3B', 'capacity' => 30]);
-    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
         'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id,
     ]);
     $this->session = GroupSession::factory()->for($this->group)->practica()->on(2, '15:00', '17:00')->create();
@@ -149,7 +149,32 @@ it('busca otro salón por clave entre los que no están sugeridos', function () 
         ->set('search', 'lc-1')
         ->assertSee('LC-106')
         ->set('search', 'zzz')
-        ->assertSee('Sin resultados para «zzz».');
+        ->assertSee('Sin resultados para «zzz».')
+        ->set('search', 'cc-11')
+        ->assertSee('Sin resultados para «cc-11».');
+});
+
+it('con la carga fuera de propuesta, asignación o ajustes, el jefe lo ve de solo lectura con ese motivo', function () {
+    $this->session->update(['room_id' => $this->free->id]);
+    $this->load->update(['status' => LoadStatus::Closed]);
+
+    sessionRoomAs($this->jefe)
+        ->assertOk()
+        ->assertSee('CC-05')
+        ->assertSee('está en cerrada: no se editan horarios.')
+        ->assertDontSee('Quitar salón')
+        ->assertSeeHtml('data-testid="session-room-reason"');
+});
+
+it('quitar el salón limpia la elección y la búsqueda', function () {
+    $this->session->update(['room_id' => $this->free->id]);
+
+    sessionRoomAs($this->jefe)
+        ->set('roomId', $this->foreign->id)
+        ->set('search', 'mm')
+        ->call('removeRoom')
+        ->assertSet('roomId', '')
+        ->assertSet('search', '');
 });
 
 it('pide elegir un salón antes de asignar', function () {

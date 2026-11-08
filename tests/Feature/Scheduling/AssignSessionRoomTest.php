@@ -68,7 +68,7 @@ it('asigna un salón libre a la sesión y la devuelve con la validación del gru
 
     expect($result->session->room_id)->toBe($this->room->id)
         ->and($result->loanRequested)->toBeFalse()
-        ->and($result->validation->isEmpty())->toBeTrue()
+        ->and(array_filter(['HC-02', 'HC-05', 'HC-06', 'HC-10', 'HC-11'], fn (string $rule): bool => $result->validation->forRule($rule) !== []))->toBe([])
         ->and($this->session->fresh()->room_id)->toBe($this->room->id)
         ->and(InterdepartmentalAgreement::query()->count())->toBe(0);
 });
@@ -126,16 +126,17 @@ it('HC-02: si otra sesión gana la carrera por el salón, la exclusión de la ba
         ->and($this->session->fresh()->room_id)->toBeNull();
 });
 
-it('HC-05, HC-06 y HC-11 no detienen el guardado: el salón se asigna y la sesión queda marcada', function (Closure $room) {
+it('HC-05, HC-06 y HC-11 no detienen el guardado: el salón se asigna y la sesión queda marcada', function (string $rule, Closure $room) {
     $room = $room();
 
-    assignRoom($room);
+    $result = assignRoom($room);
 
-    expect($this->session->fresh()->room_id)->toBe($room->id);
+    expect($this->session->fresh()->room_id)->toBe($room->id)
+        ->and($result->validation->forRule($rule))->toHaveCount(1);
 })->with([
-    'HC-05: más chico que el grupo' => [fn () => assignRoomOf(['type' => RoomType::Laboratorio, 'capacity' => 28])],
-    'HC-06: aula para una práctica con laboratorio' => [fn () => assignRoomOf(['type' => RoomType::Aula, 'capacity' => 35])],
-    'HC-11: bloqueado a esa hora' => [fn () => tap(assignRoomOf(['type' => RoomType::SalaComputo]), fn (Room $room) => RoomBlock::factory()->create(['room_id' => $room->id, 'day' => 2, 'starts_at' => '16:00', 'ends_at' => '18:00']))],
+    'HC-05: más chico que el grupo' => ['HC-05', fn () => assignRoomOf(['type' => RoomType::Laboratorio, 'capacity' => 28])],
+    'HC-06: aula para una práctica con laboratorio' => ['HC-06', fn () => assignRoomOf(['type' => RoomType::Aula, 'capacity' => 35])],
+    'HC-11: bloqueado a esa hora' => ['HC-11', fn () => tap(assignRoomOf(['type' => RoomType::SalaComputo]), fn (Room $room) => RoomBlock::factory()->create(['room_id' => $room->id, 'day' => 2, 'starts_at' => '16:00', 'ends_at' => '18:00']))],
 ]);
 
 it('HC-10: un salón de otro departamento se asigna de inmediato y pide el préstamo de la sesión al dueño', function () {
@@ -145,6 +146,7 @@ it('HC-10: un salón de otro departamento se asigna de inmediato y pide el prés
     $loan = InterdepartmentalAgreement::query()->sole();
 
     expect($result->loanRequested)->toBeTrue()
+        ->and($result->validation->forRule('HC-10')[0]->message)->toContain('préstamo pendiente')
         ->and($this->session->fresh()->room_id)->toBe($foreign->id)
         ->and($loan)
         ->status->toBe(AgreementStatus::Proposed)

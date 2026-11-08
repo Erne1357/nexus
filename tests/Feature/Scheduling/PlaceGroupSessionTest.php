@@ -296,8 +296,6 @@ it('HC-03 y las demás reglas duras que la base no impide no detienen el guardad
 });
 
 it('calcula el resultado con la foto de después de guardar, no con la que leyó antes de escribir', function () {
-    withAnotherHardRule('HC-12', 'Faltan horas.');
-
     $result = placeSession($this->group, 1, '07:00', '08:00');
 
     expect($result->validation->forRule('HC-12'))->toHaveCount(1);

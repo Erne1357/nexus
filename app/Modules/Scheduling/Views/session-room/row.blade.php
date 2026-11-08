@@ -1,7 +1,8 @@
 {{--
     Un salón de la lista del cajón de la sesión (scheduling::components.session-room): radio, clave en Mono, tipo y
-    lugares; sus motivos como chips; y su estado con insignia: «Libre», «Préstamo aceptado», «Ocupado · …» (HC-02, no se
-    elige) o el choque que causaría (HC-05, HC-06, HC-10, HC-11). Sin permiso, el radio queda deshabilitado.
+    lugares; sus motivos como chips; y su estado con insignia: «Libre», «Préstamo aceptado», «Ocupado · …» (HC-02) o
+    «Pedido para …»/«Prestado a …» (el préstamo de otro grupo), que no se eligen, o el choque que causaría (HC-05,
+    HC-06, HC-10, HC-11). Sin permiso o con el grupo sin editar, el radio queda deshabilitado.
 --}}
 @php($disabled = ! $row['selectable'] || ! $canAssign)
 <label wire:key="room-{{ $list }}-{{ $row['id'] }}" data-room="{{ $row['code'] }}"
@@ -25,8 +26,8 @@
         @endif
         <span id="room-state-{{ $list }}-{{ $row['id'] }}" class="mt-2 flex flex-wrap items-center gap-1.5">
             @if ($row['state']['busy'] !== null)
-                <x-core::status-badge tone="error" :label="'Ocupado · '.$row['state']['busy']" />
-                <span class="w-full text-sm text-neutral">HC-02: no se puede elegir.</span>
+                <x-core::status-badge tone="error" :label="$row['state']['busy']" />
+                <span class="w-full text-sm text-neutral">{{ $row['state']['busyNote'] }}</span>
             @elseif ($row['conflicts'] === [])
                 <x-core::status-badge tone="success" :label="$row['state']['covered'] ? 'Préstamo aceptado' : 'Libre'" />
             @else

@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -42,7 +43,7 @@ function suggestedRoom(string $code, RoomType $type = RoomType::Aula, int $capac
 }
 
 /**
- * @return array{current: ?array<string, mixed>, rooms: list<array<string, mixed>>}
+ * @return array{department: array{code: string, name: string}, current: ?array<string, mixed>, rooms: list<array<string, mixed>>, results: list<array<string, mixed>>}
  */
 function suggestionsFor(?GroupSession $session = null, int $limit = 8, string $search = ''): array
 {
@@ -140,7 +141,7 @@ it('HC-02, HC-05, HC-06, HC-10 y HC-11: da el estado de cada salón para esta se
     expect($rooms['CC-05']['state'])->toMatchArray(['free' => true, 'busy' => null, 'blocked' => null, 'needsLoan' => false, 'tooSmall' => false, 'wrongType' => false])
         ->and($rooms['CC-05']['selectable'])->toBeTrue()
         ->and($rooms['CC-05']['conflicts'])->toBe([])
-        ->and($rooms['CC-03']['state'])->toMatchArray(['free' => false, 'busy' => 'AED-1026 3A · mar 15:00–16:00'])
+        ->and($rooms['CC-03']['state'])->toMatchArray(['free' => false, 'busy' => 'Ocupado · AED-1026 3A · mar 15:00–16:00', 'busyNote' => 'HC-02: no se puede elegir.'])
         ->and($rooms['CC-03']['selectable'])->toBeFalse()
         ->and($rooms['CC-04']['state']['blocked'])->toBe('Mantenimiento · mar 16:00–18:00')
         ->and($rooms['CC-04']['conflicts'])->toBe([['rule' => 'HC-11', 'label' => 'Bloqueado · Mantenimiento', 'message' => 'CC-04 está bloqueado el martes de 16:00 a 18:00: Mantenimiento.']])
@@ -203,15 +204,46 @@ it('solo da salones activos del campus del grupo, hasta el límite', function ()
         ->and(suggestionsFor(limit: 2)['rooms'])->toHaveCount(2);
 });
 
-it('busca otro salón por clave o nombre, con los comodines tomados literalmente', function () {
+it('busca otro salón por clave o nombre entre los que no están sugeridos, con los comodines tomados literalmente', function () {
+    suggestedRoom('L-1', RoomType::SalaComputo);
+    suggestedRoom('L-2', RoomType::SalaComputo);
     suggestedRoom('LC-106', attributes: ['name' => 'Aula magna']);
     suggestedRoom('LC-201');
-    suggestedRoom('CC-05', attributes: ['name' => 'Centro de cómputo 100%']);
+    suggestedRoom('AU-05', attributes: ['name' => 'Centro 100%']);
 
-    expect(array_column(suggestionsFor(search: 'lc-1')['rooms'], 'code'))->toBe(['LC-106'])
-        ->and(array_column(suggestionsFor(search: 'MAGNA')['rooms'], 'code'))->toBe(['LC-106'])
-        ->and(array_column(suggestionsFor(search: '0%')['rooms'], 'code'))->toBe(['CC-05'])
-        ->and(suggestionsFor(search: '%')['rooms'])->toHaveCount(1);
+    $codes = fn (string $search): array => array_column(suggestionsFor(limit: 2, search: $search)['results'], 'code');
+
+    expect(array_column(suggestionsFor(limit: 2)['rooms'], 'code'))->toBe(['L-1', 'L-2'])
+        ->and(suggestionsFor(limit: 2)['results'])->toBe([])
+        ->and($codes('lc-1'))->toBe(['LC-106'])
+        ->and($codes('MAGNA'))->toBe(['LC-106'])
+        ->and($codes('0%'))->toBe(['AU-05'])
+        ->and($codes('%'))->toBe(['AU-05'])
+        ->and($codes('l-1'))->toBe([])
+        ->and($codes('lc'))->toBe(['LC-106', 'LC-201']);
+});
+
+it('HC-10: un salón que otro grupo ya tiene pedido o prestado a esa hora se ve ocupado y no se elige; el préstamo del propio grupo no', function () {
+    $requested = suggestedRoom('MM-L1', RoomType::Laboratorio, 30, ['department_id' => $this->metal->id]);
+    $lent = suggestedRoom('MM-L2', RoomType::Laboratorio, 30, ['department_id' => $this->metal->id]);
+    $mine = suggestedRoom('MM-L3', RoomType::Laboratorio, 30, ['department_id' => $this->metal->id]);
+    $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'code' => '3A']);
+    $loan = fn (Room $room, string $groupId, AgreementStatus $status, string $startsAt = '16:00', string $endsAt = '18:00') => InterdepartmentalAgreement::factory()->inStatus($status)->create([
+        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $groupId, 'room_id' => $room->id,
+        'from_department_id' => $this->mine->id, 'to_department_id' => $this->metal->id, 'day' => 2, 'starts_at' => $startsAt, 'ends_at' => $endsAt,
+    ]);
+    $loan($requested, $other->id, AgreementStatus::Proposed);
+    $loan($lent, $other->id, AgreementStatus::Accepted);
+    $loan($mine, $this->group->id, AgreementStatus::Proposed, '15:00', '17:00');
+    $loan($mine, $other->id, AgreementStatus::Accepted, '17:00', '18:00');
+
+    $rooms = suggestionsByCode();
+
+    expect($rooms['MM-L1']['state'])->toMatchArray(['busy' => 'Pedido para AED-1026 3A · SC', 'busyNote' => 'HC-10: el salón ya está apartado para otro grupo; no se puede elegir.'])
+        ->and($rooms['MM-L1']['selectable'])->toBeFalse()
+        ->and($rooms['MM-L2']['state']['busy'])->toBe('Prestado a AED-1026 3A · SC')
+        ->and($rooms['MM-L3']['state'])->toMatchArray(['busy' => null, 'pending' => true])
+        ->and($rooms['MM-L3']['selectable'])->toBeTrue();
 });
 
 it('lee con pocas consultas aunque el campus tenga muchos salones', function () {
@@ -225,11 +257,20 @@ it('lee con pocas consultas aunque el campus tenga muchos salones', function () 
     $this->session->update(['room_id' => Room::query()->where('code', 'R-01')->value('id')]);
     $session = $this->session->fresh();
 
-    DB::enableQueryLog();
-    $result = app(RoomSuggestionQuery::class)->for($session, 30);
-    $queries = count(DB::getQueryLog());
-    DB::disableQueryLog();
+    $counted = function (string $search) use ($session): array {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $result = app(RoomSuggestionQuery::class)->for($session, $search === '' ? 30 : 5, $search);
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return [$result, $queries];
+    };
+    [$result, $queries] = $counted('');
+    [$searched, $searchQueries] = $counted('R-2');
 
     expect($result['rooms'])->toHaveCount(25)
+        ->and($searched['results'])->not->toBe([])
+        ->and($searchQueries)->toBeLessThanOrEqual(12)
         ->and($queries)->toBeLessThanOrEqual(12);
 });

@@ -25,7 +25,8 @@ use Illuminate\Validation\ValidationException;
  * (confirmado el 7 de noviembre de 2026). Escribe en un savepoint que traduce la exclusión de la base si otra sesión
  * gana la carrera. Luego deja los préstamos del salón de antes y del nuevo al tamaño de las sesiones del grupo
  * (SyncSessionLoans): un salón de otro departamento se queda asignado y se pide su préstamo al dueño; mientras no lo
- * acepte, HC-10 «préstamo pendiente» (confirmado el 7 de noviembre de 2026). Deja la bitácora en el grupo
+ * acepte, HC-10 «préstamo pendiente» (confirmado el 7 de noviembre de 2026). Si el préstamo vivo de otro grupo ya
+ * aparta ese salón a esa hora, no se asigna y da el mensaje de RequestRoomLoan (modo estricto). Deja la bitácora en el grupo
  * (`session_room_assigned`, con la sesión de antes y de después) y avisa con GroupScheduleChanged después del commit.
  * Sin cambios no escribe, no registra ni avisa. El resultado dice si se pidió préstamo.
  */
@@ -76,7 +77,7 @@ final class AssignSessionRoom
                 $this->loans->resync($group, $previous, $session->day, $actor);
             }
 
-            $loanRequested = $room !== null && $this->loans->resync($group, $room, $session->day, $actor);
+            $loans = $room === null ? new LoanSyncResult : $this->loans->resync($group, $room, $session->day, $actor, strict: true);
 
             $session->refresh();
 
@@ -91,7 +92,7 @@ final class AssignSessionRoom
 
             $this->validator->forget();
 
-            return new SessionResult($session, $this->validator->validateGroup($group), loanRequested: $loanRequested);
+            return new SessionResult($session, $this->validator->validateGroup($group), loanRequested: $loans->requested);
         });
     }
 

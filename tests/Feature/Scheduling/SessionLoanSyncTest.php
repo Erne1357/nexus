@@ -4,22 +4,30 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Scheduling\Actions\Sessions\LoanSyncResult;
 use App\Modules\Scheduling\Actions\Sessions\SyncSessionLoans;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Notifications\AgreementReceived;
+use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
 | SyncSessionLoans (tarea 3.7, HC-10): deja los préstamos de un grupo en un salón de otro departamento, en un día, al
-| tamaño de sus sesiones. Lo que no cubren los aceptados se pide; un propuesto exacto se queda y uno que no coincide se
-| cancela y se pide de nuevo; lo que ya no toca ninguna sesión se cancela. Un salón sin dueño o del mismo
-| departamento no necesita préstamo (supuesto por confirmar).
+| tamaño de sus sesiones. Un aceptado se conserva mientras todas sus horas caigan en sesiones del grupo; si aparta horas
+| sin sesión se cancela y se pide de nuevo lo que sí se usa. Lo que no cubren los aceptados se pide; un propuesto exacto
+| se queda y uno que no coincide se cancela y se pide de nuevo; lo que ya no toca ninguna sesión se cancela. Si el
+| préstamo vivo de otro grupo ocupa el hueco, no se pide y se dice (o, en modo estricto, se detiene con su mensaje). Un
+| salón sin dueño o del mismo departamento no necesita préstamo (supuesto por confirmar).
 */
 
 beforeEach(function () {
@@ -62,9 +70,17 @@ function syncLoan(int $day, string $startsAt, string $endsAt, AgreementStatus $s
     ]);
 }
 
-function resyncLoans(?Room $room = null, int $day = 1): void
+function resyncLoans(?Room $room = null, int $day = 1, bool $strict = false): LoanSyncResult
 {
-    app(SyncSessionLoans::class)->resync(test()->group, $room ?? test()->room, $day, test()->actor);
+    return app(SyncSessionLoans::class)->resync(test()->group, $room ?? test()->room, $day, test()->actor, $strict);
+}
+
+/**
+ * Un préstamo vivo de otro grupo en el salón.
+ */
+function otherGroupLoanOfSync(int $day, string $startsAt, string $endsAt, AgreementStatus $status = AgreementStatus::Proposed): InterdepartmentalAgreement
+{
+    return syncLoan($day, $startsAt, $endsAt, $status, ['group_id' => Group::factory()->create(['term_id' => test()->term->id, 'campus_id' => test()->campus->id])->id]);
 }
 
 /**
@@ -83,11 +99,12 @@ function liveLoansOfSync(): array
 it('HC-10: pide el préstamo de una sesión en un salón de otro departamento, de quien imparte al dueño', function () {
     syncSession(1, '09:00', '11:00');
 
-    resyncLoans();
+    $result = resyncLoans();
 
     $loan = InterdepartmentalAgreement::query()->sole();
 
-    expect(liveLoansOfSync())->toBe(['1 09:00-11:00 proposed'])
+    expect($result)->requested->toBeTrue()->blocked->toBeFalse()
+        ->and(liveLoansOfSync())->toBe(['1 09:00-11:00 proposed'])
         ->and($loan->from_department_id)->toBe($this->mine->id)
         ->and($loan->to_department_id)->toBe($this->owner->id)
         ->and($loan->requested_by)->toBe($this->actor->id);
@@ -143,7 +160,7 @@ it('HC-10: cancela los préstamos vivos del grupo en el salón y día que ya no 
     $accepted = syncLoan(1, '09:00', '10:00', AgreementStatus::Accepted);
     $proposed = syncLoan(1, '16:00', '17:00');
     $otherDay = syncLoan(2, '16:00', '17:00');
-    $otherGroup = syncLoan(1, '12:00', '13:00', attributes: ['group_id' => Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id])->id]);
+    $otherGroup = otherGroupLoanOfSync(1, '12:00', '13:00');
 
     resyncLoans();
 
@@ -183,4 +200,67 @@ it('deja en la bitácora cada préstamo cancelado y pedido, causados por quien a
 
     expect(Activity::query()->orderBy('id')->pluck('event')->all())->toBe(['cancelled', 'requested'])
         ->and(Activity::query()->pluck('causer_id')->unique()->all())->toBe([$this->actor->id]);
+});
+
+it('HC-10: un aceptado que aparta horas sin sesión se cancela y se pide de nuevo lo que sí se usa (supuesto por confirmar)', function () {
+    syncSession(1, '09:00', '10:00');
+    $wide = syncLoan(1, '09:00', '11:00', AgreementStatus::Accepted);
+
+    resyncLoans();
+
+    expect($wide->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(liveLoansOfSync())->toBe(['1 09:00-10:00 proposed']);
+});
+
+it('HC-10: un aceptado que cae dentro de dos sesiones pegadas del grupo se conserva', function () {
+    syncSession(1, '09:00', '10:00');
+    syncSession(1, '10:00', '11:00', kind: SessionKind::Practica);
+    $loan = syncLoan(1, '09:00', '11:00', AgreementStatus::Accepted);
+
+    resyncLoans();
+
+    expect(liveLoansOfSync())->toBe(['1 09:00-11:00 accepted'])
+        ->and($loan->fresh()->status)->toBe(AgreementStatus::Accepted);
+});
+
+it('HC-10: si el préstamo vivo de otro grupo ocupa el hueco, no lo pide, cancela lo que ya no sirve y lo dice', function () {
+    syncSession(1, '09:00', '12:00');
+    $stale = syncLoan(1, '09:00', '10:00');
+    otherGroupLoanOfSync(1, '11:00', '13:00', AgreementStatus::Accepted);
+
+    $result = resyncLoans();
+
+    expect($result)->requested->toBeFalse()->blocked->toBeTrue()
+        ->and($stale->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(liveLoansOfSync())->toBe([]);
+});
+
+it('HC-10: en modo estricto, el préstamo vivo de otro grupo detiene con su mensaje y no cancela nada', function () {
+    syncSession(1, '09:00', '12:00');
+    $stale = syncLoan(1, '09:00', '10:00');
+    otherGroupLoanOfSync(1, '11:00', '13:00');
+
+    expect(fn () => resyncLoans(strict: true))->toThrow(ValidationException::class, 'El salón ya está prestado o pedido a esa hora.')
+        ->and($stale->fresh()->status)->toBe(AgreementStatus::Proposed);
+});
+
+it('avisa al dueño una vez por préstamo pedido: un propuesto que ya coincide no vuelve a avisar y el aviso del cancelado ya no se abre', function () {
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->owner->id])->create();
+    $session = syncSession(1, '09:00', '11:00');
+
+    resyncLoans();
+    resyncLoans();
+
+    expect($jefe->notifications()->count())->toBe(1);
+    $first = NotificationMessage::fromArray($jefe->notifications()->sole()->data);
+
+    $session->update(['ends_at' => '12:00']);
+    resyncLoans();
+
+    $context = app(Actor::class)->forUser($jefe);
+    $second = NotificationMessage::fromArray($jefe->notifications()->get()->first(fn ($notification) => $notification->data['parameters']['acuerdo'] !== $first->parameters['acuerdo'])->data);
+
+    expect($jefe->notifications()->count())->toBe(2)
+        ->and(AgreementReceived::unavailableReason($context, $first))->toBe('Este acuerdo se canceló.')
+        ->and(AgreementReceived::unavailableReason($context, $second))->toBeNull();
 });

@@ -236,21 +236,51 @@ it('HC-10: mover una sesión en un salón de otro departamento cancela el prést
         ->and(liveLoansOfMove())->toBe(['3 10:00-12:00 proposed']);
 });
 
-it('HC-10: un préstamo aceptado que sigue cubriendo parte de la sesión movida se conserva y solo se pide el hueco', function () {
-    inForeignRoomOfMove(AgreementStatus::Accepted);
+it('HC-10: un préstamo aceptado que deja de coincidir con la sesión movida se cancela y se pide de nuevo por sus horas (supuesto por confirmar)', function () {
+    $accepted = inForeignRoomOfMove(AgreementStatus::Accepted);
 
     moveSession($this->session, 1, '08:00', '10:00');
 
-    expect(liveLoansOfMove())->toBe(['1 07:00-09:00 accepted', '1 09:00-10:00 proposed']);
+    expect($accepted->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(liveLoansOfMove())->toBe(['1 08:00-10:00 proposed']);
 });
 
-it('HC-10: cambiar solo el tipo de la sesión conserva su préstamo', function () {
-    $loan = inForeignRoomOfMove();
+it('HC-10: alargar la sesión conserva el préstamo aceptado que sigue dentro de ella y pide solo lo que falta', function () {
+    inForeignRoomOfMove(AgreementStatus::Accepted);
+
+    $result = moveSession($this->session, 1, '07:00', '10:00');
+
+    expect($result->loanRequested)->toBeTrue()
+        ->and(liveLoansOfMove())->toBe(['1 07:00-09:00 accepted', '1 09:00-10:00 proposed']);
+});
+
+it('HC-10: cambiar solo el tipo de la sesión no revisa sus préstamos', function () {
+    $loan = inForeignRoomOfMove(AgreementStatus::Accepted);
+    $loan->update(['ends_at' => '10:00']);
 
     moveSession($this->session, 1, '07:00', '09:00', SessionKind::Practica);
 
-    expect(InterdepartmentalAgreement::query()->sole()->is($loan))->toBeTrue()
-        ->and($loan->fresh()->status)->toBe(AgreementStatus::Proposed);
+    expect($loan->fresh()->status)->toBe(AgreementStatus::Accepted)
+        ->and(InterdepartmentalAgreement::query()->count())->toBe(1);
+});
+
+it('HC-10: mover nunca falla por el préstamo: si otro grupo ya tiene el salón pedido a la nueva hora, la sesión se mueve con su salón, sin préstamo, y el resultado lo dice', function () {
+    $old = inForeignRoomOfMove();
+    $room = $this->session->fresh()->room;
+    InterdepartmentalAgreement::factory()->create([
+        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => otherGroupOfMove()->id, 'room_id' => $room->id,
+        'from_department_id' => $this->department->id, 'to_department_id' => $room->department_id, 'day' => 3, 'starts_at' => '11:00', 'ends_at' => '13:00',
+    ]);
+
+    $result = moveSession($this->session, 3, '10:00', '12:00');
+
+    expect($result->loanBlocked)->toBeTrue()
+        ->and($result->loanRequested)->toBeFalse()
+        ->and($this->session->fresh())->day->toBe(3)->room_id->toBe($room->id)
+        ->and($old->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(liveLoansOfMove())->toBe([])
+        ->and($result->validation->forRule('HC-10'))->toHaveCount(1)
+        ->and($result->validation->forRule('HC-10')[0]->message)->toContain('sin préstamo');
 });
 
 it('HC-10: si al moverla se le quita el salón porque otro grupo lo ocupa (HC-02), su préstamo se cancela', function () {

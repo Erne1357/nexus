@@ -5,6 +5,8 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Actions\Sessions\AssignSessionRoom;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\RoomSuggestionQuery;
+use App\Modules\Scheduling\Rules\SessionRules;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -17,17 +19,19 @@ use Mary\Traits\Toast;
  * dejarían; el buscador de otro salón y «Asignar salón», o «Asignar y pedir préstamo» si el elegido es de otro
  * departamento (AssignSessionRoom). Los errores de la Action salen en un aviso arriba.
  *
- * Asigna quien puede GroupPolicy::assignRoom (el jefe del departamento del grupo); quien solo ve el grupo lo ve igual,
- * de solo lectura, con «Lo asigna el jefe de <depto>.» (DESIGN.md, «Nada oculto por permiso»). Cada método recarga la
- * sesión con KeyLookup y vuelve a autorizar. Tras asignar o quitar despacha `session-room-saved` (con `sessionId`)
- * para que el editor se refresque.
+ * Asigna quien puede GroupPolicy::assignRoom (el jefe del departamento del grupo) mientras el grupo se pueda editar
+ * (SessionRules::ensureEditable: sin cancelar y con la carga en propuesta, asignación o ajustes). Si no, se ve igual,
+ * de solo lectura, con su motivo: «Lo asigna el jefe de <depto>.» o el de la carga (DESIGN.md, «Nada oculto por
+ * permiso»). Cada método recarga la sesión con KeyLookup y vuelve a autorizar. Las sugerencias y la búsqueda salen de
+ * una sola lectura de RoomSuggestionQuery por petición. Tras asignar o quitar despacha `session-room-saved` (con
+ * `sessionId`) para que el editor se refresque.
+ *
+ * El editor lo incrusta en el cajón de la sesión con `wire:key="room-{sessionId}-{updated_at}"`, para que se vuelva
+ * a montar cuando la sesión se mueve o cambia: este componente no escucha los eventos del editor.
  */
 new class extends Component
 {
     use Toast;
-
-    /** Cuántos resultados da el buscador, aparte de los sugeridos. */
-    private const int RESULTS = 8;
 
     /** La sesión del cajón. El navegador no la puede cambiar. */
     #[Locked]
@@ -59,22 +63,21 @@ new class extends Component
         $this->authorize('view', $session->group);
 
         $data = $this->suggestions();
-        $found = trim($this->search) === '' ? [] : app(RoomSuggestionQuery::class)->for($session, self::RESULTS + count($data['rooms']), $this->search)['rooms'];
-        $suggested = array_column($data['rooms'], 'id');
-        $results = array_slice(array_values(array_filter($found, fn (array $row): bool => ! in_array($row['id'], $suggested, true))), 0, self::RESULTS);
-        $selected = collect([...$data['rooms'], ...$results])->firstWhere('id', $this->roomId);
-        $canAssign = auth()->user()?->can('assignRoom', $session->group) ?? false;
+        $searched = trim($this->search) !== '';
+        $selected = collect([...$data['rooms'], ...$data['results']])->firstWhere('id', $this->roomId);
+        $allowed = auth()->user()?->can('assignRoom', $session->group) ?? false;
+        $reason = $allowed ? $this->editBlockedReason($session) : "Lo asigna el jefe de {$data['department']['name']}.";
 
         return [
             'current' => $data['current'],
             'rooms' => $data['rooms'],
-            'results' => $results,
-            'searched' => trim($this->search) !== '',
-            'nothingFound' => trim($this->search) !== '' && $found === [],
+            'results' => $data['results'],
+            'searched' => $searched,
+            'nothingFound' => $searched && $data['results'] === [],
             'selected' => $selected,
             'asksLoan' => $selected !== null && $selected['state']['needsLoan'] && ! $selected['state']['covered'],
-            'canAssign' => $canAssign,
-            'reason' => $canAssign ? null : "Lo asigna el jefe de {$data['department']['name']}.",
+            'canAssign' => $reason === null,
+            'reason' => $reason,
         ];
     }
 
@@ -108,6 +111,7 @@ new class extends Component
         $assign->handle($session, null, auth()->user());
 
         $this->written();
+        $this->reset('roomId', 'search');
         $this->success('Salón quitado', e($current['code']));
         $this->dispatch('session-room-saved', sessionId: $session->id);
     }
@@ -118,11 +122,28 @@ new class extends Component
     }
 
     /**
+     * Las sugerencias y, con búsqueda, sus resultados, de una sola lectura.
+     *
      * @return array<string, mixed>
      */
     private function suggestions(): array
     {
-        return $this->loaded ??= app(RoomSuggestionQuery::class)->for($this->session());
+        return $this->loaded ??= app(RoomSuggestionQuery::class)->for($this->session(), search: $this->search);
+    }
+
+    /**
+     * Por qué no se edita el grupo de la sesión (cancelado, o la carga fuera de propuesta, asignación o ajustes), con
+     * el mensaje de SessionRules; null si se edita.
+     */
+    private function editBlockedReason(GroupSession $session): ?string
+    {
+        try {
+            app(SessionRules::class)->ensureEditable($session->group);
+        } catch (ValidationException $exception) {
+            return collect($exception->errors())->flatten()->first();
+        }
+
+        return null;
     }
 
     /** Después de escribir, lo leído ya no vale. */

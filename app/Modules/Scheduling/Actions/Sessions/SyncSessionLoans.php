@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Actions\Agreements\RequestRoomLoan;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -23,15 +24,22 @@ use Illuminate\Validation\ValidationException;
  * Deja los préstamos de salón (HC-10) de un grupo en un salón y un día al tamaño de sus sesiones, después de asignar,
  * mover o quitar una (tarea 3.7; reglas-de-negocio.md, "Acuerdos entre departamentos", supuesto por confirmar). Se
  * llama dentro de la transacción de AssignSessionRoom, UpdateGroupSession o RemoveGroupSession, con el grupo ya
- * bloqueado; los préstamos vivos se releen con bloqueo.
+ * bloqueado; los préstamos vivos se releen con bloqueo. La cobertura es la de RoomLoansQuery::uncovered().
  *
- * Si el salón es de otro departamento que el del grupo: por cada sesión del grupo en ese salón y día, la parte que no
- * cubren los préstamos **aceptados** del grupo necesita préstamo. Un propuesto exacto para ese hueco se queda; los
- * demás propuestos se cancelan (CancelAgreement) y se pide uno por el hueco (RequestRoomLoan, de quien imparte al
- * dueño). Los aceptados que siguen tocando una sesión se conservan; los vivos que ya no tocan ninguna se cancelan.
- * Primero cancela y después pide: la exclusión `interdepartmental_agreements_room_no_overlap` también separa los del
- * mismo grupo. Un salón sin dueño o del mismo departamento no necesita préstamo: cancela lo vivo de ese grupo, salón y
- * día. Cada préstamo cancelado o pedido deja su bitácora y su evento (los de AcademicLoad). Da si pidió alguno.
+ * Si el salón es de otro departamento que el del grupo:
+ * - Un préstamo aceptado se conserva mientras todas sus horas caigan en sesiones del grupo en ese salón y día. Si
+ *   aparta horas sin sesión (la sesión se movió o se acortó), se cancela: un acuerdo aceptado no se edita, así que se
+ *   pide de nuevo lo que sí se usa.
+ * - La parte de cada sesión que no cubren los aceptados que quedan necesita préstamo: un propuesto exacto se queda; los
+ *   demás propuestos se cancelan (CancelAgreement) y se pide uno por cada hueco (RequestRoomLoan, de quien imparte al
+ *   dueño). Primero cancela y después pide: la exclusión `interdepartmental_agreements_room_no_overlap` también separa
+ *   los del mismo grupo.
+ * - Si el préstamo vivo de otro grupo ya aparta el salón a esa hora, el hueco no se pide y el resultado lo dice
+ *   (`blocked`): la sesión se queda con su salón y HC-10 «sin préstamo». En modo estricto (asignar el salón) eso
+ *   detiene con el mensaje de RequestRoomLoan y no cambia nada.
+ *
+ * Un salón sin dueño o del mismo departamento no necesita préstamo: cancela lo vivo de ese grupo, salón y día. Cada
+ * préstamo cancelado o pedido deja su bitácora y su evento (los de AcademicLoad); solo pedir avisa al dueño.
  */
 final class SyncSessionLoans
 {
@@ -41,11 +49,11 @@ final class SyncSessionLoans
     ) {}
 
     /**
-     * @throws ValidationException si el salón ya está prestado o pedido a esa hora para otro grupo
+     * @throws ValidationException en modo estricto, si el salón ya está prestado o pedido a esa hora para otro grupo
      */
-    public function resync(Group $group, Room $room, int $day, User $actor): bool
+    public function resync(Group $group, Room $room, int $day, User $actor, bool $strict = false): LoanSyncResult
     {
-        return DB::transaction(function () use ($group, $room, $day, $actor): bool {
+        return DB::transaction(function () use ($group, $room, $day, $actor, $strict): LoanSyncResult {
             $loans = InterdepartmentalAgreement::query()
                 ->where('kind', AgreementKind::RoomLoan->value)
                 ->where('term_id', $group->term_id)
@@ -60,46 +68,28 @@ final class SyncSessionLoans
             if ($room->department_id === null || $room->department_id === $group->department_id) {
                 $this->cancelAll($loans, $actor);
 
-                return false;
+                return new LoanSyncResult;
             }
 
             $sessions = GroupSession::query()
                 ->where('group_id', $group->id)
                 ->where('room_id', $room->id)
                 ->where('day', $day)
-                ->orderBy('starts_at')
                 ->get(['starts_at', 'ends_at'])
                 ->map(fn (GroupSession $session): array => [Minutes::of($session->starts_at), Minutes::of($session->ends_at)]);
 
-            $accepted = $loans->where('status', AgreementStatus::Accepted);
-            $gaps = $sessions->flatMap(fn (array $session): array => self::uncovered($session, $accepted))->values();
+            $accepted = $loans->filter(fn (InterdepartmentalAgreement $loan): bool => $loan->status === AgreementStatus::Accepted
+                && RoomLoansQuery::uncovered($sessions, ...self::span($loan)) === []);
+            $covering = $accepted->map(fn (InterdepartmentalAgreement $loan): array => self::span($loan));
+            $gaps = $sessions->flatMap(fn (array $session): array => RoomLoansQuery::uncovered($covering, ...$session))->values();
 
-            $stale = $loans->reject(function (InterdepartmentalAgreement $loan) use ($sessions, $gaps): bool {
-                [$start, $end] = self::span($loan);
+            $proposed = $loans->filter(fn (InterdepartmentalAgreement $loan): bool => $loan->status === AgreementStatus::Proposed
+                && $gaps->contains(self::span($loan)));
+            $asked = $proposed->map(fn (InterdepartmentalAgreement $loan): array => self::span($loan));
 
-                return $loan->status === AgreementStatus::Accepted
-                    ? $sessions->contains(fn (array $session): bool => Minutes::overlap($start, $end, ...$session))
-                    : $gaps->contains(fn (array $gap): bool => $gap === [$start, $end]);
-            });
+            $this->cancelAll($loans->diff($accepted)->diff($proposed), $actor);
 
-            $this->cancelAll($stale, $actor);
-
-            $requested = $loans->diff($stale)->where('status', AgreementStatus::Proposed)->map(fn (InterdepartmentalAgreement $loan): array => self::span($loan));
-            $missing = $gaps->reject(fn (array $gap): bool => $requested->contains($gap));
-
-            if ($missing->isEmpty()) {
-                return false;
-            }
-
-            $term = Term::query()->findOrFail($group->term_id);
-            $campus = Campus::query()->findOrFail($group->campus_id);
-            $from = Department::withTrashed()->findOrFail($group->department_id);
-
-            foreach ($missing as [$start, $end]) {
-                $this->request->handle($term, $campus, $from, $group->id, $room, $day, Minutes::format($start), Minutes::format($end), $actor);
-            }
-
-            return true;
+            return $this->requestAll($group, $room, $day, $gaps->reject(fn (array $gap): bool => $asked->contains($gap)), $actor, $strict);
         });
     }
 
@@ -114,36 +104,39 @@ final class SyncSessionLoans
     }
 
     /**
-     * Las partes de la sesión que no cubren los préstamos aceptados (varios contiguos cubren juntos), en minutos.
+     * Pide un préstamo por cada hueco, en minutos. Fuera del modo estricto, el que choca con el préstamo vivo de otro
+     * grupo no se pide (RequestRoomLoan lo rechaza en un savepoint, sin abortar la transacción).
      *
-     * @param  array{int, int}  $session
-     * @param  Collection<int, InterdepartmentalAgreement>  $accepted  ordenados por inicio
-     * @return list<array{int, int}>
+     * @param  Collection<int, array{int, int}>  $gaps
+     *
+     * @throws ValidationException
      */
-    private static function uncovered(array $session, Collection $accepted): array
+    private function requestAll(Group $group, Room $room, int $day, Collection $gaps, User $actor, bool $strict): LoanSyncResult
     {
-        [$from, $until] = $session;
-        $gaps = [];
-
-        foreach ($accepted as $loan) {
-            [$start, $end] = self::span($loan);
-
-            if ($end <= $from || $start >= $until) {
-                continue;
-            }
-
-            if ($start > $from) {
-                $gaps[] = [$from, $start];
-            }
-
-            $from = max($from, $end);
+        if ($gaps->isEmpty()) {
+            return new LoanSyncResult;
         }
 
-        if ($from < $until) {
-            $gaps[] = [$from, $until];
+        $term = Term::query()->findOrFail($group->term_id);
+        $campus = Campus::query()->findOrFail($group->campus_id);
+        $from = Department::withTrashed()->findOrFail($group->department_id);
+        $requested = false;
+        $blocked = false;
+
+        foreach ($gaps as [$start, $end]) {
+            try {
+                $this->request->handle($term, $campus, $from, $group->id, $room, $day, Minutes::format($start), Minutes::format($end), $actor);
+                $requested = true;
+            } catch (ValidationException $exception) {
+                if ($strict || ! array_key_exists('room_id', $exception->errors())) {
+                    throw $exception;
+                }
+
+                $blocked = true;
+            }
         }
 
-        return $gaps;
+        return new LoanSyncResult($requested, $blocked);
     }
 
     /**

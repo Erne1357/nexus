@@ -7,8 +7,8 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Queries\TextSearch;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
@@ -38,11 +38,13 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * - Lo que causaría resta: ocupado (HC-02) BUSY_PENALTY, bloqueado (HC-11) BLOCKED_PENALTY, tipo equivocado (HC-06)
  *   WRONG_TYPE_PENALTY, no cabe (HC-05) TOO_SMALL_PENALTY y préstamo sin aceptar (HC-10) LOAN_PENALTY.
  *
- * A igual puntaje, por clave. Un salón ocupado no se elige (HC-02); los demás se pueden elegir y sus choques duros se
- * guardan marcados (confirmado el 7 de noviembre de 2026).
+ * A igual puntaje, por clave. Un salón ocupado no se elige: por la sesión de otro grupo a esa hora (HC-02) o por el
+ * préstamo vivo de otro grupo a esa hora («Pedido para…», «Prestado a…»; HC-10, porque el préstamo no se podría
+ * pedir). Los demás se pueden elegir y sus choques duros se guardan marcados (confirmado el 7 de noviembre de 2026). Si
+ * el préstamo aceptado del grupo cubre la sesión, se ve cubierto; la cobertura es la de RoomLoansQuery::uncovered().
  *
  * @phpstan-type Conflict array{rule: string, label: string, message: string}
- * @phpstan-type State array{free: bool, busy: ?string, blocked: ?string, needsLoan: bool, covered: bool, pending: bool, tooSmall: bool, wrongType: bool}
+ * @phpstan-type State array{free: bool, busy: ?string, busyNote: ?string, blocked: ?string, needsLoan: bool, covered: bool, pending: bool, tooSmall: bool, wrongType: bool}
  * @phpstan-type Row array{id: string, code: string, name: ?string, type: string, capacity: int, building: ?string, owner: array{code: string, name: string}|null, score: int, reasons: list<string>, state: State, conflicts: list<Conflict>, selectable: bool, current: bool}
  */
 final class RoomSuggestionQuery
@@ -77,10 +79,11 @@ final class RoomSuggestionQuery
     private const int HISTORY_SHOWN = 3;
 
     /**
-     * El departamento del grupo (el que asigna), el salón actual de la sesión (aunque ya no esté activo) y los salones
-     * sugeridos, del mejor al peor; con `$search`, solo los que la contienen en su clave o nombre.
+     * El departamento del grupo (el que asigna), el salón actual de la sesión (aunque ya no esté activo), los
+     * `$limit` mejores salones y, con `$search`, hasta `$limit` más que contienen el texto en su clave o nombre y no
+     * están entre los sugeridos. Todo sale del mismo contexto: buscar no vuelve a leer la base.
      *
-     * @return array{department: array{code: string, name: string}, current: Row|null, rooms: list<Row>}
+     * @return array{department: array{code: string, name: string}, current: Row|null, rooms: list<Row>, results: list<Row>}
      */
     public function for(GroupSession $session, int $limit = 8, string $search = ''): array
     {
@@ -92,12 +95,13 @@ final class RoomSuggestionQuery
         $rooms = Room::query()
             ->where('campus_id', $group->campus_id)
             ->where('is_active', true)
-            ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->with(['building' => $withTrashed, 'department' => $withTrashed])
             ->get();
 
         $currentRoom = $session->room_id === null ? null : $rooms->firstWhere('id', $session->room_id)
             ?? Room::withTrashed()->whereKey($session->room_id)->with(['building' => $withTrashed, 'department' => $withTrashed])->first();
+
+        $loans = $this->loans($group, $session);
 
         $context = [
             'group' => $group,
@@ -106,22 +110,28 @@ final class RoomSuggestionQuery
             'defaults' => $this->defaults($group),
             'history' => $this->history($group),
             'building' => $this->previousBuilding($group, $session),
-            'busy' => $this->busy($group, $session),
+            'busy' => $this->busy($group, $session) + $loans['taken'],
             'blocks' => $this->blocks($group, $session),
-            'loans' => $this->loans($group, $session),
+            'loans' => $loans['own'],
         ];
 
-        $suggested = $rooms->toBase()
+        $ranked = $rooms->toBase()
             ->map(fn (Room $room): array => $this->row($room, $context))
             ->sort(fn (array $a, array $b): int => [$b['score'], $a['code']] <=> [$a['score'], $b['code']])
-            ->take($limit)
-            ->values()
-            ->all();
+            ->values();
+        $suggested = $ranked->take($limit);
+        $needle = mb_strtolower(trim($search));
 
         return [
             'department' => ['code' => $department->code, 'name' => $department->name],
             'current' => $currentRoom === null ? null : $this->row($currentRoom, $context),
-            'rooms' => $suggested,
+            'rooms' => $suggested->all(),
+            'results' => $needle === '' ? [] : $ranked
+                ->skip($limit)
+                ->filter(fn (array $row): bool => str_contains(mb_strtolower($row['code']), $needle) || str_contains(mb_strtolower((string) $row['name']), $needle))
+                ->take($limit)
+                ->values()
+                ->all(),
         ];
     }
 
@@ -177,7 +187,8 @@ final class RoomSuggestionQuery
         $block = $context['blocks'][$room->id] ?? null;
         $needsLoan = $room->department_id !== null && $room->department_id !== $group->department_id;
         $loans = $context['loans'][$room->id] ?? [];
-        $covered = $needsLoan && self::covers($loans, Minutes::of($session->starts_at), Minutes::of($session->ends_at));
+        $accepted = array_map(fn (array $loan): array => [$loan['start'], $loan['end']], array_filter($loans, fn (array $loan): bool => $loan['accepted']));
+        $covered = $needsLoan && RoomLoansQuery::uncovered($accepted, Minutes::of($session->starts_at), Minutes::of($session->ends_at)) === [];
         $pending = $needsLoan && array_any($loans, fn (array $loan): bool => ! $loan['accepted']);
         $subjectGroup = "{$context['subject']->code} {$group->code}";
 
@@ -223,7 +234,8 @@ final class RoomSuggestionQuery
             'reasons' => $reasons,
             'state' => [
                 'free' => $busy === null && $conflicts === [],
-                'busy' => $busy,
+                'busy' => $busy['label'] ?? null,
+                'busyNote' => $busy['note'] ?? null,
                 'blocked' => $block === null ? null : "{$block['reason']} · {$block['short']}",
                 'needsLoan' => $needsLoan,
                 'covered' => $covered,
@@ -304,9 +316,9 @@ final class RoomSuggestionQuery
     }
 
     /**
-     * HC-02: quién ocupa cada salón del campus a la hora de la sesión: «AED-1026 3A · mar 15:00–16:00».
+     * HC-02: quién ocupa cada salón del campus a la hora de la sesión: «Ocupado · AED-1026 3A · mar 15:00–16:00».
      *
-     * @return array<string, string>
+     * @return array<string, array{label: string, note: string}>
      */
     private function busy(Group $group, GroupSession $session): array
     {
@@ -324,7 +336,10 @@ final class RoomSuggestionQuery
             ->toBase()
             ->get(['group_sessions.room_id', 'group_sessions.starts_at', 'group_sessions.ends_at', 'groups.code as group_code', 'subjects.code as subject_code'])
             ->each(function (object $row) use (&$busy, $session): void {
-                $busy[$row->room_id] ??= "{$row->subject_code} {$row->group_code} · ".self::shortWhen($session->day, $row->starts_at, $row->ends_at);
+                $busy[$row->room_id] ??= [
+                    'label' => "Ocupado · {$row->subject_code} {$row->group_code} · ".self::shortWhen($session->day, $row->starts_at, $row->ends_at),
+                    'note' => 'HC-02: no se puede elegir.',
+                ];
             });
 
         return $busy;
@@ -357,30 +372,48 @@ final class RoomSuggestionQuery
     }
 
     /**
-     * HC-10: los préstamos vivos del grupo que tocan la sesión, por salón y ordenados por inicio.
+     * HC-10: los préstamos vivos del campus que tocan la sesión, en una sola lectura: los del grupo por salón (`own`,
+     * ordenados por inicio) y, de los de otros grupos, quién aparta cada salón (`taken`): «Pedido para AED-1026 3A ·
+     * SC» o «Prestado a …», con el departamento que lo pidió.
      *
-     * @return array<string, list<array{start: int, end: int, accepted: bool}>>
+     * @return array{own: array<string, list<array{start: int, end: int, accepted: bool}>>, taken: array<string, array{label: string, note: string}>}
      */
     private function loans(Group $group, GroupSession $session): array
     {
-        $loans = [];
+        $own = [];
+        $taken = [];
 
         $this->overlapping(InterdepartmentalAgreement::query(), 'interdepartmental_agreements', $session)
-            ->where('kind', AgreementKind::RoomLoan->value)
-            ->where('term_id', $group->term_id)
-            ->where('group_id', $group->id)
-            ->live()
-            ->orderBy('starts_at')
-            ->get(['room_id', 'status', 'starts_at', 'ends_at'])
-            ->each(function (InterdepartmentalAgreement $loan) use (&$loans): void {
-                $loans[$loan->room_id][] = [
-                    'start' => Minutes::of($loan->starts_at),
-                    'end' => Minutes::of($loan->ends_at),
-                    'accepted' => $loan->status === AgreementStatus::Accepted,
+            ->leftJoin('groups', 'groups.id', '=', 'interdepartmental_agreements.group_id')
+            ->leftJoin('subjects', 'subjects.id', '=', 'groups.subject_id')
+            ->join('departments', 'departments.id', '=', 'interdepartmental_agreements.from_department_id')
+            ->where('interdepartmental_agreements.kind', AgreementKind::RoomLoan->value)
+            ->where('interdepartmental_agreements.term_id', $group->term_id)
+            ->where('interdepartmental_agreements.campus_id', $group->campus_id)
+            ->whereIn('interdepartmental_agreements.status', AgreementStatus::liveValues())
+            ->orderBy('interdepartmental_agreements.starts_at')
+            ->toBase()
+            ->get([
+                'interdepartmental_agreements.group_id', 'interdepartmental_agreements.room_id', 'interdepartmental_agreements.status',
+                'interdepartmental_agreements.starts_at', 'interdepartmental_agreements.ends_at',
+                'groups.code as group_code', 'subjects.code as subject_code', 'departments.code as department_code',
+            ])
+            ->each(function (object $loan) use (&$own, &$taken, $group): void {
+                $accepted = $loan->status === AgreementStatus::Accepted->value;
+
+                if ($loan->group_id === $group->id) {
+                    $own[$loan->room_id][] = ['start' => Minutes::of($loan->starts_at), 'end' => Minutes::of($loan->ends_at), 'accepted' => $accepted];
+
+                    return;
+                }
+
+                $taken[$loan->room_id] ??= [
+                    'label' => ($accepted ? 'Prestado a ' : 'Pedido para ').trim("{$loan->subject_code} {$loan->group_code}")." · {$loan->department_code}",
+                    'note' => 'HC-10: el salón ya está apartado para otro grupo; no se puede elegir.',
                 ];
             });
 
-        return $loans;
+        return ['own' => $own, 'taken' => $taken];
     }
 
     /**
@@ -397,30 +430,6 @@ final class RoomSuggestionQuery
             ->where("{$table}.day", $session->day)
             ->where("{$table}.starts_at", '<', $session->ends_at)
             ->where("{$table}.ends_at", '>', $session->starts_at);
-    }
-
-    /**
-     * Si los préstamos aceptados (ordenados por inicio) cubren de `$start` a `$end`; varios contiguos cubren juntos.
-     *
-     * @param  list<array{start: int, end: int, accepted: bool}>  $loans
-     */
-    private static function covers(array $loans, int $start, int $end): bool
-    {
-        $reached = $start;
-
-        foreach ($loans as $loan) {
-            if (! $loan['accepted']) {
-                continue;
-            }
-
-            if ($loan['start'] > $reached) {
-                return false;
-            }
-
-            $reached = max($reached, $loan['end']);
-        }
-
-        return $reached >= $end;
     }
 
     /**

@@ -5,7 +5,9 @@
       «Sin salón» en advertencia si no tiene. Quien asigna lo puede quitar.
     - «Salones sugeridos»: un radio por salón (scheduling::session-room.row), del mejor al peor; el buscador de otro
       salón con sus resultados aparte; y, al elegir uno que causaría choques, lo que pasaría al guardarlo.
-    - Al pie, «Asignar salón» o «Asignar y pedir préstamo». Sin permiso, lo mismo en solo lectura y con su motivo.
+    - Al pie, «Asignar salón» o «Asignar y pedir préstamo». Sin permiso o con el grupo sin editar, lo mismo en solo
+      lectura y con su motivo.
+    El editor lo incrusta con `wire:key="room-{sessionId}-{updated_at}"` para volver a montarlo cuando la sesión cambia.
 --}}
 <section aria-labelledby="session-room-title-{{ $sessionId }}" class="grid gap-5" data-testid="session-room">
     @php($alerts = collect($errors->getBag('default')->toArray())->except(['roomId'])->flatten()->unique()->values())
