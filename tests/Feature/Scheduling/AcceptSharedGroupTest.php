@@ -67,7 +67,7 @@ it('HC-07 (red de seguridad): no acepta si los lugares ya no caben, sin dejar na
         $errors = $e->errors();
     }
 
-    expect($errors)->toBe(['max_seats' => ['HC-07: el grupo ya tiene 30 de 40 lugares repartidos; caben 10.']])
+    expect($errors)->toBe(['max_seats' => ['HC-07: el grupo ya tiene 30 de 40 lugares repartidos; caben 10. Baja 1 lugar de los cupos para poder aceptarlo.']])
         ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed)
         ->and(GroupQuota::query()->count())->toBe(1);
 });
@@ -87,7 +87,7 @@ it('HC-07 (red de seguridad): al aceptar cuenta tambiÃ©n lo que apartan las demÃ
         $errors = $e->errors();
     }
 
-    expect($errors)->toBe(['max_seats' => ['HC-07: el grupo ya tiene 35 de 40 lugares repartidos o apartados; caben 5.']])
+    expect($errors)->toBe(['max_seats' => ['HC-07: el grupo ya tiene 35 de 40 lugares repartidos o apartados; caben 5. Rechaza o retira 3 lugares de otras propuestas (o baja cupos) para poder aceptarlo.']])
         ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed)
         ->and(GroupQuota::query()->count())->toBe(1);
 });

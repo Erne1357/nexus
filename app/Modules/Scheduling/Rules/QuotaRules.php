@@ -120,23 +120,27 @@ final class QuotaRules
 
     /**
      * Al aceptar un acuerdo: lo repartido, lo que apartan las demás propuestas (`$held`) y los lugares del acuerdo caben
-     * en la capacidad. Es una red de seguridad: como la propuesta ya apartaba sus lugares, siempre debería caber.
+     * en la capacidad. Es una red de seguridad: como la propuesta ya apartaba sus lugares, siempre debería caber. Si no
+     * cabe, el mensaje dice cuántos lugares hay que liberar y cómo: rechazar o retirar otras propuestas (o bajar cupos)
+     * si las hay, o bajar cupos si no.
      *
      * @throws ValidationException
      */
     public function ensureAgreementFits(int $current, int $seats, int $capacity, int $held = 0): void
     {
-        if ($held > 0) {
-            $this->ensureProposalFits($current + $held, $seats, $capacity);
+        $taken = $current + $held;
+        $missing = $taken + $seats - $capacity;
 
+        if ($missing <= 0) {
             return;
         }
 
-        if ($current + $seats > $capacity) {
-            throw ValidationException::withMessages([
-                'max_seats' => 'HC-07: el grupo ya tiene '.$current.' de '.$capacity.' lugares repartidos; caben '.max(0, $capacity - $current).'.',
-            ]);
-        }
+        $places = $missing === 1 ? '1 lugar' : "{$missing} lugares";
+
+        throw ValidationException::withMessages(['max_seats' => $held > 0
+            ? "HC-07: el grupo ya tiene {$taken} de {$capacity} lugares repartidos o apartados; caben ".max(0, $capacity - $taken).". Rechaza o retira {$places} de otras propuestas (o baja cupos) para poder aceptarlo."
+            : "HC-07: el grupo ya tiene {$taken} de {$capacity} lugares repartidos; caben ".max(0, $capacity - $taken).". Baja {$places} de los cupos para poder aceptarlo.",
+        ]);
     }
 
     /**
