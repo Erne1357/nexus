@@ -8,6 +8,7 @@ use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Rules\ContiguousSessions;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\SessionRules;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -34,6 +35,7 @@ final class PlaceGroupSession
     public function __construct(
         private readonly SessionRules $rules,
         private readonly ScheduleValidator $validator,
+        private readonly LoadEditability $editability,
     ) {}
 
     /**
@@ -44,7 +46,8 @@ final class PlaceGroupSession
         $startsAt = $this->rules->time($startsAt);
         $endsAt = $this->rules->time($endsAt);
 
-        return DB::transaction(function () use ($group, $day, $startsAt, $endsAt, $kind, $actor): SessionResult {
+        $placed = $this->editability->guard(fn (): array => DB::transaction(function () use ($group, $day, $startsAt, $endsAt, $kind, $actor): array {
+            $this->editability->lockLoad($group);
             $group = Group::query()->lockForUpdate()->findOrFail($group->getKey());
 
             $this->rules->ensureEditable($group);
@@ -80,9 +83,7 @@ final class PlaceGroupSession
             }
 
             $session->refresh();
-            $this->validator->forget();
-            $validation = $this->validator->validateGroup($group);
-            $label = $this->validator->stateFor($group->term_id, $group->campus_id)->labelOf($group->id);
+            $label = SessionRules::label($group);
 
             activity()
                 ->causedBy($actor)
@@ -94,7 +95,12 @@ final class PlaceGroupSession
 
             GroupScheduleChanged::dispatch($group);
 
-            return new SessionResult($session, $validation);
-        });
+            return [$session, $group];
+        }));
+
+        [$session, $group] = $placed;
+        $this->validator->forget();
+
+        return new SessionResult($session, $this->validator->validateGroup($group));
     }
 }

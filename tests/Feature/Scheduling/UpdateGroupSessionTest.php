@@ -105,19 +105,36 @@ it('HC-01: moverla dentro de su propio horario no choca consigo misma', function
     expect($this->session->fresh()->starts_at)->toBe('08:00:00');
 });
 
-it('HC-02: si otra sesión gana la carrera por el salón, la exclusión de la base lo rechaza con el id de la regla', function () {
+it('HC-02: si otra sesión gana la carrera por el salón, la mueve sin salón y lo dice en el resultado', function () {
     $other = otherGroupOfMove();
     $room = $this->room;
 
     GroupSession::updating(function (GroupSession $updating) use ($other, $room): void {
-        if ($updating->group_id !== $other->id) {
+        if ($updating->group_id !== $other->id && $updating->room_id !== null) {
             GroupSession::factory()->for($other)->inRoom($room)->on(2, '08:00', '09:00')->create();
         }
     });
 
+    $result = moveSession($this->session, 2, '07:00', '09:00');
+
+    expect($result->roomDropped)->toBeTrue()
+        ->and($result->session->room_id)->toBeNull()
+        ->and($this->session->fresh())->day->toBe(2)->room_id->toBeNull();
+});
+
+it('HC-01: si otra sesión gana la carrera por el docente, sigue rechazándose con el id de la regla', function () {
+    $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
+    $this->group->update(['teacher_id' => $teacher->id]);
+    $other = otherGroupOfMove(['teacher_id' => $teacher->id, 'code' => 'F']);
+
+    GroupSession::updating(function (GroupSession $updating) use ($other): void {
+        if ($updating->group_id !== $other->id) {
+            GroupSession::factory()->for($other)->on(2, '08:00', '09:00')->create();
+        }
+    });
+
     expect(fn () => moveSession($this->session, 2, '07:00', '09:00'))
-        ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(['HC-02: el salón LC-1 ya está ocupado el martes entre 07:00 y 09:00.']))
+        ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'][0])->toStartWith('HC-01: Ana Pérez'))
         ->and($this->session->fresh()->day)->toBe(1);
 });
 

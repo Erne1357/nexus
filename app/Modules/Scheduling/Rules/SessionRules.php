@@ -2,13 +2,11 @@
 
 namespace App\Modules\Scheduling\Rules;
 
-use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
-use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\Clock;
@@ -35,14 +33,13 @@ use Illuminate\Validation\ValidationException;
  */
 final class SessionRules
 {
-    /** @var list<LoadStatus> */
-    public const array EDITABLE_LOADS = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting];
-
     private const string TEACHER_EXCLUSION = 'group_sessions_teacher_no_overlap';
 
     private const string ROOM_EXCLUSION = 'group_sessions_room_no_overlap';
 
     private const string GROUP_EXCLUSION = 'group_sessions_group_no_overlap';
+
+    public function __construct(private readonly LoadEditability $editability) {}
 
     /**
      * La hora en `HH:MM`; acepta `HH:MM:00`.
@@ -65,27 +62,7 @@ final class SessionRules
      */
     public function ensureEditable(Group $group): void
     {
-        if ($group->status === GroupStatus::Cancelled) {
-            throw self::invalid("El grupo {$group->code} está cancelado: no se editan sus sesiones.");
-        }
-
-        $load = AcademicLoad::query()
-            ->where('term_id', $group->term_id)
-            ->where('campus_id', $group->campus_id)
-            ->where('department_id', $group->department_id)
-            ->sharedLock()
-            ->first(['id', 'status']);
-
-        $department = $group->department()->withTrashed()->value('name');
-        $campus = $this->campusOf($group)->name;
-
-        if ($load === null) {
-            throw self::invalid("{$department} no tiene carga en {$campus} en este periodo: no se editan horarios.");
-        }
-
-        if (! in_array($load->status, self::EDITABLE_LOADS, true)) {
-            throw self::invalid("La carga de {$department} en {$campus} está en ".mb_strtolower($load->status->label()).': no se editan horarios.');
-        }
+        $this->editability->ensure($group, 'horarios', 'session');
     }
 
     /**
@@ -102,19 +79,15 @@ final class SessionRules
             throw self::invalid('La sesión debe terminar después de empezar.');
         }
 
-        if ($day < 1 || $day > 6) {
-            throw self::invalid("El día {$day} no existe: va de 1 (lunes) a 6 (sábado).");
-        }
-
         $campus = $this->campusOf($group);
         $profile = $campus->profile;
 
-        if (! $profile->usesTimeBlocks) {
-            return;
-        }
-
         if (! in_array($day, $profile->days, true)) {
             throw self::invalid("HC-04: {$campus->name} no da clases el ".Minutes::dayName($day)." ({$profile->schedule()}).");
+        }
+
+        if (! $profile->usesTimeBlocks) {
+            return;
         }
 
         $dayStart = Minutes::of($profile->dayStart);
@@ -176,6 +149,14 @@ final class SessionRules
     }
 
     /**
+     * Si el error es la exclusión de salón de `group_sessions` (otro editor tomó el salón).
+     */
+    public function isRoomTaken(QueryException $exception): bool
+    {
+        return str_contains($exception->getMessage(), self::ROOM_EXCLUSION);
+    }
+
+    /**
      * El error de una exclusión de `group_sessions` cuando otra sesión gana la carrera al validador; cualquier otro
      * error de la base sigue su camino.
      *
@@ -219,6 +200,14 @@ final class SessionRules
             'kind' => $session->kind->value,
             'room_id' => $session->room_id,
         ];
+    }
+
+    /**
+     * Cómo se nombra el grupo en la bitácora, como el validador: «Cálculo Diferencial, grupo D» (sin leer la foto).
+     */
+    public static function label(Group $group): string
+    {
+        return (Subject::withTrashed()->whereKey($group->subject_id)->value('name') ?? 'La materia').', grupo '.$group->code;
     }
 
     /**

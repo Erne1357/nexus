@@ -153,7 +153,7 @@ it('rechaza un grupo cancelado', function () {
     $this->group->update(['status' => 'cancelled']);
 
     expect(fn () => placeSession($this->group, 1, '07:00', '08:00'))
-        ->toThrow(ValidationException::class, 'El grupo D está cancelado: no se editan sus sesiones.')
+        ->toThrow(ValidationException::class, 'El grupo D está cancelado: no se editan horarios.')
         ->and($this->group->sessions()->count())->toBe(0);
 });
 
