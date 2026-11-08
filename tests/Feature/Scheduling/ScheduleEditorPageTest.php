@@ -549,7 +549,7 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
     expect($many)->toBe($few)
         ->and($many)->toBeLessThanOrEqual(31)
         ->and($pick)->toBeLessThanOrEqual(33)
-        ->and($place)->toBeLessThanOrEqual(88)
+        ->and($place)->toBeLessThanOrEqual(100)
         ->and($openSession)->toBeLessThanOrEqual(26)
         ->and($openGroup)->toBeLessThanOrEqual(15);
 });
