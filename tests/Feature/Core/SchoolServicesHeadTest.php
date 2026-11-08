@@ -63,12 +63,12 @@ describe('AZ-02: menú', function () {
     it('AZ-S16: los demás puestos ven el mismo menú que antes', function (Closure $user, array $menu) {
         expect(menuOf($user($this)))->toBe($menu);
     })->with([
-        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Inicio', 'Docentes', 'Alumnos', 'Validar catálogos', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente']],
-        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Inicio', 'Campus', 'Periodos', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente']],
-        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Inicio', 'Docentes', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente']],
+        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Inicio', 'Docentes', 'Alumnos', 'Validar catálogos', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente']],
+        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Inicio', 'Campus', 'Periodos', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente']],
+        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Inicio', 'Docentes', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente']],
         'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Inicio', 'Alumnos', 'Propuesta de carrera', 'Horarios', 'Choques y avance']],
         'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Inicio']],
-        'admin' => [fn () => User::factory()->admin()->create(), ['Inicio', 'Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Importaciones', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente']],
+        'admin' => [fn () => User::factory()->admin()->create(), ['Inicio', 'Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Importaciones', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente']],
     ]);
 });
 
@@ -76,7 +76,7 @@ describe('AZ-02: pantallas y acciones', function () {
     it('AZ-02: el jefe de Servicios Escolares no entra a ninguna pantalla académica', function (string $route) {
         $this->actingAs($this->servicesHead)->get(route($route))->assertForbidden();
     })->with([
-        'catalog-validation.review', 'catalog-validation.progress', 'academic-load.inbox', 'academic-load.proposal', 'staffing.assign',
+        'catalog-validation.review', 'catalog-validation.progress', 'academic-load.inbox', 'academic-load.proposal', 'staffing.assign', 'staffing.teacher-loads',
         'faculty.teachers', 'students.index', 'academic.departments', 'academic.careers', 'academic.subjects',
     ]);
 

@@ -291,6 +291,9 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
+| Ver la carga por docente | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` (su departamento y campus) | Las horas asignadas suman todos los campus; las categorías son las de HC-08 (supuesto por confirmar en los nombres de las categorías) |
+| Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
+| Aprobar o rechazar cambio | `jefe_departamento` | |
 | Quitar el docente de un grupo | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | Con motivo; queda en el historial de asignaciones (supuesto por confirmar) |
 | Solicitar cambio | `docente` asignado al grupo (permiso personal `staffing.change_request.request_own`), `coordinador` de la carrera dueña y campus (`staffing.change_request.request`) | carga del departamento en `staffing` o `adjusting`; grupo no cancelado. El docente, una solicitud abierta por grupo (confirmado el 7 de noviembre de 2026). Ver "Solicitudes de cambio" |
 | Ver las solicitudes de cambio | quien la pidió, `jefe_departamento`, `jefe_proyecto_docente`, `subdireccion` | Alcance de campus y departamento del grupo (`staffing.change_request.view`; supuesto por confirmar para `jefe_proyecto_docente` y `subdireccion`, solo lectura) |
