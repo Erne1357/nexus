@@ -13,6 +13,9 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum AcademicLoadPermission: string implements Permission
 {
+    case AgreementView = 'academic_load.agreement.view';
+    case AgreementRequest = 'academic_load.agreement.request';
+    case AgreementDecide = 'academic_load.agreement.decide';
     case LoadView = 'academic_load.load.view';
     case LoadPropose = 'academic_load.load.propose';
     case LoadStartStaffing = 'academic_load.load.start_staffing';
@@ -26,6 +29,9 @@ enum AcademicLoadPermission: string implements Permission
     public function label(): string
     {
         return match ($this) {
+            self::AgreementView => 'Ver los acuerdos entre departamentos',
+            self::AgreementRequest => 'Pedir un préstamo de salón o proponer un grupo compartido',
+            self::AgreementDecide => 'Aceptar o rechazar un acuerdo dirigido al departamento',
             self::LoadView => 'Ver la carga académica de un departamento',
             self::LoadPropose => 'Proponer la carga de un departamento',
             self::LoadStartStaffing => 'Pasar la carga a asignación docente',
@@ -41,7 +47,7 @@ enum AcademicLoadPermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
+            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
             default => [Dimension::Campus, Dimension::Career],
         };
     }

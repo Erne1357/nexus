@@ -79,12 +79,17 @@ class InterdepartmentalAgreementFactory extends Factory
     }
 
     /**
-     * En ese estado; fuera de `proposed`, con quién lo decidió y cuándo (y motivo si es rechazo).
+     * En ese estado; aceptado o rechazado, con quién lo decidió y cuándo (y motivo si es rechazo); cancelado, con quién lo
+     * canceló y cuándo, sin decisión.
      */
     public function inStatus(AgreementStatus $status): static
     {
         if ($status === AgreementStatus::Proposed) {
-            return $this->state(['status' => $status, 'decided_by' => null, 'decided_at' => null]);
+            return $this->state(['status' => $status, 'decided_by' => null, 'decided_at' => null, 'cancelled_by' => null, 'cancelled_at' => null]);
+        }
+
+        if ($status === AgreementStatus::Cancelled) {
+            return $this->state(['status' => $status, 'decided_by' => null, 'decided_at' => null, 'cancelled_by' => User::factory(), 'cancelled_at' => now()]);
         }
 
         return $this->state(fn (array $attributes): array => [
@@ -92,6 +97,8 @@ class InterdepartmentalAgreementFactory extends Factory
             'comment' => $status === AgreementStatus::Rejected ? ($attributes['comment'] ?? 'Ese bloque ya lo usa otro grupo.') : ($attributes['comment'] ?? null),
             'decided_by' => User::factory(),
             'decided_at' => now(),
+            'cancelled_by' => null,
+            'cancelled_at' => null,
         ]);
     }
 }

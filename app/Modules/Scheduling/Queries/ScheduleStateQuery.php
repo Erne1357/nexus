@@ -5,6 +5,9 @@ namespace App\Modules\Scheduling\Queries;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
@@ -29,6 +32,7 @@ use App\Modules\Scheduling\Validation\State\StateGroup;
 use App\Modules\Scheduling\Validation\State\StateQuota;
 use App\Modules\Scheduling\Validation\State\StateRoom;
 use App\Modules\Scheduling\Validation\State\StateRoomBlock;
+use App\Modules\Scheduling\Validation\State\StateRoomLoan;
 use App\Modules\Scheduling\Validation\State\StateSession;
 use App\Modules\Scheduling\Validation\State\StateSubject;
 use App\Modules\Scheduling\Validation\State\StateTeacher;
@@ -45,13 +49,16 @@ use Illuminate\Database\Eloquent\Builder;
  * - los perfiles de los campus, las carreras ofrecidas, los planes activos y los parámetros `staffing.*` y
  *   `scheduling.*`.
  *
- * Los préstamos de salón (HC-10) se agregan cuando AcademicLoad publique su consulta de préstamos vivos.
+ * - los préstamos de salón vivos (aceptados o propuestos) del campus, de RoomLoansQuery de AcademicLoad (HC-10).
  */
 final class ScheduleStateQuery
 {
     private const array SETTING_PREFIXES = ['staffing.', 'scheduling.'];
 
-    public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
+    public function __construct(
+        private readonly TeacherBaseHoursQuery $baseHours,
+        private readonly RoomLoansQuery $roomLoans,
+    ) {}
 
     /**
      * La foto del periodo vista desde un campus; sin campus, solo los grupos activos con docente de todo el periodo
@@ -98,6 +105,12 @@ final class ScheduleStateQuery
                 $subject->theory_hours, $subject->practice_hours, $subject->needs_lab, $subject->is_active && ! $subject->trashed())));
 
         $this->addRooms($builder, $term, $campus, array_keys($roomIds));
+
+        if ($campus !== null) {
+            $this->roomLoans->liveFor($term->id, $campus->id)
+                ->each(fn (InterdepartmentalAgreement $loan) => $builder->loan(new StateRoomLoan($loan->group_id, $loan->room_id, (int) $loan->day,
+                    Minutes::of($loan->starts_at), Minutes::of($loan->ends_at), $loan->status === AgreementStatus::Accepted)));
+        }
         $this->addTeachers($builder, $term, $groups->pluck('teacher_id')->filter()->unique()->values()->all());
 
         foreach (Campus::query()->get(['id', 'settings']) as $each) {
