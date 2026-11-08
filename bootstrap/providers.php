@@ -9,6 +9,7 @@ use App\Modules\Facilities\FacilitiesServiceProvider;
 use App\Modules\Faculty\FacultyServiceProvider;
 use App\Modules\Imports\ImportsServiceProvider;
 use App\Modules\Scheduling\SchedulingServiceProvider;
+use App\Modules\Staffing\StaffingServiceProvider;
 use App\Modules\Students\StudentsServiceProvider;
 use App\Providers\AppServiceProvider;
 
@@ -26,4 +27,5 @@ return [
     CatalogValidationServiceProvider::class,
     AcademicLoadServiceProvider::class,
     SchedulingServiceProvider::class,
+    StaffingServiceProvider::class, // a la derecha de Scheduling (ADR-0020)
 ];
