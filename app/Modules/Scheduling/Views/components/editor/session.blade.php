@@ -1,7 +1,8 @@
 {{--
     Una sesión en la semana del editor de horarios (DESIGN.md, "Editor de horarios"), la misma en la cuadrícula y en la
     lista del celular (`mobile`). La franja a la izquierda es el color de su materia (`--chain`, los tokens de las
-    cadenas de la retícula); de arriba abajo: «CLAVE · grupo» en Mono, sus horas en Mono con el icono de su tipo, y su
+    cadenas de la retícula); de arriba abajo: «CLAVE · grupo» en Mono (en la semana, con los espacios a la mitad para
+    que quepa en un carril de 7rem), sus horas en Mono con el icono de su tipo, y su
     salón en Mono o «Sin salón» con icono de advertencia (en la vista por docente, el campus si es otro; por salón, el
     docente). Una sesión con choque duro lleva borde `error` y una insignia por regla: el color nunca va solo. La del
     grupo elegido lleva el anillo `primary`; las demás se atenúan mientras se coloca. La que no es del semestre va en
@@ -33,7 +34,7 @@
         $item['mine'] ? 'outline-2 outline-offset-1 outline-primary' : '',
         $item['dim'] ? 'opacity-50' : '',
         $item['open'] ? 'cursor-pointer hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary' : '',
-        $mobile ? 'relative min-h-14 w-full gap-0.5 py-1.5 ps-3 pe-2' : 'absolute top-[calc(var(--top)*3.25rem+1px)] left-[calc(var(--lane)*100%/var(--lanes)+2px)] z-[2] h-[calc(var(--span)*3.25rem-2px)] w-[calc(100%/var(--lanes)-4px)] py-0.5 ps-2.5 pe-1.5',
+        $mobile ? 'relative min-h-14 w-full gap-0.5 py-1.5 ps-3 pe-2' : 'absolute top-[calc(var(--top)*3.25rem+1px)] left-[calc(var(--lane)*100%/var(--lanes)+2px)] z-[2] h-[calc(var(--span)*3.25rem-2px)] w-[calc(100%/var(--lanes)-4px)] py-0.5 ps-2 pe-1',
     ];
     $attributes = $attributes->merge(array_filter([
         'class' => implode(' ', array_filter($classes)),
@@ -55,10 +56,10 @@
 @else
     <div {{ $attributes }}>
 @endif
-    <span class="truncate font-mono font-semibold">{{ $item['title'] }}</span>
-    <span class="flex items-center justify-between gap-1 font-mono text-neutral tabular-nums">
+    <span @class(['truncate font-mono font-semibold', '[word-spacing:-0.3em]' => ! $mobile])>{{ $item['title'] }}</span>
+    <span class="flex items-center justify-between gap-0.5 font-mono text-neutral tabular-nums">
         <span class="truncate">{{ $item['hours'] }}</span>
-        <span title="{{ $item['kind']->label() }}"><x-icon :name="$kindIcon" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /></span>
+        <span title="{{ $item['kind']->label() }}"><x-icon :name="$kindIcon" @class(['shrink-0', 'h-3 w-3' => ! $mobile, 'h-3.5 w-3.5' => $mobile]) aria-hidden="true" /></span>
     </span>
     <span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
         @if ($item['room'])

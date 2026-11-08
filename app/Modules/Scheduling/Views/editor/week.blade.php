@@ -1,9 +1,12 @@
 {{--
     La semana (DESIGN.md, "Cuadrícula día x hora" y "Editor de horarios"), desde 768 px: una columna por día del perfil
-    del campus, tan ancha como sus carriles (`--cols`), y un renglón de 3.25rem por bloque. El encabezado de cada día
-    lleva su nombre y sus horas ocupadas, y desde 1200 px se queda pegado bajo la banda; antes, la caja se desplaza de
-    lado (nunca la página). Cada columna lleva sus renglones (o, con un grupo elegido, sus celdas), las bandas de la
-    disponibilidad del docente o de los bloqueos del salón y las sesiones (scheduling::editor.session).
+    del campus, tan ancha como sus carriles (`--cols`), y un renglón de 3.25rem por bloque. Cada carril mide al menos
+    `--lane` (un día sin sesiones, un carril), así «CLAVE · grupo» se lee aunque el día tenga varios carriles; lo que
+    no cabe se ve desplazando de lado la caja (nunca la página), que mide a lo más el alto de la ventana bajo la banda.
+    Al desplazarla, la columna de horas y el encabezado de los días (su nombre y sus horas ocupadas) se quedan pegados,
+    y `scroll-padding` deja lo que toma el foco fuera de ellos. Cada columna lleva sus renglones (o, con un grupo
+    elegido, sus celdas), las bandas de la disponibilidad del docente o de los bloqueos del salón y las sesiones
+    (scheduling::editor.session).
 
     Con un grupo elegido cada celda dice si cabe (`fits`, `success/15` y «+»), si choca con una regla que se guarda
     marcada (`clash`, rayas `error` con su regla) o si no se puede (`blocked`, HC-01 o HC-02: rayas neutras, sin
@@ -17,27 +20,27 @@
     $title = $selected ? $selected['subject']['code'].' · '.$selected['code'] : '';
     $headBg = 'bg-[color-mix(in_oklab,var(--color-secondary)_40%,var(--color-base-100))]';
 @endphp
-<div class="max-md:hidden max-desktop:overflow-x-auto max-desktop:pb-1.5" data-testid="week">
-    <div class="grid grid-cols-[3.25rem_var(--cols)] overflow-clip rounded-box border border-base-300 bg-base-100 select-none max-desktop:min-w-[calc(3.25rem+var(--units)*7rem)]"
-        style="--cols: {{ implode(' ', array_map(fn (int $lanes): string => "minmax(0,{$lanes}fr)", $lanes)) }}; --units: {{ array_sum($lanes) }}"
+<div id="editor-week" tabindex="-1" class="max-h-[calc(100dvh-var(--shell-top)-2rem)] scroll-pt-13 scroll-ps-13 overflow-auto rounded-box [scrollbar-color:var(--color-base-300)_transparent] [scrollbar-width:thin] border border-base-300 bg-base-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary max-md:hidden" data-testid="week">
+    <div class="grid min-w-[calc(3.25rem+var(--units)*var(--lane))] grid-cols-[3.25rem_var(--cols)] select-none [--lane:7rem]"
+        style="--cols: {{ implode(' ', array_map(fn (int $lanes): string => "minmax(calc({$lanes}*var(--lane)),{$lanes}fr)", $lanes)) }}; --units: {{ array_sum($lanes) }}"
         role="group" aria-label="Semana de {{ $grid->days[0]['name'] ?? '' }} a {{ mb_strtolower(array_last($grid->days)['name'] ?? '') }}"
         x-on:keydown="key($event)" x-on:focusin="rove($event)">
-        <div class="{{ $headBg }} border-b border-base-300 desktop:sticky desktop:top-(--shell-top) desktop:z-10"></div>
-        @foreach ($grid->days as $day)
-            <div class="{{ $headBg }} flex min-w-0 flex-col justify-center border-b border-l border-base-300 px-2.5 py-1.5 desktop:sticky desktop:top-(--shell-top) desktop:z-10">
+        <div class="{{ $headBg }} sticky top-0 left-0 z-[7] border-e border-b border-base-300"></div>
+        @foreach ($grid->days as $index => $day)
+            <div @class([$headBg, 'sticky top-0 z-[6] flex min-w-0 flex-col justify-center border-b border-base-300 px-2 py-1.5', 'border-l' => $index > 0])>
                 <b class="truncate font-semibold">{{ $day['name'] }}</b>
-                <span class="truncate font-mono text-xs text-neutral">{{ $busy[$day['day']] }} h ocupadas</span>
+                <span class="font-mono text-xs leading-tight text-neutral">{{ $busy[$day['day']] }} h ocupadas</span>
             </div>
         @endforeach
 
-        <div aria-hidden="true">
+        <div class="sticky left-0 z-[5] border-e border-base-300 bg-base-100" aria-hidden="true">
             @foreach ($grid->blocks as $h => $block)
                 <div class="h-13 pe-2 pt-1 text-end font-mono text-xs text-neutral tabular-nums">{{ $block['label'] }}</div>
             @endforeach
         </div>
 
         @foreach ($grid->days as $index => $day)
-            <div class="relative min-w-0 border-l border-base-300" role="group" aria-label="{{ $day['name'] }}" wire:key="day-{{ $day['day'] }}">
+            <div @class(['relative min-w-0 border-base-300', 'border-l' => $index > 0]) role="group" aria-label="{{ $day['name'] }}" wire:key="day-{{ $day['day'] }}">
                 @foreach ($grid->blocks as $h => $block)
                     @php
                         $cell = $cells[$day['day']][$h] ?? null;
