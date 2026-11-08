@@ -18,8 +18,9 @@ use Mary\Traits\Toast;
 /**
  * La sección «Cupos por carrera» del cajón del grupo en el editor de horarios (tarea 3.6, HC-07; maqueta `cajones`,
  * estado `#grupo`): un renglón por carrera con su clave en Mono, su nombre, sus lugares y su estado («Dueña», que no
- * se quita; «Aceptado»; «Propuesto · espera al jefe de <depto>», que todavía no cuenta), la barra «N de M lugares
- * repartidos» con los propuestos aparte, el error HC-07 si se pasa, «Agregar carrera» (con «Proponer a <depto>» si la
+ * se quita; «Aceptado»; «Propuesto · aparta N lugares», que espera al jefe de <depto> y ya aparta sus lugares), la
+ * barra «N de M lugares repartidos», que suma los propuestos (aparte, en rayas), el error HC-07 si la suma con lo
+ * apartado se pasa (confirmado el 8 de noviembre de 2026), «Agregar carrera» (con «Proponer a <depto>» si la
  * carrera es de otro departamento, que propone al instante con ProposeGroupQuota; quitar un «Propuesto» lo retira al
  * instante y «Cambiar lugares» lo retira y lo propone de nuevo, solo cuando se pide en su renglón) y «Guardar cupos»
  * (SetGroupQuotas, que no toca las propuestas). Los errores de cualquier llave de una Action salen en un aviso arriba.
@@ -105,7 +106,7 @@ new class extends Component
             'capacity' => $data['capacity'],
             'counted' => $counted,
             'proposed' => $proposed,
-            'over' => $counted - $data['capacity'],
+            'over' => $counted + $proposed - $data['capacity'],
             'options' => array_map(fn (array $career): array => ['id' => $career['id'], 'label' => $career['code'].' · '.$career['name']], $addable),
             'hasAddable' => $addable !== [],
             'selected' => collect($addable)->firstWhere('id', $this->newCareer),
