@@ -13,6 +13,7 @@ use App\Modules\Staffing\Events\RankingsComputed;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Queries\RankingInput;
 use App\Modules\Staffing\Queries\RankingInputsQuery;
+use App\Modules\Staffing\Rules\CandidateMarks;
 use App\Modules\Staffing\Rules\RankedCandidate;
 use App\Modules\Staffing\Rules\RankingScorer;
 use App\Modules\Staffing\Rules\RankingWeights;
@@ -26,8 +27,9 @@ use Illuminate\Support\Facades\DB;
  * «Ranking docente (desempate)»; tarea 3.8) y devuelve cuántos grupos rankeó (los no cancelados).
  *
  * Los insumos de Faculty salen de RankingInputsQuery en lotes. Las marcas las da el validador de Scheduling (scoped;
- * se olvida su foto al empezar para leer la de ahora), con checkTeachers() una vez por grupo: HC-01 marca «choque», HC-08 «sin horas»
- * y HC-09 «no disponible», según las reglas que el validador tenga. Las horas restantes de cada candidato, sin y con
+ * se olvida su foto al empezar para leer la de ahora), con checkTeachers() una vez por grupo y las marcas de
+ * CandidateMarks: HC-01 marca «choque», HC-08 «sin horas», HC-09 «no disponible» y el aviso SC-09 «traslado justo»,
+ * según las reglas que el validador tenga. Las horas restantes de cada candidato, sin y con
  * el grupo («quedan 12 → 7»), salen de teacherHours(), con la misma cuenta de HC-08 (TeacherHourLimit). Ordena con
  * RankingScorer y los pesos de `staffing.weights`.
  *
@@ -120,13 +122,14 @@ final class RankGroups
             $candidates = [];
 
             foreach ($groupInputs as $input) {
-                $result = $results[$input->teacherId] ?? new ValidationResult;
+                $marks = CandidateMarks::of($results[$input->teacherId] ?? new ValidationResult);
                 $fromOther[$input->teacherId] = $input->fromOtherDepartment;
                 $candidates[] = $input->toCandidate(
-                    noHours: $result->forRule('HC-08') !== [],
-                    clash: $result->forRule('HC-01') !== [],
-                    unavailable: $result->forRule('HC-09') !== [],
+                    noHours: in_array('sin_horas', $marks, true),
+                    clash: in_array('choque', $marks, true),
+                    unavailable: in_array('no_disponible', $marks, true),
                     remainingHours: self::remaining($hours[$input->teacherId] ?? null, 'before'),
+                    tightTravel: in_array('traslado_justo', $marks, true),
                 );
             }
 

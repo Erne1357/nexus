@@ -37,3 +37,12 @@ it('las marcas del bloque final son sin horas, choque y no disponible; sin evalu
         ->and($flagged->marks())->toBe(['sin_horas' => 'Sin horas', 'choque' => 'Choque'])
         ->and(rankingRow(['flags' => ['sin_evaluacion'], 'evaluation' => null])->isFlagged())->toBeFalse();
 });
+
+it('SC-09: «traslado justo» es una marca discreta que no baja al bloque final', function () {
+    $row = rankingRow(['flags' => ['traslado_justo']]);
+
+    expect($row->isFlagged())->toBeFalse()
+        ->and($row->marks())->toBe([])
+        ->and($row->notices())->toBe(['traslado_justo' => 'traslado justo'])
+        ->and(rankingRow()->notices())->toBe([]);
+});
