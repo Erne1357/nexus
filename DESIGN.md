@@ -477,6 +477,13 @@ Académico › Horarios (`scheduling::pages.schedule-editor`, `/scheduling/edito
 - **Cajón del grupo:** la materia, «CLAVE · grupo», quién imparte, la capacidad, el docente en una caja de solo lectura («Lo asigna Asignación docente»), sus sesiones (cada una abre su cajón) y «Cupos por carrera» (`scheduling::components.group-quotas`).
 - **Avisos:** toasts de MaryUI («Sesión colocada»; «Colocada con choque» si el grupo rompe una regla dura que antes no rompía, aunque no nombre la sesión; «No se colocó» con el mensaje del validador: la sesión que no se guarda no queda). Cambiar el tipo en el cajón de la sesión es del navegador y viaja al guardar; el validador del cajón se lee al abrir y al guardar.
 
+### Acuerdos
+La pantalla `scheduling::pages.agreements` (`/scheduling/agreements`, `?acuerdo=<uuid>`), decidida por el usuario el 7 de noviembre de 2026 (maqueta B «Bandeja de dos paneles»; maquetas en `.impeccable/mocks/horarios/acuerdos-b.html`). Copia la forma de la bandeja del departamento.
+
+- **Lista (izquierda, 300 a 380 px):** búsqueda («Salón o grupo») y filtro de tipo; tres grupos plegables («Por decidir», «Enviados», «Decididos») con su conteo, el de «Por decidir» en `warning`. Cada acuerdo, en dos renglones: salón, día y horas en Mono (o la clave del grupo) y, debajo, el grupo (o los lugares de la carrera) y «de → para». Los decididos llevan su insignia. Vacío: «No tienes acuerdos por decidir.»
+- **Detalle (derecha):** título («Préstamo de LC-201», «Cupo de ISC en SCC-1013 3A»), tipo e insignia («Por decidir», «Enviado», «Aceptado», «Rechazado», «Cancelado»); datos en Mono; en un préstamo, la mini semana del salón (día × hora, ocupado en rayas con la clave del grupo, el bloque pedido con borde, icono y texto: «Pedido», «Enviado», «Empalma», «Aceptado»…); el estado en una alerta suave y quién pidió y cuándo.
+- **Acciones fijas al pie:** «Aceptar» y «Rechazar…» (el motivo, obligatorio, aparece en el panel con lo que pasa al rechazar: en un préstamo, la sesión se queda sin salón) y «Cancelar solicitud» para quien pidió. Lo que no se puede queda deshabilitado con su motivo escrito en el cuerpo (`aria-describedby`).
+- **Bajo 1024 px** un solo panel: la lista y, al elegir, el detalle con «Volver» y el pie pegado abajo.
 ### Asignación docente
 La pantalla del jefe para asignar el docente de cada grupo con el ranking a la vista (`staffing::pages.assign`, `/staffing/assign`, Académico › Asignación docente; tarea 3.9). El usuario eligió la maqueta C con un selector para pasar a la A el 7 de noviembre de 2026 (maquetas en `.impeccable/mocks/staffing/jefe/asignacion-c.html` y `asignacion-a.html`). Las piezas están en [`app/Modules/Staffing/Views/assign/`](app/Modules/Staffing/Views/assign/).
 
