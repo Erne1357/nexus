@@ -52,9 +52,9 @@
                                 </span>
                             </span>
                         </div>
-                        <div class="flex shrink-0 items-center gap-2 max-[30rem]:w-full max-[30rem]:justify-between">
+                        <div class="flex shrink-0 items-center justify-end gap-2 @max-[30rem]:w-full">
                             @if ($state['open'] !== null)
-                                <x-core::status-badge :tone="$state['open']->tone()" :label="$state['open']->label()" data-testid="request-open-{{ $group['id'] }}" />
+                                <x-core::status-badge :tone="$state['open']->tone()" :label="$state['open']->label()" class="@max-[30rem]:me-auto" data-testid="request-open-{{ $group['id'] }}" />
                             @endif
                             @if (! $accepts)
                                 <span class="text-sm text-neutral">Carga en {{ $state['load']?->label() ?? 'sin abrir' }}</span>
@@ -99,10 +99,10 @@
                                 <p class="text-sm text-neutral"><span class="font-mono font-semibold text-base-content">{{ $request['group_code'] }}</span> · {{ $request['campus_code'] }}</p>
                             </div>
                             <div role="cell" class="col-span-2 min-w-0 text-sm @[44rem]:col-span-1">
-                                <span class="mr-1.5 inline-flex items-center gap-1 font-medium">
-                                    <x-icon :name="$request['kind'] === \App\Modules\Staffing\Enums\ChangeRequestKind::Schedule ? 'o-clock' : 'o-map-pin'" class="h-4 w-4 text-neutral" />{{ $request['kind']->label() }}
+                                <span class="flex items-center gap-1 text-xs font-medium text-neutral">
+                                    <x-icon :name="$request['kind'] === \App\Modules\Staffing\Enums\ChangeRequestKind::Schedule ? 'o-clock' : 'o-map-pin'" class="h-3.5 w-3.5" />{{ $request['kind']->label() }}
                                 </span>
-                                <span class="break-words">{{ $request['proposal'] }}</span>
+                                <span class="block break-words">{{ $request['proposal'] }}</span>
                             </div>
                             <div role="cell" class="col-start-2 row-start-1 @[44rem]:col-start-3">
                                 <x-core::status-badge :tone="$request['status']->tone()" :label="$request['status']->label()" />

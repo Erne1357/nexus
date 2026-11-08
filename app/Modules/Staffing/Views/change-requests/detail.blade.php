@@ -30,7 +30,7 @@
         </div>
     </header>
 
-    <div class="space-y-6 px-5 py-5">
+    <div class="max-w-[60rem] space-y-6 px-5 py-5">
         <dl class="grid gap-x-6 gap-y-3 text-sm @[32rem]:grid-cols-[9rem_minmax(0,1fr)]">
             <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral @[32rem]:pt-0.5">Docente</dt>
             <dd class="font-semibold">{{ $request->teacher?->name ?? '—' }}</dd>

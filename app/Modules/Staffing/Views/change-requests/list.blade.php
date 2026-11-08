@@ -1,7 +1,8 @@
 {{--
     La lista de la pantalla de solicitudes de cambio (staffing::pages.change-requests): en tres grupos, en ese orden,
     pendientes, aprobadas por aplicar y resueltas (rechazadas y aplicadas), las más recientes primero. Cada renglón dice
-    quién la pide, el grupo, el estado, el tipo y lo que propone; elegirla la abre a la derecha.
+    quién la pide, el grupo, el estado, el tipo y lo que propone; elegirla la abre a la derecha. La que se abre sola (la
+    primera, sin elegirla) solo se marca desde lg, donde se ve su detalle.
 --}}
 @php
     $tz = config('app.timezone');
@@ -29,7 +30,7 @@
                 @php($isSelected = $selected !== null && $selected->id === $request->id)
                 <li wire:key="request-{{ $request->id }}">
                     <button type="button" wire:click="pick('{{ $request->id }}')" aria-current="{{ $isSelected ? 'true' : 'false' }}" data-request="{{ $request->id }}"
-                        class="grid w-full min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary aria-[current=true]:bg-base-200">
+                        class="grid w-full min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary {{ $requestId !== '' ? 'aria-[current=true]:bg-base-200' : 'lg:aria-[current=true]:bg-base-200' }}">
                         <span class="truncate font-semibold">{{ $request->teacher?->name ?? $request->requestedBy?->name }}</span>
                         <span class="text-sm text-neutral tabular-nums">{{ $request->created_at->timezone($tz)->translatedFormat('j M') }}</span>
                         <span class="col-span-2 truncate text-sm text-neutral">

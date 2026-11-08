@@ -21,8 +21,8 @@
         <x-alert icon="o-exclamation-triangle" class="alert-error alert-soft text-sm" :title="$message" data-testid="request-error" />
     @enderror
 
-    <fieldset>
-        <legend class="mb-2 font-medium">Qué quieres cambiar</legend>
+    <fieldset class="fieldset py-0">
+        <legend class="fieldset-legend mb-1">Qué quieres cambiar</legend>
         <div class="join w-full" role="radiogroup" aria-label="Qué quieres cambiar">
             @foreach (\App\Modules\Staffing\Enums\ChangeRequestKind::cases() as $kind)
                 <label @class([

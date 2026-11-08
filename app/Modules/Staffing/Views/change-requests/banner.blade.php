@@ -17,7 +17,7 @@
         null => 'El departamento no tiene carga en este campus.',
         LoadStatus::Staffing => 'Al aprobar una solicitud, la carga pasa a Ajustes.',
         LoadStatus::Adjusting => $approved > 0
-            ? "{$approved} ".($approved === 1 ? 'aprobada por aplicar' : 'aprobadas por aplicar').'. Al aplicarlas, la carga regresa a Asignación.'
+            ? "{$approved} ".($approved === 1 ? 'aprobada por aplicar' : 'aprobadas por aplicar').' en el departamento. Al aplicarlas, la carga regresa a Asignación.'
             : 'No quedan solicitudes por aplicar; la carga sigue en Ajustes.',
         default => 'Las solicitudes se piden y se deciden con la carga en Asignación o Ajustes.',
     };
@@ -25,7 +25,8 @@
 <section class="grid items-center gap-x-8 gap-y-3 rounded-box border border-base-300 bg-base-100 px-5 py-3.5 desktop:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,24rem)]" aria-label="Estado de la carga" data-testid="load-banner">
     <div class="min-w-0">
         <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Carga del departamento</span>
-        <p class="font-bold leading-snug">{{ $departmentName }} <span class="font-normal text-neutral">· {{ $campusName }}</span></p>
+        <p class="font-bold leading-snug">{{ $departmentName }}</p>
+        <p class="text-sm text-neutral">{{ $campusName }}{{ $termName ? ' · '.$termName : '' }}</p>
     </div>
 
     <ol class="flex min-w-0 items-center gap-2 max-md:hidden" aria-label="Etapas de la carga">

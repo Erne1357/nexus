@@ -36,7 +36,7 @@
                 description="La solicitud quedó aplicada. Cuando se resuelvan, la siguiente solicitud aplicada regresa la carga a Asignación." />
         @endif
 
-        <div class="flex flex-wrap items-end gap-3" role="search" aria-label="Filtrar solicitudes">
+        <div @class(['flex flex-wrap items-end gap-3', 'max-lg:hidden' => $mobileDetail]) role="search" aria-label="Filtrar solicitudes">
             <div role="group" aria-label="Estado" class="flex flex-wrap gap-1.5">
                 @foreach (['' => 'Todas', 'pendientes' => 'Pendientes', 'aprobadas' => 'Aprobadas', 'rechazadas' => 'Rechazadas', 'aplicadas' => 'Aplicadas'] as $value => $label)
                     <button type="button" wire:click="$set('status', '{{ $value }}')" aria-pressed="{{ $status === $value ? 'true' : 'false' }}" data-testid="status-{{ $value === '' ? 'todas' : $value }}"
