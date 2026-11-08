@@ -48,7 +48,7 @@ function boardTeacher(string $name, ?string $kind, ?Department $department = nul
     return $teacher;
 }
 
-function boardGroup(Teacher $teacher, Campus $campus, int $hours, string $code): Group
+function teacherLoadsGroup(Teacher $teacher, Campus $campus, int $hours, string $code): Group
 {
     return Group::factory()->create([
         'term_id' => test()->term->id, 'campus_id' => $campus->id, 'teacher_id' => $teacher->id, 'code' => $code,
@@ -59,16 +59,16 @@ function boardGroup(Teacher $teacher, Campus $campus, int $hours, string $code):
 function boardSeed(): array
 {
     $over = boardTeacher('Olga Excedida', 'medioTiempo');
-    boardGroup($over, test()->c2, 15, 'A1');
-    boardGroup($over, test()->c1, 8, 'A2');
+    teacherLoadsGroup($over, test()->c2, 15, 'A1');
+    teacherLoadsGroup($over, test()->c1, 8, 'A2');
     $none = boardTeacher('Nora Sinclase', 'tiempoCompleto');
     $part = boardTeacher('Pablo Libre', 'tiempoCompleto');
-    boardGroup($part, test()->c2, 10, 'B1');
+    teacherLoadsGroup($part, test()->c2, 10, 'B1');
     $full = boardTeacher('Fabiola Completa', 'medioTiempo');
-    boardGroup($full, test()->c2, 20, 'C1');
+    teacherLoadsGroup($full, test()->c2, 20, 'C1');
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'staffing.honorarios_max_hours', 'value' => 12]);
     $hon = boardTeacher('Hugo Honorarios', 'honorarios');
-    boardGroup($hon, test()->c2, 4, 'D1');
+    teacherLoadsGroup($hon, test()->c2, 4, 'D1');
 
     app(RefreshTeacherTermLoads::class)->handle(test()->term);
 
@@ -262,7 +262,7 @@ describe('TeacherLoadsBoardQuery', function () {
 
         foreach (range(1, 6) as $i) {
             $teacher = boardTeacher("Docente {$i}", 'tiempoCompleto');
-            $group = boardGroup($teacher, $i % 2 ? $this->c1 : $this->c2, 5, "Z{$i}");
+            $group = teacherLoadsGroup($teacher, $i % 2 ? $this->c1 : $this->c2, 5, "Z{$i}");
             GroupSession::factory()->for($group)->on(1, '07:00', '09:00')->create();
             TeacherExternalLoad::factory()->for($teacher)->create(['term_id' => $this->term->id, 'hours' => 2]);
         }
