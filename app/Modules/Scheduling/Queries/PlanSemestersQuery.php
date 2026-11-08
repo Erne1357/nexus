@@ -10,7 +10,6 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -59,8 +58,7 @@ final class PlanSemestersQuery
      */
     public function plans(Career $career, Term $term, Campus $campus): array
     {
-        $counts = $this->counts($term, $campus)
-            ->where('groups.owner_career_id', $career->id)
+        $counts = $this->counts($term, $campus, $career->id)
             ->groupBy('groups.study_plan_id')
             ->addSelect('groups.study_plan_id as plan_id')
             ->get()
@@ -99,7 +97,7 @@ final class PlanSemestersQuery
      */
     public function semesters(StudyPlan $plan, Term $term, Campus $campus): array
     {
-        $counts = $this->counts($term, $campus)
+        $counts = $this->counts($term, $campus, $plan->career_id)
             ->where('groups.study_plan_id', $plan->id)
             ->groupBy('groups.semester')
             ->addSelect('groups.semester')
@@ -146,20 +144,23 @@ final class PlanSemestersQuery
     }
 
     /**
-     * Los grupos sin cancelar del periodo y campus, con cuántos tienen horas sin acomodar; quien llama agrupa.
+     * Los grupos sin cancelar de la carrera en el periodo y campus, con cuántos tienen horas sin acomodar; quien llama
+     * agrupa.
      */
-    private function counts(Term $term, Campus $campus): QueryBuilder
+    private function counts(Term $term, Campus $campus, string $careerId): QueryBuilder
     {
         $placed = GroupSession::query()->toBase()
+            ->where('term_id', $term->id)
+            ->where('campus_id', $campus->id)
             ->groupBy('group_id')
             ->selectRaw('group_id, sum(extract(epoch from ends_at - starts_at)) / 60 as minutes');
 
-        return Group::query()->toBase()
+        return Group::query()->active()->toBase()
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->leftJoinSub($placed, 'placed', 'placed.group_id', '=', 'groups.id')
             ->where('groups.term_id', $term->id)
             ->where('groups.campus_id', $campus->id)
-            ->where('groups.status', '<>', GroupStatus::Cancelled->value)
+            ->where('groups.owner_career_id', $careerId)
             ->selectRaw('count(*) as groups')
             ->selectRaw('count(*) filter (where coalesce(placed.minutes, 0) < (subjects.theory_hours + subjects.practice_hours) * 60) as unscheduled');
     }

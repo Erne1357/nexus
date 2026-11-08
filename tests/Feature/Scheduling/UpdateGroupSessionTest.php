@@ -121,7 +121,7 @@ it('HC-02: si otra sesión gana la carrera por el salón, la exclusión de la ba
         ->and($this->session->fresh()->day)->toBe(1);
 });
 
-it('une la sesión movida con una vecina del mismo tipo y salón: la movida se queda y la vecina se borra', function () {
+it('une la sesión movida con una vecina del mismo tipo y salón: la movida se queda, la vecina se borra y queda en la bitácora', function () {
     $neighbor = GroupSession::factory()->for($this->group)->inRoom($this->room)->on(2, '09:00', '10:00')->create();
 
     $result = moveSession($this->session, 2, '07:00', '09:00');
@@ -132,7 +132,10 @@ it('une la sesión movida con una vecina del mismo tipo y salón: la movida se q
         ->starts_at->toBe('07:00:00')
         ->ends_at->toBe('10:00:00')
         ->room_id->toBe($this->room->id)
-        ->and(GroupSession::query()->whereKey($neighbor->id)->exists())->toBeFalse();
+        ->and(GroupSession::query()->whereKey($neighbor->id)->exists())->toBeFalse()
+        ->and(Activity::sole()->properties->all())->toBe([
+            'absorbed' => [['id' => $neighbor->id, 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '10:00', 'kind' => 'teoria', 'room_id' => $this->room->id]],
+        ]);
 });
 
 it('no une con una vecina sin salón cuando la movida conserva el suyo', function () {

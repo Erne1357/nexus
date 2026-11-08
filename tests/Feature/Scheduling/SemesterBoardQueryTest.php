@@ -4,6 +4,8 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -26,13 +28,17 @@ use Illuminate\Support\Facades\DB;
 | SemesterBoardQuery (tarea 3.5): lo que el editor pinta de un semestre reticular de una carrera en un periodo y
 | campus. Los grupos de la carrera en ese plan y semestre, más los de otra carrera donde esta tiene cupo y cuya materia
 | está en ese plan y semestre (compartidos). Por grupo, su materia, docente, cupos, sesiones, horas y lo que el actor
-| puede hacer según GroupPolicy; y las violaciones del validador por grupo y por sesión.
+| puede hacer según GroupPolicy, solo con la carga de su departamento en propuesta, asignación o ajustes (si no, por
+| qué); y las violaciones del validador por grupo y por sesión.
 */
 
 beforeEach(function () {
     $this->term = Term::factory()->create();
-    $this->campus = Campus::factory()->create();
+    $this->campus = Campus::factory()->create(['name' => 'Campus II']);
     $this->sistemas = Department::factory()->create(['code' => 'DSC', 'name' => 'Sistemas y Computación']);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
+        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->sistemas->id,
+    ]);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->sistemas->id]);
     $this->iind = Career::factory()->create(['code' => 'IIND']);
     $this->plan = StudyPlan::factory()->create(['career_id' => $this->isc->id]);
@@ -134,7 +140,22 @@ it('por grupo da la materia con su departamento, el docente, la capacidad, los c
         'required_hours' => 5,
         'placed_hours' => 3.5,
         'can' => ['editSessions' => true, 'assignRoom' => true, 'manageQuotas' => true],
+        'editBlockedReason' => null,
     ]);
+});
+
+it('con la carga que no está en propuesta, asignación o ajustes nadie acomoda, asigna salón ni reparte cupos, y el grupo dice por qué', function () {
+    $closed = boardGroup(boardSubject(['department_id' => $this->sistemas->id]));
+    $basicas = Department::factory()->create(['name' => 'Ciencias Básicas']);
+    $withoutLoad = boardGroup(boardSubject(['department_id' => $basicas->id]));
+    $this->load->update(['status' => LoadStatus::Closed]);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sistemas->id])->create();
+
+    $rows = collect(semesterBoardFor($jefe)['groups'])->keyBy('id');
+
+    expect($rows[$closed->id]['can'])->toBe(['editSessions' => false, 'assignRoom' => false, 'manageQuotas' => false])
+        ->and($rows[$closed->id]['editBlockedReason'])->toBe('La carga de Sistemas y Computación en Campus II está en cerrada: no se editan horarios.')
+        ->and($rows[$withoutLoad->id]['editBlockedReason'])->toBe('Ciencias Básicas no tiene carga en Campus II en este periodo: no se editan horarios.');
 });
 
 it('dice lo que puede hacer cada quien según GroupPolicy: el compartido es de solo lectura para el coordinador', function () {
