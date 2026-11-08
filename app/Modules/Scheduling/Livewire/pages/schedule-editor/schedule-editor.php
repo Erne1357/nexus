@@ -22,6 +22,7 @@ use App\Modules\Scheduling\Queries\RoomScheduleQuery;
 use App\Modules\Scheduling\Queries\SemesterBoardQuery;
 use App\Modules\Scheduling\Queries\TeacherScheduleQuery;
 use App\Modules\Scheduling\Support\WeekGrid;
+use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
@@ -261,8 +262,8 @@ new #[Title('Horarios')] class extends Component
         $grid = WeekGrid::of($this->campus()->profile);
         $this->validate([
             'sessionDay' => ['required', Rule::in(array_map('strval', array_column($grid->days, 'day')))],
-            'sessionStart' => ['required', Rule::in([...array_column($grid->blocks, 'starts_at'), substr($session->starts_at, 0, 5)])],
-            'sessionEnd' => ['required', Rule::in([...array_column($grid->blocks, 'ends_at'), substr($session->ends_at, 0, 5)])],
+            'sessionStart' => ['required', Rule::in([...array_column($grid->blocks, 'starts_at'), Clock::of($session->starts_at)])],
+            'sessionEnd' => ['required', Rule::in([...array_column($grid->blocks, 'ends_at'), Clock::of($session->ends_at)])],
             'sessionKind' => ['required', Rule::enum(SessionKind::class)],
         ], attributes: ['sessionDay' => 'día', 'sessionStart' => 'inicio', 'sessionEnd' => 'fin', 'sessionKind' => 'tipo']);
 
@@ -508,6 +509,7 @@ new #[Title('Horarios')] class extends Component
             $items[] = [
                 ...$this->item($session, $session['group_id'], "{$session['subject_code']} · {$session['group_code']}", $own === null ? null : $chains[$own['subject']['id']]),
                 'room' => $session['room']['code'] ?? null,
+                'roomless' => $own !== null && $session['room'] === null,
                 'note' => $session['campus_id'] === $campus->id ? null : $session['campus_name'],
                 'noteIcon' => 'o-map-pin',
                 'open' => $own !== null,
@@ -934,8 +936,8 @@ new #[Title('Horarios')] class extends Component
     private function fillSession(GroupSession $session): void
     {
         $this->sessionDay = (string) $session->day;
-        $this->sessionStart = substr($session->starts_at, 0, 5);
-        $this->sessionEnd = substr($session->ends_at, 0, 5);
+        $this->sessionStart = Clock::of($session->starts_at);
+        $this->sessionEnd = Clock::of($session->ends_at);
         $this->sessionKind = $session->kind->value;
     }
 
@@ -943,7 +945,7 @@ new #[Title('Horarios')] class extends Component
     {
         $group->loadMissing(['subject' => fn (Relation $query) => $query->withTrashed()]);
 
-        return "{$group->subject->code} · {$group->code}: ".Minutes::dayName($session->day).' '.WeekGrid::range(substr($session->starts_at, 0, 5), substr($session->ends_at, 0, 5));
+        return "{$group->subject->code} · {$group->code}: ".Minutes::dayName($session->day).' '.WeekGrid::range(Clock::of($session->starts_at), Clock::of($session->ends_at));
     }
 
     private function firstError(ValidationException $exception): string

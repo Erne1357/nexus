@@ -10,7 +10,10 @@
 @endphp
 <section class="order-1 flex min-h-0 min-w-0 flex-col rounded-box border border-base-300 bg-base-100 desktop:min-h-45 desktop:flex-[1_1_auto]"
     x-data="{ open: matchMedia('(min-width: 48rem)').matches, wide: matchMedia('(min-width: 75rem)').matches }"
-    x-init="matchMedia('(min-width: 75rem)').addEventListener('change', (event) => wide = event.matches)"
+    x-init="matchMedia('(min-width: 75rem)').addEventListener('change', (event) => wide = event.matches);
+        const reveal = () => $nextTick(() => wide && $el.querySelector('[data-group][aria-pressed=true]')?.scrollIntoView({ block: 'nearest' }));
+        reveal();
+        $wire.$watch('groupId', reveal)"
     aria-labelledby="tray-title" data-testid="tray">
     <h2 id="tray-title">
         <button type="button" class="flex w-full flex-wrap items-center gap-2 rounded-box px-3.5 py-3 text-left font-bold focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default"
@@ -28,11 +31,11 @@
         @forelse ($subjects as $row)
             <div class="grid min-w-0 gap-1.5" role="group" aria-label="{{ $row['subject']['code'] }} {{ $row['subject']['name'] }}">
                 <h3 class="flex min-w-0 items-baseline gap-2 px-0.5 text-[13px] font-bold">
-                    <span class="font-mono">{{ $row['subject']['code'] }}</span>
+                    <span class="shrink-0 font-mono whitespace-nowrap">{{ $row['subject']['code'] }}</span>
                     <span class="truncate" title="{{ $row['subject']['name'] }}">{{ $row['subject']['name'] }}</span>
                     <span class="ms-auto font-mono font-normal whitespace-nowrap text-neutral">{{ count($row['groups']) }} {{ count($row['groups']) === 1 ? 'grupo' : 'grupos' }}</span>
                 </h3>
-                <div class="grid gap-1.5 max-md:auto-cols-[15rem] max-md:grid-flow-col max-md:overflow-x-auto max-md:pb-1.5 md:grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] desktop:grid-cols-1">
+                <div class="grid gap-1.5 max-md:auto-cols-[16.5rem] max-md:grid-flow-col max-md:overflow-x-auto max-md:pb-1.5 md:grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] desktop:grid-cols-1">
                     @foreach ($row['groups'] as $group)
                         @php($done = $group['placed_hours'] >= $group['required_hours'])
                         <div class="relative min-w-0" wire:key="piece-{{ $group['id'] }}">
@@ -40,7 +43,7 @@
                                 x-on:click="if (! matchMedia('(min-width: 48rem)').matches) { open = false }"
                                 @class([
                                     $chainClasses[$row['chain'] % count($chainClasses)],
-                                    'grid w-full min-w-0 gap-px rounded-field border border-base-300 bg-[color-mix(in_oklab,var(--chain)_7%,var(--color-base-100))] py-1.5 ps-3.5 pe-10 text-left shadow-[inset_4px_0_0_var(--chain)] cursor-pointer',
+                                    'grid w-full min-w-0 gap-px rounded-field border border-base-300 bg-[color-mix(in_oklab,var(--chain)_7%,var(--color-base-100))] py-1.5 ps-3.5 pe-2.5 text-left shadow-[inset_4px_0_0_var(--chain)] cursor-pointer',
                                     'hover:border-primary aria-pressed:border-primary aria-pressed:ring-3 aria-pressed:ring-primary/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
                                 ])>
                                 <span class="flex min-w-0 items-center justify-between gap-2">
@@ -49,17 +52,17 @@
                                         <x-icon :name="$done ? 'o-check-circle' : 'o-exclamation-triangle'" class="h-3.5 w-3.5" aria-hidden="true" />{{ $group['placed_hours'] }} de {{ $group['required_hours'] }} h
                                     </span>
                                 </span>
-                                <span @class(['flex min-w-0 items-center gap-1.5 text-[12.5px]', 'text-neutral' => $group['teacher'], 'text-warning' => ! $group['teacher']])>
+                                <span @class(['flex min-w-0 items-center gap-1.5 pe-7 text-[12.5px]', 'text-neutral' => $group['teacher'], 'text-warning' => ! $group['teacher']])>
                                     <x-icon :name="$group['teacher'] ? 'o-user' : 'o-user-minus'" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                                     <span class="truncate">{{ $group['teacher'] ?? 'Sin docente' }}</span>
                                 </span>
                                 @if ($group['shared'])
-                                    <span class="flex items-center gap-1.5 text-[12.5px] text-neutral">
+                                    <span class="flex items-center gap-1.5 pe-7 text-[12.5px] text-neutral">
                                         <x-icon name="o-arrows-right-left" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />Grupo de {{ collect($group['quotas'])->firstWhere('owner', true)['career_code'] ?? 'otra carrera' }}
                                     </span>
                                 @endif
                             </button>
-                            <x-button icon="o-information-circle" class="btn-ghost btn-xs btn-square absolute top-1 right-1" wire:click="openGroup('{{ $group['id'] }}')" data-opener
+                            <x-button icon="o-information-circle" class="btn-ghost btn-xs btn-square absolute right-1 bottom-1" wire:click="openGroup('{{ $group['id'] }}')" data-opener
                                 aria-label="Grupo {{ $group['subject']['code'] }} · {{ $group['code'] }}: sesiones y cupos" title="Sesiones y cupos" />
                         </div>
                     @endforeach

@@ -4,7 +4,7 @@
     mensaje y «Ver», que lleva a la sesión y la marca (o elige el grupo, si el choque no es de una sesión). Desde
     1200 px va debajo de la bandeja con su propio desplazamiento; antes, después de la semana y plegable.
 --}}
-<section id="choques" class="order-3 flex min-h-0 min-w-0 scroll-mt-24 flex-col rounded-box border border-base-300 bg-base-100 desktop:max-h-[46%] desktop:shrink-0"
+<section id="choques" class="order-3 flex min-h-0 min-w-0 scroll-mt-24 flex-col rounded-box border border-base-300 bg-base-100 desktop:max-h-[42dvh] desktop:flex-[0_1_auto]"
     x-data="{ open: matchMedia('(min-width: 48rem)').matches, wide: matchMedia('(min-width: 75rem)').matches }"
     x-init="matchMedia('(min-width: 75rem)').addEventListener('change', (event) => wide = event.matches)"
     aria-labelledby="conflicts-title" data-testid="conflicts">

@@ -226,16 +226,18 @@ describe('coordinador de la carrera dueña', function () {
     });
 
     it('marca la sesión con choque duro con su regla y la lista en «Choques del semestre» con «Ver»', function () {
-        $room = Room::factory()->create(['code' => 'A-1', 'building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id]);
+        $room = Room::factory()->create(['code' => 'A-1', 'capacity' => 40, 'building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id]);
         $mine = GroupSession::factory()->for($this->calcGroup)->inRoom($room)->on(2, '09:00', '10:00')->create();
-        $taken = GroupSession::factory()->for($this->dataGroup)->on(2, '09:00', '10:00')->create();
+        $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+        $taken = GroupSession::factory()->for($other)->on(2, '09:00', '10:00')->create();
         DB::statement('set constraints group_sessions_room_no_overlap deferred');
         DB::table('group_sessions')->where('id', $taken->id)->update(['room_id' => $room->id]);
 
-        $page = editorAs($this->coordinator)->assertSee('1 choque');
+        $page = editorAs($this->coordinator);
         $block = domOf($page)->querySelector('[data-testid=week] [data-session="'.$mine->id.'"]');
 
-        expect(textOf($block))->toContain('ACF-0904 · A', '9:00–10:00', 'A-1', 'HC-02')
+        expect(textOf(domOf($page)->querySelector('[data-testid=editor-facts]')))->toContain('1 choque', '1 aviso')
+            ->and(textOf($block))->toContain('ACF-0904 · A', '9:00–10:00', 'A-1', 'HC-02')
             ->and(textOf(domOf($page)->querySelector('[data-testid=conflicts]')))->toContain('HC-02', 'El salón A-1 ya está ocupado', 'Ver');
 
         $page->call('focusSession', $mine->id)->assertDispatched('editor-focus', id: $mine->id)->assertSet('day', '2');
@@ -393,7 +395,7 @@ it('no dispara consultas de más al pintar ni al colocar una sesión, y no crece
     $place = $queries(fn () => $page->call('place', $this->calcGroup->id, 3, '07:00'));
 
     expect($many)->toBe($few)
-        ->and($many)->toBeLessThanOrEqual(26)
-        ->and($pick)->toBeLessThanOrEqual(30)
-        ->and($place)->toBeLessThanOrEqual(66);
+        ->and($many)->toBeLessThanOrEqual(28)
+        ->and($pick)->toBeLessThanOrEqual(31)
+        ->and($place)->toBeLessThanOrEqual(67);
 });

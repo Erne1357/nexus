@@ -25,7 +25,7 @@
             @endif
         </h1>
         @isset($plan)
-            <p class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-neutral" data-testid="editor-facts">
+            <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-neutral" data-testid="editor-facts">
                 <span class="font-medium text-base-content">{{ $campus->name }}</span>
                 <span>Retícula <span class="font-mono text-base-content">{{ $plan->code }}</span></span>
                 <span>Grupos <span class="font-mono text-base-content">{{ count($groups) }}</span></span>
@@ -38,7 +38,7 @@
                         <x-core::status-badge tone="warning" icon="o-exclamation-triangle" :label="$softCount === 1 ? '1 aviso' : $softCount.' avisos'" />
                     </a>
                 @endif
-            </p>
+            </div>
         @endisset
     </div>
 

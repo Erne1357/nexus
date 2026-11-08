@@ -20,12 +20,12 @@
     @isset($plan)
         <fieldset class="fieldset py-0 max-md:w-full">
             <legend class="fieldset-legend mb-0.5">Retícula</legend>
-            <div class="join max-md:flex max-md:w-full" role="group" aria-label="Retícula">
+            <div class="join max-md:join-vertical max-md:w-full" role="group" aria-label="Retícula">
                 @foreach ($plans as $row)
-                    <button type="button" wire:click="choosePlan('{{ $row['id'] }}')" aria-pressed="{{ $row['id'] === $plan->id ? 'true' : 'false' }}" @class([$segment]) data-testid="plan-{{ $row['code'] }}">
+                    <button type="button" wire:click="choosePlan('{{ $row['id'] }}')" aria-pressed="{{ $row['id'] === $plan->id ? 'true' : 'false' }}" @class([$segment, 'max-md:justify-start']) data-testid="plan-{{ $row['code'] }}">
                         <span class="font-mono">{{ $row['code'] }}</span>
                         @if ($row['is_current'])
-                            <x-core::status-badge tone="success" label="Vigente" class="max-md:hidden" />
+                            <x-core::status-badge tone="success" label="Vigente" />
                         @else
                             <x-core::status-badge tone="warning" icon="o-exclamation-triangle" label="Prioridad" />
                             @if ($row['unscheduled'] > 0)
