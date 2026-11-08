@@ -14,7 +14,6 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
-use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
@@ -64,26 +63,15 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     {
         return [
             new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
-                visible: static fn (Actor $context): bool => self::isTeacher($context) && $context->allowsAny(StaffingPermission::MyLoadView)),
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
             new NavigationItem('Oferta del departamento', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
-                visible: static fn (Actor $context): bool => self::isTeacher($context) && $context->allowsAny(StaffingPermission::OfferView)),
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
             new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::Academico,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::ChangeRequestView)
                     || $context->allowsAny(StaffingPermission::ChangeRequestDecide)
                     || $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule)
                     || $context->allowsAny(StaffingPermission::ChangeRequestApplyRoom)),
         ];
-    }
-
-    /**
-     * «Mi espacio» es de quien tiene una ficha de docente activa: el admin, que lo puede todo, no la tiene, así que no
-     * lo ve en el menú (la página igual responde si entra por la URL).
-     */
-    private static function isTeacher(Actor $context): bool
-    {
-        $user = $context->user();
-
-        return $user !== null && Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->exists();
     }
 
     /**
@@ -128,6 +116,18 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::ChangeRequestRequest,
                 StaffingPermission::ChangeRequestApplySchedule,
             ],
+        ];
+    }
+
+    /**
+     * «Mi espacio» es del docente sobre lo suyo: el admin no es docente, así que no tiene la oferta ni «mi carga» y
+     * no los ve en el menú (y el menú no consulta la ficha del docente en cada página).
+     */
+    public function adminDenies(): array
+    {
+        return [
+            StaffingPermission::OfferView,
+            StaffingPermission::MyLoadView,
         ];
     }
 }

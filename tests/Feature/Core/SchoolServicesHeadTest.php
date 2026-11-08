@@ -67,7 +67,7 @@ describe('AZ-02: menú', function () {
         'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Inicio', 'Campus', 'Periodos', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Choques y avance', 'Solicitudes de cambio']],
         'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Inicio', 'Docentes', 'Bandeja del departamento', 'Choques y avance', 'Solicitudes de cambio']],
         'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Inicio', 'Alumnos', 'Propuesta de carrera', 'Choques y avance', 'Solicitudes de cambio']],
-        'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Inicio']],
+        'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Inicio', 'Mi carga', 'Oferta del departamento']],
         'admin' => [fn () => User::factory()->admin()->create(), ['Inicio', 'Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Importaciones', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Choques y avance', 'Solicitudes de cambio']],
     ]);
 });
