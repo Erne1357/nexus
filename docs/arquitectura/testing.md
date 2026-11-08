@@ -126,6 +126,23 @@ Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes traba
 | Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (en el masivo, HC-14 a medias; LADM con 45 materias), `jefe.ee` (catálogos validados) |
 | Campana y `/notifications` | `jefe.cea` (unos 24 avisos) o `jefe.sc` |
 
+### Qué trae la asignación docente (fase 3)
+
+`StaffingDemoSeeder` corre al final de los dos, después de `SchedulingDemoSeeder`. En el `DemoSeeder` agrega unos 7 s; en el masivo, unos 2 minutos (los rankings se calculan en paralelo, un `staffing:rank` por departamento y campus). Al terminar imprime cuántos rankings, asignaciones, solicitudes y docentes por categoría dejó y con qué usuarios revisar. En 20271, por campus:
+
+- **Cargas:** los departamentos limpios de `SchedulingDemoSeeder` pasan a asignación; los que Scheduling veta (choques duros, grupos sin horario) se quedan en propuesta con su motivo. Entre los que entran, de más a menos grupos: el primero termina en ajustes (solicitudes aprobadas sin aplicar), el segundo aplica sus solicitudes y regresa a asignación, los de en medio siguen en asignación con solicitudes pendientes y, con tres o más, el último queda sin ningún docente.
+- **Rankings** de todos los departamentos con grupos, recalculados después de asignar (las horas restantes ya cuentan lo asignado).
+- **Asignaciones** en los departamentos con papel: el 75 % de sus grupos (65 % en el masivo), casi todos al primer lugar y uno de cada siete, más o menos, fuera de él con motivo (HC-16), con hasta dos docentes de honorarios por departamento; además reemplazos y docentes quitados con motivo, así que el historial tiene asignaciones vigentes, reemplazadas y quitadas. Siempre quedan grupos «Sin docente». Las primeras de cada departamento pasan por `AssignTeacher` y dejan bitácora; las demás se escriben en bloque, validadas contra una foto del campus.
+- **Solicitudes de cambio** de horario y de salón pedidas por los docentes de los grupos: pendientes, aprobadas, rechazadas con comentario y aplicadas (unas 13 en el `DemoSeeder`, unas 50 en el masivo).
+- **Carga por docente:** crea `staffing.honorarios_max_hours` = 20 si no existe, agrega horas fuera del ITCJ a unos docentes ya cargados para que excedan su tope (HC-08) o queden justos y recalcula `teacher_term_loads`; hay docentes que exceden, honorarios con carga, sin carga, con carga completa y con horas libres.
+
+| Pantalla | Usuario y caso |
+|---|---|
+| Asignación docente (`/staffing/assign`) | En C2 del `DemoSeeder`: `jefe.ii` (ajustes), `jefe.cea` (asignación, de vuelta tras aplicar sus solicitudes), `jefe.sc` (asignación sin docentes), `jefe.cb` (propuesta vetada). En el masivo: `jefe.ee` (ajustes en C1), `jefe.ii` (aplicadas en C1, ajustes en C2), `jefe.sc` (pendientes en C1), `jefe.cb` (sin docentes en C1, aplicadas en C2), `jefe.mm` (vetada en C1) |
+| Carga por docente (`/carga-por-docente`) | Los mismos jefes; los que exceden su tope están adscritos a departamentos en asignación |
+| Solicitudes de cambio (`/staffing/change-requests`) | El jefe de la carga en ajustes (aprueba o rechaza las pendientes); el coordinador que imprime el resumen, que aplica una solicitud de horario aprobada (por ejemplo `coord.ii.c2` en el `DemoSeeder`; puede cambiar de una siembra a otra porque los ids de los grupos cambian) |
+| Oferta del departamento y Mi carga (`/mi-espacio/oferta`, `/mi-espacio/mi-carga`) | El docente que imprime el resumen (su RFC, distinto en cada siembra): varios grupos y solicitudes; en el masivo, con grupos en C1 y C2 |
+
 ## Pruebas de rendimiento
 
 Hay tres presupuestos que se miden, no se suponen:
@@ -170,7 +187,7 @@ Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protecci
 `SchedulingDemoSeeder` corre después de `AcademicLoadDemoSeeder`, que acepta partes y con eso crea los grupos (3.3); en Massive tarda unos 2.5 minutos. Para revisar el tablero «Choques y avance» (`/scheduling/conflicts`, con un campus elegido en la credencial):
 
 - **Departamentos limpios** (`SchedulingDemoSeeder::cleanDepartments()`, lo imprime al sembrar): todos sus grupos con sesiones de horas exactas, salones sin dueño o de su departamento, sin choques duros y sin docente, para que Staffing los pase a asignación (`StartStaffing`) y los asigne.
-- **Los demás departamentos**, con casos a propósito de cada tipo: grupos sin horario, horas que no cuadran (HC-12), dos materias de grupo único empalmadas en el mismo semestre (HC-03), salón más chico que el grupo (HC-05), práctica de laboratorio en aula (HC-06), salón de otro departamento sin préstamo (HC-10), docente que se pasa de horas o no está disponible (HC-08, HC-09), grupos sin docente, sin salón, cancelados y confirmados. Los choques que no son a propósito quedan cerca de cero, para que la cuadrícula muestre celdas listas, con pendientes y con choques.
+- **Los demás departamentos**, con casos a propósito de cada tipo: grupos sin horario, horas que no cuadran (HC-12), dos materias de grupo único empalmadas en el mismo semestre (HC-03; solo en semestres sin grupos de los departamentos limpios, porque HC-03 se revisa por semestre y vetaría también su paso a asignación), salón más chico que el grupo (HC-05), práctica de laboratorio en aula (HC-06), salón de otro departamento sin préstamo (HC-10), docente que se pasa de horas o no está disponible (HC-08, HC-09), grupos sin docente, sin salón, cancelados y confirmados. Los choques que no son a propósito quedan cerca de cero, para que la cuadrícula muestre celdas listas, con pendientes y con choques.
 - Al final recalcula `schedule_conflicts` de cada campus. Después de cambiar datos a mano: `php artisan scheduling:recompute-conflicts 20271`.
 
 ### Cómo corre

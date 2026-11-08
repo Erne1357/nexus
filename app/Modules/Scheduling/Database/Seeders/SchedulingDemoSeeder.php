@@ -52,7 +52,8 @@ use RuntimeException;
  * - 20 % sin docente (`teacherless_groups`); a los demás, un docente adscrito al departamento del grupo, probando el
  *   siguiente si la base lo rechaza por HC-01;
  * - `overlap_pairs` parejas (4 con el perfil demo, 40 con el massive) de materias con un solo grupo en el mismo plan y
- *   semestre, encimadas a propósito (HC-03);
+ *   semestre, encimadas a propósito (HC-03), en semestres sin grupos de los departamentos limpios (HC-03 se revisa por
+ *   semestre y vetaría también su paso a asignación);
  * - docente sin HC-08 ni HC-09 salvo el 3 % de los grupos (`teacher_conflict_groups`) que los rompe a propósito; sin
  *   candidato que sirva, el grupo queda sin docente;
  * - salón en el 75 % de las sesiones (`room_sessions`, solo si el campus usa salones): de capacidad suficiente y del
@@ -107,6 +108,9 @@ final class SchedulingDemoSeeder extends Seeder
 
     /** @var array<string, true> */
     private array $cleanIds = [];
+
+    /** @var array<string, true> «plan|semestre» con algún grupo de un departamento limpio */
+    private array $cleanCohorts = [];
 
     /** @var array<string, float|int> */
     private array $ratios;
@@ -198,6 +202,8 @@ final class SchedulingDemoSeeder extends Seeder
         $this->cleanByCampus[$campus->code] = array_values(Department::query()->withTrashed()->whereIn('id', $cleanIds)->orderBy('code')->pluck('code')->all());
         $this->command?->info("Departamentos limpios en {$campus->code}: ".($this->cleanByCampus[$campus->code] === [] ? 'ninguno' : implode(', ', $this->cleanByCampus[$campus->code])).'.');
 
+        $this->cleanCohorts = $groups->filter(fn (Group $group): bool => isset($this->cleanIds[$group->department_id]))
+            ->mapWithKeys(fn (Group $group): array => ["{$group->study_plan_id}|{$group->semester}" => true])->all();
         $plan = $this->plan($groups->reject(fn (Group $group): bool => isset($this->cleanIds[$group->department_id]))->values());
         $profile = $campus->profile;
         $touched = [];
@@ -342,7 +348,8 @@ final class SchedulingDemoSeeder extends Seeder
 
     /**
      * Parejas de grupos de materias con un solo grupo en el periodo y campus, del mismo plan y semestre, entre los
-     * grupos normales: devuelve `seguidor => líder`. El seguidor se acomoda encima del líder (HC-03).
+     * grupos normales de semestres sin grupos de departamentos limpios: devuelve `seguidor => líder`. El seguidor se
+     * acomoda encima del líder (HC-03).
      *
      * @param  Collection<int, Group>  $groups
      * @param  list<string>  $normal
@@ -365,12 +372,12 @@ final class SchedulingDemoSeeder extends Seeder
 
         $pairs = [];
 
-        foreach ($byCohort as $cohort) {
+        foreach ($byCohort as $key => $cohort) {
             if (count($pairs) >= $wanted) {
                 break;
             }
 
-            if ($cohort->count() >= 2) {
+            if ($cohort->count() >= 2 && ! isset($this->cleanCohorts[$key])) {
                 $pairs[$cohort->values()[1]->id] = $cohort->values()[0]->id;
             }
         }
