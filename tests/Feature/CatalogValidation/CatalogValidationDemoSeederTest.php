@@ -110,19 +110,35 @@ it('deja el periodo actual con los estados fijos por departamento (HC-14)', func
 
     runCatalogDemoSeeder('massive');
 
-    foreach (['CB', 'SC', 'II'] as $code) {
+    foreach (['CB', 'SC', 'II', 'EE', 'MM'] as $code) {
         expect($pending($code, 'C2'))->toBe([])->and($pending($code, 'C1'))->toBe([]);
     }
 
-    expect($pending('EE', 'C2'))->toBe(['rooms'])
-        ->and($pending('EE', 'C1'))->toBe([])
-        ->and($pending('CEA', 'C2'))->toBe(['rooms', 'study_plans', 'careers'])
-        ->and($pending('MM', 'C2'))->toBe(['teachers', 'rooms', 'study_plans', 'careers'])
-        ->and(cvReview('20271', 'EE', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::InReview)
+    expect($pending('CEA', 'C2'))->toBe(['rooms', 'study_plans', 'careers'])
+        ->and(cvReview('20271', 'CEA', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::InReview)
+        ->and(cvReview('20271', 'EE', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::InReview)
+        ->and(cvReview('20271', 'CEA', Catalog::Careers)->validated_by)->toBeNull()
+        ->and(cvReview('20271', 'CEA', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'CEA', Catalog::StudyPlans)->status)->toBe(ReviewStatus::Pending)
+        ->and(Activity::query()->where('event', 'reopened')->count())->toBe(1);
+});
+
+it('con el perfil demo deja MM reabierto y EE validado (HC-14)', function () {
+    seedCatalogScenario();
+    $query = app(CatalogReviewQuery::class);
+    $term = Term::query()->where('code', '20271')->firstOrFail();
+    $pending = fn (string $department): array => $query->pendingFor($term, Campus::query()->where('code', 'C2')->firstOrFail(), Department::query()->where('code', $department)->firstOrFail());
+
+    runCatalogDemoSeeder('demo');
+
+    expect($pending('EE'))->toBe([])
+        ->and($pending('MM'))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::InReview)
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->validated_by)->toBeNull()
         ->and(cvReview('20271', 'MM', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
-        ->and(cvReview('20271', 'CEA', Catalog::StudyPlans)->status)->toBe(ReviewStatus::Pending)
+        ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::Pending)
         ->and(Activity::query()->where('event', 'reopened')->count())->toBe(2);
 });
 
@@ -136,7 +152,8 @@ it('con el perfil demo en un solo campus deja los mismos estados en C2', functio
     $term = Term::query()->where('code', '20271')->firstOrFail();
 
     expect($query->pendingFor($term, $campus, Department::query()->where('code', 'CB')->firstOrFail()))->toBe([])
-        ->and($query->pendingFor($term, $campus, Department::query()->where('code', 'EE')->firstOrFail()))->toBe([Catalog::Rooms])
+        ->and($query->pendingFor($term, $campus, Department::query()->where('code', 'EE')->firstOrFail()))->toBe([])
+        ->and($query->pendingFor($term, $campus, Department::query()->where('code', 'MM')->firstOrFail()))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
         ->and(CatalogReview::query()->whereNotNull('snapshot')->count())->toBe(CatalogReview::query()->where('status', ReviewStatus::Validated)->count() + Activity::query()->where('event', 'reopened')->count());
 });
 
@@ -178,7 +195,7 @@ it('pone observaciones de todos los tipos que admite cada catálogo, algunas res
         ->and(CatalogReviewFlag::whereNotNull('resolved_at')->count())->toBeGreaterThan(0)
         ->and(CatalogReviewFlag::whereNull('resolved_at')->count())->toBeGreaterThan(20)
         ->and(CatalogReviewFlag::query()->whereRelation('review.department', 'code', 'CB')->whereNotNull('resolved_at')->exists())->toBeTrue()
-        ->and($reminded)->toBe(['CEA', 'EE', 'MM']);
+        ->and($reminded)->toBe(['CEA']);
 });
 
 it('es idempotente: correrlo dos veces no duplica observaciones, recordatorios ni altas', function () {

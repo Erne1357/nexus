@@ -74,7 +74,7 @@ class MassiveSeeder extends Seeder
         $this->command?->info(sprintf('Periodos, calendarios y aperturas: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $started = hrtime(true);
-        $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
+        $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2'], 'returnEvery' => 6, 'pendingEvery' => 5]);
 
         $this->command?->info(sprintf('Propuestas de carrera y bandejas: %.1f s.', (hrtime(true) - $started) / 1e9));
 
