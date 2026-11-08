@@ -36,7 +36,9 @@ export default defineConfig({
             host: 'localhost',
         },
         watch: {
-            ignored: ['**/storage/framework/views/**'],
+            // Los worktrees viven dentro del repo (CONTRIBUTING.md): vigilarlos hace crecer el servidor de Vite a
+            // varios GB y recarga la página principal con los cambios de otras ramas.
+            ignored: ['**/storage/framework/views/**', '**/.worktrees/**'],
         },
     },
 });
