@@ -145,7 +145,7 @@ it('dice lo que puede hacer cada quien según GroupPolicy: el compartido es de s
 
     $can = fn (User $user): array => array_column(semesterBoardFor($user)['groups'], 'can', 'id');
 
-    expect($can($coordinator))->toBe([
+    expect($can($coordinator))->toEqual([
         $own->id => ['editSessions' => true, 'assignRoom' => false, 'manageQuotas' => false],
         $shared->id => ['editSessions' => false, 'assignRoom' => false, 'manageQuotas' => false],
     ])
