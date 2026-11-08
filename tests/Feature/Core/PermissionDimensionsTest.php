@@ -60,6 +60,7 @@ function dimensionTables(): array
         'academic_load.load' => 'academic_loads',
         'academic_load.proposal' => 'career_proposals',
         'academic_load.proposal_review' => 'proposal_reviews',
+        'academic_load.agreement' => 'interdepartmental_agreements',
         'scheduling.schedule' => 'groups',
         'scheduling.group' => 'groups',
         'scheduling.session' => 'group_sessions',
