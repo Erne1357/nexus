@@ -53,7 +53,8 @@ final class SetGroupQuotas
         $careers = $this->careers($group, $seatsByCareer);
 
         try {
-            DB::transaction(function () use ($group, $seatsByCareer, $careers, $actor): void {
+            $this->rules->guard(fn () => DB::transaction(function () use ($group, $seatsByCareer, $careers, $actor): void {
+                $this->rules->lockLoad($group);
                 $group = Group::query()->lockForUpdate()->findOrFail($group->getKey());
                 $this->rules->ensureEditable($group);
 
@@ -91,7 +92,7 @@ final class SetGroupQuotas
                     ->log('Repartió los cupos por carrera del grupo');
 
                 GroupQuotasChanged::dispatch($group);
-            });
+            }));
         } catch (QueryException $e) {
             throw $this->rules->fromDatabase($e) ?? $e;
         }
