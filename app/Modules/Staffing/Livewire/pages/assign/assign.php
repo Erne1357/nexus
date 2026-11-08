@@ -15,6 +15,7 @@ use App\Modules\Staffing\Queries\AssignmentBoard;
 use App\Modules\Staffing\Queries\AssignmentBoardQuery;
 use App\Modules\Staffing\Queries\BoardGroup;
 use App\Modules\Staffing\Queries\GroupRankingQuery;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -370,7 +371,9 @@ new #[Title('Asignación docente')] class extends Component
         }
 
         $departments = $query->departmentsFor($context, $campus);
-        $department = $this->department === '' ? $departments->first() : $departments->first(fn (Department $department): bool => $department->code === $this->department);
+        $department = $this->department === ''
+            ? $this->departmentOfRequestedGroup($departments, $query, (string) $term->getKey(), (string) $campus->getKey()) ?? $departments->first()
+            : $departments->first(fn (Department $department): bool => $department->code === $this->department);
 
         abort_if($this->department !== '' && $department === null, 403);
 
@@ -387,6 +390,23 @@ new #[Title('Asignación docente')] class extends Component
         $this->campusId = $campus->getKey();
         $this->departmentId = $department->getKey();
         $this->message = null;
+    }
+
+    /**
+     * Con `?grupo=` y sin `?depto=` (un enlace del tablero de choques o de otra pantalla), el departamento del grupo,
+     * si es uno de los que el usuario ve; si no, null y la página toma el primero.
+     *
+     * @param  Collection<int, Department>  $departments
+     */
+    private function departmentOfRequestedGroup(Collection $departments, AssignmentBoardQuery $query, string $termId, string $campusId): ?Department
+    {
+        if ($this->groupId === '') {
+            return null;
+        }
+
+        $departmentId = $query->departmentIdOfGroup($termId, $campusId, $this->groupId);
+
+        return $departmentId === null ? null : $departments->first(fn (Department $department): bool => $department->getKey() === $departmentId);
     }
 
     /**
