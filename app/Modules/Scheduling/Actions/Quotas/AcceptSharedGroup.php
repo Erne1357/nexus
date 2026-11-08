@@ -40,8 +40,10 @@ final class AcceptSharedGroup
         }
 
         try {
-            return DB::transaction(function () use ($agreement, $actor): GroupQuota {
-                $group = Group::query()->lockForUpdate()->findOrFail($agreement->group_id);
+            return $this->rules->guard(fn (): GroupQuota => DB::transaction(function () use ($agreement, $actor): GroupQuota {
+                $group = Group::query()->findOrFail($agreement->group_id);
+                $this->rules->lockLoad($group);
+                $group = Group::query()->lockForUpdate()->findOrFail($group->id);
 
                 $this->rules->ensureEditable($group);
 
@@ -72,7 +74,7 @@ final class AcceptSharedGroup
                 GroupQuotasChanged::dispatch($group);
 
                 return $quota;
-            });
+            }));
         } catch (QueryException $e) {
             throw $this->rules->fromDatabase($e, 'max_seats') ?? $this->rules->fromUnique($e) ?? $e;
         }
