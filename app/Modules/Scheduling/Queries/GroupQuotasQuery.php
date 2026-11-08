@@ -13,8 +13,9 @@ use App\Modules\Scheduling\Models\GroupQuota;
 
 /**
  * Lo que muestra el panel «Cupos por carrera» del grupo (tarea 3.6, HC-07), para que Blade no consulte: la dueña, los
- * cupos aceptados y los acuerdos propuestos vivos (con el departamento que decide), la capacidad, lo repartido
- * (`counted`, sin los propuestos) y lo propuesto aparte, y las carreras que se pueden agregar: activas, ofrecidas
+ * cupos aceptados y los acuerdos propuestos vivos (con el departamento que decide), la capacidad, lo repartido en
+ * cupos (`counted`) y lo que apartan los propuestos (`proposed`; HC-07 suma los dos, confirmado el 8 de noviembre de
+ * 2026), y las carreras que se pueden agregar: activas, ofrecidas
  * en el campus del grupo y sin cupo ni acuerdo vivo en él, cada una con su departamento y si necesita acuerdo (es de
  * otro departamento que el que imparte).
  *

@@ -14,12 +14,14 @@ use App\Modules\Scheduling\Actions\Quotas\WithdrawGroupQuotaProposal;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /*
 | ProposeGroupQuota y WithdrawGroupQuotaProposal (tarea 3.6, HC-07): el departamento que imparte propone el cupo de
-| una carrera de otro departamento y lo retira. Proponer no da cupo; no se edita un grupo cancelado ni con la carga
-| fuera de proposed, staffing o adjusting.
+| una carrera de otro departamento y lo retira. Proponer no da cupo, pero aparta sus lugares desde ese momento
+| (confirmado el 8 de noviembre de 2026); no se edita un grupo cancelado ni con la carga fuera de proposed, staffing
+| o adjusting.
 */
 
 beforeEach(function () {
@@ -110,4 +112,48 @@ it('no retira un acuerdo que no es de grupo compartido', function () {
     $loan = InterdepartmentalAgreement::factory()->create();
 
     expect(errorsOf(fn () => app(WithdrawGroupQuotaProposal::class)->handle($loan, $this->actor)))->toHaveKey('kind');
+});
+
+it('HC-07: la propuesta aparta sus lugares: una nueva cabe solo junto a los cupos y las demás propuestas vivas (confirmado el 8 de noviembre de 2026)', function () {
+    $second = Career::factory()->create(['department_id' => $this->otro->id]);
+    CareerCampus::factory()->create(['career_id' => $second->id, 'campus_id' => $this->group->campus_id]);
+    app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 15, $this->actor);
+
+    expect(errorsOf(fn () => app(ProposeGroupQuota::class)->handle($this->group, $second, 6, $this->actor)))
+        ->toBe(['max_seats' => ['HC-07: el grupo ya tiene 35 de 40 lugares repartidos o apartados; caben 5.']])
+        ->and(InterdepartmentalAgreement::query()->live()->count())->toBe(1)
+        ->and(app(ProposeGroupQuota::class)->handle($this->group, $second, 5, $this->actor)->max_seats)->toBe(5);
+});
+
+it('HC-07: una propuesta que no cabe en lo que dejan los cupos no se crea ni avisa', function () {
+    expect(errorsOf(fn () => app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 21, $this->actor)))
+        ->toBe(['max_seats' => ['HC-07: el grupo ya tiene 20 de 40 lugares repartidos o apartados; caben 20.']])
+        ->and(InterdepartmentalAgreement::query()->count())->toBe(0);
+});
+
+it('HC-07: al retirar la propuesta, sus lugares se pueden proponer otra vez', function () {
+    $second = Career::factory()->create(['department_id' => $this->otro->id]);
+    CareerCampus::factory()->create(['career_id' => $second->id, 'campus_id' => $this->group->campus_id]);
+    $first = app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 20, $this->actor);
+    expect(errorsOf(fn () => app(ProposeGroupQuota::class)->handle($this->group, $second, 20, $this->actor)))->toHaveKey('max_seats');
+
+    app(WithdrawGroupQuotaProposal::class)->handle($first, $this->actor);
+
+    expect(app(ProposeGroupQuota::class)->handle($this->group, $second, 20, $this->actor)->status)->toBe(AgreementStatus::Proposed);
+});
+
+it('HC-07: bloquea el grupo antes de sumar lo apartado, para que dos propuestas a la vez no quepan las dos', function () {
+    $queries = [];
+    DB::listen(function ($query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 8, $this->actor);
+
+    $lock = collect($queries)->search(fn (string $sql): bool => str_contains($sql, 'from "groups"') && str_contains($sql, 'for update'));
+    $held = collect($queries)->search(fn (string $sql): bool => str_contains($sql, 'from "interdepartmental_agreements"') && str_contains($sql, 'sum('));
+
+    expect($lock)->toBeInt()
+        ->and($held)->toBeInt()
+        ->and($lock)->toBeLessThan($held);
 });

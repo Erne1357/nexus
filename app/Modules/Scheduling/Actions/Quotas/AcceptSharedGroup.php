@@ -18,9 +18,11 @@ use Illuminate\Validation\ValidationException;
  * El jefe de la carrera de otro departamento acepta el cupo que le propusieron en un grupo (reglas-de-negocio.md,
  * "Cupos por carrera" y "Acuerdos entre departamentos"; HC-07). AcademicLoad no ve grupos: esta Action orquesta
  * AcceptAgreement y el cupo en una misma transacción, con el grupo bloqueado. Acepta el acuerdo (que exige que siga
- * propuesto), revisa HC-07 con los lugares del acuerdo (sobre `max_seats`, también cuando lo dice la base; al aceptar se revisa otra vez porque los
- * propuestos no contaban; supuesto por confirmar) y crea el cupo de la carrera con los lugares acordados. Si algo
- * falla, el acuerdo queda propuesto. Deja bitácora `quotas_updated` en el grupo y avisa con GroupQuotasChanged después
+ * propuesto), revisa HC-07 con los lugares del acuerdo (sobre `max_seats`, también cuando lo dice la base) y crea el
+ * cupo de la carrera con los lugares acordados. La propuesta ya apartaba sus lugares (ProposeGroupQuota y
+ * SetGroupQuotas los cuentan; confirmado el 8 de noviembre de 2026), así que al aceptar siempre debería caber: la
+ * revisión queda como red de seguridad, para datos que no pasaron por esas Actions. Si algo falla, el acuerdo queda
+ * propuesto. Deja bitácora `quotas_updated` en el grupo y avisa con GroupQuotasChanged después
  * del commit. Un deadlock se reintenta solo, hasta tres veces; si sigue, queda el mensaje de siempre («Otra persona está
  * cambiando esta carga; intenta de nuevo.»). Quién puede lo decide InterdepartmentalAgreementPolicy antes de llamarla.
  */

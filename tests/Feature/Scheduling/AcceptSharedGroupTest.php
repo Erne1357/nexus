@@ -20,7 +20,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | AcceptSharedGroup (tarea 3.6, HC-07): Scheduling orquesta la aceptación de un acuerdo de grupo compartido: revisa
-| que los lugares quepan, acepta el acuerdo y crea el cupo de la carrera, todo en una transacción.
+| que los lugares quepan, acepta el acuerdo y crea el cupo de la carrera, todo en una transacción. La propuesta ya
+| apartaba sus lugares (confirmado el 8 de noviembre de 2026): la revisión al aceptar es una red de seguridad.
 */
 
 beforeEach(function () {
@@ -56,7 +57,7 @@ it('acepta el acuerdo y crea el cupo de la carrera con los lugares acordados', f
         ->and($agreement->fresh()->decided_by)->toBe($this->actor->id);
 });
 
-it('HC-07: no acepta si los lugares ya no caben, sin dejar nada a medias', function () {
+it('HC-07 (red de seguridad): no acepta si los lugares ya no caben, sin dejar nada a medias', function () {
     $agreement = proposedFor(11);
 
     try {
