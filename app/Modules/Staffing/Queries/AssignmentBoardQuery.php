@@ -46,9 +46,12 @@ final class AssignmentBoardQuery
      */
     public function board(string $termId, string $campusId, string $departmentId): AssignmentBoard
     {
-        $term = Term::query()->findOrFail($termId);
-        $campus = Campus::query()->findOrFail($campusId);
-        $department = Department::query()->withTrashed()->findOrFail($departmentId);
+        /** @var Term $term */
+        $term = KeyLookup::findOrFail(Term::query(), $termId);
+        /** @var Campus $campus */
+        $campus = KeyLookup::findOrFail(Campus::query(), $campusId);
+        /** @var Department $department */
+        $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId);
         $load = $this->load($termId, $campusId, $departmentId);
 
         $groups = $this->groupsQuery($termId, $campusId, $departmentId)
@@ -142,6 +145,15 @@ final class AssignmentBoardQuery
     {
         /** @var Group */
         return KeyLookup::findOrFail($this->groupsQuery($termId, $campusId, $departmentId), $groupId);
+    }
+
+    /**
+     * Como groupOrFail(), pero null si el grupo no es del departamento en el periodo y campus.
+     */
+    public function findGroup(string $termId, string $campusId, string $departmentId, string $groupId): ?Group
+    {
+        /** @var Group|null */
+        return KeyLookup::find($this->groupsQuery($termId, $campusId, $departmentId), $groupId);
     }
 
     /**
