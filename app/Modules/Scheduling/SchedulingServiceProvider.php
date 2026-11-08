@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling;
 
+use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Facilities\Events\RoomBlockAdded;
@@ -16,6 +17,8 @@ use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
+use App\Modules\Scheduling\Listeners\AssignCodeOnScheduleChange;
+use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
 use Illuminate\Support\Facades\Event;
 
@@ -50,6 +53,9 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         foreach (self::RECOMPUTE_ON as $event) {
             Event::listen($event, QueueConflictRecompute::class);
         }
+
+        Event::listen(ProposalReviewAccepted::class, CreateGroupsOnPartAccepted::class);
+        Event::listen(GroupScheduleChanged::class, AssignCodeOnScheduleChange::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([RecomputeConflicts::class]);
