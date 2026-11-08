@@ -30,7 +30,7 @@
                 @endforeach
             </span>
         @endif
-        @if ($row['state']['busy'] === null && $row['conflicts'] === [] && ! $row['state']['covered'] && $allFree)
+        @if ($row['state']['free'] && ! $row['state']['covered'] && $allFree)
             <span id="room-state-{{ $list }}-{{ $row['id'] }}" class="sr-only">Libre</span>
         @else
         <span id="room-state-{{ $list }}-{{ $row['id'] }}" class="mt-2 grid gap-1">

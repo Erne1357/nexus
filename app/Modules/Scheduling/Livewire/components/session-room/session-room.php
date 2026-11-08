@@ -78,7 +78,7 @@ new class extends Component
             'rooms' => $data['rooms'],
             'shown' => self::SHOWN,
             'revealed' => array_intersect($hidden, $data['matched']) !== [],
-            'allFree' => array_all($listed, fn (array $row): bool => $row['state']['busy'] === null && $row['conflicts'] === []),
+            'allFree' => array_all($listed, fn (array $row): bool => $row['state']['free']),
             'results' => $data['results'],
             'matched' => $data['matched'],
             'searched' => $searched,

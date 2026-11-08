@@ -255,11 +255,18 @@ it('muestra los tres mejores sugeridos y los demás con «Ver N más»; si todos
         sessionRoomOf($code, RoomType::SalaComputo, 34);
     }
 
-    $dom = domOf(sessionRoomAs($this->jefe));
+    $component = sessionRoomAs($this->jefe);
+    $dom = domOf($component);
+    $listOf = fn (): ?string => domOf($component)->querySelector('[data-testid=room-list]')?->getAttribute('x-data');
 
-    expect(textOf($dom->querySelector('[data-testid=rooms-more]')))->toBe('Ver 1 más')
+    expect($listOf())->toBe('{ more: false }')
+        ->and(textOf($dom->querySelector('[data-testid=rooms-more]')))->toBe('Ver 1 más')
         ->and(textOf($dom->querySelector('[data-testid=rooms-all-free]')))->toBe('Todos libres a esa hora')
         ->and($dom->querySelectorAll('[data-testid=room-suggestions] [x-show=more] [data-room]')->length)->toBe(1)
         ->and(textOf($dom->querySelector('[data-testid=room-suggestions]')))->toContain('Cabe: 30 de 32')->not->toContain('lugares')
         ->and($dom->querySelectorAll('[data-testid=room-suggestions] .badge')->length)->toBe(0);
+
+    // Buscar uno de los que van tras «Ver N más» los abre: la lista se vuelve a montar con `more` en true.
+    $component->set('search', 'CC-08');
+    expect($listOf())->toBe('{ more: true }');
 });

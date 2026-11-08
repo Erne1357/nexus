@@ -32,6 +32,9 @@
                         <x-core::status-badge tone="success" label="Vigente" />
                     @else
                         <x-core::status-badge tone="warning" icon="o-exclamation-triangle" label="Prioridad" />
+                        @if ($plans[0]['unscheduled'] > 0)
+                            <span class="badge badge-warning badge-sm font-mono">{{ $plans[0]['unscheduled'] }}<span class="sr-only"> {{ $plans[0]['unscheduled'] === 1 ? 'grupo' : 'grupos' }} sin acomodar</span></span>
+                        @endif
                     @endif
                 </div>
             @else

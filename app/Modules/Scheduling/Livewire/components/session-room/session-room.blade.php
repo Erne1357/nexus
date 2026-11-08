@@ -15,7 +15,7 @@
     `wire:key="room-{sessionId}-{updated_at}"` para volver a montarlo cuando la sesión cambia.
 --}}
 <section aria-labelledby="session-room-title-{{ $sessionId }}" class="grid min-w-0 gap-5" data-testid="session-room"
-    x-data="{ selected: '', more: @js($revealed), loanRooms: @js($loanRooms) }"
+    x-data="{ selected: '', loanRooms: @js($loanRooms) }"
     x-on:session-room-saved.window="if ($event.detail.sessionId === @js($sessionId)) selected = ''">
     @php($alerts = collect($errors->getBag('default')->toArray())->except(['roomId'])->flatten()->unique()->values())
     @if ($alerts->isNotEmpty())
@@ -62,24 +62,27 @@
                 <span class="inline-flex items-center gap-1.5 text-sm font-normal text-success" data-testid="rooms-all-free"><x-icon name="o-check-circle" class="h-4 w-4" aria-hidden="true" />Todos libres a esa hora</span>
             @endif
         </h3>
-        <div role="radiogroup" aria-label="Salones sugeridos" class="grid gap-2" data-testid="room-suggestions">
-            @forelse ($rooms as $index => $row)
-                @if ($index < $shown)
-                    @include('scheduling::session-room.row', ['row' => $row, 'list' => 'suggested', 'matched' => in_array($row['id'], $matched, true)])
-                @else
-                    <div x-show="more" x-cloak class="contents" wire:key="room-more-{{ $row['id'] }}">
+        {{-- `more` se arma de nuevo (otra llave) cuando la búsqueda resalta un sugerido que estaba tras «Ver N más». --}}
+        <div class="grid gap-2" x-data="{ more: {{ $revealed ? 'true' : 'false' }} }" wire:key="room-list-{{ $revealed ? 'open' : 'closed' }}" data-testid="room-list">
+            <div role="radiogroup" aria-label="Salones sugeridos" class="grid gap-2" data-testid="room-suggestions">
+                @forelse ($rooms as $index => $row)
+                    @if ($index < $shown)
                         @include('scheduling::session-room.row', ['row' => $row, 'list' => 'suggested', 'matched' => in_array($row['id'], $matched, true)])
-                    </div>
-                @endif
-            @empty
-                <p class="text-sm text-neutral">El campus no tiene salones activos.</p>
-            @endforelse
+                    @else
+                        <div x-show="more" x-cloak class="contents" wire:key="room-more-{{ $row['id'] }}">
+                            @include('scheduling::session-room.row', ['row' => $row, 'list' => 'suggested', 'matched' => in_array($row['id'], $matched, true)])
+                        </div>
+                    @endif
+                @empty
+                    <p class="text-sm text-neutral">El campus no tiene salones activos.</p>
+                @endforelse
+            </div>
+            @if (count($rooms) > $shown)
+                <button type="button" class="btn btn-ghost btn-sm justify-self-start" x-show="! more" x-on:click="more = true" data-testid="rooms-more">
+                    <x-icon name="o-chevron-down" class="h-4 w-4" aria-hidden="true" />Ver {{ count($rooms) - $shown }} más
+                </button>
+            @endif
         </div>
-        @if (count($rooms) > $shown)
-            <button type="button" class="btn btn-ghost btn-sm justify-self-start" x-show="! more" x-on:click="more = true" data-testid="rooms-more">
-                <x-icon name="o-chevron-down" class="h-4 w-4" aria-hidden="true" />Ver {{ count($rooms) - $shown }} más
-            </button>
-        @endif
 
         <x-input wire:model.live.debounce.400ms="search" icon="o-magnifying-glass" placeholder="Buscar otro salón" aria-label="Buscar otro salón" class="mt-2" clearable />
 
