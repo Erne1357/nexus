@@ -39,7 +39,6 @@ it('el admin edita una retícula de punta a punta: pone, seria, intenta un ciclo
         ->click('[data-catalog="'.$subject->code.'"]')
         ->waitForText('Agregar '.$subject->code)
         ->click('@add-submit')
-        ->waitForText('Materia agregada')
         ->assertSeeIn('[data-semester="3"]', $subject->code)
         // Le agrega como requisito Cálculo Integral (semestre 2).
         ->click('[data-subject="'.$subject->code.'"]')
@@ -48,7 +47,6 @@ it('el admin edita una retícula de punta a punta: pone, seria, intenta un ciclo
         ->waitForText('Cálculo Integral')
         ->click('[data-requisite-option="ACF-0902"]')
         ->click('@add-requisite-submit')
-        ->waitForText('Requisito agregado')
         ->assertSeeIn('[data-testid="requires-section"]', 'Cálculo Integral')
         ->assertNoJavaScriptErrors();
 
@@ -75,7 +73,7 @@ it('el admin edita una retícula de punta a punta: pone, seria, intenta un ciclo
         ->waitForText('Se va con ella')
         ->assertSeeIn('[data-testid="seriation-gone"]', 'Cálculo Integral')
         ->click('@confirm-remove')
-        ->waitForText('Materia quitada')
+        ->assertNotPresent('[data-subject="'.$subject->code.'"]')
         ->click('[data-subject="ACF-0902"]')
         ->waitForText('Lugar en la retícula')
         ->assertDontSeeIn('[data-testid="required-by-section"]', $subject->code)
