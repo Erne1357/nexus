@@ -166,6 +166,14 @@ Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su ram
 
 Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protección de `develop` y `main` (tarea 0.12): no se renombran sin actualizar la protección.
 
+### Qué trae el masivo de la fase 3 (horarios)
+
+`SchedulingDemoSeeder` corre después de `AcademicLoadDemoSeeder`, que acepta partes y con eso crea los grupos (3.3); en Massive tarda unos 2.5 minutos. Para revisar el tablero «Choques y avance» (`/scheduling/conflicts`, con un campus elegido en la credencial):
+
+- **Departamentos limpios** (`SchedulingDemoSeeder::cleanDepartments()`, lo imprime al sembrar): todos sus grupos con sesiones de horas exactas, salones sin dueño o de su departamento, sin choques duros y sin docente, para que Staffing los pase a asignación (`StartStaffing`) y los asigne.
+- **Los demás departamentos**, con casos a propósito de cada tipo: grupos sin horario, horas que no cuadran (HC-12), dos materias de grupo único empalmadas en el mismo semestre (HC-03), salón más chico que el grupo (HC-05), práctica de laboratorio en aula (HC-06), salón de otro departamento sin préstamo (HC-10), docente que se pasa de horas o no está disponible (HC-08, HC-09), grupos sin docente, sin salón, cancelados y confirmados. Los choques que no son a propósito quedan cerca de cero, para que la cuadrícula muestre celdas listas, con pendientes y con choques.
+- Al final recalcula `schedule_conflicts` de cada campus. Después de cambiar datos a mano: `php artisan scheduling:recompute-conflicts 20271`.
+
 ### Cómo corre
 
 CI usa lo mismo que el desarrollo local: la etapa `dev` del `Dockerfile` y los servicios de `compose.yaml` (PostgreSQL 18 y Valkey, mismas imágenes fijadas por digest; `nexus_test` la crea el script de `docker/postgres/` porque el volumen nace vacío). Cada job:
