@@ -200,6 +200,8 @@ describe('vista de dos paneles', function () {
 
 describe('estado de la carga', function () {
     it('en propuesta avisa que se asigna en Asignación y el jefe la pasa a asignación docente', function () {
+        // El veto de Scheduling (BlockStaffingWithHardConflicts) tiene sus pruebas; aquí solo importa la pantalla.
+        Event::fake([LoadTransitioning::class]);
         $this->world->load->update(['status' => LoadStatus::Proposed]);
 
         $page = assignPage($this->jefe)
