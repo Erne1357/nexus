@@ -8,6 +8,8 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Rules\RankingWeights;
 use App\Modules\Staffing\Support\SessionLabels;
@@ -82,6 +84,45 @@ final class TeacherOfferQuery
                 'breakdown' => $ranking === null ? null : self::breakdown($ranking, $weights),
             ])->all(),
         ];
+    }
+
+    /**
+     * HC-01 visto por el docente, para el panel de un grupo con la marca «choque»: sus grupos no cancelados del periodo,
+     * de cualquier campus, que tienen una sesión que se empalma con una del grupo (el mismo día y horas que se cruzan),
+     * con solo esas sesiones. El ranking guarda la marca y no con qué choca; esto se calcula al abrir el panel con sus
+     * sesiones de ahora, así que puede venir vacío si cambiaron después del ranking. Dos consultas.
+     *
+     * @return list<array{code: string, subject_name: string, campus_code: string, schedule: list<array{days: string, time: string}>}>
+     */
+    public function clashesWith(Teacher $teacher, Term $term, string $groupId): array
+    {
+        $sessions = GroupSession::query()->where('group_id', $groupId)->get(['day', 'starts_at', 'ends_at']);
+
+        if ($sessions->isEmpty()) {
+            return [];
+        }
+
+        $overlaps = fn (GroupSession $own): bool => $sessions->contains(fn (GroupSession $session): bool => $session->day === $own->day
+            && Minutes::of($session->starts_at) < Minutes::of($own->ends_at)
+            && Minutes::of($own->starts_at) < Minutes::of($session->ends_at));
+
+        return Group::query()
+            ->active()
+            ->where('term_id', $term->id)
+            ->where('teacher_id', $teacher->id)
+            ->whereKeyNot($groupId)
+            ->with(['subject:id,name', 'campus:id,code', 'sessions'])
+            ->orderBy('code')
+            ->get()
+            ->map(fn (Group $group): array => [
+                'code' => $group->code,
+                'subject_name' => $group->subject->name,
+                'campus_code' => $group->campus->code,
+                'schedule' => SessionLabels::schedule($group->sessions->filter($overlaps)->values()),
+            ])
+            ->filter(fn (array $clash): bool => $clash['schedule'] !== [])
+            ->values()
+            ->all();
     }
 
     /**

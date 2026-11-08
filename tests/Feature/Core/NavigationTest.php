@@ -283,7 +283,7 @@ describe('menú', function () {
         Teacher::factory()->create(['user_id' => $docente->id]);
         $this->actingAs($docente);
 
-        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Mi carga', 'Oferta del departamento'], 'Académico' => ['Inicio']]);
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Mi carga', 'Oferta'], 'Académico' => ['Inicio']]);
     });
 
     it('en la página, el coordinador no ve las entradas de Campus ni de Importaciones', function () {

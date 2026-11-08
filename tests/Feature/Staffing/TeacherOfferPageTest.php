@@ -16,6 +16,7 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Queries\TeacherOfferQuery;
 use Illuminate\Support\Facades\DB;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
 /*
@@ -50,6 +51,16 @@ function offerGroup(Department $department, Campus $campus, array $attrs = [], ?
     }
 
     return Group::factory()->create(['term_id' => test()->term->id, 'campus_id' => $campus->id, 'subject_id' => $subject->id, ...$attrs]);
+}
+
+/**
+ * El texto de un elemento de la página, con los espacios juntos.
+ */
+function offerText(Testable $page, string $selector): ?string
+{
+    $node = domOf($page->html())->querySelector($selector);
+
+    return $node === null ? null : trim(preg_replace('/\s+/u', ' ', $node->textContent));
 }
 
 function offerRank(Group $group, Teacher $teacher, int $rank, array $breakdown = []): StaffingRanking
@@ -125,11 +136,12 @@ it('muestra su propio lugar («3 de 18»), «tu mejor lugar» por materia y «As
     offerRank($first, $this->colleague, 1);
     offerRank($second, $this->me, 1);
 
-    Livewire::actingAs($this->user)->test('staffing::pages.offer')
-        ->assertSee('3 de 2')
+    $page = Livewire::actingAs($this->user)->test('staffing::pages.offer')
         ->assertSee('Asignado a ti')
         ->assertSee('Tu mejor lugar')
         ->assertSeeHtml('data-testid="offer-best-'.$subject->code.'"');
+
+    expect(offerText($page, '[data-testid="offer-group-'.$first->id.'"] [data-testid="offer-position"]'))->toBe('3 de 2');
 });
 
 it('el panel muestra solo SU desglose y nada de los demás docentes', function () {
@@ -138,16 +150,17 @@ it('el panel muestra solo SU desglose y nada de los demás docentes', function (
     $rival = offerRank($group, $this->colleague, 1, ['history_count' => 77, 'evaluation' => 3.37, 'base_hours' => 99]);
     $rival->update(['score' => 123.45]);
 
-    $html = Livewire::actingAs($this->user)->test('staffing::pages.offer')
+    $page = Livewire::actingAs($this->user)->test('staffing::pages.offer')
         ->call('open', $group->id)
         ->assertSee('Tu desglose')
+        ->assertSeeInOrder(['Criterio', 'Tuyo', 'Puntos'])
         ->assertSee('Preferente')
         ->assertSee('4.5')
-        ->assertSeeHtml('data-testid="offer-remaining"')
-        ->assertSee('2 de 2')
-        ->html();
+        ->assertSeeHtml('data-testid="offer-remaining"');
 
-    $text = strip_tags($html);
+    expect(offerText($page, '[data-testid="offer-place"] p'))->toBe('2 de 2 docentes');
+
+    $text = strip_tags($page->html());
 
     expect($text)->not->toContain('123.45')->not->toContain('3.37')->not->toContain('99 h')->not->toContain('Óscar Nájera');
 });
@@ -158,8 +171,31 @@ it('el panel de un docente sin evaluación dice «sin evaluación» y sin rankin
     offerRank($ranked, $this->me, 1, ['evaluation' => null, 'flags' => ['sin_evaluacion', 'choque']]);
 
     Livewire::actingAs($this->user)->test('staffing::pages.offer')
-        ->call('open', $ranked->id)->assertSee('sin evaluación')->assertSee('Choque')
+        ->call('open', $ranked->id)->assertSee('sin evaluación')->assertSee('Choca con tu horario')
         ->call('open', $unranked->id)->assertSee('No estás en el ranking de este grupo.');
+});
+
+it('HC-01: el panel dice con cuál de SUS grupos choca el grupo y a qué hora', function () {
+    $offered = offerGroup($this->sc, $this->c2, ['code' => '1A']);
+    GroupSession::factory()->on(1, '07:00', '09:00')->create(['group_id' => $offered->id]);
+    GroupSession::factory()->on(3, '07:00', '09:00')->create(['group_id' => $offered->id]);
+    $mine = offerGroup($this->sc, $this->c1, ['code' => 'A4', 'teacher_id' => $this->me->id, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Ingeniería Económica'])]);
+    GroupSession::factory()->on(1, '08:00', '10:00')->create(['group_id' => $mine->id]);
+    GroupSession::factory()->on(2, '07:00', '09:00')->create(['group_id' => $mine->id]);
+    $notMine = offerGroup($this->sc, $this->c2, ['code' => 'Z9', 'teacher_id' => $this->colleague->id]);
+    GroupSession::factory()->on(3, '07:00', '09:00')->create(['group_id' => $notMine->id]);
+    offerRank($offered, $this->me, 12, ['flags' => ['choque']]);
+
+    $page = Livewire::actingAs($this->user)->test('staffing::pages.offer')->call('open', $offered->id);
+
+    expect(offerText($page, '[data-testid="offer-clashes"]'))->toBe('Choca con tu horario A4 · Ingeniería Económica · C1 Lu 08:00–10:00')
+        ->and(offerText($page, '[data-testid="offer-group-'.$offered->id.'"] [data-testid="offer-marks"]'))->toBe('Choque');
+});
+
+it('el panel tiene su botón para cerrar', function () {
+    $group = offerGroup($this->sc, $this->c2, ['code' => '1A']);
+
+    Livewire::actingAs($this->user)->test('staffing::pages.offer')->call('open', $group->id)->assertSeeHtml('aria-label="Cerrar el panel"');
 });
 
 it('abrir el panel con el id de un grupo que no es de su oferta no muestra nada', function () {
@@ -168,7 +204,7 @@ it('abrir el panel con el id de un grupo que no es de su oferta no muestra nada'
     Livewire::actingAs($this->user)->test('staffing::pages.offer')->call('open', $foreign->id)->assertDontSee('OTR1');
 });
 
-it('filtra por materia, semestre, «Sin docente» y «Entre los 3 primeros»', function () {
+it('filtra por materia (?q=), semestre, «Sin docente» y «Entre tus 3 primeros»', function () {
     $algebra = offerGroup($this->sc, $this->c2, ['code' => 'AL1', 'semester' => 1, 'teacher_id' => $this->colleague->id, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Álgebra Lineal'])]);
     $redes = offerGroup($this->sc, $this->c2, ['code' => 'RE1', 'semester' => 5, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Redes'])]);
     $bd = offerGroup($this->sc, $this->c2, ['code' => 'BD1', 'semester' => 5, 'subject' => Subject::factory()->create(['department_id' => $this->sc->id, 'name' => 'Bases de Datos'])]);
@@ -176,12 +212,38 @@ it('filtra por materia, semestre, «Sin docente» y «Entre los 3 primeros»', f
     offerRank($redes, $this->me, 2);
     offerRank($bd, $this->me, 7);
 
-    Livewire::actingAs($this->user)->test('staffing::pages.offer')
-        ->set('search', 'algebra')->assertSee('AL1')->assertDontSee('RE1')->assertDontSee('BD1')
+    Livewire::actingAs($this->user)->withQueryParams(['q' => 'algebra'])->test('staffing::pages.offer')
+        ->assertSee('AL1')->assertDontSee('RE1')->assertDontSee('BD1')
         ->call('clearFilters')->set('semester', '5')->assertDontSee('AL1')->assertSee('RE1')->assertSee('BD1')
-        ->call('clearFilters')->set('withoutTeacher', true)->assertDontSee('AL1')->assertSee('RE1')
-        ->call('clearFilters')->set('topThree', true)->assertSee('RE1')->assertDontSee('AL1')->assertDontSee('BD1')
+        ->call('clearFilters')->set('state', 'sin')->assertDontSee('AL1')->assertSee('RE1')
+        ->call('clearFilters')->set('state', 'top')->assertSee('RE1')->assertDontSee('AL1')->assertDontSee('BD1')
         ->assertSee('Quitar filtros');
+});
+
+it('«Entre tus 3 primeros» cuenta exactamente lo que muestra: lugar 1 a 3, sin marca que lo baje y sin contar los suyos', function () {
+    $top = offerGroup($this->sc, $this->c2, ['code' => 'TOP1']);
+    $noHours = offerGroup($this->sc, $this->c2, ['code' => 'SIN1']);
+    $clash = offerGroup($this->sc, $this->c2, ['code' => 'CHO1']);
+    $unavailable = offerGroup($this->sc, $this->c2, ['code' => 'NOD1']);
+    $mine = offerGroup($this->sc, $this->c2, ['code' => 'MIO1', 'teacher_id' => $this->me->id]);
+    $far = offerGroup($this->sc, $this->c2, ['code' => 'LEJ1']);
+    offerRank($top, $this->me, 3, ['flags' => ['sin_evaluacion']]);
+    offerRank($noHours, $this->me, 1, ['flags' => ['sin_horas']]);
+    offerRank($clash, $this->me, 2, ['flags' => ['choque']]);
+    offerRank($unavailable, $this->me, 1, ['flags' => ['no_disponible']]);
+    offerRank($mine, $this->me, 1);
+    offerRank($far, $this->me, 4);
+
+    $page = Livewire::actingAs($this->user)->test('staffing::pages.offer');
+
+    expect(offerText($page, '[data-testid="offer-state-top"]'))->toBe('Entre tus 3 primeros 1');
+
+    $page->set('state', 'top')->assertSee('TOP1')
+        ->assertDontSee('SIN1')->assertDontSee('CHO1')->assertDontSee('NOD1')->assertDontSee('MIO1')->assertDontSee('LEJ1')
+        ->assertSee('Mostrando');
+
+    expect(offerText($page, '[data-testid="offer-state-todos"]'))->toBe('Todos 6')
+        ->and(offerText($page, '[data-testid="offer-state-sin"]'))->toBe('Sin docente 5');
 });
 
 it('mantiene un número constante de consultas sin importar cuántos grupos hay', function () {
