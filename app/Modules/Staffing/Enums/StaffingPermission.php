@@ -17,6 +17,12 @@ enum StaffingPermission: string implements Permission
     case TeacherAssign = 'staffing.teacher.assign';
     case OfferView = 'staffing.offer.view';
     case MyLoadView = 'staffing.my_load.view';
+    case ChangeRequestRequestOwn = 'staffing.change_request.request_own';
+    case ChangeRequestRequest = 'staffing.change_request.request';
+    case ChangeRequestView = 'staffing.change_request.view';
+    case ChangeRequestDecide = 'staffing.change_request.decide';
+    case ChangeRequestApplySchedule = 'staffing.change_request.apply_schedule';
+    case ChangeRequestApplyRoom = 'staffing.change_request.apply_room';
 
     public function label(): string
     {
@@ -25,22 +31,35 @@ enum StaffingPermission: string implements Permission
             self::TeacherAssign => 'Asignar el docente de un grupo',
             self::OfferView => 'Ver la oferta de mis departamentos',
             self::MyLoadView => 'Ver mi carga',
+            self::ChangeRequestRequestOwn => 'Pedir un cambio en un grupo propio (docente)',
+            self::ChangeRequestRequest => 'Pedir un cambio en un grupo de su carrera (coordinador)',
+            self::ChangeRequestView => 'Ver las solicitudes de cambio de un departamento',
+            self::ChangeRequestDecide => 'Aprobar o rechazar una solicitud de cambio',
+            self::ChangeRequestApplySchedule => 'Aplicar un cambio de horario aprobado',
+            self::ChangeRequestApplyRoom => 'Aplicar un cambio de salón aprobado',
         };
     }
 
     public function dimensions(): array
     {
-        return $this->isPersonal() ? [] : [Dimension::Campus, Dimension::Unit];
+        if ($this->isPersonal()) {
+            return [];
+        }
+
+        return match ($this) {
+            self::ChangeRequestRequest, self::ChangeRequestApplySchedule => [Dimension::Campus, Dimension::Career],
+            default => [Dimension::Campus, Dimension::Unit],
+        };
     }
 
     /**
-     * «Mi espacio» (ADR-0018): la oferta de mis departamentos y mi carga son del docente sobre lo suyo; no declaran
-     * dimensiones.
+     * «Mi espacio» (ADR-0018): la oferta de mis departamentos, mi carga y pedir un cambio en un grupo propio son del
+     * docente sobre lo suyo (el dueño es el usuario del docente); no declaran dimensiones.
      */
     public function isPersonal(): bool
     {
         return match ($this) {
-            self::OfferView, self::MyLoadView => true,
+            self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn => true,
             default => false,
         };
     }
@@ -50,6 +69,6 @@ enum StaffingPermission: string implements Permission
      */
     public function appliesTo(): ?UnitApplicability
     {
-        return UnitApplicability::academic();
+        return $this->isPersonal() ? null : UnitApplicability::academic();
     }
 }

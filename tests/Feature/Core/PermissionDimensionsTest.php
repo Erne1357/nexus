@@ -69,6 +69,7 @@ function dimensionTables(): array
         'scheduling.quota' => 'group_quotas',
         'staffing.ranking' => 'staffing_rankings',
         'staffing.teacher' => 'group_teacher_assignments',
+        'staffing.change_request' => 'change_requests',
     ];
 }
 
