@@ -48,7 +48,7 @@
     </header>
 
     <div class="flex items-center gap-2 pe-2">
-        <div role="tablist" aria-label="Grupo {{ $group->code }}" class="tabs tabs-border min-w-0 flex-1 flex-nowrap overflow-x-auto px-2">
+        <div role="tablist" aria-label="Grupo {{ $group->code }}" class="tabs tabs-border relative min-w-0 flex-1 flex-nowrap overflow-x-auto px-2">
             <button type="button" role="tab" id="tab-ranking" aria-controls="panel-group" aria-selected="{{ $tab === 'ranking' ? 'true' : 'false' }}" wire:click="setTab('ranking')"
                 @class(['tab gap-1.5 whitespace-nowrap max-md:h-11', 'tab-active' => $tab === 'ranking']) data-testid="tab-ranking">Ranking <span class="badge badge-sm badge-neutral badge-soft font-mono">{{ $row->rankingSize }}</span></button>
             <button type="button" role="tab" id="tab-history" aria-controls="panel-group" aria-selected="{{ $tab === 'historial' ? 'true' : 'false' }}" wire:click="setTab('historial')"

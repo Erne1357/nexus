@@ -18,7 +18,7 @@
         <p class="px-4 py-6 text-center text-sm text-neutral">Ningún docente entró al ranking de este grupo.</p>
     @else
         @include('staffing::assign.order-legend', ['class' => 'border-b border-base-300 px-4 py-2'])
-        <div @class(['md:max-h-[70vh] md:overflow-y-auto md:overscroll-contain' => $capped]) data-testid="ranking-scroll">
+        <div @class(['relative', 'md:max-h-[70vh] md:overflow-y-auto md:overscroll-contain' => $capped]) data-testid="ranking-scroll">
             <div role="table" aria-label="Ranking de {{ $group->code }} · {{ $group->subject?->name }}">
                 <div role="rowgroup" @class(['bg-base-100', 'md:sticky md:top-0 md:z-10' => $capped])>
                     <div role="row" @class(['hidden items-center gap-x-2 border-b border-base-300 bg-secondary/40 px-4 py-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-secondary-muted @[46rem]:grid', $grid])>

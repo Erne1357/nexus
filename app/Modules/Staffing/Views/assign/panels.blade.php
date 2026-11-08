@@ -20,7 +20,7 @@
         <p class="flex justify-between gap-3 border-b border-base-300 bg-secondary/40 px-4 py-1.5 text-[12.5px] text-secondary-muted" aria-live="polite">
             <span><span class="font-mono tabular-nums">{{ count($visible) }}</span> de <span class="font-mono tabular-nums">{{ $board->total() }}</span> grupos</span>
         </p>
-        <ul class="divide-y divide-base-300 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain" aria-label="Grupos" data-group-scroll>
+        <ul class="relative divide-y divide-base-300 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain" aria-label="Grupos" data-group-scroll>
             @forelse ($visible as $row)
                 @php($group = $row->group)
                 @php($isSelected = $selected !== null && $selected->group->id === $group->id)
