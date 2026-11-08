@@ -122,6 +122,15 @@ new #[Title('Asignación docente')] class extends Component
     #[Locked]
     public array $expanded = [];
 
+    /**
+     * Los grupos con el bloque final de su ranking abierto (los que no pueden tomarlo: sin horas, choque, no
+     * disponible); plegado, el ranking muestra solo cuántos son y por qué.
+     *
+     * @var list<string>
+     */
+    #[Locked]
+    public array $finalTierOpen = [];
+
     /** El grupo al que se desplaza la página al abrirse. */
     #[Locked]
     public ?string $scrollTo = null;
@@ -170,7 +179,7 @@ new #[Title('Asignación docente')] class extends Component
      */
     public function updatedDepartment(Actor $context, AssignmentBoardQuery $query): void
     {
-        $this->reset('groupId', 'subjectFilter', 'careerFilter', 'semesterFilter', 'expanded', 'scrollTo', 'pending', 'failure', 'vetoReasons', 'sheet', 'reason', 'tab');
+        $this->reset('groupId', 'subjectFilter', 'careerFilter', 'semesterFilter', 'expanded', 'finalTierOpen', 'scrollTo', 'pending', 'failure', 'vetoReasons', 'sheet', 'reason', 'tab');
         $this->resolve($context, $query);
     }
 
@@ -214,6 +223,18 @@ new #[Title('Asignación docente')] class extends Component
         }
 
         $this->expanded[] = $group->id;
+    }
+
+    /**
+     * Abre o pliega el bloque final del ranking de un grupo (en las dos vistas).
+     */
+    public function toggleFinalTier(string $groupId, AssignmentBoardQuery $query): void
+    {
+        $group = $this->groupOrFail($groupId, $query);
+
+        $this->finalTierOpen = in_array($group->id, $this->finalTierOpen, true)
+            ? array_values(array_diff($this->finalTierOpen, [$group->id]))
+            : [...$this->finalTierOpen, $group->id];
     }
 
     /**

@@ -22,5 +22,6 @@
         <div class="max-md:w-full">
             @include('staffing::assign.state-filter')
         </div>
+        @include('staffing::assign.order-legend', ['class' => 'w-full'])
     @endif
 </div>

@@ -30,11 +30,17 @@
                 <x-icon name="o-user-minus" class="h-4 w-4 shrink-0" />Ningún docente entró al ranking de este grupo.
             </p>
         @else
+            @php($recommendedId = collect($row->candidates)->first(fn ($candidate) => ! $candidate->isFlagged())?->teacherId)
             <div class="grid gap-2 @[44rem]:grid-cols-3" data-testid="candidates">
                 @foreach ($row->candidates as $candidate)
-                    @include('staffing::assign.candidate', ['group' => $group, 'candidate' => $candidate, 'size' => $row->rankingSize])
+                    @include('staffing::assign.candidate', ['group' => $group, 'candidate' => $candidate, 'size' => $row->rankingSize, 'recommended' => $candidate->teacherId === $recommendedId])
                 @endforeach
             </div>
+            @if ($recommendedId === null)
+                <p class="flex items-center gap-2 text-[12.5px] text-neutral" data-testid="no-eligible">
+                    <x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />Ninguno sin marcas: estos son los primeros del bloque final.
+                </p>
+            @endif
         @endif
 
         @if ($pendingHere && ($pending['from'] === 'tarjetas' || ! $open))
@@ -66,7 +72,7 @@
 
     @if ($open && isset($rankings[$group->id]))
         <div id="ranking-{{ $group->id }}" class="min-w-0 overflow-hidden rounded-box border border-base-300 md:col-span-2" data-testid="full-ranking">
-            @include('staffing::assign.ranking', ['group' => $group, 'ranking' => $rankings[$group->id], 'currentTeacherId' => $group->teacher_id])
+            @include('staffing::assign.ranking', ['group' => $group, 'ranking' => $rankings[$group->id], 'currentTeacherId' => $group->teacher_id, 'capped' => true])
             <details class="group/history border-t border-base-300" @if ($rankings[$group->id]->rows === []) open @endif>
                 <summary class="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-2.5 font-semibold hover:bg-base-200 [&::-webkit-details-marker]:hidden">
                     <x-icon name="o-chevron-right" class="h-4 w-4 transition-transform group-open/history:rotate-90 motion-reduce:transition-none" />
@@ -75,6 +81,11 @@
                 </summary>
                 @include('staffing::assign.history', ['group' => $group, 'history' => $rankings[$group->id]->history])
             </details>
+            <div class="flex flex-wrap items-center gap-2 border-t border-base-300 px-2 py-1.5">
+                <button type="button" wire:click="toggleRanking('{{ $group->id }}')" aria-expanded="true" aria-controls="ranking-{{ $group->id }}" class="btn btn-ghost btn-sm max-md:h-11" data-testid="hide-ranking-bottom">
+                    <x-icon name="o-chevron-up" class="h-4 w-4" />Ocultar ranking
+                </button>
+            </div>
         </div>
     @endif
 </article>
