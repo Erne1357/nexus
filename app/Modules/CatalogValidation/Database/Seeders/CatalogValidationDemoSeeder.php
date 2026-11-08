@@ -51,13 +51,14 @@ use Spatie\Activitylog\Models\Activity;
  *   para que quede su foto. Luego se simulan los cambios hacia el último con las Actions de cada módulo (docentes y
  *   salones desactivados, reactivados y nuevos, materias nuevas): son las altas y bajas de `summary()`.
  * - El último periodo queda con estados fijos por código de departamento, de los que depende el seeder de propuestas:
- *   CB, SC, II y EE todo validado, para que sus partes de propuesta se puedan aceptar (HC-14); CEA con docentes y
- *   materias validados, los salones en revisión (con las observaciones de capacidad) y lo demás pendiente. MM depende del perfil: en `demo` queda con docentes y carreras validados
- *   y reabiertos (en revisión), materias validadas y lo demás pendiente (el ejemplo de reapertura); en `massive` queda
- *   todo validado y el ejemplo de reapertura pasa a las carreras de CEA (validadas y reabiertas). Cualquier otro
+ *   CB, SC, II y EE todo validado, para que sus partes de propuesta se puedan aceptar (HC-14). CEA y MM dependen del
+ *   perfil. En `demo`, CEA queda todo validado (el demo solo trae materias de CB, CEA, II y SC, y así CEA tiene
+ *   grupos) y MM queda con docentes y carreras validados y reabiertos, salones en revisión (con las observaciones de
+ *   capacidad), materias validadas y lo demás pendiente. En `massive`, MM queda todo validado y CEA con docentes y
+ *   materias validados, salones en revisión, carreras validadas y reabiertas y lo demás pendiente. Cualquier otro
  *   departamento queda pendiente.
  * - Observaciones con FlagRecord de todos los tipos que admite cada catálogo, y algunas resueltas con ResolveFlag;
- *   recordatorios a CEA, EE y MM (solo reciben los que aún tienen algo pendiente: CEA, y MM en `demo`) para el «último recordatorio» del tablero.
+ *   recordatorios a CEA, EE y MM (solo reciben los que aún tienen algo pendiente: CEA en `massive`, MM en `demo`) para el «último recordatorio» del tablero.
  *
  * `$profile`: `demo` (pocos cambios y observaciones) o `massive`. Sin cola: los avisos se mandan en línea. Idempotente:
  * un departamento cuyas revisiones del último periodo ya no están todas pendientes no se vuelve a tocar, las fotos
@@ -349,14 +350,16 @@ class CatalogValidationDemoSeeder extends Seeder
         return match ($department) {
             'CB', 'SC', 'II', 'EE' => 'validated',
             'CEA' => match (true) {
+                $profile === 'demo' => 'validated',
                 in_array($catalog, [Catalog::Teachers, Catalog::Subjects], true) => 'validated',
                 $catalog === Catalog::Rooms => 'review',
-                $profile === 'massive' && $catalog === Catalog::Careers => 'reopened',
+                $catalog === Catalog::Careers => 'reopened',
                 default => 'pending',
             },
             'MM' => $profile === 'massive' ? 'validated' : match ($catalog) {
                 Catalog::Teachers, Catalog::Careers => 'reopened',
                 Catalog::Subjects => 'validated',
+                Catalog::Rooms => 'review',
                 default => 'pending',
             },
             default => 'pending',

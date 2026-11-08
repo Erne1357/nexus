@@ -109,10 +109,10 @@ El `MassiveSeeder` siembra unos 12 000 alumnos y 600 docentes, más los datos de
 - **Periodos:** desde 2014, con el calendario de 20263 y ventanas propias de C1 en 20271. 20263 y 20271 están abiertos en C1 y C2.
 - **Validación de catálogos:** en 20263 todo validado, así que hay foto y 20271 muestra altas y bajas contra ella. En 20271, por departamento:
   - CB, SC, II y EE: todo validado, para que sus jefes puedan aceptar su parte de cada propuesta (HC-14);
-  - CEA: la mitad (docentes y materias validados, salones en revisión, lo demás pendiente), con las carreras validadas y reabiertas en el masivo;
-  - MM: en el masivo, todo validado; en el `DemoSeeder`, validado en parte y reabierto (docentes y carreras).
+  - CEA: en el `DemoSeeder`, todo validado; en el masivo, la mitad (docentes y materias validados, salones en revisión, carreras validadas y reabiertas, lo demás pendiente);
+  - MM: en el masivo, todo validado; en el `DemoSeeder`, validado en parte, reabierto (docentes y carreras) y con los salones en revisión.
 
-  Hay observaciones de todos los tipos y recordatorio a CEA (en el `DemoSeeder`, también a MM).
+  Hay observaciones de todos los tipos y recordatorio a los departamentos con algo pendiente (CEA en el masivo, MM en el `DemoSeeder`).
 - **Captura docente en 20271:** alrededor de 25 % sin disponibilidad, 15 % sin perfil y 30 % con horas fuera del ITCJ.
 - **Propuestas, bandejas y avisos** de las carreras de C1 y C2, en distintos estados. Con los catálogos de CB, SC, II, EE y MM validados, el masivo acepta más partes (regresa una de cada 6 y deja pendiente una de cada 5; el `DemoSeeder`, una de cada 4 y una de cada 3).
 
@@ -120,10 +120,10 @@ Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes traba
 
 | Pantalla | Usuario y caso |
 |---|---|
-| Validación de catálogos (`/catalog-validation`) | `jefe.cea` (a medias y con carreras reabiertas en el masivo), `jefe.mm` (reabierto solo en el `DemoSeeder`), `jefe.ee` y `jefe.sc` (todo validado). `admin` o `subdir` con `?department=` la ven en lectura |
+| Validación de catálogos (`/catalog-validation`) | `jefe.cea` (a medias y con carreras reabiertas en el masivo), `jefe.mm` (reabierto y con salones en revisión solo en el `DemoSeeder`), `jefe.ee` y `jefe.sc` (todo validado). `admin` o `subdir` con `?department=` la ven en lectura |
 | Avance de validación (`/catalog-validation/progress`) | `admin` o `subdir` |
 | Propuesta de carrera | `coord.isc.c2` (enviada, unas 53 materias), `coord.ige.c2` (regresada), `coord.cp.c2` (borrador), `coord.isc.c1` |
-| Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (HC-14 a medias, LADM con 45 materias), `jefe.ee` (catálogos validados) |
+| Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (en el masivo, HC-14 a medias; LADM con 45 materias), `jefe.ee` (catálogos validados) |
 | Campana y `/notifications` | `jefe.cea` (unos 24 avisos) o `jefe.sc` |
 
 ## Pruebas de rendimiento

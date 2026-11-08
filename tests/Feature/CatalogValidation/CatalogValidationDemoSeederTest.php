@@ -125,7 +125,7 @@ it('deja el periodo actual con los estados fijos por departamento (HC-14)', func
         ->and(Activity::query()->where('event', 'reopened')->count())->toBe(1);
 });
 
-it('con el perfil demo deja MM reabierto y EE validado (HC-14)', function () {
+it('con el perfil demo deja CEA y EE validados y MM reabierto con salones en revisión (HC-14)', function () {
     seedCatalogScenario();
     $query = app(CatalogReviewQuery::class);
     $term = Term::query()->where('code', '20271')->firstOrFail();
@@ -134,11 +134,15 @@ it('con el perfil demo deja MM reabierto y EE validado (HC-14)', function () {
     runCatalogDemoSeeder('demo');
 
     expect($pending('EE'))->toBe([])
+        ->and($pending('CEA'))->toBe([])
+        ->and(cvReview('20271', 'CEA', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'MM', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::InReview)
+        ->and(CatalogReviewFlag::query()->whereRelation('review', 'catalog', Catalog::Rooms)->whereRelation('review.department', 'code', 'MM')->exists())->toBeTrue()
         ->and($pending('MM'))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::InReview)
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->validated_by)->toBeNull()
         ->and(cvReview('20271', 'MM', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
-        ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::Pending)
+        ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::Validated)
         ->and(Activity::query()->where('event', 'reopened')->count())->toBe(2);
 });
 
