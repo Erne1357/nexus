@@ -13,7 +13,7 @@
         </div>
         <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle max-md:h-11 max-md:w-11" @click="close()" aria-label="Cerrar el panel" />
     </header>
-    <div class="flex-1 space-y-6 overflow-y-auto px-5 py-4">
+    <div class="relative flex-1 space-y-6 overflow-y-auto px-5 py-4">
         <section>
             <dl class="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
                 <dt class="text-neutral">Carrera dueña</dt><dd>{{ $group['career'] }}</dd>

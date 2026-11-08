@@ -15,7 +15,7 @@
     @if ($groupOptions === [])
         <p class="rounded-field border border-base-300 px-3 py-3 text-sm text-neutral">No hay grupos en que puedas pedir un cambio.</p>
     @else
-        <div role="radiogroup" aria-label="Grupo" class="max-h-64 text-sm divide-y divide-base-300 overflow-y-auto overscroll-contain rounded-field border border-base-300" x-ref="groups">
+        <div role="radiogroup" aria-label="Grupo" class="relative max-h-64 text-sm divide-y divide-base-300 overflow-y-auto overscroll-contain rounded-field border border-base-300" x-ref="groups">
             @foreach ($groupOptions as $option)
                 <label wire:key="request-group-{{ $option['id'] }}" data-group-option="{{ $option['id'] }}"
                     data-search="{{ $option['code'].' '.$option['subject'].' '.$option['detail'] }}" x-show="matches($el)"

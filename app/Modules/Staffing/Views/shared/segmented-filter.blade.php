@@ -5,7 +5,7 @@
     Espera $label (nombre del grupo), $property (la propiedad que fija), $options (valor => texto), $current, $counts
     (valor => cifra) y $testid (prefijo: `<testid>-<valor>`, o `<testid>-todas` para el valor vacío).
 --}}
-<div class="min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
+<div class="relative min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
     <div role="group" aria-label="{{ $label }}" class="join" data-testid="{{ $testid }}">
         @foreach ($options as $value => $optionLabel)
             <button type="button" wire:click="$set('{{ $property }}', '{{ $value }}')" aria-pressed="{{ $current === (string) $value ? 'true' : 'false' }}" data-testid="{{ $testid }}-{{ $value === '' ? 'todas' : $value }}"

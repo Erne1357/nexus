@@ -37,7 +37,7 @@
         </div>
     @else
         @if (count($departments) > 1)
-            <div role="tablist" aria-label="Departamento" class="tabs tabs-border flex-nowrap overflow-x-auto" data-testid="offer-tabs">
+            <div role="tablist" aria-label="Departamento" class="tabs tabs-border relative flex-nowrap overflow-x-auto" data-testid="offer-tabs">
                 @foreach ($departments as $item)
                     <button type="button" role="tab" wire:key="tab-{{ $item['code'] }}" wire:click="$set('department', '{{ $item['code'] }}')" aria-selected="{{ $item['id'] === $current['id'] ? 'true' : 'false' }}"
                         @class(['tab shrink-0', 'tab-active font-semibold' => $item['id'] === $current['id']]) data-testid="offer-tab-{{ $item['code'] }}">
