@@ -59,6 +59,22 @@ function effectivePermissions(User $user): array
     return $keys;
 }
 
+/**
+ * De unas claves, las de permisos de gestión (los personales no se miden aquí).
+ *
+ * @param  list<string>  $keys
+ * @return list<string>
+ */
+function managementKeys(array $keys): array
+{
+    $personal = collect(app(PermissionRegistry::class)->permissions())
+        ->filter(fn (Permission $permission): bool => $permission->isPersonal())
+        ->map(fn (Permission $permission): string => (string) $permission->value)
+        ->all();
+
+    return array_values(array_diff($keys, $personal));
+}
+
 describe('AZ-02: lo que cada puesto ejerce', function () {
     it('AZ-02: el jefe de Servicios Escolares solo ejerce academic.placement.validate', function () {
         expect(effectivePermissions($this->servicesHead))->toBe(['academic.placement.validate']);
@@ -73,7 +89,7 @@ describe('AZ-02: lo que cada puesto ejerce', function () {
     it('AZ-S16: la Subdirección, el jefe de proyecto docente, el coordinador y el docente ejercen lo que la matriz les concede', function (Role $role, Closure $scope) {
         $user = User::factory()->withRole($role, $scope($this))->create();
 
-        expect(effectivePermissions($user))->toBe(app(PermissionRegistry::class)->matrix()[$role->value] ?? []);
+        expect(effectivePermissions($user))->toBe(managementKeys(app(PermissionRegistry::class)->matrix()[$role->value] ?? []));
     })->with([
         'subdirección' => [Role::Subdireccion, fn (): array => []],
         'jefe de proyecto docente' => [Role::JefeProyectoDocente, fn ($test): array => ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id]],
@@ -85,6 +101,7 @@ describe('AZ-02: lo que cada puesto ejerce', function () {
         $registry = app(PermissionRegistry::class);
         $all = collect($registry->permissions())->map(fn (Permission $permission): string => (string) $permission->value)
             ->reject(fn (string $key): bool => in_array($key, $registry->adminDenials(), true))->sort()->values()->all();
+        $all = managementKeys($all);
 
         expect(effectivePermissions(User::factory()->admin()->create()))->toBe($all);
     });
