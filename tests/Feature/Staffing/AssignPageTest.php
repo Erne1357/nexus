@@ -244,6 +244,7 @@ describe('estado de la carga', function () {
         $page = assignPage($this->jefe)
             ->assertSee($message)
             ->assertDontSeeHtml('data-testid="assign-button"')
+            ->assertSeeHtml('data-testid="assign-disabled"')
             ->assertDontSee('Cambiar')
             ->call('assign', $this->open->id, $this->teachers[0]->id);
 

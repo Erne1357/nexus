@@ -63,5 +63,5 @@
 @elseif ($stateMessage !== null)
     <p class="flex items-center gap-2 text-sm text-neutral" data-testid="read-only"><x-icon name="o-lock-closed" class="h-4 w-4 shrink-0" />{{ $stateMessage }}</p>
 @elseif (! $canAssign)
-    <p class="flex items-center gap-2 text-sm text-neutral" data-testid="read-only"><x-icon name="o-eye" class="h-4 w-4 shrink-0" />Solo consulta: asignan el jefe del departamento y el jefe de proyecto docente.</p>
+    <p class="flex items-center gap-2 text-sm text-neutral" data-testid="read-only"><x-icon name="o-eye" class="h-4 w-4 shrink-0" />{{ $readOnlyReason }}</p>
 @endif

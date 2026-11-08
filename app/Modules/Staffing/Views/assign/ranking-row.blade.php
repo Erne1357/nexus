@@ -51,6 +51,8 @@
                     aria-label="Asignar a {{ $candidate->teacherName }}, lugar {{ $candidate->rank }}" data-testid="assign-button" data-rank="{{ $candidate->rank }}"
                     @if ($recommended) data-recommended="{{ $group->id }}" @endif
                     @class(['btn btn-sm max-md:h-11', 'btn-primary btn-soft' => $recommended, 'btn-ghost' => ! $recommended])><x-icon name="o-arrow-right-circle" class="h-4 w-4" />Asignar</button>
+            @else
+                @include('staffing::assign.assign-disabled')
             @endif
         </span>
     </div>

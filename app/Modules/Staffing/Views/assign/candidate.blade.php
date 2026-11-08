@@ -39,6 +39,8 @@
             <button type="button" wire:click="assign('{{ $group->id }}', '{{ $candidate->teacherId }}', 'tarjetas')" wire:loading.attr="disabled" wire:target="assign"
                 aria-label="Asignar a {{ $candidate->teacherName }}, lugar {{ $candidate->rank }}" data-testid="assign-button" data-rank="{{ $candidate->rank }}"
                 @class(['btn btn-sm max-md:h-11', 'btn-primary btn-soft' => $recommended, 'btn-ghost' => ! $recommended])><x-icon name="o-arrow-right-circle" class="h-4 w-4" />Asignar</button>
+        @else
+            @include('staffing::assign.assign-disabled')
         @endif
     </div>
 </div>

@@ -360,6 +360,8 @@ new #[Title('Asignación docente')] class extends Component
             : array_values(array_intersect($this->expanded, $visibleIds));
         $load = $board->load;
         $assignable = $load !== null && in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true);
+        $canAssign = $assignable && Gate::allows('create', [GroupTeacherAssignment::class, $this->scopeGroup()]);
+        $stateMessage = $this->stateMessage($board);
 
         return [
             'board' => $board,
@@ -367,9 +369,10 @@ new #[Title('Asignación docente')] class extends Component
             'sections' => $this->view === 'materia' ? $this->sections($board, $visible) : [],
             'selected' => $selected,
             'rankings' => $rankings->forGroups($board->term, $openIds),
-            'canAssign' => $assignable && Gate::allows('create', [GroupTeacherAssignment::class, $this->scopeGroup()]),
+            'canAssign' => $canAssign,
             'canStart' => $load?->status === LoadStatus::Proposed && Gate::allows('startStaffing', $load),
-            'stateMessage' => $this->stateMessage($board),
+            'stateMessage' => $stateMessage,
+            'readOnlyReason' => $canAssign ? null : ($stateMessage ?? 'Solo consulta: asignan el jefe del departamento y el jefe de proyecto docente.'),
             'counts' => ['todos' => $board->total(), 'sin' => $board->total() - $board->assignedCount(), 'con' => $board->assignedCount()],
             'subjects' => $this->subjectOptions($board),
             'careers' => $this->careerOptions($board),
