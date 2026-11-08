@@ -67,7 +67,7 @@ it('acepta sus dos tipos y sus cuatro estados y rechaza otros', function () {
         ->and(fn () => DB::transaction(fn () => DB::table('interdepartmental_agreements')->update(['kind' => 'swap'])))
         ->toThrow(QueryException::class, 'interdepartmental_agreements_kind_check')
         ->and(fn () => DB::transaction(fn () => DB::table('interdepartmental_agreements')->where('status', 'accepted')->update(['status' => 'approved'])))
-        ->toThrow(QueryException::class, 'interdepartmental_agreements_status_check');
+        ->toThrow(QueryException::class, 'violates check constraint');
 });
 
 it('todo acuerdo es de un grupo', function () {
@@ -134,6 +134,20 @@ it('rechazado lleva motivo; propuesto no lleva quién ni cuándo decidió, y dec
         ->toThrow(QueryException::class, 'interdepartmental_agreements_decision_check')
         ->and(fn () => DB::transaction(fn () => DB::table('interdepartmental_agreements')->where('id', $agreement->id)->update(['status' => 'accepted', 'decided_at' => now()])))
         ->toThrow(QueryException::class, 'interdepartmental_agreements_decision_check');
+});
+
+it('cancelado lleva quién y cuándo canceló, juntos; la decisión puede estar o no; los demás estados no cancelan', function () {
+    $user = User::factory()->create();
+    $proposed = InterdepartmentalAgreement::factory()->create();
+    $accepted = InterdepartmentalAgreement::factory()->accepted()->create();
+    $update = fn (InterdepartmentalAgreement $a, array $values) => fn () => DB::transaction(fn () => DB::table('interdepartmental_agreements')->where('id', $a->id)->update($values));
+
+    expect($update($proposed, ['status' => 'cancelled']))->toThrow(QueryException::class, 'interdepartmental_agreements_decision_check')
+        ->and($update($proposed, ['status' => 'cancelled', 'cancelled_at' => now()]))->toThrow(QueryException::class, 'interdepartmental_agreements_decision_check')
+        ->and($update($proposed, ['cancelled_by' => $user->id, 'cancelled_at' => now()]))->toThrow(QueryException::class, 'interdepartmental_agreements_decision_check')
+        ->and($update($accepted, ['cancelled_by' => $user->id, 'cancelled_at' => now()]))->toThrow(QueryException::class, 'interdepartmental_agreements_decision_check')
+        ->and($update($proposed, ['status' => 'cancelled', 'cancelled_by' => $user->id, 'cancelled_at' => now()])())->toBe(1)
+        ->and($update($accepted, ['status' => 'cancelled', 'cancelled_by' => $user->id, 'cancelled_at' => now()])())->toBe(1);
 });
 
 it('un salón no se presta dos veces a la misma hora del mismo día y periodo; contiguo, rechazado o cancelado sí', function () {

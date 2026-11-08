@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Queries;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\AcademicLoad\Rules\ClockTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -29,15 +30,15 @@ final class RoomLoansQuery
             ->orderBy('starts_at')
             ->get(['starts_at', 'ends_at']);
 
-        $reached = $this->seconds($startsAt);
+        $reached = ClockTime::toSeconds($startsAt);
         foreach ($loans as $loan) {
-            if ($this->seconds($loan->starts_at) > $reached) {
+            if (ClockTime::toSeconds($loan->starts_at) > $reached) {
                 return false;
             }
-            $reached = max($reached, $this->seconds($loan->ends_at));
+            $reached = max($reached, ClockTime::toSeconds($loan->ends_at));
         }
 
-        return $reached >= $this->seconds($endsAt);
+        return $reached >= ClockTime::toSeconds($endsAt);
     }
 
     /**
@@ -85,12 +86,5 @@ final class RoomLoansQuery
             ->where('day', $day)
             ->where('starts_at', '<', $endsAt)
             ->where('ends_at', '>', $startsAt);
-    }
-
-    private function seconds(string $time): int
-    {
-        $parts = array_map('intval', explode(':', $time));
-
-        return $parts[0] * 3600 + ($parts[1] ?? 0) * 60 + ($parts[2] ?? 0);
     }
 }
