@@ -134,13 +134,12 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSee('ISIC-2010-224')
             ->assertSee('Vigente')
             ->assertSee('Prioridad')
-            ->assertSee('Horas colocadas')
-            ->assertSee('0 de 5')
             ->assertSee('0 choques');
 
         $tray = domOf($page)->querySelector('[data-testid=tray]');
 
-        expect(textOf($tray))->toContain('ACF-0904', 'Cálculo Vectorial', 'ACF-0904 · A', 'Sin docente', '0 de 2 h', 'AED-1026 · B', '0 de 3 h')
+        expect(textOf(domOf($page)->querySelector('[data-testid=editor-facts]')))->toContain('Horas colocadas 0 de 5')
+            ->and(textOf($tray))->toContain('ACF-0904', 'Cálculo Vectorial', 'ACF-0904 · A', 'Sin docente', '0 de 2 h', 'AED-1026 · B', '0 de 3 h')
             ->and(textOf(domOf($page)->querySelector('[data-testid=editor-semester]')))->toContain('Semestre 3 · 2 sin acomodar');
     });
 

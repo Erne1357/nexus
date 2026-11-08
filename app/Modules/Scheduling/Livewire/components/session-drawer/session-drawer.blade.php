@@ -21,7 +21,7 @@
                     <div class="min-w-0 flex-1">
                         <h2 id="session-drawer-title" class="text-xl leading-tight font-bold">Sesión de {{ $panel['group']['label'] }}</h2>
                         <p class="mt-1 text-neutral">{{ $panel['group']['subject'] }} · {{ $panel['group']['teacher'] ?? 'Sin docente' }}</p>
-                        <x-button label="Ver el grupo" icon="o-information-circle" class="btn-ghost btn-sm -ms-3 mt-1" data-drawer-switch
+                        <x-button label="Ver el grupo" icon-right="o-arrow-right" class="btn-ghost btn-sm -ms-3 mt-1" data-drawer-switch
                             x-on:click="close()" wire:click="$dispatchTo('scheduling::components.group-drawer', 'open-group', { id: '{{ $panel['group']['id'] }}' })" />
                     </div>
                     <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar" />

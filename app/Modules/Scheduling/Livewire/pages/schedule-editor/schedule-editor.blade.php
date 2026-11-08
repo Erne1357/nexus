@@ -38,7 +38,7 @@
                 <span class="font-medium text-base-content">{{ $campus->name }}</span>
                 <span>Retícula <span class="font-mono text-base-content">{{ $plan->code }}</span></span>
                 <span>Grupos <span class="font-mono text-base-content">{{ count($groups) }}</span></span>
-                <span>Horas colocadas <span class="font-mono text-base-content">{{ $placedHours }} de {{ $requiredHours }}</span></span>
+                <span>Horas colocadas <span class="text-base-content"><span class="font-mono">{{ $placedHours }}</span> de <span class="font-mono">{{ $requiredHours }}</span></span></span>
                 <a href="#choques" class="rounded-selector focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" data-testid="hard-count">
                     <x-core::status-badge :tone="$hardCount > 0 ? 'error' : 'success'" :label="$hardCount === 1 ? '1 choque' : $hardCount.' choques'" />
                 </a>
