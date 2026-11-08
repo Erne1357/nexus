@@ -11,6 +11,7 @@ use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ValidationResult;
 use App\Modules\Scheduling\Validation\Violation;
@@ -54,7 +55,7 @@ final class SessionRules
             throw self::invalid("La hora «{$time}» no es válida: se escribe como 07:00.");
         }
 
-        return substr($time, 0, 5);
+        return Clock::of($time);
     }
 
     /**
@@ -123,9 +124,7 @@ final class SessionRules
         }
 
         if (($start - $dayStart) % $profile->blockMinutes !== 0 || ($end - $dayStart) % $profile->blockMinutes !== 0) {
-            $from = intdiv($dayStart, 60).':'.sprintf('%02d', $dayStart % 60);
-
-            throw self::invalid("HC-04: la sesión debe empezar y terminar en bloques de {$profile->blockMinutes} minutos desde las {$from}.");
+            throw self::invalid("HC-04: la sesión debe empezar y terminar en bloques de {$profile->blockMinutes} minutos desde las ".Minutes::format($dayStart).'.');
         }
     }
 
@@ -207,14 +206,6 @@ final class SessionRules
     }
 
     /**
-     * Cómo se nombra el grupo en la bitácora: «Cálculo Diferencial, grupo D».
-     */
-    public function label(Group $group): string
-    {
-        return ($group->subject()->withTrashed()->value('name') ?? 'La materia').", grupo {$group->code}";
-    }
-
-    /**
      * Lo que la bitácora guarda de una sesión: día, horas en `HH:MM`, tipo y salón.
      *
      * @return array{day: int, starts_at: string, ends_at: string, kind: string, room_id: ?string}
@@ -223,8 +214,8 @@ final class SessionRules
     {
         return [
             'day' => $session->day,
-            'starts_at' => substr($session->starts_at, 0, 5),
-            'ends_at' => substr($session->ends_at, 0, 5),
+            'starts_at' => Clock::of($session->starts_at),
+            'ends_at' => Clock::of($session->ends_at),
             'kind' => $session->kind->value,
             'room_id' => $session->room_id,
         ];
@@ -235,7 +226,20 @@ final class SessionRules
      */
     public static function describe(GroupSession $session): string
     {
-        return Minutes::dayName($session->day).' de '.substr($session->starts_at, 0, 5).' a '.substr($session->ends_at, 0, 5);
+        return Minutes::dayName($session->day).' de '.Clock::of($session->starts_at).' a '.Clock::of($session->ends_at);
+    }
+
+    /**
+     * Las sesiones que una unión de contiguas borró, con su id, para la bitácora (`absorbed` en las propiedades).
+     *
+     * @return list<array{id: string, day: int, starts_at: string, ends_at: string, kind: string, room_id: ?string}>
+     */
+    public static function absorbed(?GroupSession ...$sessions): array
+    {
+        return array_values(array_map(
+            fn (GroupSession $session): array => ['id' => $session->id, ...self::snapshot($session)],
+            array_filter($sessions),
+        ));
     }
 
     private function campusOf(Group $group): Campus
