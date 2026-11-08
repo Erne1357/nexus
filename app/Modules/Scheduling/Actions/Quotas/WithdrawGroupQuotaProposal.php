@@ -32,11 +32,13 @@ final class WithdrawGroupQuotaProposal
             throw ValidationException::withMessages(['kind' => 'Este acuerdo no es de un cupo en un grupo.']);
         }
 
-        return DB::transaction(function () use ($agreement, $actor): InterdepartmentalAgreement {
-            $group = Group::query()->lockForUpdate()->findOrFail($agreement->group_id);
+        return $this->rules->guard(fn (): InterdepartmentalAgreement => DB::transaction(function () use ($agreement, $actor): InterdepartmentalAgreement {
+            $group = Group::query()->findOrFail($agreement->group_id);
+            $this->rules->lockLoad($group);
+            $group = Group::query()->lockForUpdate()->findOrFail($group->id);
             $this->rules->ensureEditable($group);
 
             return $this->cancel->handle($agreement, $actor);
-        });
+        }));
     }
 }
