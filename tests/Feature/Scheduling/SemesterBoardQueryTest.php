@@ -32,7 +32,7 @@ use Illuminate\Support\Facades\DB;
 beforeEach(function () {
     $this->term = Term::factory()->create();
     $this->campus = Campus::factory()->create();
-    $this->sistemas = Department::factory()->create(['code' => 'DSC']);
+    $this->sistemas = Department::factory()->create(['code' => 'DSC', 'name' => 'Sistemas y Computación']);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->sistemas->id]);
     $this->iind = Career::factory()->create(['code' => 'IIND']);
     $this->plan = StudyPlan::factory()->create(['career_id' => $this->isc->id]);
@@ -101,9 +101,10 @@ it('trae los grupos de la carrera en el plan y semestre y los compartidos donde 
         ->and(array_column($board['groups'], 'shared'))->toBe([false, false, true]);
 });
 
-it('por grupo da la materia, el docente, la capacidad, los cupos, las sesiones con su salón y las horas', function () {
+it('por grupo da la materia con su departamento, el docente, la capacidad, los cupos, las sesiones con su salón y las horas', function () {
     $subject = boardSubject(['code' => 'SCD-1001', 'name' => 'Cálculo Diferencial', 'theory_hours' => 3, 'practice_hours' => 2, 'needs_lab' => true, 'department_id' => $this->sistemas->id]);
-    $group = boardGroup($subject, ['code' => 'D', 'capacity' => 30, 'teacher_id' => Teacher::factory()->create(['name' => 'Ana Pérez'])->id]);
+    $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
+    $group = boardGroup($subject, ['code' => 'D', 'capacity' => 30, 'teacher_id' => $teacher->id]);
     GroupQuota::factory()->create(['group_id' => $group->id, 'career_id' => $this->isc->id, 'max_seats' => 20, 'is_owner' => true]);
     GroupQuota::factory()->create(['group_id' => $group->id, 'career_id' => $this->iind->id, 'max_seats' => 10]);
     $lab = boardRoom(['code' => 'LC-1', 'department_id' => $this->sistemas->id]);
@@ -117,7 +118,8 @@ it('por grupo da la materia, el docente, la capacidad, los cupos, las sesiones c
         'code' => 'D',
         'status' => GroupStatus::Planned,
         'shared' => false,
-        'subject' => ['id' => $subject->id, 'code' => 'SCD-1001', 'name' => 'Cálculo Diferencial', 'theory_hours' => 3, 'practice_hours' => 2, 'needs_lab' => true, 'department_code' => 'DSC'],
+        'subject' => ['id' => $subject->id, 'code' => 'SCD-1001', 'name' => 'Cálculo Diferencial', 'theory_hours' => 3, 'practice_hours' => 2, 'needs_lab' => true, 'department_code' => 'DSC', 'department_name' => 'Sistemas y Computación'],
+        'teacher_id' => $teacher->id,
         'teacher' => 'Ana Pérez',
         'capacity' => 30,
         'quotas' => [
