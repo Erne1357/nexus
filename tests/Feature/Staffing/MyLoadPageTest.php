@@ -32,7 +32,7 @@ beforeEach(function () {
     $this->me->update(['user_id' => $this->user->id]);
 });
 
-function loadGroup(Campus $campus, string $code, string $name, array $sessions, array $attrs = []): Group
+function myLoadGroup(Campus $campus, string $code, string $name, array $sessions, array $attrs = []): Group
 {
     $subject = Subject::factory()->create(['department_id' => test()->sc->id, 'name' => $name, 'theory_hours' => 4, 'practice_hours' => 0]);
     $group = Group::factory()->create(['term_id' => test()->term->id, 'campus_id' => $campus->id, 'subject_id' => $subject->id, 'code' => $code, 'teacher_id' => test()->me->id, ...$attrs]);
@@ -45,9 +45,9 @@ function loadGroup(Campus $campus, string $code, string $name, array $sessions, 
 }
 
 it('muestra sus grupos por día, de todos los campus, con salón y campus', function () {
-    loadGroup($this->c2, '1A', 'Fundamentos de Programación', [[2, '11:00', '13:00'], [5, '11:00', '13:00']]);
-    loadGroup($this->c1, '3B', 'Estructura de Datos', [[1, '07:00', '09:00']]);
-    loadGroup($this->c2, 'CAN', 'Materia cancelada', [[3, '07:00', '09:00']], ['status' => 'cancelled']);
+    myLoadGroup($this->c2, '1A', 'Fundamentos de Programación', [[2, '11:00', '13:00'], [5, '11:00', '13:00']]);
+    myLoadGroup($this->c1, '3B', 'Estructura de Datos', [[1, '07:00', '09:00']]);
+    myLoadGroup($this->c2, 'CAN', 'Materia cancelada', [[3, '07:00', '09:00']], ['status' => 'cancelled']);
     Group::factory()->create(['term_id' => $this->term->id, 'teacher_id' => Teacher::factory()->create()->id]);
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')
@@ -61,15 +61,15 @@ it('muestra sus grupos por día, de todos los campus, con salón y campus', func
 });
 
 it('el sábado aparece solo si tiene sesiones ese día', function () {
-    loadGroup($this->c2, '1A', 'Fundamentos', [[6, '08:00', '10:00']]);
+    myLoadGroup($this->c2, '1A', 'Fundamentos', [[6, '08:00', '10:00']]);
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')->assertSeeHtml('data-testid="day-6"')->assertSee('Sábado');
 });
 
 it('marca el hueco entre dos sesiones del mismo día y el traslado entre campus', function () {
-    loadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00'], [3, '07:00', '09:00']]);
-    loadGroup($this->c2, '1B', 'Cálculo', [[1, '11:00', '13:00']]);
-    loadGroup($this->c1, '2A', 'Redes', [[1, '13:00', '15:00'], [3, '09:00', '11:00']]);
+    myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00'], [3, '07:00', '09:00']]);
+    myLoadGroup($this->c2, '1B', 'Cálculo', [[1, '11:00', '13:00']]);
+    myLoadGroup($this->c1, '2A', 'Redes', [[1, '13:00', '15:00'], [3, '09:00', '11:00']]);
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')
         ->assertSeeHtml('data-testid="gap"')
@@ -79,8 +79,8 @@ it('marca el hueco entre dos sesiones del mismo día y el traslado entre campus'
 });
 
 it('SC-09: el traslado entre campus con menos de staffing.min_campus_travel_minutes libres es un aviso; con más, neutro y con su tiempo', function () {
-    loadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00'], [2, '07:00', '09:00']]);
-    loadGroup($this->c1, '2A', 'Redes', [[1, '09:30', '10:30'], [2, '12:00', '13:00']]);
+    myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00'], [2, '07:00', '09:00']]);
+    myLoadGroup($this->c1, '2A', 'Redes', [[1, '09:30', '10:30'], [2, '12:00', '13:00']]);
 
     $page = Livewire::actingAs($this->user)->test('staffing::pages.my-load');
     $transfers = domOf($page)->querySelectorAll('[data-testid=transfer]');
@@ -97,15 +97,15 @@ it('SC-09: el traslado entre campus con menos de staffing.min_campus_travel_minu
 });
 
 it('sin huecos ni traslados no los marca', function () {
-    loadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
-    loadGroup($this->c2, '1B', 'Cálculo', [[1, '09:00', '11:00']]);
+    myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
+    myLoadGroup($this->c2, '1B', 'Cálculo', [[1, '09:00', '11:00']]);
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')->assertDontSeeHtml('data-testid="gap"')->assertDontSeeHtml('data-testid="transfer"');
 });
 
 it('muestra la ecuación de horas: base, externas con su fuente, asignadas y restantes (HC-08)', function () {
-    loadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
-    loadGroup($this->c1, '1B', 'Cálculo', [[2, '07:00', '09:00']]);
+    myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
+    myLoadGroup($this->c1, '1B', 'Cálculo', [[2, '07:00', '09:00']]);
     TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $this->me->id]);
     TeacherExternalLoad::query()->create(['teacher_id' => $this->me->id, 'term_id' => $this->term->id, 'source' => 'Colegio Bachilleres', 'hours' => 3]);
 
@@ -135,11 +135,11 @@ it('mantiene un número constante de consultas sin importar cuántos grupos tien
         return count(DB::getQueryLog());
     };
 
-    loadGroup($this->c2, 'G0', 'Materia 0', [[1, '07:00', '09:00']]);
+    myLoadGroup($this->c2, 'G0', 'Materia 0', [[1, '07:00', '09:00']]);
     $few = $count();
 
     foreach (range(1, 6) as $n) {
-        loadGroup($n % 2 === 0 ? $this->c1 : $this->c2, 'G'.$n, 'Materia '.$n, [[1 + $n % 5, sprintf('%02d:00', 8 + $n), sprintf('%02d:00', 9 + $n)]]);
+        myLoadGroup($n % 2 === 0 ? $this->c1 : $this->c2, 'G'.$n, 'Materia '.$n, [[1 + $n % 5, sprintf('%02d:00', 8 + $n), sprintf('%02d:00', 9 + $n)]]);
     }
 
     expect($count())->toBe($few)->and($few)->toBeLessThanOrEqual(25);
@@ -153,7 +153,7 @@ describe('alcance', function () {
     it('un jefe o coordinador sin ficha de docente recibe 403', function () {
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
         $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => Career::factory()->create()->id])->create();
-        loadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
+        myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
 
         Livewire::actingAs($jefe)->test('staffing::pages.my-load')->assertForbidden();
         Livewire::actingAs($coordinador)->test('staffing::pages.my-load')->assertForbidden();
@@ -161,7 +161,7 @@ describe('alcance', function () {
 
     it('un docente sin ficha ligada ve un aviso y ningún grupo', function () {
         $loose = User::factory()->withRole(Role::Docente)->create();
-        loadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
+        myLoadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00']]);
 
         Livewire::actingAs($loose)->test('staffing::pages.my-load')->assertOk()->assertSee('no está ligado a una ficha de docente')->assertDontSee('Fundamentos');
     });
@@ -170,7 +170,7 @@ describe('alcance', function () {
         $other = Teacher::factory()->create();
         $user = User::factory()->withRole(Role::Docente)->create();
         $other->update(['user_id' => $user->id]);
-        loadGroup($this->c2, '1A', 'Fundamentos de mi colega', [[1, '07:00', '09:00']]);
+        myLoadGroup($this->c2, '1A', 'Fundamentos de mi colega', [[1, '07:00', '09:00']]);
 
         Livewire::actingAs($user)->test('staffing::pages.my-load')->assertDontSee('Fundamentos de mi colega')->assertSee('Todavía no tienes grupos');
     });
