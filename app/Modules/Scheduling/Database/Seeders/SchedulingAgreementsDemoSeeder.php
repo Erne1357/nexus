@@ -127,6 +127,9 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
 
     private SyncSessionLoans $loans;
 
+    /** @var array<string, int> intentos que una Action rechazó por sus reglas, por fase, en el campus en curso */
+    private array $rejections = [];
+
     /**
      * @param  list<string>  $campuses  claves de campus
      * @param  array<string, float|int>  $ratios  sobrescribe `loans`, `shared`, `direct_quota_groups` y `suggested_rooms`
@@ -178,7 +181,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         $already = InterdepartmentalAgreement::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->exists();
         $groups = Group::query()->with('subject')
             ->where('term_id', $term->id)->where('campus_id', $campus->id)
-            ->orderBy('id')->get();
+            ->get()->sortBy(fn (Group $group): string => self::groupKey($group))->values();
 
         if ($already || $groups->isEmpty()) {
             $this->command?->info("Acuerdos en {$campus->code}: ".($already ? 'ya existen, no se hace nada.' : 'sin grupos.'));
@@ -186,6 +189,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             return;
         }
 
+        $this->rejections = [];
         $clean = $this->cleanIds($groups, $cleanCodes, $profile);
         $editable = $this->editableDepartments($term, $campus);
         $usable = $groups->filter(fn (Group $group): bool => $group->status !== GroupStatus::Cancelled && isset($editable[$group->department_id]))->values();
@@ -201,6 +205,34 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             ->map(fn (int $total, string $status): string => "{$total} ".AgreementStatus::from($status)->value)->implode(', ');
 
         $this->command?->info("Acuerdos en {$campus->code}: préstamos de salón [".$byStatus(AgreementKind::RoomLoan).'], grupos compartidos ['.$byStatus(AgreementKind::SharedGroup)."], {$this->summary['direct']} grupos con cupo directo, {$suggested} salones sugeridos.");
+
+        if ($this->rejections !== []) {
+            $this->command?->info("Acuerdos en {$campus->code}: intentos rechazados por las reglas [".collect($this->rejections)->map(fn (int $total, string $phase): string => "{$phase}: {$total}")->implode(', ').'].');
+        }
+    }
+
+    /** Cuenta un intento que una Action rechazó (ValidationException); se informa al final del campus. */
+    private function rejected(string $phase): void
+    {
+        $this->rejections[$phase] = ($this->rejections[$phase] ?? 0) + 1;
+    }
+
+    /** Llave natural de un grupo (materia, grupo y estado) para que la misma semilla dé la misma demo aunque cambien los UUID. */
+    private static function groupKey(Group $group): string
+    {
+        return "{$group->subject?->code}|{$group->code}|{$group->status->value}";
+    }
+
+    /**
+     * Las sesiones en orden natural: grupo, día y hora.
+     *
+     * @param  Collection<int, GroupSession>  $sessions
+     * @param  Collection<string, Group>  $open
+     * @return Collection<int, GroupSession>
+     */
+    private function sessionsInOrder(Collection $sessions, Collection $open): Collection
+    {
+        return $sessions->sortBy(fn (GroupSession $session): string => self::groupKey($open[$session->group_id]).'|'.$session->day.'|'.$session->starts_at)->values();
     }
 
     /**
@@ -254,8 +286,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     {
         $rooms = Room::query()->where('campus_id', $campus->id)->where('is_active', true)->get()->keyBy('id');
 
-        $foreign = GroupSession::query()->whereIn('group_id', $open->keys())->where('is_active', true)->whereNotNull('room_id')
-            ->orderBy('id')->get()
+        $foreign = $this->sessionsInOrder(GroupSession::query()->whereIn('group_id', $open->keys())->where('is_active', true)->whereNotNull('room_id')->get(), $open)
             ->filter(fn (GroupSession $session): bool => ($room = $rooms->get($session->room_id)) !== null && $room->department_id !== null && $room->department_id !== $open[$session->group_id]->department_id);
 
         $seen = [];
@@ -273,6 +304,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             try {
                 $this->loans->resync($group, $rooms[$session->room_id], $session->day, $this->head(AcademicLoadPermission::AgreementRequest, $campus, $group->department_id));
             } catch (ValidationException) {
+                $this->rejected('préstamos');
+
                 continue;
             }
         }
@@ -281,7 +314,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             ->where('kind', AgreementKind::RoomLoan->value)->count();
         $created += $this->addLoans(max(0, (int) $this->ratios['loans'] - $created), $campus, $open, $rooms);
 
-        return $this->decideLoans($term, $campus);
+        return $this->decideLoans($term, $campus, $open);
     }
 
     /**
@@ -300,8 +333,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         $openDepartments = array_flip($open->pluck('department_id')->unique()->all());
         $pairUse = [];
 
-        $candidates = GroupSession::query()->whereIn('group_id', $open->keys())->where('is_active', true)
-            ->orderBy('id')->get()
+        $candidates = $this->sessionsInOrder(GroupSession::query()->whereIn('group_id', $open->keys())->where('is_active', true)->get(), $open)
             ->reject(fn (GroupSession $session): bool => $session->room_id !== null && ($rooms->get($session->room_id)?->department_id ?? $open[$session->group_id]->department_id) !== $open[$session->group_id]->department_id);
         $candidates = collect($this->random->shuffleArray($candidates->all()))
             ->sortBy(fn (GroupSession $session): int => $session->room_id === null ? 1 : 0)->values();
@@ -336,6 +368,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
 
                     break;
                 } catch (ValidationException) {
+                    $this->rejected('préstamos');
+
                     continue;
                 }
             }
@@ -347,14 +381,16 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     /**
      * Reparte los préstamos propuestos en aceptados, rechazados y cancelados; el resto se queda pendiente.
      *
+     * @param  Collection<string, Group>  $open
      * @return array<string, true> grupos con un préstamo rechazado o cancelado
      */
-    private function decideLoans(Term $term, Campus $campus): array
+    private function decideLoans(Term $term, Campus $campus, Collection $open): array
     {
         $loans = InterdepartmentalAgreement::query()
             ->where('term_id', $term->id)->where('campus_id', $campus->id)
             ->where('kind', AgreementKind::RoomLoan->value)->where('status', AgreementStatus::Proposed->value)
-            ->orderBy('id')->get();
+            ->with('room')->get()
+            ->sortBy(fn (InterdepartmentalAgreement $loan): string => (isset($open[$loan->group_id]) ? self::groupKey($open[$loan->group_id]) : $loan->group_id).'|'.$loan->day.'|'.$loan->starts_at.'|'.$loan->room?->code)->values();
 
         $decisions = $this->decisions($loans->all(), 0.40, 0.15, 0.15);
         $touched = [];
@@ -372,6 +408,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
                     default => null,
                 };
             } catch (ValidationException) {
+                $this->rejected('decisiones de préstamos');
+
                 continue;
             }
 
@@ -454,7 +492,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     private function seedSharedGroups(Term $term, Campus $campus, $usable): void
     {
         $offered = Career::query()->whereIn('id', CareerCampus::query()->where('campus_id', $campus->id)->where('is_active', true)->select('career_id'))
-            ->where('is_active', true)->get()->keyBy('id');
+            ->where('is_active', true)->orderBy('code')->get()->keyBy('id');
         $common = DB::table((new StudyPlanSubject)->getTable().' as sps')
             ->join('study_plans as sp', 'sp.id', '=', 'sps.study_plan_id')
             ->whereIn('sp.career_id', $offered->keys())
@@ -509,6 +547,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             try {
                 app(SetGroupQuotas::class)->handle($group, [$group->owner_career_id => $group->capacity - $reserved] + ($direct === null ? [] : [$direct->id => $seats]), $head);
             } catch (ValidationException) {
+                $this->rejected('cupos');
+
                 continue;
             }
 
@@ -521,6 +561,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
                 try {
                     $agreements[] = app(ProposeGroupQuota::class)->handle($group, $career, $seats, $head);
                 } catch (ValidationException) {
+                    $this->rejected('cupos');
+
                     continue;
                 }
             }
@@ -541,6 +583,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
                     default => null,
                 };
             } catch (ValidationException) {
+                $this->rejected('decisiones de grupos compartidos');
+
                 continue;
             }
         }
@@ -555,7 +599,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     private function seedSuggestedRooms(Campus $campus, $open, array $skipGroups): int
     {
         $sessions = GroupSession::query()->whereIn('group_id', $open->keys())->where('is_active', true)->whereNull('room_id')
-            ->whereNotIn('group_id', array_keys($skipGroups))->with('group')->orderBy('id')->get();
+            ->whereNotIn('group_id', array_keys($skipGroups))->get();
+        $sessions = $this->sessionsInOrder($sessions, $open);
 
         if ($sessions->isEmpty() || (float) $this->ratios['suggested_rooms'] <= 0) {
             return 0;
@@ -568,7 +613,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         $done = 0;
 
         foreach ($picked as $session) {
-            $first = collect($suggest->for($session, 30)['rooms'])->first(fn (array $row): bool => $row['state']['free']);
+            // Solo salones sin dueño o del propio departamento: un sugerido nunca pide préstamo (los pide addLoans).
+            $first = collect($suggest->for($session, 30)['rooms'])->first(fn (array $row): bool => $row['selectable'] && $row['state']['free'] && ! $row['state']['needsLoan']);
 
             if ($first === null) {
                 continue;
@@ -578,6 +624,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
                 $assign->handle($session, Room::query()->findOrFail($first['id']), $this->head(AcademicLoadPermission::AgreementRequest, $campus, $open[$session->group_id]->department_id));
                 $done++;
             } catch (ValidationException) {
+                $this->rejected('salones sugeridos');
+
                 continue;
             }
         }

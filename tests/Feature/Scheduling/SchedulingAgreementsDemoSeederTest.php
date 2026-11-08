@@ -68,25 +68,25 @@ beforeEach(function () {
     ]);
 });
 
-function seedAgreements(array $clean = []): void
+function seedSchedulingAgreements(array $clean = [], array $ratios = []): void
 {
     app()->call([new SchedulingAgreementsDemoSeeder, 'run'], [
         'profile' => 'demo',
         'campuses' => ['C2'],
-        'ratios' => ['loans' => 10, 'shared' => 8, 'direct_quota_groups' => 0, 'suggested_rooms' => 1],
+        'ratios' => [...['loans' => 10, 'shared' => 8, 'direct_quota_groups' => 0, 'suggested_rooms' => 1], ...$ratios],
         'cleanDepartments' => ['C2' => $clean],
     ]);
 }
 
-function agreementsOf(AgreementKind $kind): array
+function schedulingAgreementsByStatus(AgreementKind $kind): array
 {
     return InterdepartmentalAgreement::query()->where('kind', $kind->value)->get()->countBy(fn (InterdepartmentalAgreement $agreement): string => $agreement->status->value)->all();
 }
 
 it('siembra préstamos de salón en los cuatro estados entre el departamento que imparte y el dueño de los salones', function () {
-    seedAgreements();
+    seedSchedulingAgreements();
 
-    $loans = agreementsOf(AgreementKind::RoomLoan);
+    $loans = schedulingAgreementsByStatus(AgreementKind::RoomLoan);
 
     expect($loans)->toHaveKeys([AgreementStatus::Accepted->value, AgreementStatus::Proposed->value, AgreementStatus::Rejected->value, AgreementStatus::Cancelled->value])
         ->and(array_sum($loans))->toBe(10)
@@ -95,7 +95,7 @@ it('siembra préstamos de salón en los cuatro estados entre el departamento que
 });
 
 it('HC-10: los préstamos rechazados y cancelados dejaron la sesión sin salón; los aceptados y pendientes la conservan', function () {
-    seedAgreements();
+    seedSchedulingAgreements();
 
     $withoutRoom = InterdepartmentalAgreement::query()->where('kind', AgreementKind::RoomLoan->value)
         ->whereIn('status', [AgreementStatus::Rejected->value, AgreementStatus::Cancelled->value])->get();
@@ -108,9 +108,9 @@ it('HC-10: los préstamos rechazados y cancelados dejaron la sesión sin salón;
 });
 
 it('siembra grupos compartidos en los cuatro estados y los aceptados crearon su cupo', function () {
-    seedAgreements();
+    seedSchedulingAgreements();
 
-    $shared = agreementsOf(AgreementKind::SharedGroup);
+    $shared = schedulingAgreementsByStatus(AgreementKind::SharedGroup);
     $accepted = InterdepartmentalAgreement::query()->where('kind', AgreementKind::SharedGroup->value)->where('status', AgreementStatus::Accepted->value)->get();
     $notAccepted = InterdepartmentalAgreement::query()->where('kind', AgreementKind::SharedGroup->value)->where('status', '!=', AgreementStatus::Accepted->value)->get();
 
@@ -121,7 +121,7 @@ it('siembra grupos compartidos en los cuatro estados y los aceptados crearon su 
 });
 
 it('HC-07: ningún grupo reparte más lugares que su capacidad, y el grupo cancelado no se toca', function () {
-    seedAgreements();
+    seedSchedulingAgreements();
 
     $over = Group::query()->get()->filter(fn (Group $group): bool => GroupQuota::query()->where('group_id', $group->id)->sum('max_seats') > $group->capacity);
 
@@ -131,7 +131,7 @@ it('HC-07: ningún grupo reparte más lugares que su capacidad, y el grupo cance
 });
 
 it('asigna salones sugeridos a sesiones sin salón, de salones sin dueño', function () {
-    seedAgreements();
+    seedSchedulingAgreements();
 
     $suggested = GroupSession::query()->whereNotNull('room_id')
         ->whereHas('room', fn ($query) => $query->whereNull('department_id'))->count();
@@ -139,24 +139,38 @@ it('asigna salones sugeridos a sesiones sin salón, de salones sin dueño', func
     expect($suggested)->toBeGreaterThan(0);
 });
 
-it('no ensucia un departamento limpio: sin salones ajenos ni préstamos, aunque sí le llegan cupos', function () {
+it('no ensucia un departamento limpio: ni préstamos ni salones sugeridos, aunque una sesión ya esté en un salón ajeno', function () {
     $cleanGroup = Group::factory()->withQuota()->create([
         'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'capacity' => 40,
         'subject_id' => Subject::factory()->create(['department_id' => $this->limpio->id])->id,
     ]);
-    GroupSession::factory()->for($cleanGroup)->on(1, '15:00', '17:00')->create();
+    $roomless = GroupSession::factory()->for($cleanGroup)->on(1, '15:00', '17:00')->create();
+    $foreignRoom = Room::query()->where('department_id', $this->dueno->id)->firstOrFail();
+    GroupSession::factory()->for($cleanGroup)->on(2, '15:00', '17:00')->create(['room_id' => $foreignRoom->id]);
 
-    seedAgreements([$this->limpio->code]);
+    seedSchedulingAgreements([$this->limpio->code]);
 
-    expect(InterdepartmentalAgreement::query()->where('kind', AgreementKind::RoomLoan->value)->where('group_id', $cleanGroup->id)->exists())->toBeFalse()
-        ->and(GroupSession::query()->where('group_id', $cleanGroup->id)->whereNotNull('room_id')->exists())->toBeFalse();
+    expect(InterdepartmentalAgreement::query()->where('kind', AgreementKind::RoomLoan->value)
+        ->where(fn ($query) => $query->where('from_department_id', $this->limpio->id)->orWhere('to_department_id', $this->limpio->id))->exists())->toBeFalse()
+        ->and($roomless->fresh()->room_id)->toBeNull();
+});
+
+it('los salones sugeridos nunca piden préstamo ni rompen HC-05: sin salones libres propios, las sesiones se quedan sin salón', function () {
+    Room::query()->whereNull('department_id')->update(['is_active' => false]);
+    $building = Building::query()->firstOrFail();
+    Room::factory()->capacity(10)->create(['building_id' => $building->id, 'department_id' => null]);
+
+    seedSchedulingAgreements(ratios: ['loans' => 0, 'shared' => 0]);
+
+    expect(InterdepartmentalAgreement::query()->count())->toBe(0)
+        ->and(GroupSession::query()->whereNotNull('room_id')->count())->toBe(0);
 });
 
 it('es idempotente: una segunda corrida no agrega acuerdos', function () {
-    seedAgreements();
+    seedSchedulingAgreements();
     $before = InterdepartmentalAgreement::query()->count();
 
-    seedAgreements();
+    seedSchedulingAgreements();
 
     expect(InterdepartmentalAgreement::query()->count())->toBe($before)->and($before)->toBeGreaterThan(0);
 });
@@ -164,5 +178,5 @@ it('es idempotente: una segunda corrida no agrega acuerdos', function () {
 it('se niega a correr en producción', function () {
     app()->detectEnvironment(fn () => 'production');
 
-    expect(fn () => seedAgreements())->toThrow(RuntimeException::class);
+    expect(fn () => seedSchedulingAgreements())->toThrow(RuntimeException::class);
 });
