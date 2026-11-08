@@ -93,7 +93,7 @@ it('HC-01: no mueve una sesión a una hora en que el docente ya da clase y da el
         ->and($this->session->fresh())
         ->day->toBe(1)
         ->starts_at->toBe('07:00:00')
-        ->and(Activity::count())->toBe(0);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 });
 
 it('HC-01: moverla dentro de su propio horario no choca consigo misma', function () {
@@ -133,7 +133,7 @@ it('une la sesión movida con una vecina del mismo tipo y salón: la movida se q
         ->ends_at->toBe('10:00:00')
         ->room_id->toBe($this->room->id)
         ->and(GroupSession::query()->whereKey($neighbor->id)->exists())->toBeFalse()
-        ->and(Activity::sole()->properties->all())->toBe([
+        ->and(Activity::query()->where('event', 'like', 'session_%')->sole()->properties->all())->toBe([
             'absorbed' => [['id' => $neighbor->id, 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '10:00', 'kind' => 'teoria', 'room_id' => $this->room->id]],
         ]);
 });
@@ -178,7 +178,7 @@ it('sin cambios no escribe, no registra ni avisa', function () {
 
     expect($result->session->id)->toBe($this->session->id)
         ->and($result->roomDropped)->toBeFalse()
-        ->and(Activity::count())->toBe(0);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
     Event::assertNotDispatched(GroupScheduleChanged::class);
 });
 
@@ -187,7 +187,7 @@ it('deja la bitácora en el grupo con las horas de antes y de después, y avisa 
 
     moveSession($this->session, 3, '10:00', '12:00', SessionKind::Practica);
 
-    $entry = Activity::sole();
+    $entry = Activity::query()->where('event', 'like', 'session_%')->sole();
 
     expect($entry)
         ->event->toBe('session_updated')

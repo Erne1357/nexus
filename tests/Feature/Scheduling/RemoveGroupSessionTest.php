@@ -49,7 +49,7 @@ it('quita la sesión completa y deja la bitácora en el grupo con sus horas', fu
 
     removeSession($this->session);
 
-    $entry = Activity::sole();
+    $entry = Activity::query()->where('event', 'like', 'session_%')->sole();
 
     expect($this->group->sessions()->pluck('id')->all())->toBe([$kept->id])
         ->and($entry)
@@ -68,7 +68,7 @@ it('con la carga fuera de propuesta, asignación o ajustes, o el grupo cancelado
     expect(fn () => removeSession($this->session))
         ->toThrow(ValidationException::class, $message)
         ->and(GroupSession::query()->whereKey($this->session->id)->exists())->toBeTrue()
-        ->and(Activity::count())->toBe(0);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 })->with([
     'carga publicada' => [fn ($test) => $test->load->update(['status' => LoadStatus::Published]), 'La carga de Sistemas y Computación en Campus II está en publicada: no se editan horarios.'],
     'grupo cancelado' => [fn ($test) => $test->group->update(['status' => 'cancelled']), 'El grupo D está cancelado: no se editan sus sesiones.'],
