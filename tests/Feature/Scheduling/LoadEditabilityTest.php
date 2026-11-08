@@ -9,6 +9,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Rules\LoadEditability;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 
@@ -53,6 +54,14 @@ it('blockedReasons da el motivo de cada grupo bloqueado', function () {
     $load->update(['status' => LoadStatus::Proposed]);
 
     expect($this->rule->blockedReasons([$this->group]))->toBe([$this->group->id => null]);
+});
+
+it('traduce también el deadlock que Laravel envuelve al salir de una transacción anidada', function () {
+    $deadlock = new QueryException('pgsql', 'update ...', [], new PDOException('deadlock detected', 0));
+    $deadlock->errorInfo = ['40P01', 7, 'deadlock detected'];
+
+    expect(fn () => $this->rule->guard(fn () => throw new DeadlockException($deadlock->getMessage(), 0, $deadlock), 'status'))
+        ->toThrow(fn (ValidationException $e) => expect($e->errors()['status'])->toBe(['Otra persona está cambiando esta carga; intenta de nuevo.']));
 });
 
 it('traduce un deadlock de la base a un error de validación y deja pasar los demás errores', function () {

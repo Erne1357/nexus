@@ -55,16 +55,7 @@ final class SyncSessionLoans
     public function resync(Group $group, Room $room, int $day, User $actor, ?GroupSession $strictFor = null): LoanSyncResult
     {
         return DB::transaction(function () use ($group, $room, $day, $actor, $strictFor): LoanSyncResult {
-            $loans = InterdepartmentalAgreement::query()
-                ->where('kind', AgreementKind::RoomLoan->value)
-                ->where('term_id', $group->term_id)
-                ->where('group_id', $group->id)
-                ->where('room_id', $room->id)
-                ->where('day', $day)
-                ->live()
-                ->orderBy('starts_at')
-                ->lockForUpdate()
-                ->get();
+            $loans = $this->liveLoans($group, $room, $day);
 
             if ($room->department_id === null || $room->department_id === $group->department_id) {
                 $this->cancelAll($loans, $actor);
@@ -72,12 +63,7 @@ final class SyncSessionLoans
                 return new LoanSyncResult;
             }
 
-            $sessions = GroupSession::query()
-                ->where('group_id', $group->id)
-                ->where('room_id', $room->id)
-                ->where('day', $day)
-                ->get(['id', 'starts_at', 'ends_at'])
-                ->mapWithKeys(fn (GroupSession $session): array => [$session->id => [Minutes::of($session->starts_at), Minutes::of($session->ends_at)]]);
+            $sessions = $this->sessions($group, $room, $day);
 
             $accepted = $loans->filter(fn (InterdepartmentalAgreement $loan): bool => $loan->status === AgreementStatus::Accepted
                 && $sessions->contains(fn (array $session): bool => Minutes::overlap(...self::span($loan), ...$session)));
@@ -95,6 +81,65 @@ final class SyncSessionLoans
 
             return $this->requestAll($group, $room, $day, $gaps->reject(fn (array $gap): bool => $asked->contains([$gap[0], $gap[1]])), $actor);
         });
+    }
+
+    /**
+     * Solo cancela: los préstamos vivos del grupo en ese salón y día que ya no toca ninguna de sus sesiones (todos, si
+     * el salón no necesita préstamo). No pide nada. Lo usa ClearLoanRoom después de quitar el salón por un préstamo
+     * rechazado o cancelado, para no dejar un aceptado que aparte el salón sin sesión que lo use; los huecos de las
+     * sesiones que quedan no se piden a nombre de quien rechazó.
+     */
+    public function releaseUntouched(Group $group, Room $room, int $day, User $actor): void
+    {
+        DB::transaction(function () use ($group, $room, $day, $actor): void {
+            $loans = $this->liveLoans($group, $room, $day);
+
+            if ($room->department_id === null || $room->department_id === $group->department_id) {
+                $this->cancelAll($loans, $actor);
+
+                return;
+            }
+
+            $sessions = $this->sessions($group, $room, $day);
+
+            $this->cancelAll($loans->reject(fn (InterdepartmentalAgreement $loan): bool => $sessions->contains(
+                fn (array $session): bool => Minutes::overlap(...self::span($loan), ...$session),
+            )), $actor);
+        });
+    }
+
+    /**
+     * Los préstamos vivos del grupo en el salón y día, releídos con bloqueo.
+     *
+     * @return Collection<int, InterdepartmentalAgreement>
+     */
+    private function liveLoans(Group $group, Room $room, int $day): Collection
+    {
+        return InterdepartmentalAgreement::query()
+            ->where('kind', AgreementKind::RoomLoan->value)
+            ->where('term_id', $group->term_id)
+            ->where('group_id', $group->id)
+            ->where('room_id', $room->id)
+            ->where('day', $day)
+            ->live()
+            ->orderBy('starts_at')
+            ->lockForUpdate()
+            ->get();
+    }
+
+    /**
+     * Las sesiones del grupo en el salón y día, en minutos, por id.
+     *
+     * @return Collection<string, array{int, int}>
+     */
+    private function sessions(Group $group, Room $room, int $day): Collection
+    {
+        return GroupSession::query()
+            ->where('group_id', $group->id)
+            ->where('room_id', $room->id)
+            ->where('day', $day)
+            ->get(['id', 'starts_at', 'ends_at'])
+            ->mapWithKeys(fn (GroupSession $session): array => [$session->id => [Minutes::of($session->starts_at), Minutes::of($session->ends_at)]]);
     }
 
     /**
