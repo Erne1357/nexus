@@ -178,7 +178,7 @@ new #[Title('Mi carga')] class extends Component
     }
 
     /**
-     * Un grupo por opción del modal: clave, materia, «Lu Ju 07:00–09:00 · C1» y, si no se puede pedir, su motivo
+     * Un grupo por opción del modal: clave, materia, «Lu Ju 7:00–9:00 · C1» y, si no se puede pedir, su motivo
      * («Solicitud abierta», «Carga en Cierre»).
      *
      * @param  list<array{id: string, code: string, subject_name: string, campus_code: string, schedule: list<array{days: string, time: string}>}>  $groups

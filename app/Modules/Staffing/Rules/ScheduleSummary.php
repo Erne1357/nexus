@@ -2,9 +2,11 @@
 
 namespace App\Modules\Staffing\Rules;
 
+use App\Modules\Scheduling\Validation\Minutes;
+
 /**
  * El horario de un grupo en una línea, para la pantalla de asignación: las sesiones con las mismas horas se juntan
- * en un bloque con sus días («L–V 12:00–13:00», «Ma/Ju 09:00–11:00»); tres o más días seguidos van con guion y los
+ * en un bloque con sus días («L–V 12:00–13:00», «Ma/Ju 9:00–11:00»); tres o más días seguidos van con guion y los
  * demás con diagonal; varios bloques se separan con « · », por su primer día. También da las horas por semana. Puro.
  */
 final readonly class ScheduleSummary
@@ -51,7 +53,7 @@ final readonly class ScheduleSummary
         }
 
         return implode(' · ', array_map(
-            fn (array $block): string => self::days($block['days'])." {$block['starts_at']}–{$block['ends_at']}",
+            fn (array $block): string => self::days($block['days']).' '.Minutes::labelOf($block['starts_at']).'–'.Minutes::labelOf($block['ends_at']),
             $this->blocks,
         ));
     }
