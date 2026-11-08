@@ -79,7 +79,7 @@ describe('vista por carrera y semestre', function () {
             ->assertSee('Ana Pérez ya da Programación Web, grupo D el lunes de 10:00 a 12:00.')
             ->assertSee('SCD-1015 · D')
             ->assertSee('Corregir en el editor')
-            ->assertSee('El editor de horarios llega con la tarea 3.5.');
+            ->assertDontSee('El editor de horarios llega con la tarea 3.5.');
     });
 
     it('tocar otra vez la celda la cierra y una celda que no existe se ignora', function () {

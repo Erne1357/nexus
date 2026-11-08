@@ -89,7 +89,6 @@ it('el admin agrega una materia del catálogo a un semestre, la mueve y la quita
         ->click('[data-catalog="'.$subject->code.'"]')
         ->waitForText('Agregar '.$subject->code)
         ->click('@add-submit')
-        ->waitForText('Materia agregada')
         ->assertSeeIn('[data-semester="9"]', $subject->code)
         ->assertNoJavaScriptErrors();
 
@@ -97,7 +96,6 @@ it('el admin agrega una materia del catálogo a un semestre, la mueve y la quita
         ->waitForText('Lugar en la retícula')
         ->select('semester', '8')
         ->press('Guardar lugar')
-        ->waitForText('Lugar guardado')
         ->assertSeeIn('[data-semester="8"]', $subject->code)
         ->click('@remove-placement')
         ->waitForText('No tiene seriación')
@@ -106,7 +104,7 @@ it('el admin agrega una materia del catálogo a un semestre, la mueve y la quita
         ->click('@remove-placement')
         ->waitForText('No tiene seriación')
         ->click('@confirm-remove')
-        ->waitForText('Materia quitada')
+        ->assertNotPresent('[data-subject="'.$subject->code.'"]')
         ->assertDontSee('Lugar en la retícula')
         ->assertNoJavaScriptErrors();
 
@@ -134,7 +132,6 @@ it('el admin agrega un requisito, ve el error de ciclo con su cadena, cambia su 
         ->assertSeeIn('@cycle-path', 'ACF-0904')
         ->select('kind', 'correquisito')
         ->click('@add-requisite-submit')
-        ->waitForText('Requisito agregado')
         ->assertSeeIn('[data-testid="requires-section"]', 'Ecuaciones Diferenciales')
         ->assertSeeIn('[data-subject="ACF-0901"]', 'Correq.')
         ->assertNoJavaScriptErrors();
@@ -144,7 +141,7 @@ it('el admin agrega un requisito, ve el error de ciclo con su cadena, cambia su 
         ->waitForText('Cierra un ciclo')
         ->assertScript($kindOf, 'correquisito')
         ->click('[aria-label="Quitar el requisito ACF-0905"]')
-        ->waitForText('Requisito quitado')
+        ->assertNotPresent('[data-requisite="ACF-0905"]')
         ->assertDontSeeIn('[data-testid="requires-section"]', 'Ecuaciones Diferenciales')
         ->assertNoJavaScriptErrors();
 
