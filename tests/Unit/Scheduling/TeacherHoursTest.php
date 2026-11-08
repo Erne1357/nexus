@@ -45,7 +45,7 @@ it('HC-08: pasarse de las horas base da un choque duro con el desglose exacto', 
         ->subjectType->toBe('teacher')
         ->subjectId->toBe('T1')
         ->groupId->toBe('A')
-        ->message->toBe('Ana Pérez pasaría a 11 h de 10 (faltan 1 h).')
+        ->message->toBe('Ana Pérez suma 11 h y su límite es 10 h: se pasa por 1 h.')
         ->related->toBe([
             'base_hours' => 10,
             'external_hours' => 0,
@@ -63,7 +63,7 @@ it('HC-08: las horas externas cuentan contra el límite', function () {
     $violations = teacherHoursIn(teacherHoursBuilder(base: 12, external: 2)->build(), ValidationScope::groups('A'));
 
     expect($violations)->toHaveCount(1)
-        ->and($violations[0]->message)->toBe('Ana Pérez pasaría a 13 h de 12 (faltan 1 h).')
+        ->and($violations[0]->message)->toBe('Ana Pérez suma 13 h y su límite es 12 h: se pasa por 1 h.')
         ->and($violations[0]->related)->toMatchArray(['external_hours' => 2, 'remaining_hours' => -1, 'missing_hours' => 1]);
 });
 
@@ -87,7 +87,7 @@ it('HC-08: la tolerancia configurada sube el límite', function () {
 
     expect(teacherHoursIn($within, ValidationScope::groups('A')))->toBe([])
         ->and($violations)->toHaveCount(1)
-        ->and($violations[0]->message)->toBe('Ana Pérez pasaría a 11 h de 10 (faltan 1 h).')
+        ->and($violations[0]->message)->toBe('Ana Pérez suma 11 h y su límite es 10 h: se pasa por 1 h.')
         ->and($violations[0]->related)->toMatchArray(['base_hours' => 8, 'tolerance' => 2, 'limit' => 10]);
 });
 
