@@ -16,7 +16,9 @@ use App\Modules\Scheduling\Actions\Quotas\AcceptSharedGroup;
 use App\Modules\Scheduling\Actions\Quotas\WithdrawGroupQuotaProposal;
 use App\Modules\Scheduling\Queries\AgreementsInboxQuery;
 use App\Modules\Scheduling\Validation\Minutes;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -41,7 +43,8 @@ use Mary\Traits\Toast;
  * Al aceptar o rechazar se abre el siguiente por decidir de la lista (o el primero, si era el último); si ya no queda
  * ninguno, el panel se queda en el decidido. El jefe acepta varios a la vez con `acceptMany` (confirmado el 8 de
  * noviembre de 2026): cada uno pasa por su Action y su transacción, con su bitácora y su aviso, y uno que falla no
- * deshace los demás. Rechazar es uno por uno porque pide motivo.
+ * deshace los demás. Rechazar es uno por uno porque pide motivo. La selección vive en el navegador (`wire:model` sin
+ * `.live`) y viaja con `acceptMany`. La bandeja se lee una vez por petición.
  */
 new #[Title('Acuerdos')] class extends Component
 {
@@ -92,6 +95,9 @@ new #[Title('Acuerdos')] class extends Component
     /** @var array<string, InterdepartmentalAgreement|null> */
     protected array $found = [];
 
+    /** @var array{decide: list<array<string, mixed>>, sent: list<array<string, mixed>>, done: list<array<string, mixed>>}|null La bandeja de esta petición. */
+    protected ?array $inbox = null;
+
     public function mount(Actor $context, AgreementsInboxQuery $query): void
     {
         abort_unless(Gate::allows('viewAny', InterdepartmentalAgreement::class), 403);
@@ -109,11 +115,15 @@ new #[Title('Acuerdos')] class extends Component
     {
         $this->kind = AgreementKind::tryFrom($this->kind)?->value ?? '';
         $this->selected = [];
+        $this->bulkResult = null;
+        $this->inbox = null;
     }
 
     public function updatedSearch(): void
     {
         $this->selected = [];
+        $this->bulkResult = null;
+        $this->inbox = null;
     }
 
     /**
@@ -241,6 +251,10 @@ new #[Title('Acuerdos')] class extends Component
      * Acepta los acuerdos elegidos, uno por uno, cada uno con su Action en su propia transacción: lleva su bitácora y su
      * aviso como si se aceptara solo, y uno que falla (HC-07, un préstamo que empalma, uno que ya se decidió) no deshace
      * los demás. Antes de aceptar nada revisa cada id como `accept`: uno que no ve es 404 y uno que no decide, 403.
+     * Los acepta en el orden de la lista (del pedido más antiguo al más reciente, y por id), no en el que se eligieron,
+     * para que dos que compiten por los mismos lugares (HC-07) se resuelvan siempre igual. Un error de la base en uno
+     * (un deadlock, una restricción sin traducir) se reporta como fallido y se sigue con los demás. Los que fallan y
+     * siguen por decidir se quedan elegidos.
      */
     public function acceptMany(Actor $context, AgreementsInboxQuery $query, AcceptRoomLoan $loan, AcceptSharedGroup $shared): void
     {
@@ -250,29 +264,49 @@ new #[Title('Acuerdos')] class extends Component
             ['selected.required' => 'Elige los acuerdos que vas a aceptar.', 'selected.max' => 'Acepta hasta 200 a la vez.'],
         );
 
-        $agreements = array_map(function (string $id) use ($context, $query): InterdepartmentalAgreement {
-            $agreement = $this->find($id, $context, $query);
-            $this->authorize('decide', $agreement);
+        $agreements = collect(array_values(array_unique($this->selected)))
+            ->map(function (string $id) use ($context, $query): InterdepartmentalAgreement {
+                $agreement = $this->find($id, $context, $query);
+                $this->authorize('decide', $agreement);
 
-            return $agreement;
-        }, array_values(array_unique($this->selected)));
+                return $agreement;
+            })
+            ->sortBy([
+                fn (InterdepartmentalAgreement $a, InterdepartmentalAgreement $b): int => $a->created_at?->format('Y-m-d H:i:s.u') <=> $b->created_at?->format('Y-m-d H:i:s.u'),
+                fn (InterdepartmentalAgreement $a, InterdepartmentalAgreement $b): int => strcmp($a->getKey(), $b->getKey()),
+            ])
+            ->values();
 
         $open = $this->agreementId === '' ? null : $this->findOrNull($this->agreementId, $context, $query);
         $openRow = $open === null ? null : $query->row($open);
         $accepted = [];
         $failed = [];
 
+        $retry = [];
+
         foreach ($agreements as $agreement) {
             try {
                 $agreement->kind === AgreementKind::RoomLoan ? $loan->handle($agreement, auth()->user()) : $shared->handle($agreement, auth()->user());
                 $accepted[] = $agreement->getKey();
+
+                continue;
             } catch (ValidationException $e) {
-                $failed[] = ['label' => $this->label($query->row($agreement->fresh() ?? $agreement)), 'message' => (string) collect($e->errors())->flatten()->first()];
+                $message = (string) collect($e->errors())->flatten()->first();
+            } catch (QueryException|DeadlockException $e) {
+                report($e);
+                $message = 'No se pudo aceptar por un error de la base de datos; intenta de nuevo.';
+            }
+
+            $fresh = $agreement->fresh() ?? $agreement;
+            $failed[] = ['label' => $this->label($query->row($fresh)), 'message' => $message];
+
+            if ($fresh->status === AgreementStatus::Proposed) {
+                $retry[] = $agreement->getKey();
             }
         }
 
         $this->afterDecision($accepted);
-        $this->selected = [];
+        $this->selected = $retry;
         $this->bulkResult = ['accepted' => count($accepted), 'failed' => $failed];
 
         if ($openRow !== null && in_array($openRow['id'], $accepted, true)) {
@@ -282,19 +316,6 @@ new #[Title('Acuerdos')] class extends Component
         $failed === []
             ? $this->success('Aceptados '.count($accepted))
             : $this->warning('Aceptados '.count($accepted), count($failed) === 1 ? 'Uno no se aceptó: el motivo está arriba de la lista.' : count($failed).' no se aceptaron: los motivos están arriba de la lista.');
-    }
-
-    /**
-     * Elige todos los por decidir que se pueden aceptar de la lista filtrada, o ninguno si ya estaban todos.
-     */
-    public function toggleAll(Actor $context, AgreementsInboxQuery $query): void
-    {
-        $this->authorizeView();
-        abort_if($this->termId === null, 404);
-
-        $selectable = $this->selectable($query, $query->inbox($context, $this->term(), $this->campus(), AgreementKind::tryFrom($this->kind), $this->search)['decide']);
-
-        $this->selected = $selectable !== [] && array_diff($selectable, $this->selected) === [] ? [] : $selectable;
     }
 
     public function dismissBulkResult(): void
@@ -311,7 +332,7 @@ new #[Title('Acuerdos')] class extends Component
             return ['groups' => null];
         }
 
-        $groups = $query->inbox($context, $this->term(), $this->campus(), AgreementKind::tryFrom($this->kind), $this->search);
+        $groups = $this->inbox($context, $query);
         $blocked = $query->blocked($groups['decide']);
         $selected = $this->selectedRow($context, $query, $groups);
         $agreement = $selected === null ? null : $this->findOrNull($selected['id'], $context, $query);
@@ -330,7 +351,7 @@ new #[Title('Acuerdos')] class extends Component
             'maxComment' => AgreementRules::MAX_COMMENT_LENGTH,
             'filtered' => $this->kind !== '' || trim($this->search) !== '',
             'blocked' => $blocked,
-            'selectable' => array_values(array_diff(array_column($groups['decide'], 'id'), array_keys($blocked))),
+            'selectable' => $this->selectable($groups['decide'], $blocked),
         ];
     }
 
@@ -373,11 +394,22 @@ new #[Title('Acuerdos')] class extends Component
      * Los por decidir de una lista que se pueden aceptar: todos menos los préstamos cuyo bloque empalma.
      *
      * @param  list<array<string, mixed>>  $decide
+     * @param  array<string, mixed>  $blocked  Lo que da AgreementsInboxQuery::blocked() para esa lista.
      * @return list<string>
      */
-    private function selectable(AgreementsInboxQuery $query, array $decide): array
+    private function selectable(array $decide, array $blocked): array
     {
-        return array_values(array_diff(array_column($decide, 'id'), array_keys($query->blocked($decide))));
+        return array_values(array_diff(array_column($decide, 'id'), array_keys($blocked)));
+    }
+
+    /**
+     * La bandeja con el filtro y la búsqueda de ahora, leída una vez por petición; se suelta al decidir.
+     *
+     * @return array{decide: list<array<string, mixed>>, sent: list<array<string, mixed>>, done: list<array<string, mixed>>}
+     */
+    private function inbox(Actor $context, AgreementsInboxQuery $query): array
+    {
+        return $this->inbox ??= $query->inbox($context, $this->term(), $this->campus(), AgreementKind::tryFrom($this->kind), $this->search);
     }
 
     /**
@@ -389,7 +421,7 @@ new #[Title('Acuerdos')] class extends Component
      */
     private function openNextPending(array $decided, Actor $context, AgreementsInboxQuery $query): void
     {
-        $pending = $query->inbox($context, $this->term(), $this->campus(), AgreementKind::tryFrom($this->kind), $this->search)['decide'];
+        $pending = $this->inbox($context, $query)['decide'];
         $after = fn (array $row): bool => [$row['sortKey'], $row['id']] > [$decided['sortKey'], $decided['id']];
         $next = collect($pending)->first($after) ?? $pending[0] ?? null;
 
@@ -434,6 +466,8 @@ new #[Title('Acuerdos')] class extends Component
     private function afterDecision(array $decided): void
     {
         $this->found = [];
+        $this->inbox = null;
+        $this->bulkResult = null;
         $this->rejecting = false;
         $this->comment = '';
         $this->selected = array_values(array_diff($this->selected, $decided));

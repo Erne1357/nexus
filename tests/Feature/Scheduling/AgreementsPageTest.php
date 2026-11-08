@@ -19,6 +19,8 @@ use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -253,6 +255,15 @@ describe('decidir uno tras otro', function () {
 
         expect(substr_count($component->html(), 'se abre el cupo'))->toBe(1);
     });
+
+    it('el grupo compartido siempre dice los lugares y el dueño del grupo, aunque el grupo no tenga sesiones', function () {
+        $this->session->delete();
+
+        agreementsAs($this->jefeSc)
+            ->call('pick', $this->share->id)
+            ->assertSeeHtmlInOrder(['Lugares', '>8<', 'Dueño del grupo', 'Ingeniería Industrial'])
+            ->assertSee('El grupo todavía no tiene sesiones.');
+    });
 });
 
 describe('aceptar varios', function () {
@@ -270,7 +281,7 @@ describe('aceptar varios', function () {
             ->set('selected', [$this->loan->id, $this->share->id, $this->tooMany->id])
             ->call('acceptMany')
             ->assertHasNoErrors()
-            ->assertSet('selected', [])
+            ->assertSet('selected', [$this->tooMany->id])
             ->assertSet('bulkResult.accepted', 2)
             ->assertSeeHtml('Aceptados <span class="font-mono">2</span>')
             ->assertSeeHtml('No se aceptaron <span class="font-mono">1</span>')
@@ -308,7 +319,59 @@ describe('aceptar varios', function () {
         Event::assertNotDispatched(AgreementAccepted::class);
     });
 
-    it('cada por decidir lleva su casilla; un préstamo que empalma va deshabilitado con su motivo; el botón confirma con la cuenta', function () {
+    it('acepta del más antiguo al más reciente aunque se elijan al revés: con lugar para uno solo, gana el más antiguo (HC-07)', function () {
+        // La dueña tiene 20 de 40: caben 20 más, así que de dos de 15 entra uno.
+        $older = InterdepartmentalAgreement::factory()->sharedGroup(15)->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->subMinutes(10),
+        ]);
+        $newer = InterdepartmentalAgreement::factory()->sharedGroup(15)->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->subMinutes(5),
+        ]);
+
+        agreementsAs($this->jefeSc)->set('selected', [$newer->id, $older->id])->call('acceptMany')->assertSet('bulkResult.accepted', 1);
+
+        expect($older->fresh()->status)->toBe(AgreementStatus::Accepted)
+            ->and($newer->fresh()->status)->toBe(AgreementStatus::Proposed);
+    });
+
+    it('un error de la base en uno no corta los demás: lo reporta, sigue y lo deja elegido', function () {
+        GroupQuota::creating(function (GroupQuota $quota): void {
+            if ($quota->career_id === $this->career->id) {
+                throw new QueryException('pgsql', 'insert into "group_quotas"', [], new PDOException('SQLSTATE[XX000]: falla simulada'));
+            }
+        });
+
+        agreementsAs($this->jefeSc)
+            ->set('selected', [$this->share->id, $this->loan->id])
+            ->call('acceptMany')
+            ->assertOk()
+            ->assertSet('bulkResult.accepted', 1)
+            ->assertSet('bulkResult.failed.0.message', 'No se pudo aceptar por un error de la base de datos; intenta de nuevo.')
+            ->assertSet('selected', [$this->share->id]);
+
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Accepted)
+            ->and($this->share->fresh()->status)->toBe(AgreementStatus::Proposed);
+    });
+
+    it('el resultado se quita al decidir otro, al cancelar o al cambiar el filtro o la búsqueda', function () {
+        $component = agreementsAs($this->jefeSc)
+            ->set('selected', [$this->tooMany->id])
+            ->call('acceptMany')
+            ->assertSet('bulkResult.accepted', 0)
+            ->call('accept', $this->loan->id)
+            ->assertSet('bulkResult', null)
+            ->assertDontSeeHtml('data-testid="bulk-result"');
+
+        foreach ([fn ($page) => $page->set('search', 'SCC'), fn ($page) => $page->set('kind', 'shared_group')] as $change) {
+            $change($component->set('selected', [$this->tooMany->id])->call('acceptMany')->assertNotSet('bulkResult', null))->assertSet('bulkResult', null);
+        }
+
+        $component->call('dismissBulkResult')->assertSet('bulkResult', null);
+    });
+
+    it('cada por decidir lleva su casilla, que se elige en el navegador; un préstamo que empalma va deshabilitado con su motivo', function () {
         $this->session->delete();
         $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => Subject::factory()->create(['code' => 'ACF-0901'])->id, 'code' => '1B']);
         GroupSession::factory()->for($other)->on(1, '10:00', '12:00')->inRoom($this->room)->create();
@@ -316,19 +379,35 @@ describe('aceptar varios', function () {
         agreementsAs($this->jefeSc)
             ->assertSeeHtml('data-select="'.$this->share->id.'"')
             ->assertSeeHtml('data-select="'.$this->loan->id.'" disabled')
+            ->assertSeeHtml('wire:model="selected"')
+            ->assertDontSeeHtml('wire:model.live="selected"')
             ->assertSee('No se puede aceptar: ACF-0901 1B lo ocupa de 10:00 a 12:00 (HC-02).')
-            ->assertDontSeeHtml('data-testid="bulk-accept"')
-            ->call('toggleAll')
-            ->assertSet('selected', [$this->share->id, $this->tooMany->id])
-            ->assertSeeHtml('wire:confirm="¿Aceptar 2 acuerdos?')
+            ->assertSee('Elegir los 2 que puedes aceptar')
+            ->assertSeeHtml('data-testid="bulk-accept"')
             ->set('kind', 'room_loan')
             ->assertSet('selected', []);
     });
 
-    it('quien no decide no ve casillas ni puede elegir todos', function () {
+    it('quien no decide no ve casillas ni la barra', function () {
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
 
-        agreementsAs($subdireccion)->assertDontSeeHtml('data-select=')->call('toggleAll')->assertSet('selected', []);
+        agreementsAs($subdireccion)->assertDontSeeHtml('data-select=')->assertDontSeeHtml('data-testid="bulk-bar"');
+    });
+});
+
+describe('una sola lectura', function () {
+    it('al decidir, la bandeja se lee una sola vez en la petición', function () {
+        $component = agreementsAs($this->jefeSc);
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $component->call('accept', $this->loan->id)->assertSet('agreementId', $this->share->id);
+
+        $inboxReads = collect(DB::getQueryLog())->pluck('query')
+            ->filter(fn (string $sql): bool => str_starts_with($sql, 'select * from "interdepartmental_agreements" where "term_id"') && ! str_contains($sql, '"id" ='));
+        DB::disableQueryLog();
+
+        expect($inboxReads)->toHaveCount(1);
     });
 });
 

@@ -4,6 +4,8 @@
     de tipo; a la derecha el detalle con las acciones fijas al pie. Desde lg los dos paneles van juntos; debajo, la lista
     y el detalle van por separado y el detalle trae «Volver». Todo lo que se pinta viene de AgreementsInboxQuery.
 
+    El resultado de aceptar varios se quita solo al decidir otro, al filtrar o buscar y al empezar otra selección.
+
     `reveal()` lleva a la vista el renglón abierto dentro de la lista (al entrar con ?acuerdo= y al pasar al siguiente
     por decidir) y, después de decidir, pone el foco en el título del que sigue.
 --}}
@@ -47,7 +49,8 @@
     @else
         @if ($bulkResult !== null)
             @php($failedCount = count($bulkResult['failed']))
-            <section role="status" class="flex items-start gap-3 rounded-box border border-base-300 bg-base-100 py-3 ps-4 pe-2" data-testid="bulk-result">
+            <section role="status" class="flex items-start gap-3 rounded-box border border-base-300 bg-base-100 py-3 ps-4 pe-2" data-testid="bulk-result"
+                x-data="{ chosen: $wire.selected.length }" x-effect="const now = $wire.selected.length; if (now > 0 && chosen === 0) { $wire.dismissBulkResult() } chosen = now">
                 <x-icon :name="$failedCount === 0 ? 'o-check-circle' : 'o-exclamation-triangle'" @class(['mt-0.5 h-5 w-5 shrink-0', 'text-success' => $failedCount === 0, 'text-warning' => $failedCount > 0]) aria-hidden="true" />
                 <div class="min-w-0 flex-1">
                     <p class="font-medium">Aceptados <span class="font-mono">{{ $bulkResult['accepted'] }}</span>@if ($failedCount > 0)<span class="text-neutral"> · </span>No se aceptaron <span class="font-mono">{{ $failedCount }}</span>@endif</p>

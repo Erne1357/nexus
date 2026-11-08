@@ -112,6 +112,8 @@
                     <div><dt class="{{ $label }}">Grupo</dt><dd class="font-mono font-medium">{{ $group }}</dd>
                         @if ($placement !== null)<dd class="text-sm text-neutral">Semestre {{ $placement['semester'] }} de {{ $placement['owner'] }} · <span class="whitespace-nowrap font-mono">{{ $placement['plan'] }}</span></dd>@endif
                     </div>
+                    <div><dt class="{{ $label }}">Lugares</dt><dd class="font-mono font-medium">{{ $detail['seats'] }}</dd><dd class="text-sm text-neutral">para <span class="font-mono">{{ $detail['career']['code'] }}</span></dd></div>
+                    <div class="max-md:col-span-2"><dt class="{{ $label }}">Dueño del grupo</dt><dd class="font-medium">{{ $detail['from']['name'] }}</dd></div>
                     <div><dt class="{{ $label }}">En {{ $detail['career']['code'] }}</dt>
                         @forelse ($placement['career'] ?? [] as $place)
                             <dd class="font-medium">Semestre {{ $place['semester'] }} <span class="whitespace-nowrap font-mono text-sm font-normal text-neutral">{{ $place['plan'] }}</span></dd>
@@ -130,7 +132,7 @@
                     <h3 class="mb-1 text-sm font-bold">Horario de <span class="font-mono">{{ $group }}</span></h3>
                     <p class="text-neutral" data-testid="group-week-empty">El grupo todavía no tiene sesiones.</p>
                 @else
-                    <h3 class="mb-2 text-sm font-bold">Horario de <span class="font-mono">{{ $group }}</span> · {{ $seats }} para {{ $detail['career']['code'] }}</h3>
+                    <h3 class="mb-2 text-sm font-bold">Horario de <span class="font-mono">{{ $group }}</span></h3>
                     @include('scheduling::agreements.week')
                 @endif
             </div>

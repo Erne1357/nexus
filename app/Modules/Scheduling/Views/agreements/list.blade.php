@@ -6,17 +6,23 @@
     insignia. Pliegan con Alpine, sin ir al servidor; «Decididos» empieza plegado en pantallas angostas.
 
     Quien decide elige con la casilla de cada «Por decidir» los que acepta juntos (también al tacto: la casilla ocupa
-    todo el alto del renglón); un préstamo cuyo bloque empalma no se puede elegir y dice por qué. La barra de la
-    selección va al pie de la lista, pegada abajo en pantallas angostas.
+    todo el alto del renglón); un préstamo cuyo bloque empalma no se puede elegir y dice por qué. La selección vive en
+    el navegador (`wire:model` sin `.live`: elegir no va al servidor) y viaja con «Aceptar N»; la cuenta, «Elegir los N…»
+    y la barra al pie de la lista (pegada abajo en pantallas angostas) cambian al instante.
 --}}
 @php
     $kindLoan = \App\Modules\AcademicLoad\Enums\AgreementKind::RoomLoan;
     $blockedReason = fn (array $clash): string => $clash['rule'] === 'HC-11'
         ? "No se puede aceptar: el salón está bloqueado de {$clash['starts_at']} a {$clash['ends_at']} ({$clash['label']}, HC-11)."
         : "No se puede aceptar: {$clash['label']} lo ocupa de {$clash['starts_at']} a {$clash['ends_at']} (HC-02).";
-    $allChosen = $selectable !== [] && array_diff($selectable, $selected) === [];
 @endphp
-<div class="min-h-0 flex-1 overflow-auto max-lg:overflow-visible" data-agreements-list x-data="{ open: { decide: true, sent: true, done: window.matchMedia('(min-width:1024px)').matches } }">
+<div class="min-h-0 flex-1 overflow-auto max-lg:overflow-visible" data-agreements-list
+    x-data="{
+        open: { decide: true, sent: true, done: window.matchMedia('(min-width:1024px)').matches },
+        choosable() { return [...$root.querySelectorAll('[data-select]:not(:disabled)')].map((box) => box.value) },
+        allChosen() { const ids = this.choosable(); return ids.length > 0 && ids.every((id) => $wire.selected.includes(id)) },
+        toggleAll() { $wire.selected = this.allChosen() ? [] : this.choosable() },
+    }">
     @foreach ($labels as $key => $label)
         @php
             $rows = $groups[$key];
@@ -31,9 +37,10 @@
         <div x-show="open.{{ $key }}" data-testid="group-{{ $key }}">
             @if ($choosing && count($selectable) > 1)
                 <div class="flex min-h-11 items-center border-b border-base-300 ps-1 pe-3">
-                    <button type="button" wire:click="toggleAll" class="btn btn-ghost btn-sm max-md:h-11 max-md:min-h-11" data-testid="agreements-select-all">
-                        <x-icon :name="$allChosen ? 'o-minus-circle' : 'o-check-circle'" class="h-4 w-4" />
-                        {{ $allChosen ? 'Quitar la selección' : 'Elegir los '.count($selectable).' que puedes aceptar' }}
+                    <button type="button" x-on:click="toggleAll()" class="btn btn-ghost btn-sm max-md:h-11 max-md:min-h-11" data-testid="agreements-select-all">
+                        <x-icon name="o-check-circle" class="h-4 w-4" x-show="! allChosen()" />
+                        <x-icon name="o-minus-circle" class="h-4 w-4" x-show="allChosen()" x-cloak />
+                        <span x-text="allChosen() ? 'Quitar la selección' : 'Elegir los {{ count($selectable) }} que puedes aceptar'">Elegir los {{ count($selectable) }} que puedes aceptar</span>
                     </button>
                 </div>
             @endif
@@ -52,7 +59,7 @@
                     class="relative flex border-b border-base-300 hover:bg-base-200 has-[[aria-current=true]]:bg-base-200 has-[[aria-current=true]]:before:absolute has-[[aria-current=true]]:before:inset-y-0 has-[[aria-current=true]]:before:start-0 has-[[aria-current=true]]:before:w-[3px] has-[[aria-current=true]]:before:bg-primary">
                     @if ($choosing)
                         <label @class(['flex w-11 shrink-0 justify-center pt-3', 'cursor-pointer' => $clash === null, 'cursor-not-allowed' => $clash !== null])>
-                            <input type="checkbox" class="checkbox checkbox-sm" value="{{ $row['id'] }}" wire:model.live="selected" aria-label="Elegir {{ $name }} para aceptar"
+                            <input type="checkbox" class="checkbox checkbox-sm" value="{{ $row['id'] }}" wire:model="selected" aria-label="Elegir {{ $name }} para aceptar"
                                 @if ($clash !== null) aria-describedby="blocked-{{ $row['id'] }}" @endif data-select="{{ $row['id'] }}" @disabled($clash !== null)>
                         </label>
                     @endif
@@ -89,14 +96,21 @@
         </div>
     @endforeach
 </div>
-@if ($selected !== [])
-    @php
-        $chosen = count($selected);
-    @endphp
-    <div class="flex items-center gap-2 border-t border-base-300 bg-base-100 px-3 py-2.5 max-lg:sticky max-lg:bottom-0 max-lg:z-10" data-testid="bulk-bar">
-        <span class="me-auto text-sm"><span class="font-mono font-semibold">{{ $chosen }}</span> {{ $chosen === 1 ? 'elegido' : 'elegidos' }}</span>
-        <x-button label="Quitar" class="btn-ghost max-md:h-11 max-md:min-h-11" wire:click="$set('selected', [])" data-testid="bulk-clear" />
-        <x-button :label="'Aceptar '.$chosen" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11" wire:click="acceptMany" spinner="acceptMany"
-            wire:confirm="¿Aceptar {{ $chosen }} {{ $chosen === 1 ? 'acuerdo' : 'acuerdos' }}? Cada uno se acepta por separado, con su bitácora y su aviso; si alguno no se puede, los demás sí se aceptan." data-testid="bulk-accept" />
+@if ($groups['decide'] !== [])
+    <div class="flex items-center gap-2 border-t border-base-300 bg-base-100 px-3 py-2.5 max-lg:sticky max-lg:bottom-0 max-lg:z-10" data-testid="bulk-bar"
+        x-data="{
+            confirmText() {
+                const n = $wire.selected.length
+                return `¿Aceptar ${n} ${n === 1 ? 'acuerdo' : 'acuerdos'}? Cada uno se acepta por separado, con su bitácora y su aviso; si alguno no se puede, los demás sí se aceptan.`
+            },
+        }"
+        x-show="$wire.selected.length > 0" @if ($selected === []) x-cloak @endif>
+        <span class="me-auto text-sm"><span class="font-mono font-semibold" x-text="$wire.selected.length">{{ count($selected) }}</span> <span x-text="$wire.selected.length === 1 ? 'elegido' : 'elegidos'">{{ count($selected) === 1 ? 'elegido' : 'elegidos' }}</span></span>
+        <button type="button" class="btn btn-ghost max-md:h-11 max-md:min-h-11" x-on:click="$wire.selected = []" data-testid="bulk-clear">Quitar</button>
+        <button type="button" class="btn btn-primary max-md:h-11 max-md:min-h-11" x-on:click="if (confirm(confirmText())) $wire.acceptMany()" wire:loading.attr="disabled" wire:target="acceptMany" data-testid="bulk-accept">
+            <span class="loading loading-spinner loading-sm" wire:loading wire:target="acceptMany"></span>
+            <x-icon name="o-check" class="h-4 w-4" wire:loading.remove wire:target="acceptMany" />
+            <span x-text="'Aceptar ' + $wire.selected.length">Aceptar {{ count($selected) }}</span>
+        </button>
     </div>
 @endif
