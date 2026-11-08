@@ -10,6 +10,10 @@
             "scheduling.session.edit",
             "students.student.view"
         ],
+        "docente": [
+            "staffing.my_load.view",
+            "staffing.offer.view"
+        ],
         "jefe_departamento": [
             "academic.placement.validate",
             "academic_load.agreement.decide",
@@ -99,17 +103,15 @@
             "scheduling.schedule.view",
             "staffing.ranking.view",
             "students.student.view"
-        ],
-        "docente": [
-            "staffing.my_load.view",
-            "staffing.offer.view"
         ]
     },
     "admin_denies": [
         "catalog_validation.review.correct",
         "catalog_validation.review.flag",
         "catalog_validation.review.reopen",
-        "catalog_validation.review.validate"
+        "catalog_validation.review.validate",
+        "staffing.my_load.view",
+        "staffing.offer.view"
     ],
     "applies_to": {
         "codes=SERVICIOS-ESCOLARES": [
