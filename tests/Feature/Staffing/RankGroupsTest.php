@@ -126,6 +126,23 @@ it('HC-01: un candidato que ya da clase a esa hora en otro grupo queda marcado �
         ->and($row->breakdown['flags'])->toContain('choque');
 });
 
+it('SC-09: un candidato que quedaría con menos del traslado mínimo entre campus se marca «traslado justo» sin bajar de lugar', function () {
+    $group = ($this->group)();
+    GroupSession::factory()->for($group)->on(1, '07:00', '09:00')->create();
+    $ana = ($this->teacher)('Ana', 20);
+    ($this->teacher)('Beatriz', 10);
+    $elsewhere = Group::factory()->withTeacher($ana)->create(['term_id' => $this->term->id, 'campus_id' => Campus::factory()->create()->id]);
+    GroupSession::factory()->for($elsewhere)->on(1, '09:30', '10:30')->create();
+
+    ($this->rank)();
+
+    $flags = StaffingRanking::query()->where('group_id', $group->id)->where('teacher_id', $ana->id)->sole()->breakdown['flags'];
+
+    expect(($this->ranking)($group))->toBe(['Ana', 'Beatriz'])
+        ->and($flags)->toContain('traslado_justo')
+        ->and($flags)->not->toContain('choque');
+});
+
 it('HC-01: lee el horario de ahora aunque el validador (scoped) ya tenga una foto de antes en la misma petición', function () {
     $group = ($this->group)();
     GroupSession::factory()->for($group)->on(1, '07:00', '09:00')->create();

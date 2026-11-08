@@ -1,7 +1,7 @@
 {{--
     El grupo elegido en los dos paneles: encabezado con su clave y su materia, sus datos y su docente; las pestañas
-    «Ranking» e «Historial». Debajo de lg es una hoja a pantalla completa (entra desde la derecha) con «Grupos» para
-    volver; Esc también la cierra.
+    «Ranking» e «Historial» y, a su derecha, «Siguiente sin docente», que elige el que sigue en la lista. Debajo de lg
+    es una hoja a pantalla completa (entra desde la derecha) con «Grupos» para volver; Esc también la cierra.
 --}}
 @php($group = $row->group)
 @php($ranking = $rankings[$group->id] ?? null)
@@ -47,11 +47,14 @@
         </div>
     </header>
 
-    <div role="tablist" aria-label="Grupo {{ $group->code }}" class="tabs tabs-border flex-nowrap overflow-x-auto px-2">
-        <button type="button" role="tab" id="tab-ranking" aria-controls="panel-group" aria-selected="{{ $tab === 'ranking' ? 'true' : 'false' }}" wire:click="setTab('ranking')"
-            @class(['tab gap-1.5 whitespace-nowrap max-md:h-11', 'tab-active' => $tab === 'ranking']) data-testid="tab-ranking">Ranking <span class="badge badge-sm badge-neutral badge-soft font-mono">{{ $row->rankingSize }}</span></button>
-        <button type="button" role="tab" id="tab-history" aria-controls="panel-group" aria-selected="{{ $tab === 'historial' ? 'true' : 'false' }}" wire:click="setTab('historial')"
-            @class(['tab gap-1.5 whitespace-nowrap max-md:h-11', 'tab-active' => $tab === 'historial']) data-testid="tab-history">Historial <span class="badge badge-sm badge-neutral badge-soft font-mono">{{ count($ranking?->history ?? []) }}</span></button>
+    <div class="flex items-center gap-2 pe-2">
+        <div role="tablist" aria-label="Grupo {{ $group->code }}" class="tabs tabs-border relative min-w-0 flex-1 flex-nowrap overflow-x-auto px-2">
+            <button type="button" role="tab" id="tab-ranking" aria-controls="panel-group" aria-selected="{{ $tab === 'ranking' ? 'true' : 'false' }}" wire:click="setTab('ranking')"
+                @class(['tab gap-1.5 whitespace-nowrap max-md:h-11', 'tab-active' => $tab === 'ranking']) data-testid="tab-ranking">Ranking <span class="badge badge-sm badge-neutral badge-soft font-mono">{{ $row->rankingSize }}</span></button>
+            <button type="button" role="tab" id="tab-history" aria-controls="panel-group" aria-selected="{{ $tab === 'historial' ? 'true' : 'false' }}" wire:click="setTab('historial')"
+                @class(['tab gap-1.5 whitespace-nowrap max-md:h-11', 'tab-active' => $tab === 'historial']) data-testid="tab-history">Historial <span class="badge badge-sm badge-neutral badge-soft font-mono">{{ count($ranking?->history ?? []) }}</span></button>
+        </div>
+        @include('staffing::assign.next-button', ['from' => $group->id, 'next' => $nextWithoutTeacher[$group->id] ?? null, 'pick' => true])
     </div>
 
     <div role="tabpanel" id="panel-group" aria-labelledby="{{ $tab === 'historial' ? 'tab-history' : 'tab-ranking' }}" class="border-t border-base-300">

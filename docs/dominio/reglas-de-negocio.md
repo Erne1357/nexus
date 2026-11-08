@@ -64,6 +64,7 @@ Decisiones del 7 de noviembre de 2026 sobre el cálculo:
 - **Reglas duras al asignar** (supuesto por confirmar): HC-01, HC-08 y HC-09 bloquean la asignación aunque el jefe escriba un motivo; el motivo solo cubre HC-16.
 - **Promedio de evaluaciones** (supuesto por confirmar): es el promedio simple de todas las evaluaciones (estudiantil y departamental) de esos semestres.
 - **Un solo bloque final** (supuesto por confirmar): «sin horas», «choque» y «no disponible» (HC-09) bajan juntos al final, después de todos los demás, y dentro del bloque se ordenan con los mismos criterios.
+- **Traslado justo en el ranking** (supuesto por confirmar): el aviso de SC-09 (poco tiempo para cambiar de campus entre dos sesiones seguidas del docente) marca al candidato con «traslado justo», pero no lo baja al bloque final ni le cambia el lugar.
 - **Historial de cualquier campus** (supuesto por confirmar): cuenta los grupos de cualquier campus y de cualquier origen (Nexus o SII).
 - **Desempate final** (supuesto por confirmar): el orden alfabético no distingue acentos ni mayúsculas y, si dos nombres coinciden, decide el id del docente, para que el orden sea siempre el mismo.
 - **Ventana en verano** (supuesto por confirmar): para un periodo de verano, la ventana empieza en el Ene-Jun del mismo año.
