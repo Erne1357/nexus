@@ -63,12 +63,12 @@ describe('AZ-02: menú', function () {
     it('AZ-S16: los demás puestos ven el mismo menú que antes', function (Closure $user, array $menu) {
         expect(menuOf($user($this)))->toBe($menu);
     })->with([
-        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Inicio', 'Docentes', 'Alumnos', 'Validar catálogos', 'Bandeja del departamento', 'Solicitudes de cambio']],
-        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Inicio', 'Campus', 'Periodos', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Solicitudes de cambio']],
-        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Inicio', 'Docentes', 'Bandeja del departamento', 'Solicitudes de cambio']],
-        'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Inicio', 'Alumnos', 'Propuesta de carrera', 'Solicitudes de cambio']],
+        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Inicio', 'Docentes', 'Alumnos', 'Validar catálogos', 'Bandeja del departamento', 'Choques y avance', 'Solicitudes de cambio']],
+        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Inicio', 'Campus', 'Periodos', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Choques y avance', 'Solicitudes de cambio']],
+        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Inicio', 'Docentes', 'Bandeja del departamento', 'Choques y avance', 'Solicitudes de cambio']],
+        'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Inicio', 'Alumnos', 'Propuesta de carrera', 'Choques y avance', 'Solicitudes de cambio']],
         'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Inicio']],
-        'admin' => [fn () => User::factory()->admin()->create(), ['Inicio', 'Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Importaciones', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Solicitudes de cambio']],
+        'admin' => [fn () => User::factory()->admin()->create(), ['Inicio', 'Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Importaciones', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Choques y avance', 'Solicitudes de cambio']],
     ]);
 });
 

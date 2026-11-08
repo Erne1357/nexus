@@ -32,6 +32,8 @@ it('marca la solicitud como aplicada, con quién y cuándo, y avisa al solicitan
 });
 
 it('al aplicar la última aprobada, la carga vuelve a asignación', function () {
+    // El veto real de Scheduling (BlockStaffingWithHardConflicts) tiene sus pruebas; aquí se aísla el flujo.
+    Event::forget(LoadTransitioning::class);
     $s = changeScenario(LoadStatus::Adjusting);
     $request = requestFor($s['group'], 'approved');
 
@@ -53,6 +55,8 @@ it('con otra aprobada sin aplicar de la misma carga, se queda en ajustes', funct
 });
 
 it('una aprobada de otro departamento no retiene la carga', function () {
+    // El veto real de Scheduling (BlockStaffingWithHardConflicts) tiene sus pruebas; aquí se aísla el flujo.
+    Event::forget(LoadTransitioning::class);
     $s = changeScenario(LoadStatus::Adjusting);
     $other = changeScenario(LoadStatus::Adjusting);
     requestFor($other['group'], 'approved', ['term_id' => $s['group']->term_id, 'campus_id' => $s['group']->campus_id]);
@@ -63,6 +67,8 @@ it('una aprobada de otro departamento no retiene la carga', function () {
 });
 
 it('si Scheduling veta el regreso, la solicitud queda aplicada, la carga en ajustes y se devuelven los motivos', function () {
+    // El veto real de Scheduling (BlockStaffingWithHardConflicts) tiene sus pruebas; aquí se aísla el flujo.
+    Event::forget(LoadTransitioning::class);
     $s = changeScenario(LoadStatus::Adjusting);
     Event::listen(LoadTransitioning::class, function (LoadTransitioning $event): void {
         if ($event->to === LoadStatus::Staffing) {

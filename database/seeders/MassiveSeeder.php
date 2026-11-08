@@ -18,6 +18,7 @@ use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -76,6 +77,11 @@ class MassiveSeeder extends Seeder
         $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
 
         $this->command?->info(sprintf('Propuestas de carrera y bandejas: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $started = hrtime(true);
+        $this->callWith(SchedulingDemoSeeder::class, ['profile' => 'massive', 'campuses' => ['C1', 'C2']]);
+
+        $this->command?->info(sprintf('Horarios, docentes y salones de los grupos: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $this->call(LoginScreenDemoSeeder::class);
     }

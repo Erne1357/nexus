@@ -2,8 +2,13 @@
 
 namespace App\Modules\Scheduling;
 
+use App\Modules\AcademicLoad\Events\LoadTransitioning;
+use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Events\RoomBlockRemoved;
 use App\Modules\Facilities\Events\RoomUpdated;
@@ -16,7 +21,11 @@ use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
+use App\Modules\Scheduling\Listeners\AssignCodeOnScheduleChange;
+use App\Modules\Scheduling\Listeners\BlockStaffingWithHardConflicts;
+use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -43,6 +52,17 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         PositionChanged::class,
     ];
 
+    /**
+     * Un validador por petición o job (Octane): varias preguntas de la misma petición (una Action y el tablero, o una
+     * celda tras otra del editor) leen la foto una sola vez; quien escribe llama `forget()`.
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->scoped(ScheduleValidator::class);
+    }
+
     public function boot(): void
     {
         parent::boot();
@@ -51,9 +71,25 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
             Event::listen($event, QueueConflictRecompute::class);
         }
 
+        Event::listen(ProposalReviewAccepted::class, CreateGroupsOnPartAccepted::class);
+        Event::listen(GroupScheduleChanged::class, AssignCodeOnScheduleChange::class);
+
+        Event::listen(LoadTransitioning::class, BlockStaffingWithHardConflicts::class);
+
         if ($this->app->runningInConsole()) {
             $this->commands([RecomputeConflicts::class]);
         }
+    }
+
+    /**
+     * @return list<NavigationItem>
+     */
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
+        ];
     }
 
     /**
