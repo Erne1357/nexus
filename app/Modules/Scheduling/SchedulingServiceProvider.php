@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling;
 
+use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
@@ -21,9 +22,11 @@ use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Listeners\AssignCodeOnScheduleChange;
+use App\Modules\Scheduling\Listeners\BlockStaffingWithHardConflicts;
 use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -51,12 +54,15 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     ];
 
     /**
-     * `scoped`, nunca singleton (Octane): el editor memoriza por petición lo que ya leyó.
+     * Un validador por petición o job (Octane): varias preguntas de la misma petición (una Action y el tablero, o una
+     * celda tras otra del editor) leen la foto una sola vez; quien escribe llama `forget()`. La Query del editor también
+     * es `scoped`, nunca singleton: memoriza por petición lo que ya leyó.
      */
     public function register(): void
     {
         parent::register();
 
+        $this->app->scoped(ScheduleValidator::class);
         $this->app->scoped(ScheduleEditorQuery::class);
     }
 
@@ -71,18 +77,23 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         Event::listen(ProposalReviewAccepted::class, CreateGroupsOnPartAccepted::class);
         Event::listen(GroupScheduleChanged::class, AssignCodeOnScheduleChange::class);
 
+        Event::listen(LoadTransitioning::class, BlockStaffingWithHardConflicts::class);
+
         if ($this->app->runningInConsole()) {
             $this->commands([RecomputeConflicts::class]);
         }
     }
 
     /**
-     * «Horarios», el editor de horarios (tarea 3.5), para quien ve los horarios.
+     * «Horarios», el editor de horarios (tarea 3.5), y «Choques y avance», el tablero (3.4), para quien ve los horarios.
+     * @return list<NavigationItem>
      */
     public function navigation(): array
     {
         return [
             new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
+            new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
         ];
     }
