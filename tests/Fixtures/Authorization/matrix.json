@@ -8,7 +8,12 @@
             "scheduling.group.manage",
             "scheduling.schedule.view",
             "scheduling.session.edit",
+            "staffing.change_request.apply_schedule",
+            "staffing.change_request.request",
             "students.student.view"
+        ],
+        "docente": [
+            "staffing.change_request.request_own"
         ],
         "jefe_departamento": [
             "academic.placement.validate",
@@ -39,6 +44,9 @@
             "scheduling.room.assign",
             "scheduling.schedule.view",
             "scheduling.session.edit",
+            "staffing.change_request.apply_room",
+            "staffing.change_request.decide",
+            "staffing.change_request.view",
             "staffing.ranking.view",
             "staffing.teacher.assign",
             "students.student.view"
@@ -57,6 +65,7 @@
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
             "scheduling.schedule.view",
+            "staffing.change_request.view",
             "staffing.ranking.view",
             "staffing.teacher.assign"
         ],
@@ -96,6 +105,7 @@
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
             "scheduling.schedule.view",
+            "staffing.change_request.view",
             "staffing.ranking.view",
             "students.student.view"
         ]
@@ -164,6 +174,11 @@
             "scheduling.room.assign",
             "scheduling.schedule.view",
             "scheduling.session.edit",
+            "staffing.change_request.apply_room",
+            "staffing.change_request.apply_schedule",
+            "staffing.change_request.decide",
+            "staffing.change_request.request",
+            "staffing.change_request.view",
             "staffing.ranking.view",
             "staffing.teacher.assign",
             "students.student.view"
