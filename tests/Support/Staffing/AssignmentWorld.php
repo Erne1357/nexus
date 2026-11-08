@@ -119,6 +119,7 @@ final class AssignmentWorld
                     'qualification' => 'preferente',
                     'evaluation' => 4.5,
                     'remaining_hours' => 12,
+                    'remaining_after_hours' => 10,
                     'flags' => [],
                     'from_other_department' => false,
                     ...($breakdowns[$index] ?? []),

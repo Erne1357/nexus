@@ -6,7 +6,9 @@ use App\Modules\Faculty\Enums\QualificationLevel;
 
 /**
  * Un lugar del ranking de un grupo como lo muestra la asignación: el docente, su plaza y el desglose guardado en
- * `staffing_rankings.breakdown` (reglas-de-negocio.md, «Ranking docente (desempate)»).
+ * `staffing_rankings.breakdown` (reglas-de-negocio.md, «Ranking docente (desempate)»). `remainingHours` son las horas
+ * que le quedan al docente sin el grupo y `remainingAfterHours`, las que le quedarían con él; las dos pueden faltar
+ * (null) en renglones viejos o cuando el validador no las da.
  */
 final readonly class RankingRow
 {
@@ -27,6 +29,7 @@ final readonly class RankingRow
         public ?QualificationLevel $qualification,
         public ?float $evaluation,
         public ?int $remainingHours,
+        public ?int $remainingAfterHours,
         public array $flags,
         public bool $fromOtherDepartment,
     ) {}
@@ -52,5 +55,33 @@ final readonly class RankingRow
     public function lacksEvaluation(): bool
     {
         return $this->evaluation === null;
+    }
+
+    /**
+     * El puntaje sin ceros de sobra: «15», «9.66».
+     */
+    public function scoreLabel(): string
+    {
+        return rtrim(rtrim(number_format($this->score, 2, '.', ''), '0'), '.');
+    }
+
+    /**
+     * La evaluación con un decimal, o null si no tiene.
+     */
+    public function evaluationLabel(): ?string
+    {
+        return $this->evaluation === null ? null : number_format($this->evaluation, 1, '.', '');
+    }
+
+    /**
+     * Las horas que le quedan sin el grupo y, si se saben, con él: «12 → 7» o «12»; null si no se saben.
+     */
+    public function remainingLabel(): ?string
+    {
+        if ($this->remainingHours === null) {
+            return null;
+        }
+
+        return $this->remainingAfterHours === null ? (string) $this->remainingHours : "{$this->remainingHours} → {$this->remainingAfterHours}";
     }
 }

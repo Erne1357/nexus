@@ -70,7 +70,9 @@ it('trae los tres primeros lugares del ranking con su desglose, su plaza y si so
         $this->world->teacher('Dante Ortiz'),
     ];
     $this->world->rank($group, $teachers, [
+        0 => ['remaining_after_hours' => 7],
         1 => ['qualification' => 'apto', 'evaluation' => null, 'flags' => ['sin_evaluacion'], 'from_other_department' => true, 'remaining_hours' => null],
+        2 => ['remaining_after_hours' => null],
     ]);
 
     $row = boardOf($this->world)->groups[0];
@@ -87,15 +89,18 @@ it('trae los tres primeros lugares del ranking con su desglose, su plaza y si so
         ->qualification->toBe(QualificationLevel::Preferente)
         ->evaluation->toBe(4.5)
         ->remainingHours->toBe(12)
+        ->remainingAfterHours->toBe(7)
         ->fromOtherDepartment->toBeFalse()
         ->and($row->candidates[1])
         ->positions->toBe('Asig. 12 h')
         ->qualification->toBe(QualificationLevel::Apto)
         ->evaluation->toBeNull()
         ->remainingHours->toBeNull()
+        ->remainingAfterHours->toBeNull()
         ->fromOtherDepartment->toBeTrue()
         ->and($row->candidates[1]->lacksEvaluation())->toBeTrue()
-        ->and($row->candidates[2]->positions)->toBe('Hon.');
+        ->and($row->candidates[2]->positions)->toBe('Hon.')
+        ->and($row->candidates[2]->remainingAfterHours)->toBeNull();
 });
 
 it('trae el docente vigente con su asignación, quién lo asignó y su plaza, y cuenta los grupos con docente', function () {

@@ -115,6 +115,7 @@ final class GroupRankingQuery
         $breakdown = $ranking->breakdown ?? [];
         $evaluation = $breakdown['evaluation'] ?? null;
         $remaining = $breakdown['remaining_hours'] ?? null;
+        $remainingAfter = $breakdown['remaining_after_hours'] ?? null;
 
         return new RankingRow(
             rank: $ranking->rank,
@@ -127,6 +128,7 @@ final class GroupRankingQuery
             qualification: QualificationLevel::tryFrom((string) ($breakdown['qualification'] ?? '')),
             evaluation: is_numeric($evaluation) ? (float) $evaluation : null,
             remainingHours: is_numeric($remaining) ? (int) $remaining : null,
+            remainingAfterHours: is_numeric($remaining) && is_numeric($remainingAfter) ? (int) $remainingAfter : null,
             flags: array_values(array_map('strval', $breakdown['flags'] ?? [])),
             fromOtherDepartment: (bool) ($breakdown['from_other_department'] ?? false),
         );
