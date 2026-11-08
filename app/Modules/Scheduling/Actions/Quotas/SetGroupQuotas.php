@@ -29,9 +29,14 @@ use Illuminate\Validation\ValidationException;
  * y su acuerdo aceptado se cancela (supuesto por confirmar). Las propuestas no se tocan: se retiran con
  * WithdrawGroupQuotaProposal.
  *
- * HC-07: la suma de los cupos que quedan no pasa la capacidad; se revisa antes de escribir y también se traduce el
- * rechazo del trigger de la base. Las bajas y bajadas de lugares se escriben primero. No edita un grupo cancelado ni
- * con la carga fuera de proposed, staffing o adjusting (QuotaRules::ensureEditable).
+ * HC-07: la suma de los cupos que quedan más los lugares que apartan las propuestas vivas del grupo
+ * (QuotaRules::heldSeats; confirmado el 8 de noviembre de 2026) no pasa la capacidad: la dueña y las carreras del
+ * mismo departamento no toman lo apartado. Se revisa antes de escribir, con el grupo bloqueado, solo si el total sube:
+ * un grupo que ya se pasaba con datos de antes de la regla puede bajar o mover lugares, porque no lo empeora (supuesto
+ * por confirmar). El trigger de la base solo suma los cupos (las propuestas viven en otra tabla) y su rechazo también
+ * se traduce. Las bajas y bajadas de
+ * lugares se escriben primero. No edita un grupo cancelado ni con la carga fuera de proposed, staffing o adjusting
+ * (QuotaRules::ensureEditable).
  *
  * En una transacción, con el grupo bloqueado. Deja bitácora `quotas_updated` en el grupo (cupos antes y después) y,
  * después del commit, avisa con GroupQuotasChanged; sin cambios no escribe ni avisa.
@@ -68,7 +73,10 @@ final class SetGroupQuotas
                     ->keyBy('career_id');
 
                 $this->ensureReachable($group, $seatsByCareer, $careers, $quotas);
-                $this->rules->ensureWithinCapacity(array_sum($seatsByCareer), $group->capacity);
+
+                if (array_sum($seatsByCareer) > $quotas->sum('max_seats')) {
+                    $this->rules->ensureWithinCapacity(array_sum($seatsByCareer), $group->capacity, $this->rules->heldSeats($group));
+                }
 
                 $before = $quotas->map(fn (GroupQuota $quota): int => $quota->max_seats)->all();
 

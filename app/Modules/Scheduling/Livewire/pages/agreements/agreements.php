@@ -50,7 +50,7 @@ new #[Title('Acuerdos')] class extends Component
 {
     use Toast;
 
-    /** Cuántos acuerdos se aceptan juntos a lo más (supuesto por confirmar). */
+    /** Cuántos acuerdos se aceptan juntos a lo más (confirmado el 8 de noviembre de 2026). */
     private const int MAX_BULK = 50;
 
     /** Id del acuerdo abierto; '' abre el primero por decidir (o enviado). */
@@ -255,8 +255,9 @@ new #[Title('Acuerdos')] class extends Component
      * lleva su bitácora y su aviso como si se aceptara solo, y uno que falla no deshace los demás. Uno que el actor ya
      * no ve o ya no decide (otro departamento, otro campus, un id que no es de un acuerdo) no se acepta ni se nombra:
      * va a los que no se aceptaron como «Ya no está disponible.». Los demás se aceptan en el orden de la lista (del
-     * pedido más antiguo al más reciente, y por id), no en el que se eligieron, para que dos que compiten por los mismos
-     * lugares (HC-07) se resuelvan siempre igual. Lo que rechaza la regla se dice con su mensaje; un error de la base o
+     * pedido más antiguo al más reciente, y por id), no en el que se eligieron, para que el resultado no dependa de cómo
+     * se eligieron. Como las propuestas apartan sus lugares (HC-07), dos ya no compiten por los mismos; si datos de antes
+     * de la regla se pasan, AcceptSharedGroup no acepta ninguna de ese grupo. Lo que rechaza la regla se dice con su mensaje; un error de la base o
      * cualquier otro se reporta y se dice sin detalle. Los que fallan y siguen por decidir se quedan elegidos.
      */
     public function acceptMany(Actor $context, AgreementsInboxQuery $query, AcceptRoomLoan $loan, AcceptSharedGroup $shared): void

@@ -13,12 +13,15 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
+use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Notifications\LoanCancelled;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -73,6 +76,16 @@ function agreementsAs(User $user, array $query = []): Testable
 {
     return Livewire::withQueryParams($query)->actingAs($user)->test(AGREEMENTS);
 }
+
+it('el aviso de un préstamo cancelado abre el acuerdo cancelado al jefe del departamento dueño (confirmado el 8 de noviembre de 2026)', function () {
+    app(CancelRoomLoan::class)->handle($this->loan, $this->jefeIi);
+    $notice = NotificationMessage::fromArray($this->jefeSc->notifications()->where('type', LoanCancelled::class)->sole()->data);
+
+    agreementsAs($this->jefeSc, $notice->parameters)
+        ->assertOk()
+        ->assertSet('agreementId', $this->loan->id)
+        ->assertSee('Cancelado');
+});
 
 describe('jefe del departamento que decide', function () {
     it('ve «Por decidir» con los dos acuerdos, el detalle del primero y la semana del salón', function () {
@@ -270,10 +283,15 @@ describe('decidir uno tras otro', function () {
 describe('aceptar varios', function () {
     beforeEach(function () {
         Event::fake([AgreementAccepted::class]);
-        // Un tercer acuerdo que rompe HC-07: 20 de la dueña + 8 de ISC + 30 > 40 de capacidad.
+        // Un tercer acuerdo que rompe HC-07 en otro grupo del mismo departamento: 20 de la dueña + 30 > 40 de capacidad.
+        // Va en su propio grupo porque las propuestas apartan sus lugares: en el grupo de ISC, también impediría aceptar ISC.
         $this->tooMany = InterdepartmentalAgreement::factory()->sharedGroup(30)->create([
-            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
-            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->addMinute(),
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+            'created_at' => now()->addMinute(),
+            'group_id' => Group::factory()->withQuota(20)->create([
+                'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'code' => '3B', 'capacity' => 40,
+                'subject_id' => Subject::factory()->create(['department_id' => $this->ii->id])->id,
+            ])->id,
         ]);
     });
 
@@ -399,8 +417,8 @@ describe('aceptar varios', function () {
         expect($seconds)->toBeLessThan(20.0);
     });
 
-    it('acepta del más antiguo al más reciente aunque se elijan al revés: con lugar para uno solo, gana el más antiguo (HC-07)', function () {
-        // La dueña tiene 20 de 40: caben 20 más, así que de dos de 15 entra uno.
+    it('HC-07: dos propuestas de antes de la regla que ya no caben juntas no se aceptan hasta retirar o rechazar una (supuesto por confirmar)', function () {
+        // La dueña tiene 20 de 40 y las dos propuestas apartan 15 cada una: el grupo ya se pasa por 10.
         $older = InterdepartmentalAgreement::factory()->sharedGroup(15)->create([
             'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->subMinutes(10),
@@ -409,11 +427,16 @@ describe('aceptar varios', function () {
             'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->subMinutes(5),
         ]);
+        $this->share->update(['status' => AgreementStatus::Rejected, 'comment' => 'No.', 'decided_by' => $this->jefeSc->id, 'decided_at' => now()]);
 
-        agreementsAs($this->jefeSc)->set('selected', [$newer->id, $older->id])->call('acceptMany')->assertSet('bulkResult.accepted', 1);
-
-        expect($older->fresh()->status)->toBe(AgreementStatus::Accepted)
+        agreementsAs($this->jefeSc)->set('selected', [$newer->id, $older->id])->call('acceptMany')->assertSet('bulkResult.accepted', 0);
+        expect($older->fresh()->status)->toBe(AgreementStatus::Proposed)
             ->and($newer->fresh()->status)->toBe(AgreementStatus::Proposed);
+
+        $newer->update(['status' => AgreementStatus::Rejected, 'comment' => 'No.', 'decided_by' => $this->jefeSc->id, 'decided_at' => now()]);
+        agreementsAs($this->jefeSc)->set('selected', [$older->id])->call('acceptMany')->assertSet('bulkResult.accepted', 1);
+
+        expect($older->fresh()->status)->toBe(AgreementStatus::Accepted);
     });
 
     it('un error de la base en uno no corta los demás: lo reporta, sigue y lo deja elegido', function () {

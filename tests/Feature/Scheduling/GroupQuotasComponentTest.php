@@ -61,7 +61,7 @@ it('el jefe del departamento que imparte ve el panel con la dueña, la barra y �
         ->assertSee('Es del departamento que imparte: entra a los cupos y cuenta al «Guardar cupos».')
         ->set('newCareer', $this->foreign->id)
         ->assertSee('Proponer a Sistemas')
-        ->assertSee('Es de otro departamento: se propone en este momento al jefe de Sistemas y el cupo cuenta cuando lo acepta.')
+        ->assertSee('Es de otro departamento: se propone en este momento al jefe de Sistemas y sus lugares quedan apartados mientras decide.')
         ->assertDontSee('Los cupos los reparte');
 });
 
@@ -81,17 +81,17 @@ it('guarda los cupos, avisa y despacha quotas-saved', function () {
         ->toBe([$this->owner->id => 25, $this->sameDept->id => 10]);
 });
 
-it('proponer a otra carrera de otro departamento crea el acuerdo y la muestra «Propuesto» sin contarla', function () {
+it('proponer a otra carrera de otro departamento crea el acuerdo y la muestra «Propuesto», con sus lugares apartados en la suma', function () {
     quotasAs($this->jefe, $this->group)
         ->set('newCareer', $this->foreign->id)
         ->set('newSeats', 5)
         ->call('addCareer')
         ->assertHasNoErrors()
         ->assertDispatched('quotas-saved')
-        ->assertSee('Propuesto')
+        ->assertSee('Propuesto · aparta 5 lugares')
         ->assertSee('Espera al jefe de Sistemas')
-        ->assertSeeText('20 de 40 lugares repartidos')
-        ->assertSee('+5 propuestos');
+        ->assertSeeText('25 de 40 lugares repartidos')
+        ->assertSee('5 apartados por propuestas');
 
     expect(InterdepartmentalAgreement::query()->live()->sole()->career_id)->toBe($this->foreign->id)
         ->and(GroupQuota::query()->where('group_id', $this->group->id)->count())->toBe(1);
@@ -167,6 +167,57 @@ it('HC-07: si los lugares pasan la capacidad, el error sale junto a los cupos y 
         ->assertHasErrors('quotas');
 
     expect(GroupQuota::query()->sole()->max_seats)->toBe(20);
+});
+
+it('HC-07: los lugares que aparta una propuesta cuentan para el error y no dejan guardar (confirmado el 8 de noviembre de 2026)', function () {
+    proposedForeign($this, 15);
+
+    quotasAs($this->jefe, $this->group)
+        ->assertSee('Propuesto · aparta 15 lugares')
+        ->assertSeeText('35 de 40 lugares repartidos')
+        ->assertDontSeeHtml('data-testid="quotas-over"')
+        ->set('quotas.'.$this->owner->id, 30)
+        ->assertSeeHtml('data-testid="quotas-over"')
+        ->assertSeeText('con los que apartan las propuestas')
+        ->assertSeeText('Quita 5 lugares.')
+        ->call('save')
+        ->assertHasErrors('quotas');
+
+    expect(GroupQuota::query()->sole()->max_seats)->toBe(20);
+});
+
+it('HC-07: lo apartado son los lugares guardados de la propuesta: bajarlos en el borrador no libera nada hasta «Cambiar lugares»', function () {
+    proposedForeign($this, 15);
+
+    $component = quotasAs($this->jefe, $this->group)
+        ->set('quotas.'.$this->foreign->id, 5)
+        ->set('quotas.'.$this->owner->id, 30)
+        ->assertSeeText('45 de 40 lugares repartidos')
+        ->assertSeeText('Quita 5 lugares.')
+        ->call('save')
+        ->assertHasErrors('quotas');
+
+    $component->set('quotas.'.$this->owner->id, 20)
+        ->set('quotas.'.$this->foreign->id, 18)
+        ->assertSeeText('35 de 40 lugares repartidos')
+        ->call('changeProposal', $this->foreign->id)
+        ->assertHasNoErrors()
+        ->assertSeeText('38 de 40 lugares repartidos');
+});
+
+it('HC-07: subir en el borrador los lugares de una propuesta no cuenta hasta «Cambiar lugares», así que no impide guardar lo que sí cabe', function () {
+    proposedForeign($this, 15);
+
+    quotasAs($this->jefe, $this->group)
+        ->set('quotas.'.$this->foreign->id, 18)
+        ->set('quotas.'.$this->owner->id, 25)
+        ->assertSeeText('40 de 40 lugares repartidos')
+        ->assertDontSeeHtml('data-testid="quotas-over"')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(GroupQuota::query()->sole()->max_seats)->toBe(25)
+        ->and(InterdepartmentalAgreement::query()->live()->sole()->max_seats)->toBe(15);
 });
 
 it('valida que los lugares sean enteros de 1 en adelante', function (mixed $value) {

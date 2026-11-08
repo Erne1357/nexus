@@ -1,8 +1,9 @@
 {{--
     «Cupos por carrera» del cajón del grupo (maqueta `.impeccable/mocks/horarios/cajones.html`, estado `#grupo`):
     - La barra de lugares repartidos (`meter`) con los propuestos aparte en rayas de advertencia, y «N de M lugares
-      repartidos» en Mono; «+N propuestos · no cuentan» en insignia de advertencia.
-    - El error HC-07 cuando la suma pasa la capacidad.
+      repartidos» en Mono, que ya suma lo que apartan las propuestas; «N apartados por propuestas» en insignia de
+      advertencia (HC-07: una propuesta aparta sus lugares desde que se propone; confirmado el 8 de noviembre de 2026).
+    - El error HC-07 cuando la suma, con lo apartado, pasa la capacidad.
     - Un renglón por carrera: clave en Mono, nombre, lugares, quitar y, debajo, su estado (Dueña, Aceptado,
       Propuesto con su motivo). En celular el renglón se apila (clave y nombre, luego lugares).
     - «Agregar carrera», que dice junto a él qué pasará: una carrera del departamento que imparte entra al borrador y
@@ -25,14 +26,14 @@
 
     @php($shared = min(100, $capacity > 0 ? $counted / $capacity * 100 : 0))
     @php($pending = min(100 - $shared, $capacity > 0 ? $proposed / $capacity * 100 : 0))
-    <div class="flex h-2.5 overflow-hidden rounded-full border border-base-300 bg-base-200" role="meter" aria-valuemin="0" aria-valuemax="{{ $capacity }}" aria-valuenow="{{ $counted }}" aria-label="Lugares repartidos">
+    <div class="flex h-2.5 overflow-hidden rounded-full border border-base-300 bg-base-200" role="meter" aria-valuemin="0" aria-valuemax="{{ $capacity }}" aria-valuenow="{{ $counted + $proposed }}" aria-label="Lugares repartidos">
         <i class="block h-full {{ $over > 0 ? 'bg-error' : 'bg-primary' }}" style="width: {{ $shared }}%"></i>
         <i class="block h-full bg-warning/70" style="width: {{ $pending }}%"></i>
     </div>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <b class="font-semibold" data-testid="quotas-sum"><span class="font-mono">{{ $counted }}</span> de <span class="font-mono">{{ $capacity }}</span> lugares repartidos</b>
+        <b class="font-semibold" data-testid="quotas-sum"><span class="font-mono">{{ $counted + $proposed }}</span> de <span class="font-mono">{{ $capacity }}</span> lugares repartidos</b>
         @if ($proposed > 0)
-            <x-core::status-badge tone="warning" :label="'+'.$proposed.' propuestos · no cuentan'" />
+            <x-core::status-badge tone="warning" :label="$proposed.' apartados por propuestas'" />
         @endif
     </div>
 
@@ -40,7 +41,7 @@
     @if ($over > 0)
         <div role="alert" class="flex items-start gap-2 rounded-field border border-error/40 bg-error/10 px-3 py-2 text-sm text-error" data-testid="quotas-over">
             <x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span class="text-base-content"><b class="font-mono">HC-07</b> La suma de lugares por carrera no puede pasar la capacidad del grupo (<span class="font-mono">{{ $capacity }}</span>). Quita <span class="font-mono">{{ $over }}</span> lugares.</span>
+            <span class="text-base-content"><b class="font-mono">HC-07</b> La suma de lugares por carrera{{ $proposed > 0 ? ', con los que apartan las propuestas,' : '' }} no puede pasar la capacidad del grupo (<span class="font-mono">{{ $capacity }}</span>). Quita <span class="font-mono">{{ $over }}</span> {{ $over === 1 ? 'lugar' : 'lugares' }}.</span>
         </div>
     @endif
 
@@ -75,8 +76,8 @@
                     @elseif ($row['state'] === 'accepted')
                         <x-core::status-badge tone="success" label="Aceptado" />
                     @elseif ($proposedRow)
-                        <x-core::status-badge tone="warning" label="Propuesto" />
-                        <small>Espera al jefe de {{ $row['decides']['name'] }}. Todavía no cuenta.</small>
+                        <x-core::status-badge tone="warning" :label="'Propuesto · aparta '.$row['seats'].($row['seats'] === 1 ? ' lugar' : ' lugares')" />
+                        <small>Espera al jefe de {{ $row['decides']['name'] }}.</small>
                         @if ($row['edited'] && $canManage)
                             <button type="button" wire:click="changeProposal('{{ $row['career_id'] }}')" class="btn btn-xs btn-outline">Cambiar lugares (se propone de nuevo)</button>
                         @endif
@@ -105,7 +106,7 @@
         @error('newSeats') <p class="text-sm text-error" role="alert">{{ $message }}</p> @enderror
         <p class="flex items-start gap-2 text-sm" data-testid="quota-add-hint">
             @if ($selected && $selected['needs_agreement'])
-                <x-icon name="o-paper-airplane" class="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" /><span>Es de otro departamento: se propone en este momento al jefe de {{ $selected['department']['name'] }} y el cupo cuenta cuando lo acepta.</span>
+                <x-icon name="o-paper-airplane" class="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" /><span>Es de otro departamento: se propone en este momento al jefe de {{ $selected['department']['name'] }} y sus lugares quedan apartados mientras decide.</span>
             @elseif ($selected)
                 <x-icon name="o-pencil" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" aria-hidden="true" /><span>Es del departamento que imparte: entra a los cupos y cuenta al «Guardar cupos».</span>
             @else

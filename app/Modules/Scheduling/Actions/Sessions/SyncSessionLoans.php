@@ -40,7 +40,14 @@ use Illuminate\Validation\ValidationException;
  *   sesiones del grupo siguen la regla normal.
  *
  * Un salón sin dueño o del mismo departamento no necesita préstamo: cancela lo vivo de ese grupo, salón y día. Cada
- * préstamo cancelado o pedido deja su bitácora y su evento (los de AcademicLoad); solo pedir avisa al dueño.
+ * préstamo cancelado o pedido deja su bitácora y su evento (los de AcademicLoad); pedir y cancelar avisan al dueño,
+ * uno por préstamo y después del commit (NotifyDeciderOnAgreementRequested, NotifyOwnerOnLoanCancelled; confirmado el 8
+ * de noviembre de 2026). Un propuesto que se suelta mientras en la misma corrida se pide uno nuevo que se empalma o se
+ * pega con sus horas (alargar o mover la sesión dentro del día) es su reemplazo: se cancela con `replaced` y el dueño
+ * recibe solo el aviso del nuevo. Un aceptado que se suelta siempre avisa, y un propuesto también si lo nuevo es de
+ * otras horas (supuesto por confirmar). Como hay que cancelar antes de pedir, se decide con los huecos que se van a
+ * pedir, sin los que ya aparta el préstamo vivo de otro grupo (que RequestRoomLoan rechazaría); si otro grupo aparta el
+ * salón entre esa lectura y la petición, ese hueco no se pide y el dueño se queda sin los dos avisos.
  */
 final class SyncSessionLoans
 {
@@ -76,10 +83,14 @@ final class SyncSessionLoans
             $proposed = $loans->filter(fn (InterdepartmentalAgreement $loan): bool => $loan->status === AgreementStatus::Proposed
                 && $gaps->contains(fn (array $gap): bool => [$gap[0], $gap[1]] === self::span($loan)));
             $asked = $proposed->map(fn (InterdepartmentalAgreement $loan): array => self::span($loan));
+            $requests = $gaps->reject(fn (array $gap): bool => $asked->contains([$gap[0], $gap[1]]));
+            $replacing = $requests->reject(fn (array $gap): bool => $this->heldByOthers($group, $room, $day, $gap[0], $gap[1]));
 
-            $this->cancelAll($loans->diff($accepted)->diff($proposed), $actor);
+            foreach ($loans->diff($accepted)->diff($proposed) as $loan) {
+                $this->cancel->handle($loan, $actor, replaced: self::replacedBy($loan, $replacing));
+            }
 
-            return $this->requestAll($group, $room, $day, $gaps->reject(fn (array $gap): bool => $asked->contains([$gap[0], $gap[1]])), $actor);
+            return $this->requestAll($group, $room, $day, $requests, $actor);
         });
     }
 
@@ -150,6 +161,41 @@ final class SyncSessionLoans
         foreach ($loans as $loan) {
             $this->cancel->handle($loan, $actor);
         }
+    }
+
+    /**
+     * Si el préstamo que se suelta lo reemplaza un hueco que esta corrida va a pedir: solo uno propuesto (el aceptado
+     * siempre avisa), y solo si el hueco se empalma con sus horas o se pega a ellas.
+     *
+     * @param  Collection<int, array{int, int, bool}>  $replacing  inicio, fin y si es estricto
+     */
+    private static function replacedBy(InterdepartmentalAgreement $loan, Collection $replacing): bool
+    {
+        if ($loan->status !== AgreementStatus::Proposed) {
+            return false;
+        }
+
+        [$start, $end] = self::span($loan);
+
+        return $replacing->contains(fn (array $gap): bool => Minutes::overlap($start, $end, $gap[0], $gap[1]) || $gap[0] === $end || $gap[1] === $start);
+    }
+
+    /**
+     * Si el préstamo vivo de otro grupo ya aparta el salón en esas horas, en minutos: la misma exclusión que rechazaría
+     * la petición (`interdepartmental_agreements_room_no_overlap`: salón, periodo, día y horas).
+     */
+    private function heldByOthers(Group $group, Room $room, int $day, int $start, int $end): bool
+    {
+        return InterdepartmentalAgreement::query()
+            ->where('kind', AgreementKind::RoomLoan->value)
+            ->where('term_id', $group->term_id)
+            ->where('room_id', $room->id)
+            ->where('day', $day)
+            ->where('group_id', '!=', $group->id)
+            ->live()
+            ->where('starts_at', '<', Minutes::format($end))
+            ->where('ends_at', '>', Minutes::format($start))
+            ->exists();
     }
 
     /**

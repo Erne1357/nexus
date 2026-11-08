@@ -4,6 +4,9 @@ namespace App\Modules\Scheduling\Rules;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Rules\AgreementRules;
 use App\Modules\Scheduling\Models\Group;
 use Closure;
@@ -11,9 +14,14 @@ use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 
 /**
- * HC-07 (reglas-de-negocio.md, "Cupos por carrera"): la suma de los cupos de un grupo no pasa su capacidad. Los
- * acuerdos propuestos no cuentan hasta que se aceptan (supuesto por confirmar). Los lugares de cada cupo van de 1 a
- * 999, como los de un acuerdo.
+ * HC-07 (reglas-de-negocio.md, "Cupos por carrera"): la suma de los cupos de un grupo más los lugares que apartan sus
+ * propuestas vivas de grupo compartido no pasa su capacidad; una propuesta aparta sus lugares desde que se propone
+ * (confirmado el 8 de noviembre de 2026). Los lugares de cada cupo van de 1 a 999, como los de un acuerdo.
+ *
+ * La base solo cuida los cupos (el trigger diferible de `group_quotas`); las propuestas viven en
+ * `interdepartmental_agreements`, así que lo apartado (heldSeats) se revisa aquí, con el grupo bloqueado (FOR UPDATE)
+ * por quien llama. Toda Action que propone, acepta, retira o reparte cupos toma ese candado, así que la suma no cambia
+ * entre la lectura y el commit. Rechazar o cancelar solo libera lugares, así que no lo necesita.
  */
 final class QuotaRules
 {
@@ -22,12 +30,42 @@ final class QuotaRules
     public function __construct(private readonly LoadEditability $editability) {}
 
     /**
+     * Los cupos (`$total`) y lo que apartan las propuestas (`$held`) caben en la capacidad.
+     *
      * @throws ValidationException
      */
-    public function ensureWithinCapacity(int $total, int $capacity): void
+    public function ensureWithinCapacity(int $total, int $capacity, int $held = 0): void
     {
-        if ($total > $capacity) {
-            throw $this->overCapacity($total, $capacity);
+        if ($total + $held > $capacity) {
+            throw $this->overCapacity($total, $capacity, held: $held);
+        }
+    }
+
+    /**
+     * Los lugares que apartan las propuestas vivas (propuestas, todavía sin decidir) de grupo compartido del grupo. Las
+     * aceptadas ya son cupos y las rechazadas o canceladas no apartan nada. Se lee con el grupo ya bloqueado.
+     */
+    public function heldSeats(Group $group): int
+    {
+        return (int) InterdepartmentalAgreement::query()
+            ->where('kind', AgreementKind::SharedGroup->value)
+            ->where('group_id', $group->getKey())
+            ->where('status', AgreementStatus::Proposed->value)
+            ->sum('max_seats');
+    }
+
+    /**
+     * Al proponer: lo repartido y lo apartado por las demás propuestas (`$taken`) más los lugares de la nueva caben en
+     * la capacidad.
+     *
+     * @throws ValidationException
+     */
+    public function ensureProposalFits(int $taken, int $seats, int $capacity): void
+    {
+        if ($taken + $seats > $capacity) {
+            throw ValidationException::withMessages([
+                'max_seats' => 'HC-07: el grupo ya tiene '.$taken.' de '.$capacity.' lugares repartidos o apartados; caben '.max(0, $capacity - $taken).'.',
+            ]);
         }
     }
 
@@ -81,22 +119,44 @@ final class QuotaRules
     }
 
     /**
-     * Al aceptar un acuerdo: lo repartido más los lugares del acuerdo caben en la capacidad.
+     * Al aceptar un acuerdo: lo repartido, lo que apartan las demás propuestas (`$held`) y los lugares del acuerdo caben
+     * en la capacidad. Es una red de seguridad: como la propuesta ya apartaba sus lugares, siempre debería caber. Si no
+     * cabe, el mensaje dice cuántos lugares hay que liberar y cómo: rechazar o retirar otras propuestas (o bajar cupos)
+     * si las hay, o bajar cupos si no.
      *
      * @throws ValidationException
      */
-    public function ensureAgreementFits(int $current, int $seats, int $capacity): void
+    public function ensureAgreementFits(int $current, int $seats, int $capacity, int $held = 0): void
     {
-        if ($current + $seats > $capacity) {
-            throw ValidationException::withMessages([
-                'max_seats' => 'HC-07: el grupo ya tiene '.$current.' de '.$capacity.' lugares repartidos; caben '.max(0, $capacity - $current).'.',
-            ]);
+        $taken = $current + $held;
+        $missing = $taken + $seats - $capacity;
+
+        if ($missing <= 0) {
+            return;
         }
+
+        $places = $missing === 1 ? '1 lugar' : "{$missing} lugares";
+
+        throw ValidationException::withMessages(['max_seats' => $held > 0
+            ? "HC-07: el grupo ya tiene {$taken} de {$capacity} lugares repartidos o apartados; caben ".max(0, $capacity - $taken).". Rechaza o retira {$places} de otras propuestas (o baja cupos) para poder aceptarlo."
+            : "HC-07: el grupo ya tiene {$taken} de {$capacity} lugares repartidos; caben ".max(0, $capacity - $taken).". Baja {$places} de los cupos para poder aceptarlo.",
+        ]);
     }
 
-    public function overCapacity(int $total, int $capacity, string $key = 'quotas'): ValidationException
+    /**
+     * El error de HC-07 al repartir. Si hay lugares apartados por propuestas (`$held`), los dice y cuántos hay que quitar.
+     */
+    public function overCapacity(int $total, int $capacity, string $key = 'quotas', int $held = 0): ValidationException
     {
-        return ValidationException::withMessages([$key => "HC-07: los cupos suman {$total} y el grupo es de {$capacity} lugares."]);
+        if ($held === 0) {
+            return ValidationException::withMessages([$key => "HC-07: los cupos suman {$total} y el grupo es de {$capacity} lugares."]);
+        }
+
+        $over = $total + $held - $capacity;
+
+        return ValidationException::withMessages([
+            $key => "HC-07: los cupos suman {$total} y las propuestas apartan {$held}; el grupo es de {$capacity} lugares. Quita {$over} ".($over === 1 ? 'lugar' : 'lugares').'.',
+        ]);
     }
 
     /**

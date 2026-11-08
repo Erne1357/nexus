@@ -15,8 +15,9 @@ use Illuminate\Validation\ValidationException;
 /**
  * Quien pidió un préstamo propuesto lo cancela (relee con bloqueo y exige que siga propuesto: uno aceptado ya no se cancela aquí) (reglas-de-negocio.md, "Acuerdos entre departamentos"; supuesto por confirmar): como
  * un préstamo cancelado no aparta el salón, se quita de las sesiones del grupo que cubría (ClearLoanRoom), con bitácora
- * `room_removed_by_cancelled_loan` en el grupo y GroupScheduleChanged después del commit. Da cuántas sesiones quedaron
- * sin salón. Para un grupo compartido se usa CancelAgreement. Toma los candados como las acciones del editor: la carga
+ * `room_removed_by_cancelled_loan` en el grupo y GroupScheduleChanged después del commit; el dueño del salón recibe el
+ * aviso (NotifyOwnerOnLoanCancelled, por el AgreementCancelled de CancelAgreement; confirmado el 8 de noviembre de
+ * 2026). Da cuántas sesiones quedaron sin salón. Para un grupo compartido se usa CancelAgreement. Toma los candados como las acciones del editor: la carga
  * y el grupo antes que el acuerdo (lockGroup); un deadlock se traduce a un error claro.
  */
 final class CancelRoomLoan
