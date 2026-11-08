@@ -48,11 +48,11 @@ final class ScheduleState
      */
     public function __construct(
         public readonly string $termId,
-        private readonly array $groups = [],
-        private readonly array $sessions = [],
+        private array $groups = [],
+        private array $sessions = [],
         private readonly array $subjects = [],
         private readonly array $rooms = [],
-        private readonly array $teachers = [],
+        private array $teachers = [],
         private readonly array $blocks = [],
         private readonly array $quotas = [],
         private readonly array $loans = [],
@@ -258,7 +258,7 @@ final class ScheduleState
             $candidate->kind,
         );
 
-        return $this->copy(sessions: [...$this->sessions, $groupId => $sessions]);
+        return $this->patched($groupId, $this->groupOrFail($groupId), $sessions);
     }
 
     /**
@@ -268,7 +268,7 @@ final class ScheduleState
     {
         $group = $this->groupOrFail($groupId);
 
-        return $this->copy(groups: [...$this->groups, $groupId => $group->withTeacher($teacherId)]);
+        return $this->patched($groupId, $group->withTeacher($teacherId), $this->sessionsOf($groupId));
     }
 
     /**
@@ -284,31 +284,60 @@ final class ScheduleState
             $merged[$teacher->id] = $teacher;
         }
 
-        return $this->copy(teachers: $merged);
+        $copy = clone $this;
+        $copy->teachers = $merged;
+
+        return $copy;
     }
 
     /**
-     * @param  array<string, StateGroup>|null  $groups
-     * @param  array<string, list<StateSession>>|null  $sessions
-     * @param  array<string, StateTeacher>|null  $teachers
+     * Otra foto con un grupo cambiado (otro docente u otras sesiones): copia los índices y solo cambia las entradas de
+     * ese grupo, en lugar de reconstruirlos todos (el editor pregunta por decenas de celdas seguidas).
+     *
+     * @param  list<StateSession>  $sessions
      */
-    private function copy(?array $groups = null, ?array $sessions = null, ?array $teachers = null): self
+    private function patched(string $groupId, StateGroup $group, array $sessions): self
     {
-        return new self(
-            $this->termId,
-            $groups ?? $this->groups,
-            $sessions ?? $this->sessions,
-            $this->subjects,
-            $this->rooms,
-            $teachers ?? $this->teachers,
-            $this->blocks,
-            $this->quotas,
-            $this->loans,
-            $this->profiles,
-            $this->offerings,
-            $this->activePlans,
-            $this->settings,
-        );
+        $before = $this->groupOrFail($groupId);
+        $copy = clone $this;
+
+        if ($before->isActive) {
+            foreach ($this->sessionsOf($groupId) as $session) {
+                if ($before->teacherId !== null) {
+                    $copy->byTeacher[$before->teacherId] = self::without($copy->byTeacher[$before->teacherId] ?? [], $groupId);
+                }
+
+                if ($session->roomId !== null) {
+                    $copy->byRoom[$session->roomId] = self::without($copy->byRoom[$session->roomId] ?? [], $groupId);
+                }
+            }
+        }
+
+        $copy->groups[$groupId] = $group;
+        $copy->sessions[$groupId] = $sessions;
+
+        if ($group->isActive) {
+            foreach ($sessions as $session) {
+                if ($group->teacherId !== null) {
+                    $copy->byTeacher[$group->teacherId][] = $session;
+                }
+
+                if ($session->roomId !== null) {
+                    $copy->byRoom[$session->roomId][] = $session;
+                }
+            }
+        }
+
+        return $copy;
+    }
+
+    /**
+     * @param  list<StateSession>  $sessions
+     * @return list<StateSession>
+     */
+    private static function without(array $sessions, string $groupId): array
+    {
+        return array_values(array_filter($sessions, fn (StateSession $session): bool => $session->groupId !== $groupId));
     }
 
     private static function semesterKey(string $campusId, string $studyPlanId, int $semester): string
