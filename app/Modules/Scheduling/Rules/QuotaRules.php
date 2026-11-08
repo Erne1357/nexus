@@ -119,13 +119,19 @@ final class QuotaRules
     }
 
     /**
-     * Al aceptar un acuerdo: lo repartido más los lugares del acuerdo caben en la capacidad. Es una red de seguridad: como
-     * la propuesta ya apartaba sus lugares, siempre debería caber.
+     * Al aceptar un acuerdo: lo repartido, lo que apartan las demás propuestas (`$held`) y los lugares del acuerdo caben
+     * en la capacidad. Es una red de seguridad: como la propuesta ya apartaba sus lugares, siempre debería caber.
      *
      * @throws ValidationException
      */
-    public function ensureAgreementFits(int $current, int $seats, int $capacity): void
+    public function ensureAgreementFits(int $current, int $seats, int $capacity, int $held = 0): void
     {
+        if ($held > 0) {
+            $this->ensureProposalFits($current + $held, $seats, $capacity);
+
+            return;
+        }
+
         if ($current + $seats > $capacity) {
             throw ValidationException::withMessages([
                 'max_seats' => 'HC-07: el grupo ya tiene '.$current.' de '.$capacity.' lugares repartidos; caben '.max(0, $capacity - $current).'.',

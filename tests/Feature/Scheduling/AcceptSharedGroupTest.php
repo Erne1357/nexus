@@ -72,6 +72,26 @@ it('HC-07 (red de seguridad): no acepta si los lugares ya no caben, sin dejar na
         ->and(GroupQuota::query()->count())->toBe(1);
 });
 
+it('HC-07 (red de seguridad): al aceptar cuenta también lo que apartan las demás propuestas del grupo', function () {
+    InterdepartmentalAgreement::factory()->sharedGroup(5)->create([
+        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id,
+        'career_id' => Career::factory()->create(['department_id' => $this->otro->id])->id,
+    ]);
+    $agreement = proposedFor(8);
+
+    try {
+        app(AcceptSharedGroup::class)->handle($agreement, $this->actor);
+        $errors = null;
+    } catch (ValidationException $e) {
+        $errors = $e->errors();
+    }
+
+    expect($errors)->toBe(['max_seats' => ['HC-07: el grupo ya tiene 35 de 40 lugares repartidos o apartados; caben 5.']])
+        ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed)
+        ->and(GroupQuota::query()->count())->toBe(1);
+});
+
 it('HC-07: cabe justo en la capacidad', function () {
     expect(app(AcceptSharedGroup::class)->handle(proposedFor(10), $this->actor)->max_seats)->toBe(10);
 });

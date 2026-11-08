@@ -21,8 +21,9 @@ use Illuminate\Validation\ValidationException;
  * propuesto), revisa HC-07 con los lugares del acuerdo (sobre `max_seats`, también cuando lo dice la base) y crea el
  * cupo de la carrera con los lugares acordados. La propuesta ya apartaba sus lugares (ProposeGroupQuota y
  * SetGroupQuotas los cuentan; confirmado el 8 de noviembre de 2026), así que al aceptar siempre debería caber: la
- * revisión queda como red de seguridad, para datos que no pasaron por esas Actions. Si algo falla, el acuerdo queda
- * propuesto. Deja bitácora `quotas_updated` en el grupo y avisa con GroupQuotasChanged después
+ * revisión queda como red de seguridad, para datos que no pasaron por esas Actions, y cuenta los cupos, este acuerdo y
+ * lo que apartan las demás propuestas vivas del grupo (ya aceptado, este no está entre ellas). Si algo falla, el acuerdo
+ * queda propuesto. Deja bitácora `quotas_updated` en el grupo y avisa con GroupQuotasChanged después
  * del commit. Un deadlock se reintenta solo, hasta tres veces; si sigue, queda el mensaje de siempre («Otra persona está
  * cambiando esta carga; intenta de nuevo.»). Quién puede lo decide InterdepartmentalAgreementPolicy antes de llamarla.
  */
@@ -57,7 +58,7 @@ final class AcceptSharedGroup
                 $this->accept->handle($agreement, $actor);
 
                 $quotas = GroupQuota::query()->where('group_id', $group->id)->pluck('max_seats', 'career_id')->all();
-                $this->rules->ensureAgreementFits(array_sum($quotas), $agreement->max_seats, $group->capacity);
+                $this->rules->ensureAgreementFits(array_sum($quotas), $agreement->max_seats, $group->capacity, $this->rules->heldSeats($group));
 
                 $quota = GroupQuota::query()->create([
                     'group_id' => $group->id,
