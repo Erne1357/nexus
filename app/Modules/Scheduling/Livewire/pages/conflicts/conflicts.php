@@ -85,7 +85,7 @@ new #[Title('Choques y avance')] class extends Component
             'summary' => $board->summary($statuses),
             'careers' => $careers,
             'careerId' => $careerId,
-            'careerCount' => $careerId === null ? null : BoardCount::of($statuses->where('careerId', $careerId)),
+            'careerCount' => $careerId === null ? null : BoardCount::of($statuses->filter(fn (GroupBoardStatus $status): bool => $status->countsFor($careerId))),
             'grid' => $grid,
             'cellPlan' => $cellPlan,
             'cellSemester' => $cellSemester,
@@ -217,8 +217,7 @@ new #[Title('Choques y avance')] class extends Component
      */
     private function inCell(Collection $statuses, string $careerId, string $planId, int $semester): Collection
     {
-        return $statuses->filter(fn (GroupBoardStatus $status): bool => $status->careerId === $careerId
-            && $status->studyPlanId === $planId && $status->semester === $semester);
+        return $statuses->filter(fn (GroupBoardStatus $status): bool => $status->placedIn($careerId, $planId, $semester));
     }
 
     /**
