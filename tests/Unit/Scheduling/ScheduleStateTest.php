@@ -72,6 +72,7 @@ it('sin perfil cargado usa el de omisión y nombra los grupos con su materia', f
 it('las horas se comparan en minutos y dos horas contiguas no se empalman', function () {
     expect(Minutes::of('07:30:00'))->toBe(450)
         ->and(Minutes::format(450))->toBe('07:30')
+        ->and(Minutes::clock('07:30:00'))->toBe('07:30')
         ->and(Minutes::dayName(6))->toBe('sábado')
         ->and(Minutes::overlap(420, 540, 540, 600))->toBeFalse()
         ->and(Minutes::overlap(420, 540, 480, 600))->toBeTrue();
