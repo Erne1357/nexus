@@ -68,6 +68,9 @@ Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
 - Todo grupo tiene al menos un cupo: el de su carrera dueña (`is_owner`).
 - Al aceptar un acuerdo de grupo compartido se crea el cupo de la otra carrera con el máximo acordado.
 - El coordinador de cada carrera ve el grupo en la retícula de su carrera con el cupo que le corresponde.
+- Repartir los cupos (tarea 3.6, `SetGroupQuotas`) es del jefe del departamento que imparte el grupo. La dueña y las carreras de su mismo departamento se crean, cambian y quitan directo; la carrera de otro departamento se **propone** (acuerdo, «Acuerdos entre departamentos») y el grupo queda con el cupo «Propuesto» hasta que su jefe lo acepta (`AcceptSharedGroup`). La carrera dueña no se quita y todo cupo lleva de 1 a 999 lugares.
+- HC-07: la suma de los cupos del grupo no pasa su capacidad. Los propuestos no cuentan hasta aceptarse (supuesto por confirmar); al aceptar se revisa otra vez con los lugares del acuerdo, y si ya no caben el acuerdo queda propuesto y el mensaje dice cuántos lugares caben (supuesto por confirmar).
+- Una carrera de otro departamento que ya tiene cupo aceptado cambia sus lugares directo, sin nuevo acuerdo (supuesto por confirmar). Quitar el cupo de otra carrera lo borra y cancela su acuerdo; si deja de venir un propuesto, el acuerdo se cancela; si cambian los lugares de un propuesto, se cancela y se propone de nuevo con los nuevos (supuesto por confirmar).
 - R3: la inscripción descuenta del cupo de la carrera del alumno; si se agota, lista de espera, aunque el grupo tenga lugares de otra carrera.
 
 ## Acuerdos entre departamentos

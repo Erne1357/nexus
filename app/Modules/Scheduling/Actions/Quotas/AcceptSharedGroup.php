@@ -1,0 +1,74 @@
+<?php
+
+namespace App\Modules\Scheduling\Actions\Quotas;
+
+use App\Modules\AcademicLoad\Actions\Agreements\AcceptAgreement;
+use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\Core\Models\User;
+use App\Modules\Scheduling\Events\GroupQuotasChanged;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
+use App\Modules\Scheduling\Rules\QuotaRules;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * El jefe de la carrera de otro departamento acepta el cupo que le propusieron en un grupo (reglas-de-negocio.md,
+ * "Cupos por carrera" y "Acuerdos entre departamentos"; HC-07). AcademicLoad no ve grupos: esta Action orquesta
+ * AcceptAgreement y el cupo en una misma transacción, con el grupo bloqueado. Acepta el acuerdo (que exige que siga
+ * propuesto), revisa HC-07 con los lugares del acuerdo (sobre `max_seats`; al aceptar se revisa otra vez porque los
+ * propuestos no contaban; supuesto por confirmar) y crea el cupo de la carrera con los lugares acordados. Si algo
+ * falla, el acuerdo queda propuesto. Deja bitácora `quotas_updated` en el grupo y avisa con GroupQuotasChanged después
+ * del commit. Quién puede lo decide InterdepartmentalAgreementPolicy antes de llamarla.
+ */
+final class AcceptSharedGroup
+{
+    public function __construct(
+        private readonly QuotaRules $rules,
+        private readonly AcceptAgreement $accept,
+    ) {}
+
+    /**
+     * @throws ValidationException
+     */
+    public function handle(InterdepartmentalAgreement $agreement, User $actor): GroupQuota
+    {
+        if ($agreement->kind !== AgreementKind::SharedGroup) {
+            throw ValidationException::withMessages(['kind' => 'Este acuerdo no es de un cupo en un grupo.']);
+        }
+
+        try {
+            return DB::transaction(function () use ($agreement, $actor): GroupQuota {
+                $group = Group::query()->lockForUpdate()->findOrFail($agreement->group_id);
+
+                $this->accept->handle($agreement, $actor);
+
+                $quotas = GroupQuota::query()->where('group_id', $group->id)->pluck('max_seats', 'career_id')->all();
+                $this->rules->ensureAgreementFits(array_sum($quotas), $agreement->max_seats, $group->capacity);
+
+                $quota = GroupQuota::query()->create([
+                    'group_id' => $group->id,
+                    'career_id' => $agreement->career_id,
+                    'max_seats' => $agreement->max_seats,
+                    'is_owner' => false,
+                ]);
+
+                activity()
+                    ->performedOn($group)
+                    ->causedBy($actor)
+                    ->event('quotas_updated')
+                    ->withChanges(['old' => ['quotas' => $quotas], 'attributes' => ['quotas' => $quotas + [$quota->career_id => $quota->max_seats]]])
+                    ->withProperties(['agreement_id' => $agreement->id])
+                    ->log('Aceptó el cupo de una carrera de otro departamento en el grupo');
+
+                GroupQuotasChanged::dispatch($group);
+
+                return $quota;
+            });
+        } catch (QueryException $e) {
+            throw $this->rules->fromDatabase($e) ?? $e;
+        }
+    }
+}
