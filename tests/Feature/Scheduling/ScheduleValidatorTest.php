@@ -6,6 +6,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -141,6 +142,20 @@ it('checkTeacher solo corre las reglas del docente', function () {
 
     expect($this->validator->validateGroup($group)->forRule('HC-02'))->not->toBe([])
         ->and($this->validator->checkTeacher($group, $this->teacher)->forRule('HC-02'))->toBe([]);
+});
+
+it('checkTeacher avisa del traslado justo entre campus (SC-09) como regla blanda', function () {
+    $group = validatorGroup();
+    GroupSession::factory()->for($group)->on(3, '09:30', '11:00')->create();
+    $elsewhere = Group::factory()->create(['term_id' => $this->term->id, 'teacher_id' => $this->teacher->id]);
+    GroupSession::factory()->for($elsewhere)->on(3, '07:00', '09:00')->create();
+
+    $result = $this->validator->checkTeacher($group, $this->teacher);
+
+    expect($result->forRule('SC-09'))->toHaveCount(1)
+        ->and($result->forRule('SC-09')[0]->related)->toMatchArray(['free_minutes' => 30, 'other_group_id' => $elsewhere->id])
+        ->and($result->forRule('SC-09')[0]->severity)->toBe(ConflictSeverity::Soft)
+        ->and($result->forRule('SC-09')[0]->message)->toContain("a {$this->campus->code} (09:30)");
 });
 
 it('teacherHours da a cada candidato sus horas sin el grupo y con él', function () {

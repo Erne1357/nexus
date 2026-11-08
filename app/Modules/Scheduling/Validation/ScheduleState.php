@@ -45,6 +45,7 @@ final class ScheduleState
      * @param  array<string, true>  $offerings  llaves «carrera|campus» de las carreras ofrecidas
      * @param  array<string, true>  $activePlans  ids de los planes activos
      * @param  array<string, mixed>  $settings  parámetros (`staffing.extra_hours_tolerance`…)
+     * @param  array<string, string>  $campusCodes  clave de cada campus, por id (para los mensajes)
      */
     public function __construct(
         public readonly string $termId,
@@ -60,6 +61,7 @@ final class ScheduleState
         private readonly array $offerings = [],
         private readonly array $activePlans = [],
         private readonly array $settings = [],
+        private readonly array $campusCodes = [],
     ) {
         foreach ($this->groups as $group) {
             if (! $group->isActive) {
@@ -234,6 +236,14 @@ final class ScheduleState
     public function setting(string $key, mixed $default = null): mixed
     {
         return $this->settings[$key] ?? $default;
+    }
+
+    /**
+     * La clave del campus para los mensajes; sin clave cargada, su id.
+     */
+    public function campusCode(string $campusId): string
+    {
+        return $this->campusCodes[$campusId] ?? $campusId;
     }
 
     /**
