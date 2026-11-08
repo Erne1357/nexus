@@ -16,7 +16,7 @@ use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
-use App\Modules\Scheduling\Rules\SessionRules;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Support\WeekGrid;
 use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -61,7 +61,7 @@ final class ScheduleEditorQuery
     public function __construct(
         private readonly PlanSemestersQuery $navigation,
         private readonly ScheduleValidator $validator,
-        private readonly SessionRules $rules,
+        private readonly LoadEditability $editability,
         private readonly TeacherScheduleQuery $teacherSchedules,
         private readonly RoomScheduleQuery $roomSchedules,
     ) {}
@@ -270,7 +270,7 @@ final class ScheduleEditorQuery
         $violations = $this->validator->validateGroup($group)->violations();
         $mine = array_values(array_filter($violations, fn (Violation $violation): bool => ($violation->related['session_id'] ?? null) === $session->id));
         $groupWide = array_values(array_filter($violations, fn (Violation $violation): bool => ! isset($violation->related['session_id'])));
-        $blocked = $this->rules->editBlockedReasons([$group])[$group->id];
+        $blocked = $this->editability->blockedReasons([$group])[$group->id];
         $grid = WeekGrid::of($campus->profile);
         $department = $group->subject->department?->name ?? $group->subject->department?->code;
 
@@ -352,7 +352,7 @@ final class ScheduleEditorQuery
             return [...$empty, 'career' => $career, 'message' => "{$career->code} no tiene retículas activas."];
         }
 
-        $plan = $this->navigation->planOrFail($career, $selection['plan'] !== '' ? $selection['plan'] : $plans[0]['id']);
+        $plan = $this->navigation->planOrFail($career, $selection['plan'] !== '' ? $selection['plan'] : $plans[0]['id'], $term, $campus);
         $semesters = $this->navigation->semesters($plan, $term, $campus);
         $numbers = array_column($semesters, 'semester');
         $semester = in_array((int) $selection['semester'], $numbers, true) ? (int) $selection['semester']

@@ -199,7 +199,7 @@ describe('coordinador de la carrera dueña', function () {
         $elsewhere = editorGroup(editorSubject('ACF-0901', 'Cálculo Diferencial', $this->cb, theory: 4), 'V', ['semester' => 1]);
 
         editorAs($this->coordinator)->call('pick', $this->calcGroup->id)
-            ->call('pick', $elsewhere->id, false)->assertNotFound();
+            ->call('pick', $elsewhere->id, false)->assertForbidden();
 
         editorAs($this->coordinator)->call('pick', $this->calcGroup->id)->assertSet('groupId', $this->calcGroup->id);
     });
@@ -212,6 +212,17 @@ describe('coordinador de la carrera dueña', function () {
 
         expect($eight)->not->toBeNull()
             ->and(textOf($list))->toContain('AED-1026 · B');
+    });
+
+    it('una retícula inactiva con grupos en el periodo sale en el segmentado como «Inactiva» y se abre', function () {
+        $retired = StudyPlan::factory()->inactive()->create(['career_id' => $this->isc->id, 'code' => 'ISIC-1993-001', 'is_current' => false]);
+        editorGroup(editorSubject('ACF-0902', 'Cálculo Integral', $this->cb, theory: 4), 'R', ['study_plan_id' => $retired->id, 'semester' => 2]);
+
+        $page = editorAs($this->coordinator);
+
+        expect(textOf(domOf($page)->querySelector('[data-testid="plan-ISIC-1993-001"]')))->toContain('Inactiva', 'Prioridad');
+
+        $page->call('choosePlan', $retired->id)->assertOk()->assertSet('semester', '2')->assertSee('ACF-0902 · R');
     });
 
     it('avisa de la retícula vieja con grupos sin acomodar y la abre con «Ir»', function () {
@@ -430,8 +441,9 @@ describe('contexto', function () {
 });
 
 it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, y no crecen con los grupos del semestre', function () {
-    // El recálculo del tablero de choques corre en la cola, no en la petición del editor. Cada llamada es una petición
-    // nueva: la Query del editor es `scoped` y memoriza por petición.
+    // El recálculo del tablero de choques corre en la cola, no en la petición del editor (colocar sí incluye la clave
+    // del grupo, AssignCodeOnScheduleChange). Cada llamada es una petición nueva: la Query del editor es `scoped` y
+    // memoriza por petición.
     Queue::fake([RecomputeScheduleConflicts::class]);
     session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
     $this->actingAs($this->coordinator);
@@ -470,7 +482,7 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
     expect($many)->toBe($few)
         ->and($many)->toBeLessThanOrEqual(31)
         ->and($pick)->toBeLessThanOrEqual(33)
-        ->and($place)->toBeLessThanOrEqual(68)
+        ->and($place)->toBeLessThanOrEqual(75)
         ->and($openSession)->toBeLessThanOrEqual(26)
         ->and($openGroup)->toBeLessThanOrEqual(15);
 });

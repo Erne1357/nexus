@@ -31,7 +31,7 @@ use Mary\Traits\Toast;
  * pintar. Cambiar de día en celular, «Ver» de un choque y plegar la bandeja son del navegador (`scheduleEditor`).
  *
  * Entra quien ve los horarios (SchedulingPermission::ScheduleView); lo que llega por la URL pasa por careerOrFail y
- * planOrFail. Elegir un grupo pide verlo (ScheduleEditorQuery::sees) y que sea del semestre; colocar, editSessions.
+ * planOrFail. Elegir un grupo pide que el semestre lo muestre; colocar, editSessions.
  * La URL guarda la vista: `?carrera=`, `?reticula=`, `?semestre=`, `?grupo=` (el elegido; al entrar abre la carrera,
  * retícula y semestre desde donde el usuario lo ve, como lo usan el tablero de choques y las solicitudes de cambio),
  * `?vista=semestre|docente|salon`, `?docente=`, `?salon=` y `?dia=` (el día de la lista en celular).
@@ -130,14 +130,14 @@ new #[Title('Horarios')] class extends Component
 
     /**
      * Elige un grupo del semestre para pintar dónde cabe; elegirlo otra vez desde la bandeja lo suelta (`$toggle`).
-     * Un grupo de otro semestre o carrera no se elige: la URL nunca lleva un grupo ajeno.
+     * Se elige lo que el semestre muestra (SemesterBoardQuery: los grupos que el actor ve y los de contexto, de solo
+     * lectura); uno de otro semestre o carrera da 403 y la URL nunca lleva un grupo ajeno.
      */
     public function pick(string $groupId, bool $toggle = true): void
     {
         [$term, $campus, $editor, $context] = $this->context();
         $group = $editor->groupOrFail($term, $campus, $groupId);
-        abort_unless($editor->sees($context, $term, $campus, $group), 403);
-        abort_unless($editor->inSemester($context, $term, $campus, $this->selection(), $group->id), 404);
+        abort_unless($editor->inSemester($context, $term, $campus, $this->selection(), $group->id), 403);
 
         $this->groupId = $toggle && $this->groupId === $group->id ? '' : $group->id;
         $this->view = 'semestre';

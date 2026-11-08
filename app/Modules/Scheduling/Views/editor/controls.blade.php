@@ -1,6 +1,6 @@
 {{--
     Selectores del editor de horarios: Carrera; Retícula, un segmentado con la vigente («Vigente») y cada vieja
-    («Prioridad» y cuántos grupos tiene sin acomodar); Semestre («Semestre 3 · 4 sin acomodar»); el docente o el salón
+    («Prioridad» y cuántos grupos tiene sin acomodar; «Inactiva» si el plan ya no está activo pero tiene grupos); Semestre («Semestre 3 · 4 sin acomodar»); el docente o el salón
     en esas vistas, y «Ver por». Debajo de 768 px cada control ocupa el ancho.
 --}}
 @php
@@ -24,6 +24,9 @@
                 @foreach ($plans as $row)
                     <button type="button" wire:click="choosePlan('{{ $row['id'] }}')" aria-pressed="{{ $row['id'] === $plan->id ? 'true' : 'false' }}" @class([$segment, 'max-md:justify-start']) data-testid="plan-{{ $row['code'] }}">
                         <span class="font-mono">{{ $row['code'] }}</span>
+                        @if (! ($row['is_active'] ?? true))
+                            <x-core::status-badge tone="neutral" label="Inactiva" />
+                        @endif
                         @if ($row['is_current'])
                             <x-core::status-badge tone="success" label="Vigente" />
                         @else
