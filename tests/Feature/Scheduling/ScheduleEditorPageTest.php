@@ -384,6 +384,38 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSet('teacherId', $teacher->id);
     });
 
+    it('«Ver por» desde un grupo elegido muestra a su docente y el salón de su primera sesión con salón, y al volver sigue elegido', function () {
+        $building = Building::factory()->create(['campus_id' => $this->campus->id]);
+        $first = Room::factory()->create(['code' => 'A-1', 'building_id' => $building->id]);
+        $own = Room::factory()->create(['code' => 'B-9', 'building_id' => $building->id]);
+        $this->calcGroup->update(['teacher_id' => Teacher::factory()->create(['name' => 'Ana Pérez'])->id]);
+        $this->dataGroup->update(['teacher_id' => ($zoe = Teacher::factory()->create(['name' => 'Zoé Ruiz']))->id]);
+        GroupSession::factory()->for($this->calcGroup)->inRoom($first)->on(1, '07:00', '09:00')->create();
+        GroupSession::factory()->for($this->dataGroup)->on(1, '09:00', '10:00')->create();
+        GroupSession::factory()->for($this->dataGroup)->inRoom($own)->on(3, '09:00', '11:00')->create();
+        $barOf = fn (Testable $page): string => textOf(domOf($page)->querySelector('[data-testid=person-bar]'));
+
+        $page = editorAs($this->coordinator)->call('pick', $this->dataGroup->id)->call('setView', 'docente')->assertSet('teacherId', $zoe->id);
+        expect($barOf($page))->toContain('Zoé Ruiz');
+
+        $page->call('setView', 'salon')->assertSet('roomId', $own->id);
+        expect($barOf($page))->toContain('B-9');
+
+        $page->call('setView', 'semestre')->assertSet('groupId', $this->dataGroup->id)->assertSeeHtml('data-testid="selection-bar"');
+    });
+
+    it('«Ver por» desde un grupo sin docente ni salón muestra al primero de la lista', function () {
+        $building = Building::factory()->create(['campus_id' => $this->campus->id]);
+        $room = Room::factory()->create(['code' => 'A-1', 'building_id' => $building->id]);
+        $this->calcGroup->update(['teacher_id' => ($ana = Teacher::factory()->create(['name' => 'Ana Pérez']))->id]);
+        GroupSession::factory()->for($this->calcGroup)->inRoom($room)->on(1, '07:00', '09:00')->create();
+        GroupSession::factory()->for($this->dataGroup)->on(1, '09:00', '10:00')->create();
+
+        editorAs($this->coordinator)->call('pick', $this->dataGroup->id)
+            ->call('setView', 'docente')->assertSet('teacherId', $ana->id)
+            ->call('setView', 'salon')->assertSet('roomId', $room->id);
+    });
+
     it('en la vista por docente, una sesión de otro campus fuera del horario de este se ve con su altura y cuenta sus horas', function () {
         $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
         $this->calcGroup->update(['teacher_id' => $teacher->id]);

@@ -1072,7 +1072,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         escape() {
-            if (this.$wire.groupId !== '' && !this.drawerOpen()
+            if (this.$wire.groupId !== '' && this.$wire.view === 'semestre' && !this.drawerOpen()
                 && document.body.dataset.menu !== 'open' && !document.querySelector('dialog[open]')) {
                 this.$wire.clearSelection();
             }

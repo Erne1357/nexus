@@ -31,8 +31,9 @@ use Mary\Traits\Toast;
  * Entra quien ve los horarios (SchedulingPermission::ScheduleView); lo que llega por la URL pasa por careerOrFail y
  * planOrFail. Elegir un grupo pide que el semestre lo muestre; colocar, editSessions.
  * La URL guarda la vista: `?carrera=`, `?reticula=`, `?semestre=`, `?grupo=` (el elegido; al entrar abre la carrera,
- * retícula y semestre desde donde el usuario lo ve, como lo usan el tablero de choques y las solicitudes de cambio),
- * `?vista=semestre|docente|salon`, `?docente=`, `?salon=` y `?dia=` (el día de la lista en celular).
+ * retícula y semestre desde donde el usuario lo ve, como lo usan el tablero de choques y las solicitudes de cambio; se
+ * conserva al ver por docente o por salón), `?vista=semestre|docente|salon`, `?docente=`, `?salon=` y `?dia=` (el día
+ * de la lista en celular).
  */
 new #[Title('Horarios')] class extends Component
 {
@@ -100,7 +101,6 @@ new #[Title('Horarios')] class extends Component
             $this->careerId = $entry['career'];
             $this->planId = $entry['plan'];
             $this->semester = $entry['semester'];
-            $this->view = 'semestre';
         }
     }
 
@@ -120,10 +120,20 @@ new #[Title('Horarios')] class extends Component
         $this->reset('semester', 'groupId', 'teacherId', 'roomId');
     }
 
+    /**
+     * Cambia la vista sin soltar el grupo elegido: por docente muestra a su docente y por salón el de su primera sesión
+     * que tiene uno; si no tiene, el que ya estaba o el primero de la lista. Al volver al semestre sigue elegido.
+     */
     public function setView(string $view): void
     {
         $this->view = in_array($view, self::VIEWS, true) ? $view : 'semestre';
-        $this->groupId = '';
+
+        if ($this->groupId !== '' && $this->view !== 'semestre') {
+            [$term, $campus, $editor, $context] = $this->context();
+            $lens = $editor->lensOf($context, $term, $campus, $this->selection(), $this->groupId);
+            $this->teacherId = $lens['teacher'] ?? $this->teacherId;
+            $this->roomId = $lens['room'] ?? $this->roomId;
+        }
     }
 
     /**
