@@ -5,7 +5,8 @@
     que quepa en un carril de 7rem), sus horas en Mono con el icono de su tipo, y su
     salón en Mono o «Sin salón» con icono de advertencia (en la vista por docente, el campus si es otro; por salón, el
     docente). Una sesión con choque duro lleva borde `error` y una insignia por regla: el color nunca va solo. La del
-    grupo elegido lleva el anillo `primary`; las demás se atenúan mientras se coloca. La que no es del semestre va en
+    grupo elegido lleva el anillo `primary`; las demás se atenúan mientras se coloca: pierden el tinte y su franja se
+    aclara, pero el texto conserva su contraste (nunca `opacity`). La que no es del semestre va en
     gris con borde punteado y no se abre.
 
     En la cuadrícula se coloca con `--top`, `--span`, `--lane` y `--lanes` (renglones de 3.25rem) y lleva lo que leen
@@ -27,12 +28,15 @@
         .($item['rules'] !== [] ? ', choque '.implode(' ', $item['rules']) : '');
     $classes = [
         $item['external'] || $item['chain'] === null ? '[--chain:var(--color-neutral)]' : $chainClasses[$item['chain'] % count($chainClasses)],
-        'flex min-w-0 flex-col overflow-hidden rounded-field border text-left text-[11.5px] leading-[1.25] shadow-[inset_4px_0_0_var(--chain)]',
+        'flex min-w-0 flex-col overflow-hidden rounded-field border text-left text-[11.5px] leading-[1.25]',
         'data-found:outline-3 data-found:outline-offset-2 data-found:outline-primary',
-        $item['external'] ? 'border-dashed border-base-300 bg-base-200' : 'bg-[color-mix(in_oklab,var(--chain)_9%,var(--color-base-100))]',
+        match (true) {
+            $item['external'] => 'border-dashed border-base-300 bg-base-200 shadow-[inset_4px_0_0_var(--chain)]',
+            $item['dim'] => 'bg-base-100 text-neutral shadow-[inset_4px_0_0_color-mix(in_oklab,var(--chain)_40%,var(--color-base-100))]',
+            default => 'bg-[color-mix(in_oklab,var(--chain)_9%,var(--color-base-100))] shadow-[inset_4px_0_0_var(--chain)]',
+        },
         $item['rules'] !== [] ? 'border-2 border-error' : ($item['external'] ? '' : 'border-base-300'),
         $item['mine'] ? 'outline-2 outline-offset-1 outline-primary' : '',
-        $item['dim'] ? 'opacity-50' : '',
         $item['open'] ? 'cursor-pointer hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary' : '',
         $mobile ? 'relative min-h-14 w-full gap-0.5 py-1.5 ps-3 pe-2' : 'absolute top-[calc(var(--top)*3.25rem+1px)] left-[calc(var(--lane)*100%/var(--lanes)+2px)] z-[2] h-[calc(var(--span)*3.25rem-2px)] w-[calc(100%/var(--lanes)-4px)] py-0.5 ps-2 pe-1',
     ];
