@@ -401,6 +401,15 @@ Los avisos del proceso van por el canal `database` de Laravel (tarea 2.9; el cor
 
 Un listener de `Activity::creating`, `StampActingAs`, agrega `properties.acting_as` (el perfil activo) a cada entrada cuyo causante es la persona en sesión y tiene perfil activo; sin sesión (jobs, consola, una Action para otro usuario) no agrega nada. Resuelve `Actor` en cada llamada, sin estado estático (Octane). `Core\Rules\SelfApproval` (AZ-01) decide si quien aprueba es quien envió o solicitó, para marcar `self_approval: true` y avisar en pantalla.
 
+## Validador de restricciones
+
+El validador de Scheduling (tarea 3.2) lo usan el editor de horarios, la asignación de docentes, el job que recalcula `schedule_conflicts` y el tablero de choques, así que tiene una sola forma:
+
+- **Reglas puras.** Cada regla dura o blanda es una clase de `Scheduling/Rules/Constraints` que implementa `Constraint` (`rule()` con su id y `check(ScheduleState, ValidationScope)`) y cita su id en el docblock. Lee una foto en memoria (`Validation\ScheduleState`), nunca la base, así que se prueba en `tests/Unit/Scheduling` con `ScheduleStateBuilder` (atajos en `tests/Support/Scheduling/States`). Cada choque se reporta como `Violation` en cada grupo involucrado, para que cada departamento y carrera lo cuente.
+- **Foto del periodo.** `ScheduleStateQuery::forCampus(Term, ?Campus)` la arma en pocas consultas agregadas: los grupos del campus, más los grupos con docente de los otros campus (HC-01 cruza campus), con materias, salones, docentes (horas base y externas, no disponibilidad), bloqueos, cupos, perfiles, carreras ofrecidas, planes activos y parámetros `staffing.*` y `scheduling.*`. `withSession()` y `withTeacher()` devuelven otra foto para preguntar «¿y si…?».
+- **Orquestador.** `Validation\ScheduleValidator` corre las reglas de `CONSTRAINTS` y responde `validateGroup`, `validateTeacher`, `validateRoom`, `validateLoad`, `checkSession(s)` (el editor, sin escribir) y `checkTeacher(s)` (el ranking: HC-01, HC-08 y HC-09, sin contarse a sí mismo). Guarda la foto de cada periodo y campus mientras vive la instancia; no es singleton (Octane) y `forget()` la olvida después de escribir.
+- **Red de seguridad.** La base rechaza HC-01, HC-02 y HC-07 aunque el código falle; el validador da los mensajes antes de escribir. Las demás duras se guardan y quedan como choque (reglas-de-negocio.md, "Grupos y horarios").
+
 ## Colas y trabajos en segundo plano
 
 Todo lo que tarde más de un segundo va a la cola `redis` (servicio `queue`): validar y aplicar lotes de importación, recalcular `student_progress`, `staffing_rankings`, `teacher_term_loads` y `schedule_conflicts`, generar snapshots y exportes, y correr el motor. Las pantallas muestran progreso con polling de Livewire (`wire:poll`) y notificaciones en base de datos.

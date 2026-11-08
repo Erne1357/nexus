@@ -53,6 +53,18 @@ Para cada grupo, se ordenan los docentes activos del departamento que imparte la
 
 El puntaje y su desglose se guardan en `staffing_rankings` y se muestran completos. Los pesos de 2 y 3 son configurables (`staffing.weights`). Si dos docentes empatan en todo, se conserva el orden del periodo anterior para la misma materia y, en última instancia, el orden alfabético, para que el resultado sea determinista y reproducible.
 
+Decisiones del 7 de noviembre de 2026 sobre el cálculo:
+
+- **Puntaje** (confirmado el 7 de noviembre de 2026): grupos impartidos en la ventana × 1, más 3 si el perfil es `preferente` o 1 si es `apto` (no se suman), más la evaluación promedio (0 a 5) × 2. Los pesos por omisión son esos y se cambian en `staffing.weights` (objeto json con `per_group_taught`, `preferente`, `apto` y `evaluation`).
+- **Ventana de historial** (confirmado el 7 de noviembre de 2026): los últimos 6 semestres (Ene-Jun y Ago-Dic) antes del periodo que se rankea. Los grupos de verano no cuentan como historial.
+- **Evaluación** (confirmado el 7 de noviembre de 2026): la de los últimos 2 semestres. Un docente sin evaluación recibe 0 puntos de evaluación y la marca «sin evaluación».
+- **Cuándo se asigna** (confirmado el 7 de noviembre de 2026): solo se asignan docentes mientras la carga está en `staffing` o `adjusting`.
+- **Promedio de evaluaciones** (supuesto por confirmar): es el promedio simple de todas las evaluaciones (estudiantil y departamental) de esos semestres.
+- **Un solo bloque final** (supuesto por confirmar): «sin horas», «choque» y «no disponible» (HC-09) bajan juntos al final, después de todos los demás, y dentro del bloque se ordenan con los mismos criterios.
+- **Historial de cualquier campus** (supuesto por confirmar): cuenta los grupos de cualquier campus y de cualquier origen (Nexus o SII).
+- **Desempate final** (supuesto por confirmar): el orden alfabético no distingue acentos ni mayúsculas y, si dos nombres coinciden, decide el id del docente, para que el orden sea siempre el mismo.
+- **Ventana en verano** (supuesto por confirmar): para un periodo de verano, la ventana empieza en el Ene-Jun del mismo año.
+
 ## Grupos y horarios
 
 Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
@@ -255,7 +267,9 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
-| Proponer o aceptar préstamo de salón | `jefe_departamento` de ambos departamentos | |
+| Ver acuerdos entre departamentos | `admin`, `subdireccion`, `jefe_departamento` y `jefe_proyecto_docente` de cualquiera de los dos departamentos | Préstamos de salón y grupos compartidos (`academic_load.agreement.view`; supuesto por confirmar para `subdireccion` y `jefe_proyecto_docente`, solo lectura) |
+| Proponer o aceptar préstamo de salón | `jefe_departamento` del departamento que lo pide (propone y cancela) y del dueño del salón (acepta o rechaza, con motivo) | Un salón sin dueño o del propio departamento no necesita préstamo; la sesión solo cuenta con un préstamo aceptado (HC-10) |
+| Proponer o aceptar grupo compartido | `jefe_departamento` del departamento que imparte (propone y cancela) y del departamento de la carrera (acepta o rechaza, con motivo) | Confirmado el 7 de noviembre de 2026. Una carrera tiene a lo más un acuerdo vivo por grupo; el cupo nace al aceptarse (HC-07) |
 | Cerrar carga | `jefe_departamento` | HC-15 |
 | Visto bueno | `subdireccion` | solo si `requires_subdireccion_approval` |
 | Publicar | `subdireccion`, o `jefe_departamento` si el campus no exige visto bueno | carga `closed` o `approved` |
