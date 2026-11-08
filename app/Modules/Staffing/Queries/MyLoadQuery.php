@@ -112,6 +112,8 @@ final class MyLoadQuery
      */
     private function hours(Teacher $teacher, Term $term): array
     {
+        // El validador es scoped y guarda la foto que ya leyó en la petición: se olvida para leer la de ahora.
+        $this->validator->forget();
         $state = $this->validator->stateFor($term->id, null);
 
         // La foto solo trae a los docentes con grupos activos: sin ellos, se completa para mostrar base y externas.
