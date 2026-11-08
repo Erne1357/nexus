@@ -157,6 +157,18 @@ final class AssignmentBoardQuery
     }
 
     /**
+     * El departamento de un grupo del periodo y campus, por un id del cliente (`?grupo=` sin `?depto=`); null si no
+     * existe o no es de ese periodo y campus. Quién lo puede ver lo decide la página.
+     */
+    public function departmentIdOfGroup(string $termId, string $campusId, string $groupId): ?string
+    {
+        /** @var Group|null $group */
+        $group = KeyLookup::find(Group::query()->where('term_id', $termId)->where('campus_id', $campusId), $groupId);
+
+        return $group?->department_id;
+    }
+
+    /**
      * Un docente por un id del cliente; 404 si no existe. Si está activo lo decide AssignTeacher.
      */
     public function teacherOrFail(string $teacherId): Teacher
