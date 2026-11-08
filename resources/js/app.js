@@ -1025,6 +1025,112 @@ document.addEventListener('alpine:init', () => {
 });
 
 /*
+| scheduleEditor: el editor de horarios (DESIGN.md, "Editor de horarios"; maqueta A «Semana con bandeja»). Livewire
+| pinta la semana; aquí va lo que es del navegador:
+| - Las flechas recorren las celdas y las sesiones de la semana por su lugar (data-x: el día y el carril; data-r0 y
+|   data-r1: los renglones que ocupa), Inicio y Fin van a la primera y la última del día. La semana es una sola parada
+|   de tabulación: la que tiene el foco se queda con tabindex 0 (rove). Enter o Espacio la tocan (son botones).
+| - Esc quita el grupo elegido, salvo con un cajón, el menú o un diálogo abiertos.
+| - «Ver» de un choque (editor-focus) lleva la vista a la sesión, le da el foco y la marca un momento (data-found);
+|   colocar (editor-placed) deja el foco en la sesión que quedó, porque la celda tocada ya no existe.
+| - Al cerrar un cajón, el foco regresa a lo que lo abrió (data-opener).
+*/
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('scheduleEditor', () => ({
+        opener: null,
+
+        init() {
+            ['showSession', 'showGroup'].forEach((property) => this.$wire.$watch(property, (open) => {
+                if (!open) {
+                    this.$nextTick(() => this.opener?.isConnected && this.opener.focus());
+                }
+            }));
+        },
+
+        remember(event) {
+            this.opener = event.target.closest('[data-opener]') ?? this.opener;
+        },
+
+        escape() {
+            if (this.$wire.groupId !== '' && !this.$wire.showSession && !this.$wire.showGroup
+                && document.body.dataset.menu !== 'open' && !document.querySelector('dialog[open]')) {
+                this.$wire.clearSelection();
+            }
+        },
+
+        /** La copia visible de una sesión (la de la semana o la de la lista del celular). */
+        visible(id) {
+            return [...document.querySelectorAll(`[data-session="${CSS.escape(id)}"]`)].find((element) => element.offsetParent !== null);
+        },
+
+        found(id) {
+            const element = this.visible(id);
+
+            if (!element) {
+                return;
+            }
+
+            element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+            element.focus({ preventScroll: true });
+            element.setAttribute('data-found', '');
+            setTimeout(() => element.removeAttribute('data-found'), 2500);
+        },
+
+        keep(id) {
+            if (document.activeElement && document.activeElement !== document.body) {
+                return;
+            }
+
+            this.visible(id)?.focus({ preventScroll: true });
+        },
+
+        rove(event) {
+            const current = event.target.closest('[data-nav]');
+
+            if (!current) {
+                return;
+            }
+
+            for (const element of event.currentTarget.querySelectorAll('[data-nav]')) {
+                element.tabIndex = element === current ? 0 : -1;
+            }
+        },
+
+        key(event) {
+            const current = event.target.closest('[data-nav]');
+
+            if (!current || !['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                return;
+            }
+
+            const items = [...event.currentTarget.querySelectorAll('[data-nav]')].map((element) => ({
+                element,
+                x: Number(element.dataset.x),
+                r0: Number(element.dataset.r0),
+                r1: Number(element.dataset.r1),
+                day: Math.floor(Number(element.dataset.x)),
+            }));
+            const me = items.find((item) => item.element === current);
+            const middle = (me.r0 + me.r1) / 2;
+            const away = (item) => (item.r0 <= middle && middle < item.r1 ? 0 : Math.min(Math.abs(item.r0 - middle), Math.abs(item.r1 - middle)));
+            const sameDay = items.filter((item) => item.day === me.day);
+            const pick = {
+                ArrowDown: () => sameDay.filter((item) => item.r0 >= me.r1 - 0.01).sort((a, b) => a.r0 - b.r0 || Math.abs(a.x - me.x) - Math.abs(b.x - me.x)),
+                ArrowUp: () => sameDay.filter((item) => item.r1 <= me.r0 + 0.01).sort((a, b) => b.r1 - a.r1 || Math.abs(a.x - me.x) - Math.abs(b.x - me.x)),
+                ArrowRight: () => items.filter((item) => item.x > me.x + 0.01).sort((a, b) => a.day - b.day || away(a) - away(b) || a.x - b.x),
+                ArrowLeft: () => items.filter((item) => item.x < me.x - 0.01).sort((a, b) => b.day - a.day || away(a) - away(b) || b.x - a.x),
+                Home: () => [...sameDay].sort((a, b) => a.r0 - b.r0),
+                End: () => [...sameDay].sort((a, b) => b.r1 - a.r1),
+            }[event.key]();
+
+            event.preventDefault();
+            pick[0]?.element.focus();
+            pick[0]?.element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        },
+    }));
+});
+
+/*
 | AZ-S5: si el perfil activo de la sesión ya no es con el que se pintó la página (cambió en otra pestaña, o cambiaron
 | sus puestos: perdió el activo, se desactivó su campus o recibió el primero), el servidor responde 419 con
 | X-Nexus-Role-Changed (Core\Livewire\ActiveRoleHook). Aquí se ofrece recargar en español; cualquier otro 419 (sesión

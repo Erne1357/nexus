@@ -2,8 +2,11 @@
 
 namespace App\Modules\Scheduling;
 
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 
 /**
@@ -13,6 +16,17 @@ use App\Modules\Scheduling\Enums\SchedulingPermission;
  */
 final class SchedulingServiceProvider extends ModuleServiceProvider
 {
+    /**
+     * «Horarios», el editor de horarios (tarea 3.5), para quien ve los horarios.
+     */
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
+        ];
+    }
+
     /**
      * @return list<class-string>
      */
