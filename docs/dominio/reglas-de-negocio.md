@@ -66,6 +66,7 @@ Decisiones del 7 de noviembre de 2026 sobre el cálculo:
 - **Historial de cualquier campus** (supuesto por confirmar): cuenta los grupos de cualquier campus y de cualquier origen (Nexus o SII).
 - **Desempate final** (supuesto por confirmar): el orden alfabético no distingue acentos ni mayúsculas y, si dos nombres coinciden, decide el id del docente, para que el orden sea siempre el mismo.
 - **Ventana en verano** (supuesto por confirmar): para un periodo de verano, la ventana empieza en el Ene-Jun del mismo año.
+- **Orden del periodo anterior** (supuesto por confirmar): se toma el mejor puesto del docente en los grupos de la misma materia y campus del semestre anterior.
 
 ## Grupos y horarios
 

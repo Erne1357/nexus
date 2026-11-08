@@ -121,15 +121,17 @@ final class AssignTeacher
     }
 
     /**
-     * @return array{0: ?int, 1: int} lugar del docente en el ranking del grupo (null si no está) y tamaño del ranking
+     * @return array{0: ?int, 1: ?int} lugar del docente en el ranking del grupo (null si no está) y tamaño del ranking
+     *                                 (null si el grupo todavía no tiene ranking)
      */
     private function rankingPosition(Group $group, Teacher $teacher): array
     {
         $rankings = StaffingRanking::query()->where('group_id', $group->id);
+        $size = $rankings->count();
 
         return [
             (clone $rankings)->where('teacher_id', $teacher->id)->value('rank'),
-            $rankings->count(),
+            $size > 0 ? $size : null,
         ];
     }
 }
