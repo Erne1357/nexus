@@ -35,10 +35,10 @@ final readonly class StateSession
     }
 
     /**
-     * «lunes de 07:00 a 09:00».
+     * «lunes de 7:00 a 9:00».
      */
     public function describe(): string
     {
-        return Minutes::dayName($this->day).' de '.Minutes::format($this->start).' a '.Minutes::format($this->end);
+        return Minutes::dayName($this->day).' de '.Minutes::label($this->start).' a '.Minutes::label($this->end);
     }
 }

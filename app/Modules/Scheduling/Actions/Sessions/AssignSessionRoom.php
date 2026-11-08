@@ -139,7 +139,7 @@ final class AssignSessionRoom
         $label = $holder === null ? 'otro grupo' : SessionRules::label($holder);
 
         throw ValidationException::withMessages(['session' => "El salón {$room->code} ya está {$state} {$label} el "
-            .Minutes::dayName($loan->day).' de '.substr($loan->starts_at, 0, 5).' a '.substr($loan->ends_at, 0, 5).'.']);
+            .Minutes::dayName($loan->day).' de '.Minutes::labelOf($loan->starts_at).' a '.Minutes::labelOf($loan->ends_at).'.']);
     }
 
     private function describe(Group $group, GroupSession $session, ?Room $previous, ?Room $room): string

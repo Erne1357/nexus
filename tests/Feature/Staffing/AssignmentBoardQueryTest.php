@@ -57,7 +57,7 @@ it('resume el horario y las horas por semana del grupo', function () {
 
     $row = boardOf($this->world)->groups[0];
 
-    expect($row->schedule)->toBe('Ma/Ju 09:00–11:00')
+    expect($row->schedule)->toBe('Ma/Ju 9:00–11:00')
         ->and($row->hours)->toBe('4');
 });
 

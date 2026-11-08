@@ -98,7 +98,7 @@ final class SessionRules
         }
 
         if (($start - $dayStart) % $profile->blockMinutes !== 0 || ($end - $dayStart) % $profile->blockMinutes !== 0) {
-            throw self::invalid("HC-04: la sesión debe empezar y terminar en bloques de {$profile->blockMinutes} minutos desde las ".Minutes::format($dayStart).'.');
+            throw self::invalid("HC-04: la sesión debe empezar y terminar en bloques de {$profile->blockMinutes} minutos desde las ".Minutes::label($dayStart).'.');
         }
     }
 
@@ -181,7 +181,7 @@ final class SessionRules
      */
     public function overlapTaken(QueryException $exception, Group $group, int $day, string $startsAt, string $endsAt, ?string $roomId): ValidationException
     {
-        $when = Minutes::dayName($day)." entre {$startsAt} y {$endsAt}";
+        $when = Minutes::dayName($day).' entre '.Minutes::labelOf($startsAt).' y '.Minutes::labelOf($endsAt);
         $message = $exception->getMessage();
 
         if (str_contains($message, self::TEACHER_EXCLUSION)) {
@@ -228,11 +228,11 @@ final class SessionRules
     }
 
     /**
-     * «lunes de 07:00 a 09:00».
+     * «lunes de 7:00 a 9:00».
      */
     public static function describe(GroupSession $session): string
     {
-        return Minutes::dayName($session->day).' de '.Clock::of($session->starts_at).' a '.Clock::of($session->ends_at);
+        return Minutes::dayName($session->day).' de '.Minutes::labelOf($session->starts_at).' a '.Minutes::labelOf($session->ends_at);
     }
 
     /**

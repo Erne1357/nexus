@@ -86,7 +86,7 @@ it('HC-03: marca las celdas que empalman al grupo con la única opción de otra 
 
     expect($cells['4|08:00']['fits'])->toBeFalse()
         ->and($cells['4|08:00']['rules'])->toBe(['HC-03'])
-        ->and($cells['4|08:00']['messages'][0])->toStartWith('Se empalma con Física, grupo E el jueves de 08:00 a 10:00')
+        ->and($cells['4|08:00']['messages'][0])->toStartWith('Se empalma con Física, grupo E el jueves de 8:00 a 10:00')
         ->and($cells['4|09:00']['rules'])->toBe(['HC-03'])
         ->and($cells['4|10:00']['fits'])->toBeTrue();
 });

@@ -34,7 +34,7 @@ it('HC-04: una sesión en sábado, con un campus de lunes a viernes, es un choqu
         ->subjectType->toBe('group')
         ->subjectId->toBe('A')
         ->groupId->toBe('A')
-        ->message->toBe('La sesión del sábado de 08:00 a 10:00 de Materia, grupo A cae fuera de la ventana del campus (lunes a viernes, 7:00 a 21:00).')
+        ->message->toBe('La sesión del sábado de 8:00 a 10:00 de Materia, grupo A cae fuera de la ventana del campus (lunes a viernes, 7:00 a 21:00).')
         ->and($violations[0]->related)->toMatchArray([
             'day' => 6,
             'starts_at' => '08:00',

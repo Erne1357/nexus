@@ -40,7 +40,8 @@ final class SessionLabels
 
     /**
      * La foto de las sesiones que guarda una solicitud de cambio (`change_requests.current`: día, inicio, fin y salón),
-     * como «Lu Mi 07:00–09:00 · A-14»: los días con la misma hora y el mismo salón van juntos.
+     * como «Lu Mi 7:00–9:00 · A-14»: los días con la misma hora y el mismo salón van juntos. La foto guarda `HH:MM`;
+     * solo se escribe para leerse al mostrarla.
      *
      * @param  list<array{day?: int, starts_at?: string, ends_at?: string, room?: ?string}>  $sessions
      * @return list<array{days: string, time: string, room: ?string}>
@@ -52,7 +53,7 @@ final class SessionLabels
         $lines = [];
 
         foreach ($sessions as $session) {
-            $time = ($session['starts_at'] ?? '').'–'.($session['ends_at'] ?? '');
+            $time = self::clock($session['starts_at'] ?? '').'–'.self::clock($session['ends_at'] ?? '');
             $room = $session['room'] ?? null;
             $key = $time.'|'.$room;
             $lines[$key] ??= ['days' => [], 'time' => $time, 'room' => $room];
@@ -64,6 +65,14 @@ final class SessionLabels
 
     public static function time(GroupSession $session): string
     {
-        return Minutes::format(Minutes::of($session->starts_at)).'–'.Minutes::format(Minutes::of($session->ends_at));
+        return Minutes::labelOf($session->starts_at).'–'.Minutes::labelOf($session->ends_at);
+    }
+
+    /**
+     * Una hora de la foto para leerla («07:00» → «7:00»); vacía si la foto no la trae.
+     */
+    private static function clock(string $time): string
+    {
+        return $time === '' ? '' : Minutes::labelOf($time);
     }
 }

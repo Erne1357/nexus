@@ -187,7 +187,7 @@ describe('detalle', function () {
                 'Fundamentos de Programación', '1A', 'Rechazada', 'Horario',
                 'Docente', 'Marisol Quiñones Duarte',
                 'Carrera dueña', 'ISC', 'Ingeniería en Sistemas Computacionales', 'Campus II',
-                'Al pedirla', 'Lu Mi', '07:00–09:00', 'Propuesta', 'Martes y jueves de 10 a 12',
+                'Al pedirla', 'Lu Mi', '7:00–9:00', 'Propuesta', 'Martes y jueves de 10 a 12',
                 'Motivo', 'Atiendo residencias los lunes.',
                 'Historial', 'Pidió', 'Marisol Quiñones Duarte', 'Rechazó', 'Alfredo Ríos Carrasco', 'Ese bloque está ocupado.',
             ]);

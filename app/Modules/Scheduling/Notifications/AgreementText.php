@@ -18,7 +18,7 @@ final class AgreementText
         if ($agreement->kind === AgreementKind::RoomLoan) {
             $day = Minutes::dayLabel((int) $agreement->day, short: true);
 
-            return "{$agreement->room?->code} · {$day} ".ltrim(substr($agreement->starts_at, 0, 5), '0').'–'.ltrim(substr($agreement->ends_at, 0, 5), '0');
+            return "{$agreement->room?->code} · {$day} ".Minutes::labelOf($agreement->starts_at).'–'.Minutes::labelOf($agreement->ends_at);
         }
 
         return $agreement->max_seats.($agreement->max_seats === 1 ? ' lugar' : ' lugares')." de {$agreement->career?->code}";

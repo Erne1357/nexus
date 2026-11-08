@@ -10,8 +10,8 @@
     del salón tras su motivo («Guarda el horario para ver los salones libres a esa hora») y «Descartar cambios», sin
     ir al servidor. Al pie, también «Quitar sesión» con confirmación. Si al moverla se le quitó el salón, lo dice. Quien
     no acomoda el grupo lo ve todo deshabilitado, con el motivo una vez arriba y sin el aviso de cambios. «Ver el grupo» cambia de
-    cajón sin regresar el foco (`data-drawer-switch`, de `scheduleEditor`). Los mensajes del validador llevan sus horas
-    como la semana (WeekGrid::prose).
+    cajón sin regresar el foco (`data-drawer-switch`, de `scheduleEditor`). Los mensajes del validador ya traen sus horas
+    como la semana («7:00»).
 --}}
 <div>
     <x-drawer wire:model.live="show" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="session-drawer-title" data-testid="session-drawer">
@@ -58,12 +58,12 @@
                         <h3 id="session-checks-title" class="text-[11.5px] font-medium tracking-[0.09em] text-neutral uppercase">Validador</h3>
                         @foreach ($panel['hard'] as $violation)
                             <p class="flex items-start gap-2 rounded-field border border-error/40 bg-error/10 px-3 py-2 leading-snug">
-                                <x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0 text-error" aria-hidden="true" /><span class="min-w-0 break-words"><b class="font-mono text-error">{{ $violation['rule'] }}</b> · {{ \App\Modules\Scheduling\Support\WeekGrid::prose($violation['message']) }}</span>
+                                <x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0 text-error" aria-hidden="true" /><span class="min-w-0 break-words"><b class="font-mono text-error">{{ $violation['rule'] }}</b> · {{ $violation['message'] }}</span>
                             </p>
                         @endforeach
                         @foreach ($panel['soft'] as $violation)
                             <p class="flex items-start gap-2 rounded-field border border-warning/40 bg-warning/10 px-3 py-2 leading-snug">
-                                <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" /><span class="min-w-0 break-words"><b class="font-mono text-warning">{{ $violation['rule'] }}</b>{{ $violation['rule'] === 'HC-12' ? ' · faltan horas' : '' }} · {{ \App\Modules\Scheduling\Support\WeekGrid::prose($violation['message']) }}</span>
+                                <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" /><span class="min-w-0 break-words"><b class="font-mono text-warning">{{ $violation['rule'] }}</b>{{ $violation['rule'] === 'HC-12' ? ' · faltan horas' : '' }} · {{ $violation['message'] }}</span>
                             </p>
                         @endforeach
                         @if ($panel['hard'] === [] && $panel['soft'] === [])

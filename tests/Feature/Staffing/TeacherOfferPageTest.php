@@ -188,7 +188,7 @@ it('HC-01: el panel dice con cuál de SUS grupos choca el grupo y a qué hora', 
 
     $page = Livewire::actingAs($this->user)->test('staffing::pages.offer')->call('open', $offered->id);
 
-    expect(offerText($page, '[data-testid="offer-clashes"]'))->toBe('Choca con tu horario A4 · Ingeniería Económica · C1 Lu 08:00–10:00')
+    expect(offerText($page, '[data-testid="offer-clashes"]'))->toBe('Choca con tu horario A4 · Ingeniería Económica · C1 Lu 8:00–10:00')
         ->and(offerText($page, '[data-testid="offer-group-'.$offered->id.'"] [data-testid="offer-marks"]'))->toBe('Choque');
 });
 

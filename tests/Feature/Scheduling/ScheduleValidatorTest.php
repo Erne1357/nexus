@@ -53,7 +53,7 @@ it('valida un grupo con sus empalmes de salón', function () {
     $result = $this->validator->validateGroup($group);
 
     expect($result->hasHard())->toBeTrue()
-        ->and((new ValidationResult($result->forRule('HC-02')))->messages())->toBe(['El salón LC-1 ya está ocupado por Programación, grupo H el martes de 08:00 a 10:00.']);
+        ->and((new ValidationResult($result->forRule('HC-02')))->messages())->toBe(['El salón LC-1 ya está ocupado por Programación, grupo H el martes de 8:00 a 10:00.']);
 });
 
 it('checkSession dice qué pasaría con una sesión candidata, sin escribir', function () {
@@ -155,7 +155,7 @@ it('checkTeacher avisa del traslado justo entre campus (SC-09) como regla blanda
     expect($result->forRule('SC-09'))->toHaveCount(1)
         ->and($result->forRule('SC-09')[0]->related)->toMatchArray(['free_minutes' => 30, 'other_group_id' => $elsewhere->id])
         ->and($result->forRule('SC-09')[0]->severity)->toBe(ConflictSeverity::Soft)
-        ->and($result->forRule('SC-09')[0]->message)->toContain("a {$this->campus->code} (09:30)");
+        ->and($result->forRule('SC-09')[0]->message)->toContain("a {$this->campus->code} (9:30)");
 });
 
 it('teacherHours da a cada candidato sus horas sin el grupo y con él', function () {

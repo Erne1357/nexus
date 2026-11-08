@@ -4,7 +4,7 @@ use App\Modules\Staffing\Rules\ScheduleSummary;
 
 /*
 | El resumen del horario de un grupo en la pantalla de asignación: días y horas en una línea («L–V 12:00–13:00»,
-| «Ma/Ju 09:00–11:00») y sus horas por semana.
+| «Ma/Ju 9:00–11:00») y sus horas por semana.
 */
 
 function sessionOf(int $day, string $startsAt, string $endsAt): array
@@ -22,7 +22,7 @@ it('resume cinco días seguidos a la misma hora como «L–V»', function () {
 it('junta con diagonal los días que no van seguidos', function () {
     $summary = ScheduleSummary::of([sessionOf(4, '09:00:00', '11:00:00'), sessionOf(2, '09:00:00', '11:00:00')]);
 
-    expect($summary->label())->toBe('Ma/Ju 09:00–11:00')
+    expect($summary->label())->toBe('Ma/Ju 9:00–11:00')
         ->and($summary->hours())->toBe(4.0);
 });
 
@@ -33,7 +33,7 @@ it('separa con punto medio los bloques de horas distintas, por su primer día', 
         sessionOf(3, '07:00:00', '09:00:00'),
     ]);
 
-    expect($summary->label())->toBe('L/Mi 07:00–09:00 · V 07:00–08:00')
+    expect($summary->label())->toBe('L/Mi 7:00–9:00 · V 7:00–8:00')
         ->and($summary->hours())->toBe(5.0);
 });
 

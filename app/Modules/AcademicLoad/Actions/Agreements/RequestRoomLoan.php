@@ -12,6 +12,7 @@ use App\Modules\AcademicLoad\Rules\AgreementRules;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\WeekTime;
 use App\Modules\Facilities\Models\Room;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -107,7 +108,7 @@ final class RequestRoomLoan
                     'ends_at' => $endsAt,
                 ]])
                 ->withProperties(['group_id' => $groupId, 'from_department_id' => $from->getKey(), 'to_department_id' => $to->getKey()])
-                ->log("{$from->code} pidió a {$to->code} el salón {$room->code} el día {$day} de {$startsAt} a {$endsAt} en {$campus->code} para el periodo {$term->code}");
+                ->log("{$from->code} pidió a {$to->code} el salón {$room->code} el ".WeekTime::day($day).' de '.WeekTime::clock($startsAt).' a '.WeekTime::clock($endsAt)." en {$campus->code} para el periodo {$term->code}");
 
             AgreementRequested::dispatch($agreement);
 
