@@ -2,6 +2,8 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
@@ -157,15 +159,60 @@ it('filtra por tipo y por texto: salón, grupo, materia, departamento y carrera'
         ->and($ids(null, 'no existe'))->toBe([]);
 });
 
-it('ordena del más reciente al más antiguo', function () {
-    foreach (range(1, 3) as $i) {
-        loanOf($this->ii, $this->sc, ['created_at' => now()->subMinutes($i)]);
-    }
+it('«Por decidir» y «Enviados» van del más antiguo al más reciente sin importar el tipo, y «Decididos» del más reciente', function () {
+    $oldShare = shareOf($this->ii, $this->sc, ['created_at' => now()->subMinutes(30)]);
+    $loan = loanOf($this->ii, $this->sc, ['created_at' => now()->subMinutes(20)]);
+    $newShare = shareOf($this->ii, $this->sc, ['created_at' => now()->subMinutes(10)]);
+    $oldSent = loanOf($this->sc, $this->cb, ['created_at' => now()->subMinutes(15)]);
+    $newSent = shareOf($this->sc, $this->cb, ['created_at' => now()->subMinutes(5)]);
+    $doneBefore = loanOf($this->ii, $this->sc, ['status' => AgreementStatus::Accepted, 'decided_at' => now()->subMinutes(8)]);
+    $doneAfter = loanOf($this->ii, $this->sc, ['status' => AgreementStatus::Accepted, 'decided_at' => now()->subMinute()]);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
 
-    $times = array_column(agreementsInboxOf($jefe, $this->term, $this->campus)['decide'], 'requested_at');
+    $inbox = agreementsInboxOf($jefe, $this->term, $this->campus);
 
-    expect($times)->toHaveCount(3)->and($times)->toBe(collect($times)->sortDesc()->values()->all());
+    expect(array_column($inbox['decide'], 'id'))->toBe([$oldShare->id, $loan->id, $newShare->id])
+        ->and(array_column($inbox['sent'], 'id'))->toBe([$oldSent->id, $newSent->id])
+        ->and(array_column($inbox['done'], 'id'))->toBe([$doneAfter->id, $doneBefore->id]);
+});
+
+it('cada renglón dice de qué lado está el actor: decide, pidió o solo ve', function () {
+    $in = loanOf($this->ii, $this->sc);
+    $out = shareOf($this->sc, $this->ii);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+    $mine = collect(array_merge(...array_values(agreementsInboxOf($jefe, $this->term, $this->campus))))->keyBy('id');
+    $theirs = collect(array_merge(...array_values(agreementsInboxOf($subdireccion, $this->term, $this->campus))))->keyBy('id');
+
+    expect($mine[$in->id]['side'])->toBe('to')
+        ->and($mine[$out->id]['side'])->toBe('from')
+        ->and($theirs[$in->id]['side'])->toBeNull();
+});
+
+it('HC-02 y HC-11: marca en dos consultas los préstamos que no se pueden aceptar porque su bloque empalma', function () {
+    $free = loanOf($this->ii, $this->sc, ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00']);
+    $taken = loanOf($this->ii, $this->sc, ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00']);
+    $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => Subject::factory()->create(['code' => 'ACF-0901'])->id, 'code' => '1B']);
+    GroupSession::factory()->for($other)->on(2, '10:00', '12:00')->inRoom($taken->room)->create();
+    GroupSession::factory()->for(Group::query()->find($free->group_id))->on(2, '09:00', '11:00')->inRoom($free->room)->create();
+    $locked = loanOf($this->ii, $this->sc, ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '08:00']);
+    RoomBlock::factory()->create(['room_id' => $locked->room_id, 'term_id' => $this->term->id, 'day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00', 'reason' => 'Mantenimiento']);
+    $share = shareOf($this->ii, $this->sc);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
+    $rows = agreementsInboxOf($jefe, $this->term, $this->campus)['decide'];
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $blocked = app(AgreementsInboxQuery::class)->blocked($rows);
+    $queries = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect(array_keys($blocked))->toEqualCanonicalizing([$taken->id, $locked->id])
+        ->and($blocked[$taken->id])->toMatchArray(['label' => 'ACF-0901 1B', 'rule' => 'HC-02', 'starts_at' => '10:00', 'ends_at' => '12:00'])
+        ->and($blocked[$locked->id])->toMatchArray(['label' => 'Mantenimiento', 'rule' => 'HC-11'])
+        ->and($blocked)->not->toHaveKey($share->id)
+        ->and($queries)->toBe(2);
 });
 
 it('no hace una consulta por acuerdo: las mismas consultas con 1 que con 8 acuerdos', function () {
@@ -221,8 +268,30 @@ it('HC-11: el detalle marca el choque con un bloqueo del salón', function () {
     expect($detail['clash'])->toMatchArray(['day' => 2, 'label' => 'Mantenimiento', 'rule' => 'HC-11']);
 });
 
-it('el detalle de un grupo compartido no trae semana', function () {
-    expect(app(AgreementsInboxQuery::class)->detail(shareOf($this->ii, $this->sc))['week'])->toBeNull();
+it('el detalle de un grupo compartido trae sus sesiones, su semestre y plan, y dónde lleva la materia la otra carrera', function () {
+    $share = shareOf($this->ii, $this->sc);
+    $group = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'semester' => 3, 'code' => 'H12']);
+    $share->update(['group_id' => $group->id]);
+    GroupSession::factory()->for($group)->on(1, '07:00', '09:00')->inRoom(Room::factory()->create(['building_id' => $this->building->id, 'code' => 'NII1']))->create();
+    GroupSession::factory()->for($group)->on(3, '07:00', '08:00')->create();
+    $plan = StudyPlan::factory()->create(['career_id' => $share->career_id, 'code' => 'ISC-2010-224']);
+    StudyPlanSubject::factory()->create(['study_plan_id' => $plan->id, 'subject_id' => $group->subject_id, 'semester' => 4]);
+
+    $detail = app(AgreementsInboxQuery::class)->detail($share->fresh());
+
+    expect($detail['week'])->toBeNull()
+        ->and($detail['schedule']['sessions'])->toBe([
+            ['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'hours' => '7:00–9:00', 'room' => 'NII1'],
+            ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '08:00', 'hours' => '7:00–8:00', 'room' => null],
+        ])
+        ->and($detail['schedule']['days'])->toContain(1, 3, 5)
+        ->and($detail['schedule']['hours'])->toContain(7, 8)
+        ->and($detail['placement'])->toMatchArray([
+            'semester' => 3,
+            'plan' => $group->studyPlan->code,
+            'owner' => $group->ownerCareer->code,
+            'career' => [['plan' => 'ISC-2010-224', 'semester' => 4]],
+        ]);
 });
 
 it('findOrFail da el acuerdo visible y falla con el de otro departamento o campus', function () {
