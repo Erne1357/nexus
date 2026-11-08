@@ -452,6 +452,14 @@ La vista «Retícula» de la propuesta de carrera (`academic-load::pages.proposa
 - **Marcar:** el departamento elegido, el filtro o los dos (lo que cumple ambos) se marcan como una cadena resaltada: lo demás se atenúa al 20 % y en grises, el encabezado de cada semestre lo cuenta («18 de SC», «2 sin grupos») y la barra de selección lo dice («Sistemas y Computación (SC): 42 materias · 133 grupos.», «Sin grupos: 6 materias.», «Sistemas y Computación (SC), sin grupos: 2 materias.»). En la tabla, el filtro oculta las filas que no lo cumplen; el departamento las atenúa, o las oculta con «Mostrar solo».
 - **Cadena y marca:** tocar una cadena de la leyenda la resalta en lugar de la marca, que sigue elegida; «Quitar resaltado» o Esc quitan primero la cadena (vuelve la marca) y luego la marca. Elegir un departamento o un filtro suelta la cadena, y «Ver» de una parte regresada suelta también el filtro, que podría esconder lo que se le pide. Lo pinta el servidor, como en el editor del plan.
 
+### Acuerdos
+La pantalla `scheduling::pages.agreements` (`/scheduling/agreements`, `?acuerdo=<uuid>`), decidida por el usuario el 7 de noviembre de 2026 (maqueta B «Bandeja de dos paneles»; maquetas en `.impeccable/mocks/horarios/acuerdos-b.html`). Copia la forma de la bandeja del departamento.
+
+- **Lista (izquierda, 300 a 380 px):** búsqueda («Salón o grupo») y filtro de tipo; tres grupos plegables («Por decidir», «Enviados», «Decididos») con su conteo, el de «Por decidir» en `warning`. Cada acuerdo, en dos renglones: salón, día y horas en Mono (o la clave del grupo) y, debajo, el grupo (o los lugares de la carrera) y «de → para». Los decididos llevan su insignia. Vacío: «No tienes acuerdos por decidir.»
+- **Detalle (derecha):** título («Préstamo de LC-201», «Cupo de ISC en SCC-1013 3A»), tipo e insignia («Por decidir», «Enviado», «Aceptado», «Rechazado», «Cancelado»); datos en Mono; en un préstamo, la mini semana del salón (día × hora, ocupado en rayas con la clave del grupo, el bloque pedido con borde, icono y texto: «Pedido», «Enviado», «Empalma», «Aceptado»…); el estado en una alerta suave y quién pidió y cuándo.
+- **Acciones fijas al pie:** «Aceptar» y «Rechazar…» (el motivo, obligatorio, aparece en el panel con lo que pasa al rechazar: en un préstamo, la sesión se queda sin salón) y «Cancelar solicitud» para quien pidió. Lo que no se puede queda deshabilitado con su motivo escrito en el cuerpo (`aria-describedby`).
+- **Bajo 1024 px** un solo panel: la lista y, al elegir, el detalle con «Volver» y el pie pegado abajo.
+
 ## Elevation & Depth
 
 Plano. La profundidad la dan las superficies (blanco sobre platino) y los filetes, no las sombras.

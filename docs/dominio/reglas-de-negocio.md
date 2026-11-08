@@ -97,6 +97,7 @@ Lo que la junta interdepartamental acuerda de palabra (proceso-actual.md, D7) qu
 - El grupo compartido lo acepta o lo rechaza el jefe del departamento de la otra carrera, y el cupo de esa carrera se crea al aceptarlo (confirmado el 7 de noviembre de 2026). Si la otra carrera es del mismo departamento que imparte, no hace falta acuerdo (supuesto por confirmar).
 - Rechazar un acuerdo exige un motivo escrito; aceptarlo no (supuesto por confirmar).
 - Quien pidió un acuerdo lo cancela si ya no lo necesita: su sesión cambió de salón, de día o de horas, o quitó el cupo. Un acuerdo cancelado o rechazado no aparta el salón ni el cupo, y ningún acuerdo se borra (supuesto por confirmar).
+- Avisos (supuesto por confirmar): al pedirse un acuerdo, a los titulares de decidir acuerdos del departamento al que va dirigido, en el campus; al aceptarse o rechazarse, a los titulares de pedir acuerdos del departamento que lo pidió, y el rechazo lleva el motivo (y, en un préstamo, que la sesión se quedó sin salón). La Subdirección ve los acuerdos pero no recibe avisos. En la pantalla, un préstamo propuesto cuyo bloque empalma con otro grupo o un bloqueo del salón no se puede aceptar, solo rechazar (supuesto por confirmar), y los propuestos que el actor no decide aparecen en «Enviados».
 
 ## Elegibilidad y demanda
 

@@ -2,9 +2,19 @@
 
 namespace App\Modules\Scheduling;
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Events\AgreementAccepted;
+use App\Modules\AcademicLoad\Events\AgreementRejected;
+use App\Modules\AcademicLoad\Events\AgreementRequested;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Scheduling\Listeners\NotifyDeciderOnAgreementRequested;
+use App\Modules\Scheduling\Listeners\NotifyRequesterOnAgreementDecided;
+use Illuminate\Support\Facades\Event;
 
 /**
  * Módulo Scheduling: grupos, sesiones, cupos por carrera, validador de restricciones, editor de horarios, salones y
@@ -13,6 +23,26 @@ use App\Modules\Scheduling\Enums\SchedulingPermission;
  */
 final class SchedulingServiceProvider extends ModuleServiceProvider
 {
+    public function boot(): void
+    {
+        parent::boot();
+
+        Event::listen(AgreementRequested::class, NotifyDeciderOnAgreementRequested::class);
+        Event::listen(AgreementAccepted::class, NotifyRequesterOnAgreementDecided::class);
+        Event::listen(AgreementRejected::class, NotifyRequesterOnAgreementDecided::class);
+    }
+
+    /**
+     * @return list<NavigationItem>
+     */
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::AgreementView)),
+        ];
+    }
+
     /**
      * @return list<class-string>
      */
