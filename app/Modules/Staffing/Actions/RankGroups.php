@@ -27,9 +27,9 @@ use Illuminate\Support\Facades\DB;
  *
  * Los insumos de Faculty salen de RankingInputsQuery en lotes. Las marcas las da el validador de Scheduling, una
  * instancia nueva por corrida (Octane), con checkTeachers() una vez por grupo: HC-01 marca «choque», HC-08 «sin horas»
- * y HC-09 «no disponible», según las reglas que el validador tenga; las horas restantes salen del detalle de HC-08
- * (`related.remaining_hours`) cuando lo hay, si no quedan en null. Ordena con RankingScorer y los pesos de
- * `staffing.weights`.
+ * y HC-09 «no disponible», según las reglas que el validador tenga. Las horas restantes de cada candidato, sin y con
+ * el grupo («quedan 12 → 7»), salen de teacherHours(), con la misma cuenta de HC-08 (TeacherHourLimit). Ordena con
+ * RankingScorer y los pesos de `staffing.weights`.
  *
  * En una sola transacción borra las filas de `staffing_rankings` de todos los grupos del departamento en ese periodo
  * y campus (también las de los cancelados, que se quedan sin ranking) y escribe las nuevas, así que quien lee ve el
@@ -113,6 +113,7 @@ final class RankGroups
                 : $teachers->values();
             $warmed = true;
             $results = $validator->checkTeachers($group, $asked);
+            $hours = $validator->teacherHours($group, $asked);
             $fromOther = [];
             $candidates = [];
 
@@ -123,35 +124,33 @@ final class RankGroups
                     noHours: $result->forRule('HC-08') !== [],
                     clash: $result->forRule('HC-01') !== [],
                     unavailable: $result->forRule('HC-09') !== [],
-                    remainingHours: self::remainingHours($result),
+                    remainingHours: self::remaining($hours[$input->teacherId] ?? null, 'before'),
                 );
             }
 
             foreach ($scorer->rank($candidates) as $ranked) {
-                $rows[] = self::row($group, $ranked, $fromOther[$ranked->candidate->teacherId], $now);
+                $teacherId = $ranked->candidate->teacherId;
+                $rows[] = self::row($group, $ranked, $fromOther[$teacherId], self::remaining($hours[$teacherId] ?? null, 'after'), $now);
             }
         }
 
         return $rows;
     }
 
-    private static function remainingHours(ValidationResult $result): ?int
+    /**
+     * @param  array{before: array<string, mixed>, after: array<string, mixed>}|null  $hours
+     */
+    private static function remaining(?array $hours, string $when): ?int
     {
-        foreach ($result->forRule('HC-08') as $violation) {
-            $hours = $violation->related['remaining_hours'] ?? null;
+        $remaining = $hours[$when]['remaining_hours'] ?? null;
 
-            if (is_numeric($hours)) {
-                return (int) $hours;
-            }
-        }
-
-        return null;
+        return is_numeric($remaining) ? (int) $remaining : null;
     }
 
     /**
      * @return array<string, mixed>
      */
-    private static function row(Group $group, RankedCandidate $ranked, bool $fromOtherDepartment, CarbonInterface $now): array
+    private static function row(Group $group, RankedCandidate $ranked, bool $fromOtherDepartment, ?int $remainingAfter, CarbonInterface $now): array
     {
         return [
             'term_id' => $group->term_id,
@@ -160,7 +159,10 @@ final class RankGroups
             'teacher_id' => $ranked->candidate->teacherId,
             'rank' => $ranked->rank,
             'score' => $ranked->score,
-            'breakdown' => json_encode($ranked->breakdown() + ['from_other_department' => $fromOtherDepartment]),
+            'breakdown' => json_encode($ranked->breakdown() + [
+                'remaining_after_hours' => $remainingAfter,
+                'from_other_department' => $fromOtherDepartment,
+            ]),
             'computed_at' => $now,
             'created_at' => $now,
             'updated_at' => $now,

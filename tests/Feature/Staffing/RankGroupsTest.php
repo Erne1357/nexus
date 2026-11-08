@@ -78,8 +78,24 @@ it('Ranking docente: ordena a los candidatos de cada grupo del departamento como
             'from_other_department' => false,
             'history_count' => 0,
             'qualification' => 'preferente',
-            'remaining_hours' => null,
+            'remaining_after_hours' => 5,
+            'remaining_hours' => 10,
         ]);
+});
+
+it('HC-08: un candidato sin horas para el grupo queda marcado «sin horas» y baja al bloque final', function () {
+    $group = ($this->group)();
+    ($this->teacher)('Ana', 4);
+    ($this->teacher)('Beatriz', 6);
+
+    ($this->rank)();
+
+    $ana = StaffingRanking::query()->where('group_id', $group->id)->whereHas('teacher', fn ($query) => $query->where('name', 'Ana'))->sole();
+
+    expect(($this->ranking)($group))->toBe(['Beatriz', 'Ana'])
+        ->and($ana->breakdown['flags'])->toContain('sin_horas')
+        ->and($ana->breakdown['remaining_hours'])->toBe(4)
+        ->and($ana->breakdown['remaining_after_hours'])->toBe(-1);
 });
 
 it('Ranking docente: marca a un preferente de otro departamento', function () {
