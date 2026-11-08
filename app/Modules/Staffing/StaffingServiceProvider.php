@@ -91,6 +91,15 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
             new NavigationItem('Carga por docente', 'staffing.teacher-loads', 'o-user-group', NavigationArea::Academico,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::TeacherLoadView)),
+            new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
+            new NavigationItem('Oferta', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
+            new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::ChangeRequestView)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestDecide)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestApplyRoom)),
         ];
     }
 
@@ -111,6 +120,11 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     public function grants(): array
     {
         return [
+            Role::Docente->value => [
+                StaffingPermission::OfferView,
+                StaffingPermission::MyLoadView,
+                StaffingPermission::ChangeRequestRequestOwn,
+            ],
             Role::Subdireccion->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherLoadView,
@@ -134,9 +148,18 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::ChangeRequestRequest,
                 StaffingPermission::ChangeRequestApplySchedule,
             ],
-            Role::Docente->value => [
-                StaffingPermission::ChangeRequestRequestOwn,
-            ],
+        ];
+    }
+
+    /**
+     * «Mi espacio» es del docente sobre lo suyo: el admin no es docente, así que no tiene la oferta ni «mi carga» y
+     * no los ve en el menú (y el menú no consulta la ficha del docente en cada página).
+     */
+    public function adminDenies(): array
+    {
+        return [
+            StaffingPermission::OfferView,
+            StaffingPermission::MyLoadView,
         ];
     }
 }

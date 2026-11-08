@@ -301,6 +301,8 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Quitar el docente de un grupo | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | Con motivo; queda en el historial de asignaciones (supuesto por confirmar) |
+| Ver la oferta de mis departamentos (HC-17) | `docente` (personal: `staffing.offer.view`) | Desde que la carga del departamento entra a staffing, y en cualquier estado posterior; incluye todos los campus (supuesto por confirmar). Ve todos los grupos no cancelados de los departamentos donde está adscrito, con su propio lugar y desglose en el ranking, nunca el de los demás. Sin una ficha de docente con su usuario, no hay nada que ver. El filtro «Entre tus 3 primeros» cuenta y muestra los grupos que no son suyos donde ocupa del lugar 1 al 3 sin una marca que lo baje al bloque final (sin horas, choque o no disponible) (supuesto por confirmar) |
+| Ver mi carga | `docente` (personal: `staffing.my_load.view`) | Desde que la carga del departamento entra a staffing; incluye todos los campus (supuesto por confirmar). Sus grupos del periodo, por día, y la cuenta de sus horas (base, externas, asignadas y restantes) |
 | Solicitar cambio | `docente` asignado al grupo (permiso personal `staffing.change_request.request_own`), `coordinador` de la carrera dueña y campus (`staffing.change_request.request`) | carga del departamento en `staffing` o `adjusting`; grupo no cancelado. El docente, una solicitud abierta por grupo (confirmado el 7 de noviembre de 2026). Ver "Solicitudes de cambio" |
 | Ver las solicitudes de cambio | quien la pidió, `jefe_departamento`, `jefe_proyecto_docente`, `subdireccion` | Alcance de campus y departamento del grupo (`staffing.change_request.view`; supuesto por confirmar para `jefe_proyecto_docente` y `subdireccion`, solo lectura) |
 | Aprobar o rechazar cambio | `jefe_departamento` del departamento del grupo | Solo una solicitud pendiente. Rechazar lleva comentario (supuesto por confirmar) |
@@ -359,14 +361,17 @@ Con la carga del departamento en `staffing` o `adjusting`, el docente asignado a
 - **Aprobar mueve la carga (confirmado el 7 de noviembre de 2026).** Al aprobar una solicitud, la carga del departamento pasa de `staffing` a `adjusting` (si está en `staffing`). La carga vuelve a `staffing` sola cuando no queda una solicitud aprobada sin aplicar de ella (mismo periodo, campus y departamento), siempre que Scheduling no la vete: es el mismo veto de choques duros que al entrar a `staffing`.
 - **Quién aplica depende del tipo (confirmado el 7 de noviembre de 2026).** Horario: el coordinador de la carrera dueña del grupo en ese campus, que acomoda en el editor de horarios. Salón: el jefe del departamento, que asigna salones.
 - **Una abierta por docente y grupo (confirmado el 7 de noviembre de 2026).** Abierta es pendiente, o aprobada sin aplicar. El docente puede pedir en sus otros grupos, y de nuevo en el mismo cuando la anterior se rechazó o se aplicó. La base lo garantiza con un índice único parcial.
+- **El coordinador pide desde «Solicitudes de cambio» (confirmado el 7 de noviembre de 2026).** Con «Nueva solicitud» elige un grupo de su carrera dueña en el campus y el periodo de su credencial, no cancelado y con la carga de su departamento en Asignación o Ajustes, si es de horario o de salón, qué propone y el motivo. Su solicitud no lleva docente, así que no la limita la de una abierta por docente y grupo.
 
 Supuestos por confirmar:
 
 - La solicitud trae una descripción en texto libre de la propuesta (`proposed.description`), sin horario o salón estructurado.
 - Una solicitud rechazada exige un comentario con texto.
 - Si Scheduling veta el regreso a `staffing` al aplicar la última solicitud, la solicitud queda aplicada y la carga se queda en `adjusting` hasta la siguiente solicitud aplicada (o el reintento que traiga la pantalla); los motivos del veto se le muestran a quien aplicó.
-- El coordinador también puede pedir, sin el límite de una abierta (aplica por docente).
 - Aprobar con la carga en otro estado distinto de `staffing` no la toca.
+- Quién ve qué en la pantalla «Solicitudes de cambio» (tarea 3.11): la lista es de un departamento en el periodo y el campus de la credencial; los jefes, el jefe de proyecto docente y la Subdirección ven todas las del departamento; el coordinador, las de horario de los grupos de su carrera en su campus (las que aplica), en cualquier estado, y quien pidió, las suyas. Las de salón no las ve el coordinador.
+- Lo que se propone, el motivo y el comentario del jefe llevan hasta 500 caracteres.
+- «Mi carga» solo ofrece «Solicitar cambio» en los grupos cuya carga está en Asignación o Ajustes; en los demás dice en qué estado está la carga.
 
 ## Pantalla de acceso
 
