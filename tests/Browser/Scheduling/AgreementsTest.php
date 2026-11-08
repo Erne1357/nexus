@@ -16,7 +16,8 @@ use App\Modules\Scheduling\Models\GroupSession;
 
 /*
 | Acuerdos en el navegador (tarea 3.7, maqueta B): el jefe del departamento dueño del salón entra por el menú, abre un
-| préstamo pendiente, lo rechaza con motivo y la sesión de quien lo pidió queda sin salón.
+| préstamo pendiente, lo rechaza con motivo (el campo del motivo recibe el foco) y la sesión de quien lo pidió queda sin
+| salón.
 */
 
 beforeEach(function () {
@@ -39,7 +40,7 @@ beforeEach(function () {
     User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $campus->id, 'department_id' => $sc->id])->create(['username' => '19110005']);
 });
 
-it('el jefe dueño abre un préstamo pendiente desde el menú y lo rechaza con motivo; la sesión queda sin salón', function () {
+it('el jefe dueño abre un préstamo pendiente desde el menú y lo rechaza con el motivo enfocado; la sesión queda sin salón', function () {
     visit('/login')
         ->fill('username', '19110005')
         ->fill('password', 'password')
@@ -56,6 +57,7 @@ it('el jefe dueño abre un préstamo pendiente desde el menú y lo rechaza con m
         ->click('@agreement-reject')
         ->assertSee('Motivo del rechazo (obligatorio)')
         ->assertSee('se queda sin salón')
+        ->assertScript('document.activeElement?.dataset.testid', 'agreement-comment')
         ->fill('@agreement-comment', 'Se cruza con una práctica.')
         ->click('@agreement-reject-confirm')
         ->assertSee('Rechazaste LC-201')

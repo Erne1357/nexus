@@ -168,7 +168,7 @@ describe('jefe del departamento que decide', function () {
         agreementsAs($this->jefeSc, ['acuerdo' => $this->share->id])
             ->assertSet('mobileDetail', true)
             ->assertSee('Cupo de')
-            ->assertSee('Lo acepta el jefe del departamento de ISC');
+            ->assertSee('Si aceptas, se abre el cupo de ISC en SCC-1013 3A con 8 lugares.');
 
         $foreign = InterdepartmentalAgreement::factory()->create([
             'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->cb->id,
@@ -198,12 +198,66 @@ describe('jefe del departamento que decide', function () {
     });
 });
 
+describe('decidir uno tras otro', function () {
+    it('«Rechazar…» pone el motivo primero, antes de los datos y de la semana del salón', function () {
+        agreementsAs($this->jefeSc)
+            ->call('pick', $this->loan->id)
+            ->call('confirmReject', $this->loan->id)
+            ->assertSeeHtmlInOrder(['data-testid="agreement-reject-reason"', 'data-testid="agreement-comment"', 'data-testid="agreement-facts"', 'data-testid="room-week"']);
+    });
+
+    it('al aceptar o rechazar abre el siguiente por decidir de la lista; del último vuelve al primero y sin más se queda en el decidido', function () {
+        $third = InterdepartmentalAgreement::factory()->sharedGroup(2)->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->addMinute(),
+        ]);
+
+        agreementsAs($this->jefeSc)
+            ->call('pick', $this->share->id)
+            ->call('accept', $this->share->id)
+            ->assertSet('agreementId', $third->id)
+            ->assertSet('mobileDetail', true)
+            ->assertDispatched('agreement-shown')
+            ->call('confirmReject', $third->id)
+            ->set('comment', 'Sin lugares.')
+            ->call('reject', $third->id)
+            ->assertSet('agreementId', $this->loan->id)
+            ->assertSee('Préstamo de')
+            ->call('accept', $this->loan->id)
+            ->assertSet('agreementId', $this->loan->id)
+            ->assertSet('mobileDetail', false)
+            ->assertSee('Aceptado por')
+            ->assertSee('No tienes acuerdos por decidir.');
+    });
+
+    it('la lista nombra al otro departamento y deja la clave en segundo plano', function () {
+        agreementsAs($this->jefeSc)
+            ->assertSee('De Ingeniería Industrial')
+            ->assertDontSeeHtml('>II → SC<');
+
+        agreementsAs($this->jefeIi)->assertSee('Para Sistemas y Computación');
+    });
+
+    it('el grupo compartido muestra la semana del grupo, su semestre y plan, y dice la consecuencia una sola vez', function () {
+        $component = agreementsAs($this->jefeSc)
+            ->call('pick', $this->share->id)
+            ->assertSeeHtml('data-testid="group-week"')
+            ->assertSee('9:00–11:00')
+            ->assertSee('LC-201')
+            ->assertSee('Semestre 1 de '.$this->group->ownerCareer->code)
+            ->assertSee($this->group->studyPlan->code)
+            ->assertDontSeeHtml('data-testid="room-week"');
+
+        expect(substr_count($component->html(), 'se abre el cupo'))->toBe(1);
+    });
+});
+
 describe('jefe del departamento que pidió', function () {
     it('ve «Enviados», no decide y cancela su solicitud', function () {
         agreementsAs($this->jefeIi)
             ->assertSee('Enviados')
             ->assertSeeHtml('data-testid="agreement-cancel"')
-            ->assertSee('Lo decide el jefe de SC; todavía no responde.')
+            ->assertSee('Lo decide el jefe de Sistemas y Computación; todavía no responde.')
             ->assertSeeHtml('data-testid="agreement-accept"')
             ->call('accept', $this->loan->id)->assertForbidden();
 
@@ -274,7 +328,7 @@ describe('subdirección', function () {
         agreementsAs($subdireccion)
             ->assertOk()
             ->assertSee('LC-201 · Lun 9:00–11:00')
-            ->assertSee('Solo ves este acuerdo: lo decide el jefe de SC.')
+            ->assertSee('Solo ves este acuerdo: lo decide el jefe de Sistemas y Computación.')
             ->assertDontSeeHtml('data-testid="agreement-cancel"')
             ->call('accept', $this->loan->id)->assertForbidden();
 

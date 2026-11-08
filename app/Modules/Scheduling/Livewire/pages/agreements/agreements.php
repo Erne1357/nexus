@@ -37,6 +37,9 @@ use Mary\Traits\Toast;
  * va dirigido (`decide`) y cancela el que lo pidió (`cancel`). Cada método vuelve a autorizar: ver, que el acuerdo sea
  * del alcance (404 si no) y la ability. Todo lo que se pinta sale de AgreementsInboxQuery; las escrituras, de
  * AcceptRoomLoan, RejectRoomLoan, CancelRoomLoan, AcceptSharedGroup, RejectSharedGroup y WithdrawGroupQuotaProposal.
+ *
+ * Al aceptar o rechazar se abre el siguiente por decidir de la lista (o el primero, si era el último); si ya no queda
+ * ninguno, el panel se queda en el decidido.
  */
 new #[Title('Acuerdos')] class extends Component
 {
@@ -137,6 +140,7 @@ new #[Title('Acuerdos')] class extends Component
         }
 
         $this->afterDecision();
+        $this->openNextPending($row, $context, $query);
         $this->success('Aceptaste '.$this->summary($row), e($row['from']['name']));
     }
 
@@ -185,6 +189,7 @@ new #[Title('Acuerdos')] class extends Component
         }
 
         $this->afterDecision();
+        $this->openNextPending($row, $context, $query);
         $this->warning('Rechazaste '.$this->summary($row), is_int($cleared) && $cleared > 0 ? 'La sesión se quedó sin salón.' : e($row['from']['name']));
     }
 
@@ -213,6 +218,7 @@ new #[Title('Acuerdos')] class extends Component
         }
 
         $this->afterDecision();
+        $this->mobileDetail = false;
         $this->info('Cancelaste '.$this->summary($row), is_int($cleared) && $cleared > 0 ? 'La sesión se quedó sin salón.' : e($row['to']['name']));
     }
 
@@ -281,6 +287,30 @@ new #[Title('Acuerdos')] class extends Component
     }
 
     /**
+     * Después de aceptar o rechazar, abre el siguiente por decidir de la lista (el que seguía al decidido; si era el
+     * último, el primero) y lo anuncia al navegador para que lo muestre. Si ya no queda ninguno, se queda en el decidido
+     * y, en pantallas angostas, vuelve a la lista.
+     *
+     * @param  array<string, mixed>  $decided  El renglón del decidido, leído antes de decidir.
+     */
+    private function openNextPending(array $decided, Actor $context, AgreementsInboxQuery $query): void
+    {
+        $pending = $query->inbox($context, $this->term(), $this->campus(), AgreementKind::tryFrom($this->kind), $this->search)['decide'];
+        $after = fn (array $row): bool => [$row['sortKey'], $row['id']] > [$decided['sortKey'], $decided['id']];
+        $next = collect($pending)->first($after) ?? $pending[0] ?? null;
+
+        if ($next === null) {
+            $this->agreementId = $decided['id'];
+            $this->mobileDetail = false;
+
+            return;
+        }
+
+        $this->agreementId = $next['id'];
+        $this->dispatch('agreement-shown');
+    }
+
+    /**
      * Ya escapado: MaryUI pinta los toasts como HTML.
      *
      * @param  array<string, mixed>  $detail
@@ -297,7 +327,6 @@ new #[Title('Acuerdos')] class extends Component
         $this->found = [];
         $this->rejecting = false;
         $this->comment = '';
-        $this->mobileDetail = false;
         $this->resetErrorBag();
     }
 
