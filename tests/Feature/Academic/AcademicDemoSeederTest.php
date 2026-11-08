@@ -142,6 +142,7 @@ it('siembra las 6 carreras de Campus II con un plan vigente cada una', function 
 
     expect($offered->pluck('career.code')->all())->toEqualCanonicalizing(['LADM', 'COPU', 'ISIC', 'IIND', 'ILOG', 'IGEM'])
         ->and($offered->every(fn (CareerCampus $offering): bool => $offering->career->studyPlans()->where('is_active', true)->count() === 1))->toBeTrue()
+        ->and($offered->every(fn (CareerCampus $offering): bool => $offering->career->studyPlans()->where('is_current', true)->count() === 1))->toBeTrue()
         ->and(CareerCampus::query()->whereRelation('campus', 'code', 'C1')->exists())->toBeFalse();
 });
 
