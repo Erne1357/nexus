@@ -9,6 +9,7 @@ use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\MyChangeRequestsQuery;
 use Illuminate\Support\Facades\DB;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
 require_once __DIR__.'/ChangeRequestScreensSupport.php';
@@ -18,6 +19,16 @@ require_once __DIR__.'/ChangeRequestScreensSupport.php';
 | salón en un grupo suyo con la carga del departamento en Asignación o Ajustes; una solicitud abierta por grupo
 | (confirmado el 7 de noviembre de 2026).
 */
+
+/**
+ * Cómo viene el radio del grupo en el modal: 'enabled', 'disabled' o 'missing'.
+ */
+function crOption(Testable $page, string $groupId): string
+{
+    $option = domOf($page->html())->querySelector('input[name="request-group"][value="'.$groupId.'"]');
+
+    return $option === null ? 'missing' : ($option->hasAttribute('disabled') ? 'disabled' : 'enabled');
+}
 
 beforeEach(function () {
     $this->w = crWorld();
@@ -42,11 +53,17 @@ it('sin solicitudes dice que todavía no ha pedido cambios', function () {
         ->assertSee('Todavía no has pedido cambios en este periodo.');
 });
 
-it('abre el modal de un grupo y envía la solicitud de horario', function () {
-    Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
-        ->assertSeeHtml('data-testid="request-change-'.$this->group->id.'"')
-        ->call('openRequest', $this->group->id)
+it('un solo botón abre el modal, se elige el grupo y envía la solicitud de horario', function () {
+    $page = Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
+        ->assertDontSeeHtml('data-testid="request-groups"')
+        ->assertSeeHtml('data-testid="request-change"')
+        ->call('openRequest')
         ->assertSet('showRequest', true)
+        ->assertSet('requestGroupId', $this->group->id);
+
+    expect(crOption($page, $this->group->id))->toBe('enabled');
+
+    $page
         ->assertSee('Solicitar cambio')
         ->set('requestKind', 'schedule')
         ->set('proposal', 'Martes y jueves de 10:00 a 12:00')
@@ -76,6 +93,21 @@ it('envía una solicitud de salón', function () {
     expect(ChangeRequest::query()->sole()->kind)->toBe(ChangeRequestKind::Room);
 });
 
+it('el grupo es obligatorio', function () {
+    crGroup($this->w, '3B', 'Estructura de Datos', $this->w->sc, $this->w->isc, $this->w->teacher);
+
+    Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
+        ->call('openRequest')
+        ->assertSet('requestGroupId', '')
+        ->set('proposal', 'Martes de 10 a 12')
+        ->set('reason', 'Motivo')
+        ->call('sendRequest')
+        ->assertHasErrors(['requestGroupId' => 'required'])
+        ->assertSee('Elige el grupo.');
+
+    expect(ChangeRequest::query()->count())->toBe(0);
+});
+
 it('el motivo es obligatorio', function () {
     Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
         ->call('openRequest', $this->group->id)
@@ -101,13 +133,26 @@ it('lo que propone es obligatorio y el tipo debe ser horario o salón', function
     expect(ChangeRequest::query()->count())->toBe(0);
 });
 
-it('con una solicitud abierta en el grupo, el botón queda deshabilitado con la insignia de su estado', function () {
+it('con una solicitud abierta en el grupo, su bloque lleva la insignia y su opción queda deshabilitada con el motivo', function () {
+    $other = crGroup($this->w, '3B', 'Estructura de Datos', $this->w->sc, $this->w->isc, $this->w->teacher);
     crRequest($this->group, $this->w->teacherUser, 'approved');
 
-    Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
+    $page = Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
         ->assertSeeHtml('data-testid="request-open-'.$this->group->id.'"')
-        ->assertSeeHtml('data-testid="request-change-'.$this->group->id.'" disabled')
-        ->assertSee('Ya tienes una solicitud abierta para este grupo.');
+        ->assertSee('Solicitud aprobada')
+        ->call('openRequest')
+        ->assertSet('requestGroupId', $other->id)
+        ->assertSee('Solicitud abierta');
+
+    expect(crOption($page, $this->group->id))->toBe('disabled');
+});
+
+it('con una solicitud abierta en cada grupo, el botón queda deshabilitado con su motivo', function () {
+    crRequest($this->group, $this->w->teacherUser, 'pending');
+
+    Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
+        ->assertSeeHtml('data-testid="request-change" disabled')
+        ->assertSee('Ya tienes una solicitud abierta en cada uno de tus grupos.');
 });
 
 it('no abre el modal ni envía con una solicitud abierta en el grupo', function () {
@@ -124,17 +169,19 @@ it('tras una rechazada o aplicada puede pedir otra en el mismo grupo', function 
     crRequest($this->group, $this->w->teacherUser, 'rejected');
     crRequest($this->group, $this->w->teacherUser, 'applied');
 
-    Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
-        ->assertDontSeeHtml('data-testid="request-change-'.$this->group->id.'" disabled')
+    $page = Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
+        ->assertDontSeeHtml('data-testid="request-change" disabled')
         ->call('openRequest', $this->group->id)
         ->assertSet('showRequest', true);
+
+    expect(crOption($page, $this->group->id))->toBe('enabled');
 });
 
-it('con la carga fuera de Asignación y Ajustes no ofrece el botón y dice por qué', function (LoadStatus $status) {
+it('con la carga fuera de Asignación y Ajustes el botón queda deshabilitado y dice por qué', function (LoadStatus $status) {
     $this->w->scLoad->update(['status' => $status]);
 
     Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
-        ->assertDontSeeHtml('data-testid="request-change-'.$this->group->id.'"')
+        ->assertSeeHtml('data-testid="request-change" disabled')
         ->assertSee('La carga está en '.$status->label().': los cambios se piden en Asignación o Ajustes.')
         ->call('openRequest', $this->group->id)
         ->assertForbidden();
@@ -144,7 +191,8 @@ it('con la carga en Ajustes sí ofrece el botón', function () {
     $this->w->scLoad->update(['status' => LoadStatus::Adjusting]);
 
     Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
-        ->assertSeeHtml('data-testid="request-change-'.$this->group->id.'"');
+        ->assertSeeHtml('data-testid="request-change"')
+        ->assertDontSeeHtml('data-testid="request-change" disabled');
 });
 
 it('sin el permiso de pedir no ve el botón ni puede abrir el modal', function () {
@@ -154,8 +202,7 @@ it('sin el permiso de pedir no ve el botón ni puede abrir el modal', function (
     app()->forgetScopedInstances();
 
     Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
-        ->assertDontSeeHtml('data-testid="request-groups"')
-        ->assertDontSeeHtml('data-testid="request-change-'.$this->group->id.'"')
+        ->assertDontSeeHtml('data-testid="request-change"')
         ->call('openRequest', $this->group->id)
         ->assertForbidden();
 });
@@ -164,9 +211,15 @@ it('un grupo que no es suyo no se puede pedir desde Mi carga', function () {
     $foreign = crGroup($this->w, '5A', 'Redes', $this->w->sc, $this->w->isc, $this->w->otherTeacher);
 
     Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
-        ->assertDontSeeHtml('data-testid="request-change-'.$foreign->id.'"')
-        ->call('openRequest', $foreign->id)
+        ->call('openRequest')
+        ->assertDontSeeHtml('value="'.$foreign->id.'"')
+        ->set('requestGroupId', $foreign->id)
+        ->set('proposal', 'Martes de 10 a 12')
+        ->set('reason', 'Motivo')
+        ->call('sendRequest')
         ->assertNotFound();
+
+    expect(ChangeRequest::query()->count())->toBe(0);
 });
 
 it('la consulta de sus solicitudes hace un número constante de consultas', function () {

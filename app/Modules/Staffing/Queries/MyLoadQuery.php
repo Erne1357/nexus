@@ -11,13 +11,15 @@ use App\Modules\Scheduling\Queries\ScheduleStateQuery;
 use App\Modules\Scheduling\Rules\TeacherHourLimit;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
+use App\Modules\Staffing\Rules\TravelGap;
 use App\Modules\Staffing\Support\SessionLabels;
 
 /**
  * «Mi carga» (tarea 3.10): los grupos no cancelados del docente en el periodo, de todos los campus, acomodados por día
  * (lunes a viernes; el sábado solo si tiene sesiones ese día) con los huecos y los traslados entre campus de una
- * sesión a la siguiente, y la cuenta de sus horas (la misma de HC-08, TeacherHourLimit). Un número constante de
- * consultas.
+ * sesión a la siguiente, y la cuenta de sus horas (la misma de HC-08, TeacherHourLimit). Un traslado lleva sus minutos
+ * libres y si son menos de los que pide SC-09 (TravelGap); entonces no se marca aparte el hueco. Un número constante
+ * de consultas.
  */
 final class MyLoadQuery
 {
@@ -27,6 +29,7 @@ final class MyLoadQuery
      * @return array{
      *     groups: list<array{id: string, code: string, subject_name: string, campus_code: string, schedule: list<array{days: string, time: string}>}>,
      *     home: ?string,
+     *     travel_minutes: int,
      *     days: array<int, array{name: string, short: string, hours: int, blocks: list<array<string, mixed>>}>,
      *     hours: array{base: int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, sources: list<array{source: string, hours: int}>}
      * }
@@ -50,6 +53,7 @@ final class MyLoadQuery
         }
 
         $days = [];
+        $travel = TravelGap::fromSettings();
 
         foreach (SessionLabels::DAY_NAMES as $number => $name) {
             if ($number === 6 && ! isset($blocks[6])) {
@@ -60,8 +64,9 @@ final class MyLoadQuery
 
             foreach ($day as $index => &$block) {
                 $previous = $day[$index - 1] ?? null;
-                $block['gap'] = $previous !== null && $block['start'] > $previous['end'] ? $block['start'] - $previous['end'] : null;
-                $block['transfer_from'] = $previous !== null && $previous['campus_code'] !== $block['campus_code'] ? $previous['campus_code'] : null;
+                $transfer = $previous === null ? null : $travel->between($previous['campus_code'], $previous['end'], $block['campus_code'], $block['start']);
+                $block['transfer'] = $transfer === null ? null : ['from' => $previous['campus_code'], ...$transfer];
+                $block['gap'] = $transfer === null && $previous !== null && $block['start'] > $previous['end'] ? $block['start'] - $previous['end'] : null;
             }
             unset($block);
 
@@ -83,6 +88,7 @@ final class MyLoadQuery
             ])->all(),
             'days' => $days,
             'home' => $groups->countBy(fn (Group $group): string => $group->campus->code)->sortDesc()->keys()->first(),
+            'travel_minutes' => $travel->minimumMinutes,
             'hours' => $this->hours($teacher, $term),
         ];
     }

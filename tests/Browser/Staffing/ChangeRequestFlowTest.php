@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 
@@ -18,6 +20,11 @@ beforeEach(function () {
     $this->w->jefeSc->update(['username' => 'jefe-sc']);
     $this->w->coordIsc->update(['username' => 'coord-isc']);
     $this->group = crGroup($this->w, '1A', 'Fundamentos de Programación', $this->w->sc, $this->w->isc, $this->w->teacher);
+    // Sin choques duros, Scheduling no veta el regreso a Asignación: las dos sesiones de 2 h cubren las horas de la materia
+    // (HC-12), la carrera se ofrece en el campus (HC-13) y la docente tiene horas para el grupo (HC-08).
+    $this->group->subject->update(['theory_hours' => 4, 'practice_hours' => 0]);
+    CareerCampus::factory()->create(['career_id' => $this->w->isc->id, 'campus_id' => $this->w->campus->id]);
+    TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $this->w->teacher->id]);
 });
 
 function crSignIn(string $username)
@@ -33,7 +40,7 @@ it('la docente pide un cambio de horario, el jefe lo aprueba y la coordinadora l
     crSignIn('marisol')
         ->navigate('/mi-espacio/mi-carga')
         ->assertSee('Mis solicitudes')
-        ->click('[data-testid="request-change-'.$this->group->id.'"]')
+        ->click('[data-testid="request-change"]')
         ->waitForText('Qué quieres cambiar')
         ->fill('[data-testid="request-proposal"]', 'Martes y jueves de 10:00 a 12:00')
         ->fill('[data-testid="request-reason"]', 'Los lunes atiendo residencias en Campus I.')

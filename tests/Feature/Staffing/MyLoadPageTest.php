@@ -4,7 +4,9 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
@@ -72,8 +74,26 @@ it('marca el hueco entre dos sesiones del mismo día y el traslado entre campus'
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')
         ->assertSeeHtml('data-testid="gap"')
         ->assertSee('Hueco de 2 h')
-        ->assertSee('Traslado C2 → C1')
+        ->assertSeeInOrder(['Traslado C2 → C1 ·', '0 min'])
         ->assertSeeHtml('data-testid="transfer"');
+});
+
+it('SC-09: el traslado entre campus con menos de staffing.min_campus_travel_minutes libres es un aviso; con más, neutro y con su tiempo', function () {
+    loadGroup($this->c2, '1A', 'Fundamentos', [[1, '07:00', '09:00'], [2, '07:00', '09:00']]);
+    loadGroup($this->c1, '2A', 'Redes', [[1, '09:30', '10:30'], [2, '12:00', '13:00']]);
+
+    $page = Livewire::actingAs($this->user)->test('staffing::pages.my-load');
+    $transfers = domOf($page)->querySelectorAll('[data-testid=transfer]');
+
+    expect($transfers)->toHaveCount(2)
+        ->and(trim(preg_replace('/\s+/', ' ', $transfers->item(0)->textContent)))->toBe('Traslado C2 → C1 · 30 min')
+        ->and($transfers->item(0)->getAttribute('data-short'))->toBe('true')
+        ->and(trim(preg_replace('/\s+/', ' ', $transfers->item(1)->textContent)))->toBe('Traslado C2 → C1 · 3 h')
+        ->and($transfers->item(1)->getAttribute('data-short'))->toBe('false');
+
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'staffing.min_campus_travel_minutes', 'value' => 20]);
+
+    expect(domOf(Livewire::actingAs($this->user)->test('staffing::pages.my-load'))->querySelector('[data-testid=transfer]')->getAttribute('data-short'))->toBe('false');
 });
 
 it('sin huecos ni traslados no los marca', function () {
