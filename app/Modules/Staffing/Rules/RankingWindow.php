@@ -16,7 +16,7 @@ final readonly class RankingWindow
      */
     public static function semestersBefore(string $termCode, int $count): array
     {
-        if (preg_match('/^[0-9]{4}[123]$/', $termCode) !== 1) {
+        if (preg_match('/^[0-9]{4}[123]$/D', $termCode) !== 1) {
             throw new InvalidArgumentException("Código de periodo inválido: {$termCode}");
         }
 
