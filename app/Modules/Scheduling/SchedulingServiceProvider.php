@@ -4,6 +4,7 @@ namespace App\Modules\Scheduling;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Events\AgreementAccepted;
+use App\Modules\AcademicLoad\Events\AgreementCancelled;
 use App\Modules\AcademicLoad\Events\AgreementRejected;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
@@ -29,6 +30,7 @@ use App\Modules\Scheduling\Listeners\AssignCodeOnScheduleChange;
 use App\Modules\Scheduling\Listeners\BlockStaffingWithHardConflicts;
 use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
 use App\Modules\Scheduling\Listeners\NotifyDeciderOnAgreementRequested;
+use App\Modules\Scheduling\Listeners\NotifyOwnerOnLoanCancelled;
 use App\Modules\Scheduling\Listeners\NotifyRequesterOnAgreementDecided;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
@@ -88,6 +90,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         Event::listen(AgreementRequested::class, NotifyDeciderOnAgreementRequested::class);
         Event::listen(AgreementAccepted::class, NotifyRequesterOnAgreementDecided::class);
         Event::listen(AgreementRejected::class, NotifyRequesterOnAgreementDecided::class);
+        Event::listen(AgreementCancelled::class, NotifyOwnerOnLoanCancelled::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([RecomputeConflicts::class]);

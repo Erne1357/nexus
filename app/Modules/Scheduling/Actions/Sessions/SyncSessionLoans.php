@@ -40,7 +40,9 @@ use Illuminate\Validation\ValidationException;
  *   sesiones del grupo siguen la regla normal.
  *
  * Un salón sin dueño o del mismo departamento no necesita préstamo: cancela lo vivo de ese grupo, salón y día. Cada
- * préstamo cancelado o pedido deja su bitácora y su evento (los de AcademicLoad); solo pedir avisa al dueño.
+ * préstamo cancelado o pedido deja su bitácora y su evento (los de AcademicLoad); pedir y cancelar avisan al dueño,
+ * uno por préstamo y después del commit (NotifyDeciderOnAgreementRequested, NotifyOwnerOnLoanCancelled; confirmado el 8
+ * de noviembre de 2026).
  */
 final class SyncSessionLoans
 {

@@ -3,6 +3,8 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Actions\Agreements\CancelAgreement;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Events\AgreementRejected;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
@@ -15,19 +17,24 @@ use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Actions\Agreements\AcceptRoomLoan;
+use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectSharedGroup;
+use App\Modules\Scheduling\Actions\Sessions\SyncSessionLoans;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Notifications\AgreementAnswered;
 use App\Modules\Scheduling\Notifications\AgreementReceived;
+use App\Modules\Scheduling\Notifications\LoanCancelled;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 
 /*
 | Avisos de los acuerdos (tareas 3.6 y 3.7; supuesto por confirmar): al pedirse, a los titulares de
 | `academic_load.agreement.decide` del departamento al que va dirigido, en el campus; al aceptarse o rechazarse, a los de
-| `academic_load.agreement.request` del departamento que lo pidió, con el motivo. Llevan a Acuerdos con el acuerdo abierto.
+| `academic_load.agreement.request` del departamento que lo pidió, con el motivo. Al cancelarse un préstamo vivo, a los
+| mismos que al pedirlo (confirmado el 8 de noviembre de 2026). Llevan a Acuerdos con el acuerdo abierto.
 */
 
 beforeEach(function () {
@@ -193,4 +200,95 @@ it('el aviso de un acuerdo ya decidido o cancelado deja de abrirse, con su motiv
 
     $loan->update(['status' => 'accepted', 'decided_by' => $this->jefeSc->id, 'decided_at' => now(), 'cancelled_by' => null, 'cancelled_at' => null]);
     expect(AgreementReceived::unavailableReason($context, $message))->toBe('Este acuerdo ya se decidió.');
+});
+
+it('al cancelar quien lo pidió un préstamo propuesto, avisa al jefe del departamento dueño y no a quien lo pidió ni a la subdirección', function () {
+    Notification::fake();
+    $loan = ($this->loan)();
+
+    app(CancelRoomLoan::class)->handle($loan, $this->jefeIi);
+
+    Notification::assertSentTo($this->jefeSc, LoanCancelled::class, function (LoanCancelled $notification) use ($loan): bool {
+        $message = $notification->message($this->jefeSc);
+
+        return $message->title === 'Ingeniería Industrial canceló el préstamo de LC-201 del lunes de 9:00 a 11:00'
+            && $message->body === 'Ya no tienes que decidirlo.'
+            && $message->route === 'scheduling.agreements'
+            && $message->parameters === ['acuerdo' => $loan->id]
+            && $message->campusId === $this->campus->id
+            && $message->termId === $this->term->id;
+    });
+    Notification::assertSentToTimes($this->jefeSc, LoanCancelled::class, 1);
+    Notification::assertNotSentTo([$this->jefeIi, $this->subdireccion], LoanCancelled::class);
+});
+
+it('al cancelarse solos los préstamos de una sesión que se movió (SyncSessionLoans), avisa uno por préstamo, también si estaba aceptado', function () {
+    Notification::fake();
+    $first = ($this->loan)();
+    $first->update(['starts_at' => '07:00', 'ends_at' => '09:00', 'status' => AgreementStatus::Accepted, 'decided_by' => $this->jefeSc->id, 'decided_at' => now()]);
+    $second = ($this->loan)();
+
+    app(SyncSessionLoans::class)->resync($this->group, $this->room, 1, $this->jefeIi);
+
+    expect($first->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and($second->fresh()->status)->toBe(AgreementStatus::Cancelled);
+    Notification::assertSentToTimes($this->jefeSc, LoanCancelled::class, 2);
+    Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $first->id]
+        && $notification->message($this->jefeSc)->title === 'Ingeniería Industrial canceló el préstamo de LC-201 del lunes de 7:00 a 9:00'
+        && $notification->message($this->jefeSc)->body === 'Estaba aceptado: el salón ya no queda prestado a esa hora.');
+    Notification::assertNotSentTo($this->jefeIi, LoanCancelled::class);
+});
+
+it('un préstamo rechazado no avisa al dueño como cancelado, ni lo que ya se decidió y ya no se puede cancelar', function () {
+    Notification::fake();
+    $rejected = ($this->loan)();
+    app(RejectRoomLoan::class)->handle($rejected, 'No hay lugar.', $this->jefeSc);
+    $accepted = ($this->loan)();
+    app(AcceptRoomLoan::class)->handle($accepted, $this->jefeSc);
+
+    expect(fn () => app(CancelAgreement::class)->handle($rejected->fresh(), $this->jefeIi))->toThrow(ValidationException::class)
+        ->and(fn () => app(CancelRoomLoan::class)->handle($accepted->fresh(), $this->jefeIi))->toThrow(ValidationException::class, 'ya se decidió');
+
+    Notification::assertNotSentTo([$this->jefeSc, $this->jefeIi], LoanCancelled::class);
+});
+
+it('retirar un grupo compartido no avisa como préstamo cancelado', function () {
+    Notification::fake();
+    $share = InterdepartmentalAgreement::factory()->sharedGroup(6)->create([
+        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+        'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+    ]);
+
+    app(CancelAgreement::class)->handle($share, $this->jefeIi);
+
+    Notification::assertNothingSentTo($this->jefeSc);
+});
+
+it('el aviso de un préstamo cancelado sale después del commit: lo que se revierte no avisa', function () {
+    Notification::fake();
+    $loan = ($this->loan)();
+
+    try {
+        DB::transaction(function () use ($loan): void {
+            app(CancelRoomLoan::class)->handle($loan, $this->jefeIi);
+
+            throw new RuntimeException('se revierte');
+        });
+    } catch (RuntimeException) {
+    }
+
+    Notification::assertNothingSent();
+    expect($loan->fresh()->status)->toBe(AgreementStatus::Proposed);
+});
+
+it('el aviso de un préstamo cancelado se abre en Acuerdos y deja de abrirse si el acuerdo ya no existe o ya no se ve', function () {
+    $loan = ($this->loan)();
+    app(CancelRoomLoan::class)->handle($loan, $this->jefeIi);
+    $data = $this->jefeSc->notifications()->where('type', LoanCancelled::class)->sole()->data;
+    $message = NotificationMessage::fromArray($data);
+    $context = fn (User $user): Actor => app(Actor::class)->forUser($user);
+
+    expect(LoanCancelled::unavailableReason($context($this->jefeSc), $message))->toBeNull()
+        ->and(LoanCancelled::unavailableReason($context(User::factory()->withRole(Role::Docente)->create()), $message))->toBe('Ya no ves los acuerdos de ese departamento.')
+        ->and(LoanCancelled::unavailableReason($context($this->jefeSc), NotificationMessage::fromArray([...$data, 'parameters' => ['acuerdo' => fakeKey(71)]])))->toBe('Ese acuerdo ya no existe.');
 });

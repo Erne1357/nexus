@@ -13,12 +13,15 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
+use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Notifications\LoanCancelled;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -73,6 +76,16 @@ function agreementsAs(User $user, array $query = []): Testable
 {
     return Livewire::withQueryParams($query)->actingAs($user)->test(AGREEMENTS);
 }
+
+it('el aviso de un préstamo cancelado abre el acuerdo cancelado al jefe del departamento dueño (confirmado el 8 de noviembre de 2026)', function () {
+    app(CancelRoomLoan::class)->handle($this->loan, $this->jefeIi);
+    $notice = NotificationMessage::fromArray($this->jefeSc->notifications()->where('type', LoanCancelled::class)->sole()->data);
+
+    agreementsAs($this->jefeSc, $notice->parameters)
+        ->assertOk()
+        ->assertSet('agreementId', $this->loan->id)
+        ->assertSee('Cancelado');
+});
 
 describe('jefe del departamento que decide', function () {
     it('ve «Por decidir» con los dos acuerdos, el detalle del primero y la semana del salón', function () {

@@ -18,6 +18,7 @@ use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Notifications\AgreementReceived;
+use App\Modules\Scheduling\Notifications\LoanCancelled;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -265,23 +266,27 @@ it('HC-10: el modo estricto vale solo para la sesión indicada: el hueco bloquea
         ->and(liveLoansOfSync())->toBe(['1 09:00-10:00 proposed']);
 });
 
-it('avisa al dueño una vez por préstamo pedido: un propuesto que ya coincide no vuelve a avisar y el aviso del cancelado ya no se abre', function () {
+it('avisa al dueño una vez por préstamo pedido y una por cancelado: un propuesto que ya coincide no vuelve a avisar y el aviso de pedir el cancelado ya no se abre', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->owner->id])->create();
+    $received = fn () => $jefe->notifications()->where('type', AgreementReceived::class);
     $session = syncSession(1, '09:00', '11:00');
 
     resyncLoans();
     resyncLoans();
 
     expect($jefe->notifications()->count())->toBe(1);
-    $first = NotificationMessage::fromArray($jefe->notifications()->sole()->data);
+    $first = NotificationMessage::fromArray($received()->sole()->data);
 
     $session->update(['ends_at' => '12:00']);
     resyncLoans();
 
     $context = app(Actor::class)->forUser($jefe);
-    $second = NotificationMessage::fromArray($jefe->notifications()->get()->first(fn ($notification) => $notification->data['parameters']['acuerdo'] !== $first->parameters['acuerdo'])->data);
+    $second = NotificationMessage::fromArray($received()->get()->first(fn ($notification) => $notification->data['parameters']['acuerdo'] !== $first->parameters['acuerdo'])->data);
+    $cancelled = NotificationMessage::fromArray($jefe->notifications()->where('type', LoanCancelled::class)->sole()->data);
 
-    expect($jefe->notifications()->count())->toBe(2)
+    expect($received()->count())->toBe(2)
+        ->and($cancelled->parameters)->toBe($first->parameters)
         ->and(AgreementReceived::unavailableReason($context, $first))->toBe('Este acuerdo se canceló.')
-        ->and(AgreementReceived::unavailableReason($context, $second))->toBeNull();
+        ->and(AgreementReceived::unavailableReason($context, $second))->toBeNull()
+        ->and(LoanCancelled::unavailableReason($context, $cancelled))->toBeNull();
 });
