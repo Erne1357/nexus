@@ -25,7 +25,7 @@ final class MyLoadQuery
 
     /**
      * @return array{
-     *     groups: list<array<string, mixed>>,
+     *     groups: list<array{id: string, code: string, subject_name: string, campus_code: string, schedule: list<array{days: string, time: string}>}>,
      *     home: ?string,
      *     days: array<int, array{name: string, short: string, hours: int, blocks: list<array<string, mixed>>}>,
      *     hours: array{base: int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, sources: list<array{source: string, hours: int}>}
@@ -79,6 +79,7 @@ final class MyLoadQuery
                 'code' => $group->code,
                 'subject_name' => $group->subject->name,
                 'campus_code' => $group->campus->code,
+                'schedule' => SessionLabels::schedule($group->sessions),
             ])->all(),
             'days' => $days,
             'home' => $groups->countBy(fn (Group $group): string => $group->campus->code)->sortDesc()->keys()->first(),

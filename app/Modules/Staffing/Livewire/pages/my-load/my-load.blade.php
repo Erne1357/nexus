@@ -1,8 +1,9 @@
 {{--
     Mi carga (tarea 3.10), maqueta C «Columnas por día»: la ecuación de horas (base − externas − asignadas = restantes),
-    las columnas de lunes a viernes (el sábado solo con sesiones) con un bloque por sesión (materia, grupo, salón y
-    campus), el hueco entre dos sesiones y el traslado cuando el campus cambia, y al final el espacio de «Mis
-    solicitudes» (tarea 3.11, todavía vacío). Todo viene de MyLoadQuery.
+    las columnas de lunes a viernes (el sábado solo con sesiones) con un bloque por sesión (materia, grupo, salón,
+    campus y, si el grupo tiene una solicitud abierta, su estado), el hueco entre dos sesiones y el traslado cuando el
+    campus cambia, y al final «Mis solicitudes» con el modal «Solicitar cambio» (tarea 3.11). Todo viene de MyLoadQuery
+    y MyChangeRequestsQuery.
 --}}
 <div class="space-y-4">
     <div>
@@ -85,6 +86,9 @@
                                         <span>{{ $block['room'] ?? 'Sin salón' }}</span>
                                         <span class="badge badge-neutral badge-soft badge-sm" title="{{ $block['campus_name'] }}">{{ $block['campus_code'] }}</span>
                                     </span>
+                                    @if ($open = $mine['groups'][$block['group_id']]['open'] ?? null)
+                                        <span class="mt-0.5"><x-core::status-badge :tone="$open->tone()" :label="'Solicitud '.mb_strtolower($open->label())" /></span>
+                                    @endif
                                 </div>
                             @empty
                                 <p class="px-1 py-2 text-sm text-neutral">Sin clases</p>
@@ -95,7 +99,12 @@
             </div>
         @endif
 
-        {{-- Espacio de «Mis solicitudes» y «Solicitar cambio» (tarea 3.11): se agrega aquí, sin tocar lo de arriba. --}}
-        <section aria-label="Mis solicitudes" data-testid="my-load-requests-slot"></section>
+        @include('staffing::my-load.requests')
+
+        <x-modal wire:model="showRequest" box-class="max-w-xl" aria-labelledby="request-title" data-testid="request-modal">
+            @if ($showRequest && $requestGroup !== null)
+                @include('staffing::my-load.request-form', ['group' => $requestGroup])
+            @endif
+        </x-modal>
     @endif
 </div>
