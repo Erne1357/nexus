@@ -4,7 +4,7 @@ namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Models\Group;
-use App\Modules\Scheduling\Rules\SessionRules;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\SessionCandidate;
@@ -19,7 +19,7 @@ use App\Modules\Scheduling\Validation\Violation;
  * Una celda cabe si la candidata no agrega violaciones duras: las que el grupo ya tenía sin ella (validateGroup()) no
  * cuentan, ni las de sus totales (HC-12, las horas semanales del grupo), que una celda sola no cumple ni rompe. Así
  * HC-08 (horas del docente) no marca celdas y HC-01, HC-03 y HC-09 sí. Un grupo que no se edita (cancelado, o con la
- * carga fuera de propuesta, asignación o ajustes; SessionRules::editBlockedReasons()) y un campus sin bloques de tiempo
+ * carga fuera de propuesta, asignación o ajustes; LoadEditability::blockedReasons()) y un campus sin bloques de tiempo
  * no tienen celdas.
  *
  * Rendimiento (200 grupos en el campus, 70 celdas, las 13 reglas): leer la foto cuesta unos 50 ms y las 70 celdas unos
@@ -32,7 +32,7 @@ final class GroupFitQuery
 
     public function __construct(
         private readonly ScheduleValidator $validator,
-        private readonly SessionRules $rules,
+        private readonly LoadEditability $editability,
     ) {}
 
     /**
@@ -40,7 +40,7 @@ final class GroupFitQuery
      */
     public function for(Group $group): array
     {
-        if ($this->rules->editBlockedReasons([$group])[$group->id] !== null) {
+        if ($this->editability->blockedReasons([$group])[$group->id] !== null) {
             return [];
         }
 

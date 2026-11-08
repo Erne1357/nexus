@@ -14,7 +14,7 @@ use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
-use App\Modules\Scheduling\Rules\SessionRules;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\ValidationScope;
@@ -36,7 +36,7 @@ use Illuminate\Database\Query\JoinClause;
  * las que tiene colocadas, y lo que el actor que recibe puede hacer con su puesto activo, con los permisos y el
  * objetivo de GroupPolicy (`editSessions`, `assignRoom`, `manageQuotas`). Nadie puede nada de eso con un grupo de
  * contexto, ni si el grupo está cancelado o su carga no está en propuesta, asignación o ajustes: `editBlockedReason` dice
- * por qué, con el mensaje de SessionRules::editBlockedReasons(), la misma regla que aplican las Actions. Además, las
+ * por qué, con el mensaje de LoadEditability::blockedReasons(), la misma regla que aplican las Actions. Además, las
  * violaciones del validador por grupo y, las que nombran una sesión, por sesión (una sola validación de todos los
  * grupos con la foto del periodo y campus); solo los grupos y sesiones que tienen alguna.
  *
@@ -46,7 +46,7 @@ final class SemesterBoardQuery
 {
     public function __construct(
         private readonly ScheduleValidator $validator,
-        private readonly SessionRules $rules,
+        private readonly LoadEditability $editability,
     ) {}
 
     /**
@@ -104,7 +104,7 @@ final class SemesterBoardQuery
             ->orderBy('groups.code')
             ->get();
 
-        $blocked = $this->rules->editBlockedReasons($groups);
+        $blocked = $this->editability->blockedReasons($groups);
         $byGroup = [];
         $bySession = [];
 
