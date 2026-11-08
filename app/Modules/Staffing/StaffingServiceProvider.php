@@ -66,6 +66,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             Role::Docente->value => [
                 StaffingPermission::OfferView,
                 StaffingPermission::MyLoadView,
+                StaffingPermission::ChangeRequestRequestOwn,
             ],
             Role::Subdireccion->value => [
                 StaffingPermission::RankingView,
@@ -86,9 +87,6 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             Role::Coordinador->value => [
                 StaffingPermission::ChangeRequestRequest,
                 StaffingPermission::ChangeRequestApplySchedule,
-            ],
-            Role::Docente->value => [
-                StaffingPermission::ChangeRequestRequestOwn,
             ],
         ];
     }

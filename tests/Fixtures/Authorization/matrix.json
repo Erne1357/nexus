@@ -13,7 +13,9 @@
             "students.student.view"
         ],
         "docente": [
-            "staffing.change_request.request_own"
+            "staffing.change_request.request_own",
+            "staffing.my_load.view",
+            "staffing.offer.view"
         ],
         "jefe_departamento": [
             "academic.placement.validate",
@@ -109,10 +111,6 @@
             "staffing.change_request.view",
             "staffing.ranking.view",
             "students.student.view"
-        ],
-        "docente": [
-            "staffing.my_load.view",
-            "staffing.offer.view"
         ]
     },
     "admin_denies": [
@@ -185,8 +183,6 @@
             "staffing.change_request.decide",
             "staffing.change_request.request",
             "staffing.change_request.view",
-            "staffing.my_load.view",
-            "staffing.offer.view",
             "staffing.ranking.view",
             "staffing.teacher.assign",
             "students.student.view"
