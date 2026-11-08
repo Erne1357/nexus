@@ -4,6 +4,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\UnassignTeacher;
@@ -25,6 +26,7 @@ beforeEach(function () {
         'department_id' => $this->group->department_id,
     ]);
     $this->teacher = Teacher::factory()->create();
+    TeacherPosition::factory()->for($this->teacher)->tiempoCompleto()->create();
     StaffingRanking::factory()->create(['group_id' => $this->group->id, 'teacher_id' => $this->teacher->id, 'rank' => 1]);
     app(AssignTeacher::class)->handle($this->group, $this->teacher, $this->actor);
 });

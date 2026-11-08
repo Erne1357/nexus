@@ -4,6 +4,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\AssignTeacher;
@@ -28,6 +29,7 @@ beforeEach(function () {
     ]);
     $this->teachers = collect(range(1, 3))->map(function (int $rank): Teacher {
         $teacher = Teacher::factory()->create();
+        TeacherPosition::factory()->for($teacher)->tiempoCompleto()->create();
         StaffingRanking::factory()->create(['group_id' => $this->group->id, 'teacher_id' => $teacher->id, 'rank' => $rank]);
 
         return $teacher;
@@ -91,6 +93,7 @@ it('HC-16: acepta al tercer lugar con motivo y guarda «3 de N»', function () {
 
 it('HC-16: un docente fuera del ranking pide motivo y queda sin lugar', function () {
     $outsider = Teacher::factory()->create();
+    TeacherPosition::factory()->for($outsider)->tiempoCompleto()->create();
 
     $errors = assignmentErrors(fn () => assignTeacher($this->group, $outsider, $this->actor));
     $assignment = assignTeacher($this->group, $outsider, $this->actor, 'Es el único con la especialidad.');
