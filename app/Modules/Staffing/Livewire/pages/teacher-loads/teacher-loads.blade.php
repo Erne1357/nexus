@@ -6,28 +6,28 @@
 --}}
 @php
     $toneText = ['error' => 'text-error', 'warning' => 'text-warning', 'info' => 'text-info', 'success' => 'text-success', 'draft' => 'text-neutral'];
-    $campusBar = ['bg-info', 'bg-primary', 'bg-neutral', 'bg-warning'];
+    $campusBar = ['bg-info/40', 'bg-primary', 'bg-neutral', 'bg-warning'];
 @endphp
 <div class="space-y-5">
     @if ($board === null)
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Carga por docente</h1>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="loads-empty">{{ $message }}</div>
     @else
-        <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div class="flex flex-wrap items-end justify-between gap-x-7 gap-y-4">
             <div class="min-w-0">
                 <h1 class="text-2xl font-bold leading-tight md:text-3xl">Carga por docente</h1>
-                <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
+                <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-neutral">
                     <span class="font-medium text-base-content" data-testid="loads-department">{{ $department->name }}</span>
                     <span>Todos los campus</span>
                     <span data-testid="loads-term">{{ $term->name }}</span>
                 </p>
             </div>
 
-            <div class="flex flex-wrap items-end gap-3">
+            <div class="flex flex-wrap items-end gap-3 max-md:w-full">
                 @if (count($departments) > 1)
                     <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" class="select-sm" data-testid="loads-department-select" />
                 @endif
-                <div class="flex flex-col gap-1.5 rounded-box border border-base-300 bg-base-100 px-4 py-2.5" data-testid="loads-state">
+                <div class="flex flex-col gap-1.5 rounded-box border border-base-300 bg-base-100 px-4 py-2.5 max-md:w-full" data-testid="loads-state">
                     <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Carga del departamento</span>
                     <span class="flex flex-wrap items-center gap-2">
                         @forelse ($loads as $load)
@@ -54,17 +54,19 @@
                     $kpis = [
                         ['Docentes', $totals['teachers'], $totals['honorarios'].' honorarios'.($board->pending > 0 ? ' · '.$board->pending.' sin calcular' : ''), ''],
                         ['Horas base', $totals['base'], $totals['external'].' externas', ''],
-                        ['Asignadas', $totals['assigned'], collect($totals['byCampus'])->map(fn ($hours, $code) => "{$code} {$hours}")->implode(' · ').' · '.$totals['groups'].' grupos', ''],
+                        ['Asignadas', $totals['assigned'], collect($totals['byCampus'])->map(fn ($hours, $code) => "{$code} {$hours}")->implode(' · ').'|'.$totals['groups'].' grupos', ''],
                         ['Restantes', $totals['remaining'], 'sin contar honorarios', ''],
-                        ['Sin carga', $totals['none'], '', $totals['none'] > 0 ? 'text-warning' : ''],
-                        ['Exceden', $totals['over'], 'HC-08', $totals['over'] > 0 ? 'text-error' : ''],
+                        ['Sin carga', $totals['none'], 'sin grupos en el periodo', $totals['none'] > 0 ? 'text-warning' : ''],
+                        ['Exceden', $totals['over'], 'arriba de su tope (+2 h de tolerancia)', $totals['over'] > 0 ? 'text-error' : ''],
                     ];
                 @endphp
                 @foreach ($kpis as [$label, $value, $note, $tone])
                     <div class="min-w-0 space-y-1 p-4">
                         <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
                         <dd class="text-3xl font-semibold leading-none tabular-nums {{ $tone }}" data-testid="kpi-{{ Str::slug($label) }}">{{ $value }}</dd>
-                        <dd class="truncate text-sm text-neutral">{{ $note }}&nbsp;</dd>
+                        @foreach (explode('|', $note) as $line)
+                            <dd class="text-sm text-neutral">{{ $line }}&nbsp;</dd>
+                        @endforeach
                     </div>
                 @endforeach
             </dl>
@@ -76,6 +78,16 @@
 
                 <x-select wire:model.live="plaza" aria-label="Plaza" :options="$plazaOptions" placeholder="Plaza" placeholder-value="" />
             </x-core::catalog-toolbar>
+
+            @include('staffing::teacher-loads.state-filter')
+
+            <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-neutral" data-testid="loads-legend">
+                @foreach (array_keys($totals['byCampus']) as $code)
+                    <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm {{ $campusBar[$campusTones[$code] % count($campusBar)] }}"></i>{{ $code }}</span>
+                @endforeach
+                <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm bg-base-content/35"></i>Externas</span>
+                <span class="flex items-center gap-1.5"><i class="inline-block h-3 w-0.5 bg-base-content"></i>Horas base</span>
+            </div>
 
             @forelse ($sections as $status => $section)
                 <section class="space-y-3" aria-labelledby="section-{{ $status }}" data-testid="section-{{ $status }}">
@@ -94,7 +106,7 @@
                                 $scale = max(48, $row->assignedHours + $row->externalHours, $row->limitHours);
                                 $pct = fn (int $hours): string => round($hours / $scale * 100, 2).'%';
                                 $figure = match ($status) {
-                                    'over' => ['−'.$row->excessHours().' h', 'de más', 'text-error'],
+                                    'over' => ['+'.$row->excessHours(), 'h de más', 'text-error'],
                                     'none' => ['0 / '.$row->baseHours, 'h', ''],
                                     'part' => [$row->remainingHours, 'libres', ''],
                                     'full' => ['0', 'libres', 'text-success'],
@@ -102,10 +114,10 @@
                                 };
                             @endphp
                             <button type="button" wire:click="open('{{ $row->teacherId }}')" wire:key="tile-{{ $row->teacherId }}" data-testid="tile" data-teacher="{{ $row->teacherId }}"
-                                @class(['flex min-h-11 min-w-0 flex-col gap-2.5 rounded-box border bg-base-100 p-3.5 text-left transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary', 'border-error' => $status === 'over', 'border-base-300' => $status !== 'over'])>
-                                <span class="flex items-start justify-between gap-2">
-                                    <span class="min-w-0 truncate font-semibold" title="{{ $row->name }}">{{ $row->name }}</span>
-                                    <span class="flex shrink-0 flex-wrap justify-end gap-1">
+                                @class(['flex min-h-11 min-w-0 flex-col gap-2.5 rounded-box border p-3.5 text-left transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary', 'border-error' => $status === 'over', 'border-base-300' => $status !== 'over', 'bg-secondary' => $teacherId === $row->teacherId, 'bg-base-100' => $teacherId !== $row->teacherId])>
+                                <span class="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                                    <span class="min-w-0 flex-1 basis-40 break-words font-semibold">{{ $row->name }}</span>
+                                    <span class="flex shrink-0 flex-wrap gap-1">
                                         @foreach ($row->positionLabels as $label)
                                             <span class="badge badge-sm badge-neutral badge-soft font-mono" @if ($loop->first) data-testid="tile-plaza" @endif>{{ $label }}</span>
                                         @endforeach
@@ -146,17 +158,9 @@
                     <p class="font-semibold">Ningún docente coincide</p>
                 </div>
             @endforelse
-
-            <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-neutral" data-testid="loads-legend">
-                @foreach (array_keys($totals['byCampus']) as $code)
-                    <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm {{ $campusBar[$campusTones[$code] % count($campusBar)] }}"></i>{{ $code }}</span>
-                @endforeach
-                <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm bg-base-content/35"></i>Externas</span>
-                <span class="flex items-center gap-1.5"><i class="inline-block h-3 w-0.5 bg-base-content"></i>Horas base</span>
-            </div>
         @endif
 
-        <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-lg p-0!" role="dialog" aria-modal="true" aria-labelledby="teacher-drawer-title" data-testid="teacher-drawer">
+        <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-lg max-md:max-w-none p-0!" role="dialog" aria-modal="true" aria-labelledby="teacher-drawer-title" data-testid="teacher-drawer">
             @if ($showDrawer && $selected !== null)
                 @include('staffing::teacher-loads.drawer', ['row' => $selected, 'campusTones' => $campusTones, 'campusBar' => $campusBar])
             @endif

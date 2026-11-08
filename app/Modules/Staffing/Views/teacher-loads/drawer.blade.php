@@ -7,7 +7,7 @@
     $rowHeight = 22;
     $first = 7;
     $last = 21;
-    $campusText = ['text-info-content', 'text-primary-content', 'text-neutral-content', 'text-warning-content'];
+    $campusText = ['text-base-content', 'text-primary-content', 'text-neutral-content', 'text-warning-content'];
     $days = [1 => 'Lun', 2 => 'Mar', 3 => 'Mié', 4 => 'Jue', 5 => 'Vie'];
     $byCampus = collect($row->groups)->groupBy('campus');
 @endphp
@@ -34,9 +34,9 @@
     </header>
 
     <div class="flex-1 space-y-6 px-5 py-4">
-        <dl class="grid grid-cols-4 divide-x divide-base-300 overflow-hidden rounded-box border border-base-300">
+        <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 min-[480px]:grid-cols-4">
             @foreach ([['Base', $row->baseHours, ''], ['Externas', $row->externalHours, ''], ['Asignadas', $row->assignedHours, ''], ['Restan', $row->remainingHours, $row->remainingHours < 0 ? 'text-error' : '']] as [$label, $value, $tone])
-                <div class="min-w-0 p-3">
+                <div class="min-w-0 bg-base-100 p-3">
                     <dt class="truncate text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
                     <dd class="mt-1 font-mono text-2xl font-semibold leading-none tabular-nums {{ $tone }}" data-testid="drawer-{{ Str::slug($label) }}">{{ $value }}</dd>
                 </div>
@@ -64,6 +64,7 @@
             <p class="text-neutral" data-testid="drawer-no-groups">Sin grupos en este periodo.</p>
         @endforelse
 
+        @if ($row->sessions !== [])
         <section aria-labelledby="week-title">
             <h3 id="week-title" class="mb-2 font-semibold">Horario semanal</h3>
             <div class="grid grid-cols-[2rem_repeat(5,minmax(0,1fr))] gap-x-px text-xs" role="img" aria-label="Horario semanal de {{ $row->name }}" data-testid="drawer-week">
@@ -90,5 +91,6 @@
                 @endforeach
             </div>
         </section>
+        @endif
     </div>
 </div>

@@ -56,6 +56,10 @@ new #[Title('Carga por docente')] class extends Component
     #[Url(as: 'plaza')]
     public string $plaza = '';
 
+    /** Estado del filtro segmentado: 'todos' o el de una sección. */
+    #[Url(as: 'estado')]
+    public string $state = 'todos';
+
     /** El docente del drawer. */
     #[Locked]
     public ?string $teacherId = null;
@@ -86,12 +90,18 @@ new #[Title('Carga por docente')] class extends Component
 
         $this->resolve($context);
         $this->updatedPlaza();
+        $this->updatedState();
     }
 
     public function updatedDepartment(Actor $context): void
     {
         $this->reset('teacherId', 'showDrawer');
         $this->resolve($context);
+    }
+
+    public function updatedState(): void
+    {
+        $this->state = $this->state === 'todos' || array_key_exists($this->state, self::SECTIONS) ? $this->state : 'todos';
     }
 
     public function updatedPlaza(): void
@@ -146,9 +156,18 @@ new #[Title('Carga por docente')] class extends Component
         $visible = array_values(array_filter($board->rows, fn (TeacherLoadRow $row): bool => ($this->plaza === '' || in_array($this->plaza, $row->positionKinds, true))
             && ($needle === '' || str_contains(Str::of($row->name.' '.$row->rfc)->ascii()->lower()->toString(), $needle))));
 
+        $stateOptions = ['todos' => 'Todos', TeacherLoadRow::OVER => 'Exceden', TeacherLoadRow::NONE => 'Sin carga', TeacherLoadRow::PART => 'Libres', TeacherLoadRow::FULL => 'Completa', TeacherLoadRow::HONORARIOS => 'Honorarios'];
+        $stateCounts = array_map(fn (string $option): int => $option === 'todos'
+            ? count($visible)
+            : count(array_filter($visible, fn (TeacherLoadRow $row): bool => $row->status() === $option)), array_combine(array_keys($stateOptions), array_keys($stateOptions)));
+
         $sections = [];
 
         foreach (self::SECTIONS as $status => [$title, $tone, $icon]) {
+            if ($this->state !== 'todos' && $this->state !== $status) {
+                continue;
+            }
+
             $rows = array_values(array_filter($visible, fn (TeacherLoadRow $row): bool => $row->status() === $status));
 
             if ($rows !== []) {
@@ -169,6 +188,8 @@ new #[Title('Carga por docente')] class extends Component
             'totals' => $totals,
             'sections' => $sections,
             'visibleCount' => count($visible),
+            'stateOptions' => $stateOptions,
+            'stateCounts' => $stateCounts,
             'campusTones' => array_flip(array_keys($totals['byCampus'])),
             'plazaOptions' => array_map(fn (PositionKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], PositionKind::cases()),
             'selected' => $this->teacherId === null ? null : collect($board->rows)->first(fn (TeacherLoadRow $row): bool => $row->teacherId === $this->teacherId),

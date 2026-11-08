@@ -105,13 +105,35 @@ describe('mosaicos', function () {
 
         $figures = collect(domOf(loadsPage()->html())->querySelectorAll('[data-testid=tile-figure]'))->map(fn ($figure) => textOf($figure))->all();
 
-        expect($figures)->toEqualCanonicalizing(['−3 h', '0 / 40', '30', '0', '4']);
+        expect($figures)->toEqualCanonicalizing(['+3', '0 / 40', '30', '0', '4']);
 
         loadsPage()
             ->assertSeeHtml('data-testid="kpi-exceden"')
             ->assertSee('Todos los campus')
             ->assertSee('Sistemas y Computación')
             ->assertSee('Ene-Jun 2027');
+    });
+
+    it('HC-08: las horas de más llevan «+», nunca un signo menos', function () {
+        boardSeed();
+        $html = loadsPage()->html();
+        $tile = domOf($html)->querySelector('[data-testid=section-over] [data-testid=tile]');
+
+        expect(textOf($tile))->toContain('+3')->toContain('h de más')->not->toContain('−');
+    });
+
+    it('filtra por estado con el filtro segmentado y cuenta cada estado', function () {
+        boardSeed();
+
+        $page = loadsPage();
+        $html = $page->html();
+
+        expect(textOf(domOf($html)->querySelector('[data-testid=state-todos]')))->toContain('5')
+            ->and(textOf(domOf($html)->querySelector('[data-testid=state-over]')))->toContain('1');
+
+        $page->set('state', 'over')->assertSee('Olga Excedida')->assertDontSee('Pablo Libre')->assertDontSee('Hugo Honorarios');
+        loadsPage(query: ['estado' => 'hon'])->assertSee('Hugo Honorarios')->assertDontSee('Olga Excedida');
+        loadsPage()->set('state', 'inventado')->assertSee('Olga Excedida')->assertSee('Pablo Libre');
     });
 
     it('filtra por nombre o RFC y por plaza', function () {
