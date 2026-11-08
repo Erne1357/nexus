@@ -701,7 +701,7 @@ final class SchedulingDemoSeeder extends Seeder
         $this->rooms = Room::query()->where('campus_id', $campus->id)->where('is_active', true)->orderBy('code')->get()->all();
         $this->roomBusy = [];
 
-        RoomBlock::query()->where('term_id', $term->id)->whereIn('room_id', collect($this->rooms)->pluck('id'))
+        RoomBlock::query()->where(fn ($query) => $query->whereNull('term_id')->orWhere('term_id', $term->id))->whereIn('room_id', collect($this->rooms)->pluck('id'))
             ->get(['room_id', 'day', 'starts_at', 'ends_at'])
             ->each(function (RoomBlock $block): void {
                 $from = (int) substr((string) $block->starts_at, 0, 2);
