@@ -56,7 +56,7 @@ function boardSubject(array $attributes = [], int $semester = 1): Subject
     return $subject;
 }
 
-function boardGroup(Subject $subject, array $attributes = []): Group
+function semesterBoardGroup(Subject $subject, array $attributes = []): Group
 {
     return Group::factory()->create([
         'term_id' => test()->term->id,
@@ -89,19 +89,19 @@ it('trae los grupos de la carrera en el plan y semestre y los compartidos donde 
     $first = boardSubject(['code' => 'ZZZ-0001']);
     DB::table('study_plan_subjects')->where('subject_id', $first->id)->update(['position' => 1]);
     DB::table('study_plan_subjects')->where('subject_id', $second->id)->update(['position' => 2]);
-    $own = boardGroup($first, ['code' => 'A']);
-    $ownB = boardGroup($second, ['code' => 'B']);
+    $own = semesterBoardGroup($first, ['code' => 'A']);
+    $ownB = semesterBoardGroup($second, ['code' => 'B']);
     $sharedSubject = boardSubject(['code' => 'MMM-0001']);
-    $shared = boardGroup($sharedSubject, ['code' => 'S', 'owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id, 'semester' => 4]);
+    $shared = semesterBoardGroup($sharedSubject, ['code' => 'S', 'owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id, 'semester' => 4]);
     GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->isc->id]);
 
-    boardGroup($first, ['semester' => 2]);
-    boardGroup($first, ['status' => GroupStatus::Cancelled]);
-    boardGroup($first, ['campus_id' => Campus::factory()->create()->id]);
-    boardGroup($first, ['term_id' => Term::factory()->create()->id]);
-    boardGroup($first, ['study_plan_id' => StudyPlan::factory()->create(['career_id' => $this->isc->id])->id]);
-    boardGroup($sharedSubject, ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
-    $otherSemester = boardGroup(boardSubject(semester: 2), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
+    semesterBoardGroup($first, ['semester' => 2]);
+    semesterBoardGroup($first, ['status' => GroupStatus::Cancelled]);
+    semesterBoardGroup($first, ['campus_id' => Campus::factory()->create()->id]);
+    semesterBoardGroup($first, ['term_id' => Term::factory()->create()->id]);
+    semesterBoardGroup($first, ['study_plan_id' => StudyPlan::factory()->create(['career_id' => $this->isc->id])->id]);
+    semesterBoardGroup($sharedSubject, ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
+    $otherSemester = semesterBoardGroup(boardSubject(semester: 2), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
     GroupQuota::factory()->create(['group_id' => $otherSemester->id, 'career_id' => $this->isc->id]);
 
     $board = semesterBoardFor(User::factory()->admin()->create());
@@ -113,7 +113,7 @@ it('trae los grupos de la carrera en el plan y semestre y los compartidos donde 
 it('por grupo da la materia con su departamento, el docente, la capacidad, los cupos, las sesiones con su salón y las horas', function () {
     $subject = boardSubject(['code' => 'SCD-1001', 'name' => 'Cálculo Diferencial', 'theory_hours' => 3, 'practice_hours' => 2, 'needs_lab' => true, 'department_id' => $this->sistemas->id]);
     $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
-    $group = boardGroup($subject, ['code' => 'D', 'capacity' => 30, 'teacher_id' => $teacher->id]);
+    $group = semesterBoardGroup($subject, ['code' => 'D', 'capacity' => 30, 'teacher_id' => $teacher->id]);
     GroupQuota::factory()->create(['group_id' => $group->id, 'career_id' => $this->isc->id, 'max_seats' => 20, 'is_owner' => true]);
     GroupQuota::factory()->create(['group_id' => $group->id, 'career_id' => $this->iind->id, 'max_seats' => 10]);
     $lab = boardRoom(['code' => 'LC-1', 'department_id' => $this->sistemas->id]);
@@ -149,9 +149,9 @@ it('por grupo da la materia con su departamento, el docente, la capacidad, los c
 });
 
 it('con la carga que no está en propuesta, asignación o ajustes nadie acomoda, asigna salón ni reparte cupos, y el grupo dice por qué', function () {
-    $closed = boardGroup(boardSubject(['department_id' => $this->sistemas->id]));
+    $closed = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]));
     $basicas = Department::factory()->create(['name' => 'Ciencias Básicas']);
-    $withoutLoad = boardGroup(boardSubject(['department_id' => $basicas->id]));
+    $withoutLoad = semesterBoardGroup(boardSubject(['department_id' => $basicas->id]));
     $this->load->update(['status' => LoadStatus::Closed]);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sistemas->id])->create();
 
@@ -163,8 +163,8 @@ it('con la carga que no está en propuesta, asignación o ajustes nadie acomoda,
 });
 
 it('dice lo que puede hacer cada quien según GroupPolicy: el compartido es de solo lectura para el coordinador', function () {
-    $own = boardGroup(boardSubject(['department_id' => $this->sistemas->id]));
-    $shared = boardGroup(boardSubject(['department_id' => $this->sistemas->id]), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
+    $own = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]));
+    $shared = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
     GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->isc->id]);
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sistemas->id])->create();
@@ -181,7 +181,7 @@ it('dice lo que puede hacer cada quien según GroupPolicy: el compartido es de s
 });
 
 it('las banderas salen del puesto activo del actor que recibe, no de todos los puestos de su usuario', function () {
-    boardGroup(boardSubject(['department_id' => $this->sistemas->id]));
+    semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]));
     $both = User::factory()
         ->withRole(Role::JefeDepartamento, ['department_id' => $this->sistemas->id])
         ->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
@@ -195,11 +195,11 @@ it('las banderas salen del puesto activo del actor que recibe, no de todos los p
 });
 
 it('quien ve la carrera ve todos los grupos de su semestre: los que no ve por GroupPolicy van como contexto de solo lectura', function () {
-    $own = boardGroup(boardSubject(['department_id' => $this->sistemas->id]));
+    $own = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]));
     $basicas = Department::factory()->create();
     AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $basicas->id]);
-    $calculo = boardGroup(boardSubject(['department_id' => $basicas->id]));
-    $shared = boardGroup(boardSubject(['department_id' => $this->sistemas->id]), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
+    $calculo = semesterBoardGroup(boardSubject(['department_id' => $basicas->id]));
+    $shared = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
     GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->isc->id]);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sistemas->id])->create();
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
@@ -214,8 +214,8 @@ it('quien ve la carrera ve todos los grupos de su semestre: los que no ve por Gr
 
 it('junta las violaciones del validador por grupo y por sesión', function () {
     $room = boardRoom(['code' => 'A-1', 'capacity' => 40]);
-    $group = boardGroup(boardSubject(['theory_hours' => 2, 'practice_hours' => 0]));
-    $clean = boardGroup(boardSubject());
+    $group = semesterBoardGroup(boardSubject(['theory_hours' => 2, 'practice_hours' => 0]));
+    $clean = semesterBoardGroup(boardSubject());
     $session = GroupSession::factory()->for($group)->inRoom($room)->on(2, '07:00', '09:00')->create();
     $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
     $taken = GroupSession::factory()->for($other)->on(2, '08:00', '10:00')->create();
@@ -239,7 +239,7 @@ it('lee con pocas consultas aunque el semestre tenga 10 grupos', function () {
     $room = boardRoom();
 
     foreach (range(1, 10) as $index) {
-        $group = boardGroup(boardSubject(), ['teacher_id' => Teacher::factory()->create()->id]);
+        $group = semesterBoardGroup(boardSubject(), ['teacher_id' => Teacher::factory()->create()->id]);
         GroupQuota::factory()->create(['group_id' => $group->id, 'career_id' => $this->iind->id]);
         GroupSession::factory()->for($group)->inRoom($room)->on(1 + $index % 5, sprintf('%02d:00', 7 + $index), sprintf('%02d:00', 8 + $index))->create();
         GroupSession::factory()->for($group)->on(1 + $index % 5, sprintf('%02d:00', 18), sprintf('%02d:00', 19))->create(['day' => 1 + ($index + 2) % 5]);
