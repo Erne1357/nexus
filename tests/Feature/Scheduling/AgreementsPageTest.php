@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Events\AgreementAccepted;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Enums\Role;
@@ -18,8 +19,10 @@ use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use Illuminate\Support\Facades\Event;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Pantalla «Acuerdos» (tareas 3.6 y 3.7, maqueta B): el jefe del departamento dueño decide los préstamos y grupos
@@ -249,6 +252,83 @@ describe('decidir uno tras otro', function () {
             ->assertDontSeeHtml('data-testid="room-week"');
 
         expect(substr_count($component->html(), 'se abre el cupo'))->toBe(1);
+    });
+});
+
+describe('aceptar varios', function () {
+    beforeEach(function () {
+        Event::fake([AgreementAccepted::class]);
+        // Un tercer acuerdo que rompe HC-07: 20 de la dueña + 8 de ISC + 30 > 40 de capacidad.
+        $this->tooMany = InterdepartmentalAgreement::factory()->sharedGroup(30)->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->addMinute(),
+        ]);
+    });
+
+    it('acepta préstamos y grupos compartidos juntos, cada uno con su bitácora y su aviso; el que falla no deshace los demás', function () {
+        agreementsAs($this->jefeSc)
+            ->set('selected', [$this->loan->id, $this->share->id, $this->tooMany->id])
+            ->call('acceptMany')
+            ->assertHasNoErrors()
+            ->assertSet('selected', [])
+            ->assertSet('bulkResult.accepted', 2)
+            ->assertSeeHtml('Aceptados <span class="font-mono">2</span>')
+            ->assertSeeHtml('No se aceptaron <span class="font-mono">1</span>')
+            ->assertSee('HC-07');
+
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Accepted)
+            ->and($this->share->fresh()->status)->toBe(AgreementStatus::Accepted)
+            ->and($this->tooMany->fresh()->status)->toBe(AgreementStatus::Proposed)
+            ->and(GroupQuota::query()->where('group_id', $this->group->id)->where('career_id', $this->career->id)->value('max_seats'))->toBe(8)
+            ->and(Activity::query()->where('event', 'accepted')->where('subject_type', (new InterdepartmentalAgreement)->getMorphClass())->pluck('subject_id')->all())
+            ->toEqualCanonicalizing([$this->loan->id, $this->share->id]);
+
+        Event::assertDispatchedTimes(AgreementAccepted::class, 2);
+    });
+
+    it('un id ajeno en la selección no acepta nada: de otro departamento es 404 y uno que solo ve es 403', function () {
+        $foreign = InterdepartmentalAgreement::factory()->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->cb->id,
+        ]);
+
+        agreementsAs($this->jefeSc)->set('selected', [$this->share->id, $foreign->id])->call('acceptMany')->assertNotFound();
+        agreementsAs($this->jefeIi)->set('selected', [$this->loan->id])->call('acceptMany')->assertForbidden();
+
+        $otherCampus = Campus::factory()->create();
+        TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $otherCampus->id]);
+        $elsewhere = InterdepartmentalAgreement::factory()->create([
+            'term_id' => $this->term->id, 'campus_id' => $otherCampus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+        ]);
+
+        agreementsAs($this->jefeSc)->set('selected', [$elsewhere->id])->call('acceptMany')->assertNotFound();
+
+        expect($this->share->fresh()->status)->toBe(AgreementStatus::Proposed)
+            ->and($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed)
+            ->and($elsewhere->fresh()->status)->toBe(AgreementStatus::Proposed);
+        Event::assertNotDispatched(AgreementAccepted::class);
+    });
+
+    it('cada por decidir lleva su casilla; un préstamo que empalma va deshabilitado con su motivo; el botón confirma con la cuenta', function () {
+        $this->session->delete();
+        $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => Subject::factory()->create(['code' => 'ACF-0901'])->id, 'code' => '1B']);
+        GroupSession::factory()->for($other)->on(1, '10:00', '12:00')->inRoom($this->room)->create();
+
+        agreementsAs($this->jefeSc)
+            ->assertSeeHtml('data-select="'.$this->share->id.'"')
+            ->assertSeeHtml('data-select="'.$this->loan->id.'" disabled')
+            ->assertSee('No se puede aceptar: ACF-0901 1B lo ocupa de 10:00 a 12:00 (HC-02).')
+            ->assertDontSeeHtml('data-testid="bulk-accept"')
+            ->call('toggleAll')
+            ->assertSet('selected', [$this->share->id, $this->tooMany->id])
+            ->assertSeeHtml('wire:confirm="¿Aceptar 2 acuerdos?')
+            ->set('kind', 'room_loan')
+            ->assertSet('selected', []);
+    });
+
+    it('quien no decide no ve casillas ni puede elegir todos', function () {
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        agreementsAs($subdireccion)->assertDontSeeHtml('data-select=')->call('toggleAll')->assertSet('selected', []);
     });
 });
 
