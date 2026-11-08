@@ -38,6 +38,30 @@ final class SessionLabels
         return $labels;
     }
 
+    /**
+     * La foto de las sesiones que guarda una solicitud de cambio (`change_requests.current`: día, inicio, fin y salón),
+     * como «Lu Mi 07:00–09:00 · A-14»: los días con la misma hora y el mismo salón van juntos.
+     *
+     * @param  list<array{day?: int, starts_at?: string, ends_at?: string, room?: ?string}>  $sessions
+     * @return list<array{days: string, time: string, room: ?string}>
+     */
+    public static function snapshot(array $sessions): array
+    {
+        usort($sessions, fn (array $a, array $b): int => [$a['day'] ?? 0, $a['starts_at'] ?? ''] <=> [$b['day'] ?? 0, $b['starts_at'] ?? '']);
+
+        $lines = [];
+
+        foreach ($sessions as $session) {
+            $time = ($session['starts_at'] ?? '').'–'.($session['ends_at'] ?? '');
+            $room = $session['room'] ?? null;
+            $key = $time.'|'.$room;
+            $lines[$key] ??= ['days' => [], 'time' => $time, 'room' => $room];
+            $lines[$key]['days'][] = self::DAYS[$session['day'] ?? 0] ?? (string) ($session['day'] ?? '');
+        }
+
+        return array_values(array_map(fn (array $line): array => ['days' => implode(' ', $line['days']), 'time' => $line['time'], 'room' => $line['room']], $lines));
+    }
+
     public static function time(GroupSession $session): string
     {
         return Minutes::format(Minutes::of($session->starts_at)).'–'.Minutes::format(Minutes::of($session->ends_at));

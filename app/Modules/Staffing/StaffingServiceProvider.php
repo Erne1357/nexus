@@ -32,6 +32,11 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => self::isTeacher($context) && $context->allowsAny(StaffingPermission::MyLoadView)),
             new NavigationItem('Oferta del departamento', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => self::isTeacher($context) && $context->allowsAny(StaffingPermission::OfferView)),
+            new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::ChangeRequestView)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestDecide)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule)
+                    || $context->allowsAny(StaffingPermission::ChangeRequestApplyRoom)),
         ];
     }
 
