@@ -108,24 +108,15 @@ it('avisa con AgreementCancelled solo después del commit', function () {
     Event::assertDispatched(AgreementCancelled::class, fn (AgreementCancelled $event): bool => $event->agreement->is($agreement));
 });
 
-it('con announce: false cancela sin avisar, y quien llama avisa después con announce(), diciendo si se reemplaza', function () {
+it('el evento dice si quien cancela pide en ese momento otro que lo reemplaza; por omisión, no', function () {
     Event::fake([AgreementCancelled::class]);
-    $agreement = InterdepartmentalAgreement::factory()->create();
+    $replaced = InterdepartmentalAgreement::factory()->create();
+    $plain = InterdepartmentalAgreement::factory()->create(['starts_at' => '13:00', 'ends_at' => '15:00']);
 
-    app(CancelAgreement::class)->handle($agreement, $this->actor, announce: false);
+    app(CancelAgreement::class)->handle($replaced, $this->actor, replaced: true);
+    app(CancelAgreement::class)->handle($plain, $this->actor);
 
-    expect($agreement->fresh()->status)->toBe(AgreementStatus::Cancelled);
-    Event::assertNotDispatched(AgreementCancelled::class);
-
-    app(CancelAgreement::class)->announce($agreement, replaced: true);
-    Event::assertDispatched(AgreementCancelled::class, fn (AgreementCancelled $event): bool => $event->agreement->is($agreement) && $event->replaced);
-});
-
-it('al cancelar con aviso, el evento dice que no se reemplaza', function () {
-    Event::fake([AgreementCancelled::class]);
-    $agreement = InterdepartmentalAgreement::factory()->create();
-
-    app(CancelAgreement::class)->handle($agreement, $this->actor);
-
-    Event::assertDispatched(AgreementCancelled::class, fn (AgreementCancelled $event): bool => ! $event->replaced);
+    Event::assertDispatchedTimes(AgreementCancelled::class, 2);
+    Event::assertDispatched(AgreementCancelled::class, fn (AgreementCancelled $event): bool => $event->agreement->is($replaced) && $event->replaced);
+    Event::assertDispatched(AgreementCancelled::class, fn (AgreementCancelled $event): bool => $event->agreement->is($plain) && ! $event->replaced);
 });

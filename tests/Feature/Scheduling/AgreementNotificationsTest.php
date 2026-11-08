@@ -316,6 +316,37 @@ describe('préstamos que cancela la sesión al cambiar', function () {
         Notification::assertNotSentTo($this->jefeSc, LoanCancelled::class);
     });
 
+    it('mover la sesión pegada a su préstamo propuesto también lo reemplaza: solo el aviso del nuevo', function () {
+        Notification::fake();
+
+        app(UpdateGroupSession::class)->handle($this->session, 1, '11:00', '13:00', $this->session->kind, $this->jefeIi);
+
+        Notification::assertSentTo($this->jefeSc, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($this->jefeSc)->body === 'LC-201 · Lun 11:00–13:00');
+        Notification::assertNotSentTo($this->jefeSc, LoanCancelled::class);
+    });
+
+    it('un préstamo aceptado que se suelta siempre avisa, aunque se pida otro pegado a él para las nuevas horas', function () {
+        Notification::fake();
+        $this->pending->update(['status' => AgreementStatus::Accepted, 'decided_by' => $this->jefeSc->id, 'decided_at' => now()]);
+
+        app(UpdateGroupSession::class)->handle($this->session, 1, '11:00', '13:00', $this->session->kind, $this->jefeIi);
+
+        expect($this->pending->fresh()->status)->toBe(AgreementStatus::Cancelled);
+        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id]
+            && $notification->message($this->jefeSc)->body === 'Estaba aceptado: el salón ya no queda prestado a esa hora.');
+        Notification::assertSentTo($this->jefeSc, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($this->jefeSc)->body === 'LC-201 · Lun 11:00–13:00');
+    });
+
+    it('un propuesto que se suelta mientras se pide otro para una sesión que no tiene que ver sí avisa', function () {
+        Notification::fake();
+        GroupSession::factory()->for($this->group)->on(1, '14:00', '16:00')->inRoom($this->room)->create();
+
+        app(RemoveGroupSession::class)->handle($this->session, $this->jefeIi);
+
+        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id]);
+        Notification::assertSentTo($this->jefeSc, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($this->jefeSc)->body === 'LC-201 · Lun 14:00–16:00');
+    });
+
     it('si el reemplazo no se puede pedir porque otro grupo ya aparta el salón, el aviso de cancelado sí sale', function () {
         Notification::fake();
         InterdepartmentalAgreement::factory()->create([
@@ -354,3 +385,4 @@ describe('préstamos que cancela la sesión al cambiar', function () {
         Notification::assertNotSentTo($this->jefeSc, AgreementReceived::class);
     });
 });
+

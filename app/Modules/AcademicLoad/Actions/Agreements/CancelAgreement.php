@@ -17,8 +17,8 @@ use Illuminate\Validation\ValidationException;
  * con quién y cuándo (`cancelled_by/at`; la decisión, si hubo, queda como estaba), deja bitácora `cancelled` y, después del commit, avisa con AgreementCancelled. Quién puede lo decide
  * InterdepartmentalAgreementPolicy antes de llamarla; quien actúa se recibe como parámetro.
  *
- * Con `announce: false` no avisa: quien llama lo hace con announce() cuando ya sabe si el acuerdo se reemplaza
- * (SyncSessionLoans, que cancela antes de pedir el nuevo porque la exclusión de horario los separa).
+ * `replaced` va en el evento: quien cancela pide en ese mismo momento otro que lo reemplaza (SyncSessionLoans), así que
+ * el aviso del nuevo basta.
  */
 final class CancelAgreement
 {
@@ -27,9 +27,9 @@ final class CancelAgreement
     /**
      * @throws ValidationException
      */
-    public function handle(InterdepartmentalAgreement $agreement, User $actor, bool $announce = true): InterdepartmentalAgreement
+    public function handle(InterdepartmentalAgreement $agreement, User $actor, bool $replaced = false): InterdepartmentalAgreement
     {
-        return DB::transaction(function () use ($agreement, $actor, $announce): InterdepartmentalAgreement {
+        return DB::transaction(function () use ($agreement, $actor, $replaced): InterdepartmentalAgreement {
             $agreement->setRawAttributes($agreement->newQuery()->lockForUpdate()->findOrFail($agreement->getKey())->getAttributes(), sync: true);
 
             $this->rules->ensureLive($agreement);
@@ -45,20 +45,9 @@ final class CancelAgreement
                 ->withProperties(['kind' => $agreement->kind->value, 'group_id' => $agreement->group_id])
                 ->log('Canceló el acuerdo entre departamentos');
 
-            if ($announce) {
-                $this->announce($agreement);
-            }
+            AgreementCancelled::dispatch($agreement, $replaced);
 
             return $agreement;
         });
-    }
-
-    /**
-     * Avisa con AgreementCancelled, después del commit, que se canceló el acuerdo; `replaced` dice si en ese mismo
-     * momento se pidió otro que lo reemplaza.
-     */
-    public function announce(InterdepartmentalAgreement $agreement, bool $replaced = false): void
-    {
-        AgreementCancelled::dispatch($agreement, $replaced);
     }
 }
