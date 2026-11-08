@@ -25,9 +25,10 @@ use Illuminate\Support\Facades\Gate;
  * semestre (`shared`; de solo lectura para quien no puede editSessions). Van en el orden de la retícula (la posición de
  * la materia en el plan), luego por clave de materia y de grupo.
  *
- * Por grupo: su materia, docente, capacidad, cupos (el dueño primero), sesiones (por día y hora, con su salón y el
- * departamento dueño del salón), las horas que pide su materia y las que tiene colocadas, y lo que el actor puede hacer
- * según GroupPolicy (`editSessions`, `assignRoom`, `manageQuotas`). Además, las violaciones del validador
+ * Por grupo: su materia (con el departamento que la imparte), su docente (id y nombre), capacidad, cupos (el dueño
+ * primero), sesiones (por día y hora, con su salón y el departamento dueño del salón), las horas que pide su materia y
+ * las que tiene colocadas, y lo que el actor puede hacer según GroupPolicy (`editSessions`, `assignRoom`,
+ * `manageQuotas`). Además, las violaciones del validador
  * (validateGroup() con una sola foto) por grupo y, las que nombran una sesión, por sesión; solo los grupos y sesiones
  * que tienen alguna.
  *
@@ -44,7 +45,8 @@ final class SemesterBoardQuery
      *         code: string,
      *         status: GroupStatus,
      *         shared: bool,
-     *         subject: array{id: string, code: string, name: string, theory_hours: int, practice_hours: int, needs_lab: bool, department_code: ?string},
+     *         subject: array{id: string, code: string, name: string, theory_hours: int, practice_hours: int, needs_lab: bool, department_code: ?string, department_name: ?string},
+     *         teacher_id: ?string,
      *         teacher: ?string,
      *         capacity: int,
      *         quotas: list<array{career_id: string, career_code: ?string, seats: int, owner: bool}>,
@@ -118,7 +120,9 @@ final class SemesterBoardQuery
                     'practice_hours' => $group->subject->practice_hours,
                     'needs_lab' => $group->subject->needs_lab,
                     'department_code' => $group->subject->department?->code,
+                    'department_name' => $group->subject->department?->name,
                 ],
+                'teacher_id' => $group->teacher_id,
                 'teacher' => $group->teacher?->name,
                 'capacity' => $group->capacity,
                 'quotas' => $group->quotas
