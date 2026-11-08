@@ -13,11 +13,11 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
-use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Rules\RoomLoanFree;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -44,7 +44,10 @@ final class AgreementsInboxQuery
 
     public const string DONE = 'done';
 
-    public function __construct(private readonly RoomScheduleQuery $rooms) {}
+    public function __construct(
+        private readonly RoomScheduleQuery $rooms,
+        private readonly RoomLoanFree $free,
+    ) {}
 
     /**
      * Los acuerdos visibles, filtrados por tipo y texto (salón, grupo, materia, departamentos o carrera) y agrupados.
@@ -88,8 +91,8 @@ final class AgreementsInboxQuery
 
     /**
      * Los préstamos propuestos de una lista que no se pueden aceptar porque su bloque empalma con la sesión de otro
-     * grupo (HC-02) o con un bloqueo del salón (HC-11), con lo que lo ocupa: la misma revisión de AcceptRoomLoan, en
-     * dos consultas para toda la lista. Los grupos compartidos no entran.
+     * grupo (HC-02) o con un bloqueo del salón (HC-11), con lo que lo ocupa: la revisión de AcceptRoomLoan
+     * (RoomLoanFree), en dos consultas para toda la lista. Los grupos compartidos no entran.
      *
      * @param  list<array<string, mixed>>  $rows
      * @return array<string, array{day: int, starts_at: string, ends_at: string, label: string, rule: string}>
@@ -103,42 +106,14 @@ final class AgreementsInboxQuery
             return [];
         }
 
-        $rooms = array_values(array_unique(array_column($loans, 'room_id')));
-        $terms = array_values(array_unique(array_column($loans, 'term_id')));
-
-        $sessions = GroupSession::query()
-            ->join('groups', 'groups.id', '=', 'group_sessions.group_id')
-            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->whereIn('group_sessions.room_id', $rooms)
-            ->whereIn('group_sessions.term_id', $terms)
-            ->where('group_sessions.is_active', true)
-            ->toBase()
-            ->get(['group_sessions.group_id', 'group_sessions.room_id', 'group_sessions.term_id', 'group_sessions.day', 'group_sessions.starts_at', 'group_sessions.ends_at', 'groups.code as group_code', 'subjects.code as subject_code'])
-            ->map(fn (object $session): array => [
-                'room_id' => $session->room_id, 'term_id' => $session->term_id, 'group_id' => $session->group_id, 'day' => (int) $session->day,
-                'starts_at' => Minutes::clock($session->starts_at), 'ends_at' => Minutes::clock($session->ends_at),
-                'label' => "{$session->subject_code} {$session->group_code}", 'rule' => 'HC-02',
-            ]);
-
-        $blocks = RoomBlock::query()
-            ->whereIn('room_id', $rooms)
-            ->where(fn (Builder $query) => $query->whereNull('term_id')->orWhereIn('term_id', $terms))
-            ->get(['room_id', 'term_id', 'day', 'starts_at', 'ends_at', 'reason'])
-            ->map(fn (RoomBlock $block): array => [
-                'room_id' => $block->room_id, 'term_id' => $block->term_id, 'group_id' => null, 'day' => (int) $block->day,
-                'starts_at' => Minutes::clock($block->starts_at), 'ends_at' => Minutes::clock($block->ends_at),
-                'label' => (string) $block->reason === '' ? 'Bloqueado' : (string) $block->reason, 'rule' => 'HC-11',
-            ]);
-
-        $busy = $sessions->concat($blocks);
+        $busy = $this->free->busy(
+            array_values(array_unique(array_column($loans, 'room_id'))),
+            array_values(array_unique(array_column($loans, 'term_id'))),
+        );
         $blocked = [];
 
         foreach ($loans as $loan) {
-            $clash = $busy->first(fn (array $slot): bool => $slot['room_id'] === $loan['room_id']
-                && ($slot['term_id'] === null || $slot['term_id'] === $loan['term_id'])
-                && ($slot['group_id'] === null || $slot['group_id'] !== ($loan['group']['id'] ?? null))
-                && $slot['day'] === (int) $loan['day']
-                && Minutes::overlap(Minutes::of($slot['starts_at']), Minutes::of($slot['ends_at']), Minutes::of($loan['starts_at']), Minutes::of($loan['ends_at'])));
+            $clash = $this->free->clash([...$loan, 'group_id' => $loan['group']['id'] ?? null], $busy);
 
             if ($clash !== null) {
                 $blocked[$loan['id']] = ['day' => $clash['day'], 'starts_at' => $clash['starts_at'], 'ends_at' => $clash['ends_at'], 'label' => $clash['label'], 'rule' => $clash['rule']];
@@ -322,16 +297,17 @@ final class AgreementsInboxQuery
                 continue;
             }
 
-            $busy[] = ['day' => $session['day'], 'starts_at' => $session['starts_at'], 'ends_at' => $session['ends_at'], 'label' => "{$session['subject_code']} {$session['group_code']}", 'rule' => 'HC-02'];
+            $busy[] = ['room_id' => $room->id, 'term_id' => $term->id, 'group_id' => $session['group_id'], 'day' => $session['day'], 'starts_at' => $session['starts_at'], 'ends_at' => $session['ends_at'], 'label' => "{$session['subject_code']} {$session['group_code']}", 'rule' => 'HC-02'];
         }
 
         foreach ($schedule['blocks'] as $block) {
-            $busy[] = ['day' => $block['day'], 'starts_at' => $block['starts_at'], 'ends_at' => $block['ends_at'], 'label' => $block['reason'] === '' ? 'Bloqueado' : $block['reason'], 'rule' => 'HC-11'];
+            $busy[] = ['room_id' => $room->id, 'term_id' => $block['all_terms'] ? null : $term->id, 'group_id' => null, 'day' => $block['day'], 'starts_at' => $block['starts_at'], 'ends_at' => $block['ends_at'], 'label' => $block['reason'] === '' ? 'Bloqueado' : $block['reason'], 'rule' => 'HC-11'];
         }
 
         $requested = ['day' => (int) $agreement->day, 'starts_at' => substr($agreement->starts_at, 0, 5), 'ends_at' => substr($agreement->ends_at, 0, 5)];
-        $clash = collect($busy)->first(fn (array $slot): bool => $slot['day'] === $requested['day']
-            && Minutes::overlap(Minutes::of($slot['starts_at']), Minutes::of($slot['ends_at']), Minutes::of($requested['starts_at']), Minutes::of($requested['ends_at'])));
+        $slot = $this->free->clash($this->free->loanOf($agreement), $busy);
+        $clash = $slot === null ? null : ['day' => $slot['day'], 'starts_at' => $slot['starts_at'], 'ends_at' => $slot['ends_at'], 'label' => $slot['label'], 'rule' => $slot['rule']];
+        $busy = array_map(fn (array $slot): array => ['day' => $slot['day'], 'starts_at' => $slot['starts_at'], 'ends_at' => $slot['ends_at'], 'label' => $slot['label'], 'rule' => $slot['rule']], $busy);
 
         return [...$this->frame($campus, [$requested, ...$busy]), 'busy' => $busy, 'requested' => $requested, 'clash' => $clash];
     }
@@ -364,7 +340,7 @@ final class AgreementsInboxQuery
 
     /**
      * Dónde está el grupo: su semestre y el plan de la carrera dueña, y los semestres en que la carrera del cupo lleva
-     * la materia en sus planes vigentes (sin borrar), del plan actual al más viejo.
+     * la materia en sus planes vigentes (activos y sin borrar), del plan actual al más viejo.
      *
      * @return array{semester: int, plan: string, owner: string, career: list<array{plan: string, semester: int}>}
      */
@@ -373,6 +349,7 @@ final class AgreementsInboxQuery
         $career = $agreement->career_id === null ? [] : StudyPlanSubject::query()
             ->join('study_plans', 'study_plans.id', '=', 'study_plan_subjects.study_plan_id')
             ->where('study_plans.career_id', $agreement->career_id)
+            ->where('study_plans.is_active', true)
             ->whereNull('study_plans.deleted_at')
             ->where('study_plan_subjects.subject_id', $group->subject_id)
             ->orderByDesc('study_plans.is_current')

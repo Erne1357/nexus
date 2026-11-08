@@ -268,7 +268,7 @@ it('HC-11: el detalle marca el choque con un bloqueo del salón', function () {
     expect($detail['clash'])->toMatchArray(['day' => 2, 'label' => 'Mantenimiento', 'rule' => 'HC-11']);
 });
 
-it('el detalle de un grupo compartido trae sus sesiones, su semestre y plan, y dónde lleva la materia la otra carrera', function () {
+it('el detalle de un grupo compartido trae sus sesiones, su semestre y plan, y dónde lleva la materia la otra carrera en sus planes activos', function () {
     $share = shareOf($this->ii, $this->sc);
     $group = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'semester' => 3, 'code' => 'H12']);
     $share->update(['group_id' => $group->id]);
@@ -276,6 +276,8 @@ it('el detalle de un grupo compartido trae sus sesiones, su semestre y plan, y d
     GroupSession::factory()->for($group)->on(3, '07:00', '08:00')->create();
     $plan = StudyPlan::factory()->create(['career_id' => $share->career_id, 'code' => 'ISC-2010-224']);
     StudyPlanSubject::factory()->create(['study_plan_id' => $plan->id, 'subject_id' => $group->subject_id, 'semester' => 4]);
+    $retired = StudyPlan::factory()->create(['career_id' => $share->career_id, 'code' => 'ISC-2004-100', 'is_active' => false]);
+    StudyPlanSubject::factory()->create(['study_plan_id' => $retired->id, 'subject_id' => $group->subject_id, 'semester' => 2]);
 
     $detail = app(AgreementsInboxQuery::class)->detail($share->fresh());
 
