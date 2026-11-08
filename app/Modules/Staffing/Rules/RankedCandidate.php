@@ -25,6 +25,7 @@ final readonly class RankedCandidate
             'choque' => $candidate->clash,
             'no_disponible' => $candidate->unavailable,
             'sin_evaluacion' => $candidate->evaluation === null,
+            'traslado_justo' => $candidate->tightTravel,
         ]));
 
         return [

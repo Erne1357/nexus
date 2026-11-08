@@ -162,6 +162,17 @@ it('deja limpio el departamento con más grupos: sin choques duros, con horario 
         ->and($groups->every(fn (Group $group): bool => $group->sessions()->exists() && $group->teacher_id === null && $group->status === GroupStatus::Planned))->toBeTrue();
 });
 
+it('no encima a propósito grupos de un semestre que comparte un departamento limpio (HC-03)', function () {
+    Group::query()->whereKey(Group::query()->where('department_id', $this->other->id)->orderBy('id')->limit(2)->pluck('id'))->update(['semester' => 1]);
+
+    app()->call([new SchedulingDemoSeeder, 'run'], ['profile' => 'demo', 'campuses' => ['C2'], 'ratios' => [
+        'overlap_pairs' => 1, 'cancelled_groups' => 0, 'unscheduled_groups' => 0, 'short_groups' => 0, 'clean_departments' => 1,
+    ]]);
+    app(ScheduleValidator::class)->forget();
+
+    expect(hardViolations($this->department))->toBe([]);
+});
+
 it('conserva los choques duros en los departamentos que no quedaron limpios', function () {
     seedScheduling();
     app(ScheduleValidator::class)->forget();

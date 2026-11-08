@@ -24,7 +24,7 @@
                     @php($active = $entry['status'] === 'vigente')
                     <div role="row" wire:key="history-{{ $assignment->id }}" @class(['grid gap-x-3 gap-y-1 px-4 py-3 text-sm', $historyGrid, 'text-secondary-muted' => ! $active]) data-testid="history-row">
                         <span role="cell" class="grid">
-                            <span class="font-mono text-[13px] tabular-nums">{{ $assignment->assigned_at->setTimezone(config('app.timezone'))->format('d/m/Y H:i') }}</span>
+                            <span class="font-mono text-[12.5px] tabular-nums">{{ $assignment->assigned_at->setTimezone(config('app.timezone'))->format('d/m/Y H:i') }}</span>
                             <span class="text-[12.5px] text-neutral">{{ $assignment->assignedBy?->name }}</span>
                         </span>
                         <span role="cell" @class(['min-w-0', 'font-semibold' => $active])>{{ $assignment->teacher?->name }}</span>

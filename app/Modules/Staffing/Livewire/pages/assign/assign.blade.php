@@ -5,8 +5,10 @@
     GroupRankingQuery. Mientras algún grupo a la vista espera su ranking, la página consulta cada 5 s.
 
     Alpine solo mueve la vista y el foco: lleva la página al grupo de `?grupo=` (`data-scroll-to`) o al que pide
-    `assign-scroll-to`, pone el foco en el motivo cuando se abre (`assign-reason-opened`) y en el título del grupo
-    elegido de los dos paneles (`assign-group-opened`). Lo pendiente se intenta otra vez después de cada repintado.
+    `assign-scroll-to` («Siguiente sin docente», que además le pone el foco) y lo marca un momento con un anillo; si
+    queda a más de dos pantallas salta sin animación. Pone el foco en el motivo cuando se abre (`assign-reason-opened`)
+    y en el título del grupo elegido de los dos paneles (`assign-group-opened`), y desplaza la lista de grupos hasta el
+    elegido si no se ve. Lo pendiente se intenta otra vez después de cada repintado.
 --}}
 <div class="space-y-5" data-testid="assign-page"
     @if ($board !== null && $polling) wire:poll.5s @endif
@@ -21,7 +23,11 @@
                 const group = this.$root.querySelector(`[data-group='${target.scroll}']`)
                 if (! group) { return }
                 this.target = null
-                group.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
+                const far = Math.abs(group.getBoundingClientRect().top) > window.innerHeight * 2
+                group.scrollIntoView({ block: 'start', behavior: smooth && ! far ? 'smooth' : 'auto' })
+                if (target.focus) { group.focus({ preventScroll: true }) }
+                group.classList.add('ring-2', 'ring-inset', 'ring-primary')
+                setTimeout(() => group.classList.remove('ring-2', 'ring-inset', 'ring-primary'), 1600)
             } else if (target.reason) {
                 const input = this.$root.querySelector('[data-testid=reason-input]')
                 if (! input) { return }
@@ -33,14 +39,24 @@
                 if (! title) { return }
                 this.target = null
                 title.focus({ preventScroll: window.innerWidth >= 1024 })
+                this.revealSelected()
             }
+        },
+        revealSelected() {
+            const list = this.$root.querySelector('[data-group-scroll]')
+            const item = list?.querySelector('[aria-current=true]')
+            if (! item || list.scrollHeight <= list.clientHeight) { return }
+            const box = list.getBoundingClientRect()
+            const row = item.getBoundingClientRect()
+            if (row.top < box.top || row.bottom > box.bottom) { list.scrollTop += row.top - box.top - (box.height - row.height) / 2 }
         },
         init() {
             Livewire.hook('morphed', ({ component }) => { if (component.id === this.$wire.id) { this.flush() } })
             if (this.$root.dataset.scrollTo) { this.target = { scroll: this.$root.dataset.scrollTo }; this.$nextTick(() => this.flush()) }
+            this.$nextTick(() => this.revealSelected())
         },
     }"
-    x-on:assign-scroll-to.window="target = { scroll: $event.detail.id }; $nextTick(() => flush())"
+    x-on:assign-scroll-to.window="target = { scroll: $event.detail.id, focus: $event.detail.focus ?? false }; $nextTick(() => flush())"
     x-on:assign-reason-opened.window="target = { reason: true }; $nextTick(() => flush())"
     x-on:assign-group-opened.window="target = { title: true }; $nextTick(() => flush())">
     @if ($board === null)
