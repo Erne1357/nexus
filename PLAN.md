@@ -57,7 +57,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | CatalogValidation | 2 | ✅ (base y revisiones al abrir el periodo #179; validación del jefe, 2.4, #184 y #185; tablero de avance con recordatorios, 2.5, #191; captura docente desde la validación, 2.6, #190) |
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179; máquina de estados con HC-14 #180; propuesta de carrera #187; bandeja del departamento con HC-20 y paralelos #188) |
 | Scheduling | 3 (manual + validador), 6 (heurística) | ⬜ |
-| Staffing | 3 | ⬜ |
+| Staffing | 3 | 🟨 (3.8 a 3.12 hechas: ranking docente #293, #295, #297 y #299; asignación #296, #302, #306, #318 y #321; oferta y Mi carga #309 y #314; solicitudes de cambio #304 y #314; carga por docente #308; datos demo y masivos #324. Falta la integración 3.13) |
 | Demand | 5 | ⬜ |
 | Solver | 6 (contrato y cliente), 7 (servicio Python) | ⬜ |
 | Enrollment | 9 | 🟦 |
