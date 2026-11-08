@@ -4,13 +4,9 @@ namespace App\Modules\Scheduling\Rules;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
-use App\Modules\Academic\Models\Department;
-use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Rules\AgreementRules;
-use App\Modules\Core\Models\Campus;
-use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
+use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 
@@ -23,6 +19,8 @@ final class QuotaRules
 {
     public const int MAX_SEATS = AgreementRules::MAX_SEATS;
 
+    public function __construct(private readonly LoadEditability $editability) {}
+
     /**
      * @throws ValidationException
      */
@@ -34,36 +32,37 @@ final class QuotaRules
     }
 
     /**
-     * Los cupos se editan solo en un grupo que no está cancelado y mientras la carga del departamento que lo imparte,
-     * en su campus y periodo, está propuesta, en asignación docente o en ajuste (supuesto por confirmar; se unirá con
-     * la regla del editor). Sin fila de carga no hay nada que lo impida.
+     * Los cupos se editan con la misma regla que las sesiones (LoadEditability): grupo sin cancelar y carga propuesta,
+     * en asignación docente o en ajuste; sin carga tampoco (supuesto por confirmar).
      *
      * @throws ValidationException
      */
     public function ensureEditable(Group $group): void
     {
-        if ($group->status === GroupStatus::Cancelled) {
-            throw ValidationException::withMessages(['quotas' => 'El grupo está cancelado: no se editan cupos.']);
-        }
+        $this->editability->ensure($group, 'cupos', 'quotas');
+    }
 
-        $status = AcademicLoad::query()
-            ->where('term_id', $group->term_id)
-            ->where('campus_id', $group->campus_id)
-            ->where('department_id', $group->department_id)
-            ->value('status');
+    /**
+     * Toma la carga del grupo (FOR SHARE) antes de bloquear el grupo: el orden de las transiciones de carga.
+     */
+    public function lockLoad(Group $group): void
+    {
+        $this->editability->lockLoad($group);
+    }
 
-        if ($status === null) {
-            return;
-        }
-
-        $status = $status instanceof LoadStatus ? $status : LoadStatus::from($status);
-
-        if (! in_array($status, [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting], true)) {
-            $department = Department::withTrashed()->find($group->department_id)?->name;
-            $campus = Campus::query()->find($group->campus_id)?->name;
-
-            throw ValidationException::withMessages(['quotas' => "La carga de {$department} en {$campus} está en {$status->label()}: no se editan cupos."]);
-        }
+    /**
+     * Corre la escritura de cupos; un deadlock de la base sale como error de validación y no como un 500.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $work
+     * @return T
+     *
+     * @throws ValidationException
+     */
+    public function guard(Closure $work): mixed
+    {
+        return $this->editability->guard($work, 'quotas');
     }
 
     /**
