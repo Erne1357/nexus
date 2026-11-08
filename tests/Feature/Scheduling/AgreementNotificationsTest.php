@@ -19,6 +19,7 @@ use App\Modules\Scheduling\Actions\Agreements\AcceptRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectSharedGroup;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Notifications\AgreementAnswered;
 use App\Modules\Scheduling\Notifications\AgreementReceived;
 use Illuminate\Support\Facades\Notification;
@@ -114,6 +115,7 @@ it('al aceptarse un préstamo, avisa al departamento que lo pidió', function ()
 
 it('al rechazarse un préstamo, avisa con el motivo y que la sesión se quedó sin salón', function () {
     Notification::fake();
+    GroupSession::factory()->for($this->group)->on(1, '09:00', '10:00')->inRoom($this->room)->create();
 
     app(RejectRoomLoan::class)->handle(($this->loan)(), 'Se cruza con una práctica.', $this->jefeSc);
 
@@ -124,6 +126,14 @@ it('al rechazarse un préstamo, avisa con el motivo y que la sesión se quedó s
             && $message->body === 'Motivo: Se cruza con una práctica. La sesión se quedó sin salón.'
             && $message->tone === 'warning';
     });
+});
+
+it('si el rechazo no dejó ninguna sesión sin salón, el aviso no lo dice', function () {
+    Notification::fake();
+
+    app(RejectRoomLoan::class)->handle(($this->loan)(), 'No hay lugar.', $this->jefeSc);
+
+    Notification::assertSentTo($this->jefeIi, AgreementAnswered::class, fn (AgreementAnswered $notification): bool => $notification->message($this->jefeIi)->body === 'Motivo: No hay lugar.');
 });
 
 it('al rechazarse un grupo compartido, avisa con el motivo sin hablar de salón', function () {
@@ -162,4 +172,17 @@ it('se abre en Acuerdos y deja de abrirse si el acuerdo ya no existe o ya no se 
 
     expect(AgreementAnswered::unavailableReason($context($this->jefeIi), $answered))->toBeNull()
         ->and(AgreementAnswered::unavailableReason($context($this->jefeSc), $answered))->toBe('Ya no ves los acuerdos de ese departamento.');
+});
+
+it('el aviso de un acuerdo ya decidido o cancelado deja de abrirse, con su motivo', function () {
+    $loan = ($this->loan)();
+    event(new AgreementRequested($loan));
+    $message = NotificationMessage::fromArray($this->jefeSc->notifications()->first()->data);
+    $context = app(Actor::class)->forUser($this->jefeSc);
+
+    $loan->update(['status' => 'cancelled', 'cancelled_by' => $this->jefeIi->id, 'cancelled_at' => now()]);
+    expect(AgreementReceived::unavailableReason($context, $message))->toBe('Este acuerdo se canceló.');
+
+    $loan->update(['status' => 'accepted', 'decided_by' => $this->jefeSc->id, 'decided_at' => now(), 'cancelled_by' => null, 'cancelled_at' => null]);
+    expect(AgreementReceived::unavailableReason($context, $message))->toBe('Este acuerdo ya se decidió.');
 });

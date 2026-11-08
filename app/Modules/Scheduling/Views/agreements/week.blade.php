@@ -29,7 +29,7 @@
         style="grid-template-columns: 2.125rem repeat({{ count($week['days']) }}, minmax(0, 1fr)); grid-template-rows: 1.75rem repeat({{ count($week['hours']) }}, 1.5rem)">
         <div class="bg-base-200" style="grid-column: 1; grid-row: 1"></div>
         @foreach ($week['days'] as $index => $day)
-            <div class="grid place-items-center border-s border-base-300 bg-base-200 text-[11.5px] font-medium uppercase tracking-[0.06em] text-neutral" style="grid-row: 1; grid-column: {{ $index + 2 }}">{{ mb_substr(\Illuminate\Support\Str::ucfirst(\App\Modules\Scheduling\Validation\Minutes::dayName($day)), 0, 3) }}</div>
+            <div class="grid place-items-center border-s border-base-300 bg-base-200 text-[11.5px] font-medium uppercase tracking-[0.06em] text-neutral" style="grid-row: 1; grid-column: {{ $index + 2 }}">{{ $week['day_labels'][$day] }}</div>
         @endforeach
         @foreach ($week['hours'] as $index => $hour)
             <div class="grid place-items-center border-t border-base-300 bg-base-200 font-mono text-[11.5px] text-neutral" style="grid-column: 1; grid-row: {{ $index + 2 }}">{{ $hour }}</div>

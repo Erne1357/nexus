@@ -5,7 +5,6 @@ namespace App\Modules\Scheduling\Notifications;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Scheduling\Validation\Minutes;
-use Illuminate\Support\Str;
 
 /**
  * El renglón que resume un acuerdo en un aviso: «LC-201 · Lun 9:00–11:00» o «5 lugares de ISC».
@@ -17,7 +16,7 @@ final class AgreementText
         $agreement->loadMissing(['room', 'career']);
 
         if ($agreement->kind === AgreementKind::RoomLoan) {
-            $day = mb_substr(Str::ucfirst(Minutes::dayName((int) $agreement->day)), 0, 3);
+            $day = Minutes::dayLabel((int) $agreement->day, short: true);
 
             return "{$agreement->room?->code} · {$day} ".ltrim(substr($agreement->starts_at, 0, 5), '0').'–'.ltrim(substr($agreement->ends_at, 0, 5), '0');
         }

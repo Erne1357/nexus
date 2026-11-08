@@ -18,7 +18,7 @@
                     class="relative grid min-h-16 w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-x-2.5 gap-y-0.5 border-b border-base-300 py-2.5 ps-3.5 pe-3 text-start hover:bg-base-200 aria-[current=true]:bg-base-200 aria-[current=true]:before:absolute aria-[current=true]:before:inset-y-0 aria-[current=true]:before:start-0 aria-[current=true]:before:w-[3px] aria-[current=true]:before:bg-primary lg:min-h-14">
                     <x-icon :name="$row['kind']->icon()" class="row-span-2 h-[18px] w-[18px] text-neutral" aria-hidden="true" />
                     <span class="col-start-2 truncate font-mono text-sm font-semibold">
-                        @if ($row['room'] !== null)
+                        @if ($row['kind'] === \App\Modules\AcademicLoad\Enums\AgreementKind::RoomLoan)
                             {{ $row['room'] }} · {{ $row['day_short'] }} {{ $row['hours'] }}
                         @else
                             {{ $row['group']['label'] ?? 'Grupo' }}
@@ -29,7 +29,7 @@
                     @endif
                     <span class="col-span-2 col-start-2 flex min-w-0 items-center gap-2 text-[12.5px] text-neutral">
                         <span class="min-w-0 truncate">
-                            @if ($row['room'] !== null)
+                            @if ($row['kind'] === \App\Modules\AcademicLoad\Enums\AgreementKind::RoomLoan)
                                 <span class="font-mono">{{ $row['group']['label'] ?? 'Grupo' }}</span>
                             @else
                                 {{ $row['seats'] }} {{ $row['seats'] === 1 ? 'lugar' : 'lugares' }} de <span class="font-mono">{{ $row['career']['code'] }}</span>

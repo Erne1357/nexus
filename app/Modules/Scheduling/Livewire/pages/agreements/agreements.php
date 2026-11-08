@@ -10,6 +10,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Actions\Agreements\AcceptRoomLoan;
+use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectSharedGroup;
 use App\Modules\Scheduling\Actions\Quotas\AcceptSharedGroup;
@@ -35,7 +36,7 @@ use Mary\Traits\Toast;
  * acuerdos (InterdepartmentalAgreementPolicy::viewAny) y solo los de su alcance; decide el jefe del departamento al que
  * va dirigido (`decide`) y cancela el que lo pidió (`cancel`). Cada método vuelve a autorizar: ver, que el acuerdo sea
  * del alcance (404 si no) y la ability. Todo lo que se pinta sale de AgreementsInboxQuery; las escrituras, de
- * AcceptRoomLoan, RejectRoomLoan, AcceptSharedGroup, RejectSharedGroup y CancelAgreement.
+ * AcceptRoomLoan, RejectRoomLoan, CancelRoomLoan, AcceptSharedGroup, RejectSharedGroup y CancelAgreement.
  */
 new #[Title('Acuerdos')] class extends Component
 {
@@ -70,6 +71,14 @@ new #[Title('Acuerdos')] class extends Component
     public bool $rejecting = false;
 
     public string $comment = '';
+
+    /** Lo resuelto en esta petición (periodo, campus y acuerdos por id); se suelta al escribir. */
+    protected ?Term $loadedTerm = null;
+
+    protected ?Campus $loadedCampus = null;
+
+    /** @var array<string, InterdepartmentalAgreement|null> */
+    protected array $found = [];
 
     public function mount(Actor $context, AgreementsInboxQuery $query): void
     {
@@ -117,13 +126,7 @@ new #[Title('Acuerdos')] class extends Component
         $agreement = $this->find($id, $context, $query);
         $this->authorize('decide', $agreement);
 
-        $detail = $query->detail($agreement);
-
-        if ($agreement->status !== AgreementStatus::Proposed || $detail['clash'] !== null) {
-            $this->error('No se aceptó', e($this->acceptBlock($detail) ?? 'Este acuerdo ya se decidió.'));
-
-            return;
-        }
+        $row = $query->row($agreement);
 
         try {
             $agreement->kind === AgreementKind::RoomLoan ? $loan->handle($agreement, auth()->user()) : $shared->handle($agreement, auth()->user());
@@ -134,7 +137,7 @@ new #[Title('Acuerdos')] class extends Component
         }
 
         $this->afterDecision();
-        $this->success('Aceptaste '.$this->summary($detail), e($detail['from']['name']));
+        $this->success('Aceptaste '.$this->summary($row), e($row['from']['name']));
     }
 
     /**
@@ -169,10 +172,10 @@ new #[Title('Acuerdos')] class extends Component
             ['comment.required' => 'Escribe por qué rechazas el acuerdo.', 'comment.max' => 'El motivo lleva hasta '.AgreementRules::MAX_COMMENT_LENGTH.' caracteres.'],
         );
 
-        $detail = $query->detail($agreement);
+        $row = $query->row($agreement);
 
         try {
-            $agreement->kind === AgreementKind::RoomLoan
+            $cleared = $agreement->kind === AgreementKind::RoomLoan
                 ? $loan->handle($agreement, $this->comment, auth()->user())
                 : $shared->handle($agreement, $this->comment, auth()->user());
         } catch (ValidationException $e) {
@@ -182,10 +185,10 @@ new #[Title('Acuerdos')] class extends Component
         }
 
         $this->afterDecision();
-        $this->warning('Rechazaste '.$this->summary($detail), $agreement->kind === AgreementKind::RoomLoan ? 'La sesión se quedó sin salón.' : e($detail['from']['name']));
+        $this->warning('Rechazaste '.$this->summary($row), is_int($cleared) && $cleared > 0 ? 'La sesión se quedó sin salón.' : e($row['from']['name']));
     }
 
-    public function cancel(string $id, Actor $context, AgreementsInboxQuery $query, CancelAgreement $cancel): void
+    public function cancel(string $id, Actor $context, AgreementsInboxQuery $query, CancelAgreement $cancel, CancelRoomLoan $cancelLoan): void
     {
         $this->authorizeView();
         $agreement = $this->find($id, $context, $query);
@@ -197,10 +200,12 @@ new #[Title('Acuerdos')] class extends Component
             return;
         }
 
-        $detail = $query->detail($agreement);
+        $row = $query->row($agreement);
 
         try {
-            $cancel->handle($agreement, auth()->user());
+            $cleared = $agreement->kind === AgreementKind::RoomLoan
+                ? $cancelLoan->handle($agreement, auth()->user())
+                : $cancel->handle($agreement, auth()->user());
         } catch (ValidationException $e) {
             $this->report($e, 'No se canceló');
 
@@ -208,7 +213,7 @@ new #[Title('Acuerdos')] class extends Component
         }
 
         $this->afterDecision();
-        $this->info('Cancelaste '.$this->summary($detail), e($detail['to']['name']));
+        $this->info('Cancelaste '.$this->summary($row), is_int($cleared) && $cleared > 0 ? 'La sesión se quedó sin salón.' : e($row['to']['name']));
     }
 
     /**
@@ -235,6 +240,7 @@ new #[Title('Acuerdos')] class extends Component
             'canDecide' => $agreement !== null && Gate::allows('decide', $agreement),
             'canCancel' => $agreement !== null && Gate::allows('cancel', $agreement),
             'acceptBlock' => $detail === null ? null : $this->acceptBlock($detail),
+            'maxComment' => AgreementRules::MAX_COMMENT_LENGTH,
             'filtered' => $this->kind !== '' || trim($this->search) !== '',
         ];
     }
@@ -252,9 +258,9 @@ new #[Title('Acuerdos')] class extends Component
             return null;
         }
 
-        $days = [1 => 'lunes', 2 => 'martes', 3 => 'miércoles', 4 => 'jueves', 5 => 'viernes', 6 => 'sábado'];
+        $day = Minutes::dayName($clash['day']);
 
-        return "{$detail['room']} ya está ocupado el {$days[$clash['day']]} de {$clash['starts_at']} a {$clash['ends_at']} por {$clash['label']} (HC-02).";
+        return "{$detail['room']} ya está ocupado el {$day} de {$clash['starts_at']} a {$clash['ends_at']} por {$clash['label']} (HC-02).";
     }
 
     /**
@@ -286,6 +292,7 @@ new #[Title('Acuerdos')] class extends Component
 
     private function afterDecision(): void
     {
+        $this->found = [];
         $this->rejecting = false;
         $this->comment = '';
         $this->mobileDetail = false;
@@ -301,30 +308,30 @@ new #[Title('Acuerdos')] class extends Component
     {
         abort_if($this->termId === null, 404);
 
-        try {
-            return $query->findOrFail($context, $this->term(), $this->campus(), $id);
-        } catch (ModelNotFoundException) {
-            abort(404);
-        }
+        return $this->findOrNull($id, $context, $query) ?? abort(404);
     }
 
     private function findOrNull(string $id, Actor $context, AgreementsInboxQuery $query): ?InterdepartmentalAgreement
     {
+        if (array_key_exists($id, $this->found)) {
+            return $this->found[$id];
+        }
+
         try {
-            return $query->findOrFail($context, $this->term(), $this->campus(), $id);
+            return $this->found[$id] = $query->findOrFail($context, $this->term(), $this->campus(), $id);
         } catch (ModelNotFoundException) {
-            return null;
+            return $this->found[$id] = null;
         }
     }
 
     private function term(): Term
     {
-        return KeyLookup::findOrFail(Term::query(), $this->termId);
+        return $this->loadedTerm ??= KeyLookup::findOrFail(Term::query(), $this->termId);
     }
 
     private function campus(): Campus
     {
-        return KeyLookup::findOrFail(Campus::query(), $this->campusId);
+        return $this->loadedCampus ??= KeyLookup::findOrFail(Campus::query(), $this->campusId);
     }
 
     /**

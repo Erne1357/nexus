@@ -12,13 +12,15 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
+use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Str;
+use Spatie\Activitylog\Models\Activity;
 
 /**
  * Lo que muestra la pantalla Acuerdos (tareas 3.6 y 3.7, reglas-de-negocio.md, "Acuerdos entre departamentos"): los
@@ -48,7 +50,7 @@ final class AgreementsInboxQuery
     {
         $agreements = $this->visible($actor, $term, $campus)
             ->when($kind !== null, fn (Builder $query) => $query->where('kind', $kind->value))
-            ->when(trim($search) !== '', fn (Builder $query) => $this->search($query, trim($search)))
+            ->when(trim($search) !== '', fn (Builder $query) => $this->search($query, trim($search), $term, $campus))
             ->get();
 
         $rows = $this->rows($agreements);
@@ -83,6 +85,16 @@ final class AgreementsInboxQuery
     }
 
     /**
+     * La fila de un acuerdo, sin la semana del salón: lo que alcanza para resumirlo.
+     *
+     * @return array<string, mixed>
+     */
+    public function row(InterdepartmentalAgreement $agreement): array
+    {
+        return $this->rows(new EloquentCollection([$agreement]))[0];
+    }
+
+    /**
      * El detalle de un acuerdo para la página: sus datos y, en un préstamo, la semana del salón con el bloque
      * pedido y si choca con otro grupo o un bloqueo del salón (HC-02).
      *
@@ -90,7 +102,7 @@ final class AgreementsInboxQuery
      */
     public function detail(InterdepartmentalAgreement $agreement): array
     {
-        $row = $this->rows(new EloquentCollection([$agreement]))[0];
+        $row = $this->row($agreement);
         $row['week'] = $agreement->kind === AgreementKind::RoomLoan ? $this->week($agreement) : null;
         $row['clash'] = $row['week']['clash'] ?? null;
 
@@ -118,18 +130,19 @@ final class AgreementsInboxQuery
      * @param  Builder<InterdepartmentalAgreement>  $query
      * @return Builder<InterdepartmentalAgreement>
      */
-    private function search(Builder $query, string $term): Builder
+    private function search(Builder $query, string $term, Term $period, Campus $campus): Builder
     {
-        $pattern = '%'.TextSearch::escape($term).'%';
-
         return $query->where(fn (Builder $any) => $any
             ->orWhereHas('room', fn ($room) => TextSearch::apply($room->withTrashed(), ['code'], $term))
             ->orWhereHas('fromDepartment', fn ($department) => TextSearch::apply($department->withTrashed(), ['code', 'name'], $term))
             ->orWhereHas('toDepartment', fn ($department) => TextSearch::apply($department->withTrashed(), ['code', 'name'], $term))
             ->orWhereHas('career', fn ($career) => TextSearch::apply($career->withTrashed(), ['code', 'name'], $term))
-            ->orWhereIn('group_id', Group::query()->select('groups.id')->where(fn (Builder $group) => $group
-                ->orWhereLike('groups.code', $pattern)
-                ->orWhereHas('subject', fn ($subject) => TextSearch::apply($subject->withTrashed(), ['code', 'name'], $term)))));
+            ->orWhereIn('group_id', Group::query()->select('groups.id')
+                ->where('groups.term_id', $period->getKey())
+                ->where('groups.campus_id', $campus->getKey())
+                ->where(fn (Builder $group) => $group
+                    ->orWhere(fn (Builder $code) => TextSearch::apply($code, ['groups.code'], $term))
+                    ->orWhereHas('subject', fn ($subject) => TextSearch::apply($subject->withTrashed(), ['code', 'name'], $term)))));
     }
 
     /**
@@ -152,7 +165,14 @@ final class AgreementsInboxQuery
             ->get()
             ->keyBy('id');
 
-        return $agreements->map(function (InterdepartmentalAgreement $agreement) use ($groups): array {
+        $cleared = Activity::query()
+            ->whereIn('event', [RejectRoomLoan::EVENT, CancelRoomLoan::EVENT])
+            ->whereIn('properties->agreement_id', $agreements->where('kind', AgreementKind::RoomLoan)->pluck('id')->all())
+            ->get()
+            ->map(fn (Activity $entry): ?string => $entry->properties['agreement_id'] ?? null)
+            ->all();
+
+        return $agreements->map(function (InterdepartmentalAgreement $agreement) use ($groups, $cleared): array {
             $group = $groups->get($agreement->group_id);
             $closedAt = $agreement->cancelled_at ?? $agreement->decided_at;
 
@@ -165,8 +185,8 @@ final class AgreementsInboxQuery
                 'starts_at' => $agreement->starts_at === null ? null : substr($agreement->starts_at, 0, 5),
                 'ends_at' => $agreement->ends_at === null ? null : substr($agreement->ends_at, 0, 5),
                 'hours' => $agreement->starts_at === null ? null : ltrim(substr($agreement->starts_at, 0, 5), '0').'–'.ltrim(substr($agreement->ends_at, 0, 5), '0'),
-                'day_name' => $agreement->day === null ? null : Str::ucfirst(Minutes::dayName($agreement->day)),
-                'day_short' => $agreement->day === null ? null : mb_substr(Str::ucfirst(Minutes::dayName($agreement->day)), 0, 3),
+                'day_name' => $agreement->day === null ? null : Minutes::dayLabel($agreement->day),
+                'day_short' => $agreement->day === null ? null : Minutes::dayLabel($agreement->day, short: true),
                 'group' => $group === null ? null : [
                     'id' => $group->getKey(),
                     'code' => $group->code,
@@ -185,6 +205,7 @@ final class AgreementsInboxQuery
                 'cancelled_by' => $agreement->canceller?->name,
                 'cancelled_at' => $agreement->cancelled_at,
                 'comment' => $agreement->comment,
+                'room_cleared' => in_array($agreement->getKey(), $cleared, true),
                 'sortKey' => ($closedAt ?? $agreement->created_at)?->format('Y-m-d H:i:s.u'),
             ];
         })->all();
@@ -196,6 +217,7 @@ final class AgreementsInboxQuery
      * @return array{
      *     hours: list<int>,
      *     days: list<int>,
+     *     day_labels: array<int, string>,
      *     busy: list<array{day: int, starts_at: string, ends_at: string, label: string}>,
      *     requested: array{day: int, starts_at: string, ends_at: string},
      *     clash: ?array{day: int, starts_at: string, ends_at: string, label: string},
@@ -227,12 +249,17 @@ final class AgreementsInboxQuery
         $clash = collect($busy)->first(fn (array $slot): bool => $slot['day'] === $requested['day']
             && Minutes::overlap(Minutes::of($slot['starts_at']), Minutes::of($slot['ends_at']), Minutes::of($requested['starts_at']), Minutes::of($requested['ends_at'])));
 
-        $first = min(intdiv(Minutes::of($profile->dayStart), 60), intdiv(Minutes::of($requested['starts_at']), 60));
-        $last = max((int) ceil(Minutes::of($profile->dayEnd) / 60), (int) ceil(Minutes::of($requested['ends_at']) / 60));
+        $starts = [Minutes::of($profile->dayStart), Minutes::of($requested['starts_at']), ...array_map(fn (array $slot): int => Minutes::of($slot['starts_at']), $busy)];
+        $ends = [Minutes::of($profile->dayEnd), Minutes::of($requested['ends_at']), ...array_map(fn (array $slot): int => Minutes::of($slot['ends_at']), $busy)];
+        $first = intdiv(min($starts), 60);
+        $last = (int) ceil(max($ends) / 60);
+
+        $days = collect([...$profile->days, $requested['day'], ...array_column($busy, 'day')])->unique()->sort()->values()->all();
 
         return [
             'hours' => range($first, $last - 1),
-            'days' => collect([...$profile->days, $requested['day'], ...array_column($busy, 'day')])->unique()->sort()->values()->all(),
+            'days' => $days,
+            'day_labels' => collect($days)->mapWithKeys(fn (int $day): array => [$day => Minutes::dayLabel($day, short: true)])->all(),
             'busy' => $busy,
             'requested' => $requested,
             'clash' => $clash,

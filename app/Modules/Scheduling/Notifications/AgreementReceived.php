@@ -4,6 +4,7 @@ namespace App\Modules\Scheduling\Notifications;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
@@ -55,8 +56,12 @@ final class AgreementReceived extends NexusNotification
             return 'Ese acuerdo ya no existe.';
         }
 
-        if (! $context->allows(AcademicLoadPermission::AgreementView, Target::of(campus: $agreement->campus_id, unit: $agreement->to_department_id))) {
+        if (! $context->allows(AcademicLoadPermission::AgreementDecide, Target::of(campus: $agreement->campus_id, unit: $agreement->to_department_id))) {
             return 'Ya no decides acuerdos de ese departamento.';
+        }
+
+        if ($agreement->status !== AgreementStatus::Proposed) {
+            return $agreement->status === AgreementStatus::Cancelled ? 'Este acuerdo se canceló.' : 'Este acuerdo ya se decidió.';
         }
 
         return parent::unavailableReason($context, $message);

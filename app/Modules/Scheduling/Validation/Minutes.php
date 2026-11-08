@@ -36,6 +36,16 @@ final class Minutes
     }
 
     /**
+     * El nombre del día para mostrarlo solo: «Lunes»; corto, «Lun» (la única capitalización de los días).
+     */
+    public static function dayLabel(int $day, bool $short = false): string
+    {
+        $name = mb_convert_case(self::dayName($day), MB_CASE_TITLE);
+
+        return $short ? mb_substr($name, 0, 3) : $name;
+    }
+
+    /**
      * Si [startA, endA) y [startB, endB) se empalman: dos horas contiguas no.
      */
     public static function overlap(int $startA, int $endA, int $startB, int $endB): bool

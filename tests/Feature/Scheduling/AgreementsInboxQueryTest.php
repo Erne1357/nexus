@@ -15,6 +15,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
+use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\AgreementsInboxQuery;
@@ -213,4 +214,35 @@ it('findOrFail da el acuerdo visible y falla con el de otro departamento o campu
     expect($query->findOrFail($actor, $this->term, $this->campus, $mine->id)->is($mine))->toBeTrue()
         ->and(fn () => $query->findOrFail($actor, $this->term, $this->campus, $foreign->id))->toThrow(ModelNotFoundException::class)
         ->and(fn () => $query->findOrFail($actor, $this->term, $this->campus, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
+});
+
+it('la semana incluye las horas de lo ocupado fuera de la ventana del campus', function () {
+    $loan = loanOf($this->ii, $this->sc, ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00']);
+    RoomBlock::factory()->create(['room_id' => $loan->room_id, 'term_id' => $this->term->id, 'day' => 2, 'starts_at' => '05:00', 'ends_at' => '06:30', 'reason' => 'Aseo']);
+    RoomBlock::factory()->create(['room_id' => $loan->room_id, 'term_id' => $this->term->id, 'day' => 6, 'starts_at' => '21:00', 'ends_at' => '23:00', 'reason' => 'Evento']);
+
+    $week = app(AgreementsInboxQuery::class)->detail($loan)['week'];
+
+    expect($week['hours'])->toContain(5, 22)
+        ->and($week['days'])->toContain(6)
+        ->and($week['day_labels'][6])->toBe('Sáb');
+});
+
+it('marca si un préstamo rechazado o cancelado dejó una sesión sin salón, por la bitácora', function () {
+    $loan = loanOf($this->ii, $this->sc);
+    GroupSession::factory()->for(Group::query()->find($loan->group_id))->on(1, '09:00', '10:00')->inRoom($loan->room)->create();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
+
+    expect(app(AgreementsInboxQuery::class)->row($loan)['room_cleared'])->toBeFalse();
+
+    app(RejectRoomLoan::class)->handle($loan, 'No.', $jefe);
+
+    expect(app(AgreementsInboxQuery::class)->row($loan->fresh())['room_cleared'])->toBeTrue();
+});
+
+it('la búsqueda por grupo no trae acuerdos de grupos de otro periodo con la misma clave', function () {
+    $mine = loanOf($this->ii, $this->sc, [], 'SCC-1013');
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
+
+    expect(array_column(inboxOf($jefe, $this->term, $this->campus, null, '3A')['decide'], 'id'))->toBe([$mine->id]);
 });

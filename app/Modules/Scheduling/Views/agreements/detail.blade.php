@@ -4,7 +4,7 @@
     puede hacer queda deshabilitado con su motivo escrito en el cuerpo (`aria-describedby`), no solo en un tooltip.
 --}}
 @php
-    $isLoan = $detail['room'] !== null;
+    $isLoan = $detail['kind'] === \App\Modules\AcademicLoad\Enums\AgreementKind::RoomLoan;
     $proposed = $detail['status'] === \App\Modules\AcademicLoad\Enums\AgreementStatus::Proposed;
     $answerable = $proposed && $canDecide;
     [$badgeTone, $badgeLabel, $badgeIcon] = $proposed
@@ -68,18 +68,18 @@
                             <div>
                                 <b class="font-medium">Rechazado por {{ $detail['decided_by'] }}</b><br><span class="font-mono">{{ $date($detail['decided_at']) }}</span>
                                 <br>Motivo: {{ $detail['comment'] }}
-                                @if ($isLoan)<br>La sesión de {{ $group }} se quedó sin salón.@endif
+                                @if ($isLoan && $detail['room_cleared'])<br>La sesión de {{ $group }} se quedó sin salón.@endif
                             </div>
                         </x-alert>
                     @else
                         <x-alert icon="o-minus-circle" class="alert-soft text-sm" data-testid="agreement-note">
-                            <div><b class="font-medium">Cancelado por {{ $detail['cancelled_by'] }}</b><br><span class="font-mono">{{ $date($detail['cancelled_at']) }}</span></div>
+                            <div><b class="font-medium">Cancelado por {{ $detail['cancelled_by'] }}</b><br><span class="font-mono">{{ $date($detail['cancelled_at']) }}</span>@if ($isLoan && $detail['room_cleared'])<br>La sesión de {{ $group }} se quedó sin salón.@endif</div>
                         </x-alert>
                     @endif
                 @elseif ($rejecting && $canDecide)
                     <div class="grid gap-1.5">
                         <label for="agreement-comment" class="block text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Motivo del rechazo (obligatorio)</label>
-                        <textarea id="agreement-comment" wire:model="comment" x-model="text" maxlength="1000" rows="4" aria-describedby="agreement-consequence @error('comment') agreement-comment-error @enderror"
+                        <textarea id="agreement-comment" wire:model="comment" x-model="text" maxlength="{{ $maxComment }}" rows="4" aria-describedby="agreement-consequence @error('comment') agreement-comment-error @enderror"
                             class="textarea textarea-bordered min-h-24 w-full" data-testid="agreement-comment"></textarea>
                         @error('comment')
                             <p id="agreement-comment-error" class="flex items-center gap-1.5 text-[12.5px] text-error" role="alert" data-testid="agreement-comment-error"><x-icon name="o-exclamation-circle" class="h-4 w-4" />{{ $message }}</p>

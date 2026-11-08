@@ -11,7 +11,9 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use Illuminate\Support\Str;
+use Spatie\Activitylog\Models\Activity;
 
 /**
  * «Ciencias Básicas aceptó tu préstamo» o «rechazó» (tareas 3.6 y 3.7): a quien pidió el acuerdo, el departamento
@@ -40,7 +42,7 @@ final class AgreementAnswered extends NexusNotification
         $body = AgreementText::summary($agreement);
 
         if ($rejected) {
-            $body = Str::limit("Motivo: {$agreement->comment}", 160).($agreement->kind === AgreementKind::RoomLoan ? ' La sesión se quedó sin salón.' : '');
+            $body = Str::limit("Motivo: {$agreement->comment}", 160).($agreement->kind === AgreementKind::RoomLoan && $this->roomWasCleared($agreement) ? ' La sesión se quedó sin salón.' : '');
         }
 
         return new NotificationMessage(
@@ -53,6 +55,14 @@ final class AgreementAnswered extends NexusNotification
             campusId: $agreement->campus_id,
             tone: $rejected ? 'warning' : 'success',
         );
+    }
+
+    /**
+     * Si el rechazo quitó el salón de alguna sesión (la bitácora del grupo lo dice).
+     */
+    private function roomWasCleared(InterdepartmentalAgreement $agreement): bool
+    {
+        return Activity::query()->where('event', RejectRoomLoan::EVENT)->where('properties->agreement_id', $agreement->getKey())->exists();
     }
 
     public static function unavailableReason(Actor $context, NotificationMessage $message): ?string

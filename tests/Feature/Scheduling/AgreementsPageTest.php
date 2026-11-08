@@ -95,6 +95,16 @@ describe('jefe del departamento que decide', function () {
             ->and($this->session->fresh()->room_id)->toBeNull();
     });
 
+    it('aceptar un préstamo que empalma lo rechaza la Action aunque se llame directo', function () {
+        $this->session->delete();
+        $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+        GroupSession::factory()->for($other)->on(1, '10:00', '12:00')->inRoom($this->room)->create();
+
+        agreementsAs($this->jefeSc)->call('accept', $this->loan->id)->assertHasErrors(['room_id']);
+
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
+    });
+
     it('rechazar sin motivo muestra el error y no rechaza', function () {
         agreementsAs($this->jefeSc)
             ->call('confirmReject', $this->loan->id)
@@ -194,6 +204,18 @@ describe('jefe del departamento que pidió', function () {
 
         expect($this->loan->fresh()->status)->toBe(AgreementStatus::Cancelled)
             ->and($this->loan->fresh()->cancelled_by)->toBe($this->jefeIi->id);
+    });
+});
+
+describe('cancelar un préstamo', function () {
+    it('quita el salón de la sesión cubierta y avisa en el toast; en un grupo compartido solo cancela', function () {
+        agreementsAs($this->jefeIi)->call('cancel', $this->loan->id)->assertHasNoErrors();
+
+        expect($this->session->fresh()->room_id)->toBeNull();
+
+        agreementsAs($this->jefeIi)->call('cancel', $this->share->id)->assertHasNoErrors();
+
+        expect($this->share->fresh()->status)->toBe(AgreementStatus::Cancelled);
     });
 });
 

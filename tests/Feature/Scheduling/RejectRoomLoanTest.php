@@ -44,9 +44,10 @@ it('rechaza con motivo y quita el salón solo de las sesiones que cubre el prés
     $otherRoom = GroupSession::factory()->for($this->group)->on(3, '09:00', '10:00')->inRoom($this->other)->create();
     $otherGroup = GroupSession::factory()->for(Group::factory()->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id]))->on(4, '09:00', '10:00')->inRoom($this->room)->create();
 
-    app(RejectRoomLoan::class)->handle($this->loan, 'Ese bloque ya lo usa otro grupo.', $this->actor);
+    $cleared = app(RejectRoomLoan::class)->handle($this->loan, 'Ese bloque ya lo usa otro grupo.', $this->actor);
 
-    expect($this->loan->fresh()->status)->toBe(AgreementStatus::Rejected)
+    expect($cleared)->toBe(2)
+        ->and($this->loan->fresh()->status)->toBe(AgreementStatus::Rejected)
         ->and($this->loan->fresh()->comment)->toBe('Ese bloque ya lo usa otro grupo.')
         ->and($covered->fresh()->room_id)->toBeNull()
         ->and($partly->fresh()->room_id)->toBeNull()
@@ -67,6 +68,14 @@ it('deja bitácora en el grupo y avisa después del commit', function () {
         ->and($entry->causer_id)->toBe($this->actor->id)
         ->and($entry->properties['sessions'])->toBe([$session->id]);
     Event::assertDispatched(GroupScheduleChanged::class, fn (GroupScheduleChanged $event): bool => $event->group->is($this->group));
+});
+
+it('sin sesiones cubiertas da 0, no deja bitácora de salón y avisa igual del cambio', function () {
+    Event::fake([GroupScheduleChanged::class]);
+
+    expect(app(RejectRoomLoan::class)->handle($this->loan, 'No hay.', $this->actor))->toBe(0)
+        ->and(Activity::query()->where('event', 'room_removed_by_rejected_loan')->exists())->toBeFalse();
+    Event::assertDispatched(GroupScheduleChanged::class);
 });
 
 it('sin motivo no rechaza, no quita el salón y no avisa', function () {
