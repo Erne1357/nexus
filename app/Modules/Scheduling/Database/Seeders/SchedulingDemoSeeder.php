@@ -2,11 +2,14 @@
 
 namespace App\Modules\Scheduling\Database\Seeders;
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Scheduling\Actions\AssignGroupCode;
@@ -20,6 +23,7 @@ use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -46,9 +50,11 @@ use RuntimeException;
  *   siguiente si SetGroupTeacher lo rechaza por HC-01;
  * - `overlap_pairs` parejas (4 con el perfil demo, 40 con el massive) de materias con un solo grupo en el mismo plan y
  *   semestre, encimadas a propósito (HC-03);
+ * - docente sin HC-08 ni HC-09 salvo el 3 % de los grupos (`teacher_conflict_groups`) que los rompe a propósito; sin
+ *   candidato que sirva, el grupo queda sin docente;
  * - salón en el 75 % de las sesiones (`room_sessions`, solo si el campus usa salones): de capacidad suficiente y del
  *   tipo correcto; el 6 % va a un salón chico (`small_room_sessions`, HC-05) y el 25 % de las prácticas de materias con
- *   laboratorio a un aula (`lab_in_aula_sessions`, HC-06). Un salón ocupado a esa hora se salta (la base lo rechaza,
+ *   laboratorio a un aula (`lab_in_aula_sessions`, HC-06); el 3 % (`foreign_room_sessions`) va a un salón de otro departamento (HC-10). Los demás son salones sin dueño o del propio departamento, y las prácticas de materias con laboratorio van a laboratorio, taller o sala de cómputo. Un salón ocupado a esa hora se salta (la base lo rechaza,
  *   HC-02), así que no hay empalmes de salón.
  *
  * El horario sale de las horas de la materia (teoría más práctica) en sesiones de dos horas y una última de lo que
@@ -56,6 +62,13 @@ use RuntimeException;
  * mismo plan y semestre se acomodan a horas distintas: el primer grupo de cada materia en la mañana y el segundo en la
  * tarde, así el alumno tipo tiene una combinación válida. Las prácticas de materias con laboratorio van en sesiones
  * `practica`.
+ *
+ * Además, los `clean_departments` departamentos con más grupos de cada campus (3 con el perfil demo, 4 con el massive)
+ * quedan limpios para que su carga pueda pasar a asignación de docentes: todos sus grupos activos tienen sesiones con
+ * exactamente sus horas, sin parejas encimadas, salones chicos ni prácticas en aula, con salones sin dueño o de su
+ * propio departamento y sin docente (los asigna después el seeder de Staffing). Los demás departamentos conservan la
+ * variedad de arriba, y siempre queda al menos uno con choques duros. Las proporciones se calculan sobre los grupos de
+ * los departamentos no limpios. `cleanDepartments()` devuelve los códigos por campus y se imprimen al sembrar.
  *
  * Determinista con `$seed` sobre los mismos datos. Idempotente: un grupo que ya tiene sesiones no se toca, ni se le
  * cambia un docente que ya tiene. Se niega a correr en producción.
@@ -73,14 +86,24 @@ final class SchedulingDemoSeeder extends Seeder
         'room_sessions' => 0.75,
         'small_room_sessions' => 0.06,
         'lab_in_aula_sessions' => 0.25,
+        'foreign_room_sessions' => 0.03,
+        'teacher_conflict_groups' => 0.03,
     ];
 
     private const array OVERLAP_PAIRS = ['demo' => 4, 'massive' => 40];
 
-    /** Docentes que se prueban por grupo antes de dejarlo sin docente. */
-    private const int TEACHER_TRIES = 8;
+    private const array CLEAN_DEPARTMENTS = ['demo' => 3, 'massive' => 4];
+
+    /** Docentes candidatos que se revisan por grupo antes de dejarlo sin docente. */
+    private const int TEACHER_CANDIDATES = 15;
 
     private Randomizer $random;
+
+    /** @var array<string, list<string>> campus => códigos de los departamentos limpios */
+    private array $cleanByCampus = [];
+
+    /** @var array<string, true> */
+    private array $cleanIds = [];
 
     /** @var array<string, float|int> */
     private array $ratios;
@@ -107,7 +130,8 @@ final class SchedulingDemoSeeder extends Seeder
     {
         $this->refuseProduction();
         $this->random = new Randomizer(new Mt19937($seed));
-        $this->ratios = [...self::DEFAULT_RATIOS, 'overlap_pairs' => self::OVERLAP_PAIRS[$profile] ?? self::OVERLAP_PAIRS['demo'], ...$ratios];
+        $this->ratios = [...self::DEFAULT_RATIOS, 'overlap_pairs' => self::OVERLAP_PAIRS[$profile] ?? self::OVERLAP_PAIRS['demo'], 'clean_departments' => self::CLEAN_DEPARTMENTS[$profile] ?? self::CLEAN_DEPARTMENTS['demo'], ...$ratios];
+        $this->cleanByCampus = [];
 
         $termModel = Term::query()->where('code', $term)->first() ?? throw new RuntimeException("El periodo {$term} no existe: corre antes DemoTermSeeder.");
         $user = User::query()->where('username', 'admin')->first() ?? User::query()->first()
@@ -126,6 +150,33 @@ final class SchedulingDemoSeeder extends Seeder
         }
     }
 
+    /**
+     * Códigos de los departamentos que quedaron limpios en la última corrida, por clave de campus.
+     *
+     * @return array<string, list<string>>
+     */
+    public function cleanDepartments(): array
+    {
+        return $this->cleanByCampus;
+    }
+
+    /**
+     * Los departamentos con más grupos del campus (contando los cancelados, para que no cambie al repetir), sin dejar a todos limpios.
+     *
+     * @param  Collection<int, Group>  $groups
+     * @return list<string> ids de departamento
+     */
+    private function pickClean($groups): array
+    {
+        $counts = $groups->countBy('department_id')->all();
+        $codes = Department::query()->withTrashed()->whereIn('id', array_keys($counts))->pluck('code', 'id')->all();
+        $wanted = min((int) $this->ratios['clean_departments'], count($counts) - 1);
+
+        uksort($counts, fn (string $a, string $b): int => [$counts[$b], $codes[$a] ?? $a] <=> [$counts[$a], $codes[$b] ?? $b]);
+
+        return array_slice(array_keys($counts), 0, max(0, $wanted));
+    }
+
     private function seedCampus(Term $term, Campus $campus, User $user): void
     {
         $groups = Group::query()->with('subject')
@@ -139,12 +190,18 @@ final class SchedulingDemoSeeder extends Seeder
         $this->loadTeachers();
         $this->loadRooms($term, $campus);
 
-        $plan = $this->plan($groups);
+        $cleanIds = $this->pickClean($groups);
+        $this->cleanIds = array_fill_keys($cleanIds, true);
+        $this->cleanByCampus[$campus->code] = array_values(Department::query()->withTrashed()->whereIn('id', $cleanIds)->orderBy('code')->pluck('code')->all());
+        $this->command?->info("Departamentos limpios en {$campus->code}: ".($this->cleanByCampus[$campus->code] === [] ? 'ninguno' : implode(', ', $this->cleanByCampus[$campus->code])).'.');
+
+        $plan = $this->plan($groups->reject(fn (Group $group): bool => isset($this->cleanIds[$group->department_id]))->values());
         $profile = $campus->profile;
         $touched = [];
         $placements = [];
         $occupied = [];
         $subjectsSeen = [];
+        $slots = [];
 
         $ordered = $groups->sortBy(fn (Group $group): string => "{$group->study_plan_id}|{$group->semester}|{$group->subject_id}|{$group->id}")->values();
 
@@ -152,29 +209,33 @@ final class SchedulingDemoSeeder extends Seeder
             $cohort = "{$group->study_plan_id}|{$group->semester}";
             $variant = $subjectsSeen[$cohort][$group->subject_id] ?? 0;
             $subjectsSeen[$cohort][$group->subject_id] = $variant + 1;
-            $ordinal = count($subjectsSeen[$cohort]) - 1;
-
-            if ($group->sessions()->exists() || isset($plan['unscheduled'][$group->id]) || isset($plan['follower'][$group->id]) || $this->hoursOf($group) === 0) {
-                continue;
-            }
-
-            $pieces = $this->pieces($group, isset($plan['short'][$group->id]), $profile->days);
-            $placement = $this->place($pieces, $profile->days, $profile->dayStart, $profile->dayEnd, $occupied["{$cohort}|{$variant}"], $variant, $ordinal);
-            $placements[$group->id] = $placement;
-            $this->persist($group, $placement, $profile->usesRooms);
-            $touched[$group->id] = $group;
+            $slots[$group->id] = [$cohort, $variant, count($subjectsSeen[$cohort]) - 1];
         }
 
-        foreach ($plan['follower'] as $followerId => $leaderId) {
-            $follower = $groups->firstWhere('id', $followerId);
+        $passes = [
+            $ordered->reject(fn (Group $group): bool => isset($this->cleanIds[$group->department_id])),
+            $ordered->filter(fn (Group $group): bool => isset($this->cleanIds[$group->department_id])),
+        ];
 
-            if ($follower === null || isset($placements[$followerId]) || ! isset($placements[$leaderId]) || $follower->sessions()->exists()) {
-                continue;
+        foreach ($passes as $index => $pass) {
+            if ($index === 1) {
+                $this->placeFollowers($plan['follower'], $groups, $placements, $profile, $touched, $slots, $occupied);
             }
 
-            $placement = $this->overlapping($this->pieces($follower, false, $profile->days), $placements[$leaderId], $profile->days);
-            $this->persist($follower, $placement, $profile->usesRooms);
-            $touched[$followerId] = $follower;
+            foreach ($pass as $group) {
+                [$cohort, $variant, $ordinal] = $slots[$group->id];
+                $clean = isset($this->cleanIds[$group->department_id]);
+
+                if ($group->sessions()->exists() || isset($plan['unscheduled'][$group->id]) || isset($plan['follower'][$group->id]) || $this->hoursOf($group) === 0) {
+                    continue;
+                }
+
+                $pieces = $this->pieces($group, isset($plan['short'][$group->id]), $profile->days);
+                $placement = $this->place($pieces, $profile->days, $profile->dayStart, $profile->dayEnd, $occupied["{$cohort}|{$variant}"], $variant, $ordinal);
+                $placements[$group->id] = $placement;
+                $this->persist($group, $placement, $profile->usesRooms, $clean);
+                $touched[$group->id] = $group;
+            }
         }
 
         foreach ($touched as $group) {
@@ -182,7 +243,7 @@ final class SchedulingDemoSeeder extends Seeder
         }
 
         foreach ($groups as $group) {
-            if (! isset($plan['cancelled'][$group->id]) && ! isset($plan['teacherless'][$group->id]) && $group->teacher_id === null) {
+            if (! isset($this->cleanIds[$group->department_id]) && ! isset($plan['cancelled'][$group->id]) && ! isset($plan['teacherless'][$group->id]) && $group->teacher_id === null) {
                 $this->assignTeacher($group, $user);
             }
 
@@ -195,6 +256,32 @@ final class SchedulingDemoSeeder extends Seeder
             if ($status !== null && $group->status === GroupStatus::Planned) {
                 $group->update(['status' => $status]);
             }
+        }
+    }
+
+    /**
+     * Acomoda a cada seguidor encima de su líder y lo registra como ocupado en el plan y semestre.
+     *
+     * @param  array<string, string>  $followers
+     * @param  Collection<int, Group>  $groups
+     * @param  array<string, list<array{day: int, start: int, hours: int, kind: SessionKind}>>  $placements
+     * @param  array<string, Group>  $touched
+     * @param  array<string, array{0: string, 1: int, 2: int}>  $slots
+     * @param  array<string, array<string, true>>  $occupied
+     */
+    private function placeFollowers(array $followers, $groups, array &$placements, CampusProfile $profile, array &$touched, array $slots, array &$occupied): void
+    {
+        foreach ($followers as $followerId => $leaderId) {
+            $follower = $groups->firstWhere('id', $followerId);
+
+            if ($follower === null || isset($placements[$followerId]) || ! isset($placements[$leaderId]) || $follower->sessions()->exists()) {
+                continue;
+            }
+
+            $placement = $this->overlapping($this->pieces($follower, false, $profile->days), $placements[$leaderId], $profile->days);
+            $this->persist($follower, $placement, $profile->usesRooms);
+            $touched[$followerId] = $follower;
+            $this->occupy($placement, $occupied["{$slots[$followerId][0]}|{$slots[$followerId][1]}"]);
         }
     }
 
@@ -487,10 +574,10 @@ final class SchedulingDemoSeeder extends Seeder
      *
      * @param  list<array{day: int, start: int, hours: int, kind: SessionKind}>  $placement
      */
-    private function persist(Group $group, array $placement, bool $usesRooms): void
+    private function persist(Group $group, array $placement, bool $usesRooms, bool $clean = false): void
     {
         foreach ($placement as $slot) {
-            $room = $usesRooms && $this->chance('room_sessions') ? $this->pickRoom($group, $slot) : null;
+            $room = $usesRooms && $this->chance('room_sessions') ? $this->pickRoom($group, $slot, $clean) : null;
             $attributes = [
                 'day' => $slot['day'],
                 'starts_at' => sprintf('%02d:00', $slot['start']),
@@ -510,16 +597,22 @@ final class SchedulingDemoSeeder extends Seeder
     /**
      * @param  array{day: int, start: int, hours: int, kind: SessionKind}  $slot
      */
-    private function pickRoom(Group $group, array $slot): ?Room
+    private function pickRoom(Group $group, array $slot, bool $clean): ?Room
     {
         $isLabPractice = $slot['kind'] === SessionKind::Practica && $group->subject->needs_lab;
         $capacity = (int) $group->capacity;
 
+        $mine = fn (Room $room): bool => $room->department_id === null || $room->department_id === $group->department_id;
+        $practice = fn (Room $room): bool => $room->type->isPracticeSpace();
+
         $candidates = match (true) {
-            $isLabPractice && $this->chance('lab_in_aula_sessions') => $this->roomsWhere(fn (Room $room): bool => ! $room->type->isPracticeSpace()),
-            $isLabPractice => $this->practiceRooms($group, $capacity),
-            $this->chance('small_room_sessions') => $this->roomsWhere(fn (Room $room): bool => ! $room->type->isPracticeSpace() && $room->capacity < $capacity),
-            default => $this->roomsWhere(fn (Room $room): bool => ! $room->type->isPracticeSpace() && $room->capacity >= $capacity),
+            $clean => $this->cleanRooms($group, $isLabPractice),
+            $isLabPractice && $this->chance('lab_in_aula_sessions') => $this->roomsWhere(fn (Room $room): bool => ! $practice($room) && $mine($room)),
+            $isLabPractice && $this->chance('foreign_room_sessions') => $this->roomsWhere(fn (Room $room): bool => $practice($room) && ! $mine($room) && $room->capacity >= $capacity),
+            $isLabPractice => $this->roomsWhere(fn (Room $room): bool => $practice($room) && $mine($room) && $room->capacity >= $capacity),
+            $this->chance('small_room_sessions') => $this->roomsWhere(fn (Room $room): bool => ! $practice($room) && $mine($room) && $room->capacity < $capacity),
+            $this->chance('foreign_room_sessions') => $this->roomsWhere(fn (Room $room): bool => ! $practice($room) && ! $mine($room) && $room->capacity >= $capacity),
+            default => $this->roomsWhere(fn (Room $room): bool => ! $practice($room) && $mine($room) && $room->capacity >= $capacity),
         };
 
         if ($candidates === []) {
@@ -540,18 +633,16 @@ final class SchedulingDemoSeeder extends Seeder
     }
 
     /**
-     * Laboratorios, talleres y salas de cómputo con lugar; primero los del departamento del grupo.
+     * Salones sin conflicto para un grupo limpio: de capacidad suficiente, del tipo que toca y sin dueño o del propio
+     * departamento del grupo (HC-05, HC-06, HC-10).
      *
      * @return list<Room>
      */
-    private function practiceRooms(Group $group, int $capacity): array
+    private function cleanRooms(Group $group, bool $isLabPractice): array
     {
-        $practice = $this->roomsWhere(fn (Room $room): bool => $room->type->isPracticeSpace());
-        $owned = array_values(array_filter($practice, fn (Room $room): bool => $room->department_id === $group->department_id));
-        $pool = $owned !== [] ? $owned : $practice;
-        $roomy = array_values(array_filter($pool, fn (Room $room): bool => $room->capacity >= $capacity));
-
-        return $roomy !== [] ? $roomy : $pool;
+        return $this->roomsWhere(fn (Room $room): bool => $room->type->isPracticeSpace() === $isLabPractice
+            && $room->capacity >= (int) $group->capacity
+            && ($room->department_id === null || $room->department_id === $group->department_id));
     }
 
     /**
@@ -610,6 +701,17 @@ final class SchedulingDemoSeeder extends Seeder
         $this->rooms = Room::query()->where('campus_id', $campus->id)->where('is_active', true)->orderBy('code')->get()->all();
         $this->roomBusy = [];
 
+        RoomBlock::query()->where('term_id', $term->id)->whereIn('room_id', collect($this->rooms)->pluck('id'))
+            ->get(['room_id', 'day', 'starts_at', 'ends_at'])
+            ->each(function (RoomBlock $block): void {
+                $from = (int) substr((string) $block->starts_at, 0, 2);
+                $to = (int) ceil((int) substr((string) $block->ends_at, 0, 2) + (int) substr((string) $block->ends_at, 3, 2) / 60);
+
+                foreach (range($from, max($from, $to - 1)) as $hour) {
+                    $this->roomBusy[$block->room_id]["{$block->day}:{$hour}"] = true;
+                }
+            });
+
         GroupSession::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->where('is_active', true)->whereNotNull('room_id')
             ->get(['room_id', 'day', 'starts_at', 'ends_at'])
             ->each(function (GroupSession $session): void {
@@ -623,7 +725,9 @@ final class SchedulingDemoSeeder extends Seeder
     }
 
     /**
-     * Le da a un grupo un docente adscrito a su departamento, probando el siguiente si HC-01 lo rechaza.
+     * Le da a un grupo un docente adscrito a su departamento que no rompa HC-08 ni HC-09 (y SetGroupTeacher descarta
+     * HC-01); solo una parte pequeña (`teacher_conflict_groups`) puede romperlos a propósito. Si ninguno sirve, el
+     * grupo se queda sin docente.
      */
     private function assignTeacher(Group $group, User $user): void
     {
@@ -633,13 +737,27 @@ final class SchedulingDemoSeeder extends Seeder
             return;
         }
 
-        for ($try = 0; $try < min(self::TEACHER_TRIES, count($pool)); $try++) {
-            $cursor = $this->teacherCursor[$group->department_id] ?? 0;
-            $this->teacherCursor[$group->department_id] = $cursor + 1;
-            $teacher = Teacher::query()->find($pool[$cursor % count($pool)]);
+        $cursor = $this->teacherCursor[$group->department_id] ?? 0;
+        $ids = array_map(fn (int $step): string => $pool[($cursor + $step) % count($pool)], range(0, min(self::TEACHER_CANDIDATES, count($pool)) - 1));
+        $found = Teacher::query()->whereIn('id', $ids)->get()->keyBy('id');
+        $candidates = array_values(array_filter(array_map(fn (string $id): ?Teacher => $found[$id] ?? null, $ids)));
+
+        $validator = app(ScheduleValidator::class);
+        $validator->forget();
+        $checks = $validator->checkTeachers($group, $candidates);
+        $deliberate = $this->chance('teacher_conflict_groups');
+
+        foreach ($candidates as $teacher) {
+            $result = $checks[$teacher->id];
+
+            if ($deliberate ? $result->forRule('HC-01') !== [] || ! $result->hasHard() : $result->hasHard()) {
+                continue;
+            }
 
             try {
                 app(SetGroupTeacher::class)->handle($group, $teacher, $user);
+                $this->teacherCursor[$group->department_id] = (array_search($teacher->id, $pool, true) + 1);
+                $validator->forget();
 
                 return;
             } catch (ValidationException|QueryException) {
