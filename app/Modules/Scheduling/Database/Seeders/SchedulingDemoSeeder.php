@@ -13,7 +13,6 @@ use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Scheduling\Actions\AssignGroupCode;
-use App\Modules\Scheduling\Actions\SetGroupTeacher;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SessionKind;
@@ -23,13 +22,16 @@ use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
+use App\Modules\Scheduling\Validation\ValidationResult;
+use App\Modules\Scheduling\Validation\ValidationScope;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Validation\ValidationException;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
 use RuntimeException;
@@ -37,7 +39,8 @@ use RuntimeException;
 /**
  * Horarios, docentes y salones de prueba para los grupos que ya creó la aceptación de las propuestas (tarea 3.4).
  * Corre después de AcademicLoadDemoSeeder. Escribe las sesiones directo con el modelo (las Actions del editor de
- * horarios todavía no existen); el docente sí pasa por SetGroupTeacher y la clave por AssignGroupCode. Mientras
+ * horarios todavía no existen); el docente se escribe directo contra una foto del campus que se va actualizando (ver
+ * assignTeacher()) y la clave pasa por AssignGroupCode. Mientras
  * siembra, los eventos que encolarían un recálculo por cada cambio (GroupScheduleChanged, GroupTeacherChanged,
  * GroupCancelled, GroupsCreated) se descartan; al final corre SyncScheduleConflicts una vez por campus.
  *
@@ -47,7 +50,7 @@ use RuntimeException;
  * - 3 % cancelados (`cancelled_groups`) y 30 % confirmados (`confirmed_groups`, con docente); el resto, planeados;
  * - 10 % sin horario (`unscheduled_groups`) y 5 % con una hora de menos (`short_groups`, HC-12);
  * - 20 % sin docente (`teacherless_groups`); a los demás, un docente adscrito al departamento del grupo, probando el
- *   siguiente si SetGroupTeacher lo rechaza por HC-01;
+ *   siguiente si la base lo rechaza por HC-01;
  * - `overlap_pairs` parejas (4 con el perfil demo, 40 con el massive) de materias con un solo grupo en el mismo plan y
  *   semestre, encimadas a propósito (HC-03);
  * - docente sin HC-08 ni HC-09 salvo el 3 % de los grupos (`teacher_conflict_groups`) que los rompe a propósito; sin
@@ -242,9 +245,14 @@ final class SchedulingDemoSeeder extends Seeder
             app(AssignGroupCode::class)->handle($group);
         }
 
+        $validator = app(ScheduleValidator::class);
+        $validator->forget();
+        $state = $validator->stateFor($term->id, $campus->id);
+        $state = $state->withTeachers(app(ScheduleStateQuery::class)->teachers($term, array_values(array_unique(array_merge(...array_values($this->teachersByDepartment ?: [[]]))))));
+
         foreach ($groups as $group) {
             if (! isset($this->cleanIds[$group->department_id]) && ! isset($plan['cancelled'][$group->id]) && ! isset($plan['teacherless'][$group->id]) && $group->teacher_id === null) {
-                $this->assignTeacher($group, $user);
+                $state = $this->assignTeacher($group, $validator, $state);
             }
 
             $status = match (true) {
@@ -725,44 +733,52 @@ final class SchedulingDemoSeeder extends Seeder
     }
 
     /**
-     * Le da a un grupo un docente adscrito a su departamento que no rompa HC-08 ni HC-09 (y SetGroupTeacher descarta
-     * HC-01); solo una parte pequeña (`teacher_conflict_groups`) puede romperlos a propósito. Si ninguno sirve, el
-     * grupo se queda sin docente.
+     * Le da a un grupo un docente adscrito a su departamento que no rompa HC-08 ni HC-09; solo una parte pequeña
+     * (`teacher_conflict_groups`) puede romperlos a propósito. Si ninguno sirve, el grupo se queda sin docente.
+     *
+     * Pregunta contra la foto del campus que se leyó una sola vez y que va actualizando con cada asignación
+     * (`withTeacher()`), y escribe `teacher_id` directo, sin SetGroupTeacher: con cientos de grupos, la Action relee la
+     * foto completa en cada asignación (correcto para una persona, demasiado lento para sembrar el masivo). HC-01 lo
+     * sigue cuidando la exclusión de la base; los eventos de Scheduling están apagados durante la siembra.
      */
-    private function assignTeacher(Group $group, User $user): void
+    private function assignTeacher(Group $group, ScheduleValidator $validator, ScheduleState $state): ScheduleState
     {
         $pool = $this->teachersByDepartment[$group->department_id] ?? [];
 
         if ($pool === []) {
-            return;
+            return $state;
         }
 
         $cursor = $this->teacherCursor[$group->department_id] ?? 0;
         $ids = array_map(fn (int $step): string => $pool[($cursor + $step) % count($pool)], range(0, min(self::TEACHER_CANDIDATES, count($pool)) - 1));
-        $found = Teacher::query()->whereIn('id', $ids)->get()->keyBy('id');
-        $candidates = array_values(array_filter(array_map(fn (string $id): ?Teacher => $found[$id] ?? null, $ids)));
-
-        $validator = app(ScheduleValidator::class);
-        $validator->forget();
-        $checks = $validator->checkTeachers($group, $candidates);
         $deliberate = $this->chance('teacher_conflict_groups');
 
-        foreach ($candidates as $teacher) {
-            $result = $checks[$teacher->id];
+        foreach ($ids as $id) {
+            if ($state->teacher($id) === null) {
+                continue;
+            }
+
+            $result = new ValidationResult($validator->validate(
+                $state->withTeacher($group->id, $id),
+                new ValidationScope([$group->id], [$id]),
+                ScheduleValidator::TEACHER_RULES,
+            )->forGroup($group->id));
 
             if ($deliberate ? $result->forRule('HC-01') !== [] || ! $result->hasHard() : $result->hasHard()) {
                 continue;
             }
 
             try {
-                app(SetGroupTeacher::class)->handle($group, $teacher, $user);
-                $this->teacherCursor[$group->department_id] = (array_search($teacher->id, $pool, true) + 1);
-                $validator->forget();
-
-                return;
-            } catch (ValidationException|QueryException) {
+                DB::transaction(fn () => $group->update(['teacher_id' => $id]));
+            } catch (QueryException) {
                 continue;
             }
+
+            $this->teacherCursor[$group->department_id] = array_search($id, $pool, true) + 1;
+
+            return $state->withTeacher($group->id, $id);
         }
+
+        return $state;
     }
 }

@@ -59,9 +59,16 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         ], RerankOnFacultyChange::class);
     }
 
+    /**
+     * «Asignación docente» para quienes ven el ranking de algún departamento (StaffingPermission::RankingView).
+     *
+     * @return list<NavigationItem>
+     */
     public function navigation(): array
     {
         return [
+            new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
             new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
             new NavigationItem('Oferta del departamento', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,

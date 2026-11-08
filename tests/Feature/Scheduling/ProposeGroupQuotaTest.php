@@ -32,6 +32,7 @@ beforeEach(function () {
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
     CareerCampus::factory()->create(['career_id' => $this->foreign->id, 'campus_id' => $this->group->campus_id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
 });
 
 function errorsOf(Closure $callback): array
@@ -80,7 +81,7 @@ it('no propone ni retira en un grupo cancelado o con la carga cerrada', function
     if ($status === null) {
         $this->group->update(['status' => GroupStatus::Cancelled]);
     } else {
-        AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+        $this->load->update(['status' => $status]);
     }
 
     expect(errorsOf(fn () => app(ProposeGroupQuota::class)->handle($this->group, $other, 5, $this->actor)))->toHaveKey('quotas')
@@ -89,11 +90,11 @@ it('no propone ni retira en un grupo cancelado o con la carga cerrada', function
 })->with([null, LoadStatus::Closed, LoadStatus::Published]);
 
 it('el mensaje de la carga dice el departamento, el campus y el estado', function () {
-    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load->update(['status' => LoadStatus::Closed]);
 
     $errors = errorsOf(fn () => app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 5, $this->actor));
 
-    expect($errors['quotas'][0])->toBe("La carga de {$this->imparte->name} en {$this->group->campus->name} está en Cerrada: no se editan cupos.");
+    expect($errors['quotas'][0])->toBe("La carga de {$this->imparte->name} en {$this->group->campus->name} está en cerrada: no se editan cupos.");
 });
 
 it('retira la propuesta', function () {
