@@ -7,7 +7,20 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Facilities\Events\RoomBlockAdded;
+use App\Modules\Facilities\Events\RoomBlockRemoved;
+use App\Modules\Facilities\Events\RoomUpdated;
+use App\Modules\Faculty\Events\AvailabilityChanged;
+use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\PositionChanged;
+use App\Modules\Scheduling\Console\RecomputeConflicts;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Scheduling\Events\GroupCancelled;
+use App\Modules\Scheduling\Events\GroupScheduleChanged;
+use App\Modules\Scheduling\Events\GroupsCreated;
+use App\Modules\Scheduling\Events\GroupTeacherChanged;
+use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
+use Illuminate\Support\Facades\Event;
 
 /**
  * Módulo Scheduling: grupos, sesiones, cupos por carrera, validador de restricciones, editor de horarios, salones y
@@ -16,6 +29,36 @@ use App\Modules\Scheduling\Enums\SchedulingPermission;
  */
 final class SchedulingServiceProvider extends ModuleServiceProvider
 {
+    /**
+     * Lo que dispara el recálculo de choques: sesiones, docentes y grupos de Scheduling, salones y bloqueos de
+     * Facilities, y disponibilidad, horas externas y plazas de Faculty.
+     */
+    private const array RECOMPUTE_ON = [
+        GroupsCreated::class,
+        GroupScheduleChanged::class,
+        GroupTeacherChanged::class,
+        GroupCancelled::class,
+        RoomUpdated::class,
+        RoomBlockAdded::class,
+        RoomBlockRemoved::class,
+        AvailabilityChanged::class,
+        ExternalLoadChanged::class,
+        PositionChanged::class,
+    ];
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        foreach (self::RECOMPUTE_ON as $event) {
+            Event::listen($event, QueueConflictRecompute::class);
+        }
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([RecomputeConflicts::class]);
+        }
+    }
+
     /**
      * «Horarios», el editor de horarios (tarea 3.5), para quien ve los horarios.
      */
