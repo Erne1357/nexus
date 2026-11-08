@@ -2,8 +2,11 @@
 
 namespace App\Modules\Staffing;
 
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Staffing\Enums\StaffingPermission;
 
 /**
@@ -14,7 +17,12 @@ final class StaffingServiceProvider extends ModuleServiceProvider
 {
     public function navigation(): array
     {
-        return [];
+        return [
+            new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
+            new NavigationItem('Oferta del departamento', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
+        ];
     }
 
     /**
