@@ -52,6 +52,7 @@
             "staffing.change_request.view",
             "staffing.ranking.view",
             "staffing.teacher.assign",
+            "staffing.teacher_load.view",
             "students.student.view"
         ],
         "jefe_proyecto_docente": [
@@ -70,7 +71,8 @@
             "scheduling.schedule.view",
             "staffing.change_request.view",
             "staffing.ranking.view",
-            "staffing.teacher.assign"
+            "staffing.teacher.assign",
+            "staffing.teacher_load.view"
         ],
         "subdireccion": [
             "academic_load.agreement.view",
@@ -110,6 +112,7 @@
             "scheduling.schedule.view",
             "staffing.change_request.view",
             "staffing.ranking.view",
+            "staffing.teacher_load.view",
             "students.student.view"
         ]
     },
@@ -187,6 +190,7 @@
             "staffing.change_request.view",
             "staffing.ranking.view",
             "staffing.teacher.assign",
+            "staffing.teacher_load.view",
             "students.student.view"
         ]
     }

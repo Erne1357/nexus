@@ -17,6 +17,7 @@ enum StaffingPermission: string implements Permission
     case TeacherAssign = 'staffing.teacher.assign';
     case OfferView = 'staffing.offer.view';
     case MyLoadView = 'staffing.my_load.view';
+    case TeacherLoadView = 'staffing.teacher_load.view';
     case ChangeRequestRequestOwn = 'staffing.change_request.request_own';
     case ChangeRequestRequest = 'staffing.change_request.request';
     case ChangeRequestView = 'staffing.change_request.view';
@@ -31,6 +32,7 @@ enum StaffingPermission: string implements Permission
             self::TeacherAssign => 'Asignar el docente de un grupo',
             self::OfferView => 'Ver la oferta de mis departamentos',
             self::MyLoadView => 'Ver mi carga',
+            self::TeacherLoadView => 'Ver la carga por docente de un departamento',
             self::ChangeRequestRequestOwn => 'Pedir un cambio en un grupo propio (docente)',
             self::ChangeRequestRequest => 'Pedir un cambio en un grupo de su carrera (coordinador)',
             self::ChangeRequestView => 'Ver las solicitudes de cambio de un departamento',

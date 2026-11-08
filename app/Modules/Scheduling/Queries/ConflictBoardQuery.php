@@ -14,6 +14,7 @@ use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,6 +31,10 @@ use Illuminate\Support\Facades\Cache;
  * que usa salones). Solo cuenta lo que el usuario puede ver (`scheduling.schedule.view` con su alcance: el jefe, su
  * departamento; el coordinador, su carrera en su campus), filtrado en SQL con `Actor::constrain()`. Lee el estado de
  * todos los grupos del alcance en una consulta y cuenta en memoria: una carga de un campus son cientos de grupos.
+ *
+ * Un grupo compartido (con cupo de otra carrera) cuenta también en esa carrera, en cada retícula suya donde está la
+ * materia y en el semestre que ahí tiene, como en el editor de horarios; y el coordinador de esa carrera lo ve. En
+ * cada carrera un grupo cuenta una vez; los totales del campus y por departamento no lo repiten.
  */
 final class ConflictBoardQuery
 {
@@ -41,6 +46,7 @@ final class ConflictBoardQuery
     public function statuses(Actor $actor, Term $term, Campus $campus): Collection
     {
         $profile = $campus->profile;
+        $shared = $this->sharedPlacements($term, $campus);
 
         return $this->scoped($actor, $term, $campus)
             ->select(['groups.id', 'groups.code', 'groups.subject_id', 'groups.department_id', 'groups.owner_career_id', 'groups.study_plan_id', 'groups.semester', 'groups.teacher_id'])
@@ -61,6 +67,10 @@ final class ConflictBoardQuery
                 unscheduled: $profile->usesTimeBlocks && ! $row->has_sessions,
                 withoutTeacher: $row->teacher_id === null,
                 withoutRoom: $profile->usesRooms && (bool) $row->missing_room,
+                placements: [
+                    ['career' => $row->owner_career_id, 'plan' => $row->study_plan_id, 'semester' => (int) $row->semester],
+                    ...$shared[$row->id] ?? [],
+                ],
             ));
     }
 
@@ -88,16 +98,24 @@ final class ConflictBoardQuery
     }
 
     /**
-     * Un renglón por carrera dueña con grupos en el alcance, por clave.
+     * Un renglón por carrera con grupos en el alcance (dueña o con cupo), por clave.
      *
      * @param  Collection<int, GroupBoardStatus>  $statuses
      * @return list<array{id: string, code: string, name: string, count: BoardCount}>
      */
     public function byCareer(Collection $statuses): array
     {
-        $careers = Career::query()->withTrashed()->whereIn('id', $statuses->pluck('careerId')->unique()->all())->get(['id', 'code', 'name']);
+        $grouped = [];
 
-        return $this->rows($careers, $statuses->groupBy('careerId'));
+        foreach ($statuses as $status) {
+            foreach (array_unique(array_column($status->placements, 'career')) as $careerId) {
+                $grouped[$careerId][] = $status;
+            }
+        }
+
+        $careers = Career::query()->withTrashed()->whereIn('id', array_keys($grouped))->get(['id', 'code', 'name']);
+
+        return $this->rows($careers, collect($grouped)->map(fn (array $ofCareer): Collection => new Collection($ofCareer)));
     }
 
     /**
@@ -109,12 +127,16 @@ final class ConflictBoardQuery
      */
     public function grid(Collection $statuses, string $careerId): array
     {
-        $ofCareer = $statuses->where('careerId', $careerId);
-        $plans = StudyPlan::query()->withTrashed()->whereIn('id', $ofCareer->pluck('studyPlanId')->unique()->all())
+        $ofCareer = $statuses->filter(fn (GroupBoardStatus $status): bool => $status->countsFor($careerId));
+        $cells = $ofCareer->flatMap(fn (GroupBoardStatus $status): array => array_values(array_filter(
+            $status->placements,
+            fn (array $placement): bool => $placement['career'] === $careerId,
+        )));
+        $plans = StudyPlan::query()->withTrashed()->whereIn('id', $cells->pluck('plan')->unique()->all())
             ->orderBy('is_current')->orderBy('code')
             ->get(['id', 'code', 'name', 'is_current', 'semesters_count']);
 
-        $semesters = max([1, (int) $plans->max('semesters_count'), (int) $ofCareer->max('semester')]);
+        $semesters = max([1, (int) $plans->max('semesters_count'), (int) $cells->max('semester')]);
 
         return [
             'semesters' => $semesters,
@@ -123,8 +145,10 @@ final class ConflictBoardQuery
                 'code' => $plan->code,
                 'name' => $plan->name,
                 'priority' => ! $plan->is_current,
-                'cells' => $ofCareer->where('studyPlanId', $plan->id)->groupBy('semester')
-                    ->map(fn (Collection $cell): BoardCount => BoardCount::of($cell))->all(),
+                'cells' => $cells->where('plan', $plan->id)->pluck('semester')->unique()->sort()
+                    ->mapWithKeys(fn (int $semester): array => [$semester => BoardCount::of(
+                        $ofCareer->filter(fn (GroupBoardStatus $status): bool => $status->placedIn($careerId, $plan->id, $semester)),
+                    )])->all(),
             ])->values()->all(),
         ];
     }
@@ -214,8 +238,39 @@ final class ConflictBoardQuery
         return $actor->constrain($query, SchedulingPermission::ScheduleView, [
             'campus' => 'groups.campus_id',
             'unit' => 'groups.department_id',
-            'career' => 'groups.owner_career_id',
+            'career' => fn (Builder $careers, array $ids) => $careers->whereIn('groups.owner_career_id', $ids)
+                ->orWhereExists(GroupQuota::query()->toBase()->whereColumn('group_quotas.group_id', 'groups.id')->whereIn('group_quotas.career_id', $ids)),
         ]);
+    }
+
+    /**
+     * Dónde cuenta cada grupo compartido del campus y periodo en las carreras que le dan cupo: cada retícula de esa
+     * carrera donde está la materia, con el semestre que ahí tiene.
+     *
+     * @return array<string, list<array{career: string, plan: string, semester: int}>>
+     */
+    private function sharedPlacements(Term $term, Campus $campus): array
+    {
+        $placements = [];
+
+        GroupQuota::query()
+            ->join('groups', 'groups.id', '=', 'group_quotas.group_id')
+            ->join('study_plans', fn ($join) => $join->on('study_plans.career_id', '=', 'group_quotas.career_id')->whereNull('study_plans.deleted_at'))
+            ->join('study_plan_subjects', fn ($join) => $join->on('study_plan_subjects.study_plan_id', '=', 'study_plans.id')
+                ->on('study_plan_subjects.subject_id', '=', 'groups.subject_id')
+                ->whereNull('study_plan_subjects.deleted_at'))
+            ->where('groups.term_id', $term->id)
+            ->where('groups.campus_id', $campus->id)
+            ->where('groups.status', '<>', GroupStatus::Cancelled->value)
+            ->whereColumn('group_quotas.career_id', '<>', 'groups.owner_career_id')
+            ->orderBy('study_plans.code')
+            ->toBase()
+            ->get(['group_quotas.group_id', 'group_quotas.career_id', 'study_plan_subjects.study_plan_id', 'study_plan_subjects.semester'])
+            ->each(function (object $row) use (&$placements): void {
+                $placements[$row->group_id][] = ['career' => $row->career_id, 'plan' => $row->study_plan_id, 'semester' => (int) $row->semester];
+            });
+
+        return $placements;
     }
 
     /**

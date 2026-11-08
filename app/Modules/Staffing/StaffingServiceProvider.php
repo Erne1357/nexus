@@ -19,7 +19,9 @@ use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Staffing\Console\RankTerm;
+use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
 use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
@@ -37,6 +39,20 @@ use Illuminate\Support\Facades\Event;
 final class StaffingServiceProvider extends ModuleServiceProvider
 {
     /**
+     * Lo que recalcula `teacher_term_loads`: los grupos con docente de Scheduling y las plazas, horas externas,
+     * datos y adscripciones de Faculty.
+     */
+    private const array REFRESH_LOADS_ON = [
+        GroupTeacherChanged::class,
+        GroupCancelled::class,
+        GroupsCreated::class,
+        PositionChanged::class,
+        ExternalLoadChanged::class,
+        TeacherUpdated::class,
+        AdscriptionChanged::class,
+    ];
+
+    /**
      * @var array<class-string, class-string>
      */
     protected array $policies = [
@@ -47,8 +63,12 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     {
         parent::boot();
 
+        foreach (self::REFRESH_LOADS_ON as $event) {
+            Event::listen($event, QueueTeacherLoadRefresh::class);
+        }
+
         if ($this->app->runningInConsole()) {
-            $this->commands([RankTerm::class]);
+            $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class]);
         }
 
         Event::listen(GroupsCreated::class, RerankOnGroupsCreated::class);
@@ -69,6 +89,8 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         return [
             new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::Academico,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
+            new NavigationItem('Carga por docente', 'staffing.teacher-loads', 'o-user-group', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::TeacherLoadView)),
             new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
             new NavigationItem('Oferta', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
@@ -105,11 +127,13 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             ],
             Role::Subdireccion->value => [
                 StaffingPermission::RankingView,
+                StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
             ],
             Role::JefeDepartamento->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherAssign,
+                StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
                 StaffingPermission::ChangeRequestDecide,
                 StaffingPermission::ChangeRequestApplyRoom,
@@ -117,6 +141,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             Role::JefeProyectoDocente->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherAssign,
+                StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
             ],
             Role::Coordinador->value => [

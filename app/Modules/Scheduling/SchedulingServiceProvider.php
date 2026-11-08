@@ -2,6 +2,10 @@
 
 namespace App\Modules\Scheduling;
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Events\AgreementAccepted;
+use App\Modules\AcademicLoad\Events\AgreementRejected;
+use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\Core\Authorization\Actor;
@@ -24,6 +28,8 @@ use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Listeners\AssignCodeOnScheduleChange;
 use App\Modules\Scheduling\Listeners\BlockStaffingWithHardConflicts;
 use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
+use App\Modules\Scheduling\Listeners\NotifyDeciderOnAgreementRequested;
+use App\Modules\Scheduling\Listeners\NotifyRequesterOnAgreementDecided;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -79,6 +85,10 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 
         Event::listen(LoadTransitioning::class, BlockStaffingWithHardConflicts::class);
 
+        Event::listen(AgreementRequested::class, NotifyDeciderOnAgreementRequested::class);
+        Event::listen(AgreementAccepted::class, NotifyRequesterOnAgreementDecided::class);
+        Event::listen(AgreementRejected::class, NotifyRequesterOnAgreementDecided::class);
+
         if ($this->app->runningInConsole()) {
             $this->commands([RecomputeConflicts::class]);
         }
@@ -96,6 +106,8 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
             new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
+            new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::AgreementView)),
         ];
     }
 
