@@ -41,7 +41,7 @@ it('HC-10: usar el salón de otro departamento sin préstamo da un choque duro',
         ->subjectId->toBe('R1')
         ->groupId->toBe('A')
         ->message->toBe('El salón R1 es de otro departamento y no hay préstamo para el lunes de 09:00 a 11:00 (sin préstamo).')
-        ->related->toBe(['room_id' => 'R1', 'owner_department_id' => 'D2', 'loan' => 'none']);
+        ->related->toBe(['session_id' => 'A-0', 'room_id' => 'R1', 'owner_department_id' => 'D2', 'loan' => 'none']);
 });
 
 it('HC-10: un préstamo propuesto que toca la sesión se reporta como pendiente', function () {

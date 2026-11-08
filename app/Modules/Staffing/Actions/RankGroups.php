@@ -25,8 +25,8 @@ use Illuminate\Support\Facades\DB;
  * Recalcula el ranking docente de los grupos de un departamento en un periodo y campus (reglas-de-negocio.md,
  * «Ranking docente (desempate)»; tarea 3.8) y devuelve cuántos grupos rankeó (los no cancelados).
  *
- * Los insumos de Faculty salen de RankingInputsQuery en lotes. Las marcas las da el validador de Scheduling, una
- * instancia nueva por corrida (Octane), con checkTeachers() una vez por grupo: HC-01 marca «choque», HC-08 «sin horas»
+ * Los insumos de Faculty salen de RankingInputsQuery en lotes. Las marcas las da el validador de Scheduling (scoped;
+ * se olvida su foto al empezar para leer la de ahora), con checkTeachers() una vez por grupo: HC-01 marca «choque», HC-08 «sin horas»
  * y HC-09 «no disponible», según las reglas que el validador tenga. Las horas restantes de cada candidato, sin y con
  * el grupo («quedan 12 → 7»), salen de teacherHours(), con la misma cuenta de HC-08 (TeacherHourLimit). Ordena con
  * RankingScorer y los pesos de `staffing.weights`.
@@ -92,6 +92,8 @@ final class RankGroups
 
         $teachers = Teacher::query()->whereIn('id', $candidateIds->all())->get(['id'])->keyBy('id');
         $validator = $this->container->make(ScheduleValidator::class);
+        // Es scoped: dentro de una petición o un job puede traer una foto leída antes de una escritura.
+        $validator->forget();
         $scorer = new RankingScorer(RankingWeights::fromSettings());
         $now = now();
         $warmed = false;

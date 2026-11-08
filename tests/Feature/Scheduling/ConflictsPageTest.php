@@ -1,0 +1,149 @@
+<?php
+
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Models\ScheduleConflict;
+use Illuminate\Support\Facades\Queue;
+use Livewire\Livewire;
+
+/*
+| Tarea 3.4: el tablero de choques y avance (`/scheduling/conflicts`, scheduling::pages.conflicts). Vista principal
+| por carrera, retícula y semestre; vista por departamento con drawer (decidido por el usuario el 7 de noviembre de
+| 2026). Lo ven quienes ven la carga y el coordinador de su carrera en su campus; nadie más.
+*/
+
+beforeEach(function () {
+    $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $this->career = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
+    $this->plan = StudyPlan::factory()->create(['career_id' => $this->career->id, 'code' => 'ISIC-2010', 'name' => 'Plan 2010', 'is_current' => true, 'semesters_count' => 9]);
+    $this->subject = Subject::factory()->create(['code' => 'SCD-1015', 'name' => 'Lenguajes y Autómatas I', 'department_id' => departmentKey(10)]);
+    $this->clash = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id,
+        'owner_career_id' => $this->career->id, 'study_plan_id' => $this->plan->id, 'semester' => 5, 'code' => 'D', 'teacher_id' => Teacher::factory()->create()->id]);
+    GroupSession::factory()->for($this->clash)->on(1, '10:00', '12:00')->create();
+    ScheduleConflict::factory()->forGroup($this->clash)->create(['rule' => 'HC-01', 'message' => 'Ana Pérez ya da Programación Web, grupo D el lunes de 10:00 a 12:00.']);
+    $this->admin = User::factory()->admin()->create();
+});
+
+function conflictsPage(User $user, array $query = [])
+{
+    session([Actor::ACTIVE_CAMPUS => test()->campus->id]);
+
+    return Livewire::withQueryParams($query)->actingAs($user)->test('scheduling::pages.conflicts');
+}
+
+describe('quién entra', function () {
+    it('lo ven quienes ven la carga y el coordinador, con su entrada en el menú', function (Role $role, Closure $scope) {
+        $user = User::factory()->withRole($role, $scope($this))->create();
+
+        $this->actingAs($user)->get(route('scheduling.conflicts'))->assertOk()->assertSee('Choques y avance');
+    })->with([
+        'subdirección' => [Role::Subdireccion, fn () => []],
+        'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
+        'jefe de proyecto docente' => [Role::JefeProyectoDocente, fn ($test) => ['campus_id' => $test->campus->id, 'department_id' => departmentKey(10)]],
+        'coordinador' => [Role::Coordinador, fn ($test) => ['campus_id' => $test->campus->id, 'career_id' => $test->career->id]],
+    ]);
+
+    it('el docente no entra ni llama sus métodos', function () {
+        $docente = User::factory()->withRole(Role::Docente)->create();
+
+        $this->actingAs($docente)->get(route('scheduling.conflicts'))->assertForbidden();
+        $component = conflictsPage($this->admin);
+        $this->actingAs($docente);
+        $component->call('recompute')->assertForbidden();
+    });
+
+    it('al invitado lo manda al login', function () {
+        $this->get(route('scheduling.conflicts'))->assertRedirect(route('login'));
+    });
+});
+
+describe('vista por carrera y semestre', function () {
+    it('muestra la pestaña de cada carrera, su cuadrícula y el detalle de la celda elegida', function () {
+        conflictsPage($this->admin)
+            ->assertSee('Ingeniería en Sistemas Computacionales')
+            ->assertSeeHtml('data-testid="career-tab-ISC"')
+            ->assertSeeHtml('data-testid="cell-ISIC-2010-5"')
+            ->call('selectCell', $this->plan->id, 5)
+            ->assertSet('cell', "{$this->plan->id}:5")
+            ->assertSee('Ana Pérez ya da Programación Web, grupo D el lunes de 10:00 a 12:00.')
+            ->assertSee('SCD-1015 · D')
+            ->assertSee('Corregir en el editor')
+            ->assertDontSee('El editor de horarios llega con la tarea 3.5.');
+    });
+
+    it('tocar otra vez la celda la cierra y una celda que no existe se ignora', function () {
+        conflictsPage($this->admin, ['celda' => 'no-existe:3'])
+            ->assertDontSeeHtml('data-testid="cell-detail"')
+            ->call('selectCell', $this->plan->id, 5)
+            ->call('selectCell', $this->plan->id, 5)
+            ->assertSet('cell', '');
+    });
+
+    it('el coordinador de otra carrera no ve los grupos de esta', function () {
+        $other = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create();
+
+        conflictsPage($other)
+            ->assertSee('Todavía no hay grupos que puedas ver en Campus II.')
+            ->assertDontSee('Ana Pérez');
+    });
+});
+
+describe('vista por departamento', function () {
+    it('cuenta por departamento y el drawer lista lo que falta', function () {
+        conflictsPage($this->admin, ['vista' => 'departamentos'])
+            ->assertSeeHtml('data-testid="department-matrix"')
+            ->call('openDepartment', departmentKey(10))
+            ->assertSet('showDrawer', true)
+            ->assertSee('Ana Pérez ya da Programación Web');
+    });
+
+    it('no abre el drawer de un departamento fuera de su alcance', function () {
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(11)])->create();
+
+        conflictsPage($jefe, ['vista' => 'departamentos'])->call('openDepartment', departmentKey(10))->assertNotFound();
+    });
+});
+
+it('una vista desconocida en la URL muestra la vista por carrera y semestre', function () {
+    conflictsPage($this->admin, ['vista' => 'x'])
+        ->assertSet('view', 'reticula')
+        ->assertSeeHtml('data-testid="career-grid"');
+});
+
+it('cerrar el drawer con Esc o el velo olvida el departamento', function () {
+    conflictsPage($this->admin, ['vista' => 'departamentos'])
+        ->call('openDepartment', departmentKey(10))
+        ->set('showDrawer', false)
+        ->assertSet('departmentId', null);
+});
+
+it('sin campus activo pide elegir uno', function () {
+    Campus::factory()->create();
+
+    Livewire::actingAs($this->admin)->test('scheduling::pages.conflicts')->assertSee('Elige un campus.');
+});
+
+it('Recalcular encola el recálculo de la carga del campus', function () {
+    Queue::fake([RecomputeScheduleConflicts::class]);
+
+    $component = conflictsPage($this->admin)->call('recompute');
+
+    Queue::assertPushed(RecomputeScheduleConflicts::class, fn (RecomputeScheduleConflicts $job): bool => $job->termId === $this->term->id && $job->campusId === $this->campus->id);
+    expect(lastToastOf($component)['title'])->toBe('Recalculando los choques')
+        ->and($component->get('pollUntil'))->toBeGreaterThan(now()->getTimestamp());
+    $component->assertSeeHtml('wire:poll.3s="refreshBoard"');
+
+    $this->travel(31)->seconds();
+    $component->call('refreshBoard')->assertSet('pollUntil', 0)->assertDontSeeHtml('wire:poll.3s="refreshBoard"');
+});

@@ -72,6 +72,7 @@ it('sin perfil cargado usa el de omisión y nombra los grupos con su materia', f
 it('las horas se comparan en minutos y dos horas contiguas no se empalman', function () {
     expect(Minutes::of('07:30:00'))->toBe(450)
         ->and(Minutes::format(450))->toBe('07:30')
+        ->and(Minutes::clock('07:30:00'))->toBe('07:30')
         ->and(Minutes::dayName(6))->toBe('sábado')
         ->and(Minutes::overlap(420, 540, 540, 600))->toBeFalse()
         ->and(Minutes::overlap(420, 540, 480, 600))->toBeTrue();
@@ -91,4 +92,20 @@ it('el resultado quita las violaciones repetidas y las filtra por regla, grupo y
         ->and((new ValidationResult([$soft]))->hasHard())->toBeFalse()
         ->and((new ValidationResult)->isEmpty())->toBeTrue()
         ->and($soft->severity)->toBe(ConflictSeverity::Soft);
+});
+
+it('withSession y withTeacher dejan los mismos índices que una foto armada desde cero', function () {
+    $builder = fn (string $teacher, string $start) => States::builder()
+        ->group(States::group('A', teacher: $teacher))
+        ->group(States::group('B', teacher: 'T1'))
+        ->session('A', 1, $start, '10:00', 'R1', id: 'a1')
+        ->session('B', 2, '07:00', '09:00', 'R1', id: 'b1')
+        ->build();
+
+    $patched = $builder('T1', '08:00')->withTeacher('A', 'T2')->withSession('A', new SessionCandidate(1, '09:00', '10:00', 'R1', replacesSessionId: 'a1'));
+    $fresh = $builder('T2', '09:00');
+
+    expect($patched->teacherSessions('T1'))->toEqual($fresh->teacherSessions('T1'))
+        ->and($patched->teacherSessions('T2'))->toEqual($fresh->teacherSessions('T2'))
+        ->and($patched->roomSessions('R1'))->toEqualCanonicalizing($fresh->roomSessions('R1'));
 });

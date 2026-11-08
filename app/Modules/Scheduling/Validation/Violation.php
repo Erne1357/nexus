@@ -9,6 +9,10 @@ use App\Modules\Scheduling\Enums\ConflictSeverity;
  * trata (`group`, `teacher` o `room` con su id), el grupo afectado (un choque entre dos grupos da una violación por
  * cada uno, para que cada departamento y carrera lo cuente) y el detalle (`related`) que la pantalla puede mostrar
  * sin recalcular. Es la forma de una fila de `schedule_conflicts`.
+ *
+ * Toda violación que nace de una sesión lleva su id en `related.session_id` (y `other_session_id` si choca con la
+ * sesión de otro grupo): el editor marca con eso la sesión en la semana y en su cajón. Las de totales (HC-07, HC-08,
+ * HC-12, HC-13) y el núcleo sin combinación de HC-03 son del grupo y no lo llevan.
  */
 final readonly class Violation
 {

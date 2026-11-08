@@ -18,9 +18,12 @@ use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
+use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Event;
 
 /**
  * Volumen para probar pantallas y rendimiento: lo base, los periodos, el catálogo, los usuarios y los edificios y
@@ -73,9 +76,16 @@ class MassiveSeeder extends Seeder
         $this->command?->info(sprintf('Periodos, calendarios y aperturas: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $started = hrtime(true);
-        $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
+        // Aceptar una parte crea grupos (3.3) y GroupsCreated recalcularía los choques del campus en cada aceptación;
+        // SchedulingDemoSeeder los recalcula una vez al final.
+        Event::fakeFor(fn () => $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2'], 'returnEvery' => 6, 'pendingEvery' => 5]), [GroupsCreated::class]);
 
         $this->command?->info(sprintf('Propuestas de carrera y bandejas: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $started = hrtime(true);
+        $this->callWith(SchedulingDemoSeeder::class, ['profile' => 'massive', 'campuses' => ['C1', 'C2']]);
+
+        $this->command?->info(sprintf('Horarios, docentes y salones de los grupos: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $this->call(LoginScreenDemoSeeder::class);
     }

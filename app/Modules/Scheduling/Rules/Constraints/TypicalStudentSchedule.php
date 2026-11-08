@@ -104,14 +104,14 @@ final class TypicalStudentSchedule implements Constraint
                     continue;
                 }
 
-                foreach ([[$singles[$i], $singles[$j], $overlap[1]], [$singles[$j], $singles[$i], $overlap[0]]] as [$mine, $other, $otherSession]) {
+                foreach ([[$singles[$i], $singles[$j], $overlap[0], $overlap[1]], [$singles[$j], $singles[$i], $overlap[1], $overlap[0]]] as [$mine, $other, $mySession, $otherSession]) {
                     yield Violation::hard(
                         $this->rule(),
                         "Se empalma con {$state->labelOf($other->id)} el {$otherSession->describe()}, la única opción de su materia en el semestre {$semester}: el alumno tipo no puede llevar las dos.",
                         'group',
                         $mine->id,
                         $mine->id,
-                        ['study_plan_id' => $studyPlanId, 'semester' => $semester, 'other_group_id' => $other->id],
+                        ['study_plan_id' => $studyPlanId, 'semester' => $semester, 'other_group_id' => $other->id, 'session_id' => $mySession->id, 'other_session_id' => $otherSession->id],
                     );
                 }
             }

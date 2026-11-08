@@ -25,6 +25,8 @@ use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
+use App\Modules\Staffing\Models\ChangeRequest;
+use App\Modules\Staffing\Policies\ChangeRequestPolicy;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -50,6 +52,13 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         AdscriptionChanged::class,
     ];
 
+    /**
+     * @var array<class-string, class-string>
+     */
+    protected array $policies = [
+        ChangeRequest::class => ChangeRequestPolicy::class,
+    ];
+
     public function boot(): void
     {
         parent::boot();
@@ -70,9 +79,16 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         ], RerankOnFacultyChange::class);
     }
 
+    /**
+     * «Asignación docente» para quienes ven el ranking de algún departamento (StaffingPermission::RankingView).
+     *
+     * @return list<NavigationItem>
+     */
     public function navigation(): array
     {
         return [
+            new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
             new NavigationItem('Carga por docente', 'staffing.teacher-loads', 'o-user-group', NavigationArea::Academico,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::TeacherLoadView)),
         ];
@@ -88,7 +104,9 @@ final class StaffingServiceProvider extends ModuleServiceProvider
 
     /**
      * Ven el ranking los jefes, el jefe de proyecto docente y la Subdirección; asignan los jefes (reglas-de-negocio.md,
-     * "Aprobaciones y permisos").
+     * "Aprobaciones y permisos"). Solicitudes de cambio: piden el docente del grupo y el coordinador de su carrera;
+     * ven los jefes, el jefe de proyecto docente y la Subdirección; decide el jefe del departamento; aplica el
+     * coordinador (horario) o el jefe (salón).
      */
     public function grants(): array
     {
@@ -96,16 +114,28 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             Role::Subdireccion->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherLoadView,
+                StaffingPermission::ChangeRequestView,
             ],
             Role::JefeDepartamento->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherAssign,
                 StaffingPermission::TeacherLoadView,
+                StaffingPermission::ChangeRequestView,
+                StaffingPermission::ChangeRequestDecide,
+                StaffingPermission::ChangeRequestApplyRoom,
             ],
             Role::JefeProyectoDocente->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherAssign,
                 StaffingPermission::TeacherLoadView,
+                StaffingPermission::ChangeRequestView,
+            ],
+            Role::Coordinador->value => [
+                StaffingPermission::ChangeRequestRequest,
+                StaffingPermission::ChangeRequestApplySchedule,
+            ],
+            Role::Docente->value => [
+                StaffingPermission::ChangeRequestRequestOwn,
             ],
         ];
     }
