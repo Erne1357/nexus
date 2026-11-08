@@ -23,7 +23,7 @@
         <fieldset class="fieldset py-0 max-md:w-full">
             <legend class="fieldset-legend mb-0.5">Retícula</legend>
             @if (count($plans) === 1)
-                <p class="flex h-10 items-center gap-2 font-medium" data-testid="plan-{{ $plans[0]['code'] }}">
+                <div class="flex h-10 items-center gap-2 text-sm font-medium whitespace-nowrap" data-testid="plan-{{ $plans[0]['code'] }}">
                     <span class="font-mono">{{ $plans[0]['code'] }}</span>
                     @if (! ($plans[0]['is_active'] ?? true))
                         <x-core::status-badge tone="neutral" label="Inactiva" />
@@ -33,7 +33,7 @@
                     @else
                         <x-core::status-badge tone="warning" icon="o-exclamation-triangle" label="Prioridad" />
                     @endif
-                </p>
+                </div>
             @else
             <div class="join max-md:join-vertical max-md:w-full" role="group" aria-label="Retícula">
                 @foreach ($plans as $row)
