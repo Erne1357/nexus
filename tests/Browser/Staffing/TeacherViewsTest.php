@@ -60,7 +60,7 @@ it('el docente abre la oferta, ve su lugar y desglose en el panel y pasa a Mi ca
         ->navigate('/mi-espacio/mi-carga')
         ->assertSee('Mi carga')
         ->assertSee('Lunes')
-        ->assertSee('07:00–09:00')
+        ->assertSee('7:00–9:00')
         ->assertSee('Restantes')
         ->assertNoJavaScriptErrors();
 });

@@ -244,7 +244,7 @@ final class AgreementsInboxQuery
                 'day' => $agreement->day,
                 'starts_at' => $agreement->starts_at === null ? null : substr($agreement->starts_at, 0, 5),
                 'ends_at' => $agreement->ends_at === null ? null : substr($agreement->ends_at, 0, 5),
-                'hours' => $agreement->starts_at === null ? null : ltrim(substr($agreement->starts_at, 0, 5), '0').'–'.ltrim(substr($agreement->ends_at, 0, 5), '0'),
+                'hours' => $agreement->starts_at === null ? null : Minutes::labelOf($agreement->starts_at).'–'.Minutes::labelOf($agreement->ends_at),
                 'day_name' => $agreement->day === null ? null : Minutes::dayLabel($agreement->day),
                 'day_short' => $agreement->day === null ? null : Minutes::dayLabel($agreement->day, short: true),
                 'group' => $group === null ? null : [
@@ -330,7 +330,7 @@ final class AgreementsInboxQuery
                 'day' => (int) $session->day,
                 'starts_at' => Minutes::clock($session->starts_at),
                 'ends_at' => Minutes::clock($session->ends_at),
-                'hours' => ltrim(Minutes::clock($session->starts_at), '0').'–'.ltrim(Minutes::clock($session->ends_at), '0'),
+                'hours' => Minutes::labelOf($session->starts_at).'–'.Minutes::labelOf($session->ends_at),
                 'room' => $session->room?->code,
             ])
             ->all();

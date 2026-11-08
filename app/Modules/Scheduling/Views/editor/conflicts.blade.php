@@ -46,7 +46,7 @@
                 @else
                     <x-button label="Ver" icon-right="o-arrow-right" class="btn-outline btn-xs row-span-2 bg-base-100" wire:click="pick('{{ $conflict['group'] }}', false)" />
                 @endif
-                <p class="text-base-content">{{ \App\Modules\Scheduling\Support\WeekGrid::prose($conflict['message']) }}</p>
+                <p class="text-base-content">{{ $conflict['message'] }}</p>
             </div>
         @empty
             <p class="flex items-center gap-2 px-1 pb-1 text-success"><x-icon name="o-check-circle" class="h-5 w-5" aria-hidden="true" />Sin choques en este semestre</p>

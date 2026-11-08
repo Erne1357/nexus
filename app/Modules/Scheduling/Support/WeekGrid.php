@@ -97,7 +97,7 @@ final readonly class WeekGrid
             $blocks[] = [
                 'starts_at' => Minutes::format($minutes),
                 'ends_at' => Minutes::format($minutes + $blockMinutes),
-                'label' => self::clock(Minutes::format($minutes)),
+                'label' => Minutes::label($minutes),
             ];
         }
 
@@ -112,16 +112,6 @@ final readonly class WeekGrid
     public static function clock(string $time): string
     {
         return Minutes::labelOf($time);
-    }
-
-    /**
-     * Las horas de un texto como las pinta la semana (DESIGN.md: «7:00», sin cero a la izquierda): «el lunes de 07:00
-     * a 08:00» → «el lunes de 7:00 a 8:00». Es solo para mostrar los mensajes del validador junto a las horas de la
-     * pantalla; el mensaje guardado no cambia.
-     */
-    public static function prose(string $text): string
-    {
-        return (string) preg_replace('/(?<![\d:])0(\d:\d\d)(?!\d)/', '$1', $text);
     }
 
     /**
