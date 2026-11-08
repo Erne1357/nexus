@@ -139,3 +139,13 @@ it('Ranking docente: el desglose lista datos y marcas', function () {
         'base_hours' => 20, 'history_count' => 0, 'qualification' => null, 'evaluation' => 4.25, 'remaining_hours' => null, 'flags' => [],
     ]);
 });
+
+it('SC-09: el traslado justo queda en las marcas del desglose sin bajar al docente', function () {
+    $ranked = (new RankingScorer(new RankingWeights))->rank([
+        rankingCandidate('a', ['baseHours' => 40, 'tightTravel' => true]),
+        rankingCandidate('b', ['baseHours' => 20]),
+    ]);
+
+    expect($ranked[0]->candidate->teacherId)->toBe('a')
+        ->and($ranked[0]->breakdown()['flags'])->toBe(['traslado_justo']);
+});

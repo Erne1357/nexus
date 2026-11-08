@@ -43,7 +43,7 @@
                 <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">Los grupos nacen cuando un jefe acepta la parte de su departamento en una propuesta de carrera.</p>
             </div>
         @elseif ($view !== 'departamentos')
-            <div class="mb-3 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-base-300 [scrollbar-width:none]" role="tablist" aria-label="Carreras" data-testid="career-tabs">
+            <div class="relative mb-3 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-base-300 [scrollbar-width:none]" role="tablist" aria-label="Carreras" data-testid="career-tabs">
                 @foreach ($careers as $tab)
                     @php($active = $tab['id'] === $careerId)
                     <button type="button" role="tab" aria-selected="{{ $active ? 'true' : 'false' }}" wire:key="tab-{{ $tab['id'] }}" wire:click="$set('career', '{{ $tab['id'] }}')"
@@ -67,7 +67,7 @@
                 @if ($careerCount->pending > 0)<span class="text-warning"><span class="font-mono font-semibold">{{ $careerCount->pending }}</span> con pendientes</span>@endif
             </p>
 
-            <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100" data-testid="career-grid">
+            <div class="relative overflow-x-auto rounded-box border border-base-300 bg-base-100" data-testid="career-grid">
                 <table class="w-full min-w-[66rem] table-fixed border-separate border-spacing-0 text-sm">
                     <caption class="sr-only">Grupos de {{ $careerTab['name'] }} por retícula y semestre</caption>
                     <colgroup><col class="w-48 md:w-56">@for ($s = 1; $s <= $grid['semesters']; $s++)<col>@endfor</colgroup>
@@ -169,8 +169,8 @@
                 </div>
             </section>
 
-            <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="department-matrix">
-                <div class="hidden overflow-x-auto md:block">
+            <div class="relative overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="department-matrix">
+                <div class="relative hidden overflow-x-auto md:block">
                     <table class="w-full min-w-[50rem] text-sm">
                         <caption class="sr-only">Lo que le falta a cada departamento</caption>
                         <thead class="bg-base-200">

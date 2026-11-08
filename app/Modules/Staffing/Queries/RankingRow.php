@@ -15,8 +15,11 @@ final readonly class RankingRow
     /** Las marcas que bajan al docente al bloque final del ranking, con su nombre en pantalla. */
     public const array MARKS = ['sin_horas' => 'Sin horas', 'choque' => 'Choque', 'no_disponible' => 'No disponible'];
 
+    /** Los avisos que se muestran discretos sin mover al docente de lugar (SC-09), con su nombre en pantalla. */
+    public const array NOTICES = ['traslado_justo' => 'traslado justo'];
+
     /**
-     * @param  list<string>  $flags  `sin_horas`, `choque`, `no_disponible`, `sin_evaluacion`
+     * @param  list<string>  $flags  `sin_horas`, `choque`, `no_disponible`, `sin_evaluacion`, `traslado_justo`
      */
     public function __construct(
         public int $rank,
@@ -50,6 +53,16 @@ final readonly class RankingRow
     public function marks(): array
     {
         return array_intersect_key(self::MARKS, array_flip($this->flags));
+    }
+
+    /**
+     * Los avisos discretos que tiene (traslado justo, SC-09), por su clave, con su nombre.
+     *
+     * @return array<string, string>
+     */
+    public function notices(): array
+    {
+        return array_intersect_key(self::NOTICES, array_flip($this->flags));
     }
 
     public function lacksEvaluation(): bool
