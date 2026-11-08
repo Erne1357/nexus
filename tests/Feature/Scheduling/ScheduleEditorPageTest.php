@@ -15,6 +15,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
@@ -158,6 +159,44 @@ describe('coordinador de la carrera dueña', function () {
             ->and(lastToastOf($page)['description'])->toContain('ACF-0904 · A', '2 de 2 h');
     });
 
+    it('avisa «Colocada con choque» con cualquier regla dura nueva del grupo, aunque no nombre la sesión (HC-09), y no con las que ya tenía (HC-08)', function () {
+        $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
+        $this->calcGroup->update(['teacher_id' => $teacher->id]);
+        TeacherAvailability::factory()->create(['teacher_id' => $teacher->id, 'term_id' => $this->term->id, 'day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00']);
+
+        $page = editorAs($this->coordinator)->call('place', $this->calcGroup->id, 1, '07:00');
+
+        expect(editorSessionsOf($this->calcGroup))->toBe(['1 07:00-08:00 teoria'])
+            ->and(lastToastOf($page))->toMatchArray(['type' => 'warning', 'title' => 'Colocada con choque'])
+            ->and(lastToastOf($page)['description'])->toContain('HC-09', 'Ana Pérez no está disponible');
+
+        $page->call('place', $this->calcGroup->id, 3, '07:00');
+
+        expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Sesión colocada']);
+    });
+
+    it('con un grupo elegido, las sesiones de los demás grupos quedan bajo las celdas y fuera de las flechas', function () {
+        $mine = GroupSession::factory()->for($this->calcGroup)->on(2, '07:00', '08:00')->create();
+        $other = GroupSession::factory()->for($this->dataGroup)->on(1, '13:00', '14:00')->create();
+
+        $dom = domOf(editorAs($this->coordinator)->call('pick', $this->calcGroup->id));
+        $under = $dom->querySelector('[data-testid=week] [data-session="'.$other->id.'"]');
+
+        expect($under?->hasAttribute('data-nav'))->toBeFalse()
+            ->and($under?->getAttribute('tabindex'))->toBe('-1')
+            ->and($dom->querySelector('[data-testid=week] [data-session="'.$mine->id.'"]')?->hasAttribute('data-nav'))->toBeTrue();
+    });
+
+    it('si después de guardar cupos o salón el grupo elegido ya no es del semestre, suelta la selección sin 403', function () {
+        $page = editorAs($this->coordinator)->call('pick', $this->calcGroup->id)->assertSet('groupId', $this->calcGroup->id);
+        $this->calcGroup->update(['semester' => 4]);
+        app()->forgetScopedInstances(); // otra petición: la Query del editor memoriza por petición
+
+        $page->dispatch('quotas-saved')->assertOk()->assertSet('groupId', '')->assertDontSee('Quitar selección');
+
+        $page->call('pick', $this->dataGroup->id)->dispatch('session-room-saved')->assertOk()->assertSet('groupId', $this->dataGroup->id);
+    });
+
     it('coloca teoría hasta cubrir sus horas y luego práctica', function () {
         GroupSession::factory()->for($this->dataGroup)->on(1, '07:00', '09:00')->create();
 
@@ -287,6 +326,18 @@ describe('coordinador de la carrera dueña', function () {
             ->and(lastToastOf($drawer)['title'])->toBe('Sesión quitada');
     });
 
+    it('cambiar el tipo en el cajón no vuelve a validar el grupo: valida al abrir y al guardar', function () {
+        $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
+        $drawer = editorDrawerAs($this->coordinator, SESSION_DRAWER)->call('open', $session->id);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $drawer->set('kind', 'practica')->assertSee('Sesión de ACF-0904 · A');
+        DB::disableQueryLog();
+
+        expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(1);
+    });
+
     it('el cajón del grupo muestra su materia, docente, sesiones y cupos', function () {
         GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
 
@@ -331,6 +382,20 @@ describe('coordinador de la carrera dueña', function () {
 
         editorAs($this->coordinator, ['vista' => 'docente', 'docente' => Teacher::factory()->create()->id])
             ->assertSet('teacherId', $teacher->id);
+    });
+
+    it('en la vista por docente, una sesión de otro campus fuera del horario de este se ve con su altura y cuenta sus horas', function () {
+        $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
+        $this->calcGroup->update(['teacher_id' => $teacher->id]);
+        $elsewhere = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->otherCampus->id, 'teacher_id' => $teacher->id, 'code' => 'S1']);
+        $early = GroupSession::factory()->for($elsewhere)->on(6, '06:00', '08:00')->create();
+
+        $dom = domOf(editorAs($this->coordinator, ['vista' => 'docente']));
+        $block = $dom->querySelector('[data-testid=week] [data-session="'.$early->id.'"]');
+
+        expect($block?->getAttribute('style'))->toContain('--top: 0;', '--span: 2;')
+            ->and(textOf($dom->querySelector('[data-testid=week]')))->toContain('Sábado 2 h ocupadas', '6:00')
+            ->and(textOf($block))->toContain('Campus I');
     });
 });
 
@@ -412,6 +477,8 @@ describe('docente', function () {
         $docente = User::factory()->withRole(Role::Docente)->create();
 
         $this->actingAs($docente)->get(route('scheduling.editor'))->assertForbidden();
+
+        expect(textOf(domOf($this->get('/'))->getElementById('nexus-menu')))->not->toContain('Horarios');
     });
 });
 
@@ -442,8 +509,8 @@ describe('contexto', function () {
 
 it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, y no crecen con los grupos del semestre', function () {
     // El recálculo del tablero de choques corre en la cola, no en la petición del editor (colocar sí incluye la clave
-    // del grupo, AssignCodeOnScheduleChange). Cada llamada es una petición nueva: la Query del editor es `scoped` y
-    // memoriza por petición.
+    // del grupo, AssignCodeOnScheduleChange, y la validación del grupo antes de colocar, para avisar lo que agrega).
+    // Cada llamada es una petición nueva: la Query del editor es `scoped` y memoriza por petición.
     Queue::fake([RecomputeScheduleConflicts::class]);
     session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
     $this->actingAs($this->coordinator);
@@ -482,7 +549,7 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
     expect($many)->toBe($few)
         ->and($many)->toBeLessThanOrEqual(31)
         ->and($pick)->toBeLessThanOrEqual(33)
-        ->and($place)->toBeLessThanOrEqual(75)
+        ->and($place)->toBeLessThanOrEqual(88)
         ->and($openSession)->toBeLessThanOrEqual(26)
         ->and($openGroup)->toBeLessThanOrEqual(15);
 });

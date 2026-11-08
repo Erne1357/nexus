@@ -3,12 +3,13 @@
     grupo», día, inicio y fin (en los bloques del perfil del campus) y tipo; el salón actual o «Sin salón» y, si no lo
     asigna quien ve, quién lo asigna; los choques de la sesión (`error`) y los avisos del grupo (HC-12, «faltan horas»), o
     «Sin choques en esta sesión.». Al pie, «Quitar sesión» con confirmación y «Guardar». Si al moverla se le quitó el
-    salón, lo dice. Quien no acomoda el grupo lo ve todo deshabilitado, con el motivo una vez arriba. «Ver el grupo»
-    cambia de cajón sin regresar el foco (`data-drawer-switch`, de `scheduleEditor`).
+    salón, lo dice. Quien no acomoda el grupo lo ve todo deshabilitado, con el motivo una vez arriba. El tipo se elige en
+    el navegador (Alpine, enlazado a `kind`) y viaja al guardar. «Ver el grupo» cambia de cajón sin regresar el foco
+    (`data-drawer-switch`, de `scheduleEditor`).
 --}}
 <div>
     <x-drawer wire:model.live="show" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="session-drawer-title" data-testid="session-drawer">
-        @if ($panel)
+        @if ($show && $panel)
             @php
                 $readonly = $panel['editReason'] !== null;
                 $kinds = [['teoria', 'Teoría', 'o-book-open'], ['practica', 'Práctica', 'o-beaker'], ['virtual', 'Virtual', 'o-computer-desktop']];
@@ -51,9 +52,9 @@
 
                     <fieldset class="fieldset py-0">
                         <legend class="fieldset-legend mb-0.5">Tipo</legend>
-                        <div class="join" role="group" aria-label="Tipo">
+                        <div class="join" role="group" aria-label="Tipo" x-data="{ kind: $wire.entangle('kind') }">
                             @foreach ($kinds as [$value, $kindLabel, $icon])
-                                <button type="button" wire:click="$set('kind', '{{ $value }}')" aria-pressed="{{ $kind === $value ? 'true' : 'false' }}" @disabled($readonly)
+                                <button type="button" x-on:click="kind = '{{ $value }}'" aria-pressed="{{ $kind === $value ? 'true' : 'false' }}" x-bind:aria-pressed="kind === '{{ $value }}' ? 'true' : 'false'" @disabled($readonly)
                                     class="btn join-item h-10 gap-2 border-base-300 font-medium shadow-none aria-pressed:btn-primary not-aria-pressed:bg-base-100">
                                     <x-icon :name="$icon" class="h-4 w-4" aria-hidden="true" />{{ $kindLabel }}
                                 </button>
@@ -78,12 +79,12 @@
                         <h3 id="session-checks-title" class="text-[11.5px] font-medium tracking-[0.09em] text-neutral uppercase">Validador</h3>
                         @foreach ($panel['hard'] as $violation)
                             <p class="flex items-start gap-2 rounded-field border border-error/40 bg-error/10 px-3 py-2 leading-snug">
-                                <x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0 text-error" aria-hidden="true" /><span><b class="font-mono text-error">{{ $violation->rule }}</b> · {{ $violation->message }}</span>
+                                <x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0 text-error" aria-hidden="true" /><span><b class="font-mono text-error">{{ $violation['rule'] }}</b> · {{ $violation['message'] }}</span>
                             </p>
                         @endforeach
                         @foreach ($panel['soft'] as $violation)
                             <p class="flex items-start gap-2 rounded-field border border-warning/40 bg-warning/10 px-3 py-2 leading-snug">
-                                <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" /><span><b class="font-mono text-warning">{{ $violation->rule }}</b>{{ $violation->rule === 'HC-12' ? ' · faltan horas' : '' }} · {{ $violation->message }}</span>
+                                <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" /><span><b class="font-mono text-warning">{{ $violation['rule'] }}</b>{{ $violation['rule'] === 'HC-12' ? ' · faltan horas' : '' }} · {{ $violation['message'] }}</span>
                             </p>
                         @endforeach
                         @if ($panel['hard'] === [] && $panel['soft'] === [])

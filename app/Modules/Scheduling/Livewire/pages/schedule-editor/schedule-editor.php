@@ -4,12 +4,10 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Scheduling\Actions\Sessions\PlaceGroupSession;
-use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Support\WeekGrid;
 use App\Modules\Scheduling\Validation\Minutes;
-use App\Modules\Scheduling\Validation\Violation;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
@@ -150,7 +148,8 @@ new #[Title('Horarios')] class extends Component
 
     /**
      * Coloca un bloque del grupo en un día y hora (se une con los contiguos del mismo tipo). Teoría hasta cubrir las
-     * horas de teoría de la materia y luego práctica (supuesto por confirmar); el cajón de la sesión lo cambia.
+     * horas de teoría de la materia y luego práctica (supuesto por confirmar); el cajón de la sesión lo cambia. Avisa
+     * «Colocada con choque» si el grupo rompe una regla dura que antes no rompía, aunque no nombre la sesión (HC-08).
      */
     public function place(string $groupId, int $day, string $startsAt, PlaceGroupSession $place): void
     {
@@ -168,6 +167,7 @@ new #[Title('Horarios')] class extends Component
         }
 
         $placement = $editor->placement($group);
+        $before = $editor->hardSignatures($group);
 
         try {
             $result = $place->handle($group, $day, $block['starts_at'], $block['ends_at'], $placement['kind'], $context->user());
@@ -183,9 +183,7 @@ new #[Title('Horarios')] class extends Component
 
         $hours = WeekGrid::hours($placement['minutes'] + Minutes::of($block['ends_at']) - Minutes::of($block['starts_at']));
         $where = "{$placement['label']}: ".Minutes::dayName($day).' '.WeekGrid::clock($block['starts_at']);
-        $clash = collect($result->validation->violations())->first(fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard
-            && ! in_array($violation->rule, ScheduleEditorQuery::TOTALS, true)
-            && ($violation->related['session_id'] ?? null) === $result->session->id);
+        $clash = $editor->firstNewHard($before, $result->validation->violations());
 
         if ($clash !== null) {
             $this->warning('Colocada con choque', e("{$where} · {$clash->rule} · {$clash->message}"));
@@ -195,9 +193,12 @@ new #[Title('Horarios')] class extends Component
     }
 
     /**
-     * Un cajón guardó o quitó una sesión: se vuelve a pintar con lo guardado.
+     * Un cajón guardó o quitó una sesión, o cambiaron los cupos o el salón: se vuelve a pintar con lo guardado (si el
+     * grupo elegido ya no es del semestre, la selección se suelta al pintar).
      */
     #[On('schedule-changed')]
+    #[On('quotas-saved')]
+    #[On('session-room-saved')]
     public function scheduleChanged(): void {}
 
     /**
@@ -213,6 +214,7 @@ new #[Title('Horarios')] class extends Component
         $data = $editor->editor($context, $term, $campus, [...$this->selection(), 'group' => $this->groupId, 'view' => $this->view, 'teacher' => $this->teacherId, 'room' => $this->roomId]);
 
         if ($data['board'] !== null) {
+            $this->groupId = $this->view === 'semestre' && $data['selected'] === null ? '' : $this->groupId;
             $this->semester = (string) $data['semester'];
             $this->teacherId = $this->view === 'docente' ? ($data['person']['id'] ?? '') : $this->teacherId;
             $this->roomId = $this->view === 'salon' ? ($data['person']['id'] ?? '') : $this->roomId;

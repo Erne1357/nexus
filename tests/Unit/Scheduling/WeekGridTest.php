@@ -112,3 +112,14 @@ it('la parada de tabulación es la primera celda que coloca o, sin ella, la prim
         ->and($grid->tabStop($laid, $cells, false))->toBe('session:s')
         ->and($grid->tabStop($laid, null, false))->toBe('session:s');
 });
+
+it('extiende la ventana a las sesiones que caen fuera del horario o de los días del perfil, alineada a sus bloques', function () {
+    $grid = weekGrid(['days' => [1, 2, 3, 4, 5], 'day_start' => '07:00', 'day_end' => '21:00', 'block_minutes' => 60])
+        ->covering([weekItem('sabado', 6, '06:30', '08:00'), weekItem('noche', 2, '20:00', '22:00')]);
+
+    expect(array_column($grid->days, 'day'))->toBe([1, 2, 3, 4, 5, 6])
+        ->and($grid->blocks[0]['starts_at'])->toBe('06:00')
+        ->and(array_last($grid->blocks)['ends_at'])->toBe('22:00')
+        ->and($grid->position('06:30', '08:00'))->toBe(['top' => 0.5, 'span' => 1.5])
+        ->and(weekGrid()->covering([])->blocks)->toBe(weekGrid()->blocks);
+});

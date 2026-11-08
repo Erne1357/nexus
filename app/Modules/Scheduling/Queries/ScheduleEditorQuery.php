@@ -192,7 +192,6 @@ final class ScheduleEditorQuery
         $board = $semester['board'];
         $groups = array_column($board['groups'], null, 'id');
         $selected = $selection['view'] === 'semestre' ? ($groups[$selection['group']] ?? null) : null;
-        $grid = WeekGrid::of($campus->profile);
         $chains = array_flip(array_values(array_unique(array_map(fn (array $group): string => $group['subject']['id'], $board['groups']))));
         $teacherOptions = $this->teacherOptions($board['groups']);
         $roomOptions = $this->roomOptions($board['groups']);
@@ -203,6 +202,7 @@ final class ScheduleEditorQuery
             default => [$this->semesterWeek($board, $chains, $selected), [], null],
         };
 
+        $grid = WeekGrid::of($campus->profile)->covering([...$items, ...array_merge(...array_values($bands))]);
         $laid = $grid->lay($items);
         $cells = $grid->cells($selected === null ? null : $this->fit($term, $campus, $selected['id']), self::UNSAVEABLE);
         $canPlace = $selected !== null && $selected['can']['editSessions'];
@@ -250,8 +250,9 @@ final class ScheduleEditorQuery
     }
 
     /**
-     * El cajón de una sesión: la sesión, su grupo, sus choques duros y los avisos del grupo (HC-12 como aviso), por qué
-     * no se acomoda (si no se puede) y quién asigna su salón; null si la sesión ya no existe.
+     * El cajón de una sesión, en datos simples que el cajón guarda entre peticiones: la sesión, su grupo, sus choques
+     * duros y los avisos del grupo (HC-12 como aviso), por qué no se acomoda (si no se puede) y quién asigna su salón;
+     * null si la sesión ya no existe.
      *
      * @return array<string, mixed>|null
      */
@@ -282,8 +283,8 @@ final class ScheduleEditorQuery
             'updated_at' => (string) $session->updated_at?->getTimestamp(),
             'room' => $session->room?->code,
             'group' => ['id' => $group->id, 'label' => "{$group->subject->code} · {$group->code}", 'subject' => $group->subject->name, 'teacher' => $group->teacher?->name],
-            'hard' => array_values(array_filter($mine, fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard && ! in_array($violation->rule, self::TOTALS, true))),
-            'soft' => array_values(array_filter([...$mine, ...$groupWide], fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Soft || in_array($violation->rule, self::TOTALS, true))),
+            'hard' => array_map(self::plain(...), array_values(array_filter($mine, self::isHard(...)))),
+            'soft' => array_map(self::plain(...), array_values(array_filter([...$mine, ...$groupWide], fn (Violation $violation): bool => ! self::isHard($violation)))),
             'editReason' => $blocked ?? ($gate->allows('editSessions', $group) ? null : $this->readOnlyReason($group->ownerCareer?->code ?? 'su carrera', $department)),
             'roomReason' => $blocked === null && $gate->allows('assignRoom', $group) ? null : "Lo asigna el jefe de {$department}",
             'days' => array_map(fn (array $day): array => ['id' => (string) $day['day'], 'name' => $day['name']], $grid->days),
@@ -320,6 +321,36 @@ final class ScheduleEditorQuery
                 'room' => $session->room?->code,
             ])->all(),
         ];
+    }
+
+    /**
+     * Las reglas duras que el grupo rompe, por su firma (regla, de qué se trata y con qué otro grupo), sin las de
+     * totales: para saber qué agregó colocar, aunque la violación no nombre la sesión (HC-08) o cambie su mensaje.
+     *
+     * @return array<string, true>
+     */
+    public function hardSignatures(Group $group): array
+    {
+        $signatures = [];
+
+        foreach ($this->validator->validateGroup($group)->violations() as $violation) {
+            if (self::isHard($violation)) {
+                $signatures[self::signature($violation)] = true;
+            }
+        }
+
+        return $signatures;
+    }
+
+    /**
+     * La primera violación dura (sin las de totales) que no estaba antes, por su firma; null si no hay.
+     *
+     * @param  array<string, true>  $before
+     * @param  list<Violation>  $after
+     */
+    public function firstNewHard(array $before, array $after): ?Violation
+    {
+        return array_find($after, fn (Violation $violation): bool => self::isHard($violation) && ! isset($before[self::signature($violation)]));
     }
 
     /**
@@ -385,7 +416,8 @@ final class ScheduleEditorQuery
     }
 
     /**
-     * Las sesiones del semestre, con el color de su materia y las reglas duras que rompen.
+     * Las sesiones del semestre, con el color de su materia y las reglas duras que rompen. Con un grupo elegido que se
+     * acomoda, las de los demás quedan bajo sus celdas (`covered`): ni se tocan ni las recorren las flechas.
      *
      * @param  array<string, mixed>  $board
      * @param  array<string, int>  $chains
@@ -405,6 +437,7 @@ final class ScheduleEditorQuery
                     'rules' => $this->hardRules($board['violations']['sessions'][$session['id']] ?? []),
                     'mine' => $selected !== null && $selected['id'] === $group['id'],
                     'dim' => $selected !== null && $selected['id'] !== $group['id'],
+                    'covered' => $selected !== null && $selected['can']['editSessions'] && $selected['id'] !== $group['id'],
                 ];
             }
         }
@@ -447,6 +480,7 @@ final class ScheduleEditorQuery
 
         foreach ($schedule['availability'] as $range) {
             $bands[$range['day']][] = [
+                'day' => $range['day'],
                 'kind' => $range['kind'] === AvailabilityKind::Unavailable ? 'unavailable' : 'preferred',
                 'label' => $range['kind']->label(),
                 'hours' => WeekGrid::range($range['starts_at'], $range['ends_at']),
@@ -491,6 +525,7 @@ final class ScheduleEditorQuery
 
         foreach ($schedule['blocks'] as $block) {
             $bands[$block['day']][] = [
+                'day' => $block['day'],
                 'kind' => 'blocked',
                 'label' => 'Bloqueado',
                 'hours' => WeekGrid::range($block['starts_at'], $block['ends_at']),
@@ -530,6 +565,7 @@ final class ScheduleEditorQuery
             'external' => false,
             'mine' => false,
             'dim' => false,
+            'covered' => false,
         ];
     }
 
@@ -681,6 +717,24 @@ final class ScheduleEditorQuery
         sort($times);
 
         return array_map(fn (string $time): array => ['id' => $time, 'name' => WeekGrid::clock($time)], $times);
+    }
+
+    private static function isHard(Violation $violation): bool
+    {
+        return $violation->severity === ConflictSeverity::Hard && ! in_array($violation->rule, self::TOTALS, true);
+    }
+
+    /**
+     * @return array{rule: string, message: string}
+     */
+    private static function plain(Violation $violation): array
+    {
+        return ['rule' => $violation->rule, 'message' => $violation->message];
+    }
+
+    private static function signature(Violation $violation): string
+    {
+        return implode('|', [$violation->rule, $violation->subjectType, $violation->subjectId, $violation->groupId ?? '', (string) ($violation->related['other_group_id'] ?? '')]);
     }
 
     /**

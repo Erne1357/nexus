@@ -9,7 +9,8 @@
 
     En la cuadrícula se coloca con `--top`, `--span`, `--lane` y `--lanes` (renglones de 3.25rem) y lleva lo que leen
     las flechas de `scheduleEditor`: `data-nav`, su lugar (`data-x`, `data-r0`, `data-r1`) y `tabindex` (una sola
-    parada para toda la cuadrícula, `$tabStop`). `data-found` la marca un momento tras «Ver».
+    parada para toda la cuadrícula, `$tabStop`). La que queda bajo las celdas del grupo elegido (`covered`) no entra a
+    las flechas. `data-found` la marca un momento tras «Ver».
 --}}
 @props(['item', 'chainClasses', 'dayIndex' => 0, 'tabStop' => null, 'mobile' => false])
 
@@ -38,11 +39,11 @@
         'class' => implode(' ', array_filter($classes)),
         'style' => $mobile ? null : "--top: {$item['top']}; --span: {$item['span']}; --lane: {$item['lane']}; --lanes: {$item['lanes']}",
         'data-session' => $item['id'],
-        'data-nav' => $mobile || ! $item['open'] ? null : '',
+        'data-nav' => $mobile || ! $item['open'] || $item['covered'] ? null : '',
         'data-x' => $mobile ? null : $dayIndex + ($item['lane'] + 0.5) / $item['lanes'],
         'data-r0' => $mobile ? null : $item['top'],
         'data-r1' => $mobile ? null : $item['top'] + $item['span'],
-        'tabindex' => $mobile || ! $item['open'] ? null : ($tabStop === 'session:'.$item['id'] ? '0' : '-1'),
+        'tabindex' => $mobile || ! $item['open'] ? null : ($tabStop === 'session:'.$item['id'] && ! $item['covered'] ? '0' : '-1'),
         'aria-label' => $label,
         'data-day' => $item['day'],
         'wire:key' => ($mobile ? 'm-' : 'w-').$item['id'],

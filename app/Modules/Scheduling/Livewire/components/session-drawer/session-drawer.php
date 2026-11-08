@@ -22,7 +22,8 @@ use Mary\Traits\Toast;
  * El cajón de una sesión del editor de horarios (tarea 3.5; DESIGN.md, "Editor de horarios"): día, inicio, fin y tipo;
  * «Guardar» la mueve (UpdateGroupSession) y «Quitar sesión» la quita completa (RemoveGroupSession), y los dos avisan a
  * la página con `schedule-changed` para que vuelva a pintar la semana. Abrirlo (`open-session`) no la vuelve a pintar.
- * Muestra el salón, quién lo asigna y lo que dice el validador de la sesión (ScheduleEditorQuery::sessionPanel).
+ * Muestra el salón, quién lo asigna y lo que dice el validador de la sesión (ScheduleEditorQuery::sessionPanel), leído
+ * al abrir y al guardar; el tipo se elige en el navegador y viaja al guardar.
  *
  * El periodo y el campus son los de la página (`#[Locked]`); abrir pide ver el grupo (ScheduleEditorQuery::sees) y
  * guardar o quitar, editSessions, cada vez.
@@ -54,6 +55,15 @@ new class extends Component
     #[Locked]
     public ?string $roomNotice = null;
 
+    /**
+     * Lo que pinta el cajón (ScheduleEditorQuery::sessionPanel), leído al abrir y al guardar: cambiar el día, las horas o
+     * el tipo no vuelve a validar el grupo.
+     *
+     * @var array<string, mixed>|null
+     */
+    #[Locked]
+    public ?array $panel = null;
+
     public function mount(string $termId, string $campusId): void
     {
         $this->termId = $termId;
@@ -70,6 +80,7 @@ new class extends Component
         $this->sessionId = $session->id;
         $this->fillFrom($session);
         $this->roomNotice = null;
+        $this->panel = $editor->sessionPanel($context, $term, $campus, $session->id);
         $this->resetErrorBag();
         $this->show = true;
     }
@@ -103,6 +114,7 @@ new class extends Component
         $editor->forget();
         $this->sessionId = $result->session->id;
         $this->fillFrom($result->session);
+        $this->panel = $editor->sessionPanel($context, $term, $campus, $result->session->id);
         $this->roomNotice = $result->roomDropped ? "Quitamos el salón {$room}: estaba ocupado a esa hora." : null;
         $this->dispatch('schedule-changed');
 
@@ -131,22 +143,9 @@ new class extends Component
         $editor->forget();
         $this->show = false;
         $this->sessionId = null;
+        $this->panel = null;
         $this->dispatch('schedule-changed');
         $this->success('Sesión quitada', e($label));
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function with(ScheduleEditorQuery $editor, Actor $context): array
-    {
-        if (! $this->show || $this->sessionId === null) {
-            return ['panel' => null];
-        }
-
-        [$term, $campus] = $this->context($editor);
-
-        return ['panel' => $editor->sessionPanel($context, $term, $campus, $this->sessionId)];
     }
 
     private function fillFrom(GroupSession $session): void

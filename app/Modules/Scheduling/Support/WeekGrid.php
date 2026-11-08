@@ -33,9 +33,9 @@ final readonly class WeekGrid
         'preferred' => 'bg-success/15 text-success',
     ];
 
-    private const array NAMES = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado'];
+    private const array NAMES = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado', 7 => 'Domingo'];
 
-    private const array SHORT = [1 => 'L', 2 => 'M', 3 => 'Mi', 4 => 'J', 5 => 'V', 6 => 'S'];
+    private const array SHORT = [1 => 'L', 2 => 'M', 3 => 'Mi', 4 => 'J', 5 => 'V', 6 => 'S', 7 => 'D'];
 
     /**
      * @param  list<array{day: int, name: string, short: string}>  $days
@@ -51,19 +51,59 @@ final readonly class WeekGrid
     public static function of(CampusProfile $profile): self
     {
         $start = Minutes::of($profile->dayStart);
+        $end = Minutes::of($profile->dayEnd);
+
+        return self::build($profile->days, $start, $start + intdiv($end - $start, $profile->blockMinutes) * $profile->blockMinutes, $profile->blockMinutes);
+    }
+
+    /**
+     * La misma semana extendida a lo que cae fuera de ella (la sesión de otro campus en la vista por docente): más
+     * bloques antes o después, alineados a los del perfil, y los días que falten, en orden.
+     *
+     * @param  iterable<array{day: int, starts_at: string, ends_at: string}>  $ranges
+     */
+    public function covering(iterable $ranges): self
+    {
+        $start = $this->start;
+        $end = $this->start + count($this->blocks) * $this->blockMinutes;
+        $days = array_column($this->days, 'day');
+
+        foreach ($ranges as $range) {
+            while ($start > 0 && Minutes::of($range['starts_at']) < $start) {
+                $start -= $this->blockMinutes;
+            }
+
+            while ($end < 24 * 60 && Minutes::of($range['ends_at']) > $end) {
+                $end += $this->blockMinutes;
+            }
+
+            $days[] = $range['day'];
+        }
+
+        $days = array_values(array_unique($days));
+        sort($days);
+
+        return self::build($days, max(0, $start), min(24 * 60, $end), $this->blockMinutes);
+    }
+
+    /**
+     * @param  list<int>  $days
+     */
+    private static function build(array $days, int $start, int $end, int $blockMinutes): self
+    {
         $blocks = [];
 
-        for ($minutes = $start; $minutes + $profile->blockMinutes <= Minutes::of($profile->dayEnd); $minutes += $profile->blockMinutes) {
+        for ($minutes = $start; $minutes + $blockMinutes <= $end; $minutes += $blockMinutes) {
             $blocks[] = [
                 'starts_at' => Minutes::format($minutes),
-                'ends_at' => Minutes::format($minutes + $profile->blockMinutes),
+                'ends_at' => Minutes::format($minutes + $blockMinutes),
                 'label' => self::clock(Minutes::format($minutes)),
             ];
         }
 
-        $days = array_map(fn (int $day): array => ['day' => $day, 'name' => self::NAMES[$day] ?? (string) $day, 'short' => self::SHORT[$day] ?? (string) $day], $profile->days);
+        $days = array_map(fn (int $day): array => ['day' => $day, 'name' => self::NAMES[$day] ?? (string) $day, 'short' => self::SHORT[$day] ?? (string) $day], $days);
 
-        return new self($days, $blocks, $start, $profile->blockMinutes);
+        return new self($days, $blocks, $start, $blockMinutes);
     }
 
     /**
@@ -200,9 +240,10 @@ final readonly class WeekGrid
     }
 
     /**
-     * La única parada de tabulación de la semana: la primera celda que coloca o la primera sesión que se abre.
+     * La única parada de tabulación de la semana: la primera celda que coloca o la primera sesión que se abre y no
+     * queda bajo las celdas del grupo elegido (`covered`).
      *
-     * @param  array<int, list<array{id: string, open: bool}>>  $laid
+     * @param  array<int, list<array{id: string, open: bool, covered?: bool}>>  $laid
      * @param  array<int, list<array{key: string, state: string}>>|null  $cells
      */
     public function tabStop(array $laid, ?array $cells, bool $canPlace): ?string
@@ -215,7 +256,7 @@ final readonly class WeekGrid
             }
 
             foreach ($laid[$day['day']] ?? [] as $item) {
-                if ($item['open']) {
+                if ($item['open'] && ! ($item['covered'] ?? false)) {
                     return 'session:'.$item['id'];
                 }
             }

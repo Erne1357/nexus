@@ -41,6 +41,18 @@ beforeEach(function () {
         ]);
     }
 
+    // Dos grupos de una materia a la misma hora del lunes: el lunes lleva dos carriles.
+    $physics = Subject::factory()->create(['code' => 'SCD-1018', 'name' => 'Física General', 'department_id' => $department->id, 'theory_hours' => 1, 'practice_hours' => 0]);
+    placeInPlan($this->plan, $physics, 3);
+
+    foreach (['A', 'B'] as $code) {
+        $group = Group::factory()->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => $physics->id, 'owner_career_id' => $this->career->id,
+            'study_plan_id' => $this->plan->id, 'semester' => 3, 'code' => $code,
+        ]);
+        GroupSession::factory()->for($group)->on(1, '13:00', '14:00')->create();
+    }
+
     User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])->create(['username' => '19110005']);
 });
 
@@ -65,12 +77,20 @@ it('el coordinador entra por el menú, acomoda las horas de tres grupos del seme
             ->assertSeeIn('@selection-bar', '2 de 2 h');
     }
 
+    // Las flechas no caen en las sesiones que quedan bajo las celdas (el lunes de dos carriles); Enter coloca y el
+    // foco queda en la sesión que resultó (keep()).
     $page->click('[data-group="'.$this->groups['SCC-1005']->id.'"]')
         ->assertSeeIn('@selection-bar', 'SCC-1005 · A')
+        ->keys('[data-testid=week] [data-cell="1|07:00"]', 'ArrowRight')
+        ->assertScript('document.activeElement.dataset.cell', '2|07:00')
         ->keys('[data-testid=week] [data-cell="2|07:00"]', 'ArrowDown')
         ->assertScript('document.activeElement.dataset.cell', '2|08:00')
         ->keys('[data-testid=week] [data-cell="2|08:00"]', 'Enter')
-        ->assertSeeIn('@selection-bar', '1 de 2 h')
+        ->assertSeeIn('@selection-bar', '1 de 2 h');
+
+    $placed = GroupSession::query()->where('group_id', $this->groups['SCC-1005']->id)->value('id');
+
+    $page->assertScript('document.activeElement?.dataset.session', $placed)
         ->keys('[data-testid=week] [data-cell="2|07:00"]', 'Enter')
         ->assertSeeIn('@selection-bar', '2 de 2 h')
         ->keys('[data-testid=week] [aria-label^="SCC-1005 · A"]', 'Escape')
@@ -78,14 +98,17 @@ it('el coordinador entra por el menú, acomoda las horas de tres grupos del seme
         ->assertSeeIn('@hard-count', '0 choques')
         ->assertSee('Sin choques en este semestre');
 
-    // Los cajones: de la sesión al grupo no regresa el foco; al cerrar el último, regresa a la sesión que lo abrió.
-    $page->click('[data-testid=week] [aria-label^="ACF-0904 · A"]')
+    // Los cajones: de la sesión al grupo el foco no regresa a la semana; al cerrar con Esc el último, regresa a la
+    // sesión que abrió el primero.
+    $opener = GroupSession::query()->where('group_id', $this->groups['ACF-0904']->id)->value('id');
+
+    $page->click('[data-testid=week] [data-session="'.$opener.'"]')
         ->assertSeeIn('@session-drawer', 'Sesión de ACF-0904 · A')
         ->click('Ver el grupo')
         ->assertSeeIn('@group-drawer', 'Cupos por carrera')
-        ->assertScript("document.activeElement?.getAttribute('aria-label')?.startsWith('ACF-0904 · A') === true", false)
+        ->assertScript('document.activeElement?.dataset.session ?? null', null)
         ->keys('[data-testid=group-drawer] h2', 'Escape')
-        ->assertScript("document.activeElement?.getAttribute('aria-label')?.startsWith('ACF-0904 · A') === true", true);
+        ->assertScript('document.activeElement?.dataset.session', $opener);
 
     // En celular, cambiar de día es del navegador.
     $page->resize(390, 900)
