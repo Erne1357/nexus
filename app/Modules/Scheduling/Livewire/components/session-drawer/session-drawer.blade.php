@@ -1,17 +1,19 @@
 {{--
     El cajón de una sesión (`x-drawer` a la derecha, 448 px; a pantalla completa en celular): su grupo y materia, «Ver el
-    grupo», día, inicio y fin (en los bloques del perfil del campus) y tipo; el salón actual o «Sin salón» y, si no lo
-    asigna quien ve, quién lo asigna; los choques de la sesión (`error`) y los avisos del grupo (HC-12, «faltan horas»), o
-    «Sin choques en esta sesión.». Al pie, «Quitar sesión» con confirmación y «Guardar». Si al moverla se le quitó el
-    salón, lo dice. Quien no acomoda el grupo lo ve todo deshabilitado, con el motivo una vez arriba. El tipo se elige en
-    el navegador (Alpine, enlazado a `kind`) y viaja al guardar. «Ver el grupo» cambia de cajón sin regresar el foco
-    (`data-drawer-switch`, de `scheduleEditor`).
+    grupo», día, inicio y fin (en los bloques del perfil del campus) y tipo; la sección del salón
+    (`scheduling::components.session-room`: el salón actual, los sugeridos y «Asignar salón», o de solo lectura con quién
+    lo asigna), con la llave de la sesión y de su `updated_at`; los choques de la sesión (`error`) y los avisos del grupo
+    (HC-12, «faltan horas»), o «Sin choques en esta sesión.». Al pie, «Quitar sesión» con confirmación y «Guardar». Si al
+    moverla se le quitó el salón, lo dice. Quien no acomoda el grupo lo ve todo deshabilitado, con el motivo una vez
+    arriba. El tipo se elige en el navegador (Alpine, enlazado a `kind`) y viaja al guardar. «Ver el grupo» cambia de
+    cajón sin regresar el foco (`data-drawer-switch`, de `scheduleEditor`).
 --}}
 <div>
     <x-drawer wire:model.live="show" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="session-drawer-title" data-testid="session-drawer">
         @if ($show && $panel)
             @php
                 $readonly = $panel['editReason'] !== null;
+                $updatedAt = $panel['updated_at'];
                 $kinds = [['teoria', 'Teoría', 'o-book-open'], ['practica', 'Práctica', 'o-beaker'], ['virtual', 'Virtual', 'o-computer-desktop']];
             @endphp
             <div class="flex min-h-dvh flex-col">
@@ -63,17 +65,7 @@
                         @error('kind') <p class="text-sm text-error" role="alert">{{ $message }}</p> @enderror
                     </fieldset>
 
-                    <section class="grid gap-1.5" aria-labelledby="session-room-title">
-                        <h3 id="session-room-title" class="text-[11.5px] font-medium tracking-[0.09em] text-neutral uppercase">Salón</h3>
-                        @if ($panel['room'])
-                            <p class="font-mono text-[15px] font-semibold">{{ $panel['room'] }}</p>
-                        @else
-                            <p class="flex items-center gap-1.5 font-medium text-warning"><x-icon name="o-exclamation-triangle" class="h-4 w-4" aria-hidden="true" />Sin salón</p>
-                        @endif
-                        @if ($panel['roomReason'])
-                            <p class="flex items-center gap-1.5 text-sm text-neutral"><x-icon name="o-lock-closed" class="h-4 w-4 shrink-0" aria-hidden="true" />{{ $panel['roomReason'] }}</p>
-                        @endif
-                    </section>
+                    <livewire:scheduling::components.session-room :session-id="$sessionId" wire:key="room-{{ $sessionId }}-{{ $updatedAt }}" />
 
                     <section class="grid gap-2" aria-labelledby="session-checks-title">
                         <h3 id="session-checks-title" class="text-[11.5px] font-medium tracking-[0.09em] text-neutral uppercase">Validador</h3>
