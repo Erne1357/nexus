@@ -39,6 +39,7 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 | SC-06 | Un docente no cambia de edificio entre horas consecutivas. | 2 | R2 |
 | SC-07 | Materias de semestres consecutivos de una carrera no se empalman entre sí (para alumnos irregulares). | 3 | R2 |
 | SC-08 | Un grupo con docente de honorarios se programa en los turnos donde hay disponibilidad declarada. | 2 | R2 |
+| SC-09 | Si un docente tiene dos sesiones seguidas el mismo día en campus distintos, entre el fin de una y el inicio de la otra quedan al menos los minutos de traslado (`staffing.min_campus_travel_minutes`, 60 por omisión); si no, es un aviso en los dos grupos que no bloquea (confirmado el 7 de noviembre de 2026). «Seguidas» es sin otra sesión del docente en medio; dos que se empalman ya son HC-01. Cuentan todas las sesiones, también las virtuales (supuesto por confirmar). | — | R1 (aviso) |
 
 Los pesos son configurables por campus (`settings`, clave `solver.weights`).
 
