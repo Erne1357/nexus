@@ -268,6 +268,7 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
+| Ver la carga por docente | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` (su departamento y campus) | Las horas asignadas suman todos los campus; las categorías son las de HC-08 (supuesto por confirmar en los nombres de las categorías) |
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
