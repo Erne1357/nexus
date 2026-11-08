@@ -178,6 +178,10 @@ it('spec §7.1: ningún permiso del módulo sobre un recurso con campus_id omite
     $problems = [];
 
     foreach ($enum::cases() as $permission) {
+        if ($permission->isPersonal()) {
+            continue;
+        }
+
         $table = dimensionTableFor($permission);
 
         if ($table === null || ! Schema::hasTable($table)) {

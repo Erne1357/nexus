@@ -32,6 +32,10 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     public function grants(): array
     {
         return [
+            Role::Docente->value => [
+                StaffingPermission::OfferView,
+                StaffingPermission::MyLoadView,
+            ],
             Role::Subdireccion->value => [
                 StaffingPermission::RankingView,
             ],

@@ -98,6 +98,10 @@
             "scheduling.schedule.view",
             "staffing.ranking.view",
             "students.student.view"
+        ],
+        "docente": [
+            "staffing.my_load.view",
+            "staffing.offer.view"
         ]
     },
     "admin_denies": [
