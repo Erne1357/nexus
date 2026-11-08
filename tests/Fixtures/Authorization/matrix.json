@@ -12,7 +12,11 @@
         ],
         "jefe_departamento": [
             "academic.placement.validate",
+            "academic_load.agreement.decide",
+            "academic_load.agreement.request",
+            "academic_load.agreement.view",
             "academic_load.load.propose",
+            "academic_load.load.start_staffing",
             "academic_load.load.view",
             "academic_load.proposal_review.decide",
             "academic_load.proposal_review.view",
@@ -41,6 +45,7 @@
             "students.student.view"
         ],
         "jefe_proyecto_docente": [
+            "academic_load.agreement.view",
             "academic_load.load.view",
             "academic_load.proposal_review.view",
             "faculty.teacher.create",
@@ -57,6 +62,7 @@
             "staffing.teacher.assign"
         ],
         "subdireccion": [
+            "academic_load.agreement.view",
             "academic_load.load.view",
             "academic_load.proposal.view",
             "academic_load.proposal_review.view",
@@ -121,7 +127,11 @@
             "academic.subject.create",
             "academic.subject.update",
             "academic.subject.view",
+            "academic_load.agreement.decide",
+            "academic_load.agreement.request",
+            "academic_load.agreement.view",
             "academic_load.load.propose",
+            "academic_load.load.start_staffing",
             "academic_load.load.view",
             "academic_load.proposal.create",
             "academic_load.proposal.submit",
