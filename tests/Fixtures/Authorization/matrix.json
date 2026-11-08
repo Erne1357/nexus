@@ -40,6 +40,8 @@
             "scheduling.room.assign",
             "scheduling.schedule.view",
             "scheduling.session.edit",
+            "staffing.ranking.view",
+            "staffing.teacher.assign",
             "students.student.view"
         ],
         "jefe_proyecto_docente": [
@@ -55,7 +57,9 @@
             "faculty.teacher_department.remove",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
-            "scheduling.schedule.view"
+            "scheduling.schedule.view",
+            "staffing.ranking.view",
+            "staffing.teacher.assign"
         ],
         "subdireccion": [
             "academic_load.agreement.view",
@@ -93,6 +97,7 @@
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
             "scheduling.schedule.view",
+            "staffing.ranking.view",
             "students.student.view"
         ]
     },
@@ -161,6 +166,8 @@
             "scheduling.room.assign",
             "scheduling.schedule.view",
             "scheduling.session.edit",
+            "staffing.ranking.view",
+            "staffing.teacher.assign",
             "students.student.view"
         ]
     }
