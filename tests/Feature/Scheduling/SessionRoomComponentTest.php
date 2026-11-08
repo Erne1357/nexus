@@ -86,7 +86,12 @@ it('HC-10: un salón de otro departamento cambia el botón a «Asignar y pedir p
         ->assertHasNoErrors()
         ->assertSee('Préstamo pendiente');
 
-    expect($this->session->fresh()->room_id)->toBe($this->foreign->id)
+    // El préstamo pendiente es un estado, no un choque: en «Salón actual» va en ámbar, como en los sugeridos.
+    $badge = domOf($component)->querySelector('[data-testid=current-room] .badge');
+
+    expect(textOf($badge))->toBe('Préstamo pendiente · HC-10')
+        ->and($badge?->getAttribute('class'))->toContain('badge-warning')->not->toContain('badge-error')
+        ->and($this->session->fresh()->room_id)->toBe($this->foreign->id)
         ->and(InterdepartmentalAgreement::query()->sole()->status)->toBe(AgreementStatus::Proposed)
         ->and(lastToastOf($component))->toMatchArray(['title' => 'Salón asignado', 'description' => 'MM-L2 · préstamo pedido a Metal-Mecánica']);
 });
@@ -241,4 +246,20 @@ it('HC-10: un salón apartado por el préstamo de otro grupo se ve apartado y no
         ->assertSee('El salón SC-L1 ya está prestado a');
 
     expect($this->session->fresh()->room_id)->toBeNull();
+});
+
+it('muestra los tres mejores sugeridos y los demás con «Ver N más»; si todos están libres lo dice una vez', function () {
+    $this->foreign->update(['is_active' => false]);
+
+    foreach (['CC-06', 'CC-07', 'CC-08'] as $code) {
+        sessionRoomOf($code, RoomType::SalaComputo, 34);
+    }
+
+    $dom = domOf(sessionRoomAs($this->jefe));
+
+    expect(textOf($dom->querySelector('[data-testid=rooms-more]')))->toBe('Ver 1 más')
+        ->and(textOf($dom->querySelector('[data-testid=rooms-all-free]')))->toBe('Todos libres a esa hora')
+        ->and($dom->querySelectorAll('[data-testid=room-suggestions] [x-show=more] [data-room]')->length)->toBe(1)
+        ->and(textOf($dom->querySelector('[data-testid=room-suggestions]')))->toContain('Cabe: 30 de 32')->not->toContain('lugares')
+        ->and($dom->querySelectorAll('[data-testid=room-suggestions] .badge')->length)->toBe(0);
 });
