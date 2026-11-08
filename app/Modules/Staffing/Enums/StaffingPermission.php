@@ -15,12 +15,14 @@ enum StaffingPermission: string implements Permission
 {
     case RankingView = 'staffing.ranking.view';
     case TeacherAssign = 'staffing.teacher.assign';
+    case TeacherLoadView = 'staffing.teacher_load.view';
 
     public function label(): string
     {
         return match ($this) {
             self::RankingView => 'Ver el ranking de docentes de un grupo',
             self::TeacherAssign => 'Asignar el docente de un grupo',
+            self::TeacherLoadView => 'Ver la carga por docente de un departamento',
         };
     }
 
