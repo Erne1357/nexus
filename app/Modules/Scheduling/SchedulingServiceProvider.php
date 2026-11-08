@@ -25,6 +25,7 @@ use App\Modules\Scheduling\Listeners\AssignCodeOnScheduleChange;
 use App\Modules\Scheduling\Listeners\BlockStaffingWithHardConflicts;
 use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
+use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Support\Facades\Event;
 
@@ -54,13 +55,15 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 
     /**
      * Un validador por petición o job (Octane): varias preguntas de la misma petición (una Action y el tablero, o una
-     * celda tras otra del editor) leen la foto una sola vez; quien escribe llama `forget()`.
+     * celda tras otra del editor) leen la foto una sola vez; quien escribe llama `forget()`. La Query del editor también
+     * es `scoped`, nunca singleton: memoriza por petición lo que ya leyó.
      */
     public function register(): void
     {
         parent::register();
 
         $this->app->scoped(ScheduleValidator::class);
+        $this->app->scoped(ScheduleEditorQuery::class);
     }
 
     public function boot(): void
@@ -82,11 +85,15 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     }
 
     /**
+     * «Horarios», el editor de horarios (tarea 3.5), y «Choques y avance», el tablero (3.4), para quien ve los horarios.
+     *
      * @return list<NavigationItem>
      */
     public function navigation(): array
     {
         return [
+            new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
             new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
         ];
