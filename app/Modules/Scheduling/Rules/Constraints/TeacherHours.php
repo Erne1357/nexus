@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Rules\Constraints;
 
+use App\Modules\Scheduling\Rules\TeacherHourLimit;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ValidationScope;
 use App\Modules\Scheduling\Validation\Violation;
@@ -23,30 +24,18 @@ final class TeacherHours implements Constraint
 
     public function check(ScheduleState $state, ValidationScope $scope): iterable
     {
-        $tolerance = (int) $state->setting('staffing.extra_hours_tolerance', 0);
-        $honorariosCap = $state->setting('staffing.honorarios_max_hours');
-
         foreach ($scope->teacherIds($state) as $teacherId) {
             $teacher = $state->teacher($teacherId);
+            $hours = TeacherHourLimit::of($state, $teacherId);
 
-            if ($teacher === null) {
+            if ($teacher === null || $hours === null || $hours['remaining_hours'] >= 0) {
                 continue;
             }
 
-            $hoursByGroup = [];
-
-            foreach ($state->groups() as $group) {
-                if ($group->isActive && $group->teacherId === $teacherId) {
-                    $hoursByGroup[$group->id] = $state->subject($group->subjectId)?->weeklyHours() ?? 0;
-                }
-            }
-
-            $assigned = array_sum($hoursByGroup);
-            $limit = $teacher->isHonorarios && $honorariosCap !== null ? (int) $honorariosCap : $teacher->baseHours + $tolerance;
-
-            if ($assigned + $teacher->externalHours <= $limit) {
-                continue;
-            }
+            $hoursByGroup = $hours['groups'];
+            $assigned = $hours['assigned_hours'];
+            $limit = $hours['limit'];
+            $tolerance = $hours['tolerance'];
 
             $remaining = $limit - $teacher->externalHours - $assigned;
             $missing = max(0, -$remaining);
