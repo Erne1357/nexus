@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
@@ -10,7 +11,7 @@ use Tests\Support\Staffing\AssignmentWorld;
 /*
 | «Asignación docente» con volumen (tarea 3.9, revisión con datos masivos): el ranking muestra primero a quienes pueden
 | tomar el grupo y pliega el bloque final; dice en qué orden va; un candidato con marca no se presenta como la
-| recomendación.
+| recomendación; «Por materia» abre en «Sin docente» mientras falte alguno, y «Siguiente sin docente» lleva al que sigue.
 */
 
 beforeEach(function () {
@@ -35,6 +36,10 @@ beforeEach(function () {
     ]);
 
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
+
+    $this->staffed = $this->world->group($poo, $isc, 'E', 2, [[4, '10:00', '11:00']]);
+    $this->world->rank($this->staffed, $this->teachers->take(3)->all());
+    $this->world->assign($this->staffed, $this->teachers[0], $this->jefe);
 });
 
 /**
@@ -103,4 +108,56 @@ it('SC-09: el traslado justo se ve como marca discreta, sin bajar al docente al 
         ->assertSeeHtml('data-recommended="'.$group->id.'"')
         ->call('toggleRanking', $group->id)
         ->assertDontSeeHtml('data-testid="flagged-tier"');
+});
+
+describe('filtro de entrada', function () {
+    it('«Por materia» abre en «Sin docente» mientras la carga se asigna y falta algún docente', function () {
+        volumeAssignPage($this->jefe)
+            ->assertSet('state', 'sin')
+            ->assertSeeHtml('data-group="'.$this->group->id.'"')
+            ->assertDontSeeHtml('data-group="'.$this->staffed->id.'"');
+    });
+
+    it('?estado= manda sobre el de entrada', function () {
+        volumeAssignPage($this->jefe, ['estado' => 'todos'])
+            ->assertSet('state', 'todos')
+            ->assertSeeHtml('data-group="'.$this->staffed->id.'"');
+    });
+
+    it('abre en «Todos» con ?grupo=, en los dos paneles, en propuesta o sin grupos por asignar', function (Closure $setup, array $query) {
+        $setup->call($this);
+
+        volumeAssignPage($this->jefe, $query)->assertSet('state', 'todos');
+    })->with([
+        'con ?grupo=' => [fn () => null, fn () => ['grupo' => test()->staffed->id]],
+        'dos paneles' => [fn () => null, ['vista' => 'paneles']],
+        'en propuesta' => [fn () => test()->world->load->update(['status' => LoadStatus::Proposed]), []],
+        'todos con docente' => [function () {
+            test()->world->assign(test()->group, test()->teachers[0], test()->jefe);
+            test()->world->assign(test()->blocked, test()->teachers[1], test()->jefe);
+        }, []],
+    ]);
+});
+
+describe('siguiente sin docente', function () {
+    it('en la vista por materia cada grupo lleva al siguiente sin docente, y el último vuelve al primero', function () {
+        volumeAssignPage($this->jefe, ['estado' => 'todos'])
+            ->assertSeeHtml('data-from="'.$this->group->id.'" data-next-group="'.$this->blocked->id.'"')
+            ->assertSeeHtml('data-from="'.$this->staffed->id.'" data-next-group="'.$this->blocked->id.'"')
+            ->assertSeeHtml('data-from="'.$this->blocked->id.'" data-next-group="'.$this->group->id.'"');
+    });
+
+    it('con «Sin docente» va al pie del ranking abierto, donde el siguiente queda lejos', function () {
+        volumeAssignPage($this->jefe)
+            ->assertDontSeeHtml('data-testid="next-without-teacher"')
+            ->call('toggleRanking', $this->group->id)
+            ->assertSeeHtml('data-from="'.$this->group->id.'" data-next-group="'.$this->blocked->id.'"');
+    });
+
+    it('en los dos paneles elige el siguiente grupo sin docente de la lista', function () {
+        volumeAssignPage($this->jefe, ['vista' => 'paneles', 'grupo' => $this->staffed->id])
+            ->assertSeeHtml('data-from="'.$this->staffed->id.'" data-next-group="'.$this->blocked->id.'"')
+            ->call('pick', $this->blocked->id)
+            ->assertSeeHtml('data-from="'.$this->blocked->id.'" data-next-group="'.$this->group->id.'"');
+    });
 });

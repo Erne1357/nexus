@@ -51,7 +51,7 @@ function assignPage(User $user, array $query = []): Testable
 
 describe('vista por materia', function () {
     it('muestra cada materia con sus grupos, su avance y los tres primeros lugares de los grupos sin docente', function () {
-        assignPage($this->jefe)
+        assignPage($this->jefe, ['estado' => 'todos'])
             ->assertOk()
             ->assertSeeHtml('data-testid="assign-by-subject"')
             ->assertSeeInOrder(['Asignación docente', 'Sistemas y Computación', 'Campus II', 'Ene-Jun 2027', 'Asignación'])
@@ -63,7 +63,7 @@ describe('vista por materia', function () {
     });
 
     it('«Ver el ranking completo» lo abre en su lugar con el historial', function () {
-        assignPage($this->jefe)
+        assignPage($this->jefe, ['estado' => 'todos'])
             ->assertSeeText('Ver el ranking completo (4)')
             ->call('toggleRanking', $this->done->id)
             ->assertSee('Dante Ortiz')
@@ -135,7 +135,7 @@ describe('vista por materia', function () {
     });
 
     it('«Cambiar» abre el ranking del grupo con docente y marca al asignado', function () {
-        assignPage($this->jefe)
+        assignPage($this->jefe, ['estado' => 'todos'])
             ->assertSee('Cambiar')
             ->call('toggleRanking', $this->done->id)
             ->assertSeeHtml('data-testid="current-teacher"');

@@ -70,7 +70,7 @@ new #[Title('Asignación docente')] class extends Component
     #[Url(as: 'q')]
     public string $search = '';
 
-    /** 'todos', 'sin' (sin docente) o 'con' (con docente). */
+    /** 'todos', 'sin' (sin docente) o 'con' (con docente); sin `?estado=`, el de entrada (openOnGroupsWithoutTeacher). */
     #[Url(as: 'estado')]
     public string $state = 'todos';
 
@@ -183,6 +183,7 @@ new #[Title('Asignación docente')] class extends Component
         $this->updatedState();
         $this->resolve($context, $query);
         $this->openRequestedGroup($query);
+        $this->openOnGroupsWithoutTeacher($query);
         $this->checkBlockers($query, $blockers);
     }
 
@@ -374,6 +375,7 @@ new #[Title('Asignación docente')] class extends Component
             'careers' => $this->careerOptions($board),
             'semesters' => $this->semesterOptions($board),
             'polling' => collect($visible)->contains(fn (BoardGroup $row): bool => $row->rankingState === RankingState::Pending),
+            'nextWithoutTeacher' => self::nextWithoutTeacher($visible),
         ];
     }
 
@@ -465,6 +467,24 @@ new #[Title('Asignación docente')] class extends Component
             $this->scrollTo = $group->id;
         } else {
             $this->sheet = true;
+        }
+    }
+
+    /**
+     * Sin `?estado=`, la vista por materia abre en «Sin docente» mientras la carga se asigna (asignación o ajustes) y
+     * algún grupo no tiene docente; así la tarea queda arriba y los grupos con docente no la tapan. Con `?grupo=` no,
+     * para que el grupo pedido se vea aunque tenga docente.
+     */
+    private function openOnGroupsWithoutTeacher(AssignmentBoardQuery $query): void
+    {
+        if (request()->query->has('estado') || $this->view !== 'materia' || $this->groupId !== '' || $this->departmentId === null) {
+            return;
+        }
+
+        $load = $query->load((string) $this->termId, (string) $this->campusId, $this->departmentId);
+
+        if (in_array($load?->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true) && $query->hasGroupWithoutTeacher((string) $this->termId, (string) $this->campusId, $this->departmentId)) {
+            $this->state = 'sin';
         }
     }
 
@@ -692,6 +712,34 @@ new #[Title('Asignación docente')] class extends Component
             ->map(fn (int $semester): array => ['id' => (string) $semester, 'name' => "Semestre {$semester}"])
             ->values()
             ->all();
+    }
+
+    /**
+     * Para cada grupo a la vista, el siguiente sin docente en el orden de la lista (después del último, el primero);
+     * un grupo sin otro después no aparece. Lo usa «Siguiente sin docente».
+     *
+     * @param  list<BoardGroup>  $visible
+     * @return array<string, string> id del grupo => id del siguiente sin docente
+     */
+    private static function nextWithoutTeacher(array $visible): array
+    {
+        $count = count($visible);
+        $next = [];
+        $following = null;
+
+        for ($index = 2 * $count - 1; $index >= 0; $index--) {
+            $row = $visible[$index % $count];
+
+            if ($index < $count && $following !== null && $following !== $row->group->id) {
+                $next[$row->group->id] = $following;
+            }
+
+            if (! $row->hasTeacher()) {
+                $following = $row->group->id;
+            }
+        }
+
+        return $next;
     }
 
     /**

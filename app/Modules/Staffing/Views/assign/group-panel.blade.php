@@ -1,5 +1,6 @@
 {{--
-    El grupo elegido en los dos paneles: encabezado con su clave y su materia, sus datos y su docente; las pestañas
+    El grupo elegido en los dos paneles: encabezado con su clave y su materia, sus datos, su docente y «Siguiente sin
+    docente», que elige el que sigue en la lista; las pestañas
     «Ranking» e «Historial». Debajo de lg es una hoja a pantalla completa (entra desde la derecha) con «Grupos» para
     volver; Esc también la cierra.
 --}}
@@ -43,6 +44,7 @@
                 @else
                     <x-core::status-badge tone="warning" label="Sin docente" icon="o-clock" />
                 @endif
+                @include('staffing::assign.next-button', ['from' => $group->id, 'next' => $nextWithoutTeacher[$group->id] ?? null, 'pick' => true])
             </div>
         </div>
     </header>
