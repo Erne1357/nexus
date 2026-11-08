@@ -36,7 +36,7 @@ it('HC-09: una sesión que cae en un bloque no disponible da un choque duro', fu
         ->subjectId->toBe('T1')
         ->groupId->toBe('A')
         ->message->toBe('Ana Pérez no está disponible el lunes de 10:00 a 12:00.')
-        ->related->toBe(['day' => 1, 'starts_at' => '10:00', 'ends_at' => '12:00']);
+        ->related->toBe(['session_id' => 'A-0', 'day' => 1, 'starts_at' => '10:00', 'ends_at' => '12:00']);
 });
 
 it('HC-09: bloque contiguo, otro día o sin docente no violan', function () {

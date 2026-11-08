@@ -51,12 +51,14 @@ use Spatie\Activitylog\Models\Activity;
  *   para que quede su foto. Luego se simulan los cambios hacia el último con las Actions de cada módulo (docentes y
  *   salones desactivados, reactivados y nuevos, materias nuevas): son las altas y bajas de `summary()`.
  * - El último periodo queda con estados fijos por código de departamento, de los que depende el seeder de propuestas:
- *   CB, SC e II todo validado; EE con las generales validadas y los salones de C2 en revisión (los de los demás campus
- *   validados), así que HC-14 bloquea solo en C2; CEA con docentes y materias validados y lo demás pendiente; MM con
- *   docentes y carreras validados y reabiertos (en revisión), materias validadas y lo demás pendiente. Cualquier otro
+ *   CB, SC, II y EE todo validado, para que sus partes de propuesta se puedan aceptar (HC-14). CEA y MM dependen del
+ *   perfil. En `demo`, CEA queda todo validado (el demo solo trae materias de CB, CEA, II y SC, y así CEA tiene
+ *   grupos) y MM queda con docentes y carreras validados y reabiertos, salones en revisión (con las observaciones de
+ *   capacidad), materias validadas y lo demás pendiente. En `massive`, MM queda todo validado y CEA con docentes y
+ *   materias validados, salones en revisión, carreras validadas y reabiertas y lo demás pendiente. Cualquier otro
  *   departamento queda pendiente.
  * - Observaciones con FlagRecord de todos los tipos que admite cada catálogo, y algunas resueltas con ResolveFlag;
- *   recordatorios a EE, CEA y MM para el «último recordatorio» del tablero.
+ *   recordatorios a CEA, EE y MM (solo reciben los que aún tienen algo pendiente: CEA en `massive`, MM en `demo`) para el «último recordatorio» del tablero.
  *
  * `$profile`: `demo` (pocos cambios y observaciones) o `massive`. Sin cola: los avisos se mandan en línea. Idempotente:
  * un departamento cuyas revisiones del último periodo ya no están todas pendientes no se vuelve a tocar, las fotos
@@ -156,7 +158,7 @@ class CatalogValidationDemoSeeder extends Seeder
                 $this->simulateChanges($current, $config);
             }
 
-            $this->seedCurrent($current, $config);
+            $this->seedCurrent($current, $config, $profile);
             $this->remindDepartments($current);
         } finally {
             config(['queue.default' => $queue]);
@@ -299,8 +301,9 @@ class CatalogValidationDemoSeeder extends Seeder
      * Los estados fijos del periodo actual, por departamento.
      *
      * @param  array{deactivate: int, create: int, reactivate: int, subjects: int, rooms: int, flags: int, calm: int}  $config
+     * @param  string  $profile  `demo` o `massive`: decide los estados de MM y CEA
      */
-    private function seedCurrent(Term $term, array $config): void
+    private function seedCurrent(Term $term, array $config, string $profile): void
     {
         $reviews = CatalogReview::query()->where('term_id', $term->getKey())->with(['department', 'campus', 'term'])->get()->groupBy('department_id');
 
@@ -315,7 +318,7 @@ class CatalogValidationDemoSeeder extends Seeder
             $flags = [];
 
             foreach ($group->sort(fn (CatalogReview $a, CatalogReview $b): int => [$order[$a->catalog->value], $a->campus?->code] <=> [$order[$b->catalog->value], $b->campus?->code]) as $review) {
-                $target = $this->target($code, $review->catalog, $review->campus?->code);
+                $target = $this->target($code, $review->catalog, $profile);
                 $actor = $this->headOf($review);
 
                 foreach ($this->flagRecords($review, $target, $config, $actor) as $created) {
@@ -340,17 +343,23 @@ class CatalogValidationDemoSeeder extends Seeder
 
     /**
      * El estado final de una revisión: `validated`, `reopened` (validada y reabierta), `review` (en revisión) o
-     * `pending`. Fijo por departamento: AcademicLoad depende de él.
+     * `pending`. Fijo por departamento y perfil: AcademicLoad depende de él.
      */
-    private function target(string $department, Catalog $catalog, ?string $campus): string
+    private function target(string $department, Catalog $catalog, string $profile): string
     {
         return match ($department) {
-            'CB', 'SC', 'II' => 'validated',
-            'EE' => $catalog === Catalog::Rooms && $campus === 'C2' ? 'review' : 'validated',
-            'CEA' => in_array($catalog, [Catalog::Teachers, Catalog::Subjects], true) ? 'validated' : 'pending',
-            'MM' => match ($catalog) {
+            'CB', 'SC', 'II', 'EE' => 'validated',
+            'CEA' => match (true) {
+                $profile === 'demo' => 'validated',
+                in_array($catalog, [Catalog::Teachers, Catalog::Subjects], true) => 'validated',
+                $catalog === Catalog::Rooms => 'review',
+                $catalog === Catalog::Careers => 'reopened',
+                default => 'pending',
+            },
+            'MM' => $profile === 'massive' ? 'validated' : match ($catalog) {
                 Catalog::Teachers, Catalog::Careers => 'reopened',
                 Catalog::Subjects => 'validated',
+                Catalog::Rooms => 'review',
                 default => 'pending',
             },
             default => 'pending',

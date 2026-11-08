@@ -28,6 +28,14 @@ final class Minutes
     }
 
     /**
+     * Una hora guardada (`HH:MM:SS` o `HH:MM`) como `HH:MM`, para mostrarla.
+     */
+    public static function clock(string $time): string
+    {
+        return self::format(self::of($time));
+    }
+
+    /**
      * El nombre del día (1 = lunes a 6 = sábado).
      */
     public static function dayName(int $day): string
