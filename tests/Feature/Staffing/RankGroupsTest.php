@@ -15,6 +15,7 @@ use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\RankGroups;
 use App\Modules\Staffing\Events\RankingsComputed;
 use App\Modules\Staffing\Models\StaffingRanking;
@@ -123,6 +124,20 @@ it('HC-01: un candidato que ya da clase a esa hora en otro grupo queda marcado �
 
     expect(($this->ranking)($group))->toBe(['Beatriz', 'Ana'])
         ->and($row->breakdown['flags'])->toContain('choque');
+});
+
+it('HC-01: lee el horario de ahora aunque el validador (scoped) ya tenga una foto de antes en la misma petición', function () {
+    $group = ($this->group)();
+    GroupSession::factory()->for($group)->on(1, '07:00', '09:00')->create();
+    $busy = ($this->teacher)('Ana', 40);
+    ($this->teacher)('Beatriz', 10);
+    app(ScheduleValidator::class)->stateFor($this->term->id, $this->campus->id);
+    $elsewhere = Group::factory()->withTeacher($busy)->create(['term_id' => $this->term->id, 'campus_id' => Campus::factory()->create()->id]);
+    GroupSession::factory()->for($elsewhere)->on(1, '08:00', '10:00')->create();
+
+    ($this->rank)();
+
+    expect(StaffingRanking::query()->where('group_id', $group->id)->where('teacher_id', $busy->id)->sole()->breakdown['flags'])->toContain('choque');
 });
 
 it('Ranking docente: volver a calcular reemplaza las filas y saca a quien ya no está adscrito', function () {

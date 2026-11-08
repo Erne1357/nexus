@@ -59,6 +59,8 @@ Decisiones del 7 de noviembre de 2026 sobre el cálculo:
 - **Ventana de historial** (confirmado el 7 de noviembre de 2026): los últimos 6 semestres (Ene-Jun y Ago-Dic) antes del periodo que se rankea. Los grupos de verano no cuentan como historial.
 - **Evaluación** (confirmado el 7 de noviembre de 2026): la de los últimos 2 semestres. Un docente sin evaluación recibe 0 puntos de evaluación y la marca «sin evaluación».
 - **Cuándo se asigna** (confirmado el 7 de noviembre de 2026): solo se asignan docentes mientras la carga está en `staffing` o `adjusting`.
+- **Reasignar al mismo docente** (supuesto por confirmar): no cambia nada ni deja otra fila en el historial.
+- **Reglas duras al asignar** (supuesto por confirmar): HC-01, HC-08 y HC-09 bloquean la asignación aunque el jefe escriba un motivo; el motivo solo cubre HC-16.
 - **Promedio de evaluaciones** (supuesto por confirmar): es el promedio simple de todas las evaluaciones (estudiantil y departamental) de esos semestres.
 - **Un solo bloque final** (supuesto por confirmar): «sin horas», «choque» y «no disponible» (HC-09) bajan juntos al final, después de todos los demás, y dentro del bloque se ordenan con los mismos criterios.
 - **Historial de cualquier campus** (supuesto por confirmar): cuenta los grupos de cualquier campus y de cualquier origen (Nexus o SII).
@@ -79,12 +81,25 @@ Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
 - Supuestos de las reglas HC-04 a HC-13 (supuesto por confirmar): la alineación de HC-04 se cuenta desde `day_start`; HC-12 no revisa grupos sin sesiones (el tablero los cuenta como «sin horario») ni campus sin bloques de tiempo, y su tolerancia es la configuración `scheduling.weekly_hours_tolerance`, en minutos y 0 sin configurar; HC-13 reporta una violación por cada razón (materia inactiva, plan inactivo, carrera no ofrecida).
 - Las horas de un grupo para HC-08 son las de su materia, teoría más práctica, sumadas por grupo no cancelado en todos los campus del periodo; con docente de honorarios y `staffing.honorarios_max_hours` definido, ese tope sustituye a base más tolerancia. En HC-10 los préstamos aceptados contiguos del mismo grupo, salón y día cubren juntos una sesión (supuesto por confirmar).
 
+## Editor de horarios
+
+Cómo se colocan, mueven y quitan las sesiones de un grupo (tarea 3.5).
+
+- El editor trabaja una carrera, luego una de sus retículas (plan) y luego un semestre. Abre la retícula vigente (`study_plans.is_current`) y muestra las demás activas con la marca «Prioridad»; HC-03 se revisa dentro de cada retícula (confirmado el 7 de noviembre de 2026).
+- Una sesión que rompe una regla dura que la base no impide (HC-03, HC-05, HC-06, HC-10, HC-11, HC-12…) se guarda y queda marcada. Un empalme de docente o de salón (HC-01, HC-02) no se guarda y el intento muestra el mensaje del validador (confirmado el 7 de noviembre de 2026). Tampoco se guarda una sesión que se encima con otra del mismo grupo.
+- Solo se editan las sesiones de un grupo sin cancelar cuya carga (la de su departamento en su campus y periodo) está en `proposed`, `staffing` o `adjusting` ("Aprobaciones y permisos"). Un grupo sin fila de carga tampoco se edita (supuesto por confirmar); es la misma regla de «grupo editable» que usan los cupos (`LoadEditability`). Antes de validar se exige HC-04: el día es del perfil del campus, las horas caen en su ventana y se alinean a sus bloques.
+- Una sesión nueva se coloca sin salón; el salón se asigna aparte (tarea 3.7).
+- Bloques pegados se unen: al colocar o mover una sesión, si queda pegada (una termina donde empieza la otra) a otra del mismo grupo y día, del mismo tipo y con el mismo salón (o las dos sin salón), quedan como una sola sesión. Al colocar, la que ya existía se extiende; al mover, la movida se extiende y las vecinas se borran (supuesto por confirmar).
+- Mover una sesión conserva su salón si a la nueva hora sigue libre; si otro grupo lo ocupa (HC-02), la sesión se mueve sin salón y el editor lo avisa; lo mismo si otro editor toma el salón entre la lectura y la escritura (la exclusión de la base). Un salón bloqueado (HC-11) o sin préstamo (HC-10) a la nueva hora no se quita: se guarda marcado, como las demás reglas duras (supuesto por confirmar).
+- Cambiar el tipo de una sesión (teoría, práctica, virtual) no le quita el salón (supuesto por confirmar).
+- Quitar una sesión la quita completa, con todos sus bloques; para dejar parte, se mueve o se acorta (supuesto por confirmar).
+
 ## Cupos por carrera
 
 - Todo grupo tiene al menos un cupo: el de su carrera dueña (`is_owner`).
 - Al aceptar un acuerdo de grupo compartido se crea el cupo de la otra carrera con el máximo acordado.
 - El coordinador de cada carrera ve el grupo en la retícula de su carrera con el cupo que le corresponde.
-- Repartir los cupos (tarea 3.6, `SetGroupQuotas`) es del jefe del departamento que imparte el grupo. La dueña y las carreras de su mismo departamento se crean, cambian y quitan directo; la carrera de otro departamento se **propone** (acuerdo, «Acuerdos entre departamentos») y el grupo queda con el cupo «Propuesto» hasta que su jefe lo acepta (`AcceptSharedGroup`). Proponer (`ProposeGroupQuota`) y retirar (`WithdrawGroupQuotaProposal`) son acciones propias; guardar cupos no propone. No se editan cupos en un grupo cancelado ni con la carga del departamento fuera de propuesta, asignación docente o ajuste (supuesto por confirmar); una carga sin registro no lo impide. La carrera dueña no se quita y todo cupo lleva de 1 a 999 lugares.
+- Repartir los cupos (tarea 3.6, `SetGroupQuotas`) es del jefe del departamento que imparte el grupo. La dueña y las carreras de su mismo departamento se crean, cambian y quitan directo; la carrera de otro departamento se **propone** (acuerdo, «Acuerdos entre departamentos») y el grupo queda con el cupo «Propuesto» hasta que su jefe lo acepta (`AcceptSharedGroup`). Proponer (`ProposeGroupQuota`) y retirar (`WithdrawGroupQuotaProposal`) son acciones propias; guardar cupos no propone. No se editan cupos en un grupo cancelado ni con la carga del departamento fuera de propuesta, asignación docente o ajuste (supuesto por confirmar); un grupo sin carga registrada tampoco se edita, la misma regla del editor de horarios (supuesto por confirmar). La carrera dueña no se quita y todo cupo lleva de 1 a 999 lugares.
 - HC-07: la suma de los cupos del grupo no pasa su capacidad. Los propuestos no cuentan hasta aceptarse (supuesto por confirmar); al aceptar se revisa otra vez con los lugares del acuerdo, y si ya no caben el acuerdo queda propuesto y el mensaje dice cuántos lugares caben (supuesto por confirmar).
 - Una carrera de otro departamento que ya tiene cupo aceptado cambia sus lugares directo, sin nuevo acuerdo (supuesto por confirmar). Quitar el cupo de otra carrera lo borra y cancela su acuerdo; si deja de venir un propuesto, el acuerdo se cancela; si cambian los lugares de un propuesto, se retira y se propone de nuevo con los nuevos, solo cuando se pide en su renglón (supuesto por confirmar).
 - R3: la inscripción descuenta del cupo de la carrera del alumno; si se agota, lista de espera, aunque el grupo tenga lugares de otra carrera.
@@ -271,6 +286,7 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
+| Quitar el docente de un grupo | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | Con motivo; queda en el historial de asignaciones (supuesto por confirmar) |
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
