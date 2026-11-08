@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
@@ -13,9 +14,11 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use App\Modules\Scheduling\Queries\ConflictBoardQuery;
+use App\Modules\Scheduling\Queries\GroupBoardStatus;
 
 /*
 | ConflictBoardQuery (tarea 3.4): qué le falta a cada grupo para cerrar (HC-15), contado por carrera, retícula y
@@ -149,6 +152,49 @@ it('cada quien cuenta solo su alcance: el jefe su departamento, el coordinador s
         ->and(boardStatuses($coordinador))->toHaveCount(2)
         ->and(boardStatuses($otherCampus))->toHaveCount(0)
         ->and(boardStatuses(User::factory()->withRole(Role::Docente)->create()))->toHaveCount(0);
+});
+
+/**
+ * Un grupo de IIND con cupo de ISC: la materia está en el semestre 3 del plan vigente de ISC y no está en la retícula
+ * vieja.
+ */
+function sharedBoardGroup(): Group
+{
+    $iind = Career::factory()->create(['code' => 'IIND']);
+    $group = boardGroup([
+        'owner_career_id' => $iind->id,
+        'study_plan_id' => StudyPlan::factory()->create(['career_id' => $iind->id, 'semesters_count' => 9])->id,
+        'semester' => 2,
+    ]);
+    StudyPlanSubject::factory()->create(['study_plan_id' => test()->plan->id, 'subject_id' => test()->subject->id, 'semester' => 3]);
+    GroupQuota::factory()->create(['group_id' => $group->id, 'career_id' => test()->career->id, 'max_seats' => 10]);
+
+    return $group;
+}
+
+it('un grupo compartido cuenta en cada carrera con cupo, en la retícula y el semestre de su materia en ese plan', function () {
+    $shared = sharedBoardGroup();
+    $board = app(ConflictBoardQuery::class);
+    $statuses = boardStatuses(User::factory()->admin()->create());
+    $grid = $board->grid($statuses, $this->career->id);
+
+    expect($board->summary($statuses)->groups)->toBe(1)
+        ->and(array_map(fn ($row) => [$row['code'], $row['count']->groups], $board->byCareer($statuses)))->toBe([['IIND', 1], ['ISC', 1]])
+        ->and(array_column($grid['plans'], 'id'))->toBe([$this->plan->id])
+        ->and($grid['plans'][0]['cells'][3])->groups->toBe(1)->missing->toBe(1)
+        ->and($statuses->sole()->placedIn($this->career->id, $this->plan->id, 3))->toBeTrue()
+        ->and($statuses->sole()->placedIn($shared->owner_career_id, $shared->study_plan_id, 2))->toBeTrue()
+        ->and($statuses->filter(fn (GroupBoardStatus $status): bool => $status->countsFor($this->career->id)))->toHaveCount(1);
+});
+
+it('el coordinador ve los grupos de otra carrera con cupo de la suya, y no los que no le dan cupo', function () {
+    sharedBoardGroup();
+    $iind = Career::query()->where('code', 'IIND')->sole();
+    boardGroup(['owner_career_id' => $iind->id, 'study_plan_id' => StudyPlan::factory()->create(['career_id' => $iind->id])->id]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])->create();
+
+    expect(boardStatuses($coordinador))->toHaveCount(1)
+        ->and(boardStatuses(User::factory()->admin()->create()))->toHaveCount(2);
 });
 
 it('dice cuándo se recalcularon los choques del campus, aunque el recálculo no haya cambiado nada', function () {
