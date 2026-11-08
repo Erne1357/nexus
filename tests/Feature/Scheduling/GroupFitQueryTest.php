@@ -8,22 +8,19 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
-use App\Modules\Scheduling\Enums\ConflictSeverity;
+use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\GroupFitQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
-use App\Modules\Scheduling\Validation\SessionCandidate;
-use App\Modules\Scheduling\Validation\ValidationResult;
-use App\Modules\Scheduling\Validation\Violation;
 use Illuminate\Support\Facades\DB;
 
 /*
 | GroupFitQuery (tarea 3.5): para pintar «dónde cabe» un grupo en el editor. Por cada día y bloque del perfil del
 | campus, sin las horas donde el grupo ya tiene sesión, pregunta al validador por una sesión de un bloque y dice si
-| cabe (sin reglas duras nuevas) y, si no, qué reglas rompe y sus mensajes. Lee la foto una vez y revisa cada celda
-| contra la parte de la foto que la toca, con el mismo resultado que la foto completa. Un grupo que no se edita
-| (cancelado, o con la carga fuera de propuesta, asignación o ajustes) no tiene celdas.
+| cabe (sin reglas duras nuevas) y, si no, qué reglas rompe y sus mensajes. Lee la foto una vez y pregunta por todas
+| las celdas con checkSessions(). Un grupo que no se edita (cancelado, o con la carga fuera de propuesta, asignación o
+| ajustes) no tiene celdas.
 */
 
 beforeEach(function () {
@@ -80,27 +77,37 @@ it('no cuenta contra una celda lo que el grupo ya rompía antes', function () {
     expect(array_filter($cells, fn (array $cell): bool => ! $cell['fits']))->toBe([]);
 });
 
-it('da lo mismo que preguntar al validador con la foto completa, celda por celda', function () {
-    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id]);
-    GroupSession::factory()->for($this->group)->inRoom($room)->on(1, '07:00', '09:00')->create();
-    GroupSession::factory()->for(fitGroup(['teacher_id' => $this->teacher->id]))->on(2, '10:00', '12:00')->create();
-    GroupSession::factory()->for(Group::factory()->create(['term_id' => $this->term->id, 'teacher_id' => $this->teacher->id]))->on(3, '07:00', '09:00')->create();
-    GroupSession::factory()->for(fitGroup(['owner_career_id' => $this->group->owner_career_id, 'study_plan_id' => $this->group->study_plan_id]))->inRoom($room)->on(4, '08:00', '10:00')->create();
-    GroupSession::factory()->for(fitGroup())->inRoom($room)->on(5, '09:00', '10:00')->create();
+it('HC-03: marca las celdas que empalman al grupo con la única opción de otra materia de su plan y semestre', function () {
+    $mate = fitGroup(['code' => 'E', 'owner_career_id' => $this->group->owner_career_id, 'study_plan_id' => $this->group->study_plan_id,
+        'subject_id' => Subject::factory()->create(['name' => 'Física'])->id]);
+    GroupSession::factory()->for($mate)->on(4, '08:00', '10:00')->create();
 
-    $validator = app(ScheduleValidator::class);
-    $before = array_map(fn (Violation $violation): string => $violation->key(), $validator->validateGroup($this->group)->violations());
     $cells = app(GroupFitQuery::class)->for($this->group);
-    $candidates = array_map(fn (array $cell): SessionCandidate => new SessionCandidate($cell['day'], $cell['starts_at'], $cell['ends_at']), $cells);
-    $expected = array_map(function (ValidationResult $result) use ($before): array {
-        $new = array_values(array_filter($result->violations(), fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard
-            && ! in_array($violation->key(), $before, true) && $violation->rule !== 'HC-12'));
 
-        return [$new === [], array_values(array_unique(array_map(fn (Violation $violation): string => $violation->rule, $new))), array_map(fn (Violation $violation): string => $violation->message, $new)];
-    }, $validator->checkSessions($this->group, $candidates));
+    expect($cells['4|08:00']['fits'])->toBeFalse()
+        ->and($cells['4|08:00']['rules'])->toBe(['HC-03'])
+        ->and($cells['4|08:00']['messages'][0])->toStartWith('Se empalma con Física, grupo E el jueves de 08:00 a 10:00')
+        ->and($cells['4|09:00']['rules'])->toBe(['HC-03'])
+        ->and($cells['4|10:00']['fits'])->toBeTrue();
+});
 
-    expect(array_map(fn (array $cell): array => [$cell['fits'], $cell['rules'], $cell['messages']], $cells))->toBe($expected)
-        ->and(array_keys(array_filter($cells, fn (array $cell): bool => ! $cell['fits'])))->toBe(['2|10:00', '2|11:00', '3|07:00', '3|08:00']);
+it('HC-09: marca las celdas donde el docente no está disponible en el periodo', function () {
+    TeacherAvailability::factory()->unavailable()->create(['teacher_id' => $this->teacher->id, 'term_id' => $this->term->id, 'day' => 3, 'starts_at' => '10:00', 'ends_at' => '12:00']);
+
+    $cells = app(GroupFitQuery::class)->for($this->group);
+
+    expect($cells['3|10:00']['rules'])->toBe(['HC-09'])
+        ->and($cells['3|11:00']['rules'])->toBe(['HC-09'])
+        ->and($cells['3|12:00']['fits'])->toBeTrue();
+});
+
+it('HC-08: las horas del docente, que no dependen de la hora de la sesión, no deciden dónde cabe', function () {
+    fitGroup(['teacher_id' => $this->teacher->id]);
+
+    $cells = app(GroupFitQuery::class)->for($this->group);
+
+    expect(app(ScheduleValidator::class)->validateGroup($this->group)->forRule('HC-08'))->not->toBe([])
+        ->and(array_filter($cells, fn (array $cell): bool => ! $cell['fits']))->toBe([]);
 });
 
 it('un grupo cancelado o con la carga fuera de propuesta, asignación o ajustes no tiene celdas', function (Closure $setUp) {
