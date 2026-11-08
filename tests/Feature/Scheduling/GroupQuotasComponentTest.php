@@ -72,7 +72,7 @@ it('guarda los cupos, avisa y despacha quotas-saved', function () {
         ->assertDispatched('quotas-saved')
         ->assertSee('35 de 40 lugares repartidos');
 
-    expect(GroupQuota::query()->where('group_id', $this->group->id)->pluck('max_seats', 'career_id')->all())
+    expect(GroupQuota::query()->where('group_id', $this->group->id)->orderByDesc('is_owner')->orderBy('id')->pluck('max_seats', 'career_id')->all())
         ->toBe([$this->owner->id => 25, $this->sameDept->id => 10]);
 });
 
