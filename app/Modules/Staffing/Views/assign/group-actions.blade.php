@@ -1,7 +1,8 @@
 {{--
     Las acciones de un grupo en la vista por materia: «Ocultar ranking» si está abierto; si no, «Cambiar» (con docente,
     para quien asigna) o «Ver el ranking completo (N)». A la derecha, «Siguiente sin docente» salvo con el filtro «Sin
-    docente», donde el siguiente es el renglón de abajo (ahí va al pie del ranking abierto).
+    docente», donde el siguiente es el renglón de abajo (ahí va al pie del ranking abierto); `iconOnly`, en el renglón
+    compacto de un grupo con docente, solo su icono.
 --}}
 @php($group = $row->group)
 @if ($open)
@@ -18,5 +19,5 @@
     </button>
 @endif
 @if ($state !== 'sin')
-    @include('staffing::assign.next-button', ['from' => $group->id, 'next' => $nextWithoutTeacher[$group->id] ?? null])
+    @include('staffing::assign.next-button', ['from' => $group->id, 'next' => $nextWithoutTeacher[$group->id] ?? null, 'iconOnly' => $iconOnly ?? false])
 @endif

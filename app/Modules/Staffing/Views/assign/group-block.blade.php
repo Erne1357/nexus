@@ -1,8 +1,9 @@
 {{--
     Un grupo en la vista por materia: a la izquierda su clave, su carrera dueña, su horario (un bloque por renglón, sin
     partirse) y sus horas; a la derecha los tres primeros lugares de su ranking (staffing::assign.candidate), el motivo
-    si se pidió desde ahí y sus acciones (staffing::assign.group-actions). Un grupo con docente va compacto, en un
-    renglón: su docente (staffing::assign.assigned) y sus acciones, para que los asignados no tapen a los que faltan.
+    si se pidió desde ahí y sus acciones (staffing::assign.group-actions). Un grupo con docente va compacto: su docente
+    (staffing::assign.assigned) y, a la derecha, sus acciones con «Siguiente sin docente» solo como icono, para que los
+    asignados no tapen a los que faltan.
     «Ver el ranking completo» o «Cambiar» abre debajo el ranking completo con el historial, a todo el ancho, y al pie
     «Ocultar ranking» y «Siguiente sin docente».
 --}}
@@ -33,9 +34,11 @@
 
     <div class="@container grid min-w-0 content-start gap-2.5">
         @if ($compact)
-            <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+            <div class="grid gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                 @include('staffing::assign.assigned', ['row' => $row])
-                @include('staffing::assign.group-actions', ['row' => $row, 'open' => $open])
+                <div class="flex items-center gap-1 max-sm:-ms-2">
+                    @include('staffing::assign.group-actions', ['row' => $row, 'open' => $open, 'iconOnly' => true])
+                </div>
             </div>
         @else
             @if ($row->rankingState === \App\Modules\Staffing\Enums\RankingState::Pending)

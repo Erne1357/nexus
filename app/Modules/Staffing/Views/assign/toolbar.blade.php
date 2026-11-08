@@ -11,15 +11,15 @@
     </div>
 
     @if ($view === 'materia')
-        <div class="contents [&>*]:w-full md:[&>*]:w-40 min-[1600px]:[&>*]:w-48">
+        <div class="contents [&>*]:w-full md:[&>*]:w-40 2xl:[&>*]:w-48">
             <div class="md:w-64!">
-                <x-input wire:model.live.debounce.300ms="search" placeholder="Grupo, materia o docente" aria-label="Buscar grupo, materia o docente" icon="o-magnifying-glass" clearable data-testid="assign-search" />
+                <x-input wire:model.live.debounce.300ms="search" placeholder="Grupo, materia o docente" aria-label="Buscar grupo, materia o docente" icon="o-magnifying-glass" :clearable="$search !== ''" data-testid="assign-search" />
             </div>
             <x-select wire:model.live="subjectFilter" aria-label="Materia" :options="$subjects" placeholder="Materia" />
             <x-select wire:model.live="careerFilter" aria-label="Carrera" :options="$careers" placeholder="Carrera" />
             <x-select wire:model.live="semesterFilter" aria-label="Semestre" :options="$semesters" placeholder="Semestre" />
         </div>
-        <div class="max-md:w-full">
+        <div class="shrink-0 max-md:w-full">
             @include('staffing::assign.state-filter')
         </div>
         @include('staffing::assign.order-legend', ['class' => 'w-full'])
