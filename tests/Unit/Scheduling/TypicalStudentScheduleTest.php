@@ -38,7 +38,8 @@ it('HC-03: dos materias de un solo grupo que se empalman en el mismo semestre da
         ->subjectType->toBe('group')
         ->subjectId->toBe('A')
         ->message->toBe('Se empalma con Química, grupo C el lunes de 09:00 a 11:00, la única opción de su materia en el semestre 1: el alumno tipo no puede llevar las dos.')
-        ->and($violations[0]->related)->toMatchArray(['study_plan_id' => 'P1', 'semester' => 1, 'other_group_id' => 'B']);
+        ->and($violations[0]->related)->toMatchArray(['study_plan_id' => 'P1', 'semester' => 1, 'other_group_id' => 'B', 'session_id' => 'A-0', 'other_session_id' => 'B-0'])
+        ->and($violations[1]->related)->toMatchArray(['other_group_id' => 'A', 'session_id' => 'B-0', 'other_session_id' => 'A-0']);
 });
 
 it('HC-03: si la materia tiene otro grupo que no choca, el alumno tipo tiene combinación', function () {

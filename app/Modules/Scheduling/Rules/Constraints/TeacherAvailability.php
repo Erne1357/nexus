@@ -41,6 +41,7 @@ final class TeacherAvailability implements Constraint
                         $teacher->id,
                         $groupId,
                         [
+                            'session_id' => $session->id,
                             'day' => $session->day,
                             'starts_at' => Minutes::format($session->start),
                             'ends_at' => Minutes::format($session->end),
