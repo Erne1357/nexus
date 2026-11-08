@@ -3,18 +3,21 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
 use App\Modules\Staffing\Actions\ChangeRequests\RejectChangeRequest;
+use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\ChangeRequestsQuery;
 use App\Modules\Staffing\Rules\ChangeRequestRules;
+use App\Modules\Staffing\Support\SessionLabels;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -32,6 +35,12 @@ use Mary\Traits\Toast;
  * del departamento aprueba (comentario opcional) o rechaza (comentario obligatorio); aplica el coordinador de la carrera
  * dueña si es de horario y el jefe si es de salón: «Abrir en el editor» (si existe el editor de horarios) y «Marcar
  * como aplicada». Si Scheduling veta el regreso de la carga a Asignación, la pantalla muestra los motivos.
+ *
+ * El coordinador también pide desde aquí (confirmado el 7 de noviembre de 2026): «Nueva solicitud» (solo con el
+ * permiso de pedir en un grupo de su carrera) abre un modal con los grupos de su carrera en el campus y el periodo cuya
+ * carga está en Asignación o Ajustes (ChangeRequestsQuery::requestableGroups), el tipo, qué propone y el motivo, y
+ * llama a RequestChange; la solicitud del coordinador no lleva docente, así que no la limita la de una abierta por
+ * docente. Al enviarla, la pantalla la abre.
  *
  * Entra quien puede ver, decidir, aplicar o pedir alguna; cada quien ve solo lo de su alcance (ChangeRequestsQuery).
  * El departamento es el primero que puede ver; con varios, `?depto=<código>` lo elige, y `?solicitud=<id>` (el de los
@@ -69,11 +78,23 @@ new #[Title('Solicitudes de cambio')] class extends Component
     #[Url(as: 'tipo')]
     public string $kind = '';
 
-    #[Url(as: 'buscar')]
+    #[Url(as: 'q')]
     public string $search = '';
 
     /** El comentario del jefe al decidir. */
     public string $comment = '';
+
+    /** El modal «Nueva solicitud» del coordinador: el grupo elegido (se revisa de nuevo al enviar), el tipo, qué propone y el motivo. */
+    public bool $showRequest = false;
+
+    public string $requestGroupId = '';
+
+    /** 'schedule' o 'room' (ChangeRequestKind). */
+    public string $requestKind = 'schedule';
+
+    public string $proposal = '';
+
+    public string $reason = '';
 
     /** El periodo, el campus y el departamento con los que entró. El navegador no los puede cambiar. */
     #[Locked]
@@ -212,12 +233,75 @@ new #[Title('Solicitudes de cambio')] class extends Component
     }
 
     /**
+     * Abre el modal «Nueva solicitud» del coordinador.
+     */
+    public function openRequest(Actor $context): void
+    {
+        abort_unless($this->canRequest($context), 403);
+
+        $this->reset('requestGroupId', 'proposal', 'reason');
+        $this->requestKind = ChangeRequestKind::Schedule->value;
+        $this->resetErrorBag();
+        $this->showRequest = true;
+    }
+
+    public function sendRequest(Actor $context, ChangeRequestsQuery $query, RequestChange $requestChange): void
+    {
+        abort_unless($this->canRequest($context), 403);
+
+        $max = ChangeRequestRules::MAX_TEXT_LENGTH;
+        $this->validate([
+            'requestGroupId' => ['required', 'string'],
+            'requestKind' => ['required', Rule::enum(ChangeRequestKind::class)],
+            'proposal' => ['required', 'string', "max:{$max}"],
+            'reason' => ['required', 'string', "max:{$max}"],
+        ], [
+            'requestGroupId.*' => 'Elige el grupo.',
+            'requestKind.*' => 'Elige si es de horario o de salón.',
+            'proposal.required' => 'Describe qué cambio pides.',
+            'proposal.max' => "Lo que propones lleva hasta {$max} caracteres.",
+            'reason.required' => 'Escribe el motivo del cambio.',
+            'reason.max' => "El motivo lleva hasta {$max} caracteres.",
+        ]);
+
+        $group = $query->requestableGroup($context, (string) $context->activeTerm()?->id, (string) $context->activeCampus()?->id, $this->requestGroupId) ?? abort(404);
+        $this->authorize('create', [ChangeRequest::class, $group]);
+
+        try {
+            $request = $requestChange->handle($group, auth()->user(), ChangeRequestKind::from($this->requestKind), $this->proposal, $this->reason);
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $field => $messages) {
+                $this->addError($field === 'description' ? 'proposal' : $field, $messages[0]);
+            }
+
+            return;
+        }
+
+        $this->showRequest = false;
+        $this->reset('requestGroupId', 'proposal', 'reason', 'status', 'kind', 'search', 'comment', 'vetoReasons');
+        $this->requestId = $request->id;
+        $this->mobileDetail = true;
+        $this->resolve($context, $query);
+        $this->success("Pediste un cambio del grupo {$group->code}", 'El jefe del departamento la revisa.');
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function with(Actor $context, ChangeRequestsQuery $query): array
     {
+        $canRequest = $this->canRequest($context);
+        $termId = (string) $context->activeTerm()?->id;
+        $campusId = (string) $context->activeCampus()?->id;
+        $requesting = [
+            'canRequest' => $canRequest,
+            'requestBlocked' => $canRequest && ! $query->hasRequestableGroups($context, $termId, $campusId) ? 'No hay grupos de tu carrera con la carga en Asignación o Ajustes.' : null,
+            'groupOptions' => $canRequest && $this->showRequest ? self::groupOptions($query->requestableGroups($context, $termId, $campusId)) : [],
+            'maxText' => ChangeRequestRules::MAX_TEXT_LENGTH,
+        ];
+
         if ($this->departmentId === null) {
-            return ['requests' => null];
+            return ['requests' => null, ...$requesting];
         }
 
         $requests = $query->listFor($context, (string) $this->termId, (string) $this->campusId, $this->departmentId);
@@ -232,13 +316,47 @@ new #[Title('Solicitudes de cambio')] class extends Component
             'selected' => $selected,
             'departmentName' => $department['label'] ?? $this->department,
             'loadState' => $query->loadOf((string) $this->termId, (string) $this->campusId, $this->departmentId),
+            'approvedListed' => $requests->where('status', ChangeRequestStatus::Approved)->count(),
+            'listScope' => $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule) ? 'de tu carrera' : 'en tu lista',
             'canDecide' => $selected !== null && $selected->status === ChangeRequestStatus::Pending && Gate::allows('decide', $selected),
             'canApply' => $selected !== null && $selected->status === ChangeRequestStatus::Approved && Gate::allows('apply', $selected),
-            'editorUrl' => $selected !== null && Route::has('scheduling.editor') ? route('scheduling.editor', ['grupo' => $selected->group_id]) : null,
+            'editorUrl' => $selected !== null ? route('scheduling.editor', ['grupo' => $selected->group_id]) : null,
             'campusName' => $context->activeCampus()?->name,
             'termName' => $context->activeTerm()?->name,
-            'maxText' => ChangeRequestRules::MAX_TEXT_LENGTH,
+            ...$requesting,
         ];
+    }
+
+    /**
+     * Los grupos del modal «Nueva solicitud»: clave, materia y «Sem. 3 · SC · Lu Mi 07:00–09:00».
+     *
+     * @param  iterable<Group>  $groups
+     * @return list<array{id: string, code: string, subject: string, detail: string, reason: null}>
+     */
+    private static function groupOptions(iterable $groups): array
+    {
+        $options = [];
+
+        foreach ($groups as $group) {
+            $options[] = [
+                'id' => $group->id,
+                'code' => $group->code,
+                'subject' => $group->subject->name,
+                'detail' => implode(' · ', ['Sem. '.$group->semester, $group->department->code, ...array_map(fn (array $line): string => $line['days'].' '.$line['time'], SessionLabels::schedule($group->sessions))]),
+                'reason' => null,
+            ];
+        }
+
+        return $options;
+    }
+
+    /**
+     * Si puede pedir un cambio como coordinador (el permiso de pedir en un grupo de su carrera) con un campus y un periodo
+     * en la credencial.
+     */
+    private function canRequest(Actor $context): bool
+    {
+        return $context->allowsAny(StaffingPermission::ChangeRequestRequest) && $context->activeCampus() !== null && $context->activeTerm() !== null;
     }
 
     /**

@@ -2,7 +2,8 @@
     El aviso del estado de la carga del departamento en la pantalla de solicitudes de cambio (tarea 3.11, maqueta A):
     el departamento y el campus, las etapas Propuesta · Asignación · Ajustes · Cierre con la actual marcada, la insignia
     del estado y qué pasa con las solicitudes: aprobar una pasa la carga de Asignación a Ajustes, y aplicar la última
-    aprobada la regresa (reglas-de-negocio.md, "Solicitudes de cambio").
+    aprobada la regresa (reglas-de-negocio.md, "Solicitudes de cambio"). Las aprobadas por aplicar se cuentan en todo el
+    departamento; si la lista de quien la ve tiene menos (el coordinador ve las de su carrera), también las suyas.
 --}}
 @use('App\Modules\AcademicLoad\Enums\LoadStatus')
 @php
@@ -17,7 +18,8 @@
         null => 'El departamento no tiene carga en este campus.',
         LoadStatus::Staffing => 'Al aprobar una solicitud, la carga pasa a Ajustes.',
         LoadStatus::Adjusting => $approved > 0
-            ? "{$approved} ".($approved === 1 ? 'aprobada por aplicar' : 'aprobadas por aplicar').' en el departamento. Al aplicarlas, la carga regresa a Asignación.'
+            ? "{$approved} ".($approved === 1 ? 'aprobada por aplicar' : 'aprobadas por aplicar').' en el departamento'
+                .($approvedListed !== $approved ? " · {$approvedListed} {$listScope}" : '').'. Al aplicarlas, la carga regresa a Asignación.'
             : 'No quedan solicitudes por aplicar; la carga sigue en Ajustes.',
         default => 'Las solicitudes se piden y se deciden con la carga en Asignación o Ajustes.',
     };

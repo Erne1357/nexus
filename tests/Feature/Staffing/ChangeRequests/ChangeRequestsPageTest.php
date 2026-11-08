@@ -1,19 +1,23 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
+use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Notifications\ChangeRequested;
 use App\Modules\Staffing\Queries\ChangeRequestsQuery;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Route;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -49,6 +53,29 @@ function crListedIds(Testable $page): array
     preg_match_all('/data-request="([0-9a-f-]+)"/', $page->html(), $matches);
 
     return $matches[1];
+}
+
+/**
+ * Los ids de los grupos que ofrece el select de «Nueva solicitud».
+ *
+ * @return list<string>
+ */
+function crGroupOptions(Testable $page): array
+{
+    preg_match_all('/data-group-option="([0-9a-f-]+)"/', $page->html(), $matches);
+
+    return $matches[1];
+}
+
+/**
+ * Un grupo de la carrera ISC en un tercer departamento cuya carga está en `$status`.
+ */
+function crWorldDepartmentGroup(object $world, LoadStatus $status): Group
+{
+    $department = Department::factory()->create(['code' => 'IND', 'name' => 'Industrial']);
+    AcademicLoad::factory()->create(['term_id' => $world->term->id, 'campus_id' => $world->campus->id, 'department_id' => $department->id, 'status' => $status]);
+
+    return crGroup($world, '9Z', 'Materia en propuesta', $department, $world->isc, null);
 }
 
 describe('lista', function () {
@@ -157,9 +184,9 @@ describe('detalle', function () {
             ->assertSet('requestId', $request->id)
             ->assertSeeHtml('data-testid="request-detail"')
             ->assertSeeInOrder([
-                'Fundamentos de Programación', 'Rechazada', 'Horario',
+                'Fundamentos de Programación', '1A', 'Rechazada', 'Horario',
                 'Docente', 'Marisol Quiñones Duarte',
-                'Grupo', '1A', 'Ingeniería en Sistemas Computacionales', 'Campus II',
+                'Carrera dueña', 'ISC', 'Ingeniería en Sistemas Computacionales', 'Campus II',
                 'Al pedirla', 'Lu Mi', '07:00–09:00', 'Propuesta', 'Martes y jueves de 10 a 12',
                 'Motivo', 'Atiendo residencias los lunes.',
                 'Historial', 'Pidió', 'Marisol Quiñones Duarte', 'Rechazó', 'Alfredo Ríos Carrasco', 'Ese bloque está ocupado.',
@@ -193,6 +220,16 @@ describe('detalle', function () {
         crRequest($this->g1, $this->w->teacherUser, 'approved');
 
         crPage($this->w->jefeSc)->assertSeeInOrder(['Ajustes', '1 aprobada por aplicar']);
+    });
+
+    it('al coordinador le dice cuántas por aplicar hay en el departamento y cuántas son de su carrera', function () {
+        $this->w->scLoad->update(['status' => LoadStatus::Adjusting]);
+        crRequest($this->g1, $this->w->teacherUser, 'approved');
+        crRequest($this->g2, $this->w->otherTeacherUser, 'approved');
+        crRequest($this->g2, $this->w->coordIind, 'approved', ['kind' => 'room']);
+
+        crPage($this->w->coordIsc)->assertSee('3 aprobadas por aplicar en el departamento · 1 de tu carrera.');
+        crPage($this->w->jefeSc)->assertSee('3 aprobadas por aplicar en el departamento. Al aplicarlas')->assertDontSee('de tu carrera');
     });
 });
 
@@ -329,18 +366,93 @@ describe('aplicar', function () {
             ->and($this->w->scLoad->fresh()->status)->toBe(LoadStatus::Adjusting);
     });
 
-    it('«Abrir en el editor» aparece solo si existe el editor de horarios', function () {
+    it('«Abrir en el editor» lleva al editor de horarios con el grupo, junto a «Marcar como aplicada»', function () {
         $request = crRequest($this->g1, $this->w->teacherUser, 'approved');
-
-        crPage($this->w->coordIsc, ['solicitud' => $request->id])->assertDontSeeHtml('data-testid="open-editor"');
-
-        Route::get('/scheduling/editor', fn () => 'editor')->name('scheduling.editor');
-        app('router')->getRoutes()->refreshNameLookups();
 
         crPage($this->w->coordIsc, ['solicitud' => $request->id])
             ->assertSeeHtml('data-testid="open-editor"')
             ->assertSeeHtml('href="'.route('scheduling.editor', ['grupo' => $this->g1->id]).'"');
+
+        crPage($this->w->jefeSc, ['solicitud' => $request->id])->assertDontSeeHtml('data-testid="open-editor"');
     });
+});
+
+describe('nueva solicitud (coordinador, confirmado el 7 de noviembre de 2026)', function () {
+    it('el coordinador pide un cambio en un grupo de su carrera desde «Nueva solicitud» y queda abierta en la lista', function () {
+        $page = crPage($this->w->coordIsc)
+            ->assertSeeHtml('data-testid="new-request"')
+            ->call('openRequest')
+            ->assertSet('showRequest', true)
+            ->assertSee('Fundamentos de Programación')
+            ->set('requestGroupId', $this->g1->id)
+            ->set('requestKind', 'room')
+            ->set('proposal', 'Un laboratorio de cómputo')
+            ->set('reason', 'Las prácticas necesitan equipo.')
+            ->call('sendRequest')
+            ->assertHasNoErrors()
+            ->assertSet('showRequest', false);
+
+        $request = ChangeRequest::query()->sole();
+
+        expect($request->group_id)->toBe($this->g1->id)
+            ->and($request->requested_by)->toBe($this->w->coordIsc->id)
+            ->and($request->teacher_id)->toBeNull()
+            ->and($request->kind)->toBe(ChangeRequestKind::Room)
+            ->and($request->status)->toBe(ChangeRequestStatus::Pending);
+
+        $page->assertSet('requestId', $request->id)
+            ->assertSeeHtml('data-testid="request-detail" data-request-id="'.$request->id.'"');
+    });
+
+    it('solo ofrece los grupos no cancelados de su carrera, del campus y periodo, con la carga en Asignación o Ajustes', function () {
+        $cancelled = crGroup($this->w, '1C', 'Materia cancelada', $this->w->sc, $this->w->isc, null);
+        $cancelled->update(['status' => 'cancelled']);
+        $other = crWorldDepartmentGroup($this->w, LoadStatus::Proposed);
+
+        $page = crPage($this->w->coordIsc)->call('openRequest');
+        $options = crGroupOptions($page);
+
+        expect($options)->toContain($this->g1->id)
+            ->not->toContain($this->g2->id)
+            ->not->toContain($cancelled->id)
+            ->not->toContain($other->id);
+    });
+
+    it('el coordinador de otra carrera no puede elegir ese grupo aunque mande su id', function () {
+        crPage($this->w->coordIind)
+            ->call('openRequest')
+            ->set('requestGroupId', $this->g1->id)
+            ->set('proposal', 'Martes de 10 a 12')
+            ->set('reason', 'Motivo')
+            ->call('sendRequest')
+            ->assertNotFound();
+
+        expect(crGroupOptions(crPage($this->w->coordIind)->call('openRequest')))->not->toContain($this->g1->id)
+            ->and(ChangeRequest::query()->count())->toBe(0);
+    });
+
+    it('el grupo, lo que propone y el motivo son obligatorios', function () {
+        crPage($this->w->coordIsc)
+            ->call('openRequest')
+            ->call('sendRequest')
+            ->assertHasErrors(['requestGroupId' => 'required', 'proposal' => 'required', 'reason' => 'required'])
+            ->assertSee('Elige el grupo.');
+    });
+
+    it('sin grupos que se puedan pedir, el botón queda deshabilitado con su motivo', function () {
+        $this->w->scLoad->update(['status' => LoadStatus::Closed]);
+
+        crPage($this->w->coordIsc)
+            ->assertSeeHtml('data-testid="new-request" disabled')
+            ->assertSee('No hay grupos de tu carrera con la carga en Asignación o Ajustes.');
+    });
+
+    it('el docente, el jefe y la Subdirección no ven «Nueva solicitud» ni pueden abrirla', function (string $who) {
+        crRequest($this->g1, $this->w->teacherUser, 'pending');
+        $user = $who === 'subdireccion' ? User::factory()->withRole(Role::Subdireccion)->create() : $this->w->{$who};
+
+        crPage($user)->assertDontSeeHtml('data-testid="new-request"')->call('openRequest')->assertForbidden();
+    })->with(['teacherUser', 'jefeSc', 'subdireccion']);
 });
 
 describe('alcance', function () {

@@ -1,9 +1,10 @@
 {{--
-    Solicitudes de cambio (tarea 3.11, maqueta A «Lista y detalle»): encabezado con el departamento (selector si hay
-    varios), el aviso con el estado de la carga del departamento, los filtros (estado con sus cifras, tipo y texto) y
-    los dos paneles: la lista a la izquierda y el detalle fijo a la derecha. Desde lg van juntos; debajo, la lista y el
-    detalle van por separado (el detalle ocupa la pantalla, con «Solicitudes» para regresar). Todo lo que se pinta viene
-    de ChangeRequestsQuery.
+    Solicitudes de cambio (tarea 3.11, maqueta A «Lista y detalle»): encabezado con el departamento y, a la derecha, su
+    selector (si hay varios, del tamaño y en el lugar del de la asignación) y «Nueva solicitud» para el coordinador; el
+    aviso con el estado de la carga del departamento, los filtros (estado con sus cifras, tipo y texto) y los dos
+    paneles: la lista a la izquierda y el detalle fijo a la derecha. Desde lg van juntos; debajo, la lista y el detalle
+    van por separado (el detalle ocupa la pantalla, con «Solicitudes» para regresar). Todo lo que se pinta viene de
+    ChangeRequestsQuery.
 --}}
 <div class="space-y-4" x-on:request-detail-opened.window="$nextTick(() => {
         const title = $root.querySelector('[data-testid=request-detail-title]')
@@ -11,22 +12,41 @@
         if (window.innerWidth < 1024) { $root.querySelector('[data-testid=request-detail]')?.scrollIntoView({ block: 'start' }) }
         title.focus({ preventScroll: true })
     })">
-    <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+    <div class="flex flex-wrap items-end justify-between gap-x-7 gap-y-3">
         <div class="min-w-0">
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Solicitudes de cambio</h1>
             @if ($requests !== null)
                 <p class="mt-1.5 text-sm text-neutral">Cambios de horario y de salón que piden los docentes y la coordinación en los grupos de {{ $departmentName }}.</p>
             @endif
         </div>
-        @if ($requests !== null && count($departments) > 1)
-            <div class="w-full md:w-72">
-                <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" data-testid="department-select" />
+        @if (($requests !== null && count($departments) > 1) || $canRequest)
+            <div class="flex flex-wrap items-end gap-3 max-md:w-full">
+                @if ($requests !== null && count($departments) > 1)
+                    <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" class="select-sm" data-testid="department-select" />
+                @endif
+                @if ($canRequest)
+                    @if ($requestBlocked !== null)
+                        <span class="tooltip tooltip-left max-md:w-full" data-tip="{{ $requestBlocked }}">
+                            <button type="button" class="btn btn-outline h-10 max-md:h-11 max-md:w-full" data-testid="new-request" disabled aria-describedby="new-request-reason">
+                                <x-icon name="o-plus" class="h-4 w-4" aria-hidden="true" />Nueva solicitud
+                            </button>
+                        </span>
+                        <span id="new-request-reason" class="sr-only">{{ $requestBlocked }}</span>
+                    @else
+                        <x-button label="Nueva solicitud" icon="o-plus" class="btn-outline h-10 max-md:h-11 max-md:w-full" wire:click="openRequest" spinner="openRequest" data-testid="new-request" />
+                    @endif
+                @endif
             </div>
         @endif
     </div>
 
     @if ($requests === null)
-        <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="requests-empty">{{ $message }}</div>
+        <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="requests-empty">
+            <p>{{ $message }}</p>
+            @if ($canRequest && $requestBlocked === null)
+                <p class="mt-1 text-sm">Con «Nueva solicitud» pides un cambio en un grupo de tu carrera.</p>
+            @endif
+        </div>
     @else
         @include('staffing::change-requests.banner', ['load' => $loadState['load'], 'approved' => $loadState['approved']])
 
@@ -36,15 +56,15 @@
                 description="La solicitud quedó aplicada. Cuando se resuelvan, la siguiente solicitud aplicada regresa la carga a Asignación." />
         @endif
 
-        <div @class(['flex flex-wrap items-end gap-3', 'max-lg:hidden' => $mobileDetail]) role="search" aria-label="Filtrar solicitudes">
-            <div role="group" aria-label="Estado" class="flex flex-wrap gap-1.5">
-                @foreach (['' => 'Todas', 'pendientes' => 'Pendientes', 'aprobadas' => 'Aprobadas', 'rechazadas' => 'Rechazadas', 'aplicadas' => 'Aplicadas'] as $value => $label)
-                    <button type="button" wire:click="$set('status', '{{ $value }}')" aria-pressed="{{ $status === $value ? 'true' : 'false' }}" data-testid="status-{{ $value === '' ? 'todas' : $value }}"
-                        @class(['btn btn-sm h-10 max-md:h-11 max-md:min-h-11', 'btn-primary' => $status === $value, 'btn-outline border-base-300' => $status !== $value])>
-                        {{ $label }} <span class="font-mono tabular-nums opacity-85">{{ $counts[$value] }}</span>
-                    </button>
-                @endforeach
-            </div>
+        <div @class(['flex flex-wrap items-center gap-3', 'max-lg:hidden' => $mobileDetail]) role="search" aria-label="Filtrar solicitudes">
+            @include('staffing::shared.segmented-filter', [
+                'label' => 'Estado',
+                'property' => 'status',
+                'options' => ['' => 'Todas', 'pendientes' => 'Pendientes', 'aprobadas' => 'Aprobadas', 'rechazadas' => 'Rechazadas', 'aplicadas' => 'Aplicadas'],
+                'current' => $status,
+                'counts' => $counts,
+                'testid' => 'status',
+            ])
             <div class="flex w-full flex-wrap gap-3 md:ms-auto md:w-auto md:flex-nowrap">
                 <div class="w-full md:w-40">
                     <x-select wire:model.live="kind" :options="[['id' => '', 'name' => 'Tipo'], ['id' => 'horario', 'name' => 'Horario'], ['id' => 'salon', 'name' => 'Salón']]" aria-label="Tipo de cambio" data-testid="kind-filter" />
@@ -71,5 +91,24 @@
                 @endif
             </section>
         </div>
+    @endif
+
+    @if ($canRequest)
+        <x-modal wire:model="showRequest" box-class="max-w-xl" aria-labelledby="request-title" data-testid="request-modal">
+            @if ($showRequest)
+                <form wire:submit="sendRequest" class="space-y-5" novalidate>
+                    <h2 id="request-title" class="text-xl font-bold">Nueva solicitud de cambio</h2>
+
+                    @include('staffing::change-requests.group-picker')
+
+                    @include('staffing::change-requests.request-fields')
+
+                    <div class="flex flex-wrap justify-end gap-2 border-t border-base-300 pt-4">
+                        <x-button label="Cancelar" class="btn-ghost max-md:h-11 max-md:min-h-11" wire:click="$set('showRequest', false)" />
+                        <x-button label="Enviar solicitud" type="submit" icon="o-paper-airplane" class="btn-primary max-md:h-11 max-md:min-h-11" spinner="sendRequest" data-testid="send-request" />
+                    </div>
+                </form>
+            @endif
+        </x-modal>
     @endif
 </div>

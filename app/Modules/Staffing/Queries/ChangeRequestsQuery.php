@@ -3,6 +3,7 @@
 namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
@@ -16,6 +17,8 @@ use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\ChangeRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Lo que lee la pantalla «Solicitudes de cambio» (tarea 3.11, maqueta A): las solicitudes de un departamento en el
@@ -25,8 +28,8 @@ use Illuminate\Database\Eloquent\Collection;
  *
  * Quién ve una solicitud es ChangeRequestPolicy::view en SQL (visible()): quien la pidió; quien tiene ver, decidir o
  * aplicar las de salón sobre el campus y el departamento del grupo (jefes, jefe de proyecto docente, Subdirección), y
- * el coordinador de la carrera dueña del grupo en su campus, solo las de horario (las aplica él). Un número constante
- * de consultas.
+ * el coordinador de la carrera dueña del grupo en su campus, solo las de horario (las aplica él). También da los grupos
+ * en que el coordinador puede pedir una nueva. Un número constante de consultas.
  */
 final class ChangeRequestsQuery
 {
@@ -110,6 +113,35 @@ final class ChangeRequestsQuery
     }
 
     /**
+     * Los grupos en que puede pedir un cambio como coordinador (confirmado el 7 de noviembre de 2026): los no cancelados
+     * de las carreras dueñas que cubre su permiso de pedir, en el periodo y el campus, de cualquier departamento cuya
+     * carga esté en Asignación o Ajustes; por semestre y clave, con su materia, su departamento y sus sesiones.
+     *
+     * @return Collection<int, Group>
+     */
+    public function requestableGroups(Actor $context, string $termId, string $campusId): Collection
+    {
+        return $this->requestable($context, $termId, $campusId)
+            ->with(['subject:id,code,name', 'department:id,code', 'sessions'])
+            ->orderBy('groups.semester')
+            ->orderBy('groups.code')
+            ->get();
+    }
+
+    public function hasRequestableGroups(Actor $context, string $termId, string $campusId): bool
+    {
+        return $this->requestable($context, $termId, $campusId)->exists();
+    }
+
+    /**
+     * Un grupo en que puede pedir, por un id que llega del cliente, con su docente (lo pide la policy).
+     */
+    public function requestableGroup(Actor $context, string $termId, string $campusId, string $id): ?Group
+    {
+        return KeyLookup::find($this->requestable($context, $termId, $campusId)->with('teacher'), $id);
+    }
+
+    /**
      * Deja en `$query` solo las solicitudes que ve (ChangeRequestPolicy::view). Cada permiso va en su propio grupo,
      * que arranca con `true` para que el admin, con quien constrain() no agrega nada, lo vea todo.
      *
@@ -134,6 +166,24 @@ final class ChangeRequestsQuery
                 'campus' => 'campus_id',
                 'career' => fn (Builder $groups, array $careers) => $groups->whereIn('group_id', Group::query()->select('id')->whereIn('owner_career_id', $careers)),
             ])));
+    }
+
+    /**
+     * @return Builder<Group>
+     */
+    private function requestable(Actor $context, string $termId, string $campusId): Builder
+    {
+        $groups = Group::query()
+            ->active()
+            ->where('groups.term_id', $termId)
+            ->where('groups.campus_id', $campusId)
+            ->whereExists(fn (QueryBuilder $load) => $load->select(DB::raw(1))->from('academic_loads')
+                ->whereColumn('academic_loads.term_id', 'groups.term_id')
+                ->whereColumn('academic_loads.campus_id', 'groups.campus_id')
+                ->whereColumn('academic_loads.department_id', 'groups.department_id')
+                ->whereIn('academic_loads.status', [LoadStatus::Staffing->value, LoadStatus::Adjusting->value]));
+
+        return $context->constrain($groups, StaffingPermission::ChangeRequestRequest, ['campus' => 'groups.campus_id', 'career' => 'groups.owner_career_id']);
     }
 
     /**

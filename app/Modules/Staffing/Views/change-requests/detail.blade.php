@@ -1,8 +1,9 @@
 {{--
-    El detalle de la solicitud elegida (staffing::pages.change-requests, maqueta A): el grupo y el estado; docente,
-    quién la pidió, grupo, carrera dueña y campus; la foto de las sesiones al pedirla contra lo que se propone; el motivo;
-    el historial (pidió, aprobó o rechazó con su comentario, aplicó) y, abajo, lo que le toca a quien la ve: decidir
-    (el jefe), aplicar (el coordinador si es de horario, el jefe si es de salón) o quién sigue.
+    El detalle de la solicitud elegida (staffing::pages.change-requests, maqueta A): el grupo, el estado y, en un renglón,
+    el docente, quién la pidió (si fue la coordinación), la materia, la carrera dueña y el campus; la foto de las sesiones
+    al pedirla contra lo que se propone; el motivo; el historial (pidió, aprobó o rechazó con su comentario, aplicó) y,
+    en un pie pegado abajo del panel, lo que le toca a quien lo ve: decidir (el jefe), aplicar (el coordinador si es de
+    horario, el jefe si es de salón) o quién sigue.
 --}}
 @use('App\Modules\Staffing\Enums\ChangeRequestKind')
 @use('App\Modules\Staffing\Enums\ChangeRequestStatus')
@@ -15,37 +16,31 @@
     $byCoordination = $request->teacher_id === null;
     $when = fn ($date) => $date?->timezone($tz)->translatedFormat('j M Y, H:i');
 @endphp
-<div class="@container" data-testid="request-detail-body">
+<div class="@container flex min-h-full flex-col" data-testid="request-detail-body">
     <header class="space-y-3 border-b border-base-300 px-5 py-4">
-        <button type="button" wire:click="back" class="btn btn-sm lg:hidden max-md:h-11 max-md:min-h-11" data-testid="request-back"><x-icon name="o-chevron-left" class="h-4 w-4" />Solicitudes</button>
+        <button type="button" wire:click="back" class="btn btn-ghost btn-sm -ms-2 lg:hidden max-md:h-11 max-md:min-h-11" data-testid="request-back"><x-icon name="o-chevron-left" class="h-4 w-4" aria-hidden="true" />Solicitudes</button>
         <h2 class="text-xl font-bold leading-tight" tabindex="-1" data-testid="request-detail-title">
             {{ $group->subject->name }} · <span class="font-mono">{{ $group->code }}</span>
         </h2>
         <div class="flex flex-wrap items-center gap-2">
-            <x-core::status-badge :tone="$request->status->tone()" :label="$request->status->label()" data-testid="request-status" />
+            <x-core::status-badge :tone="$request->status->tone()" :label="$request->status->label()" :icon="$request->status->icon()" data-testid="request-status" />
             <span class="badge badge-neutral badge-soft h-6.5 gap-1.5 font-medium">
-                <x-icon :name="$isSchedule ? 'o-clock' : 'o-map-pin'" class="h-3.5 w-3.5" aria-hidden="true" />{{ $request->kind->label() }}
+                <x-icon :name="$isSchedule ? 'o-calendar-days' : 'o-map-pin'" class="h-3.5 w-3.5" aria-hidden="true" />{{ $request->kind->label() }}
             </span>
             <span class="text-sm text-neutral">Pedida el <span class="tabular-nums">{{ $when($request->created_at) }}</span></span>
         </div>
+        <dl class="flex flex-wrap gap-x-5 gap-y-1 text-sm" data-testid="request-facts">
+            <div class="flex gap-1.5"><dt class="text-neutral">Docente</dt><dd class="font-semibold">{{ $request->teacher?->name ?? 'Sin docente' }}</dd></div>
+            @if ($byCoordination)
+                <div class="flex gap-1.5"><dt class="text-neutral">La pidió</dt><dd>{{ $request->requestedBy?->name }} <span class="text-neutral">· coordinación</span></dd></div>
+            @endif
+            <div class="flex gap-1.5"><dt class="text-neutral">Materia</dt><dd class="font-mono">{{ $group->subject->code }}</dd></div>
+            <div class="flex min-w-0 gap-1.5"><dt class="shrink-0 text-neutral">Carrera dueña</dt><dd class="min-w-0"><span class="font-mono font-semibold">{{ $career?->code }}</span> {{ $career?->name }}</dd></div>
+            <div class="flex gap-1.5"><dt class="text-neutral">Campus</dt><dd>{{ $campusName }}</dd></div>
+        </dl>
     </header>
 
-    <div class="max-w-[60rem] space-y-6 px-5 py-5">
-        <dl class="grid gap-x-6 gap-y-3 text-sm @[32rem]:grid-cols-[9rem_minmax(0,1fr)]">
-            <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral @[32rem]:pt-0.5">Docente</dt>
-            <dd class="font-semibold">{{ $request->teacher?->name ?? '—' }}</dd>
-            @if ($byCoordination)
-                <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral @[32rem]:pt-0.5">La pidió</dt>
-                <dd>{{ $request->requestedBy?->name }} <span class="text-neutral">· coordinación</span></dd>
-            @endif
-            <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral @[32rem]:pt-0.5">Grupo</dt>
-            <dd><span class="font-mono font-semibold">{{ $group->code }}</span> · <span class="font-mono">{{ $group->subject->code }}</span> {{ $group->subject->name }}</dd>
-            <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral @[32rem]:pt-0.5">Carrera dueña</dt>
-            <dd><span class="font-mono font-semibold">{{ $career?->code }}</span> · {{ $career?->name }}</dd>
-            <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral @[32rem]:pt-0.5">Campus</dt>
-            <dd>{{ $campusName }}</dd>
-        </dl>
-
+    <div class="max-w-[60rem] flex-1 space-y-6 px-5 py-5">
         <section aria-labelledby="request-change-title">
             <h3 id="request-change-title" class="mb-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $isSchedule ? 'Cambio de horario' : 'Cambio de salón' }}</h3>
             <div class="grid items-stretch gap-2 @[34rem]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
@@ -105,41 +100,41 @@
                 @endif
             </ol>
         </section>
-
-        @if ($request->status === ChangeRequestStatus::Pending)
-            <div class="space-y-3 border-t border-base-300 pt-5" data-testid="request-decision">
-                @if ($canDecide)
-                    <x-textarea label="Comentario" wire:model="comment" rows="3" maxlength="{{ $maxText }}" hint="Opcional al aprobar; obligatorio al rechazar. Lo ve quien la pidió." data-testid="decision-comment" />
-                    @error('status')
-                        <p class="text-sm text-error">{{ $message }}</p>
-                    @enderror
-                    <div class="flex flex-wrap justify-end gap-2">
-                        <x-button label="Rechazar" icon="o-x-circle" class="btn-outline btn-error max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="reject" spinner="reject" data-testid="reject-request" />
-                        <x-button label="Aprobar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" data-testid="approve-request" />
-                    </div>
-                @else
-                    <p class="flex items-center gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="h-4 w-4 shrink-0" />La revisa el jefe del departamento.</p>
-                @endif
-            </div>
-        @elseif ($request->status === ChangeRequestStatus::Approved)
-            <div class="space-y-3 border-t border-base-300 pt-5" data-testid="request-application">
-                @if ($canApply)
-                    <p class="text-sm">{{ $isSchedule ? 'Acomoda el cambio en el editor de horarios y luego márcala como aplicada.' : 'Asigna el salón y luego márcala como aplicada.' }}</p>
-                    @error('status')
-                        <p class="text-sm text-error">{{ $message }}</p>
-                    @enderror
-                    <div class="flex flex-wrap justify-end gap-2">
-                        @if ($editorUrl !== null)
-                            <a href="{{ $editorUrl }}" class="btn btn-outline max-md:h-11 max-md:min-h-11 max-md:flex-1" data-testid="open-editor"><x-icon name="o-arrow-top-right-on-square" class="h-4 w-4" />Abrir en el editor</a>
-                        @endif
-                        <x-button label="Marcar como aplicada" icon="o-check-badge" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="markApplied" spinner="markApplied" data-testid="apply-request" />
-                    </div>
-                @else
-                    <p class="flex items-center gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="h-4 w-4 shrink-0" />
-                        {{ $isSchedule ? "La aplica la coordinación de {$career?->code} en el editor de horarios." : 'La aplica el jefe del departamento al asignar salones.' }}
-                    </p>
-                @endif
-            </div>
-        @endif
     </div>
+
+    @if ($request->status === ChangeRequestStatus::Pending)
+        <footer class="sticky bottom-0 z-10 space-y-3 border-t border-base-300 bg-base-100 px-5 py-4" data-testid="request-decision">
+            @if ($canDecide)
+                <x-textarea label="Comentario" wire:model="comment" rows="2" maxlength="{{ $maxText }}" placeholder="Opcional al aprobar" data-testid="decision-comment" />
+                @error('status')
+                    <p class="text-sm text-error">{{ $message }}</p>
+                @enderror
+                <div class="flex flex-wrap justify-end gap-2">
+                    <x-button label="Rechazar" icon="o-x-circle" class="btn-outline btn-error max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="reject" spinner="reject" data-testid="reject-request" />
+                    <x-button label="Aprobar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" data-testid="approve-request" />
+                </div>
+            @else
+                <p class="flex items-center gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />La revisa el jefe del departamento.</p>
+            @endif
+        </footer>
+    @elseif ($request->status === ChangeRequestStatus::Approved)
+        <footer class="sticky bottom-0 z-10 space-y-3 border-t border-base-300 bg-base-100 px-5 py-4" data-testid="request-application">
+            @if ($canApply)
+                <p class="text-sm">{{ $isSchedule ? 'Acomoda el cambio en el editor de horarios y luego márcala como aplicada.' : 'Asigna el salón y luego márcala como aplicada.' }}</p>
+                @error('status')
+                    <p class="text-sm text-error">{{ $message }}</p>
+                @enderror
+                <div class="flex flex-wrap justify-end gap-2">
+                    @if ($editorUrl !== null)
+                        <a href="{{ $editorUrl }}" wire:navigate class="btn btn-outline max-md:h-11 max-md:min-h-11 max-md:flex-1" data-testid="open-editor"><x-icon name="o-arrow-top-right-on-square" class="h-4 w-4" aria-hidden="true" />Abrir en el editor</a>
+                    @endif
+                    <x-button label="Marcar como aplicada" icon="o-check-badge" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="markApplied" spinner="markApplied" data-testid="apply-request" />
+                </div>
+            @else
+                <p class="flex items-center gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {{ $isSchedule ? "La aplica la coordinación de {$career?->code} en el editor de horarios." : 'La aplica el jefe del departamento al asignar salones.' }}
+                </p>
+            @endif
+        </footer>
+    @endif
 </div>
