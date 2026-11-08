@@ -34,6 +34,11 @@ final class AcademicLoadPolicy
         return $this->can($user, AcademicLoadPermission::LoadPropose, $load);
     }
 
+    public function startStaffing(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadStartStaffing, $load);
+    }
+
     private function can(User $user, AcademicLoadPermission $permission, AcademicLoad $load): bool
     {
         return $this->actor($user)->allows($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
