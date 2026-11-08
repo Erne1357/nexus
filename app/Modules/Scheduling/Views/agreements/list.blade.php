@@ -19,7 +19,7 @@
 <div class="min-h-0 flex-1 overflow-auto max-lg:overflow-visible" data-agreements-list
     x-data="{
         open: { decide: true, sent: true, done: window.matchMedia('(min-width:1024px)').matches },
-        choosable() { return [...$root.querySelectorAll('[data-select]:not(:disabled)')].map((box) => box.value) },
+        choosable() { return [...$root.querySelectorAll('[data-select]:not(:disabled)')].map((box) => box.value).slice(0, {{ $maxBulk }}) },
         allChosen() { const ids = this.choosable(); return ids.length > 0 && ids.every((id) => $wire.selected.includes(id)) },
         toggleAll() { $wire.selected = this.allChosen() ? [] : this.choosable() },
     }">
@@ -40,8 +40,14 @@
                     <button type="button" x-on:click="toggleAll()" class="btn btn-ghost btn-sm max-md:h-11 max-md:min-h-11" data-testid="agreements-select-all">
                         <x-icon name="o-check-circle" class="h-4 w-4" x-show="! allChosen()" />
                         <x-icon name="o-minus-circle" class="h-4 w-4" x-show="allChosen()" x-cloak />
-                        <span x-text="allChosen() ? 'Quitar la selección' : 'Elegir los {{ count($selectable) }} que puedes aceptar'">Elegir los {{ count($selectable) }} que puedes aceptar</span>
+                        @php
+                            $chooseLabel = count($selectable) > $maxBulk ? "Elegir los primeros {$maxBulk} de ".count($selectable).' que puedes aceptar' : 'Elegir los '.count($selectable).' que puedes aceptar';
+                        @endphp
+                        <span x-text="allChosen() ? 'Quitar la selección' : @js($chooseLabel)">{{ $chooseLabel }}</span>
                     </button>
+                    @if (count($selectable) > $maxBulk)
+                        <span class="ms-auto text-sm text-neutral">Se aceptan hasta {{ $maxBulk }} a la vez.</span>
+                    @endif
                 </div>
             @endif
             @forelse ($rows as $row)
@@ -97,7 +103,7 @@
     @endforeach
 </div>
 @if ($groups['decide'] !== [])
-    <div class="flex items-center gap-2 border-t border-base-300 bg-base-100 px-3 py-2.5 max-lg:sticky max-lg:bottom-0 max-lg:z-10" data-testid="bulk-bar"
+    <div class="flex flex-wrap items-center gap-2 border-t border-base-300 bg-base-100 px-3 py-2.5 max-lg:sticky max-lg:bottom-0 max-lg:z-10" data-testid="bulk-bar"
         x-data="{
             confirmText() {
                 const n = $wire.selected.length
@@ -107,10 +113,15 @@
         x-show="$wire.selected.length > 0" @if ($selected === []) x-cloak @endif>
         <span class="me-auto text-sm"><span class="font-mono font-semibold" x-text="$wire.selected.length">{{ count($selected) }}</span> <span x-text="$wire.selected.length === 1 ? 'elegido' : 'elegidos'">{{ count($selected) === 1 ? 'elegido' : 'elegidos' }}</span></span>
         <button type="button" class="btn btn-ghost max-md:h-11 max-md:min-h-11" x-on:click="$wire.selected = []" data-testid="bulk-clear">Quitar</button>
-        <button type="button" class="btn btn-primary max-md:h-11 max-md:min-h-11" x-on:click="if (confirm(confirmText())) $wire.acceptMany()" wire:loading.attr="disabled" wire:target="acceptMany" data-testid="bulk-accept">
+        <button type="button" class="btn btn-primary max-md:h-11 max-md:min-h-11" x-on:click="if (confirm(confirmText())) $wire.acceptMany()" x-bind:disabled="$wire.selected.length > {{ $maxBulk }}"
+            aria-describedby="bulk-limit" wire:loading.attr="disabled" wire:target="acceptMany" data-testid="bulk-accept">
             <span class="loading loading-spinner loading-sm" wire:loading wire:target="acceptMany"></span>
             <x-icon name="o-check" class="h-4 w-4" wire:loading.remove wire:target="acceptMany" />
             <span x-text="'Aceptar ' + $wire.selected.length">Aceptar {{ count($selected) }}</span>
         </button>
+        <p id="bulk-limit" class="basis-full text-sm text-error" role="alert" x-show="$wire.selected.length > {{ $maxBulk }}" x-cloak>Se aceptan hasta {{ $maxBulk }} a la vez: quita algunos de la selección.</p>
+        @error('selected')
+            <p class="basis-full text-sm text-error" role="alert" data-testid="bulk-error">{{ $message }}</p>
+        @enderror
     </div>
 @endif

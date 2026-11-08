@@ -50,6 +50,9 @@ new #[Title('Acuerdos')] class extends Component
 {
     use Toast;
 
+    /** Cuántos acuerdos se aceptan juntos a lo más (supuesto por confirmar). */
+    private const int MAX_BULK = 50;
+
     /** Id del acuerdo abierto; '' abre el primero por decidir (o enviado). */
     #[Url(as: 'acuerdo')]
     public string $agreementId = '';
@@ -248,43 +251,48 @@ new #[Title('Acuerdos')] class extends Component
     }
 
     /**
-     * Acepta los acuerdos elegidos, uno por uno, cada uno con su Action en su propia transacción: lleva su bitácora y su
-     * aviso como si se aceptara solo, y uno que falla (HC-07, un préstamo que empalma, uno que ya se decidió) no deshace
-     * los demás. Antes de aceptar nada revisa cada id como `accept`: uno que no ve es 404 y uno que no decide, 403.
-     * Los acepta en el orden de la lista (del pedido más antiguo al más reciente, y por id), no en el que se eligieron,
-     * para que dos que compiten por los mismos lugares (HC-07) se resuelvan siempre igual. Un error de la base en uno
-     * (un deadlock, una restricción sin traducir) se reporta como fallido y se sigue con los demás. Los que fallan y
-     * siguen por decidir se quedan elegidos.
+     * Acepta los acuerdos elegidos (hasta MAX_BULK), uno por uno, cada uno con su Action en su propia transacción:
+     * lleva su bitácora y su aviso como si se aceptara solo, y uno que falla no deshace los demás. Uno que el actor ya
+     * no ve o ya no decide (otro departamento, otro campus, un id que no es de un acuerdo) no se acepta ni se nombra:
+     * va a los que no se aceptaron como «Ya no está disponible.». Los demás se aceptan en el orden de la lista (del
+     * pedido más antiguo al más reciente, y por id), no en el que se eligieron, para que dos que compiten por los mismos
+     * lugares (HC-07) se resuelvan siempre igual. Lo que rechaza la regla se dice con su mensaje; un error de la base o
+     * cualquier otro se reporta y se dice sin detalle. Los que fallan y siguen por decidir se quedan elegidos.
      */
     public function acceptMany(Actor $context, AgreementsInboxQuery $query, AcceptRoomLoan $loan, AcceptSharedGroup $shared): void
     {
         $this->authorizeView();
+        abort_if($this->termId === null, 404);
         $this->validate(
-            ['selected' => ['required', 'array', 'max:200'], 'selected.*' => ['string']],
-            ['selected.required' => 'Elige los acuerdos que vas a aceptar.', 'selected.max' => 'Acepta hasta 200 a la vez.'],
+            ['selected' => ['required', 'array', 'max:'.self::MAX_BULK], 'selected.*' => ['string']],
+            ['selected.required' => 'Elige los acuerdos que vas a aceptar.', 'selected.max' => 'Acepta hasta '.self::MAX_BULK.' a la vez.'],
         );
-
-        $agreements = collect(array_values(array_unique($this->selected)))
-            ->map(function (string $id) use ($context, $query): InterdepartmentalAgreement {
-                $agreement = $this->find($id, $context, $query);
-                $this->authorize('decide', $agreement);
-
-                return $agreement;
-            })
-            ->sortBy([
-                fn (InterdepartmentalAgreement $a, InterdepartmentalAgreement $b): int => $a->created_at?->format('Y-m-d H:i:s.u') <=> $b->created_at?->format('Y-m-d H:i:s.u'),
-                fn (InterdepartmentalAgreement $a, InterdepartmentalAgreement $b): int => strcmp($a->getKey(), $b->getKey()),
-            ])
-            ->values();
 
         $open = $this->agreementId === '' ? null : $this->findOrNull($this->agreementId, $context, $query);
         $openRow = $open === null ? null : $query->row($open);
         $accepted = [];
         $failed = [];
-
         $retry = [];
+        $candidates = [];
 
-        foreach ($agreements as $agreement) {
+        foreach (array_values(array_unique($this->selected)) as $id) {
+            $agreement = $this->findOrNull($id, $context, $query);
+
+            if ($agreement === null || Gate::denies('decide', $agreement)) {
+                $failed[] = ['label' => 'Un acuerdo', 'message' => 'Ya no está disponible.'];
+
+                continue;
+            }
+
+            $candidates[] = $agreement;
+        }
+
+        $inOrder = collect($candidates)->sortBy([
+            fn (InterdepartmentalAgreement $a, InterdepartmentalAgreement $b): int => $a->created_at?->format('Y-m-d H:i:s.u') <=> $b->created_at?->format('Y-m-d H:i:s.u'),
+            fn (InterdepartmentalAgreement $a, InterdepartmentalAgreement $b): int => strcmp($a->getKey(), $b->getKey()),
+        ]);
+
+        foreach ($inOrder as $agreement) {
             try {
                 $agreement->kind === AgreementKind::RoomLoan ? $loan->handle($agreement, auth()->user()) : $shared->handle($agreement, auth()->user());
                 $accepted[] = $agreement->getKey();
@@ -295,13 +303,21 @@ new #[Title('Acuerdos')] class extends Component
             } catch (QueryException|DeadlockException $e) {
                 report($e);
                 $message = 'No se pudo aceptar por un error de la base de datos; intenta de nuevo.';
+            } catch (Throwable $e) {
+                report($e);
+                $message = 'No se pudo aceptar por un error inesperado; intenta de nuevo.';
             }
 
-            $fresh = $agreement->fresh() ?? $agreement;
-            $failed[] = ['label' => $this->label($query->row($fresh)), 'message' => $message];
+            try {
+                $fresh = $agreement->fresh() ?? $agreement;
+                $failed[] = ['label' => $this->label($query->row($fresh)), 'message' => $message];
 
-            if ($fresh->status === AgreementStatus::Proposed) {
-                $retry[] = $agreement->getKey();
+                if ($fresh->status === AgreementStatus::Proposed) {
+                    $retry[] = $agreement->getKey();
+                }
+            } catch (Throwable $e) {
+                report($e);
+                $failed[] = ['label' => 'Un acuerdo', 'message' => $message];
             }
         }
 
@@ -352,6 +368,7 @@ new #[Title('Acuerdos')] class extends Component
             'filtered' => $this->kind !== '' || trim($this->search) !== '',
             'blocked' => $blocked,
             'selectable' => $this->selectable($groups['decide'], $blocked),
+            'maxBulk' => self::MAX_BULK,
         ];
     }
 

@@ -22,6 +22,7 @@ use App\Modules\Scheduling\Models\GroupSession;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -297,26 +298,105 @@ describe('aceptar varios', function () {
         Event::assertDispatchedTimes(AgreementAccepted::class, 2);
     });
 
-    it('un id ajeno en la selección no acepta nada: de otro departamento es 404 y uno que solo ve es 403', function () {
+    it('un id ajeno, de otro campus, que solo ve o que no es uuid no se acepta ni se nombra: «Ya no está disponible» y los demás sí', function () {
         $foreign = InterdepartmentalAgreement::factory()->create([
             'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->cb->id,
         ]);
-
-        agreementsAs($this->jefeSc)->set('selected', [$this->share->id, $foreign->id])->call('acceptMany')->assertNotFound();
-        agreementsAs($this->jefeIi)->set('selected', [$this->loan->id])->call('acceptMany')->assertForbidden();
-
         $otherCampus = Campus::factory()->create();
         TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $otherCampus->id]);
         $elsewhere = InterdepartmentalAgreement::factory()->create([
             'term_id' => $this->term->id, 'campus_id' => $otherCampus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
         ]);
+        $unavailable = ['label' => 'Un acuerdo', 'message' => 'Ya no está disponible.'];
 
-        agreementsAs($this->jefeSc)->set('selected', [$elsewhere->id])->call('acceptMany')->assertNotFound();
+        agreementsAs($this->jefeSc)
+            ->set('selected', [$foreign->id, $this->share->id, 'no-es-uuid', $elsewhere->id])
+            ->call('acceptMany')
+            ->assertOk()
+            ->assertSet('bulkResult', ['accepted' => 1, 'failed' => [$unavailable, $unavailable, $unavailable]])
+            ->assertSet('selected', [])
+            ->assertDontSee('Ciencias Básicas');
 
-        expect($this->share->fresh()->status)->toBe(AgreementStatus::Proposed)
-            ->and($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed)
-            ->and($elsewhere->fresh()->status)->toBe(AgreementStatus::Proposed);
-        Event::assertNotDispatched(AgreementAccepted::class);
+        agreementsAs($this->jefeIi)->set('selected', [$this->loan->id])->call('acceptMany')->assertOk()->assertSet('bulkResult', ['accepted' => 0, 'failed' => [$unavailable]]);
+
+        expect($this->share->fresh()->status)->toBe(AgreementStatus::Accepted)
+            ->and($foreign->fresh()->status)->toBe(AgreementStatus::Proposed)
+            ->and($elsewhere->fresh()->status)->toBe(AgreementStatus::Proposed)
+            ->and($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
+        Event::assertDispatchedTimes(AgreementAccepted::class, 1);
+    });
+
+    it('uno que otra sesión ya decidió va a los que no se aceptaron y sale de la selección', function () {
+        $component = agreementsAs($this->jefeSc)->set('selected', [$this->share->id, $this->loan->id]);
+        $this->loan->update(['status' => AgreementStatus::Rejected, 'comment' => 'No.', 'decided_by' => $this->jefeSc->id, 'decided_at' => now()]);
+
+        $component->call('acceptMany')
+            ->assertSet('bulkResult.accepted', 1)
+            ->assertSet('bulkResult.failed.0.message', 'Este acuerdo ya se decidió.')
+            ->assertSet('selected', []);
+
+        expect($this->share->fresh()->status)->toBe(AgreementStatus::Accepted);
+    });
+
+    it('un error inesperado que no es de la base en uno se reporta, se dice sin detalle y los demás siguen', function () {
+        Exceptions::fake();
+        GroupQuota::creating(function (GroupQuota $quota): void {
+            if ($quota->career_id === $this->career->id) {
+                throw new RuntimeException('Falla simulada de la Action');
+            }
+        });
+
+        agreementsAs($this->jefeSc)
+            ->set('selected', [$this->share->id, $this->loan->id])
+            ->call('acceptMany')
+            ->assertOk()
+            ->assertSet('bulkResult.accepted', 1)
+            ->assertSet('bulkResult.failed.0.message', 'No se pudo aceptar por un error inesperado; intenta de nuevo.')
+            ->assertDontSee('Falla simulada')
+            ->assertSet('selected', [$this->share->id]);
+
+        Exceptions::assertReported(RuntimeException::class);
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Accepted);
+    });
+
+    it('acepta hasta 50 a la vez: con más no acepta ninguno, y la lista lo dice cuando hay más de 50 por decidir', function () {
+        $many = InterdepartmentalAgreement::factory()->count(49)->sharedGroup(1)->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => Group::factory()->withQuota(20)->create([
+                'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'capacity' => 200,
+            ])->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+        ]);
+
+        agreementsAs($this->jefeSc)
+            ->assertSee('Elegir los primeros 50 de 52 que puedes aceptar')
+            ->assertSee('Se aceptan hasta 50 a la vez.')
+            ->set('selected', [...$many->pluck('id')->all(), $this->share->id, $this->loan->id])
+            ->call('acceptMany')
+            ->assertHasErrors(['selected' => 'max'])
+            ->assertSee('Acepta hasta 50 a la vez.');
+
+        expect(InterdepartmentalAgreement::query()->where('status', AgreementStatus::Accepted)->count())->toBe(0);
+    });
+
+    it('acepta 50 (40 grupos compartidos y 10 préstamos) en una sola petición en poco tiempo', function () {
+        $this->group->update(['capacity' => 200]);
+        $shares = InterdepartmentalAgreement::factory()->count(40)->sharedGroup(1)->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+        ]);
+        $building = Building::factory()->create(['campus_id' => $this->campus->id]);
+        $loans = collect(range(1, 10))->map(fn (int $i): InterdepartmentalAgreement => InterdepartmentalAgreement::factory()->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'room_id' => Room::factory()->create(['building_id' => $building->id, 'department_id' => $this->sc->id, 'code' => "LB-{$i}"])->id,
+            'day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00', 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+        ]));
+        $component = agreementsAs($this->jefeSc)->set('selected', [...$shares->pluck('id')->all(), ...$loans->pluck('id')->all()]);
+
+        $started = microtime(true);
+        $component->call('acceptMany')->assertSet('bulkResult.accepted', 50);
+        $seconds = microtime(true) - $started;
+
+        expect($seconds)->toBeLessThan(20.0);
     });
 
     it('acepta del más antiguo al más reciente aunque se elijan al revés: con lugar para uno solo, gana el más antiguo (HC-07)', function () {
