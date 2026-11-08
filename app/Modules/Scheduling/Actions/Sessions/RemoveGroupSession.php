@@ -3,6 +3,7 @@
 namespace App\Modules\Scheduling\Actions\Sessions;
 
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -15,14 +16,16 @@ use Illuminate\Validation\ValidationException;
  * Quita una sesión de un grupo desde el editor de horarios (tarea 3.5): la sesión completa, con todos sus bloques
  * (supuesto por confirmar). No es catálogo ni bitácora: la fila se borra y lo que tenía queda en la bitácora del grupo
  * (`session_removed`). Con el grupo y la sesión releídos con bloqueo exige un grupo sin cancelar y la carga editable
- * (SessionRules). El grupo se nombra en la bitácora con su materia y su clave (SessionRules::label()). Avisa con
- * GroupScheduleChanged después del commit. No sabe de puestos.
+ * (SessionRules). Si la sesión tenía salón, deja los préstamos (HC-10) del grupo en ese salón y día al tamaño de las
+ * sesiones que quedan (SyncSessionLoans): cancela los que ya no tocan ninguna. El grupo se nombra en la bitácora con su
+ * materia y su clave (SessionRules::label()). Avisa con GroupScheduleChanged después del commit. No sabe de puestos.
  */
 final class RemoveGroupSession
 {
     public function __construct(
         private readonly SessionRules $rules,
         private readonly LoadEditability $editability,
+        private readonly SyncSessionLoans $loans,
     ) {}
 
     /**
@@ -40,6 +43,10 @@ final class RemoveGroupSession
 
             $session->delete();
             $label = SessionRules::label($group);
+
+            if ($session->room_id !== null) {
+                $this->loans->resync($group, Room::withTrashed()->findOrFail($session->room_id), $session->day, $actor);
+            }
 
             activity()
                 ->causedBy($actor)

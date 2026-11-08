@@ -15,6 +15,7 @@ enum StaffingPermission: string implements Permission
 {
     case RankingView = 'staffing.ranking.view';
     case TeacherAssign = 'staffing.teacher.assign';
+    case TeacherLoadView = 'staffing.teacher_load.view';
     case ChangeRequestRequestOwn = 'staffing.change_request.request_own';
     case ChangeRequestRequest = 'staffing.change_request.request';
     case ChangeRequestView = 'staffing.change_request.view';
@@ -27,6 +28,7 @@ enum StaffingPermission: string implements Permission
         return match ($this) {
             self::RankingView => 'Ver el ranking de docentes de un grupo',
             self::TeacherAssign => 'Asignar el docente de un grupo',
+            self::TeacherLoadView => 'Ver la carga por docente de un departamento',
             self::ChangeRequestRequestOwn => 'Pedir un cambio en un grupo propio (docente)',
             self::ChangeRequestRequest => 'Pedir un cambio en un grupo de su carrera (coordinador)',
             self::ChangeRequestView => 'Ver las solicitudes de cambio de un departamento',

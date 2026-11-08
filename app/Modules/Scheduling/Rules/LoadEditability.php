@@ -9,9 +9,11 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use Closure;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
+use PDOException;
 
 /**
  * La única regla de «grupo editable» del editor de horarios (3.5) y de los cupos (3.6): el grupo no está cancelado y
@@ -19,7 +21,8 @@ use Illuminate\Validation\ValidationException;
  * permisos"). Un grupo sin fila de carga no se edita (supuesto por confirmar, lo más restrictivo).
  *
  * Orden de candados: las Actions toman la carga con lockLoad() (FOR SHARE) antes de bloquear el grupo (FOR UPDATE),
- * como las transiciones de carga, para no provocar un deadlock; si aun así la base lo detecta, guard() lo traduce.
+ * como las transiciones de carga, para no provocar un deadlock; si aun así la base lo detecta, guard() lo traduce, también
+ * cuando Laravel lo envuelve en un DeadlockException al salir de una transacción anidada.
  */
 final class LoadEditability
 {
@@ -124,7 +127,7 @@ final class LoadEditability
     {
         try {
             return $work();
-        } catch (QueryException $exception) {
+        } catch (QueryException|DeadlockException $exception) {
             if ($this->isDeadlock($exception)) {
                 throw ValidationException::withMessages([$key => 'Otra persona está cambiando esta carga; intenta de nuevo.']);
             }
@@ -133,9 +136,19 @@ final class LoadEditability
         }
     }
 
-    public function isDeadlock(QueryException $exception): bool
+    /**
+     * Si el error es un deadlock (40P01), aunque Laravel lo haya envuelto en un DeadlockException al salir de una
+     * transacción anidada.
+     */
+    public function isDeadlock(PDOException $exception): bool
     {
-        return (string) $exception->getCode() === self::DEADLOCK || ($exception->errorInfo[0] ?? null) === self::DEADLOCK;
+        for ($current = $exception; $current !== null; $current = $current->getPrevious()) {
+            if ((string) $current->getCode() === self::DEADLOCK || ($current instanceof PDOException && ($current->errorInfo[0] ?? null) === self::DEADLOCK)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function isEditable(?LoadStatus $status): bool

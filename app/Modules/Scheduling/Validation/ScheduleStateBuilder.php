@@ -54,6 +54,9 @@ final class ScheduleStateBuilder
     /** @var array<string, mixed> */
     private array $settings = [];
 
+    /** @var array<string, string> */
+    private array $campusCodes = [];
+
     public function __construct(private readonly string $termId = 'term') {}
 
     public function group(StateGroup $group): self
@@ -127,6 +130,13 @@ final class ScheduleStateBuilder
         return $this;
     }
 
+    public function campusCode(string $campusId, string $code): self
+    {
+        $this->campusCodes[$campusId] = $code;
+
+        return $this;
+    }
+
     public function offering(string $careerId, string $campusId): self
     {
         $this->offerings["{$careerId}|{$campusId}"] = true;
@@ -164,6 +174,7 @@ final class ScheduleStateBuilder
             $this->offerings,
             $this->activePlans,
             $this->settings,
+            $this->campusCodes,
         );
     }
 }
