@@ -32,7 +32,7 @@
         @foreach ($grid->days as $index => $day)
             <div @class([$headBg, 'sticky top-0 z-[6] flex min-w-0 flex-col justify-center border-b border-base-300 px-2 py-1.5', 'border-l' => $index > 0])>
                 <b class="truncate font-semibold">{{ $day['name'] }}</b>
-                <span class="font-mono text-xs leading-tight text-neutral">{{ $busy[$day['day']] }} h ocupadas</span>
+                <span class="text-xs leading-tight text-neutral"><span class="font-mono">{{ $busy[$day['day']] }}</span> h ocupadas</span>
             </div>
         @endforeach
 
