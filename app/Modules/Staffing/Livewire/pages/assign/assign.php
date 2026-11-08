@@ -15,6 +15,7 @@ use App\Modules\Staffing\Queries\AssignmentBoard;
 use App\Modules\Staffing\Queries\AssignmentBoardQuery;
 use App\Modules\Staffing\Queries\BoardGroup;
 use App\Modules\Staffing\Queries\GroupRankingQuery;
+use App\Modules\Staffing\Queries\StaffingBlockersQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -35,7 +36,8 @@ use Mary\Traits\Toast;
  *
  * Asignar al primer lugar es un clic; fuera de él (o fuera del ranking) pide el motivo en el renglón con el lugar que
  * ocupa. Lo que rechaza AssignTeacher se ve en su lugar. Si la carga está en propuesta, quien puede la pasa a
- * asignación (StartStaffing) y ve los motivos si Scheduling lo veta; en otro estado que no sea asignación ni ajustes
+ * asignación (StartStaffing): si ya se sabe que Scheduling lo vetaría (StaffingBlockersQuery), el botón sale
+ * deshabilitado con los motivos, y si lo veta al pasarla, ve los motivos; en otro estado que no sea asignación ni ajustes
  * es de solo lectura. La ven quienes ven el ranking del departamento (StaffingRankingPolicy::viewAny) y asignan
  * quienes pueden (GroupTeacherAssignmentPolicy::create), con la policy antes de cada método. Lo que muestra sale de
  * AssignmentBoardQuery y GroupRankingQuery; mientras algún grupo a la vista espera su ranking, consulta cada 5 s.
@@ -153,14 +155,23 @@ new #[Title('Asignación docente')] class extends Component
     public ?array $failure = null;
 
     /**
-     * Por qué no pasó la carga a asignación (el veto de Scheduling o del diagrama).
+     * Por qué no pasó la carga a asignación (el veto de Scheduling o del diagrama), sin ids de regla.
      *
      * @var list<string>
      */
     #[Locked]
     public array $vetoReasons = [];
 
-    public function mount(Actor $context, AssignmentBoardQuery $query): void
+    /**
+     * Lo que ya se sabe que vetaría pasar la carga a asignación (StaffingBlockersQuery), calculado al entrar para
+     * quien puede pasarla: cuántos grupos tienen choques duros y cuántos no tienen horario, solo los que no son cero.
+     *
+     * @var array{conflicted?: int, unscheduled?: int}
+     */
+    #[Locked]
+    public array $blockers = [];
+
+    public function mount(Actor $context, AssignmentBoardQuery $query, StaffingBlockersQuery $blockers): void
     {
         abort_unless($context->allowsAny(StaffingPermission::RankingView), 403);
 
@@ -172,15 +183,17 @@ new #[Title('Asignación docente')] class extends Component
         $this->updatedState();
         $this->resolve($context, $query);
         $this->openRequestedGroup($query);
+        $this->checkBlockers($query, $blockers);
     }
 
     /**
      * Cambiar de departamento suelta lo elegido del anterior.
      */
-    public function updatedDepartment(Actor $context, AssignmentBoardQuery $query): void
+    public function updatedDepartment(Actor $context, AssignmentBoardQuery $query, StaffingBlockersQuery $blockers): void
     {
         $this->reset('groupId', 'subjectFilter', 'careerFilter', 'semesterFilter', 'expanded', 'finalTierOpen', 'scrollTo', 'pending', 'failure', 'vetoReasons', 'sheet', 'reason', 'tab');
         $this->resolve($context, $query);
+        $this->checkBlockers($query, $blockers);
     }
 
     public function updatedState(): void
@@ -319,13 +332,12 @@ new #[Title('Asignación docente')] class extends Component
         try {
             $action->handle($load, auth()->user());
         } catch (ValidationException $e) {
-            $this->vetoReasons = collect($e->errors())->flatten()->map(fn ($reason): string => (string) $reason)->values()->all();
-            $this->error('No pasó a asignación', e($this->vetoReasons[0] ?? ''));
+            $this->vetoReasons = collect($e->errors())->flatten()->map(fn ($reason): string => self::withoutRuleIds((string) $reason))->values()->all();
 
             return;
         }
 
-        $this->vetoReasons = [];
+        $this->vetoReasons = $this->blockers = [];
         $this->success('La carga pasó a Asignación', e('Ya puedes asignar los docentes de los grupos.'));
     }
 
@@ -454,6 +466,22 @@ new #[Title('Asignación docente')] class extends Component
         } else {
             $this->sheet = true;
         }
+    }
+
+    /**
+     * Si la carga está en propuesta y el usuario puede pasarla a asignación, lo que hoy la vetaría (choques duros,
+     * grupos sin horario), para deshabilitar el botón con su motivo; si no, nada.
+     */
+    private function checkBlockers(AssignmentBoardQuery $query, StaffingBlockersQuery $blockers): void
+    {
+        $this->blockers = [];
+        $load = $this->departmentId === null ? null : $query->load((string) $this->termId, (string) $this->campusId, $this->departmentId);
+
+        if ($load?->status !== LoadStatus::Proposed || ! Gate::allows('startStaffing', $load)) {
+            return;
+        }
+
+        $this->blockers = array_filter($blockers->of($load));
     }
 
     /**
@@ -664,6 +692,14 @@ new #[Title('Asignación docente')] class extends Component
             ->map(fn (int $semester): array => ['id' => (string) $semester, 'name' => "Semestre {$semester}"])
             ->values()
             ->all();
+    }
+
+    /**
+     * Un motivo sin el id de regla entre paréntesis («… antes de asignar docentes (HC-15).»): en pantalla va en palabras.
+     */
+    private static function withoutRuleIds(string $reason): string
+    {
+        return (string) preg_replace('/\s*\((?:HC|SC)-\d+\)/u', '', $reason);
     }
 
     private static function fold(string $text): string
