@@ -4,6 +4,7 @@ namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
@@ -27,7 +28,8 @@ final class StaffingBlockersQuery
      */
     public function of(AcademicLoad $load): array
     {
-        $department = Department::query()->withTrashed()->findOrFail($load->department_id);
+        /** @var Department $department */
+        $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $load->department_id);
 
         $this->validator->forget();
         $hard = array_filter(
