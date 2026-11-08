@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
@@ -17,6 +18,7 @@ use App\Modules\Scheduling\Models\ScheduleConflict;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Lo que lee el tablero de choques y avance (tarea 3.4): qué le falta a cada grupo activo de un campus en un periodo
@@ -42,7 +44,7 @@ final class ConflictBoardQuery
 
         return $this->scoped($actor, $term, $campus)
             ->select(['groups.id', 'groups.code', 'groups.subject_id', 'groups.department_id', 'groups.owner_career_id', 'groups.study_plan_id', 'groups.semester', 'groups.teacher_id'])
-            ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id) as has_sessions')
+            ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.is_active) as has_sessions')
             ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.room_id is null and s.kind <> ?) as missing_room', [SessionKind::Virtual->value])
             ->selectRaw('exists (select 1 from schedule_conflicts c where c.group_id = groups.id and c.resolved_at is null and c.severity = ?) as has_hard', [ConflictSeverity::Hard->value])
             ->orderBy('groups.semester')->orderBy('groups.code')
@@ -184,9 +186,17 @@ final class ConflictBoardQuery
      */
     public function lastSyncedAt(Term $term, Campus $campus): ?CarbonImmutable
     {
-        $at = ScheduleConflict::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->max('updated_at');
+        $at = Cache::get(SyncScheduleConflicts::stampKey($term->id, $campus->id));
 
         return $at === null ? null : CarbonImmutable::parse($at)->setTimezone(config('app.timezone'));
+    }
+
+    /**
+     * Si el usuario ve grupos activos de ese departamento en el campus y periodo.
+     */
+    public function hasDepartment(Actor $actor, Term $term, Campus $campus, string $departmentId): bool
+    {
+        return $this->scoped($actor, $term, $campus)->where('groups.department_id', $departmentId)->exists();
     }
 
     /**

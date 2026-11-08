@@ -45,7 +45,7 @@ it('veta pasar a asignación con grupos sin horario', function () {
     expect(staffingVeto()->reasons())->toBe(['1 grupo no tiene horario: acomódalos en el editor antes de asignar docentes.']);
 });
 
-it('veta pasar a asignación con choques duros, también de vuelta desde ajustes', function () {
+it('HC-15: veta pasar a asignación con choques duros, también de vuelta desde ajustes', function () {
     $room = Room::factory()->capacity(20)->create(['building_id' => Building::factory()->create(['campus_id' => $this->load->campus_id])->id]);
     GroupSession::factory()->for(loadGroup())->inRoom($room)->on(1, '07:00', '09:00')->create();
 

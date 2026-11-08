@@ -47,9 +47,13 @@ new #[Title('Choques y avance')] class extends Component
     #[Locked]
     public ?string $departmentId = null;
 
+    /** Hasta cuándo (marca Unix) la página se refresca sola tras «Recalcular». */
+    public int $pollUntil = 0;
+
     public function mount(Actor $context): void
     {
         $this->authorizeView($context);
+        $this->view = $this->normalizedView();
     }
 
     /**
@@ -87,15 +91,35 @@ new #[Title('Choques y avance')] class extends Component
             'cellSemester' => $cellSemester,
             'cellDetail' => $cellPlan === null ? null : $board->detail($this->inCell($statuses, $careerId, $cellPlan['id'], $cellSemester)),
             'cellCount' => $cellPlan === null ? null : ($cellPlan['cells'][$cellSemester] ?? new BoardCount),
-            'departments' => $this->view === 'departamentos' ? $board->byDepartment($statuses) : [],
-            'drawer' => $this->drawer($board, $statuses),
+            'departments' => $this->normalizedView() === 'departamentos' ? $board->byDepartment($statuses) : [],
+            'drawer' => $this->showDrawer ? $this->drawer($board, $statuses) : null,
         ];
     }
 
     public function updatedView(): void
     {
-        $this->view = in_array($this->view, ['reticula', 'departamentos'], true) ? $this->view : 'reticula';
+        $this->view = $this->normalizedView();
         $this->closeDrawer();
+    }
+
+    /**
+     * Esc o el velo cierran el drawer por wire:model: entonces también se olvida el departamento.
+     */
+    public function updatedShowDrawer(bool $open): void
+    {
+        if (! $open) {
+            $this->closeDrawer();
+        }
+    }
+
+    /**
+     * Lo que pide wire:poll mientras corre un recálculo: solo vuelve a pintar.
+     */
+    public function refreshBoard(): void
+    {
+        if (now()->getTimestamp() >= $this->pollUntil) {
+            $this->pollUntil = 0;
+        }
     }
 
     public function updatedCareer(): void
@@ -117,7 +141,7 @@ new #[Title('Choques y avance')] class extends Component
         $term = $context->activeTerm() ?? abort(404);
         $campus = $context->activeCampus() ?? abort(404);
 
-        abort_unless($board->statuses($context, $term, $campus)->contains('departmentId', $id), 404);
+        abort_unless($board->hasDepartment($context, $term, $campus, $id), 404);
 
         $this->departmentId = $id;
         $this->showDrawer = true;
@@ -137,8 +161,14 @@ new #[Title('Choques y avance')] class extends Component
         $campus = $context->activeCampus() ?? abort(404);
 
         RecomputeScheduleConflicts::dispatch($term->id, $campus->id);
+        $this->pollUntil = now()->addSeconds(30)->getTimestamp();
 
         $this->success('Recalculando los choques', 'Los conteos se actualizan en unos segundos.');
+    }
+
+    private function normalizedView(): string
+    {
+        return $this->view === 'departamentos' ? 'departamentos' : 'reticula';
     }
 
     private function authorizeView(Actor $context): void

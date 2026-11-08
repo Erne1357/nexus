@@ -16,7 +16,9 @@ use App\Modules\Scheduling\Validation\Violation;
  * `adjusting` tras una solicitud de cambio): los grupos del departamento en el campus no tienen choques duros y, en un
  * campus con bloques de tiempo, todos tienen sesiones (docs/proceso/proceso-propuesto.md, «grupos y sesiones sin
  * choques duros»). Valida la carga en ese momento con el validador, no con `schedule_conflicts`, que el job pudo no
- * haber recalculado todavía. Veta con un motivo por cosa que falta (evento con veto, LoadTransitioning).
+ * haber recalculado todavía (por eso puede vetar mientras el tablero, que lee la tabla, aún no lo muestra). Carga la foto
+ * del campus completo porque HC-01 cruza departamentos y campus; la validación de 400 grupos tarda menos de 5 s. Veta
+ * con un motivo por cosa que falta (evento con veto, LoadTransitioning).
  */
 final class BlockStaffingWithHardConflicts
 {
@@ -38,7 +40,7 @@ final class BlockStaffingWithHardConflicts
             $this->validator->validateLoad($load->term, $load->campus, $department)->violations(),
             fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
         );
-        $groups = count(array_unique(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard)));
+        $groups = count(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))));
 
         if ($groups > 0) {
             $event->block("{$groups} ".($groups === 1 ? 'grupo tiene' : 'grupos tienen').' choques duros: corrígelos en el editor de horarios antes de asignar docentes (HC-15).');

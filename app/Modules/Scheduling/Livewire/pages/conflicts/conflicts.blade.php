@@ -4,7 +4,7 @@
     viejas con «Prioridad») y el detalle de la celda elegida. Vista «Departamentos»: cinco cifras, la matriz por
     departamento y su drawer. Cada pendiente enlaza a la pantalla que lo corrige.
 --}}
-<div>
+<div @if ($pollUntil > now()->getTimestamp()) wire:poll.3s="refreshBoard" @endif>
     <x-header title="Choques y avance" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             @if ($term && $campus)
@@ -42,7 +42,7 @@
                 <p class="font-semibold">Todavía no hay grupos que puedas ver en {{ $campus->name }}.</p>
                 <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">Los grupos nacen cuando un jefe acepta la parte de su departamento en una propuesta de carrera.</p>
             </div>
-        @elseif ($view === 'reticula')
+        @elseif ($view !== 'departamentos')
             <div class="mb-3 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-base-300 [scrollbar-width:none]" role="tablist" aria-label="Carreras" data-testid="career-tabs">
                 @foreach ($careers as $tab)
                     @php($active = $tab['id'] === $careerId)

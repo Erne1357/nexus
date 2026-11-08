@@ -115,6 +115,19 @@ describe('vista por departamento', function () {
     });
 });
 
+it('una vista desconocida en la URL muestra la vista por carrera y semestre', function () {
+    conflictsPage($this->admin, ['vista' => 'x'])
+        ->assertSet('view', 'reticula')
+        ->assertSeeHtml('data-testid="career-grid"');
+});
+
+it('cerrar el drawer con Esc o el velo olvida el departamento', function () {
+    conflictsPage($this->admin, ['vista' => 'departamentos'])
+        ->call('openDepartment', departmentKey(10))
+        ->set('showDrawer', false)
+        ->assertSet('departmentId', null);
+});
+
 it('sin campus activo pide elegir uno', function () {
     Campus::factory()->create();
 
@@ -127,5 +140,10 @@ it('Recalcular encola el recálculo de la carga del campus', function () {
     $component = conflictsPage($this->admin)->call('recompute');
 
     Queue::assertPushed(RecomputeScheduleConflicts::class, fn (RecomputeScheduleConflicts $job): bool => $job->termId === $this->term->id && $job->campusId === $this->campus->id);
-    expect(lastToastOf($component)['title'])->toBe('Recalculando los choques');
+    expect(lastToastOf($component)['title'])->toBe('Recalculando los choques')
+        ->and($component->get('pollUntil'))->toBeGreaterThan(now()->getTimestamp());
+    $component->assertSeeHtml('wire:poll.3s="refreshBoard"');
+
+    $this->travel(31)->seconds();
+    $component->call('refreshBoard')->assertSet('pollUntil', 0)->assertDontSeeHtml('wire:poll.3s="refreshBoard"');
 });

@@ -11,6 +11,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
@@ -150,12 +151,23 @@ it('cada quien cuenta solo su alcance: el jefe su departamento, el coordinador s
         ->and(boardStatuses(User::factory()->withRole(Role::Docente)->create()))->toHaveCount(0);
 });
 
-it('dice cuándo se recalcularon los choques del campus', function () {
+it('dice cuándo se recalcularon los choques del campus, aunque el recálculo no haya cambiado nada', function () {
     $board = app(ConflictBoardQuery::class);
 
     expect($board->lastSyncedAt($this->term, $this->campus))->toBeNull();
 
-    ScheduleConflict::factory()->forGroup(boardGroup())->create();
+    app(SyncScheduleConflicts::class)->handle($this->term, $this->campus);
 
-    expect($board->lastSyncedAt($this->term, $this->campus))->not->toBeNull();
+    expect($board->lastSyncedAt($this->term, $this->campus))->not->toBeNull()
+        ->and($board->hasDepartment(app(Actor::class)->forUser(User::factory()->admin()->create()), $this->term, $this->campus, departmentKey(10)))->toBeFalse();
+});
+
+it('HC-15: un grupo con choque duro no está listo para cerrar, aunque tenga horario, docente y salón', function () {
+    $clash = readyBoardGroup();
+    ScheduleConflict::factory()->forGroup($clash)->create();
+
+    $summary = app(ConflictBoardQuery::class)->summary(boardStatuses(User::factory()->admin()->create()));
+
+    expect($summary)->hard->toBe(1)->missing->toBe(1)
+        ->and($summary->ready())->toBe(0);
 });
