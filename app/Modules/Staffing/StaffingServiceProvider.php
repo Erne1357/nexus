@@ -2,11 +2,13 @@
 
 namespace App\Modules\Staffing;
 
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Staffing\Enums\StaffingPermission;
 
 /**
  * Módulo Staffing: ranking docente y asignación de docentes a los grupos (docs/dominio/modelo-de-datos.md,
- * "Staffing"). Está a la derecha de Scheduling (ADR-0020); por ahora solo usa Core, Academic y Faculty.
+ * "Staffing"). Está a la derecha de Scheduling (ADR-0020); puede usar Scheduling, Faculty, AcademicLoad, Academic y Core.
  */
 final class StaffingServiceProvider extends ModuleServiceProvider
 {
@@ -15,13 +17,32 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         return [];
     }
 
+    /**
+     * @return list<class-string>
+     */
     public function permissions(): array
     {
-        return [];
+        return [StaffingPermission::class];
     }
 
+    /**
+     * Ven el ranking los jefes, el jefe de proyecto docente y la Subdirección; asignan los jefes (reglas-de-negocio.md,
+     * "Aprobaciones y permisos").
+     */
     public function grants(): array
     {
-        return [];
+        return [
+            Role::Subdireccion->value => [
+                StaffingPermission::RankingView,
+            ],
+            Role::JefeDepartamento->value => [
+                StaffingPermission::RankingView,
+                StaffingPermission::TeacherAssign,
+            ],
+            Role::JefeProyectoDocente->value => [
+                StaffingPermission::RankingView,
+                StaffingPermission::TeacherAssign,
+            ],
+        ];
     }
 }

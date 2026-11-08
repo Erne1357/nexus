@@ -133,7 +133,7 @@ it('rechaza con la carga en cualquier otro estado, sin escribir', function (Load
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
             ->toBe(["La carga de Sistemas y Computación en Campus II está en {$label}: no se editan horarios."]))
         ->and($this->group->sessions()->count())->toBe(0)
-        ->and(Activity::count())->toBe(0);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 })->with([
     'borrador' => [LoadStatus::Draft, 'borrador'],
     'cerrada' => [LoadStatus::Closed, 'cerrada'],
@@ -153,7 +153,7 @@ it('rechaza un grupo cancelado', function () {
     $this->group->update(['status' => 'cancelled']);
 
     expect(fn () => placeSession($this->group, 1, '07:00', '08:00'))
-        ->toThrow(ValidationException::class, 'El grupo D está cancelado: no se editan sus sesiones.')
+        ->toThrow(ValidationException::class, 'El grupo D está cancelado: no se editan horarios.')
         ->and($this->group->sessions()->count())->toBe(0);
 });
 
@@ -200,11 +200,11 @@ it('une con las dos vecinas: la de antes se extiende, la de después se borra y 
     expect(placedSessionsOf($this->group))->toBe(['3 07:00-10:00 teoria'])
         ->and($result->session->id)->toBe($first->id)
         ->and(GroupSession::query()->whereKey($last->id)->exists())->toBeFalse()
-        ->and(Activity::sole()->attribute_changes->toArray())->toBe([
+        ->and(Activity::query()->where('event', 'like', 'session_%')->sole()->attribute_changes->toArray())->toBe([
             'attributes' => ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '10:00', 'kind' => 'teoria', 'room_id' => null],
             'old' => ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '08:00', 'kind' => 'teoria', 'room_id' => null],
         ])
-        ->and(Activity::sole()->properties->all())->toBe([
+        ->and(Activity::query()->where('event', 'like', 'session_%')->sole()->properties->all())->toBe([
             'absorbed' => [['id' => $last->id, 'day' => 3, 'starts_at' => '09:00', 'ends_at' => '10:00', 'kind' => 'teoria', 'room_id' => null]],
         ]);
 });
@@ -240,7 +240,7 @@ it('rechaza encimarse con otra sesión del mismo grupo, sin escribir', function 
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
             ->toBe(['El grupo D ya tiene sesión el lunes de 07:00 a 09:00: no se encima otra.']))
         ->and(placedSessionsOf($this->group))->toBe(['1 07:00-09:00 teoria'])
-        ->and(Activity::count())->toBe(0);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 });
 
 it('HC-01: no guarda una sesión que empalma al docente con otro grupo, en cualquier campus, y da el mensaje del validador', function () {
@@ -255,7 +255,7 @@ it('HC-01: no guarda una sesión que empalma al docente con otro grupo, en cualq
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
             ->toBe(['Ana Pérez ya da Química, grupo F el lunes de 08:00 a 10:00.']))
         ->and($this->group->sessions()->count())->toBe(0)
-        ->and(Activity::count())->toBe(0);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 
     Event::assertNotDispatched(GroupScheduleChanged::class);
 });
@@ -303,8 +303,6 @@ it('HC-03 y las demás reglas duras que la base no impide no detienen el guardad
 });
 
 it('calcula el resultado con la foto de después de guardar, no con la que leyó antes de escribir', function () {
-    withAnotherHardRule('HC-12', 'Faltan horas.');
-
     $result = placeSession($this->group, 1, '07:00', '08:00');
 
     expect($result->validation->forRule('HC-12'))->toHaveCount(1);
@@ -315,7 +313,7 @@ it('deja la bitácora en el grupo con las horas de antes y de después', functio
 
     placeSession($this->group, 1, '08:00', '09:00');
 
-    $entry = Activity::sole();
+    $entry = Activity::query()->where('event', 'like', 'session_%')->sole();
 
     expect($entry)
         ->event->toBe('session_placed')
@@ -331,10 +329,10 @@ it('deja la bitácora en el grupo con las horas de antes y de después', functio
 it('una sesión nueva sin vecinas no tiene horas de antes ni sesiones absorbidas en la bitácora', function () {
     placeSession($this->group, 1, '08:00', '09:00');
 
-    expect(Activity::sole()->attribute_changes->toArray())->toBe([
+    expect(Activity::query()->where('event', 'like', 'session_%')->sole()->attribute_changes->toArray())->toBe([
         'attributes' => ['day' => 1, 'starts_at' => '08:00', 'ends_at' => '09:00', 'kind' => 'teoria', 'room_id' => null],
     ])
-        ->and(Activity::sole()->properties->all())->toBe([]);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->sole()->properties->all())->toBe([]);
 });
 
 it('avisa con GroupScheduleChanged solo después del commit', function () {

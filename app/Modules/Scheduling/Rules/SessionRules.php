@@ -2,21 +2,17 @@
 
 namespace App\Modules\Scheduling\Rules;
 
-use App\Modules\Academic\Models\Department;
-use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
-use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ValidationResult;
 use App\Modules\Scheduling\Validation\Violation;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -37,14 +33,13 @@ use Illuminate\Validation\ValidationException;
  */
 final class SessionRules
 {
-    /** @var list<LoadStatus> */
-    public const array EDITABLE_LOADS = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting];
-
     private const string TEACHER_EXCLUSION = 'group_sessions_teacher_no_overlap';
 
     private const string ROOM_EXCLUSION = 'group_sessions_room_no_overlap';
 
     private const string GROUP_EXCLUSION = 'group_sessions_group_no_overlap';
+
+    public function __construct(private readonly LoadEditability $editability) {}
 
     /**
      * La hora en `HH:MM`; acepta `HH:MM:00`.
@@ -61,72 +56,13 @@ final class SessionRules
     }
 
     /**
-     * El grupo no está cancelado y la carga de su departamento en su campus y periodo se puede editar; la carga se lee
-     * con bloqueo compartido para que no cambie de estado mientras se escribe.
+     * El grupo no está cancelado y la carga de su departamento en su campus y periodo se puede editar.
      *
      * @throws ValidationException
      */
     public function ensureEditable(Group $group): void
     {
-        $reason = $this->editBlockedReasons([$group], lock: true)[$group->id];
-
-        if ($reason !== null) {
-            throw self::invalid($reason);
-        }
-    }
-
-    /**
-     * Por qué no se editan las sesiones de cada grupo, o null si se editan: el grupo está cancelado, su departamento no
-     * tiene carga en su campus y periodo, o esa carga no está en propuesta, asignación o ajustes. Es la regla de
-     * ensureEditable() para muchos grupos a la vez (el tablero del editor): una consulta de cargas y, solo si alguno no
-     * se edita, una de departamentos y una de campus para el mensaje.
-     *
-     * @param  iterable<Group>  $groups
-     * @return array<string, ?string> por id de grupo
-     */
-    public function editBlockedReasons(iterable $groups, bool $lock = false): array
-    {
-        $groups = collect($groups)->keyBy('id');
-        $open = $groups->reject(fn (Group $group): bool => $group->status === GroupStatus::Cancelled);
-
-        $loads = $open->isEmpty() ? collect() : AcademicLoad::query()
-            ->whereIn('term_id', $open->pluck('term_id')->unique()->values()->all())
-            ->whereIn('campus_id', $open->pluck('campus_id')->unique()->values()->all())
-            ->whereIn('department_id', $open->pluck('department_id')->unique()->values()->all())
-            ->when($lock, fn (Builder $query) => $query->sharedLock())
-            ->get(['term_id', 'campus_id', 'department_id', 'status'])
-            ->keyBy(fn (AcademicLoad $load): string => "{$load->term_id}|{$load->campus_id}|{$load->department_id}");
-
-        $reasons = [];
-        $departments = null;
-        $campuses = null;
-
-        foreach ($groups as $id => $group) {
-            if ($group->status === GroupStatus::Cancelled) {
-                $reasons[$id] = "El grupo {$group->code} está cancelado: no se editan sus sesiones.";
-
-                continue;
-            }
-
-            $load = $loads->get("{$group->term_id}|{$group->campus_id}|{$group->department_id}");
-
-            if ($load !== null && in_array($load->status, self::EDITABLE_LOADS, true)) {
-                $reasons[$id] = null;
-
-                continue;
-            }
-
-            $departments ??= Department::withTrashed()->whereIn('id', $open->pluck('department_id')->unique()->values()->all())->pluck('name', 'id');
-            $campuses ??= Campus::withTrashed()->whereIn('id', $open->pluck('campus_id')->unique()->values()->all())->pluck('name', 'id');
-            $department = $departments[$group->department_id] ?? '';
-            $campus = $campuses[$group->campus_id] ?? '';
-
-            $reasons[$id] = $load === null
-                ? "{$department} no tiene carga en {$campus} en este periodo: no se editan horarios."
-                : "La carga de {$department} en {$campus} está en ".mb_strtolower($load->status->label()).': no se editan horarios.';
-        }
-
-        return $reasons;
+        $this->editability->ensure($group, 'horarios', 'session');
     }
 
     /**
@@ -143,19 +79,15 @@ final class SessionRules
             throw self::invalid('La sesión debe terminar después de empezar.');
         }
 
-        if ($day < 1 || $day > 6) {
-            throw self::invalid("El día {$day} no existe: va de 1 (lunes) a 6 (sábado).");
-        }
-
         $campus = $this->campusOf($group);
         $profile = $campus->profile;
 
-        if (! $profile->usesTimeBlocks) {
-            return;
-        }
-
         if (! in_array($day, $profile->days, true)) {
             throw self::invalid("HC-04: {$campus->name} no da clases el ".Minutes::dayName($day)." ({$profile->schedule()}).");
+        }
+
+        if (! $profile->usesTimeBlocks) {
+            return;
         }
 
         $dayStart = Minutes::of($profile->dayStart);
@@ -217,6 +149,14 @@ final class SessionRules
     }
 
     /**
+     * Si el error es la exclusión de salón de `group_sessions` (otro editor tomó el salón).
+     */
+    public function isRoomTaken(QueryException $exception): bool
+    {
+        return str_contains($exception->getMessage(), self::ROOM_EXCLUSION);
+    }
+
+    /**
      * El error de una exclusión de `group_sessions` cuando otra sesión gana la carrera al validador; cualquier otro
      * error de la base sigue su camino.
      *
@@ -260,6 +200,14 @@ final class SessionRules
             'kind' => $session->kind->value,
             'room_id' => $session->room_id,
         ];
+    }
+
+    /**
+     * Cómo se nombra el grupo en la bitácora, como el validador: «Cálculo Diferencial, grupo D» (sin leer la foto).
+     */
+    public static function label(Group $group): string
+    {
+        return (Subject::withTrashed()->whereKey($group->subject_id)->value('name') ?? 'La materia').', grupo '.$group->code;
     }
 
     /**

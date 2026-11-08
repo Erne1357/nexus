@@ -33,7 +33,8 @@ final class ProposeGroupQuota
      */
     public function handle(Group $group, Career $career, int $seats, User $actor): InterdepartmentalAgreement
     {
-        return DB::transaction(function () use ($group, $career, $seats, $actor): InterdepartmentalAgreement {
+        return $this->rules->guard(fn (): InterdepartmentalAgreement => DB::transaction(function () use ($group, $career, $seats, $actor): InterdepartmentalAgreement {
+            $this->rules->lockLoad($group);
             $group = Group::query()->lockForUpdate()->findOrFail($group->getKey());
             $this->rules->ensureEditable($group);
             $this->rules->ensureOffered($career, $group);
@@ -47,6 +48,6 @@ final class ProposeGroupQuota
                 $seats,
                 $actor,
             );
-        });
+        }));
     }
 }

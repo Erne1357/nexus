@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
@@ -21,6 +22,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\SemesterBoardQuery;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
 use Illuminate\Support\Facades\DB;
 
@@ -41,6 +43,7 @@ beforeEach(function () {
     ]);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->sistemas->id]);
     $this->iind = Career::factory()->create(['code' => 'IIND']);
+    CareerCampus::factory()->create(['career_id' => $this->isc->id, 'campus_id' => $this->campus->id]);
     $this->plan = StudyPlan::factory()->create(['career_id' => $this->isc->id]);
     $this->iindPlan = StudyPlan::factory()->create(['career_id' => $this->iind->id]);
 });
@@ -124,6 +127,7 @@ it('por grupo da la materia con su departamento, el docente, la capacidad, los c
         'code' => 'D',
         'status' => GroupStatus::Planned,
         'shared' => false,
+        'context' => false,
         'subject' => ['id' => $subject->id, 'code' => 'SCD-1001', 'name' => 'Cálculo Diferencial', 'theory_hours' => 3, 'practice_hours' => 2, 'needs_lab' => true, 'department_code' => 'DSC', 'department_name' => 'Sistemas y Computación'],
         'teacher_id' => $teacher->id,
         'teacher' => 'Ana Pérez',
@@ -176,9 +180,41 @@ it('dice lo que puede hacer cada quien según GroupPolicy: el compartido es de s
         ->and($can($subdireccion)[$own->id])->toBe(['editSessions' => false, 'assignRoom' => false, 'manageQuotas' => false]);
 });
 
+it('las banderas salen del puesto activo del actor que recibe, no de todos los puestos de su usuario', function () {
+    boardGroup(boardSubject(['department_id' => $this->sistemas->id]));
+    $both = User::factory()
+        ->withRole(Role::JefeDepartamento, ['department_id' => $this->sistemas->id])
+        ->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
+    actingAsRole($both, Role::JefeDepartamento);
+
+    $asCoordinator = app(SemesterBoardQuery::class)->for($this->term, $this->campus, $this->isc, $this->plan, 1, app(Actor::class)->asRole(Role::Coordinador));
+    $asJefe = app(SemesterBoardQuery::class)->for($this->term, $this->campus, $this->isc, $this->plan, 1, app(Actor::class));
+
+    expect($asCoordinator['groups'][0]['can'])->toBe(['editSessions' => true, 'assignRoom' => false, 'manageQuotas' => false])
+        ->and($asJefe['groups'][0]['can'])->toBe(['editSessions' => true, 'assignRoom' => true, 'manageQuotas' => true]);
+});
+
+it('quien ve la carrera ve todos los grupos de su semestre: los que no ve por GroupPolicy van como contexto de solo lectura', function () {
+    $own = boardGroup(boardSubject(['department_id' => $this->sistemas->id]));
+    $basicas = Department::factory()->create();
+    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $basicas->id]);
+    $calculo = boardGroup(boardSubject(['department_id' => $basicas->id]));
+    $shared = boardGroup(boardSubject(['department_id' => $this->sistemas->id]), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
+    GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->isc->id]);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sistemas->id])->create();
+    $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
+
+    $context = fn (User $user): array => array_column(semesterBoardFor($user)['groups'], 'context', 'id');
+    $jefeRows = collect(semesterBoardFor($jefe)['groups'])->keyBy('id');
+
+    expect($context($jefe))->toEqual([$own->id => false, $calculo->id => true, $shared->id => false])
+        ->and($jefeRows[$calculo->id]['can'])->toBe(['editSessions' => false, 'assignRoom' => false, 'manageQuotas' => false])
+        ->and($context($coordinator))->toEqual([$own->id => false, $calculo->id => false, $shared->id => true]);
+});
+
 it('junta las violaciones del validador por grupo y por sesión', function () {
-    $room = boardRoom(['code' => 'A-1']);
-    $group = boardGroup(boardSubject());
+    $room = boardRoom(['code' => 'A-1', 'capacity' => 40]);
+    $group = boardGroup(boardSubject(['theory_hours' => 2, 'practice_hours' => 0]));
     $clean = boardGroup(boardSubject());
     $session = GroupSession::factory()->for($group)->inRoom($room)->on(2, '07:00', '09:00')->create();
     $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
@@ -193,6 +229,10 @@ it('junta las violaciones del validador por grupo y por sesión', function () {
         ->and(array_keys($violations['sessions']))->toBe([$session->id])
         ->and($violations['sessions'][$session->id][0]->message)->toStartWith('El salón A-1 ya está ocupado')
         ->and($violations['groups'])->not->toHaveKey($clean->id);
+
+    foreach ([$group, $clean] as $each) {
+        expect($violations['groups'][$each->id] ?? [])->toEqual(app(ScheduleValidator::class)->validateGroup($each)->violations());
+    }
 });
 
 it('lee con pocas consultas aunque el semestre tenga 10 grupos', function () {

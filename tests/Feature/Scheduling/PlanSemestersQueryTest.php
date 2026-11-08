@@ -101,6 +101,17 @@ it('al jefe de un departamento que imparte en otra carrera, la carrera donde tie
     expect(plannerCareersFor($jefe))->toBe([]);
 });
 
+it('al jefe, una carrera donde su departamento tiene grupos aunque ya no se ofrezca en el campus, para llegar a ellos', function () {
+    $offering = CareerCampus::query()->where('career_id', $this->isc->id)->sole();
+    $offering->update(['is_active' => false]);
+    $plan = StudyPlan::factory()->create(['career_id' => $this->isc->id]);
+    plannerGroup($plan, 1, attributes: ['subject_id' => Subject::factory()->create(['department_id' => $this->basicas->id])->id]);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->basicas->id])->create();
+
+    expect(plannerCareersFor($jefe))->toBe(['ISC'])
+        ->and(plannerCareersFor(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sistemas->id])->create()))->toBe([]);
+});
+
 it('al docente, ninguna', function () {
     expect(plannerCareersFor(User::factory()->withRole(Role::Docente)->create()))->toBe([]);
 });
@@ -114,11 +125,13 @@ it('careerOrFail da la carrera solo si el actor la ve', function () {
         ->and(fn () => $query->careerOrFail(app(Actor::class), $this->term, $this->campus, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
 });
 
-it('da los planes activos de la carrera, el vigente primero y los viejos con la marca de prioridad, con sus grupos sin acomodar', function () {
+it('da los planes activos de la carrera y los inactivos con grupos en el periodo, el vigente primero y los viejos con la marca de prioridad, con sus grupos sin acomodar', function () {
     $current = StudyPlan::factory()->create(['career_id' => $this->isc->id, 'code' => 'ISIC-2010-224', 'name' => 'Plan 2010', 'is_current' => true]);
     $old = StudyPlan::factory()->create(['career_id' => $this->isc->id, 'code' => 'ISIC-2004-296', 'name' => 'Plan 2004']);
     $older = StudyPlan::factory()->create(['career_id' => $this->isc->id, 'code' => 'ISIC-2009-226', 'name' => 'Plan 2009']);
     StudyPlan::factory()->inactive()->create(['career_id' => $this->isc->id, 'code' => 'ISIC-1993-001']);
+    $retired = StudyPlan::factory()->inactive()->create(['career_id' => $this->isc->id, 'code' => 'ISIC-1999-100', 'name' => 'Plan 1999']);
+    plannerGroup($retired, 8, 4);
 
     $complete = plannerGroup($current, 1, 4);
     GroupSession::factory()->for($complete)->on(1, '07:00', '09:00')->create();
@@ -132,20 +145,25 @@ it('da los planes activos de la carrera, el vigente primero y los viejos con la 
     $plans = app(PlanSemestersQuery::class)->plans($this->isc, $this->term, $this->campus);
 
     expect($plans)->toBe([
-        ['id' => $current->id, 'code' => 'ISIC-2010-224', 'name' => 'Plan 2010', 'is_current' => true, 'is_priority' => false, 'groups' => 2, 'unscheduled' => 1],
-        ['id' => $old->id, 'code' => 'ISIC-2004-296', 'name' => 'Plan 2004', 'is_current' => false, 'is_priority' => true, 'groups' => 1, 'unscheduled' => 1],
-        ['id' => $older->id, 'code' => 'ISIC-2009-226', 'name' => 'Plan 2009', 'is_current' => false, 'is_priority' => true, 'groups' => 0, 'unscheduled' => 0],
+        ['id' => $current->id, 'code' => 'ISIC-2010-224', 'name' => 'Plan 2010', 'is_current' => true, 'is_priority' => false, 'is_active' => true, 'groups' => 2, 'unscheduled' => 1],
+        ['id' => $old->id, 'code' => 'ISIC-2004-296', 'name' => 'Plan 2004', 'is_current' => false, 'is_priority' => true, 'is_active' => true, 'groups' => 1, 'unscheduled' => 1],
+        ['id' => $older->id, 'code' => 'ISIC-2009-226', 'name' => 'Plan 2009', 'is_current' => false, 'is_priority' => true, 'is_active' => true, 'groups' => 0, 'unscheduled' => 0],
+        ['id' => $retired->id, 'code' => 'ISIC-1999-100', 'name' => 'Plan 1999', 'is_current' => false, 'is_priority' => true, 'is_active' => false, 'groups' => 1, 'unscheduled' => 1],
     ]);
 });
 
-it('planOrFail da solo un plan activo de la carrera', function () {
+it('planOrFail da un plan activo de la carrera, o uno inactivo con grupos en el periodo y campus', function () {
     $plan = StudyPlan::factory()->create(['career_id' => $this->isc->id]);
     $inactive = StudyPlan::factory()->inactive()->create(['career_id' => $this->isc->id]);
+    $retired = StudyPlan::factory()->inactive()->create(['career_id' => $this->isc->id]);
+    plannerGroup($retired, 2);
     $foreign = StudyPlan::factory()->create(['career_id' => $this->iind->id]);
     $query = app(PlanSemestersQuery::class);
 
     expect($query->planOrFail($this->isc, $plan->id)->is($plan))->toBeTrue()
-        ->and(fn () => $query->planOrFail($this->isc, $inactive->id))->toThrow(ModelNotFoundException::class)
+        ->and($query->planOrFail($this->isc, $retired->id, $this->term, $this->campus)->is($retired))->toBeTrue()
+        ->and(fn () => $query->planOrFail($this->isc, $retired->id))->toThrow(ModelNotFoundException::class)
+        ->and(fn () => $query->planOrFail($this->isc, $inactive->id, $this->term, $this->campus))->toThrow(ModelNotFoundException::class)
         ->and(fn () => $query->planOrFail($this->isc, $foreign->id))->toThrow(ModelNotFoundException::class);
 });
 

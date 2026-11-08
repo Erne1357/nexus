@@ -40,6 +40,7 @@ beforeEach(function () {
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
     CareerCampus::factory()->create(['career_id' => $this->sameDept->id, 'campus_id' => $this->group->campus_id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
 });
 
 /**
@@ -70,7 +71,7 @@ function setQuotasErrors(array $seats): array
  */
 function seatsOf(Group $group): array
 {
-    return GroupQuota::query()->where('group_id', $group->id)->pluck('max_seats', 'career_id')->all();
+    return GroupQuota::query()->where('group_id', $group->id)->orderByDesc('is_owner')->orderBy('id')->pluck('max_seats', 'career_id')->all();
 }
 
 it('crea, cambia y quita directo el cupo de una carrera del mismo departamento', function () {
@@ -89,6 +90,7 @@ it('cambia lugares de la dueña aunque sea de otro departamento', function () {
     $foreignOwner = Career::factory()->create(['department_id' => $this->otro->id]);
     $group = Group::factory()->withQuota(20)->create([
         'capacity' => 40, 'owner_career_id' => $foreignOwner->id,
+        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id,
         'subject_id' => $this->group->subject_id,
     ]);
 
@@ -144,7 +146,7 @@ it('una carrera nueva debe estar activa, sin borrar y ofrecida en el campus del 
 
 it('no edita cupos de un grupo cancelado ni con la carga fuera de proposed, staffing o adjusting', function (?LoadStatus $status, string $message) {
     if ($status !== null) {
-        AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+        $this->load->update(['status' => $status]);
     } else {
         $this->group->update(['status' => GroupStatus::Cancelled]);
     }
@@ -154,13 +156,21 @@ it('no edita cupos de un grupo cancelado ni con la carga fuera de proposed, staf
         ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
 })->with([
     'cancelado' => [null, 'cancelado'],
-    'borrador' => [LoadStatus::Draft, 'Borrador'],
+    'borrador' => [LoadStatus::Draft, 'borrador'],
     'cerrada' => [LoadStatus::Closed, 'no se editan cupos.'],
     'publicada' => [LoadStatus::Published, 'no se editan cupos.'],
 ]);
 
+it('no edita cupos si el departamento no tiene carga en el campus y el periodo (supuesto por confirmar)', function () {
+    $this->load->delete();
+
+    expect(setQuotasErrors([$this->owner->id => 25])['quotas'][0])
+        ->toBe("{$this->imparte->name} no tiene carga en {$this->group->campus->name} en este periodo: no se editan cupos.")
+        ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
+});
+
 it('edita cupos con la carga en proposed, staffing o adjusting', function (LoadStatus $status) {
-    AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load->update(['status' => $status]);
 
     setQuotas([$this->owner->id => 25]);
 

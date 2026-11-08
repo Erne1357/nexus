@@ -93,7 +93,7 @@ it('HC-01: no mueve una sesión a una hora en que el docente ya da clase y da el
         ->and($this->session->fresh())
         ->day->toBe(1)
         ->starts_at->toBe('07:00:00')
-        ->and(Activity::count())->toBe(0);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 });
 
 it('HC-01: moverla dentro de su propio horario no choca consigo misma', function () {
@@ -105,19 +105,36 @@ it('HC-01: moverla dentro de su propio horario no choca consigo misma', function
     expect($this->session->fresh()->starts_at)->toBe('08:00:00');
 });
 
-it('HC-02: si otra sesión gana la carrera por el salón, la exclusión de la base lo rechaza con el id de la regla', function () {
+it('HC-02: si otra sesión gana la carrera por el salón, la mueve sin salón y lo dice en el resultado', function () {
     $other = otherGroupOfMove();
     $room = $this->room;
 
     GroupSession::updating(function (GroupSession $updating) use ($other, $room): void {
-        if ($updating->group_id !== $other->id) {
+        if ($updating->group_id !== $other->id && $updating->room_id !== null) {
             GroupSession::factory()->for($other)->inRoom($room)->on(2, '08:00', '09:00')->create();
         }
     });
 
+    $result = moveSession($this->session, 2, '07:00', '09:00');
+
+    expect($result->roomDropped)->toBeTrue()
+        ->and($result->session->room_id)->toBeNull()
+        ->and($this->session->fresh())->day->toBe(2)->room_id->toBeNull();
+});
+
+it('HC-01: si otra sesión gana la carrera por el docente, sigue rechazándose con el id de la regla', function () {
+    $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
+    $this->group->update(['teacher_id' => $teacher->id]);
+    $other = otherGroupOfMove(['teacher_id' => $teacher->id, 'code' => 'F']);
+
+    GroupSession::updating(function (GroupSession $updating) use ($other): void {
+        if ($updating->group_id !== $other->id) {
+            GroupSession::factory()->for($other)->on(2, '08:00', '09:00')->create();
+        }
+    });
+
     expect(fn () => moveSession($this->session, 2, '07:00', '09:00'))
-        ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(['HC-02: el salón LC-1 ya está ocupado el martes entre 07:00 y 09:00.']))
+        ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'][0])->toStartWith('HC-01: Ana Pérez'))
         ->and($this->session->fresh()->day)->toBe(1);
 });
 
@@ -133,7 +150,7 @@ it('une la sesión movida con una vecina del mismo tipo y salón: la movida se q
         ->ends_at->toBe('10:00:00')
         ->room_id->toBe($this->room->id)
         ->and(GroupSession::query()->whereKey($neighbor->id)->exists())->toBeFalse()
-        ->and(Activity::sole()->properties->all())->toBe([
+        ->and(Activity::query()->where('event', 'like', 'session_%')->sole()->properties->all())->toBe([
             'absorbed' => [['id' => $neighbor->id, 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '10:00', 'kind' => 'teoria', 'room_id' => $this->room->id]],
         ]);
 });
@@ -178,7 +195,7 @@ it('sin cambios no escribe, no registra ni avisa', function () {
 
     expect($result->session->id)->toBe($this->session->id)
         ->and($result->roomDropped)->toBeFalse()
-        ->and(Activity::count())->toBe(0);
+        ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
     Event::assertNotDispatched(GroupScheduleChanged::class);
 });
 
@@ -187,7 +204,7 @@ it('deja la bitácora en el grupo con las horas de antes y de después, y avisa 
 
     moveSession($this->session, 3, '10:00', '12:00', SessionKind::Practica);
 
-    $entry = Activity::sole();
+    $entry = Activity::query()->where('event', 'like', 'session_%')->sole();
 
     expect($entry)
         ->event->toBe('session_updated')
