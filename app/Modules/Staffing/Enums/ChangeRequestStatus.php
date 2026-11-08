@@ -34,6 +34,19 @@ enum ChangeRequestStatus: string
         };
     }
 
+    /**
+     * El icono de su insignia: aprobada lleva `o-check` y no el `o-eye` del tono info, que en DESIGN.md es «En revisión».
+     */
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Pending => 'o-clock',
+            self::Approved => 'o-check',
+            self::Rejected => 'o-x-circle',
+            self::Applied => 'o-check-circle',
+        };
+    }
+
     public function isOpen(): bool
     {
         return $this === self::Pending || $this === self::Approved;

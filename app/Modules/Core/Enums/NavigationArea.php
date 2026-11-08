@@ -9,6 +9,7 @@ namespace App\Modules\Core\Enums;
  */
 enum NavigationArea: string
 {
+    case MiEspacio = 'mi_espacio';
     case Academico = 'academico';
     case ServiciosEscolares = 'servicios_escolares';
     case RecursosHumanos = 'recursos_humanos';
@@ -21,6 +22,7 @@ enum NavigationArea: string
     public function label(): string
     {
         return match ($this) {
+            self::MiEspacio => 'Mi espacio',
             self::Academico => 'Académico',
             self::ServiciosEscolares => 'Servicios escolares',
             self::RecursosHumanos => 'Recursos humanos',
@@ -35,6 +37,7 @@ enum NavigationArea: string
     public function icon(): string
     {
         return match ($this) {
+            self::MiEspacio => 'o-user-circle',
             self::Academico => 'o-academic-cap',
             self::ServiciosEscolares => 'o-user-group',
             self::RecursosHumanos => 'o-identification',

@@ -9,12 +9,14 @@ use App\Modules\Core\Authorization\UnitApplicability;
 /**
  * Permisos del módulo Staffing (docs/dominio/reglas-de-negocio.md, "Aprobaciones y permisos"): ver el ranking de un
  * grupo lo hacen los jefes, el jefe de proyecto docente y la Subdirección; asignar el docente, los jefes. La clave es
- * `staffing.<recurso>.<accion>`. El objetivo es un grupo: su campus y su departamento (unidad).
+ * `staffing.<recurso>.<accion>`. El objetivo de los de gestión es un grupo: su campus y su departamento (unidad).
  */
 enum StaffingPermission: string implements Permission
 {
     case RankingView = 'staffing.ranking.view';
     case TeacherAssign = 'staffing.teacher.assign';
+    case OfferView = 'staffing.offer.view';
+    case MyLoadView = 'staffing.my_load.view';
     case TeacherLoadView = 'staffing.teacher_load.view';
     case ChangeRequestRequestOwn = 'staffing.change_request.request_own';
     case ChangeRequestRequest = 'staffing.change_request.request';
@@ -28,6 +30,8 @@ enum StaffingPermission: string implements Permission
         return match ($this) {
             self::RankingView => 'Ver el ranking de docentes de un grupo',
             self::TeacherAssign => 'Asignar el docente de un grupo',
+            self::OfferView => 'Ver la oferta de mis departamentos',
+            self::MyLoadView => 'Ver mi carga',
             self::TeacherLoadView => 'Ver la carga por docente de un departamento',
             self::ChangeRequestRequestOwn => 'Pedir un cambio en un grupo propio (docente)',
             self::ChangeRequestRequest => 'Pedir un cambio en un grupo de su carrera (coordinador)',
@@ -40,6 +44,10 @@ enum StaffingPermission: string implements Permission
 
     public function dimensions(): array
     {
+        if ($this->isPersonal()) {
+            return [];
+        }
+
         return match ($this) {
             self::ChangeRequestRequest, self::ChangeRequestApplySchedule => [Dimension::Campus, Dimension::Career],
             default => [Dimension::Campus, Dimension::Unit],
@@ -47,11 +55,15 @@ enum StaffingPermission: string implements Permission
     }
 
     /**
-     * Pedir un cambio como docente es sobre lo propio: el dueño es el usuario del docente asignado al grupo.
+     * «Mi espacio» (ADR-0018): la oferta de mis departamentos, mi carga y pedir un cambio en un grupo propio son del
+     * docente sobre lo suyo (el dueño es el usuario del docente); no declaran dimensiones.
      */
     public function isPersonal(): bool
     {
-        return $this === self::ChangeRequestRequestOwn;
+        return match ($this) {
+            self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn => true,
+            default => false,
+        };
     }
 
     /**
