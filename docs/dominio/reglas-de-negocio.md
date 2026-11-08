@@ -93,6 +93,10 @@ Cómo se colocan, mueven y quitan las sesiones de un grupo (tarea 3.5).
 - Mover una sesión conserva su salón si a la nueva hora sigue libre; si otro grupo lo ocupa (HC-02), la sesión se mueve sin salón y el editor lo avisa; lo mismo si otro editor toma el salón entre la lectura y la escritura (la exclusión de la base). Un salón bloqueado (HC-11) o sin préstamo (HC-10) a la nueva hora no se quita: se guarda marcado, como las demás reglas duras (supuesto por confirmar).
 - Cambiar el tipo de una sesión (teoría, práctica, virtual) no le quita el salón (supuesto por confirmar).
 - Quitar una sesión la quita completa, con todos sus bloques; para dejar parte, se mueve o se acorta (supuesto por confirmar).
+- Las carreras del editor son las que se ofrecen en el campus y que quien entra ve con «Ver los horarios» (el coordinador la suya, el jefe las de su departamento). También aparecen las carreras donde quien entra ve grupos en el periodo y campus, aunque ya no se ofrezcan: así el jefe de un departamento que imparte en carreras de otro (Ciencias Básicas, por ejemplo) llega a sus grupos (supuesto por confirmar).
+- Las retículas de una carrera son las activas y, para que ningún grupo se quede sin camino, las inactivas que tienen grupos en el periodo y campus, marcadas como inactivas (supuesto por confirmar).
+- Un semestre muestra los grupos de la carrera en esa retícula y semestre, y los de otras carreras donde ella tiene cupo y cuya materia está en ese semestre de la retícula. Los grupos cancelados no aparecen (supuesto por confirmar).
+- Quien ve la carrera ve todos los grupos de su semestre, de solo lectura los que no puede acomodar; los que no ve por su puesto (por ejemplo, para el jefe de la carrera, los de Ciencias Básicas) aparecen como contexto, porque HC-03 se revisa con todos (supuesto por confirmar).
 
 ## Cupos por carrera
 

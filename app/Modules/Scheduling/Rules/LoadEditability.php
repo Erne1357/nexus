@@ -9,6 +9,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 
@@ -52,7 +53,13 @@ final class LoadEditability
             throw ValidationException::withMessages([$key => "El grupo {$group->code} está cancelado: no se editan {$what}."]);
         }
 
-        $reason = $this->reason($group, $this->lockLoad($group)?->status, $what);
+        $status = $this->lockLoad($group)?->status;
+        $reason = self::isEditable($status) ? null : self::reason(
+            $status,
+            Department::withTrashed()->whereKey($group->department_id)->value('name'),
+            Campus::withTrashed()->whereKey($group->campus_id)->value('name'),
+            $what,
+        );
 
         if ($reason !== null) {
             throw ValidationException::withMessages([$key => $reason]);
@@ -60,7 +67,9 @@ final class LoadEditability
     }
 
     /**
-     * El motivo por el que cada grupo no se edita, o null si se edita; una sola consulta de cargas.
+     * El motivo por el que cada grupo no se edita, o null si se edita. Una consulta de cargas por las tuplas (periodo,
+     * campus, departamento) de los grupos y, solo si alguno está bloqueado, una de departamentos y una de campus para los
+     * mensajes, sin importar cuántos grupos sean (el tablero del editor).
      *
      * @param  iterable<Group>  $groups
      * @return array<string, ?string>
@@ -68,23 +77,37 @@ final class LoadEditability
     public function blockedReasons(iterable $groups, string $what = 'horarios'): array
     {
         $groups = collect($groups)->values();
+        $key = fn (Group|AcademicLoad $row): string => $row->term_id.'|'.$row->campus_id.'|'.$row->department_id;
+        $tuples = $groups->reject(fn (Group $group): bool => $group->status === GroupStatus::Cancelled)->unique($key)->values();
 
-        if ($groups->isEmpty()) {
-            return [];
-        }
-
-        $statuses = AcademicLoad::query()
-            ->whereIn('term_id', $groups->pluck('term_id')->unique())
-            ->whereIn('campus_id', $groups->pluck('campus_id')->unique())
-            ->whereIn('department_id', $groups->pluck('department_id')->unique())
+        $statuses = $tuples->isEmpty() ? collect() : AcademicLoad::query()
+            ->where(function (Builder $query) use ($tuples): void {
+                foreach ($tuples as $group) {
+                    $query->orWhere(fn (Builder $tuple) => $tuple->where('term_id', $group->term_id)->where('campus_id', $group->campus_id)->where('department_id', $group->department_id));
+                }
+            })
             ->get(['term_id', 'campus_id', 'department_id', 'status'])
-            ->mapWithKeys(fn (AcademicLoad $load): array => [$load->term_id.'|'.$load->campus_id.'|'.$load->department_id => $load->status]);
+            ->mapWithKeys(fn (AcademicLoad $load): array => [$key($load) => $load->status]);
 
-        return $groups->mapWithKeys(fn (Group $group): array => [
-            $group->id => $group->status === GroupStatus::Cancelled
-                ? "El grupo {$group->code} está cancelado: no se editan {$what}."
-                : $this->reason($group, $statuses[$group->term_id.'|'.$group->campus_id.'|'.$group->department_id] ?? null, $what),
-        ])->all();
+        $departments = null;
+        $campuses = null;
+
+        return $groups->mapWithKeys(function (Group $group) use ($statuses, $key, $tuples, $what, &$departments, &$campuses): array {
+            if ($group->status === GroupStatus::Cancelled) {
+                return [$group->id => "El grupo {$group->code} está cancelado: no se editan {$what}."];
+            }
+
+            $status = $statuses[$key($group)] ?? null;
+
+            if (self::isEditable($status)) {
+                return [$group->id => null];
+            }
+
+            $departments ??= Department::withTrashed()->whereIn('id', $tuples->pluck('department_id')->unique()->all())->pluck('name', 'id');
+            $campuses ??= Campus::withTrashed()->whereIn('id', $tuples->pluck('campus_id')->unique()->all())->pluck('name', 'id');
+
+            return [$group->id => self::reason($status, $departments[$group->department_id] ?? null, $campuses[$group->campus_id] ?? null, $what)];
+        })->all();
     }
 
     /**
@@ -115,15 +138,13 @@ final class LoadEditability
         return (string) $exception->getCode() === self::DEADLOCK || ($exception->errorInfo[0] ?? null) === self::DEADLOCK;
     }
 
-    private function reason(Group $group, ?LoadStatus $status, string $what): ?string
+    private static function isEditable(?LoadStatus $status): bool
     {
-        if ($status !== null && in_array($status, self::EDITABLE, true)) {
-            return null;
-        }
+        return $status !== null && in_array($status, self::EDITABLE, true);
+    }
 
-        $department = Department::withTrashed()->whereKey($group->department_id)->value('name');
-        $campus = Campus::withTrashed()->whereKey($group->campus_id)->value('name');
-
+    private static function reason(?LoadStatus $status, ?string $department, ?string $campus, string $what): string
+    {
         return $status === null
             ? "{$department} no tiene carga en {$campus} en este periodo: no se editan {$what}."
             : "La carga de {$department} en {$campus} está en ".mb_strtolower($status->label()).": no se editan {$what}.";
