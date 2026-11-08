@@ -22,8 +22,10 @@ use Mary\Traits\Toast;
  * El cajón de una sesión del editor de horarios (tarea 3.5; DESIGN.md, "Editor de horarios"): día, inicio, fin y tipo;
  * «Guardar» la mueve (UpdateGroupSession) y «Quitar sesión» la quita completa (RemoveGroupSession), y los dos avisan a
  * la página con `schedule-changed` para que vuelva a pintar la semana. Abrirlo (`open-session`) no la vuelve a pintar.
- * Muestra el salón, quién lo asigna y lo que dice el validador de la sesión (ScheduleEditorQuery::sessionPanel), leído
- * al abrir y al guardar; el tipo se elige en el navegador y viaja al guardar.
+ * Incrusta la sección del salón (`scheduling::components.session-room`, tarea 3.7), con la llave de la sesión y de su
+ * `updated_at` para que se vuelva a montar cuando la sesión cambia; muestra lo que dice el validador de la sesión
+ * (ScheduleEditorQuery::sessionPanel), leído al abrir, al guardar y cuando la sección asigna o quita el salón
+ * (`session-room-saved`); el tipo se elige en el navegador y viaja al guardar.
  *
  * El periodo y el campus son los de la página (`#[Locked]`); abrir pide ver el grupo (ScheduleEditorQuery::sees) y
  * guardar o quitar, editSessions, cada vez.
@@ -83,6 +85,25 @@ new class extends Component
         $this->panel = $editor->sessionPanel($context, $term, $campus, $session->id);
         $this->resetErrorBag();
         $this->show = true;
+    }
+
+    /**
+     * La sección del salón asignó o quitó el de esta sesión: se vuelve a leer el cajón (el validador y la llave de la
+     * sección) sin tocar el día, las horas ni el tipo que no se han guardado.
+     */
+    #[On('session-room-saved')]
+    public function roomSaved(string $sessionId, ScheduleEditorQuery $editor, Actor $context): void
+    {
+        if (! $this->show || $sessionId !== $this->sessionId) {
+            return;
+        }
+
+        [$term, $campus] = $this->context($editor);
+        $session = $editor->sessionOrFail($term, $campus, $sessionId);
+        abort_unless($editor->sees($context, $term, $campus, $session->group), 403);
+
+        $this->roomNotice = null;
+        $this->panel = $editor->sessionPanel($context, $term, $campus, $session->id);
     }
 
     public function save(UpdateGroupSession $update, ScheduleEditorQuery $editor, Actor $context): void

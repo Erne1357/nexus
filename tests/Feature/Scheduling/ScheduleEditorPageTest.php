@@ -453,6 +453,41 @@ describe('jefe del departamento de la materia', function () {
 
         $page->call('place', $this->dataGroup->id, 4, '13:00')->assertForbidden();
     });
+
+    it('asigna un salón desde el cajón de la sesión, el cajón vuelve a leer el validador y la semana lo muestra', function () {
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
+        $room = Room::factory()->capacity(30)->create(['code' => 'A-7', 'building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id]);
+        $session = GroupSession::factory()->for($this->calcGroup)->on(2, '09:00', '10:00')->create();
+        $blockOf = fn (Testable $page) => domOf($page)->querySelector('[data-testid=week] [data-session="'.$session->id.'"]');
+        $checksOf = fn (Testable $drawer): string => textOf(domOf($drawer)->querySelector('[aria-labelledby=session-checks-title]'));
+
+        $page = editorAs($jefe);
+        $drawer = editorDrawerAs($jefe, SESSION_DRAWER)->dispatch('open-session', id: $session->id)
+            ->assertSee('Salón actual')
+            ->assertSee('Salones sugeridos')
+            ->assertSee('A-7')
+            ->assertDontSee('Lo asigna el jefe');
+
+        expect(textOf($blockOf($page)))->toContain('Sin salón')
+            ->and($checksOf($drawer))->not->toContain('HC-05');
+
+        $this->travel(1)->minute();
+        Livewire::actingAs($jefe)->test('scheduling::components.session-room', ['sessionId' => $session->id])
+            ->call('assign', $room->id)
+            ->assertHasNoErrors()
+            ->assertDispatched('session-room-saved', sessionId: $session->id);
+        app()->forgetScopedInstances(); // otra petición: la Query del editor memoriza por petición
+
+        // El grupo (35) no cabe en A-7 (30): se guarda y queda marcado con HC-05, en el cajón y en la semana.
+        $drawer->dispatch('session-room-saved', sessionId: $session->id)
+            ->assertSet('panel.room', 'A-7')
+            ->assertSet('panel.updated_at', (string) $session->fresh()->updated_at->getTimestamp());
+        $page->dispatch('session-room-saved', sessionId: $session->id);
+
+        expect($session->fresh()->room_id)->toBe($room->id)
+            ->and($checksOf($drawer))->toContain('HC-05')
+            ->and(textOf($blockOf($page)))->toContain('ACF-0904', 'A-7', 'HC-05')->not->toContain('Sin salón');
+    });
 });
 
 describe('Subdirección', function () {
@@ -550,6 +585,6 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
         ->and($many)->toBeLessThanOrEqual(31)
         ->and($pick)->toBeLessThanOrEqual(33)
         ->and($place)->toBeLessThanOrEqual(100)
-        ->and($openSession)->toBeLessThanOrEqual(26)
+        ->and($openSession)->toBeLessThanOrEqual(37) // con la sección del salón y sus sugerencias (tarea 3.7)
         ->and($openGroup)->toBeLessThanOrEqual(15);
 });
