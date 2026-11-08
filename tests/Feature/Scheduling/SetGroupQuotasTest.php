@@ -245,6 +245,22 @@ it('HC-07: una propuesta aceptada deja de apartar y cuenta como su cupo, sin con
     expect(seatsOf($this->group))->toBe([$this->owner->id => 25, $this->foreign->id => 15]);
 });
 
+it('HC-07: si datos de antes ya se pasan de la capacidad, deja guardar lo que no sube el total y rechaza lo que lo sube (supuesto por confirmar)', function () {
+    InterdepartmentalAgreement::factory()->sharedGroup(25)->create([
+        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $this->foreign->id,
+    ]);
+
+    setQuotas([$this->owner->id => 18]);
+    expect(seatsOf($this->group))->toBe([$this->owner->id => 18]);
+
+    setQuotas([$this->owner->id => 10, $this->sameDept->id => 8]);
+    expect(seatsOf($this->group))->toBe([$this->owner->id => 10, $this->sameDept->id => 8])
+        ->and(setQuotasErrors([$this->owner->id => 11, $this->sameDept->id => 8]))
+        ->toBe(['quotas' => ['HC-07: los cupos suman 19 y las propuestas apartan 25; el grupo es de 40 lugares. Quita 4 lugares.']])
+        ->and(seatsOf($this->group))->toBe([$this->owner->id => 10, $this->sameDept->id => 8]);
+});
+
 it('HC-07: traduce el rechazo de la base al mismo mensaje', function () {
     // La base ve un cupo que la lectura previa no ve (otro proceso lo escribió): la suma real pasa la capacidad.
     $other = Career::factory()->create(['department_id' => $this->imparte->id]);
