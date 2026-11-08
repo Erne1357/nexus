@@ -20,6 +20,7 @@ use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use Dom\Element;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Features\SupportTesting\Testable;
@@ -141,6 +142,15 @@ describe('coordinador de la carrera dueña', function () {
 
         expect(textOf($tray))->toContain('ACF-0904', 'Cálculo Vectorial', 'ACF-0904 · A', 'Sin docente', '0 de 2 h', 'AED-1026 · B', '0 de 3 h')
             ->and(textOf(domOf($page)->querySelector('[data-testid=editor-semester]')))->toContain('Semestre 3 · 2 sin acomodar');
+    });
+
+    it('la bandeja es una sola parada de tabulación: la pieza elegida o la primera, con los botones del cajón fuera del Tab', function () {
+        $stops = fn (Testable $page): array => array_map(fn (Element $element): string => $element->getAttribute('data-group') ?? 'cajón', [...domOf($page)->querySelectorAll('[data-testid=tray] [tabindex="0"]')]);
+
+        expect($stops(editorAs($this->coordinator)))->toBe([$this->calcGroup->id])
+            ->and($stops(editorAs($this->coordinator)->call('pick', $this->dataGroup->id)))->toBe([$this->dataGroup->id])
+            ->and(domOf(editorAs($this->coordinator))->querySelectorAll('[data-testid=tray] [data-group-drawer][tabindex="-1"]')->length)->toBe(2)
+            ->and(domOf(editorAs($this->coordinator))->querySelector('[data-testid=skip-to-week]')?->getAttribute('href'))->toBe('#editor-week');
     });
 
     it('elige un grupo, ve dónde cabe y coloca una sesión en una celda que cabe', function () {

@@ -1037,6 +1037,8 @@ document.addEventListener('alpine:init', () => {
 |   tocada ya no existe.
 | - Al cerrar el último cajón abierto, el foco regresa a lo que lo abrió (data-opener). Pasar de un cajón al otro
 |   (data-drawer-switch) no lo regresa.
+| - La bandeja también es una sola parada (trayRove, trayKey) y «Ir a la semana» (toWeek) salta a la semana sin
+|   recorrer la bandeja ni los choques.
 | - El motivo de una celda que choca o no se puede (data-why) se ve junto a ella con el foco o bajo el puntero (tip,
 |   `position: fixed` para que la caja de la semana no lo recorte) y se mueve con ella al desplazar.
 */
@@ -1142,6 +1144,57 @@ document.addEventListener('alpine:init', () => {
             }
 
             this.visible(id)?.focus({ preventScroll: true });
+        },
+
+        /** «Ir a la semana»: el foco a la parada de la semana (o al día elegido de la lista en celular). */
+        toWeek() {
+            const week = [...document.querySelectorAll('[data-testid=week], [data-testid=day-list]')].find((element) => element.offsetParent !== null);
+            const target = week?.querySelector('[data-nav][tabindex="0"], [data-day-button][aria-pressed=true]') ?? week;
+
+            target?.focus({ preventScroll: true });
+            target?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+        },
+
+        trayRove(event) {
+            const current = event.target.closest('[data-tray-item]');
+
+            if (!current) {
+                return;
+            }
+
+            for (const element of event.currentTarget.querySelectorAll('[data-tray-item]')) {
+                element.tabIndex = element === current ? 0 : -1;
+            }
+        },
+
+        /**
+         * La bandeja es una sola parada: arriba y abajo, Inicio y Fin cambian de grupo (en la misma columna: la pieza o
+         * el botón de su cajón); la derecha va al botón del cajón y la izquierda regresa a la pieza.
+         */
+        trayKey(event) {
+            const current = event.target.closest('[data-tray-item]');
+
+            if (!current || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) {
+                return;
+            }
+
+            const pieces = [...event.currentTarget.querySelectorAll('[data-piece]')];
+            const piece = current.closest('[data-piece]');
+            const index = pieces.indexOf(piece);
+            const onDrawer = current.hasAttribute('data-group-drawer');
+            const column = (element) => element?.querySelector(onDrawer ? '[data-group-drawer]' : '[data-group]');
+            const next = {
+                ArrowDown: () => column(pieces[index + 1]),
+                ArrowUp: () => column(pieces[index - 1]),
+                Home: () => column(pieces[0]),
+                End: () => column(pieces.at(-1)),
+                ArrowRight: () => (onDrawer ? null : piece.querySelector('[data-group-drawer]')),
+                ArrowLeft: () => (onDrawer ? piece.querySelector('[data-group]') : null),
+            }[event.key]();
+
+            event.preventDefault();
+            next?.focus();
+            next?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         },
 
         rove(event) {
