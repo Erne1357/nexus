@@ -7,9 +7,9 @@ use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Staffing\Models\ChangeRequest;
 
 /**
- * Base de los avisos de una solicitud de cambio (tarea 3.11): llevan a la pantalla de solicitudes con la solicitud
- * elegida (`?solicitud=`), en el periodo y campus del grupo. La pantalla llega después: si la ruta no existe, la
- * campana avisa que no está disponible (NexusNotification::unavailableReason).
+ * Base de los avisos de una solicitud de cambio (tarea 3.11): llevan a la pantalla «Solicitudes de cambio»
+ * (`staffing.change-requests`) con la solicitud elegida (`?solicitud=`), en el periodo y campus del grupo; al abrirlo, la
+ * campana deja la credencial en ellos (OpenNotification).
  */
 abstract class ChangeRequestNotification extends NexusNotification
 {
