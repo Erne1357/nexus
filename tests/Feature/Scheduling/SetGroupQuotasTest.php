@@ -70,7 +70,7 @@ function setQuotasErrors(array $seats): array
  */
 function seatsOf(Group $group): array
 {
-    return GroupQuota::query()->where('group_id', $group->id)->pluck('max_seats', 'career_id')->all();
+    return GroupQuota::query()->where('group_id', $group->id)->orderByDesc('is_owner')->orderBy('id')->pluck('max_seats', 'career_id')->all();
 }
 
 it('crea, cambia y quita directo el cupo de una carrera del mismo departamento', function () {
