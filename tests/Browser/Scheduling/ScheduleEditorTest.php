@@ -17,8 +17,9 @@ use App\Modules\Scheduling\Models\GroupSession;
 /*
 | Editor de horarios en el navegador (tarea 3.5, maqueta A): el coordinador entra por el menú, elige el semestre,
 | acomoda las horas de tres grupos tocando las celdas donde caben (el último con el teclado: flechas, Enter y Esc) y
-| queda con «0 choques»; pasa del cajón de una sesión al de su grupo y, al cerrarlo, el foco regresa a la sesión; en
-| celular cambia de día.
+| queda con «0 choques»; recorre la bandeja con las flechas (una sola parada) y salta a la semana con «Ir a la
+| semana»; pasa del cajón de una sesión al de su grupo y, al cerrarlo, el foco regresa a la sesión; en celular cambia
+| de día.
 */
 
 beforeEach(function () {
@@ -97,6 +98,23 @@ it('el coordinador entra por el menú, acomoda las horas de tres grupos del seme
         ->assertMissing('@selection-bar')
         ->assertSeeIn('@hard-count', '0 choques')
         ->assertSee('Sin choques en este semestre');
+
+    // La bandeja es una sola parada: abajo cambia de grupo, Enter lo elige y la derecha va al botón de su cajón;
+    // «Ir a la semana» salta a la parada de la semana.
+    $stop = '[data-testid=tray] [data-group][tabindex="0"]';
+    $first = $this->groups['ACF-0904']->id;
+
+    $page->assertScript("document.querySelectorAll('[data-testid=tray] [tabindex=\"0\"]').length", 1)
+        ->keys('[data-group="'.$first.'"]', 'ArrowDown')
+        ->assertScript("document.activeElement.hasAttribute('data-group') && document.activeElement.dataset.group !== '{$first}'", true)
+        ->keys($stop, 'Enter')
+        ->assertScript("document.querySelector('[data-testid=selection-bar]')?.textContent.includes(document.querySelector('{$stop} b').textContent.trim())", true)
+        ->keys($stop, 'ArrowRight')
+        ->assertScript("document.activeElement.hasAttribute('data-group-drawer')", true)
+        ->keys('@skip-to-week', 'Enter')
+        ->assertScript("!! document.activeElement.closest('[data-testid=week]')", true)
+        ->keys('[data-testid=week] [data-nav][tabindex="0"]', 'Escape')
+        ->assertMissing('@selection-bar');
 
     // Los cajones: de la sesión al grupo el foco no regresa a la semana; al cerrar con Esc el último, regresa a la
     // sesión que abrió el primero.
