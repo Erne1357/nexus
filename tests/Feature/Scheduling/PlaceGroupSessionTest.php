@@ -165,7 +165,7 @@ it('HC-04: rechaza lo que cae fuera de los días, la ventana o los bloques del c
     'sábado' => [6, '07:00', '08:00', 'HC-04: Campus II no da clases el sábado (lunes a viernes, 7:00 a 21:00).'],
     'antes de abrir' => [1, '06:00', '07:00', 'HC-04: la sesión debe caer dentro del horario de Campus II (lunes a viernes, 7:00 a 21:00).'],
     'después de cerrar' => [1, '20:00', '22:00', 'HC-04: la sesión debe caer dentro del horario de Campus II (lunes a viernes, 7:00 a 21:00).'],
-    'a media hora' => [1, '07:30', '08:30', 'HC-04: la sesión debe empezar y terminar en bloques de 60 minutos desde las 7:00.'],
+    'a media hora' => [1, '07:30', '08:30', 'HC-04: la sesión debe empezar y terminar en bloques de 60 minutos desde las 07:00.'],
     'fin antes del inicio' => [1, '09:00', '08:00', 'La sesión debe terminar después de empezar.'],
     'hora mal escrita' => [1, '7am', '08:00', 'La hora «7am» no es válida: se escribe como 07:00.'],
 ]);
@@ -191,7 +191,7 @@ it('une un bloque pegado a otra sesión del mismo tipo y sin salón: la que exis
         ->and($before->session->id)->toBe($existing->id);
 });
 
-it('une con las dos vecinas: la de antes se extiende y la de después se borra', function () {
+it('une con las dos vecinas: la de antes se extiende, la de después se borra y queda en la bitácora', function () {
     $first = GroupSession::factory()->for($this->group)->on(3, '07:00', '08:00')->create();
     $last = GroupSession::factory()->for($this->group)->on(3, '09:00', '10:00')->create();
 
@@ -199,7 +199,14 @@ it('une con las dos vecinas: la de antes se extiende y la de después se borra',
 
     expect(placedSessionsOf($this->group))->toBe(['3 07:00-10:00 teoria'])
         ->and($result->session->id)->toBe($first->id)
-        ->and(GroupSession::query()->whereKey($last->id)->exists())->toBeFalse();
+        ->and(GroupSession::query()->whereKey($last->id)->exists())->toBeFalse()
+        ->and(Activity::sole()->attribute_changes->toArray())->toBe([
+            'attributes' => ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '10:00', 'kind' => 'teoria', 'room_id' => null],
+            'old' => ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '08:00', 'kind' => 'teoria', 'room_id' => null],
+        ])
+        ->and(Activity::sole()->properties->all())->toBe([
+            'absorbed' => [['id' => $last->id, 'day' => 3, 'starts_at' => '09:00', 'ends_at' => '10:00', 'kind' => 'teoria', 'room_id' => null]],
+        ]);
 });
 
 it('une con la de después cuando no hay de antes: esa se extiende hacia atrás', function () {
@@ -321,12 +328,13 @@ it('deja la bitácora en el grupo con las horas de antes y de después', functio
         ]);
 });
 
-it('una sesión nueva sin vecinas no tiene horas de antes en la bitácora', function () {
+it('una sesión nueva sin vecinas no tiene horas de antes ni sesiones absorbidas en la bitácora', function () {
     placeSession($this->group, 1, '08:00', '09:00');
 
     expect(Activity::sole()->attribute_changes->toArray())->toBe([
         'attributes' => ['day' => 1, 'starts_at' => '08:00', 'ends_at' => '09:00', 'kind' => 'teoria', 'room_id' => null],
-    ]);
+    ])
+        ->and(Activity::sole()->properties->all())->toBe([]);
 });
 
 it('avisa con GroupScheduleChanged solo después del commit', function () {

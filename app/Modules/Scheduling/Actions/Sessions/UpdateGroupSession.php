@@ -26,7 +26,8 @@ use Illuminate\Validation\ValidationException;
  * supuesto por confirmar); las demás reglas duras no la detienen. Si queda pegada a otra sesión del grupo del mismo
  * tipo y salón, la movida se extiende y las vecinas se borran. Sin cambios no escribe, no registra ni avisa. Escribe
  * en un savepoint que traduce las exclusiones de la base, deja la bitácora en el grupo (`session_updated`, con las
- * horas de antes y de después) y avisa con GroupScheduleChanged después del commit.
+ * horas de antes y de después y las vecinas absorbidas en `absorbed`) y avisa con GroupScheduleChanged después del
+ * commit.
  */
 final class UpdateGroupSession
 {
@@ -66,6 +67,7 @@ final class UpdateGroupSession
             }
 
             [$before, $after] = ContiguousSessions::around($sameDay, $startsAt, $endsAt, $kind, $roomId);
+            $absorbed = SessionRules::absorbed($before, $after);
 
             try {
                 DB::transaction(function () use ($session, $day, $startsAt, $endsAt, $kind, $roomId, $before, $after): void {
@@ -85,19 +87,21 @@ final class UpdateGroupSession
             }
 
             $session->refresh();
+            $this->validator->forget();
+            $validation = $this->validator->validateGroup($group);
+            $label = $this->validator->stateFor($group->term_id, $group->campus_id)->labelOf($group->id);
 
             activity()
                 ->causedBy($actor)
                 ->performedOn($group)
                 ->event('session_updated')
                 ->withChanges(['attributes' => SessionRules::snapshot($session), 'old' => $old])
-                ->log("Movió una sesión de {$this->rules->label($group)} del ".Minutes::dayName($old['day'])." de {$old['starts_at']} a {$old['ends_at']} al ".Minutes::dayName($day)." de {$startsAt} a {$endsAt}");
+                ->withProperties(array_filter(['absorbed' => $absorbed]))
+                ->log("Movió una sesión de {$label} del ".Minutes::dayName($old['day'])." de {$old['starts_at']} a {$old['ends_at']} al ".Minutes::dayName($day)." de {$startsAt} a {$endsAt}");
 
             GroupScheduleChanged::dispatch($group);
 
-            $this->validator->forget();
-
-            return new SessionResult($session, $this->validator->validateGroup($group), $roomDropped);
+            return new SessionResult($session, $validation, $roomDropped);
         });
     }
 }
