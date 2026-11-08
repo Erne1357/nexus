@@ -21,6 +21,7 @@ use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Scheduling\Events\GroupsCreated;
+use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -93,6 +94,11 @@ class MassiveSeeder extends Seeder
         $this->callWith(SchedulingAgreementsDemoSeeder::class, ['profile' => 'massive', 'campuses' => ['C1', 'C2'], 'cleanDepartments' => $scheduling->cleanDepartments()]);
 
         $this->command?->info(sprintf('Préstamos de salón, grupos compartidos y salones sugeridos: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $started = hrtime(true);
+        $this->callWith(StaffingDemoSeeder::class, ['profile' => 'massive', 'campuses' => ['C1', 'C2']]);
+
+        $this->command?->info(sprintf('Asignación docente, solicitudes de cambio y carga por docente: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $this->call(LoginScreenDemoSeeder::class);
     }
