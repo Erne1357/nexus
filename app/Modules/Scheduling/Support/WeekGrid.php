@@ -107,11 +107,11 @@ final readonly class WeekGrid
     }
 
     /**
-     * «7:00» de «07:00».
+     * «7:00» de «07:00» (Minutes::labelOf()).
      */
     public static function clock(string $time): string
     {
-        return (int) substr($time, 0, 2).substr($time, 2, 3);
+        return Minutes::labelOf($time);
     }
 
     /**

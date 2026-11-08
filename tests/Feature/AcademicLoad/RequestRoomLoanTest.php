@@ -89,7 +89,7 @@ it('deja bitácora con quién lo pidió y qué pidió', function () {
         ->and($activity->causer_id)->toBe($this->actor->id)
         ->and($activity->event)->toBe('requested')
         ->and($activity->attribute_changes['attributes'])->toMatchArray(['status' => 'proposed', 'room_id' => $this->room->id, 'day' => 1])
-        ->and($activity->description)->toBe('SIS pidió a CB el salón LAB1 el día 1 de 09:00 a 11:00 en C2 para el periodo 20271');
+        ->and($activity->description)->toBe('SIS pidió a CB el salón LAB1 el lunes de 9:00 a 11:00 en C2 para el periodo 20271');
 });
 
 it('es idempotente: el mismo préstamo vivo se regresa sin escribir', function () {

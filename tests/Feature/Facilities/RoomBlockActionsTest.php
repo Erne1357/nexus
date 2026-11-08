@@ -41,7 +41,7 @@ it('agrega un bloqueo para todos los periodos, con bitácora y aviso', function 
 
     expect($block->fresh())->term_id->toBeNull()->day->toBe(2)->reason->toBe('Reservado')
         ->and(substr($block->fresh()->starts_at, 0, 5))->toBe('09:00')
-        ->and($entry)->event->toBe('created')->description->toBe('Bloqueó el salón A-101 el martes de 09:00 a 11:00')
+        ->and($entry)->event->toBe('created')->description->toBe('Bloqueó el salón A-101 el martes de 9:00 a 11:00')
         ->and($entry->causer->is($admin))->toBeTrue();
     Event::assertDispatched(RoomBlockAdded::class, fn (RoomBlockAdded $event): bool => $event->block->is($block));
 });
@@ -73,7 +73,7 @@ it('rechaza horas fuera de la jornada del campus, en el campo de la hora que se 
         $this->fail('Debió rechazar las horas.');
     } catch (ValidationException $exception) {
         expect(array_keys($exception->errors()))->toBe([$field])
-            ->and($exception->errors()[$field][0])->toContain('dentro del horario del campus (07:00 a 21:00)');
+            ->and($exception->errors()[$field][0])->toContain('dentro del horario del campus (7:00 a 21:00)');
     }
 })->with([['06:00', '08:00', 'starts_at'], ['20:00', '22:00', 'ends_at']]);
 
@@ -118,7 +118,7 @@ it('quitar un bloqueo es borrado lógico, con bitácora y aviso', function () {
     app(RemoveRoomBlock::class)->handle($block);
 
     expect(RoomBlock::count())->toBe(0)->and(RoomBlock::withTrashed()->count())->toBe(1)
-        ->and(Activity::query()->orderByDesc('id')->firstOrFail())->event->toBe('deleted')->description->toBe('Quitó el bloqueo del salón A-101 el martes de 09:00 a 11:00');
+        ->and(Activity::query()->orderByDesc('id')->firstOrFail())->event->toBe('deleted')->description->toBe('Quitó el bloqueo del salón A-101 el martes de 9:00 a 11:00');
     Event::assertDispatched(RoomBlockRemoved::class);
 });
 

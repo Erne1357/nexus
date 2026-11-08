@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Enums\StaffingMode;
+use App\Modules\Core\Support\WeekTime;
 use Illuminate\Support\Arr;
 use InvalidArgumentException;
 
@@ -43,8 +44,6 @@ final readonly class CampusProfile
     private const int FIRST_DAY = 1;
 
     private const int LAST_DAY = 6;
-
-    private const array DAY_NAMES = [1 => 'lunes', 2 => 'martes', 3 => 'miércoles', 4 => 'jueves', 5 => 'viernes', 6 => 'sábado'];
 
     /**
      * @param  list<int>  $days
@@ -153,7 +152,7 @@ final readonly class CampusProfile
      */
     private static function dayNames(array $days): string
     {
-        $names = array_map(fn (int $day): string => self::DAY_NAMES[$day], $days);
+        $names = array_map(fn (int $day): string => WeekTime::day($day), $days);
         $count = count($days);
 
         if ($count >= 3 && $count - 1 === $days[$count - 1] - $days[0]) {
@@ -168,7 +167,7 @@ final readonly class CampusProfile
      */
     private static function clock(string $time): string
     {
-        return (int) substr($time, 0, 2).substr($time, 2);
+        return WeekTime::clock($time);
     }
 
     /**

@@ -34,7 +34,7 @@ it('HC-05: un salón más chico que el grupo da un choque duro en el salón', fu
         ->subjectType->toBe('room')
         ->subjectId->toBe('A-1')
         ->groupId->toBe('A')
-        ->message->toBe('El salón A-1 tiene 30 lugares y Cálculo, grupo A tiene 35 (martes de 07:00 a 09:00).')
+        ->message->toBe('El salón A-1 tiene 30 lugares y Cálculo, grupo A tiene 35 (martes de 7:00 a 9:00).')
         ->and($violations[0]->related)->toMatchArray(['room_capacity' => 30, 'group_capacity' => 35]);
 });
 

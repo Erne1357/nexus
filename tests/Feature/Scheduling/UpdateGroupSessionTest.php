@@ -169,7 +169,7 @@ it('rechaza encimarse con otra sesión del mismo grupo, sin mover', function () 
     GroupSession::factory()->for($this->group)->on(2, '08:00', '10:00')->create();
 
     expect(fn () => moveSession($this->session, 2, '07:00', '09:00'))
-        ->toThrow(ValidationException::class, 'El grupo D ya tiene sesión el martes de 08:00 a 10:00: no se encima otra.')
+        ->toThrow(ValidationException::class, 'El grupo D ya tiene sesión el martes de 8:00 a 10:00: no se encima otra.')
         ->and($this->session->fresh()->day)->toBe(1);
 });
 
@@ -210,7 +210,7 @@ it('deja la bitácora en el grupo con las horas de antes y de después, y avisa 
 
     expect($entry)
         ->event->toBe('session_updated')
-        ->description->toBe('Movió una sesión de Cálculo Diferencial, grupo D del lunes de 07:00 a 09:00 al miércoles de 10:00 a 12:00')
+        ->description->toBe('Movió una sesión de Cálculo Diferencial, grupo D del lunes de 7:00 a 9:00 al miércoles de 10:00 a 12:00')
         ->and($entry->causer->is($this->user))->toBeTrue()
         ->and($entry->subject->is($this->group))->toBeTrue()
         ->and($entry->attribute_changes->toArray())->toBe([

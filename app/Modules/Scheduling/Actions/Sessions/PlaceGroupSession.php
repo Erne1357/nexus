@@ -91,7 +91,7 @@ final class PlaceGroupSession
                 ->event('session_placed')
                 ->withChanges(array_filter(['attributes' => SessionRules::snapshot($session), 'old' => $old]))
                 ->withProperties(array_filter(['absorbed' => $absorbed]))
-                ->log("Colocó una sesión de {$label} el ".Minutes::dayName($day)." de {$startsAt} a {$endsAt}");
+                ->log("Colocó una sesión de {$label} el ".Minutes::dayName($day).' de '.Minutes::labelOf($startsAt).' a '.Minutes::labelOf($endsAt));
 
             GroupScheduleChanged::dispatch($group);
 

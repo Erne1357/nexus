@@ -45,12 +45,12 @@ it('SC-09: dos sesiones seguidas del docente en campus distintos con menos de 1 
         ->severity->toBe(ConflictSeverity::Soft)
         ->subjectType->toBe('teacher')
         ->subjectId->toBe('T1')
-        ->message->toBe('Ana Pérez tiene 30 min para ir de C1 (09:00) a C2 (09:30) el lunes, entre este grupo y Química, grupo H; el mínimo es 60 min.')
+        ->message->toBe('Ana Pérez tiene 30 min para ir de C1 (9:00) a C2 (9:30) el lunes, entre este grupo y Química, grupo H; el mínimo es 60 min.')
         ->and($violations[0]->related)->toBe([
             'teacher_id' => 'T1', 'session_id' => 'A-0', 'other_session_id' => 'B-0', 'other_group_id' => 'B',
             'campus_id' => 'C1', 'other_campus_id' => 'C2', 'day' => 1, 'free_minutes' => 30, 'min_minutes' => 60,
         ])
-        ->and($violations[1]->message)->toBe('Ana Pérez tiene 30 min para ir de C1 (09:00) a C2 (09:30) el lunes, entre Cálculo Diferencial, grupo A, y este grupo; el mínimo es 60 min.');
+        ->and($violations[1]->message)->toBe('Ana Pérez tiene 30 min para ir de C1 (9:00) a C2 (9:30) el lunes, entre Cálculo Diferencial, grupo A, y este grupo; el mínimo es 60 min.');
 });
 
 it('SC-09: con 1 h libre o más, en el mismo campus, otro día, empalmadas o con otra sesión de por medio no avisa', function () {

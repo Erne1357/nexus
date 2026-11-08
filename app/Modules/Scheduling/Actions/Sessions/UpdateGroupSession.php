@@ -101,7 +101,7 @@ final class UpdateGroupSession
                 ->event('session_updated')
                 ->withChanges(['attributes' => SessionRules::snapshot($session), 'old' => $old])
                 ->withProperties(array_filter(['absorbed' => $absorbed]))
-                ->log('Movió una sesión de '.SessionRules::label($group).' del '.Minutes::dayName($old['day'])." de {$old['starts_at']} a {$old['ends_at']} al ".Minutes::dayName($day)." de {$startsAt} a {$endsAt}");
+                ->log('Movió una sesión de '.SessionRules::label($group).' del '.Minutes::dayName($old['day']).' de '.Minutes::labelOf($old['starts_at']).' a '.Minutes::labelOf($old['ends_at']).' al '.Minutes::dayName($day).' de '.Minutes::labelOf($startsAt).' a '.Minutes::labelOf($endsAt));
 
             GroupScheduleChanged::dispatch($group);
 
