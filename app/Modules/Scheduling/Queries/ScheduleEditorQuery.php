@@ -296,6 +296,7 @@ final class ScheduleEditorQuery
             'day' => $session->day,
             'starts_at' => Clock::of($session->starts_at),
             'ends_at' => Clock::of($session->ends_at),
+            'kind' => $session->kind->value,
             'updated_at' => (string) $session->updated_at?->getTimestamp(),
             'room' => $session->room?->code,
             'group' => ['id' => $group->id, 'label' => "{$group->subject->code} · {$group->code}", 'subject' => $group->subject->name, 'teacher' => $group->teacher?->name],

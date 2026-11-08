@@ -337,6 +337,33 @@ describe('coordinador de la carrera dueña', function () {
             ->and(lastToastOf($drawer)['title'])->toBe('Sesión quitada');
     });
 
+    it('con el día, la hora o el tipo sin guardar, el salón se deshabilita con su motivo y solo «Guardar horario» guarda', function () {
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
+        Room::factory()->capacity(40)->create(['code' => 'A-7', 'building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id]);
+        $session = GroupSession::factory()->for($this->calcGroup)->on(2, '09:00', '10:00')->create();
+        $gateOf = fn (Testable $drawer) => domOf($drawer)->querySelector('[data-testid=room-gate]');
+        $saveOf = fn (Testable $drawer) => domOf($drawer)->querySelector('[data-testid=save-session]');
+
+        $drawer = editorDrawerAs($jefe, SESSION_DRAWER)->dispatch('open-session', id: $session->id)->assertSee('Salones sugeridos');
+        expect($gateOf($drawer))->toBeNull()
+            ->and($saveOf($drawer)?->hasAttribute('disabled'))->toBeTrue()
+            ->and(textOf($saveOf($drawer)))->toBe('Guardar horario');
+
+        $drawer->set('startsAt', '11:00')->set('endsAt', '12:00')->assertDontSee('Salones sugeridos');
+        expect(textOf($gateOf($drawer)))->toContain('Guarda el horario para ver los salones libres a esa hora')
+            ->and($saveOf($drawer)?->hasAttribute('disabled'))->toBeFalse();
+
+        $drawer->call('discard')->assertSet('startsAt', '09:00')->assertSet('endsAt', '10:00')->assertSee('Salones sugeridos');
+        expect($gateOf($drawer))->toBeNull();
+
+        $drawer->set('kind', 'practica');
+        expect($gateOf($drawer))->not->toBeNull();
+
+        $drawer->set('day', '4')->call('save')->assertHasNoErrors()->assertSee('Salones sugeridos');
+        expect($gateOf($drawer))->toBeNull()
+            ->and(editorSessionsOf($this->calcGroup))->toBe(['4 09:00-10:00 practica']);
+    });
+
     it('cambiar el tipo en el cajón no vuelve a validar el grupo: valida al abrir y al guardar', function () {
         $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
         $drawer = editorDrawerAs($this->coordinator, SESSION_DRAWER)->call('open', $session->id);

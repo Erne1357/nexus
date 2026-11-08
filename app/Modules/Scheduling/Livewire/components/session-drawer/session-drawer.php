@@ -13,19 +13,23 @@ use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
 /**
- * El cajón de una sesión del editor de horarios (tarea 3.5; DESIGN.md, "Editor de horarios"): día, inicio, fin y tipo;
- * «Guardar» la mueve (UpdateGroupSession) y «Quitar sesión» la quita completa (RemoveGroupSession), y los dos avisan a
- * la página con `schedule-changed` para que vuelva a pintar la semana. Abrirlo (`open-session`) no la vuelve a pintar.
- * Incrusta la sección del salón (`scheduling::components.session-room`, tarea 3.7), con la llave de la sesión y de su
- * `updated_at` para que se vuelva a montar cuando la sesión cambia; muestra lo que dice el validador de la sesión
- * (ScheduleEditorQuery::sessionPanel), leído al abrir, al guardar y cuando la sección asigna o quita el salón
- * (`session-room-saved`); el tipo se elige en el navegador y viaja al guardar.
+ * El cajón de una sesión del editor de horarios (tarea 3.5; DESIGN.md, "Editor de horarios"): arriba lo que dice el
+ * validador de la sesión (ScheduleEditorQuery::sessionPanel, leído al abrir, al guardar y cuando la sección del salón
+ * asigna o quita el salón, `session-room-saved`); luego día, inicio, fin y tipo, y la sección del salón
+ * (`scheduling::components.session-room`, tarea 3.7), con la llave de la sesión y de su `updated_at` para que se vuelva
+ * a montar cuando la sesión cambia. Cada cosa se guarda de una sola forma: «Guardar horario» (al pie) mueve la sesión
+ * (UpdateGroupSession) y «Asignar salón» (en su sección) asigna el salón. Mientras el día, las horas o el tipo tienen
+ * cambios sin guardar (`dirty`), la sección del salón no se monta y dice por qué: sus sugerencias serían de la hora
+ * guardada. «Descartar cambios» regresa a lo guardado. «Quitar sesión» la quita completa (RemoveGroupSession); guardar
+ * y quitar avisan a la página con `schedule-changed` para que vuelva a pintar la semana. Abrirlo (`open-session`) no
+ * la vuelve a pintar; cambiar un campo vuelve a pintar el cajón sin validar ni leer salones.
  *
  * El periodo y el campus son los de la página (`#[Locked]`); abrir pide ver el grupo (ScheduleEditorQuery::sees) y
  * guardar o quitar, editSessions, cada vez.
@@ -104,6 +108,32 @@ new class extends Component
 
         $this->roomNotice = null;
         $this->panel = $editor->sessionPanel($context, $term, $campus, $session->id);
+    }
+
+    /**
+     * Si el día, las horas o el tipo cambiaron y no se han guardado.
+     */
+    #[Computed]
+    public function dirty(): bool
+    {
+        return $this->panel !== null
+            && [$this->day, $this->startsAt, $this->endsAt, $this->kind] !== [(string) $this->panel['day'], $this->panel['starts_at'], $this->panel['ends_at'], $this->panel['kind']];
+    }
+
+    /**
+     * «Descartar cambios»: el día, las horas y el tipo regresan a lo guardado.
+     */
+    public function discard(): void
+    {
+        if ($this->panel === null) {
+            return;
+        }
+
+        $this->day = (string) $this->panel['day'];
+        $this->startsAt = $this->panel['starts_at'];
+        $this->endsAt = $this->panel['ends_at'];
+        $this->kind = $this->panel['kind'];
+        $this->resetErrorBag();
     }
 
     public function save(UpdateGroupSession $update, ScheduleEditorQuery $editor, Actor $context): void
