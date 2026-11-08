@@ -41,7 +41,7 @@ final class CampusTravel implements Constraint
                         continue;
                     }
 
-                    $trip = "{$name} tiene {$free} min para ir de {$state->campusCode($from)} (".Minutes::format($first->end).") a {$state->campusCode($to)} (".Minutes::format($next->start).') el '.Minutes::dayName($first->day);
+                    $trip = "{$name} tiene {$free} min para ir de {$state->campusCode($from)} (".Minutes::label($first->end).") a {$state->campusCode($to)} (".Minutes::label($next->start).') el '.Minutes::dayName($first->day);
                     $related = ['teacher_id' => $teacherId, 'day' => $first->day, 'free_minutes' => $free, 'min_minutes' => $minimum];
 
                     yield $this->warning("{$trip}, entre este grupo y {$state->labelOf($next->groupId)}; el mínimo es {$minimum} min.", $teacherId, $first, $next, $from, $to, $related);

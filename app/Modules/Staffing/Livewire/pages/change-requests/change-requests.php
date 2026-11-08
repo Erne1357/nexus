@@ -328,7 +328,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
     }
 
     /**
-     * Los grupos del modal «Nueva solicitud»: clave, materia y «Sem. 3 · SC · Lu Mi 07:00–09:00».
+     * Los grupos del modal «Nueva solicitud»: clave, materia y «Sem. 3 · SC · Lu Mi 7:00–9:00».
      *
      * @param  iterable<Group>  $groups
      * @return list<array{id: string, code: string, subject: string, detail: string, reason: null}>

@@ -52,12 +52,12 @@
                 @endif
             </span>
             @if ($row['state']['busy'] !== null)
-                <span class="text-sm break-words">{{ \App\Modules\Scheduling\Support\WeekGrid::prose((string) $row['state']['busyDetail']) }}</span>
+                <span class="text-sm break-words">{{ (string) $row['state']['busyDetail'] }}</span>
                 <span class="text-sm text-neutral break-words">{{ $row['state']['busyNote'] }}</span>
             @else
                 @foreach ($row['conflicts'] as $conflict)
                     @if ($conflict['detail'] !== null)
-                        <span class="text-sm break-words">{{ \App\Modules\Scheduling\Support\WeekGrid::prose($conflict['detail']) }}</span>
+                        <span class="text-sm break-words">{{ $conflict['detail'] }}</span>
                     @endif
                 @endforeach
             @endif
@@ -70,7 +70,7 @@
                     @php($loan = $conflict['rule'] === 'HC-10')
                     <span class="flex items-start gap-2 rounded-field border px-3 py-2 text-sm {{ $loan ? 'border-warning/40 bg-warning/10' : 'border-error/40 bg-error/10' }}">
                         <x-icon :name="$loan ? 'o-arrows-right-left' : 'o-x-circle'" class="mt-0.5 h-4 w-4 shrink-0 {{ $loan ? 'text-warning' : 'text-error' }}" aria-hidden="true" />
-                        <span class="min-w-0 break-words"><b class="font-mono">{{ $conflict['rule'] }}</b> {{ \App\Modules\Scheduling\Support\WeekGrid::prose($conflict['message']) }}</span>
+                        <span class="min-w-0 break-words"><b class="font-mono">{{ $conflict['rule'] }}</b> {{ $conflict['message'] }}</span>
                     </span>
                 @endforeach
             </span>

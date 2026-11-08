@@ -367,7 +367,7 @@ final class RoomSuggestionQuery
             ->each(function (RoomBlock $block) use (&$blocks, $session): void {
                 $blocks[$block->room_id] ??= [
                     'reason' => (string) ($block->reason ?: 'Bloqueado'),
-                    'when' => Minutes::dayName($session->day).' de '.substr($block->starts_at, 0, 5).' a '.substr($block->ends_at, 0, 5),
+                    'when' => Minutes::dayName($session->day).' de '.Minutes::labelOf($block->starts_at).' a '.Minutes::labelOf($block->ends_at),
                     'short' => self::shortWhen($session->day, $block->starts_at, $block->ends_at),
                 ];
             });
@@ -442,7 +442,7 @@ final class RoomSuggestionQuery
      */
     private static function shortWhen(int $day, string $startsAt, string $endsAt): string
     {
-        return mb_strtolower(Minutes::dayLabel($day, short: true)).' '.substr($startsAt, 0, 5).'–'.substr($endsAt, 0, 5);
+        return mb_strtolower(Minutes::dayLabel($day, short: true)).' '.Minutes::labelOf($startsAt).'–'.Minutes::labelOf($endsAt);
     }
 
     /**

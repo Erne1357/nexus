@@ -78,6 +78,15 @@ it('las horas se comparan en minutos y dos horas contiguas no se empalman', func
         ->and(Minutes::overlap(420, 540, 480, 600))->toBeTrue();
 });
 
+it('escribe las horas para leerlas sin cero a la izquierda, como la semana del editor', function () {
+    expect(Minutes::label(420))->toBe('7:00')
+        ->and(Minutes::label(13 * 60 + 30))->toBe('13:30')
+        ->and(Minutes::label(5))->toBe('0:05')
+        ->and(Minutes::labelOf('07:30:00'))->toBe('7:30')
+        ->and(States::builder()->group(States::group('A'))->session('A', 1, '07:00', '09:00')->build()->sessionsOf('A')[0]->describe())
+        ->toBe('lunes de 7:00 a 9:00');
+});
+
 it('el resultado quita las violaciones repetidas y las filtra por regla, grupo y gravedad', function () {
     $hard = Violation::hard('HC-02', 'Ocupado', 'room', 'R1', 'A');
     $soft = Violation::soft('HC-12', 'Faltan horas', 'group', 'B', 'B');

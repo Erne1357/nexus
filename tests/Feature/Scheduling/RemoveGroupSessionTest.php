@@ -58,7 +58,7 @@ it('quita la sesión completa y deja la bitácora en el grupo con sus horas', fu
     expect($this->group->sessions()->pluck('id')->all())->toBe([$kept->id])
         ->and($entry)
         ->event->toBe('session_removed')
-        ->description->toBe('Quitó la sesión de Cálculo Diferencial, grupo D del viernes de 07:00 a 10:00')
+        ->description->toBe('Quitó la sesión de Cálculo Diferencial, grupo D del viernes de 7:00 a 10:00')
         ->and($entry->causer->is($this->user))->toBeTrue()
         ->and($entry->subject->is($this->group))->toBeTrue()
         ->and($entry->attribute_changes->toArray())->toBe([

@@ -43,7 +43,7 @@ it('HC-06: una práctica de materia con laboratorio en un aula es un choque duro
         ->subjectType->toBe('room')
         ->subjectId->toBe('A-1')
         ->groupId->toBe('A')
-        ->message->toBe('Química, grupo A necesita laboratorio, taller o sala de cómputo para su práctica del miércoles de 09:00 a 11:00, y el salón A-1 es de tipo aula.')
+        ->message->toBe('Química, grupo A necesita laboratorio, taller o sala de cómputo para su práctica del miércoles de 9:00 a 11:00, y el salón A-1 es de tipo aula.')
         ->and($violations[0]->related)->toMatchArray(['room_type' => RoomType::Aula->value]);
 });
 

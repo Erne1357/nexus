@@ -52,7 +52,7 @@ it('muestra sus grupos por día, de todos los campus, con salón y campus', func
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')
         ->assertOk()
-        ->assertSeeInOrder(['Lunes', 'Estructura de Datos', '07:00–09:00', '3B', 'C1'])
+        ->assertSeeInOrder(['Lunes', 'Estructura de Datos', '7:00–9:00', '3B', 'C1'])
         ->assertSeeInOrder(['Martes', 'Fundamentos de Programación', '11:00–13:00', '1A', 'C2'])
         ->assertSee('Viernes')
         ->assertDontSee('Materia cancelada')

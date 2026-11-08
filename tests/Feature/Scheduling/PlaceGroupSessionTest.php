@@ -165,7 +165,7 @@ it('HC-04: rechaza lo que cae fuera de los días, la ventana o los bloques del c
     'sábado' => [6, '07:00', '08:00', 'HC-04: Campus II no da clases el sábado (lunes a viernes, 7:00 a 21:00).'],
     'antes de abrir' => [1, '06:00', '07:00', 'HC-04: la sesión debe caer dentro del horario de Campus II (lunes a viernes, 7:00 a 21:00).'],
     'después de cerrar' => [1, '20:00', '22:00', 'HC-04: la sesión debe caer dentro del horario de Campus II (lunes a viernes, 7:00 a 21:00).'],
-    'a media hora' => [1, '07:30', '08:30', 'HC-04: la sesión debe empezar y terminar en bloques de 60 minutos desde las 07:00.'],
+    'a media hora' => [1, '07:30', '08:30', 'HC-04: la sesión debe empezar y terminar en bloques de 60 minutos desde las 7:00.'],
     'fin antes del inicio' => [1, '09:00', '08:00', 'La sesión debe terminar después de empezar.'],
     'hora mal escrita' => [1, '7am', '08:00', 'La hora «7am» no es válida: se escribe como 07:00.'],
 ]);
@@ -238,7 +238,7 @@ it('rechaza encimarse con otra sesión del mismo grupo, sin escribir', function 
 
     expect(fn () => placeSession($this->group, 1, '08:00', '10:00'))
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(['El grupo D ya tiene sesión el lunes de 07:00 a 09:00: no se encima otra.']))
+            ->toBe(['El grupo D ya tiene sesión el lunes de 7:00 a 9:00: no se encima otra.']))
         ->and(placedSessionsOf($this->group))->toBe(['1 07:00-09:00 teoria'])
         ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 });
@@ -253,7 +253,7 @@ it('HC-01: no guarda una sesión que empalma al docente con otro grupo, en cualq
 
     expect(fn () => placeSession($this->group, 1, '07:00', '09:00'))
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(['Ana Pérez ya da Química, grupo F el lunes de 08:00 a 10:00.']))
+            ->toBe(['Ana Pérez ya da Química, grupo F el lunes de 8:00 a 10:00.']))
         ->and($this->group->sessions()->count())->toBe(0)
         ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 
@@ -273,7 +273,7 @@ it('HC-01: si otra sesión gana la carrera, la exclusión de la base lo rechaza 
 
     expect(fn () => placeSession($this->group, 1, '07:00', '09:00'))
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(['HC-01: Ana Pérez ya da clase el lunes entre 07:00 y 09:00.']))
+            ->toBe(['HC-01: Ana Pérez ya da clase el lunes entre 7:00 y 9:00.']))
         ->and(GroupSession::query()->count())->toBe(0);
 });
 
@@ -288,7 +288,7 @@ it('si otra sesión del mismo grupo gana la carrera, la exclusión de la base da
 
     expect(fn () => placeSession($this->group, 1, '07:00', '09:00'))
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(['El grupo D ya tiene otra sesión el lunes entre 07:00 y 09:00: no se encima otra.']));
+            ->toBe(['El grupo D ya tiene otra sesión el lunes entre 7:00 y 9:00: no se encima otra.']));
 });
 
 it('HC-03 y las demás reglas duras que la base no impide no detienen el guardado: la sesión queda y la regla vuelve en el resultado', function () {
@@ -317,7 +317,7 @@ it('deja la bitácora en el grupo con las horas de antes y de después', functio
 
     expect($entry)
         ->event->toBe('session_placed')
-        ->description->toBe('Colocó una sesión de Cálculo Diferencial, grupo D el lunes de 08:00 a 09:00')
+        ->description->toBe('Colocó una sesión de Cálculo Diferencial, grupo D el lunes de 8:00 a 9:00')
         ->and($entry->causer->is($this->user))->toBeTrue()
         ->and($entry->subject->is($this->group))->toBeTrue()
         ->and($entry->attribute_changes->toArray())->toBe([

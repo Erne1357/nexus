@@ -11,7 +11,7 @@
       elección vive en Alpine (`selected`) hasta «Asignar».
     - Al pie, «Asignar salón» o «Asignar y pedir préstamo»: la única forma de guardar el salón. Sin permiso o con el
       grupo sin editar, lo mismo en solo lectura y con su motivo.
-    Las horas de los mensajes van como en la semana (WeekGrid::prose). El editor lo incrusta con
+    Las horas de los mensajes ya llegan como en la semana («7:00»). El editor lo incrusta con
     `wire:key="room-{sessionId}-{updated_at}"` para volver a montarlo cuando la sesión cambia.
 --}}
 <section aria-labelledby="session-room-title-{{ $sessionId }}" class="grid min-w-0 gap-5" data-testid="session-room"
@@ -47,7 +47,7 @@
                     @endif
                 </div>
                 @foreach ($current['conflicts'] as $conflict)
-                    <p class="text-sm break-words"><b class="font-mono">{{ $conflict['rule'] }}</b> {{ \App\Modules\Scheduling\Support\WeekGrid::prose($conflict['message']) }}</p>
+                    <p class="text-sm break-words"><b class="font-mono">{{ $conflict['rule'] }}</b> {{ $conflict['message'] }}</p>
                 @endforeach
             @else
                 <div><x-core::status-badge tone="warning" label="Sin salón" icon="o-exclamation-triangle" /></div>

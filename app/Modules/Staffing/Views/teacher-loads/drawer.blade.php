@@ -74,7 +74,7 @@
                 @endforeach
                 <div class="font-mono text-neutral">
                     @for ($hour = $first; $hour < $last; $hour++)
-                        <div class="pr-1 text-right" style="height: {{ $rowHeight }}px">{{ sprintf('%02d', $hour) }}</div>
+                        <div class="pr-1 text-right" style="height: {{ $rowHeight }}px">{{ $hour }}</div>
                     @endfor
                 </div>
                 @foreach ($days as $day => $label)

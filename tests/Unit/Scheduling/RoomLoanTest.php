@@ -40,7 +40,7 @@ it('HC-10: usar el salón de otro departamento sin préstamo da un choque duro',
         ->subjectType->toBe('room')
         ->subjectId->toBe('R1')
         ->groupId->toBe('A')
-        ->message->toBe('El salón R1 es de otro departamento y no hay préstamo para el lunes de 09:00 a 11:00 (sin préstamo).')
+        ->message->toBe('El salón R1 es de otro departamento y no hay préstamo para el lunes de 9:00 a 11:00 (sin préstamo).')
         ->related->toBe(['session_id' => 'A-0', 'room_id' => 'R1', 'owner_department_id' => 'D2', 'loan' => 'none']);
 });
 
@@ -53,7 +53,7 @@ it('HC-10: un préstamo propuesto que toca la sesión se reporta como pendiente'
     $violations = roomLoanIn($state, ValidationScope::groups('A'));
 
     expect($violations)->toHaveCount(1)
-        ->and($violations[0]->message)->toBe('El salón R1 es de otro departamento y su préstamo para el lunes de 09:00 a 11:00 sigue pendiente (préstamo pendiente).')
+        ->and($violations[0]->message)->toBe('El salón R1 es de otro departamento y su préstamo para el lunes de 9:00 a 11:00 sigue pendiente (préstamo pendiente).')
         ->and($violations[0]->related['loan'])->toBe('pending');
 });
 
