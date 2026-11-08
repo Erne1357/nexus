@@ -53,6 +53,18 @@ Para cada grupo, se ordenan los docentes activos del departamento que imparte la
 
 El puntaje y su desglose se guardan en `staffing_rankings` y se muestran completos. Los pesos de 2 y 3 son configurables (`staffing.weights`). Si dos docentes empatan en todo, se conserva el orden del periodo anterior para la misma materia y, en última instancia, el orden alfabético, para que el resultado sea determinista y reproducible.
 
+Decisiones del 7 de noviembre de 2026 sobre el cálculo:
+
+- **Puntaje** (confirmado el 7 de noviembre de 2026): grupos impartidos en la ventana × 1, más 3 si el perfil es `preferente` o 1 si es `apto` (no se suman), más la evaluación promedio (0 a 5) × 2. Los pesos por omisión son esos y se cambian en `staffing.weights` (objeto json con `per_group_taught`, `preferente`, `apto` y `evaluation`).
+- **Ventana de historial** (confirmado el 7 de noviembre de 2026): los últimos 6 semestres (Ene-Jun y Ago-Dic) antes del periodo que se rankea. Los grupos de verano no cuentan como historial.
+- **Evaluación** (confirmado el 7 de noviembre de 2026): la de los últimos 2 semestres. Un docente sin evaluación recibe 0 puntos de evaluación y la marca «sin evaluación».
+- **Cuándo se asigna** (confirmado el 7 de noviembre de 2026): solo se asignan docentes mientras la carga está en `staffing` o `adjusting`.
+- **Promedio de evaluaciones** (supuesto por confirmar): es el promedio simple de todas las evaluaciones (estudiantil y departamental) de esos semestres.
+- **Un solo bloque final** (supuesto por confirmar): «sin horas», «choque» y «no disponible» (HC-09) bajan juntos al final, después de todos los demás, y dentro del bloque se ordenan con los mismos criterios.
+- **Historial de cualquier campus** (supuesto por confirmar): cuenta los grupos de cualquier campus y de cualquier origen (Nexus o SII).
+- **Desempate final** (supuesto por confirmar): el orden alfabético no distingue acentos ni mayúsculas y, si dos nombres coinciden, decide el id del docente, para que el orden sea siempre el mismo.
+- **Ventana en verano** (supuesto por confirmar): para un periodo de verano, la ventana empieza en el Ene-Jun del mismo año.
+
 ## Grupos y horarios
 
 Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
@@ -62,6 +74,8 @@ Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
 - La clave del grupo sigue la nomenclatura del SII, donde la letra es la hora de inicio: A = 7:00, B = 8:00 … O = 21:00 (confirmado el 7 de noviembre de 2026). Mientras no tiene sesiones lleva una clave provisional, un número consecutivo por materia y periodo (1, 2, …), que ninguna clave del SII usa (supuesto por confirmar). Al acomodar sesiones toma la letra de la hora de inicio más temprana de sus sesiones y, si otro grupo de la misma materia y periodo ya tiene esa letra, un número detrás (D2, D3…); se recalcula cada vez que cambian sus sesiones, hasta que la carga se publica (supuesto por confirmar). Las claves especiales del SII (SM, RM, TM, NE…) no se generan (supuesto por confirmar).
 - Una sesión que rompe una regla dura se guarda y queda como choque en el tablero, salvo los empalmes de docente (HC-01), de salón (HC-02) y de dos sesiones del mismo grupo, que la base rechaza; HC-15 impide cerrar la carga con choques duros (confirmado el 7 de noviembre de 2026).
 - HC-03 se revisa dentro de cada plan y semestre reticular del campus: el alumno tipo necesita al menos una combinación de un grupo por materia sin empalmes. Una carrera puede tener varias retículas activas; las viejas llevan la marca «Prioridad» en el editor (confirmado el 7 de noviembre de 2026).
+- Supuestos de las reglas HC-04 a HC-13 (supuesto por confirmar): la alineación de HC-04 se cuenta desde `day_start`; HC-12 no revisa grupos sin sesiones (el tablero los cuenta como «sin horario») ni campus sin bloques de tiempo, y su tolerancia es la configuración `scheduling.weekly_hours_tolerance`, en minutos y 0 sin configurar; HC-13 reporta una violación por cada razón (materia inactiva, plan inactivo, carrera no ofrecida).
+- Las horas de un grupo para HC-08 son las de su materia, teoría más práctica, sumadas por grupo no cancelado en todos los campus del periodo; con docente de honorarios y `staffing.honorarios_max_hours` definido, ese tope sustituye a base más tolerancia. En HC-10 los préstamos aceptados contiguos del mismo grupo, salón y día cubren juntos una sesión (supuesto por confirmar).
 
 ## Editor de horarios
 
