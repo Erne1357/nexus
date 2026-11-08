@@ -63,6 +63,19 @@ Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
 - Una sesión que rompe una regla dura se guarda y queda como choque en el tablero, salvo los empalmes de docente (HC-01), de salón (HC-02) y de dos sesiones del mismo grupo, que la base rechaza; HC-15 impide cerrar la carga con choques duros (confirmado el 7 de noviembre de 2026).
 - HC-03 se revisa dentro de cada plan y semestre reticular del campus: el alumno tipo necesita al menos una combinación de un grupo por materia sin empalmes. Una carrera puede tener varias retículas activas; las viejas llevan la marca «Prioridad» en el editor (confirmado el 7 de noviembre de 2026).
 
+## Editor de horarios
+
+Cómo se colocan, mueven y quitan las sesiones de un grupo (tarea 3.5).
+
+- El editor trabaja una carrera, luego una de sus retículas (plan) y luego un semestre. Abre la retícula vigente (`study_plans.is_current`) y muestra las demás activas con la marca «Prioridad»; HC-03 se revisa dentro de cada retícula (confirmado el 7 de noviembre de 2026).
+- Una sesión que rompe una regla dura que la base no impide (HC-03, HC-05, HC-06, HC-10, HC-11, HC-12…) se guarda y queda marcada. Un empalme de docente o de salón (HC-01, HC-02) no se guarda y el intento muestra el mensaje del validador (confirmado el 7 de noviembre de 2026). Tampoco se guarda una sesión que se encima con otra del mismo grupo.
+- Solo se editan las sesiones de un grupo sin cancelar cuya carga (la de su departamento en su campus y periodo) está en `proposed`, `staffing` o `adjusting` ("Aprobaciones y permisos"). Antes de validar se exige HC-04: el día es del perfil del campus, las horas caen en su ventana y se alinean a sus bloques.
+- Una sesión nueva se coloca sin salón; el salón se asigna aparte (tarea 3.7).
+- Bloques pegados se unen: al colocar o mover una sesión, si queda pegada (una termina donde empieza la otra) a otra del mismo grupo y día, del mismo tipo y con el mismo salón (o las dos sin salón), quedan como una sola sesión. Al colocar, la que ya existía se extiende; al mover, la movida se extiende y las vecinas se borran (supuesto por confirmar).
+- Mover una sesión conserva su salón si a la nueva hora sigue libre; si otro grupo lo ocupa (HC-02), la sesión se mueve sin salón y el editor lo avisa. Un salón bloqueado (HC-11) o sin préstamo (HC-10) a la nueva hora no se quita: se guarda marcado, como las demás reglas duras (supuesto por confirmar).
+- Cambiar el tipo de una sesión (teoría, práctica, virtual) no le quita el salón (supuesto por confirmar).
+- Quitar una sesión la quita completa, con todos sus bloques; para dejar parte, se mueve o se acorta (supuesto por confirmar).
+
 ## Cupos por carrera
 
 - Todo grupo tiene al menos un cupo: el de su carrera dueña (`is_owner`).
