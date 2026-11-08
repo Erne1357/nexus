@@ -386,3 +386,13 @@ describe('préstamos que cancela la sesión al cambiar', function () {
     });
 });
 
+it('el aviso de cancelado dice las horas sin cero a la izquierda, también antes de la una', function () {
+    Notification::fake();
+    $loan = ($this->loan)();
+    $loan->update(['starts_at' => '00:30', 'ends_at' => '01:00']);
+
+    app(CancelRoomLoan::class)->handle($loan->fresh(), $this->jefeIi);
+
+    Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->title === 'Ingeniería Industrial canceló el préstamo de LC-201 del lunes de 0:30 a 1:00'
+        && $notification->message($this->jefeSc)->icon === 'o-building-office');
+});

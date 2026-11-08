@@ -9,6 +9,7 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Scheduling\Support\WeekGrid;
 use App\Modules\Scheduling\Validation\Minutes;
 
 /**
@@ -39,7 +40,7 @@ final class LoanCancelled extends NexusNotification
         return new NotificationMessage(
             title: "{$agreement->fromDepartment->name} canceló el préstamo de {$agreement->room?->code} del {$this->when($agreement)}",
             body: $agreement->decided_at === null ? 'Ya no tienes que decidirlo.' : 'Estaba aceptado: el salón ya no queda prestado a esa hora.',
-            icon: 'o-x-circle',
+            icon: $agreement->kind->icon(),
             route: 'scheduling.agreements',
             parameters: ['acuerdo' => $agreement->getKey()],
             termId: $agreement->term_id,
@@ -49,13 +50,11 @@ final class LoanCancelled extends NexusNotification
     }
 
     /**
-     * «lunes de 9:00 a 11:00».
+     * «lunes de 9:00 a 11:00», con las horas como las pinta la semana (WeekGrid::clock, sin cero a la izquierda).
      */
     private function when(InterdepartmentalAgreement $agreement): string
     {
-        $hour = fn (string $time): string => ltrim(Minutes::clock($time), '0');
-
-        return Minutes::dayName((int) $agreement->day)." de {$hour($agreement->starts_at)} a {$hour($agreement->ends_at)}";
+        return Minutes::dayName((int) $agreement->day).' de '.WeekGrid::clock($agreement->starts_at).' a '.WeekGrid::clock($agreement->ends_at);
     }
 
     public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
