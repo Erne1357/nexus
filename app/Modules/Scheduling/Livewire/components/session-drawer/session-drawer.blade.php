@@ -5,10 +5,11 @@
     campus) y tipo; y la sección del salón (`scheduling::components.session-room`: el salón actual, los sugeridos y
     «Asignar salón», o de solo lectura con quién lo asigna), con la llave de la sesión y de su `updated_at`. Cada cosa
     se guarda de una sola forma: «Guardar horario» al pie (deshabilitado sin cambios, con su motivo) y «Asignar salón»
-    en su sección. Con el día, las horas o el tipo sin guardar, la sección del salón se cambia por su motivo («Guarda el
-    horario para ver los salones libres a esa hora») y «Descartar cambios». Al pie, también «Quitar sesión» con
-    confirmación. Si al moverla se le quitó el salón, lo dice. Quien no acomoda el grupo lo ve todo deshabilitado, con el
-    motivo una vez arriba. Los campos van al servidor al cambiar (sin validar ni leer salones). «Ver el grupo» cambia de
+    en su sección. El día, las horas y el tipo se quedan en el navegador hasta «Guardar horario»; Alpine (`dirty`)
+    los compara con lo guardado (`$wire.panel`, con las llaves de FIELDS) y, mientras hay cambios, esconde la sección
+    del salón tras su motivo («Guarda el horario para ver los salones libres a esa hora») y «Descartar cambios», sin
+    ir al servidor. Al pie, también «Quitar sesión» con confirmación. Si al moverla se le quitó el salón, lo dice. Quien
+    no acomoda el grupo lo ve todo deshabilitado, con el motivo una vez arriba y sin el aviso de cambios. «Ver el grupo» cambia de
     cajón sin regresar el foco (`data-drawer-switch`, de `scheduleEditor`). Los mensajes del validador llevan sus horas
     como la semana (WeekGrid::prose).
 --}}
@@ -17,11 +18,15 @@
         @if ($show && $panel)
             @php
                 $readonly = $panel['editReason'] !== null;
-                $dirty = $this->dirty;
                 $updatedAt = $panel['updated_at'];
                 $kinds = [['teoria', 'Teoría', 'o-book-open'], ['practica', 'Práctica', 'o-beaker'], ['virtual', 'Virtual', 'o-computer-desktop']];
             @endphp
-            <div class="flex min-h-dvh flex-col">
+            <div class="flex min-h-dvh flex-col" data-testid="session-form"
+                x-data="{
+                    fields: @js($this::FIELDS),
+                    get dirty() { return Object.entries(this.fields).some(([field, key]) => String($wire[field]) !== String($wire.panel?.[key] ?? '')) },
+                    discard() { Object.entries(this.fields).forEach(([field, key]) => $wire[field] = String($wire.panel[key])) },
+                }">
                 <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
                     <div class="min-w-0 flex-1">
                         <h2 id="session-drawer-title" class="text-xl leading-tight font-bold">Sesión de {{ $panel['group']['label'] }}</h2>
@@ -64,22 +69,22 @@
                         @if ($panel['hard'] === [] && $panel['soft'] === [])
                             <p class="flex items-center gap-2 rounded-field border border-success/40 bg-success/10 px-3 py-2"><x-icon name="o-check-circle" class="h-4 w-4 shrink-0 text-success" aria-hidden="true" />Sin choques en esta sesión.</p>
                         @endif
-                        @if ($dirty)
-                            <p class="text-sm text-neutral">Es del horario guardado; se vuelve a leer al guardar.</p>
-                        @endif
+                        @unless ($readonly)
+                            <p class="text-sm text-neutral" x-show="dirty" x-cloak>Es del horario guardado; se vuelve a leer al guardar.</p>
+                        @endunless
                     </section>
 
                     <div class="grid grid-cols-[1.4fr_1fr_1fr] gap-2.5 max-md:grid-cols-2">
                         <div class="max-md:col-span-2">
-                            <x-select label="Día" wire:model.live="day" :options="$panel['days']" :disabled="$readonly" />
+                            <x-select label="Día" wire:model="day" :options="$panel['days']" :disabled="$readonly" />
                         </div>
-                        <x-select label="Inicio" wire:model.live="startsAt" :options="$panel['starts']" class="font-mono" :disabled="$readonly" />
-                        <x-select label="Fin" wire:model.live="endsAt" :options="$panel['ends']" class="font-mono" :disabled="$readonly" />
+                        <x-select label="Inicio" wire:model="startsAt" :options="$panel['starts']" class="font-mono" :disabled="$readonly" />
+                        <x-select label="Fin" wire:model="endsAt" :options="$panel['ends']" class="font-mono" :disabled="$readonly" />
                     </div>
 
                     <fieldset class="fieldset py-0">
                         <legend class="fieldset-legend mb-0.5">Tipo</legend>
-                        <div class="join" role="group" aria-label="Tipo" x-data="{ kind: $wire.entangle('kind').live }">
+                        <div class="join" role="group" aria-label="Tipo" x-data="{ kind: $wire.entangle('kind') }">
                             @foreach ($kinds as [$value, $kindLabel, $icon])
                                 <button type="button" x-on:click="kind = '{{ $value }}'" aria-pressed="{{ $kind === $value ? 'true' : 'false' }}" x-bind:aria-pressed="kind === '{{ $value }}' ? 'true' : 'false'" @disabled($readonly)
                                     class="btn join-item h-10 gap-2 border-base-300 font-medium shadow-none aria-pressed:btn-primary not-aria-pressed:bg-base-100">
@@ -90,17 +95,20 @@
                         @error('kind') <p class="text-sm text-error" role="alert">{{ $message }}</p> @enderror
                     </fieldset>
 
-                    @if ($dirty)
-                        <section class="grid gap-2" aria-labelledby="room-gate-title" data-testid="room-gate">
+                    @if ($readonly)
+                        <livewire:scheduling::components.session-room :session-id="$sessionId" wire:key="room-{{ $sessionId }}-{{ $updatedAt }}" />
+                    @else
+                        <div x-show="! dirty" data-testid="room-section">
+                            <livewire:scheduling::components.session-room :session-id="$sessionId" wire:key="room-{{ $sessionId }}-{{ $updatedAt }}" />
+                        </div>
+                        <section class="grid gap-2" x-show="dirty" x-cloak aria-labelledby="room-gate-title" data-testid="room-gate">
                             <h3 id="room-gate-title" class="text-base font-semibold">Salón</h3>
                             <div role="note" class="grid gap-2 rounded-box border border-dashed border-base-300 bg-base-200 px-3 py-2.5">
                                 <p class="flex items-start gap-2"><x-icon name="o-lock-closed" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" aria-hidden="true" /><span>Guarda el horario para ver los salones libres a esa hora.</span></p>
                                 <p class="ps-6 text-sm text-neutral">Salón actual: @if ($panel['room'])<span class="font-mono text-base-content">{{ $panel['room'] }}</span>@else sin salón @endif</p>
-                                <x-button label="Descartar cambios" icon="o-arrow-uturn-left" class="btn-ghost btn-sm justify-self-start ms-4" wire:click="discard" spinner="discard" />
+                                <x-button label="Descartar cambios" icon="o-arrow-uturn-left" class="btn-ghost btn-sm ms-4 justify-self-start" x-on:click="discard()" />
                             </div>
                         </section>
-                    @else
-                        <livewire:scheduling::components.session-room :session-id="$sessionId" wire:key="room-{{ $sessionId }}-{{ $updatedAt }}" />
                     @endif
 
                 </div>
@@ -108,11 +116,11 @@
                 <footer class="sticky bottom-0 flex items-center justify-between gap-2 border-t border-base-300 bg-base-100 px-5 py-3.5">
                     <x-button label="Quitar sesión" icon="o-trash" class="btn-ghost text-error" wire:click="remove" spinner="remove" :disabled="$readonly" data-testid="remove-session"
                         wire:confirm="¿Quitar la sesión de {{ $panel['group']['label'] }} del {{ \App\Modules\Scheduling\Validation\Minutes::dayName($panel['day']) }} de {{ \App\Modules\Scheduling\Support\WeekGrid::range($panel['starts_at'], $panel['ends_at']) }}? Se quita completa." />
-                    @if ($readonly || $dirty)
-                        <x-button label="Guardar horario" icon="o-check" class="btn-primary" wire:click="save" spinner="save" :disabled="$readonly" data-testid="save-session" />
+                    @if ($readonly)
+                        <x-button label="Guardar horario" icon="o-check" class="btn-primary" disabled data-testid="save-session" />
                     @else
-                        <span class="tooltip tooltip-left" data-tip="Cambia el día, la hora o el tipo para guardar.">
-                            <x-button label="Guardar horario" icon="o-check" class="btn-primary" disabled data-testid="save-session" />
+                        <span x-bind:class="dirty ? '' : 'tooltip tooltip-left'" data-tip="Cambia el día, la hora o el tipo para guardar.">
+                            <x-button label="Guardar horario" icon="o-check" class="btn-primary" wire:click="save" spinner="save" disabled x-bind:disabled="! dirty" data-testid="save-session" />
                         </span>
                     @endif
                 </footer>
