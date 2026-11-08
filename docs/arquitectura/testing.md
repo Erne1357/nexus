@@ -126,6 +126,26 @@ Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes traba
 | Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (en el masivo, HC-14 a medias; LADM con 45 materias), `jefe.ee` (catálogos validados) |
 | Campana y `/notifications` | `jefe.cea` (unos 24 avisos) o `jefe.sc` |
 
+### Qué trae el seeder de acuerdos (fase 3, riel B)
+
+`SchedulingAgreementsDemoSeeder` corre después de `SchedulingDemoSeeder` (en `DemoSeeder` y en el masivo) y usa las Actions reales con el jefe que corresponde, así que la bitácora y la campana dicen quién pidió y quién decidió. Solo toca grupos editables (carga en proposed, staffing o adjusting) y no ensucia los departamentos limpios de `SchedulingDemoSeeder`: no les pone salones ajenos ni choques, aunque sí les llegan cupos que respetan HC-07. Si el periodo y el campus ya tienen acuerdos, no hace nada.
+
+| Caso | Demo (C2) | Masivo (por campus) |
+|---|---|---|
+| Préstamos de salón (HC-10) | 16: 40 % aceptados, 30 % pendientes («préstamo pendiente»), 15 % rechazados con motivo (la sesión queda sin salón) y 15 % cancelados por quien pidió | alrededor de 60 o más (los del 3 % de salones ajenos de `SchedulingDemoSeeder` más los que falten), con la misma proporción |
+| Grupos compartidos (HC-07) | 24 acuerdos: 40 % aceptados (crean su cupo), 30 % pendientes, 20 % rechazados con motivo, 10 % retirados | 120 con la misma proporción |
+| Cupos directos de la misma área | 4 grupos | 25 grupos |
+| Salones sugeridos | hasta 10 sesiones sin salón con el primer salón libre de `RoomSuggestionQuery` | hasta 40 |
+
+Con el demo solo el departamento CB queda con la carga abierta fuera de los limpios, así que todos los préstamos salen de CB hacia CEA, EE, II, MM y SC; los grupos compartidos salen de los departamentos que imparten y los reciben las carreras de CEA, II y SC. Con qué usuario verlos (contraseña `password`):
+
+| Pantalla | Usuario y caso |
+|---|---|
+| Acuerdos (`/scheduling/agreements`) | `jefe.cea` (préstamos y cupos «Por decidir» y decididos), `jefe.cb` (préstamos «Enviados» pendientes, rechazados y cancelados), `jefe.ii` (cupos «Por decidir» y «Enviados») |
+| Cajón de cupos y salones en el editor de horarios | `jefe.cb` en un grupo con acuerdo propuesto o aceptado; salones sugeridos en las sesiones que el seeder llenó |
+| Campana (`/notifications`) | `jefe.cea` (unos 26 avisos), `jefe.ii`, `jefe.cb` |
+| Coordinador con un grupo compartido | `coord.ige.c2`, `coord.la.c2` o `coord.ii.c2`: su carrera tiene cupo aceptado en grupos compartidos de otro departamento (cajón de cupos de esos grupos) |
+
 ## Pruebas de rendimiento
 
 Hay tres presupuestos que se miden, no se suponen:
