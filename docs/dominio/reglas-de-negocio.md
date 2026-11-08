@@ -59,6 +59,8 @@ Decisiones del 7 de noviembre de 2026 sobre el cálculo:
 - **Ventana de historial** (confirmado el 7 de noviembre de 2026): los últimos 6 semestres (Ene-Jun y Ago-Dic) antes del periodo que se rankea. Los grupos de verano no cuentan como historial.
 - **Evaluación** (confirmado el 7 de noviembre de 2026): la de los últimos 2 semestres. Un docente sin evaluación recibe 0 puntos de evaluación y la marca «sin evaluación».
 - **Cuándo se asigna** (confirmado el 7 de noviembre de 2026): solo se asignan docentes mientras la carga está en `staffing` o `adjusting`.
+- **Reasignar al mismo docente** (supuesto por confirmar): no cambia nada ni deja otra fila en el historial.
+- **Reglas duras al asignar** (supuesto por confirmar): HC-01, HC-08 y HC-09 bloquean la asignación aunque el jefe escriba un motivo; el motivo solo cubre HC-16.
 - **Promedio de evaluaciones** (supuesto por confirmar): es el promedio simple de todas las evaluaciones (estudiantil y departamental) de esos semestres.
 - **Un solo bloque final** (supuesto por confirmar): «sin horas», «choque» y «no disponible» (HC-09) bajan juntos al final, después de todos los demás, y dentro del bloque se ordenan con los mismos criterios.
 - **Historial de cualquier campus** (supuesto por confirmar): cuenta los grupos de cualquier campus y de cualquier origen (Nexus o SII).
@@ -263,6 +265,7 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
+| Quitar el docente de un grupo | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | Con motivo; queda en el historial de asignaciones (supuesto por confirmar) |
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
