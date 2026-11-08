@@ -15,9 +15,11 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -365,6 +367,8 @@ describe('contexto', function () {
 });
 
 it('no dispara consultas de más al pintar ni al colocar una sesión, y no crecen con los grupos del semestre', function () {
+    // El recálculo del tablero de choques corre en la cola, no en la petición del editor.
+    Queue::fake([RecomputeScheduleConflicts::class]);
     session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
     $this->actingAs($this->coordinator);
     $queries = function (Closure $action): int {
