@@ -10,7 +10,7 @@
             class="flex h-9 min-h-9 w-full cursor-pointer items-center gap-2 border-y border-base-300 bg-base-200 px-3 text-start text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral first:border-t-0 lg:sticky lg:top-0 lg:z-[2]">
             <x-icon name="o-chevron-down" class="h-4 w-4 transition-transform" x-bind:class="open.{{ $key }} || '-rotate-90'" />
             {{ $label }}
-            <span @class(['ms-auto rounded-full border px-2 py-px font-mono text-xs font-semibold', 'border-warning/40 bg-warning/10 text-warning-content' => $key === 'decide' && count($rows) > 0, 'border-base-300 bg-base-100 text-neutral' => ! ($key === 'decide' && count($rows) > 0)]) data-testid="group-count-{{ $key }}">{{ count($rows) }}</span>
+            <span @class(['ms-auto rounded-full border px-2 py-px font-mono text-xs font-semibold', 'border-warning/40 bg-warning/10 text-warning' => $key === 'decide' && count($rows) > 0, 'border-base-300 bg-base-100 text-neutral' => ! ($key === 'decide' && count($rows) > 0)]) data-testid="group-count-{{ $key }}">{{ count($rows) }}</span>
         </button>
         <div x-show="open.{{ $key }}" data-testid="group-{{ $key }}">
             @forelse ($rows as $row)

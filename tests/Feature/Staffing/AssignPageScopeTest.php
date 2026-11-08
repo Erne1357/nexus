@@ -112,3 +112,22 @@ it('el menú muestra «Asignación docente» a quien ve el ranking y no al coord
         ->and($labels(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->world->campus->id, 'career_id' => $this->isc->id])->create()))->not->toContain('Asignación docente')
         ->and($labels(User::factory()->withRole(Role::Docente)->create()))->not->toContain('Asignación docente');
 });
+
+it('con ?grupo= y sin ?depto= abre el departamento del grupo aunque no sea el primero de quien ve varios', function () {
+    $cbSubject = $this->world->subject('ACF-0901', 'Cálculo Diferencial', $this->cb);
+    $this->world->group($cbSubject, $this->isc, 'A', 1, [[2, '07:00', '08:00']]);
+
+    scopedAssignPage(User::factory()->admin()->create(), ['grupo' => $this->group->id])
+        ->assertSet('department', 'SC')
+        ->assertSet('groupId', $this->group->id)
+        ->assertSeeHtml('data-subject="SCC-1013"');
+});
+
+it('con ?grupo= de un departamento que no ve, abre el suyo como siempre', function () {
+    $cbSubject = $this->world->subject('ACF-0901', 'Cálculo Diferencial', $this->cb);
+    $cbGroup = $this->world->group($cbSubject, $this->isc, 'A', 1, [[2, '07:00', '08:00']]);
+
+    scopedAssignPage($this->jefe ?? User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create(), ['grupo' => $cbGroup->id])
+        ->assertSet('department', 'SC')
+        ->assertSet('groupId', '');
+});
