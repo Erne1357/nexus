@@ -12,7 +12,11 @@
         ],
         "jefe_departamento": [
             "academic.placement.validate",
+            "academic_load.agreement.decide",
+            "academic_load.agreement.request",
+            "academic_load.agreement.view",
             "academic_load.load.propose",
+            "academic_load.load.start_staffing",
             "academic_load.load.view",
             "academic_load.proposal_review.decide",
             "academic_load.proposal_review.view",
@@ -36,9 +40,12 @@
             "scheduling.room.assign",
             "scheduling.schedule.view",
             "scheduling.session.edit",
+            "staffing.ranking.view",
+            "staffing.teacher.assign",
             "students.student.view"
         ],
         "jefe_proyecto_docente": [
+            "academic_load.agreement.view",
             "academic_load.load.view",
             "academic_load.proposal_review.view",
             "faculty.teacher.create",
@@ -50,9 +57,12 @@
             "faculty.teacher_department.remove",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
-            "scheduling.schedule.view"
+            "scheduling.schedule.view",
+            "staffing.ranking.view",
+            "staffing.teacher.assign"
         ],
         "subdireccion": [
+            "academic_load.agreement.view",
             "academic_load.load.view",
             "academic_load.proposal.view",
             "academic_load.proposal_review.view",
@@ -87,6 +97,7 @@
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
             "scheduling.schedule.view",
+            "staffing.ranking.view",
             "students.student.view"
         ]
     },
@@ -116,7 +127,11 @@
             "academic.subject.create",
             "academic.subject.update",
             "academic.subject.view",
+            "academic_load.agreement.decide",
+            "academic_load.agreement.request",
+            "academic_load.agreement.view",
             "academic_load.load.propose",
+            "academic_load.load.start_staffing",
             "academic_load.load.view",
             "academic_load.proposal.create",
             "academic_load.proposal.submit",
@@ -151,6 +166,8 @@
             "scheduling.room.assign",
             "scheduling.schedule.view",
             "scheduling.session.edit",
+            "staffing.ranking.view",
+            "staffing.teacher.assign",
             "students.student.view"
         ]
     }

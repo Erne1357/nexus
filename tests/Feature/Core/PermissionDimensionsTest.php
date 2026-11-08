@@ -12,6 +12,7 @@ use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Students\Enums\StudentsPermission;
 use Illuminate\Support\Facades\Schema;
 use Tests\Fixtures\Authorization\FakePermission;
@@ -60,11 +61,14 @@ function dimensionTables(): array
         'academic_load.load' => 'academic_loads',
         'academic_load.proposal' => 'career_proposals',
         'academic_load.proposal_review' => 'proposal_reviews',
+        'academic_load.agreement' => 'interdepartmental_agreements',
         'scheduling.schedule' => 'groups',
         'scheduling.group' => 'groups',
         'scheduling.session' => 'group_sessions',
         'scheduling.room' => 'group_sessions',
         'scheduling.quota' => 'group_quotas',
+        'staffing.ranking' => 'staffing_rankings',
+        'staffing.teacher' => 'group_teacher_assignments',
     ];
 }
 
@@ -155,6 +159,7 @@ $enums = [
     CatalogValidationPermission::class,
     AcademicLoadPermission::class,
     SchedulingPermission::class,
+    StaffingPermission::class,
 ];
 
 it('la prueba revisa los enums de permisos de todos los módulos', function () use ($enums) {
