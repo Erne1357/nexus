@@ -80,7 +80,10 @@ use RuntimeException;
  *    y, si hay tres o más, la última sin ningún docente. En las demás asigna el 75 % de los grupos (65 % con el perfil
  *    massive): casi todos al primer lugar y uno de cada siete, más o menos, a otro candidato con un motivo (HC-16), con
  *    hasta dos docentes de honorarios; luego reemplaza y quita algunos docentes con su motivo, para que el historial
- *    tenga asignaciones vigentes, reemplazadas y quitadas. Siempre quedan grupos sin docente.
+ *    tenga asignaciones vigentes, reemplazadas y quitadas. Siempre quedan grupos sin docente. En un campus que se
+ *    asigna después de otro (el massive siembra C1 y luego C2), hasta `campus_travel` grupos (10 en el massive, 0 en el
+ *    demo) van a un docente que cabe y con quien el grupo da traslado justo entre campus (SC-09, aviso), buscado entre
+ *    los primeros 20 del ranking; si no es el primer lugar, con motivo.
  * 4. Pide cambios de horario y de salón como los docentes de los grupos asignados (RequestChange) y los decide como el
  *    jefe: en la carga que termina en ajustes, pendientes, aprobadas sin aplicar y rechazadas con comentario; en la
  *    segunda, además, aprueba y aplica (MarkChangeRequestApplied, como el coordinador o el jefe) hasta que la carga
@@ -99,10 +102,13 @@ use RuntimeException;
  * AssignTeacher, con su bitácora; las demás se escriben en bloque (el docente del grupo y su fila del historial, con el
  * lugar que tendría en un ranking recién calculado), porque AssignTeacher relee la foto completa del campus dos veces
  * por grupo y con el masivo tardaría más de diez minutos. Por lo mismo, con el perfil massive los rankings se calculan
- * en paralelo con `staffing:rank`, un proceso por departamento y campus.
+ * en paralelo con `staffing:rank`, un proceso por departamento y campus, de seis en seis.
  *
- * Determinista con `$seed` sobre los mismos datos. Si el periodo ya tiene asignaciones en esos campus no hace nada,
- * así que volver a correrlo no duplica. Se niega a correr en producción.
+ * Determinista con `$seed` sobre los mismos datos: todo lo que se ordena antes de barajar o de escoger va por llaves
+ * naturales (claves de materia y de grupo, RFC, códigos), no por los UUIDv7, que dentro del mismo milisegundo traen
+ * bits al azar. `$overrides` cambia valores del perfil (las pruebas siembran traslados justos con el perfil demo). Si
+ * el periodo ya tiene asignaciones en esos campus no hace nada, así que volver a correrlo no duplica. Se niega a
+ * correr en producción.
  */
 final class StaffingDemoSeeder extends Seeder
 {
@@ -122,13 +128,22 @@ final class StaffingDemoSeeder extends Seeder
 
     /**
      * Por perfil: parte de los grupos que se asignan, asignaciones por AssignTeacher por departamento, reemplazos y
-     * docentes quitados por departamento, docentes que se pasan de su tope o quedan justos y si los rankings van en
-     * paralelo.
+     * docentes quitados por departamento, docentes que se pasan de su tope o quedan justos, grupos con traslado justo
+     * entre campus (SC-09) y si los rankings van en paralelo.
      */
     private const array PROFILES = [
-        'demo' => ['assigned' => 0.75, 'actions' => 6, 'replaced' => 1, 'removed' => 1, 'exceeding' => 3, 'full' => 2, 'parallel' => false],
-        'massive' => ['assigned' => 0.65, 'actions' => 10, 'replaced' => 2, 'removed' => 1, 'exceeding' => 4, 'full' => 3, 'parallel' => true],
+        'demo' => ['assigned' => 0.75, 'actions' => 6, 'replaced' => 1, 'removed' => 1, 'exceeding' => 3, 'full' => 2, 'campus_travel' => 0, 'parallel' => false],
+        'massive' => ['assigned' => 0.65, 'actions' => 10, 'replaced' => 2, 'removed' => 1, 'exceeding' => 4, 'full' => 3, 'campus_travel' => 10, 'parallel' => true],
     ];
+
+    /** Rankings en paralelo a la vez, para no agotar la memoria ni las conexiones de la base. */
+    private const int PARALLEL_RANKINGS = 6;
+
+    /** Candidatos que se revisan por grupo buscando uno con traslado justo (SC-09). */
+    private const int TRAVEL_ATTEMPTS = 20;
+
+    /** La exclusión de la base que rechaza dos sesiones empalmadas del mismo docente (HC-01). */
+    private const string OVERLAP_CONSTRAINT = 'group_sessions_teacher_no_overlap';
 
     /** Por perfil y papel del departamento, cuántas solicitudes terminan en cada estado. */
     private const array REQUESTS = [
@@ -225,8 +240,17 @@ final class StaffingDemoSeeder extends Seeder
 
     private Randomizer $random;
 
-    /** @var array{assigned: float, actions: int, replaced: int, removed: int, exceeding: int, full: int, parallel: bool} */
+    /** @var array{assigned: float, actions: int, replaced: int, removed: int, exceeding: int, full: int, campus_travel: int, parallel: bool} */
     private array $profile;
+
+    /** Grupos con traslado justo (SC-09) que faltan por sembrar en esta corrida. */
+    private int $travelLeft = 0;
+
+    /** @var array<string, true> campus con asignaciones de esta corrida */
+    private array $assignedCampuses = [];
+
+    /** @var array<string, true> docentes con un traslado justo sembrado */
+    private array $travelTeachers = [];
 
     /** @var array<string, array<string, int>> */
     private array $requestPlan;
@@ -257,15 +281,17 @@ final class StaffingDemoSeeder extends Seeder
 
     /**
      * @param  list<string>  $campuses  claves de campus
+     * @param  array<string, int|float|bool>  $overrides  sobrescribe valores del perfil (`campus_travel`, `assigned`…)
      *
      * @throws RuntimeException en producción, si el periodo no existe o si falla un ranking en paralelo
      */
-    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027): void
+    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $overrides = []): void
     {
         $this->refuseProduction();
         $started = hrtime(true);
         $this->random = new Randomizer(new Mt19937($seed));
-        $this->profile = self::PROFILES[$profile] ?? self::PROFILES['demo'];
+        $this->profile = [...(self::PROFILES[$profile] ?? self::PROFILES['demo']), ...$overrides];
+        $this->travelLeft = (int) $this->profile['campus_travel'];
         $this->requestPlan = self::REQUESTS[$profile] ?? self::REQUESTS['demo'];
 
         $termModel = Term::query()->where('code', $term)->first() ?? throw new RuntimeException("El periodo {$term} no existe: corre antes DemoTermSeeder.");
@@ -382,7 +408,8 @@ final class StaffingDemoSeeder extends Seeder
     {
         $byId = $campuses->keyBy('id');
         $scopes = Group::query()->active()->where('term_id', $term->id)->whereIn('campus_id', $campuses->modelKeys())
-            ->distinct()->orderBy('campus_id')->orderBy('department_id')->get(['campus_id', 'department_id'])
+            ->selectRaw('campus_id, department_id, count(*) as total')->groupBy('campus_id', 'department_id')
+            ->orderByDesc('total')->orderBy('campus_id')->orderBy('department_id')->get()
             ->filter(fn (Group $scope): bool => ! $assignedOnly || ($this->roles[$byId[$scope->campus_id]->code][$scope->department_id] ?? self::UNTOUCHED) !== self::UNTOUCHED)
             ->values();
         $departments = Department::query()->withTrashed()->whereIn('id', $scopes->pluck('department_id')->unique()->all())->get()->keyBy('id');
@@ -399,7 +426,8 @@ final class StaffingDemoSeeder extends Seeder
     }
 
     /**
-     * Un `staffing:rank` por departamento y campus, todos a la vez, contra la misma base que este proceso.
+     * Un `staffing:rank` por departamento y campus contra la misma base que este proceso, `PARALLEL_RANKINGS` a la vez
+     * (los de más grupos primero, así los bloques tardan parecido).
      *
      * @param  list<array{0: string, 1: string}>  $scopes  campus y departamento
      */
@@ -408,16 +436,18 @@ final class StaffingDemoSeeder extends Seeder
         $connection = (string) config('database.default');
         $env = ['DB_CONNECTION' => $connection, 'DB_DATABASE' => (string) config("database.connections.{$connection}.database")];
 
-        $results = Process::pool(function (Pool $pool) use ($term, $scopes, $env): void {
-            foreach ($scopes as [$campus, $department]) {
-                $pool->path(base_path())->env($env)->timeout(900)
-                    ->command([PHP_BINARY, '-d', 'memory_limit=1G', 'artisan', 'staffing:rank', $term->code, "--campus={$campus}", "--department={$department}"]);
-            }
-        })->start()->wait();
+        foreach (array_chunk($scopes, self::PARALLEL_RANKINGS) as $chunk) {
+            $results = Process::pool(function (Pool $pool) use ($term, $chunk, $env): void {
+                foreach ($chunk as [$campus, $department]) {
+                    $pool->path(base_path())->env($env)->timeout(900)
+                        ->command([PHP_BINARY, '-d', 'memory_limit=1G', 'artisan', 'staffing:rank', $term->code, "--campus={$campus}", "--department={$department}"]);
+                }
+            })->start()->wait();
 
-        foreach ($results as $result) {
-            if ($result->failed()) {
-                throw new RuntimeException('Falló un ranking en paralelo: '.trim($result->errorOutput() ?: $result->output()));
+            foreach ($results as $result) {
+                if ($result->failed()) {
+                    throw new RuntimeException('Falló un ranking en paralelo: '.trim($result->errorOutput() ?: $result->output()));
+                }
             }
         }
     }
@@ -441,9 +471,9 @@ final class StaffingDemoSeeder extends Seeder
     private function assignDepartment(Term $term, Campus $campus, Department $department): void
     {
         $head = $this->head($campus, $department);
-        $groups = Group::query()->active()
-            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('department_id', $department->id)->whereNull('teacher_id')
-            ->orderBy('id')->get()->keyBy('id');
+        $groups = Group::query()->active()->join('subjects', 'subjects.id', '=', 'groups.subject_id')
+            ->where('groups.term_id', $term->id)->where('groups.campus_id', $campus->id)->where('groups.department_id', $department->id)->whereNull('groups.teacher_id')
+            ->orderBy('subjects.code')->orderBy('groups.code')->select('groups.*')->get()->keyBy('id');
         $ids = $this->random->shuffleArray($groups->keys()->all());
         $planned = array_slice($ids, 0, (int) round(count($ids) * $this->profile['assigned']));
         $rankings = $this->rankingsOf($term, $planned);
@@ -463,8 +493,17 @@ final class StaffingDemoSeeder extends Seeder
                 continue;
             }
 
-            [$teacherId, $reason] = $outside && count($fits) > 1 ? $this->outsidePick($groupId, $order, $fits, $honorarios) : [$fits[0], null];
-            $position = in_array($teacherId, $fits, true) ? (int) array_search($teacherId, $fits, true) + 1 : $this->freshPosition($groupId, $order, $teacherId);
+            $travel = $this->travelPick($campus, $groupId, $order);
+
+            [$teacherId, $reason] = match (true) {
+                $travel !== null => [$travel[0], $travel[1] === 1 ? null : $this->next(self::OUTSIDE_REASONS)],
+                $outside && count($fits) > 1 => $this->outsidePick($groupId, $order, $fits, $honorarios),
+                default => [$fits[0], null],
+            };
+            // El lugar se cuenta contra un ranking recién calculado (freshPosition): en la app cada asignación recalcula
+            // el ranking y quien ya no cabe baja al bloque final. Por eso AssignTeacher, que lee el ranking guardado,
+            // solo se usa abajo cuando el primero que cabe es también el primero guardado (fits[0] === order[0]).
+            $position = $travel[1] ?? (in_array($teacherId, $fits, true) ? (int) array_search($teacherId, $fits, true) + 1 : $this->freshPosition($groupId, $order, $teacherId));
 
             if ($budget > 0 && $fits[0] === $order[0]) {
                 $written = $this->assignWithAction($groups[$groupId], $teacherId, $head, $reason);
@@ -478,8 +517,13 @@ final class StaffingDemoSeeder extends Seeder
             }
 
             $this->state = $this->state->withTeacher($groupId, $teacherId);
+            $this->assignedCampuses[$campus->code] = true;
 
-            if ($reason === null) {
+            if ($travel !== null) {
+                $this->travelLeft--;
+                $this->travelTeachers[$teacherId] = true;
+                $this->count('traslado justo');
+            } elseif ($reason === null) {
                 $firstPlace[] = $groupId;
             } elseif ($reason !== self::HONORARIOS_REASON) {
                 $outsidePicks[] = $groupId;
@@ -563,13 +607,57 @@ final class StaffingDemoSeeder extends Seeder
 
     private function fits(string $groupId, string $teacherId): bool
     {
+        $result = $this->check($groupId, $teacherId);
+
+        return $result !== null && ! $result->hasHard();
+    }
+
+    /**
+     * Lo que diría el validador del grupo si fuera del docente (HC-01, HC-08, HC-09 y SC-09), con la foto actual; null
+     * si la foto no conoce al docente.
+     */
+    private function check(string $groupId, string $teacherId): ?ValidationResult
+    {
         if ($this->state->teacher($teacherId) === null) {
-            return false;
+            return null;
         }
 
         $result = $this->validator->validate($this->state->withTeacher($groupId, $teacherId), new ValidationScope([$groupId], [$teacherId]), ScheduleValidator::TEACHER_RULES);
 
-        return ! (new ValidationResult($result->forGroup($groupId)))->hasHard();
+        return new ValidationResult($result->forGroup($groupId));
+    }
+
+    /**
+     * Con otro campus ya asignado en esta corrida y mientras queden `campus_travel`, un candidato del ranking que cabe
+     * y con quien el grupo da traslado justo (SC-09, aviso), entre los primeros `TRAVEL_ATTEMPTS`, con el lugar que
+     * tendría en un ranking recién calculado; null si no hay.
+     *
+     * @param  list<string>  $order
+     * @return array{0: string, 1: int}|null
+     */
+    private function travelPick(Campus $campus, string $groupId, array $order): ?array
+    {
+        if ($this->travelLeft <= 0 || array_diff_key($this->assignedCampuses, [$campus->code => true]) === []) {
+            return null;
+        }
+
+        $position = 1;
+
+        foreach (array_slice($order, 0, self::TRAVEL_ATTEMPTS) as $teacherId) {
+            $result = $this->check($groupId, $teacherId);
+
+            if ($result === null || $result->hasHard()) {
+                continue;
+            }
+
+            if ($result->forRule('SC-09') !== []) {
+                return [$teacherId, $position];
+            }
+
+            $position++;
+        }
+
+        return null;
     }
 
     /**
@@ -632,7 +720,11 @@ final class StaffingDemoSeeder extends Seeder
                     'reason' => $reason,
                 ]);
             });
-        } catch (QueryException) {
+        } catch (QueryException $exception) {
+            if (! str_contains($exception->getMessage(), self::OVERLAP_CONSTRAINT)) {
+                throw $exception;
+            }
+
             return false;
         }
 
@@ -705,12 +797,11 @@ final class StaffingDemoSeeder extends Seeder
         $loads = Group::query()->active()->where('term_id', $term->id)->whereNotNull('teacher_id')
             ->selectRaw('teacher_id, count(*) as total, count(distinct campus_id) as campuses')->groupBy('teacher_id')
             ->get()->keyBy('teacher_id');
-        $groups = Group::query()->active()->with('teacher.user')
+        $groups = Group::query()->active()->with(['teacher.user', 'subject'])
             ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('department_id', $department->id)->whereNotNull('teacher_id')
             ->whereHas('teacher', fn ($query) => $query->whereNotNull('user_id'))
-            ->orderBy('id')->get()
-            ->sort(fn (Group $a, Group $b): int => [(int) $loads[$b->teacher_id]?->campuses, (int) $loads[$b->teacher_id]?->total, $a->teacher_id, $a->id]
-                <=> [(int) $loads[$a->teacher_id]?->campuses, (int) $loads[$a->teacher_id]?->total, $b->teacher_id, $b->id]);
+            ->get()
+            ->sort(fn (Group $a, Group $b): int => $this->requestRank($b, $loads) <=> $this->requestRank($a, $loads) ?: [$a->teacher->rfc, $a->subject->code, $a->code] <=> [$b->teacher->rfc, $b->subject->code, $b->code]);
 
         $perTeacher = [];
         $requests = [];
@@ -739,6 +830,18 @@ final class StaffingDemoSeeder extends Seeder
         foreach ($requests as [$request, $status]) {
             $this->decide($campus, $request, $status, $head);
         }
+    }
+
+    /**
+     * Quién pide primero: los docentes con traslado justo sembrado, luego los que dan clase en más campus y los que
+     * tienen más grupos.
+     *
+     * @param  Collection<string, Group>  $loads  grupos por docente: `total` y `campuses`
+     * @return array{0: bool, 1: int, 2: int}
+     */
+    private function requestRank(Group $group, Collection $loads): array
+    {
+        return [isset($this->travelTeachers[$group->teacher_id]), (int) $loads[$group->teacher_id]?->campuses, (int) $loads[$group->teacher_id]?->total];
     }
 
     private function decide(Campus $campus, ChangeRequest $request, string $status, User $head): void
@@ -795,11 +898,12 @@ final class StaffingDemoSeeder extends Seeder
             })
             ->distinct()->pluck('teacher_id')->all();
 
-        $candidates = TeacherTermLoad::query()->where('term_id', $term->id)
-            ->where('assigned_hours', '>', 0)->whereBetween('remaining_hours', [0, 30])
-            ->whereNotIn('teacher_id', $blocked)
-            ->whereIn('teacher_id', TeacherDepartment::query()->whereIn('department_id', $staffingDepartments)->select('teacher_id'))
-            ->orderBy('teacher_id')->get();
+        $candidates = TeacherTermLoad::query()->join('teachers', 'teachers.id', '=', 'teacher_term_loads.teacher_id')
+            ->where('teacher_term_loads.term_id', $term->id)
+            ->where('teacher_term_loads.assigned_hours', '>', 0)->whereBetween('teacher_term_loads.remaining_hours', [0, 30])
+            ->whereNotIn('teacher_term_loads.teacher_id', $blocked)
+            ->whereIn('teacher_term_loads.teacher_id', TeacherDepartment::query()->whereIn('department_id', $staffingDepartments)->select('teacher_id'))
+            ->orderBy('teachers.rfc')->select('teacher_term_loads.*')->get();
 
         $picked = $this->random->shuffleArray($candidates->all());
         $honorarios = TeacherPosition::query()->currentOn($term->starts_on)->where('kind', PositionKind::Honorarios)->pluck('teacher_id')->flip();
@@ -910,9 +1014,9 @@ final class StaffingDemoSeeder extends Seeder
         $this->command->line(sprintf('  Rankings: %d renglones de %d grupos.',
             StaffingRanking::query()->where('term_id', $term->id)->whereIn('campus_id', $campusIds)->count(),
             StaffingRanking::query()->where('term_id', $term->id)->whereIn('campus_id', $campusIds)->distinct()->count('group_id')));
-        $this->command->line(sprintf('  Asignaciones: %d vigentes (%d al primer lugar, %d con motivo), %d reemplazadas, %d quitadas; %d por AssignTeacher, %d en bloque, %d grupos sin candidato que pase.',
+        $this->command->line(sprintf('  Asignaciones: %d vigentes (%d al primer lugar, %d con motivo), %d reemplazadas, %d quitadas, %d con traslado justo (SC-09); %d por AssignTeacher, %d en bloque, %d grupos sin candidato que pase.',
             $current->count(), $current->where('ranking_position_at_assignment', 1)->whereNull('reason')->count(), $current->whereNotNull('reason')->count(),
-            $closed->count() - $removed, $removed, $this->counts['por AssignTeacher'] ?? 0, $this->counts['en bloque'] ?? 0, $this->counts['sin candidato'] ?? 0));
+            $closed->count() - $removed, $removed, $this->counts['traslado justo'] ?? 0, $this->counts['por AssignTeacher'] ?? 0, $this->counts['en bloque'] ?? 0, $this->counts['sin candidato'] ?? 0));
 
         $requests = ChangeRequest::query()->where('term_id', $term->id)->whereIn('campus_id', $campusIds)->get(['status'])->countBy(fn (ChangeRequest $request): string => $request->status->value);
         $this->command->line('  Solicitudes de cambio: '.implode(', ', array_map(fn (ChangeRequestStatus $status): string => ($requests[$status->value] ?? 0).' '.mb_strtolower($status->label()).'s', ChangeRequestStatus::cases())).'.');
@@ -960,8 +1064,11 @@ final class StaffingDemoSeeder extends Seeder
             }
         }
 
-        $pending = ChangeRequest::query()->with('group')->where('term_id', $term->id)->whereIn('campus_id', $campuses->modelKeys())
-            ->where('status', ChangeRequestStatus::Approved)->where('kind', ChangeRequestKind::Schedule)->orderBy('id')->first();
+        $pending = ChangeRequest::query()->with('group')
+            ->join('groups', 'groups.id', '=', 'change_requests.group_id')->join('subjects', 'subjects.id', '=', 'groups.subject_id')
+            ->where('change_requests.term_id', $term->id)->whereIn('change_requests.campus_id', $campuses->modelKeys())
+            ->where('change_requests.status', ChangeRequestStatus::Approved)->where('change_requests.kind', ChangeRequestKind::Schedule)
+            ->orderBy('subjects.code')->orderBy('groups.code')->select('change_requests.*')->first();
         $coordinator = $pending === null ? null : $this->holder(StaffingPermission::ChangeRequestApplySchedule, $pending->campus_id, career: $pending->group->owner_career_id);
 
         if ($coordinator !== null) {
@@ -969,13 +1076,17 @@ final class StaffingDemoSeeder extends Seeder
         }
 
         $requesters = ChangeRequest::query()->where('term_id', $term->id)->whereNotNull('teacher_id')->selectRaw('teacher_id, count(*) as total')->groupBy('teacher_id')->pluck('total', 'teacher_id');
-        $teacher = Group::query()->active()->where('term_id', $term->id)->whereIn('teacher_id', $requesters->keys()->all())
-            ->selectRaw('teacher_id, count(*) as total, count(distinct campus_id) as campuses')->groupBy('teacher_id')
-            ->orderByDesc('campuses')->orderByDesc('total')->orderBy('teacher_id')->first();
+        $teacher = Group::query()->active()->join('teachers', 'teachers.id', '=', 'groups.teacher_id')
+            ->where('groups.term_id', $term->id)->whereIn('groups.teacher_id', [...$requesters->keys()->all(), ...array_keys($this->travelTeachers)])
+            ->selectRaw('groups.teacher_id, teachers.rfc, count(*) as total, count(distinct groups.campus_id) as campuses')->groupBy('groups.teacher_id', 'teachers.rfc')
+            ->get()
+            ->sortBy(fn (Group $row): array => [-(int) (isset($this->travelTeachers[$row->teacher_id]) && $requesters->has($row->teacher_id)), -(int) $requesters->has($row->teacher_id), -$row->campuses, -$row->total, $row->rfc])
+            ->first();
         $user = $teacher === null ? null : Teacher::query()->with('user')->find($teacher->teacher_id)?->user;
 
         if ($user !== null) {
-            $logins[] = sprintf('%s (docente: %d grupos en %d %s, %d solicitudes)', $user->username, $teacher->total, $teacher->campuses, 'campus', $requesters[$teacher->teacher_id]);
+            $logins[] = sprintf('%s (docente: %d grupos en %d campus, %d solicitudes%s)', $user->username, $teacher->total, $teacher->campuses, $requesters[$teacher->teacher_id] ?? 0,
+                isset($this->travelTeachers[$teacher->teacher_id]) ? ', con traslado justo' : '');
         }
 
         return $logins;
