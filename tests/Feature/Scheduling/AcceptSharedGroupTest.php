@@ -32,6 +32,7 @@ beforeEach(function () {
         'capacity' => 40,
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
 });
 
 function proposedFor(int $seats = 8, AgreementStatus $status = AgreementStatus::Proposed): InterdepartmentalAgreement
@@ -144,7 +145,7 @@ it('no acepta en un grupo cancelado ni con la carga fuera de proposed, staffing 
         ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed);
 
     $this->group->update(['status' => GroupStatus::Planned]);
-    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load->update(['status' => LoadStatus::Closed]);
 
     expect(fn () => app(AcceptSharedGroup::class)->handle($agreement, $this->actor))->toThrow(ValidationException::class, 'no se editan cupos.');
 });

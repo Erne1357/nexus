@@ -108,23 +108,22 @@ El `MassiveSeeder` siembra unos 12 000 alumnos y 600 docentes, más los datos de
 
 - **Periodos:** desde 2014, con el calendario de 20263 y ventanas propias de C1 en 20271. 20263 y 20271 están abiertos en C1 y C2.
 - **Validación de catálogos:** en 20263 todo validado, así que hay foto y 20271 muestra altas y bajas contra ella. En 20271, por departamento:
-  - CB, SC e II: todo validado;
-  - EE: salones de C2 en revisión, o sea que HC-14 bloquea en C2;
-  - CEA: la mitad;
-  - MM: validado y reabierto.
+  - CB, SC, II y EE: todo validado, para que sus jefes puedan aceptar su parte de cada propuesta (HC-14);
+  - CEA: en el `DemoSeeder`, todo validado; en el masivo, la mitad (docentes y materias validados, salones en revisión, carreras validadas y reabiertas, lo demás pendiente);
+  - MM: en el masivo, todo validado; en el `DemoSeeder`, validado en parte, reabierto (docentes y carreras) y con los salones en revisión.
 
-  Hay observaciones de todos los tipos y recordatorios a CEA, EE y MM.
+  Hay observaciones de todos los tipos y recordatorio a los departamentos con algo pendiente (CEA en el masivo, MM en el `DemoSeeder`).
 - **Captura docente en 20271:** alrededor de 25 % sin disponibilidad, 15 % sin perfil y 30 % con horas fuera del ITCJ.
-- **Propuestas, bandejas y avisos** de las carreras de C1 y C2, en distintos estados.
+- **Propuestas, bandejas y avisos** de las carreras de C1 y C2, en distintos estados. Con los catálogos de CB, SC, II, EE y MM validados, el masivo acepta más partes (regresa una de cada 6 y deja pendiente una de cada 5; el `DemoSeeder`, una de cada 4 y una de cada 3).
 
 Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes trabajan en todo el Tec y eligen el campus en la credencial:
 
 | Pantalla | Usuario y caso |
 |---|---|
-| Validación de catálogos (`/catalog-validation`) | `jefe.ee` (HC-14 bloqueado en C2), `jefe.mm` (reabierto), `jefe.cea` (a medias), `jefe.sc` (todo validado). `admin` o `subdir` con `?department=` la ven en lectura |
+| Validación de catálogos (`/catalog-validation`) | `jefe.cea` (a medias y con carreras reabiertas en el masivo), `jefe.mm` (reabierto y con salones en revisión solo en el `DemoSeeder`), `jefe.ee` y `jefe.sc` (todo validado). `admin` o `subdir` con `?department=` la ven en lectura |
 | Avance de validación (`/catalog-validation/progress`) | `admin` o `subdir` |
 | Propuesta de carrera | `coord.isc.c2` (enviada, unas 53 materias), `coord.ige.c2` (regresada), `coord.cp.c2` (borrador), `coord.isc.c1` |
-| Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (HC-14 a medias, LADM con 45 materias), `jefe.ee` (HC-14 bloqueado en C2) |
+| Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (en el masivo, HC-14 a medias; LADM con 45 materias), `jefe.ee` (catálogos validados) |
 | Campana y `/notifications` | `jefe.cea` (unos 24 avisos) o `jefe.sc` |
 
 ## Pruebas de rendimiento
@@ -165,6 +164,14 @@ Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su ram
 | `rendimiento` | Presupuestos de rendimiento (aún no existe) | No (informa; ver arriba) |
 
 Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protección de `develop` y `main` (tarea 0.12): no se renombran sin actualizar la protección.
+
+### Qué trae el masivo de la fase 3 (horarios)
+
+`SchedulingDemoSeeder` corre después de `AcademicLoadDemoSeeder`, que acepta partes y con eso crea los grupos (3.3); en Massive tarda unos 2.5 minutos. Para revisar el tablero «Choques y avance» (`/scheduling/conflicts`, con un campus elegido en la credencial):
+
+- **Departamentos limpios** (`SchedulingDemoSeeder::cleanDepartments()`, lo imprime al sembrar): todos sus grupos con sesiones de horas exactas, salones sin dueño o de su departamento, sin choques duros y sin docente, para que Staffing los pase a asignación (`StartStaffing`) y los asigne.
+- **Los demás departamentos**, con casos a propósito de cada tipo: grupos sin horario, horas que no cuadran (HC-12), dos materias de grupo único empalmadas en el mismo semestre (HC-03), salón más chico que el grupo (HC-05), práctica de laboratorio en aula (HC-06), salón de otro departamento sin préstamo (HC-10), docente que se pasa de horas o no está disponible (HC-08, HC-09), grupos sin docente, sin salón, cancelados y confirmados. Los choques que no son a propósito quedan cerca de cero, para que la cuadrícula muestre celdas listas, con pendientes y con choques.
+- Al final recalcula `schedule_conflicts` de cada campus. Después de cambiar datos a mano: `php artisan scheduling:recompute-conflicts 20271`.
 
 ### Cómo corre
 

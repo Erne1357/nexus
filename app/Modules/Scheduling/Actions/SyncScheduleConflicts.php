@@ -9,6 +9,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -88,10 +89,20 @@ final class SyncScheduleConflicts
                 ]);
             }
 
+            Cache::forever(self::stampKey($term->id, $campus->id), now()->toIso8601String());
             ScheduleConflictsSynced::dispatch($term->id, $campus->id);
 
             return ['opened' => count($found), 'kept' => $kept, 'resolved' => $resolved];
         });
+    }
+
+    /**
+     * Dónde queda la hora del último recálculo de la carga de un campus: un recálculo que no cambia ningún choque no
+     * toca `schedule_conflicts`, y uno de un campus sin choques no tiene filas.
+     */
+    public static function stampKey(string $termId, string $campusId): string
+    {
+        return "scheduling:conflicts-synced:{$termId}:{$campusId}";
     }
 
     /**

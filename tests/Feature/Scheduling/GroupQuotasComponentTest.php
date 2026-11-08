@@ -39,6 +39,7 @@ beforeEach(function () {
         CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => $this->group->campus_id]);
     }
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->imparte->id])->create();
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
 });
 
 function quotasAs(User $user, Group $group): Testable
@@ -72,7 +73,7 @@ it('guarda los cupos, avisa y despacha quotas-saved', function () {
         ->assertDispatched('quotas-saved')
         ->assertSee('35 de 40 lugares repartidos');
 
-    expect(GroupQuota::query()->where('group_id', $this->group->id)->pluck('max_seats', 'career_id')->all())
+    expect(GroupQuota::query()->where('group_id', $this->group->id)->orderByDesc('is_owner')->orderBy('id')->pluck('max_seats', 'career_id')->all())
         ->toBe([$this->owner->id => 25, $this->sameDept->id => 10]);
 });
 
@@ -139,7 +140,7 @@ it('un borrador viejo no vuelve a proponer un acuerdo que ya no está vivo: pide
 });
 
 it('muestra arriba los errores de cualquier llave que regrese una Action', function () {
-    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load->update(['status' => LoadStatus::Closed]);
 
     quotasAs($this->jefe, $this->group)
         ->set('newCareer', $this->foreign->id)

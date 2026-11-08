@@ -66,7 +66,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
     /**
      * Subdirección y el jefe de proyecto docente ven la carga y la bandeja (Subdirección, además, la propuesta); el
-     * jefe de departamento, además, propone la carga, decide la parte de su departamento y pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el coordinador arma,
+     * jefe de departamento, además, propone la carga, la pasa a asignación docente, decide la parte de su departamento y pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el coordinador arma,
      * corrige, envía y ve la propuesta de su carrera.
      */
     public function grants(): array
@@ -81,6 +81,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             Role::JefeDepartamento->value => [
                 AcademicLoadPermission::LoadView,
                 AcademicLoadPermission::LoadPropose,
+                AcademicLoadPermission::LoadStartStaffing,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::ProposalReviewDecide,
                 AcademicLoadPermission::AgreementView,

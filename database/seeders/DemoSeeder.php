@@ -16,9 +16,12 @@ use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
+use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Event;
 
 /**
  * Datos demo de Campus II para desarrollo, demostraciones y browser tests: lo base, los periodos, el catálogo
@@ -52,7 +55,10 @@ class DemoSeeder extends Seeder
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C2']]]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
-        $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C2']]);
+        // Aceptar una parte crea grupos (3.3) y GroupsCreated recalcularía los choques del campus en cada aceptación;
+        // SchedulingDemoSeeder los recalcula una vez al final.
+        Event::fakeFor(fn () => $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C2']]), [GroupsCreated::class]);
+        $this->callWith(SchedulingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2']]);
         $this->call(LoginScreenDemoSeeder::class);
     }
 }
