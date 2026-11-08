@@ -18,7 +18,8 @@ use Illuminate\Validation\ValidationException;
  * bloqueo vigente del salón (HC-02, HC-11; supuesto por confirmar; la revisión es RoomLoanFree, la misma que muestra la
  * pantalla Acuerdos), y lo rechaza con ValidationException sobre `room_id`.
  * AcademicLoad no ve grupos: esta Action orquesta AcceptAgreement y avisa con GroupScheduleChanged, después del commit,
- * para que el validador recalcule HC-10 del grupo. Quién puede lo decide InterdepartmentalAgreementPolicy antes de llamarla.
+ * para que el validador recalcule HC-10 del grupo. Un deadlock se reintenta solo, hasta tres veces. Quién puede lo decide
+ * InterdepartmentalAgreementPolicy antes de llamarla.
  */
 final class AcceptRoomLoan
 {
@@ -47,7 +48,7 @@ final class AcceptRoomLoan
             }
 
             return $agreement;
-        });
+        }, 3);
     }
 
     /**

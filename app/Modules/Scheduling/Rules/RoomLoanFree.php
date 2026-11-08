@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * HC-02 y HC-11 para un préstamo de salón (reglas-de-negocio.md, "Acuerdos entre departamentos"): el bloque pedido
  * (salón, periodo, día y horas de un grupo) no puede empalmar con la sesión activa de otro grupo en ese salón y periodo
- * (HC-02) ni con un bloqueo del salón de ese periodo o de todos (HC-11). Es la única revisión: la usan AcceptRoomLoan
+ * (HC-02) ni con un bloqueo del salón de ese periodo o de todos (HC-11). Es la única revisión de un préstamo: la usan AcceptRoomLoan
  * (leyendo con bloqueo de filas), la semana del detalle y la lista de Acuerdos (AgreementsInboxQuery), para que los
  * tres digan lo mismo. Una sesión cuenta antes que un bloqueo.
  *
