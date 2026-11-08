@@ -372,7 +372,7 @@ Hay operaciones de un módulo que solo tienen sentido completas junto con lo que
 
 ### Transiciones de la carga
 
-El estado de una carga (`academic_loads.status`) cambia en un solo lugar: `AcademicLoad\Actions\Transitions\TransitionLoad`. Cada transición es una Action propia y delgada (hoy `ProposeLoad`; las demás llegan en las fases 3 y 4) que la llama con el estado destino y una guarda:
+El estado de una carga (`academic_loads.status`) cambia en un solo lugar: `AcademicLoad\Actions\Transitions\TransitionLoad`. Cada transición es una Action propia y delgada (hoy `ProposeLoad` y `StartStaffing`, esta sin guarda propia porque la veta Scheduling; las demás llegan en las fases 3 y 4) que la llama con el estado destino y una guarda:
 
 - **El diagrama son datos**: `LoadStatus::transitions(CampusProfile)` y `canTransitionTo($to, CampusProfile)` listan los destinos permitidos desde cada estado (el diagrama de `docs/proceso/proceso-propuesto.md`). Dependen del perfil del campus: desde Cerrada, un campus con `requires_subdireccion_approval` pasa a Aprobada y uno sin él publica directo. `TransitionLoad` (que recibe al actor como parámetro, para que también la llame un job o un comando) relee la carga con bloqueo dentro de la transacción y rechaza con una `ValidationException` sobre `status` si el estado de la base no permite el destino.
 - **Guarda para las reglas de la izquierda**: la Action de la transición pasa un `Closure(AcademicLoad): list<string>` con los motivos que bloquean, que salen de clases de `Rules/Constraints` (`ProposeLoad` junta `CatalogsValidated`, HC-14, y `ProposalPartAccepted`, HC-20). Lo que depende de un módulo a la derecha del mapa (Scheduling, Staffing) no se importa: lo veta un listener de `LoadTransitioning`.
