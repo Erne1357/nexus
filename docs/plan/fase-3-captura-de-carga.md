@@ -1,6 +1,6 @@
 # Fase 3 — Captura de carga: grupos, horarios, docentes y salones
 
-**Entrega:** R1 · **Ventana:** 17 nov – 4 dic 2026 · **Modo:** 3 en paralelo · **Estado:** ⬜ · **Milestone:** `Fase 3 — Captura de carga`
+**Entrega:** R1 · **Ventana:** 17 nov – 4 dic 2026 · **Modo:** 3 en paralelo · **Estado:** 🟨 (3.1 a 3.12 en `develop`; la integración 3.13 queda pendiente) · **Milestone:** `Fase 3 — Captura de carga`
 
 ## Objetivo
 
@@ -54,7 +54,7 @@ Decisión en [ADR-0018](../decisiones/0018-permisos-por-puesto-y-perfil-activo.m
 | 3.10 ✅ [#309](https://github.com/Erne1357/nexus/pull/309) y [#314](https://github.com/Erne1357/nexus/pull/314) | Vista docente: toda la oferta del departamento desde `staffing` (HC-17) y "mi carga" con horario y salones | Staffing | `Staffing/Livewire/pages/offer` («Oferta del departamento», maqueta B «Fichas por semestre», `/mi-espacio/oferta`) y `my-load` («Mi carga», maqueta C «Columnas por día», `/mi-espacio/mi-carga`), con los permisos personales `staffing.offer.view` y `staffing.my_load.view` y el área «Mi espacio» del menú. Deja el espacio de «Mis solicitudes» para 3.11. Elimina la posibilidad de esconder materias. | Feature: docente ve todos los grupos del departamento, no edita | C |
 | 3.11 ✅ [#304](https://github.com/Erne1357/nexus/pull/304) y [#314](https://github.com/Erne1357/nexus/pull/314) | Solicitudes de cambio (flujo simple): el docente pide cambio de horario o salón con motivo; el jefe aprueba o rechaza; al aprobar la carga pasa a `adjusting` y el coordinador reacomoda en el editor; al validar vuelve a `staffing` | Staffing, AcademicLoad, Scheduling | `change_requests` con sus Actions y `ChangeRequestPolicy`. «Mis solicitudes» y el modal «Solicitar cambio» en «Mi carga» (maqueta C); la pantalla «Solicitudes de cambio» (`staffing.change-requests`, `/staffing/change-requests`, maqueta A «Lista y detalle», `?solicitud=` y `?depto=`) con aprobar y rechazar del jefe, «Marcar como aplicada» del coordinador (horario) o del jefe (salón), «Abrir en el editor» cuando exista `scheduling.editor` y los motivos del veto de Scheduling; entrada en Académico. Lecturas en `ChangeRequestsQuery` y `MyChangeRequestsQuery`. R2 añade el impacto calculado. | Feature: transiciones y permisos; browser: pedir y aprobar | C |
 | 3.12 ✅ [#308](https://github.com/Erne1357/nexus/pull/308) | Carga por docente: tablero por departamento con horas base, externas, asignadas y restantes; lista de docentes sin carga | Staffing | `Staffing/Livewire/pages/teacher-loads`. Da al jefe la foto que hoy arma en Excel. | Feature: sumas correctas entre campus | C |
-| 3.13 | Integración: capturar en Nexus la carga real de Campus II (lo ya decidido en Excel más lo pendiente) con los coordinadores y jefes; corregir choques | Todos | Hito H4. Días 3 y 4 de diciembre. | Cero choques duros en el tablero | A, B, C |
+| 3.13 ⬜ pendiente | Integración: capturar en Nexus la carga real de Campus II (lo ya decidido en Excel más lo pendiente) con los coordinadores y jefes; corregir choques | Todos | Hito H4. Días 3 y 4 de diciembre. Queda pendiente por decisión del usuario (8 de noviembre de 2026): necesita a los coordinadores y jefes y la carga real de Campus II, que entra por `storage/app/imports/`. | Cero choques duros en el tablero | A, B, C |
 
 ## Pruebas de la fase
 
