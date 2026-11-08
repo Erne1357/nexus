@@ -19,6 +19,6 @@ final class ChangeRequested extends ChangeRequestNotification
 
     protected function content(): array
     {
-        return ['Solicitud de cambio de {$this->request->kind->label()}', 'o-arrow-path', 'info'];
+        return ['Solicitud de cambio de '.mb_strtolower($this->request->kind->label()), 'o-arrow-path', 'info'];
     }
 }

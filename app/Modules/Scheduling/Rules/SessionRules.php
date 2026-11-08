@@ -27,6 +27,7 @@ use Illuminate\Validation\ValidationException;
  * - HC-04: el día es del perfil del campus, las horas caen entre `day_start` y `day_end` y se alinean a
  *   `block_minutes` desde `day_start`; un campus sin bloques de tiempo no tiene ventana, como en el validador.
  * - Una sesión no se encima con otra del mismo grupo.
+ * - El salón de una sesión es del campus de su grupo y está activo (tarea 3.7).
  * - HC-01 y HC-02, los empalmes que la base no deja guardar, detienen la escritura con el mensaje del validador; las
  *   demás reglas duras se guardan y quedan marcadas (confirmado el 7 de noviembre de 2026). Si otra sesión gana la
  *   carrera, overlapTaken() traduce las tres exclusiones de `group_sessions`.
@@ -116,6 +117,22 @@ final class SessionRules
 
         if ($taken !== null) {
             throw self::invalid("El grupo {$group->code} ya tiene sesión el ".self::describe($taken).': no se encima otra.');
+        }
+    }
+
+    /**
+     * El salón que se asigna a una sesión es del campus del grupo y está activo (ni inactivo ni borrado).
+     *
+     * @throws ValidationException
+     */
+    public function ensureRoomUsable(Group $group, Room $room): void
+    {
+        if ($room->campus_id !== $group->campus_id) {
+            throw self::invalid("El salón {$room->code} es de otro campus.");
+        }
+
+        if (! $room->is_active || $room->trashed()) {
+            throw self::invalid("El salón {$room->code} está inactivo.");
         }
     }
 
