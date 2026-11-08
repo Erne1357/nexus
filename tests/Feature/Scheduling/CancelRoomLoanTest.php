@@ -16,6 +16,8 @@ use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -83,4 +85,31 @@ it('la carrera en un grupo compartido: aceptado entre la lectura y retirar no de
 
     expect($shared->fresh()->status)->toBe(AgreementStatus::Accepted)
         ->and(GroupQuota::query()->where('group_id', $this->group->id)->where('career_id', $shared->career_id)->exists())->toBeTrue();
+});
+
+it('bloquea el grupo antes que el acuerdo, como las acciones del editor', function () {
+    $queries = [];
+    DB::listen(function ($query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    app(CancelRoomLoan::class)->handle($this->loan, $this->actor);
+
+    $first = fn (string $table): int => collect($queries)->search(fn (string $sql): bool => str_contains($sql, "from \"{$table}\"") && str_contains($sql, 'for update'));
+
+    expect($first('groups'))->toBeInt()
+        ->and($first('groups'))->toBeLessThan($first('interdepartmental_agreements'));
+});
+
+it('un deadlock de la base al cancelar se traduce a un error claro', function () {
+    InterdepartmentalAgreement::updating(function (): void {
+        $deadlock = new QueryException('pgsql', 'update ...', [], new PDOException('deadlock detected', 0));
+        $deadlock->errorInfo = ['40P01', 7, 'deadlock detected'];
+
+        throw $deadlock;
+    });
+
+    expect(fn () => app(CancelRoomLoan::class)->handle($this->loan, $this->actor))
+        ->toThrow(ValidationException::class, 'Otra persona está cambiando esta carga; intenta de nuevo.')
+        ->and($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
 });

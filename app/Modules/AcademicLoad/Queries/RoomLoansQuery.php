@@ -27,18 +27,46 @@ final class RoomLoansQuery
     {
         $loans = $this->overlapping($termId, $roomId, $groupId, $day, $startsAt, $endsAt)
             ->where('status', AgreementStatus::Accepted->value)
-            ->orderBy('starts_at')
-            ->get(['starts_at', 'ends_at']);
+            ->get(['starts_at', 'ends_at'])
+            ->map(fn (InterdepartmentalAgreement $loan): array => [ClockTime::toSeconds($loan->starts_at), ClockTime::toSeconds($loan->ends_at)]);
 
-        $reached = ClockTime::toSeconds($startsAt);
-        foreach ($loans as $loan) {
-            if (ClockTime::toSeconds($loan->starts_at) > $reached) {
-                return false;
+        return self::uncovered($loans, ClockTime::toSeconds($startsAt), ClockTime::toSeconds($endsAt)) === [];
+    }
+
+    /**
+     * La regla de cobertura de HC-10, para quien ya tiene los intervalos en memoria (la sincronía de préstamos y la
+     * sugerencia de salones de Scheduling): las partes de [`$start`, `$end`) que no cubren los intervalos
+     * [inicio, fin), en orden. Varios contiguos o encimados cubren juntos. Todos los números van en la misma unidad
+     * (minutos o segundos desde la medianoche). Pura.
+     *
+     * @param  iterable<array{int, int}>  $intervals
+     * @return list<array{int, int}>
+     */
+    public static function uncovered(iterable $intervals, int $start, int $end): array
+    {
+        $sorted = [...$intervals];
+        usort($sorted, fn (array $a, array $b): int => $a[0] <=> $b[0]);
+
+        $gaps = [];
+        $reached = $start;
+
+        foreach ($sorted as [$from, $until]) {
+            if ($until <= $reached || $from >= $end) {
+                continue;
             }
-            $reached = max($reached, ClockTime::toSeconds($loan->ends_at));
+
+            if ($from > $reached) {
+                $gaps[] = [$reached, $from];
+            }
+
+            $reached = max($reached, $until);
         }
 
-        return $reached >= ClockTime::toSeconds($endsAt);
+        if ($reached < $end) {
+            $gaps[] = [$reached, $end];
+        }
+
+        return $gaps;
     }
 
     /**
