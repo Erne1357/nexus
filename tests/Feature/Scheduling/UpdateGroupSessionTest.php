@@ -2,8 +2,10 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -196,4 +198,68 @@ it('deja la bitácora en el grupo con las horas de antes y de después, y avisa 
             'old' => ['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'kind' => 'teoria', 'room_id' => $this->room->id],
         ]);
     Event::assertDispatched(GroupScheduleChanged::class, fn (GroupScheduleChanged $event): bool => $event->group->is($this->group));
+});
+
+/**
+ * Pasa la sesión del grupo a un salón de otro departamento con su préstamo del lunes de 7:00 a 9:00.
+ */
+function inForeignRoomOfMove(AgreementStatus $status = AgreementStatus::Proposed): InterdepartmentalAgreement
+{
+    $owner = Department::factory()->create();
+    $room = Room::factory()->create(['building_id' => test()->room->building_id, 'code' => 'MM-L2', 'department_id' => $owner->id]);
+    test()->session->update(['room_id' => $room->id]);
+
+    return InterdepartmentalAgreement::factory()->inStatus($status)->create([
+        'term_id' => test()->term->id, 'campus_id' => test()->campus->id, 'group_id' => test()->group->id, 'room_id' => $room->id,
+        'from_department_id' => test()->department->id, 'to_department_id' => $owner->id, 'day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00',
+    ]);
+}
+
+/**
+ * Los préstamos vivos del grupo como «día inicio-fin estado».
+ *
+ * @return list<string>
+ */
+function liveLoansOfMove(): array
+{
+    return InterdepartmentalAgreement::query()->where('group_id', test()->group->id)->live()->orderBy('day')->orderBy('starts_at')->get()
+        ->map(fn (InterdepartmentalAgreement $loan): string => "{$loan->day} ".substr($loan->starts_at, 0, 5).'-'.substr($loan->ends_at, 0, 5)." {$loan->status->value}")
+        ->all();
+}
+
+it('HC-10: mover una sesión en un salón de otro departamento cancela el préstamo de su hora anterior y pide el de la nueva', function () {
+    $old = inForeignRoomOfMove();
+
+    moveSession($this->session, 3, '10:00', '12:00');
+
+    expect($old->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(liveLoansOfMove())->toBe(['3 10:00-12:00 proposed']);
+});
+
+it('HC-10: un préstamo aceptado que sigue cubriendo parte de la sesión movida se conserva y solo se pide el hueco', function () {
+    inForeignRoomOfMove(AgreementStatus::Accepted);
+
+    moveSession($this->session, 1, '08:00', '10:00');
+
+    expect(liveLoansOfMove())->toBe(['1 07:00-09:00 accepted', '1 09:00-10:00 proposed']);
+});
+
+it('HC-10: cambiar solo el tipo de la sesión conserva su préstamo', function () {
+    $loan = inForeignRoomOfMove();
+
+    moveSession($this->session, 1, '07:00', '09:00', SessionKind::Practica);
+
+    expect(InterdepartmentalAgreement::query()->sole()->is($loan))->toBeTrue()
+        ->and($loan->fresh()->status)->toBe(AgreementStatus::Proposed);
+});
+
+it('HC-10: si al moverla se le quita el salón porque otro grupo lo ocupa (HC-02), su préstamo se cancela', function () {
+    $old = inForeignRoomOfMove();
+    GroupSession::factory()->for(otherGroupOfMove())->inRoom($this->session->fresh()->room)->on(2, '08:00', '10:00')->create();
+
+    $result = moveSession($this->session, 2, '09:00', '11:00');
+
+    expect($result->roomDropped)->toBeTrue()
+        ->and($old->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(liveLoansOfMove())->toBe([]);
 });

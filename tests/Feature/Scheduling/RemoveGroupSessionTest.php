@@ -2,11 +2,15 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Actions\Sessions\RemoveGroupSession;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
@@ -96,4 +100,22 @@ it('avisa con GroupScheduleChanged solo después del commit', function () {
     removeSession($this->session);
 
     expect($heard)->toBe([$this->group->id]);
+});
+
+it('HC-10: quitar una sesión cancela su préstamo; el de otra sesión del grupo en ese salón se queda', function () {
+    $owner = Department::factory()->create();
+    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id, 'department_id' => $owner->id]);
+    GroupSession::factory()->for($this->group)->inRoom($room)->on(5, '12:00', '13:00')->create();
+    $this->session->update(['room_id' => $room->id]);
+    $loan = fn (string $startsAt, string $endsAt, AgreementStatus $status): InterdepartmentalAgreement => InterdepartmentalAgreement::factory()->inStatus($status)->create([
+        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id, 'room_id' => $room->id,
+        'from_department_id' => $this->department->id, 'to_department_id' => $owner->id, 'day' => 5, 'starts_at' => $startsAt, 'ends_at' => $endsAt,
+    ]);
+    $removed = $loan('07:00', '10:00', AgreementStatus::Proposed);
+    $kept = $loan('12:00', '13:00', AgreementStatus::Accepted);
+
+    removeSession($this->session);
+
+    expect($removed->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and($kept->fresh()->status)->toBe(AgreementStatus::Accepted);
 });

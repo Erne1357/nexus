@@ -3,6 +3,7 @@
 namespace App\Modules\Scheduling\Actions\Sessions;
 
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
@@ -25,14 +26,17 @@ use Illuminate\Validation\ValidationException;
  * si el salón ya está ocupado a esa hora (HC-02), la mueve sin salón y lo dice en el resultado (`roomDropped`,
  * supuesto por confirmar); las demás reglas duras no la detienen. Si queda pegada a otra sesión del grupo del mismo
  * tipo y salón, la movida se extiende y las vecinas se borran. Sin cambios no escribe, no registra ni avisa. Escribe
- * en un savepoint que traduce las exclusiones de la base, deja la bitácora en el grupo (`session_updated`, con las
- * horas de antes y de después) y avisa con GroupScheduleChanged después del commit.
+ * en un savepoint que traduce las exclusiones de la base, deja los préstamos del salón (HC-10) en el día de antes y en
+ * el nuevo al tamaño de las sesiones del grupo (SyncSessionLoans: cancela los que ya no sirven y pide los que faltan;
+ * los aceptados que siguen cubriendo se conservan), deja la bitácora en el grupo (`session_updated`, con las horas de
+ * antes y de después) y avisa con GroupScheduleChanged después del commit.
  */
 final class UpdateGroupSession
 {
     public function __construct(
         private readonly SessionRules $rules,
         private readonly ScheduleValidator $validator,
+        private readonly SyncSessionLoans $loans,
     ) {}
 
     /**
@@ -86,6 +90,8 @@ final class UpdateGroupSession
 
             $session->refresh();
 
+            $this->resyncLoans($group, $old['room_id'], $old['day'], $session, $actor);
+
             activity()
                 ->causedBy($actor)
                 ->performedOn($group)
@@ -99,5 +105,19 @@ final class UpdateGroupSession
 
             return new SessionResult($session, $this->validator->validateGroup($group), $roomDropped);
         });
+    }
+
+    /**
+     * Los préstamos del salón de antes en el día de antes y, si cambió algo, los del salón en su día nuevo.
+     */
+    private function resyncLoans(Group $group, ?string $oldRoomId, int $oldDay, GroupSession $session, User $actor): void
+    {
+        if ($oldRoomId !== null) {
+            $this->loans->resync($group, Room::withTrashed()->findOrFail($oldRoomId), $oldDay, $actor);
+        }
+
+        if ($session->room_id !== null && ($session->room_id !== $oldRoomId || $session->day !== $oldDay)) {
+            $this->loans->resync($group, Room::withTrashed()->findOrFail($session->room_id), $session->day, $actor);
+        }
     }
 }
