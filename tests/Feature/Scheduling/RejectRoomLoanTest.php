@@ -3,15 +3,20 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectSharedGroup;
+use App\Modules\Scheduling\Actions\Sessions\UpdateGroupSession;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -107,4 +112,47 @@ it('si el departamento al que va dirigido ya no es dueño del salón, no rechaza
 
     expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed)
         ->and($session->fresh()->room_id)->toBe($this->room->id);
+});
+
+it('HC-10: rechazar la parte nueva de una sesión alargada no deja vivo el aceptado de la parte vieja sin sesión que lo use', function () {
+    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->from->id]);
+    $this->loan->update(['starts_at' => '07:00', 'ends_at' => '08:00', 'status' => AgreementStatus::Accepted, 'decided_by' => $this->actor->id, 'decided_at' => now()]);
+    $session = GroupSession::factory()->for($this->group)->on(1, '07:00', '08:00')->inRoom($this->room)->create();
+
+    app(UpdateGroupSession::class)->handle($session, 1, '07:00', '09:00', $session->kind, $this->actor);
+    $extension = InterdepartmentalAgreement::query()->where('status', AgreementStatus::Proposed)->sole();
+
+    app(RejectRoomLoan::class)->handle($extension, 'Ese bloque ya lo usa otro grupo.', $this->actor);
+
+    expect($extension->starts_at)->toBe('08:00:00')
+        ->and($session->fresh()->room_id)->toBeNull()
+        ->and($this->loan->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(InterdepartmentalAgreement::query()->live()->count())->toBe(0);
+});
+
+it('bloquea el grupo antes que el acuerdo, como las acciones del editor', function () {
+    $queries = [];
+    DB::listen(function ($query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    app(RejectRoomLoan::class)->handle($this->loan, 'No.', $this->actor);
+
+    $first = fn (string $table): int => collect($queries)->search(fn (string $sql): bool => str_contains($sql, "from \"{$table}\"") && str_contains($sql, 'for update'));
+
+    expect($first('groups'))->toBeInt()
+        ->and($first('groups'))->toBeLessThan($first('interdepartmental_agreements'));
+});
+
+it('un deadlock de la base al rechazar se traduce a un error claro', function () {
+    InterdepartmentalAgreement::updating(function (): void {
+        $deadlock = new QueryException('pgsql', 'update ...', [], new PDOException('deadlock detected', 0));
+        $deadlock->errorInfo = ['40P01', 7, 'deadlock detected'];
+
+        throw $deadlock;
+    });
+
+    expect(fn () => app(RejectRoomLoan::class)->handle($this->loan, 'No.', $this->actor))
+        ->toThrow(ValidationException::class, 'Otra persona está cambiando esta carga; intenta de nuevo.')
+        ->and($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
 });
