@@ -86,6 +86,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 
     /**
      * «Horarios», el editor de horarios (tarea 3.5), y «Choques y avance», el tablero (3.4), para quien ve los horarios.
+     *
      * @return list<NavigationItem>
      */
     public function navigation(): array
