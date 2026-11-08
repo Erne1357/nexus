@@ -123,6 +123,14 @@ final class AssignmentBoardQuery
     }
 
     /**
+     * Si algún grupo no cancelado del departamento en el periodo y campus está sin docente.
+     */
+    public function hasGroupWithoutTeacher(string $termId, string $campusId, string $departmentId): bool
+    {
+        return $this->groupsQuery($termId, $campusId, $departmentId)->whereNull('groups.teacher_id')->exists();
+    }
+
+    /**
      * Los departamentos activos cuyo ranking puede ver el usuario en el campus, por clave: el suyo para el jefe y el
      * jefe de proyecto docente; todos para Subdirección y el admin.
      *

@@ -6,8 +6,9 @@ use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use Tests\Support\Staffing\AssignmentWorld;
 
 /*
-| Asignación docente en el navegador (tarea 3.9): el jefe asigna al primer lugar del ranking con un clic y después
-| cambia al docente por el segundo lugar, con el motivo que pide HC-16.
+| Asignación docente en el navegador (tarea 3.9): el jefe asigna al primer lugar del ranking con un clic (la vista abre
+| en «Sin docente», así que el grupo deja la lista) y, en «Todos», cambia al docente por el segundo lugar, con el
+| motivo que pide HC-16.
 */
 
 beforeEach(function () {
@@ -31,6 +32,7 @@ it('HC-16: el jefe asigna al primer lugar y luego al segundo con un motivo', fun
         ->assertSee('Programación Orientada a Objetos')
         ->click('[data-testid="assign-button"][data-rank="1"]')
         ->assertSee('Asignaste a Ana Ruiz')
+        ->click('@state-todos')
         ->assertSee('Con docente')
         ->click('@change-teacher')
         ->click('[data-testid="assign-button"][data-rank="2"]')
