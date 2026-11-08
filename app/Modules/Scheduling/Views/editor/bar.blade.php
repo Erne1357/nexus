@@ -26,7 +26,7 @@
             <span class="flex basis-full items-center gap-1.5 text-sm text-neutral" data-testid="edit-reason"><x-icon name="o-lock-closed" class="h-4 w-4 shrink-0" aria-hidden="true" />{{ $editReason }}</span>
         @endif
         <span class="ms-auto flex gap-1.5">
-            <x-button label="Grupo" icon="o-information-circle" class="btn-ghost btn-sm" wire:click="openGroup('{{ $selected['id'] }}')" data-opener />
+            <x-button label="Grupo" icon="o-information-circle" class="btn-ghost btn-sm" wire:click="$dispatchTo('scheduling::components.group-drawer', 'open-group', { id: '{{ $selected['id'] }}' })" data-opener />
             <x-button label="Quitar selección" icon="o-x-mark" class="btn-outline btn-sm" wire:click="clearSelection" data-testid="clear-selection" />
         </span>
     </div>

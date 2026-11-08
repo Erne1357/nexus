@@ -62,7 +62,7 @@
                                     </span>
                                 @endif
                             </button>
-                            <x-button icon="o-information-circle" class="btn-ghost btn-xs btn-square absolute right-1 bottom-1" wire:click="openGroup('{{ $group['id'] }}')" data-opener
+                            <x-button icon="o-information-circle" class="btn-ghost btn-xs btn-square absolute right-1 bottom-1" wire:click="$dispatchTo('scheduling::components.group-drawer', 'open-group', { id: '{{ $group['id'] }}' })" data-opener
                                 aria-label="Grupo {{ $group['subject']['code'] }} · {{ $group['code'] }}: sesiones y cupos" title="Sesiones y cupos" />
                         </div>
                     @endforeach

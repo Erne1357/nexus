@@ -8,8 +8,9 @@
     Con un grupo elegido cada celda dice si cabe (`fits`, `success/15` y «+»), si choca con una regla que se guarda
     marcada (`clash`, rayas `error` con su regla) o si no se puede (`blocked`, HC-01 o HC-02: rayas neutras, sin
     botón, con el motivo en `title` y para lectores de pantalla). Quien puede acomodar el grupo coloca tocando una
-    celda que cabe o choca; quien no, ve lo mismo sin botones. Las celdas van sobre las sesiones de los demás grupos,
-    que se atenúan; las del grupo elegido quedan a la vista y se abren.
+    celda que cabe o choca; quien no, ve lo mismo sin botones y sin tapar los clics a las sesiones (las celdas sin botón
+    llevan `pointer-events-none`). Las celdas van sobre las sesiones de los demás grupos, que se atenúan; las del grupo
+    elegido quedan a la vista y se abren.
 --}}
 @php
     $dayVerb = fn (array $day): string => mb_strtolower($day['name']);
@@ -45,7 +46,7 @@
                         <div @class(['h-13', 'border-t border-base-300' => $h > 0])></div>
                     @else
                         @php
-                            $why = implode(' ', $cell['rules']).($cell['messages'] !== [] ? ' · '.implode(' ', $cell['messages']) : '');
+                            $why = $cell['why'];
                             $where = $dayVerb($day).' de '.$block['label'].' a '.\App\Modules\Scheduling\Support\WeekGrid::clock($block['ends_at']);
                             $classes = [
                                 'relative z-[3] mx-px my-px flex h-[calc(3.25rem-2px)] items-end justify-end gap-1 rounded-selector p-1 font-mono text-[11.5px] font-semibold',
@@ -61,7 +62,7 @@
                                 aria-label="Colocar {{ $title }} el {{ $where }}{{ $cell['state'] === 'clash' ? ', con choque '.$why : '' }}"
                                 @if ($cell['state'] === 'clash') title="Choca: {{ $why }}" @endif>
                         @else
-                            <div @class($classes) data-cell="{{ $cell['key'] }}" data-fit="{{ $cell['state'] }}" wire:key="cell-{{ $cell['key'] }}"
+                            <div @class([...$classes, 'pointer-events-none']) data-cell="{{ $cell['key'] }}" data-fit="{{ $cell['state'] }}" wire:key="cell-{{ $cell['key'] }}"
                                 @if ($cell['state'] !== 'fits') title="{{ $cell['state'] === 'blocked' ? 'No se puede' : 'Choca' }}: {{ $why }}" @endif>
                                 <span class="sr-only">{{ ucfirst($where) }}: {{ match ($cell['state']) { 'fits' => 'cabe', 'clash' => 'choca, '.$why, default => 'no se puede, '.$why } }}</span>
                         @endif

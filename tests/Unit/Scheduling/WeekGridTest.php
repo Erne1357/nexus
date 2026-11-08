@@ -75,3 +75,40 @@ it('cuenta las horas ocupadas de un día sin contar dos veces las que coinciden'
     expect($grid->busyHours([weekItem('a', 1, '07:00', '09:00'), weekItem('b', 1, '08:00', '10:30'), weekItem('c', 1, '12:00', '13:00'), weekItem('d', 2, '07:00', '09:00')], 1))->toBe(4.5)
         ->and($grid->busyHours([], 1))->toBe(0);
 });
+
+it('pinta dónde cabe el grupo elegido: cabe, choca (se guarda marcada), no se puede (HC-01, HC-02) o ya es suya', function () {
+    $grid = weekGrid(['days' => [1], 'day_start' => '07:00', 'day_end' => '11:00']);
+    $cells = $grid->cells([
+        '1|07:00' => ['fits' => true, 'rules' => [], 'messages' => []],
+        '1|08:00' => ['fits' => false, 'rules' => ['HC-03'], 'messages' => ['Se empalma con B.']],
+        '1|09:00' => ['fits' => false, 'rules' => ['HC-03', 'HC-01'], 'messages' => ['Ana ya da Química.']],
+    ], ['HC-01', 'HC-02']);
+
+    expect($grid->cells(null, ['HC-01']))->toBeNull()
+        ->and(array_column($cells[1], 'state'))->toBe(['fits', 'clash', 'blocked', 'own'])
+        ->and($cells[1][1]['why'])->toBe('HC-03 · Se empalma con B.')
+        ->and($cells[1][0]['key'])->toBe('1|07:00');
+});
+
+it('la lista de un día salta las horas que cubre una sesión, salvo las que el grupo elegido puede tomar', function () {
+    $grid = weekGrid(['days' => [1], 'day_start' => '07:00', 'day_end' => '10:00']);
+    $laid = $grid->lay([weekItem('otra', 1, '07:00', '09:00')])[1];
+    $cells = $grid->cells(['1|07:00' => ['fits' => false, 'rules' => ['HC-03'], 'messages' => []], '1|08:00' => ['fits' => false, 'rules' => ['HC-03'], 'messages' => []], '1|09:00' => ['fits' => true, 'rules' => [], 'messages' => []]], ['HC-01'])[1];
+
+    $plain = $grid->dayRows($laid, [], null);
+    $picking = $grid->dayRows($laid, [], $cells);
+
+    expect(array_map(fn (array $row): string => $row['block']['label'], $plain))->toBe(['7:00', '9:00'])
+        ->and(array_map(fn (array $row): string => $row['block']['label'].' '.($row['cell']['state'] ?? '-'), $picking))->toBe(['7:00 clash', '8:00 clash', '9:00 fits'])
+        ->and(array_column($picking[0]['items'], 'id'))->toBe(['otra']);
+});
+
+it('la parada de tabulación es la primera celda que coloca o, sin ella, la primera sesión que se abre', function () {
+    $grid = weekGrid(['days' => [1, 2], 'day_start' => '07:00', 'day_end' => '09:00']);
+    $laid = $grid->lay([[...weekItem('s', 2, '07:00', '08:00'), 'open' => true]]);
+    $cells = $grid->cells(['1|07:00' => ['fits' => false, 'rules' => ['HC-01'], 'messages' => []], '1|08:00' => ['fits' => true, 'rules' => [], 'messages' => []]], ['HC-01']);
+
+    expect($grid->tabStop($laid, $cells, true))->toBe('cell:1|08:00')
+        ->and($grid->tabStop($laid, $cells, false))->toBe('session:s')
+        ->and($grid->tabStop($laid, null, false))->toBe('session:s');
+});

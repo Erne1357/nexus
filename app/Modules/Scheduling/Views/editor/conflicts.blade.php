@@ -1,7 +1,8 @@
 {{--
     «Choques del semestre»: los duros primero (fondo y borde `error`), luego los avisos (`warning`; HC-12 se lee como
     «faltan horas» aunque el validador lo dé duro). Cada uno con su regla en Mono, el día y las horas de su sesión, su
-    mensaje y «Ver», que lleva a la sesión y la marca (o elige el grupo, si el choque no es de una sesión). Desde
+    mensaje y «Ver»: lleva a la sesión y la marca, en el navegador (en celular, cambia al día); si el choque no es de una
+    sesión, elige el grupo del semestre al que pertenece. Desde
     1200 px va debajo de la bandeja con su propio desplazamiento; antes, después de la semana y plegable.
 --}}
 <section id="choques" class="order-3 flex min-h-0 min-w-0 scroll-mt-24 flex-col rounded-box border border-base-300 bg-base-100 desktop:max-h-[42dvh] desktop:flex-[0_1_auto]"
@@ -40,8 +41,11 @@
                         <span class="font-normal text-neutral">· {{ $conflict['when'] }}</span>
                     @endif
                 </span>
-                <x-button label="Ver" icon-right="o-arrow-right" class="btn-outline btn-xs row-span-2 bg-base-100"
-                    wire:click="{{ $conflict['session'] ? 'focusSession(\''.$conflict['session'].'\')' : 'pick(\''.$conflict['group'].'\', false)' }}" />
+                @if ($conflict['session'])
+                    <x-button label="Ver" icon-right="o-arrow-right" class="btn-outline btn-xs row-span-2 bg-base-100" x-on:click="found('{{ $conflict['session'] }}')" />
+                @else
+                    <x-button label="Ver" icon-right="o-arrow-right" class="btn-outline btn-xs row-span-2 bg-base-100" wire:click="pick('{{ $conflict['group'] }}', false)" />
+                @endif
                 <p class="text-base-content">{{ $conflict['message'] }}</p>
             </div>
         @empty

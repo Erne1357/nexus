@@ -20,6 +20,7 @@ use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
+use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -45,6 +46,16 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         ExternalLoadChanged::class,
         PositionChanged::class,
     ];
+
+    /**
+     * `scoped`, nunca singleton (Octane): el editor memoriza por petición lo que ya leyó.
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->scoped(ScheduleEditorQuery::class);
+    }
 
     public function boot(): void
     {

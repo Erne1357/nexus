@@ -8,15 +8,17 @@
     - Desde 1200 px, a la izquierda y pegada arriba, la bandeja de grupos por materia y «Choques del semestre»; antes,
       arriba y abajo de la semana, plegables. A la derecha, la barra del grupo elegido (o del docente o salón) y la
       semana (scheduling::editor.week); bajo 768 px, la lista de horas de un día (scheduling::editor.day-list).
-    - Los cajones de la sesión y del grupo.
-    El teclado de la semana, la marca de «Ver» y el foco al cerrar un cajón son del componente Alpine `scheduleEditor`
-    (resources/js/app.js). Esc quita la selección si no hay cajón ni menú abiertos.
+    - Los cajones de la sesión y del grupo, componentes aparte (scheduling::components.session-drawer y .group-drawer)
+      que se abren con `$dispatchTo` sin volver a pintar la página.
+    El teclado de la semana, el día del celular, «Ver» de un choque y el foco al cerrar un cajón son del componente
+    Alpine `scheduleEditor` (resources/js/app.js). Esc quita la selección si no hay cajón ni menú abiertos.
 --}}
-<div class="space-y-4" x-data="scheduleEditor"
-    x-on:editor-focus.window="$nextTick(() => found($event.detail.id))"
+<div class="space-y-4" x-data="scheduleEditor($wire.entangle('day'))"
     x-on:editor-placed.window="$nextTick(() => keep($event.detail.id))"
     x-on:keydown.escape.window="escape()"
-    x-on:click.capture="remember($event)">
+    x-on:click.capture="remember($event)"
+    x-on:open="drawerOpened()"
+    x-on:close="drawerClosed()">
     <div>
         <h1 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[1.625rem] leading-tight font-bold md:text-3xl">
             Horarios
@@ -76,6 +78,8 @@
         </div>
     @endif
 
-    @include('scheduling::editor.session-drawer')
-    @include('scheduling::editor.group-drawer')
+    @if ($term)
+        <livewire:scheduling::components.session-drawer :term-id="$termId" :campus-id="$campusId" />
+        <livewire:scheduling::components.group-drawer :term-id="$termId" :campus-id="$campusId" />
+    @endif
 </div>

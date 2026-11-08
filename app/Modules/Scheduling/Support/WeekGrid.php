@@ -13,6 +13,26 @@ use App\Modules\Scheduling\Validation\Minutes;
  */
 final readonly class WeekGrid
 {
+    /** El color de una materia en `--chain`: los tokens de las cadenas de la retícula, uno por materia del semestre. */
+    public const array CHAINS = [
+        '[--chain:var(--color-chain-1)]', '[--chain:var(--color-chain-2)]', '[--chain:var(--color-chain-3)]',
+        '[--chain:var(--color-chain-4)]', '[--chain:var(--color-chain-5)]', '[--chain:var(--color-chain-6)]',
+        '[--chain:var(--color-chain-7)]', '[--chain:var(--color-chain-8)]', '[--chain:var(--color-chain-9)]',
+        '[--chain:var(--color-chain-10)]', '[--chain:var(--color-chain-11)]', '[--chain:var(--color-chain-12)]',
+    ];
+
+    /**
+     * Los rellenos de las celdas y bandas, con utilidades de los tokens: cabe en `success/10` con borde punteado; choca
+     * en rayas `error`; no se puede, no disponible y bloqueado en las rayas `neutral` de la disponibilidad; preferido
+     * en `success/15`.
+     */
+    public const array FILLS = [
+        'fits' => 'border border-dashed border-success/55 bg-success/10 text-success',
+        'clash' => 'bg-[image:repeating-linear-gradient(135deg,color-mix(in_oklab,var(--color-error)_18%,transparent)_0_3px,transparent_3px_8px)] text-error',
+        'blocked' => 'bg-[image:repeating-linear-gradient(135deg,color-mix(in_oklab,var(--color-neutral)_9%,var(--color-base-100))_0_5px,color-mix(in_oklab,var(--color-neutral)_20%,var(--color-base-100))_5px_10px)] text-secondary-muted',
+        'preferred' => 'bg-success/15 text-success',
+    ];
+
     private const array NAMES = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado'];
 
     private const array SHORT = [1 => 'L', 2 => 'M', 3 => 'Mi', 4 => 'J', 5 => 'V', 6 => 'S'];
@@ -137,6 +157,107 @@ final readonly class WeekGrid
         $bottom = min($rows, max($top, (Minutes::of($endsAt) - $this->start) / $this->blockMinutes));
 
         return ['top' => $top, 'span' => $bottom - $top];
+    }
+
+    /**
+     * Dónde cabe el grupo elegido, por día y bloque (GroupFitQuery): `fits` (cabe), `clash` (choca con una regla que
+     * se guarda marcada), `blocked` (rompe una de `$unsaveable`, que la base no guarda) u `own` (el grupo ya tiene
+     * sesión ahí, o no se edita); null sin grupo elegido.
+     *
+     * @param  array<string, array{fits: bool, rules: list<string>, messages: list<string>}>|null  $fit
+     * @param  list<string>  $unsaveable
+     * @return array<int, list<array{key: string, starts_at: string, ends_at: string, state: string, rules: list<string>, why: string}>>|null
+     */
+    public function cells(?array $fit, array $unsaveable): ?array
+    {
+        if ($fit === null) {
+            return null;
+        }
+
+        $cells = [];
+
+        foreach ($this->days as $day) {
+            foreach ($this->blocks as $block) {
+                $key = "{$day['day']}|{$block['starts_at']}";
+                $cell = $fit[$key] ?? null;
+                $cells[$day['day']][] = [
+                    'key' => $key,
+                    'starts_at' => $block['starts_at'],
+                    'ends_at' => $block['ends_at'],
+                    'state' => match (true) {
+                        $cell === null => 'own',
+                        $cell['fits'] => 'fits',
+                        array_intersect($cell['rules'], $unsaveable) !== [] => 'blocked',
+                        default => 'clash',
+                    },
+                    'rules' => $cell['rules'] ?? [],
+                    'why' => $cell === null ? '' : implode(' ', $cell['rules']).($cell['messages'] !== [] ? ' · '.implode(' ', $cell['messages']) : ''),
+                ];
+            }
+        }
+
+        return $cells;
+    }
+
+    /**
+     * La única parada de tabulación de la semana: la primera celda que coloca o la primera sesión que se abre.
+     *
+     * @param  array<int, list<array{id: string, open: bool}>>  $laid
+     * @param  array<int, list<array{key: string, state: string}>>|null  $cells
+     */
+    public function tabStop(array $laid, ?array $cells, bool $canPlace): ?string
+    {
+        foreach ($this->days as $day) {
+            foreach ($cells[$day['day']] ?? [] as $cell) {
+                if ($canPlace && in_array($cell['state'], ['fits', 'clash'], true)) {
+                    return 'cell:'.$cell['key'];
+                }
+            }
+
+            foreach ($laid[$day['day']] ?? [] as $item) {
+                if ($item['open']) {
+                    return 'session:'.$item['id'];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * La lista de un día en celular: un renglón por bloque con las sesiones que empiezan en él. Sin grupo elegido, el
+     * bloque que una sesión ya cubre no lleva renglón; con él, lo lleva todo bloque donde el grupo no tiene sesión,
+     * aunque lo cubra la de otro grupo, para colocar ahí también (cabe, choca o no se puede).
+     *
+     * @param  list<array{top: float, span: float}>  $items
+     * @param  list<array{starts_at: string, ends_at: string}>  $bands
+     * @param  list<array{state: string}>|null  $cells
+     * @return list<array{block: array{starts_at: string, ends_at: string, label: string}, items: list<array<string, mixed>>, cell: ?array<string, mixed>, band: ?array<string, mixed>}>
+     */
+    public function dayRows(array $items, array $bands, ?array $cells): array
+    {
+        $rows = [];
+
+        foreach ($this->blocks as $index => $block) {
+            $starting = array_values(array_filter($items, fn (array $item): bool => (int) floor($item['top']) === $index));
+            $covered = array_any($items, fn (array $item): bool => $item['top'] < $index && $index < $item['top'] + $item['span']);
+            $cell = $cells[$index] ?? null;
+            $placeable = $cell !== null && $cell['state'] !== 'own';
+
+            if ($starting === [] && $covered && ! $placeable) {
+                continue;
+            }
+
+            $minutes = Minutes::of($block['starts_at']);
+            $rows[] = [
+                'block' => $block,
+                'items' => $starting,
+                'cell' => $placeable ? $cell : null,
+                'band' => array_find($bands, fn (array $band): bool => Minutes::of($band['starts_at']) <= $minutes && $minutes < Minutes::of($band['ends_at'])),
+            ];
+        }
+
+        return $rows;
     }
 
     /**

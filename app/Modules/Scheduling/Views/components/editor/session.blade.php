@@ -44,12 +44,13 @@
         'data-r1' => $mobile ? null : $item['top'] + $item['span'],
         'tabindex' => $mobile || ! $item['open'] ? null : ($tabStop === 'session:'.$item['id'] ? '0' : '-1'),
         'aria-label' => $label,
+        'data-day' => $item['day'],
         'wire:key' => ($mobile ? 'm-' : 'w-').$item['id'],
     ], fn ($value): bool => $value !== null));
 @endphp
 
 @if ($item['open'])
-    <button type="button" wire:click="openSession('{{ $item['id'] }}')" data-opener {{ $attributes }}>
+    <button type="button" wire:click="$dispatchTo('scheduling::components.session-drawer', 'open-session', { id: '{{ $item['id'] }}' })" data-opener {{ $attributes }}>
 @else
     <div {{ $attributes }}>
 @endif

@@ -1026,33 +1026,53 @@ document.addEventListener('alpine:init', () => {
 
 /*
 | scheduleEditor: el editor de horarios (DESIGN.md, "Editor de horarios"; maqueta A «Semana con bandeja»). Livewire
-| pinta la semana; aquí va lo que es del navegador:
+| pinta la semana; aquí va lo que es del navegador, sin ir al servidor:
+| - El día de la lista del celular (`day`, enlazado a `?dia=`): cambiarlo solo muestra otra lista.
 | - Las flechas recorren las celdas y las sesiones de la semana por su lugar (data-x: el día y el carril; data-r0 y
 |   data-r1: los renglones que ocupa), Inicio y Fin van a la primera y la última del día. La semana es una sola parada
 |   de tabulación: la que tiene el foco se queda con tabindex 0 (rove). Enter o Espacio la tocan (son botones).
 | - Esc quita el grupo elegido, salvo con un cajón, el menú o un diálogo abiertos.
-| - «Ver» de un choque (editor-focus) lleva la vista a la sesión, le da el foco y la marca un momento (data-found);
-|   colocar (editor-placed) deja el foco en la sesión que quedó, porque la celda tocada ya no existe.
-| - Al cerrar un cajón, el foco regresa a lo que lo abrió (data-opener).
+| - «Ver» de un choque (found) lleva la vista a la sesión, le da el foco y la marca un momento (data-found); en celular
+|   cambia antes al día de la sesión. Colocar (editor-placed) deja el foco en la sesión que quedó, porque la celda
+|   tocada ya no existe.
+| - Al cerrar el último cajón abierto, el foco regresa a lo que lo abrió (data-opener). Pasar de un cajón al otro
+|   (data-drawer-switch) no lo regresa.
 */
 document.addEventListener('alpine:init', () => {
-    window.Alpine.data('scheduleEditor', () => ({
+    window.Alpine.data('scheduleEditor', (day) => ({
+        day,
         opener: null,
-
-        init() {
-            ['showSession', 'showGroup'].forEach((property) => this.$wire.$watch(property, (open) => {
-                if (!open) {
-                    this.$nextTick(() => this.opener?.isConnected && this.opener.focus());
-                }
-            }));
-        },
+        switching: false,
 
         remember(event) {
+            if (event.target.closest('[data-drawer-switch]')) {
+                this.switching = true;
+                setTimeout(() => (this.switching = false), 3000);
+
+                return;
+            }
+
             this.opener = event.target.closest('[data-opener]') ?? this.opener;
         },
 
+        drawerOpen() {
+            return document.querySelector('.drawer-toggle:checked') !== null;
+        },
+
+        drawerOpened() {
+            this.switching = false;
+        },
+
+        drawerClosed() {
+            this.$nextTick(() => {
+                if (!this.switching && !this.drawerOpen() && this.opener?.isConnected) {
+                    this.opener.focus();
+                }
+            });
+        },
+
         escape() {
-            if (this.$wire.groupId !== '' && !this.$wire.showSession && !this.$wire.showGroup
+            if (this.$wire.groupId !== '' && !this.drawerOpen()
                 && document.body.dataset.menu !== 'open' && !document.querySelector('dialog[open]')) {
                 this.$wire.clearSelection();
             }
@@ -1064,16 +1084,24 @@ document.addEventListener('alpine:init', () => {
         },
 
         found(id) {
-            const element = this.visible(id);
+            const hidden = this.visible(id) ? null : document.querySelector(`[data-day-list] [data-session="${CSS.escape(id)}"]`);
 
-            if (!element) {
-                return;
+            if (hidden) {
+                this.day = hidden.dataset.day;
             }
 
-            element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
-            element.focus({ preventScroll: true });
-            element.setAttribute('data-found', '');
-            setTimeout(() => element.removeAttribute('data-found'), 2500);
+            this.$nextTick(() => {
+                const element = this.visible(id);
+
+                if (!element) {
+                    return;
+                }
+
+                element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+                element.focus({ preventScroll: true });
+                element.setAttribute('data-found', '');
+                setTimeout(() => element.removeAttribute('data-found'), 2500);
+            });
         },
 
         keep(id) {

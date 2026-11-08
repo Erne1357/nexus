@@ -17,6 +17,7 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -31,6 +32,10 @@ use Livewire\Livewire;
 */
 
 const SCHEDULE_EDITOR = 'scheduling::pages.schedule-editor';
+
+const SESSION_DRAWER = 'scheduling::components.session-drawer';
+
+const GROUP_DRAWER = 'scheduling::components.group-drawer';
 
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
@@ -95,6 +100,14 @@ function editorAs(User $user, array $query = []): Testable
     session([Actor::ACTIVE_CAMPUS => test()->campus->id]);
 
     return Livewire::withQueryParams(['semestre' => '3', ...$query])->actingAs($user)->test(SCHEDULE_EDITOR);
+}
+
+/**
+ * Un cajón del editor como `$user`, con el periodo y el campus de la página.
+ */
+function editorDrawerAs(User $user, string $drawer): Testable
+{
+    return Livewire::actingAs($user)->test($drawer, ['termId' => test()->term->id, 'campusId' => test()->campus->id]);
 }
 
 /**
@@ -166,6 +179,41 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSee('Quitar selección');
     });
 
+    it('?grupo= de un grupo de otra carrera que ve por el cupo de la suya abre su carrera, en la retícula y el semestre de la materia', function () {
+        $industrial = StudyPlan::factory()->create(['career_id' => $this->iind->id]);
+        $shared = editorGroup($this->calculus, 'S', ['owner_career_id' => $this->iind->id, 'study_plan_id' => $industrial->id, 'semester' => 5]);
+        GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->iind->id, 'is_owner' => true]);
+        GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->isc->id, 'is_owner' => false]);
+        session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
+
+        Livewire::withQueryParams(['grupo' => $shared->id])->actingAs($this->coordinator)->test(SCHEDULE_EDITOR)
+            ->assertOk()
+            ->assertSet('careerId', $this->isc->id)
+            ->assertSet('planId', $this->plan->id)
+            ->assertSet('semester', '3')
+            ->assertSet('groupId', $shared->id)
+            ->assertSee('Grupo de IIND');
+    });
+
+    it('«Ver» y elegir solo toman grupos del semestre: uno de otro semestre no entra a la URL', function () {
+        $elsewhere = editorGroup(editorSubject('ACF-0901', 'Cálculo Diferencial', $this->cb, theory: 4), 'V', ['semester' => 1]);
+
+        editorAs($this->coordinator)->call('pick', $this->calcGroup->id)
+            ->call('pick', $elsewhere->id, false)->assertNotFound();
+
+        editorAs($this->coordinator)->call('pick', $this->calcGroup->id)->assertSet('groupId', $this->calcGroup->id);
+    });
+
+    it('en celular, con un grupo elegido, la hora que cubre la sesión de otro grupo también coloca (marcada si choca)', function () {
+        GroupSession::factory()->for($this->dataGroup)->on(1, '07:00', '09:00')->create();
+
+        $list = domOf(editorAs($this->coordinator)->call('pick', $this->calcGroup->id))->querySelector('[data-testid=day-list] [data-day="1"]');
+        $eight = $list?->querySelector('button[aria-label^="Colocar ACF-0904 · A el lunes a las 8:00"]');
+
+        expect($eight)->not->toBeNull()
+            ->and(textOf($list))->toContain('AED-1026 · B');
+    });
+
     it('avisa de la retícula vieja con grupos sin acomodar y la abre con «Ir»', function () {
         editorGroup(editorSubject('ACF-0901', 'Cálculo Diferencial', $this->cb, theory: 4), 'V', ['study_plan_id' => $this->oldPlan->id, 'semester' => 1]);
 
@@ -200,31 +248,45 @@ describe('coordinador de la carrera dueña', function () {
             ->and(lastToastOf($page)['description'])->toContain('Ana Pérez ya da Química');
     });
 
-    it('mueve una sesión desde su cajón y la quita', function () {
+    it('mueve una sesión desde su cajón, que avisa a la página, y la quita', function () {
         $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
 
-        $page = editorAs($this->coordinator)
-            ->call('openSession', $session->id)
-            ->assertSet('showSession', true)
-            ->assertSet('sessionDay', '1')
-            ->assertSet('sessionStart', '07:00')
-            ->assertSet('sessionEnd', '09:00')
+        $drawer = editorDrawerAs($this->coordinator, SESSION_DRAWER)
+            ->dispatch('open-session', id: $session->id)
+            ->assertSet('show', true)
+            ->assertSet('day', '1')
+            ->assertSet('startsAt', '07:00')
+            ->assertSet('endsAt', '09:00')
             ->assertSee('Sesión de ACF-0904 · A')
             ->assertSee('Lo asigna el jefe de Ciencias Básicas')
-            ->set('sessionDay', '3')
-            ->set('sessionStart', '10:00')
-            ->set('sessionEnd', '12:00')
-            ->set('sessionKind', 'practica')
-            ->call('saveSession')
-            ->assertHasNoErrors();
+            ->set('day', '3')
+            ->set('startsAt', '10:00')
+            ->set('endsAt', '12:00')
+            ->set('kind', 'practica')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertDispatched('schedule-changed');
 
         expect(editorSessionsOf($this->calcGroup))->toBe(['3 10:00-12:00 practica'])
-            ->and(lastToastOf($page)['title'])->toBe('Sesión guardada');
+            ->and(lastToastOf($drawer)['title'])->toBe('Sesión guardada');
 
-        $page->call('removeSession')->assertSet('showSession', false);
+        $drawer->call('remove')->assertSet('show', false)->assertDispatched('schedule-changed');
 
         expect(editorSessionsOf($this->calcGroup))->toBe([])
-            ->and(lastToastOf($page)['title'])->toBe('Sesión quitada');
+            ->and(lastToastOf($drawer)['title'])->toBe('Sesión quitada');
+    });
+
+    it('el cajón del grupo muestra su materia, docente, sesiones y cupos', function () {
+        GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
+
+        editorDrawerAs($this->coordinator, GROUP_DRAWER)
+            ->dispatch('open-group', id: $this->calcGroup->id)
+            ->assertSet('show', true)
+            ->assertSee('Cálculo Vectorial')
+            ->assertSee('CB · Ciencias Básicas')
+            ->assertSee('Lo asigna Asignación docente')
+            ->assertSee('2 de 2 h')
+            ->assertSee('Cupos por carrera');
     });
 
     it('marca la sesión con choque duro con su regla y la lista en «Choques del semestre» con «Ver»', function () {
@@ -242,7 +304,7 @@ describe('coordinador de la carrera dueña', function () {
             ->and(textOf($block))->toContain('ACF-0904 · A', '9:00–10:00', 'A-1', 'HC-02')
             ->and(textOf(domOf($page)->querySelector('[data-testid=conflicts]')))->toContain('HC-02', 'El salón A-1 ya está ocupado', 'Ver');
 
-        $page->call('focusSession', $mine->id)->assertDispatched('editor-focus', id: $mine->id)->assertSet('day', '2');
+        expect($page->html())->toContain("found('{$mine->id}')");
     });
 
     it('cambia a la vista por docente y por salón con los de los grupos del semestre', function () {
@@ -276,30 +338,28 @@ describe('coordinador de otra carrera', function () {
         Livewire::withQueryParams(['grupo' => $this->calcGroup->id])->actingAs($this->other)->test(SCHEDULE_EDITOR)->assertForbidden();
     });
 
-    it('cada método llamado directo sobre un grupo o sesión de otra carrera da 403 y no escribe', function (string $method, Closure $arguments) {
+    it('cada método llamado directo sobre un grupo o sesión de otra carrera da 403 y no escribe', function (string $component, string $method, Closure $arguments) {
         $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
+        $tested = $component === SCHEDULE_EDITOR ? editorAs($this->other) : editorDrawerAs($this->other, $component);
 
-        editorAs($this->other)->call($method, ...$arguments($this, $session))->assertForbidden();
+        $tested->call($method, ...$arguments($this, $session))->assertForbidden();
 
         expect(editorSessionsOf($this->calcGroup))->toBe(['1 07:00-09:00 teoria']);
     })->with([
-        'elegir' => ['pick', fn ($test) => [$test->calcGroup->id]],
-        'colocar' => ['place', fn ($test) => [$test->calcGroup->id, 2, '07:00']],
-        'abrir la sesión' => ['openSession', fn ($test, $session) => [$session->id]],
-        'abrir el grupo' => ['openGroup', fn ($test) => [$test->calcGroup->id]],
-        'ver el choque' => ['focusSession', fn ($test, $session) => [$session->id]],
+        'elegir' => [SCHEDULE_EDITOR, 'pick', fn ($test) => [$test->calcGroup->id]],
+        'colocar' => [SCHEDULE_EDITOR, 'place', fn ($test) => [$test->calcGroup->id, 2, '07:00']],
+        'abrir la sesión' => [SESSION_DRAWER, 'open', fn ($test, $session) => [$session->id]],
+        'abrir el grupo' => [GROUP_DRAWER, 'open', fn ($test) => [$test->calcGroup->id]],
     ]);
 
     it('guardar o quitar una sesión ajena desde un cajón que abrió el admin da 403', function () {
         $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
-        $page = editorAs(User::factory()->admin()->create())->call('openSession', $session->id);
 
-        $this->actingAs($this->other);
-        $page->set('sessionDay', '2')->call('saveSession')->assertForbidden();
-
-        $page = editorAs(User::factory()->admin()->create())->call('openSession', $session->id);
-        $this->actingAs($this->other);
-        $page->call('removeSession')->assertForbidden();
+        foreach (['save', 'remove'] as $method) {
+            $drawer = editorDrawerAs(User::factory()->admin()->create(), SESSION_DRAWER)->call('open', $session->id)->set('day', '2');
+            $this->actingAs($this->other);
+            $drawer->call($method)->assertForbidden();
+        }
 
         expect(editorSessionsOf($this->calcGroup))->toBe(['1 07:00-09:00 teoria']);
     });
@@ -325,7 +385,10 @@ describe('Subdirección', function () {
         $page = editorAs($subdireccion, ['carrera' => $this->isc->id])->assertSee('ACF-0904 · A')->call('pick', $this->calcGroup->id)->assertSee('Solo lectura');
         $dom = domOf($page);
 
-        expect($dom->querySelectorAll('[data-testid=week] button[data-cell]'))->toHaveCount(0)
+        $cells = iterator_to_array($dom->querySelectorAll('[data-testid=week] [data-cell]'));
+
+        expect(array_filter($cells, fn ($cell): bool => ! str_contains($cell->getAttribute('class'), 'pointer-events-none')))->toBe([])
+            ->and($dom->querySelectorAll('[data-testid=week] button[data-cell]'))->toHaveCount(0)
             ->and($dom->querySelectorAll('[data-testid=week] [data-cell][data-fit=fits]')->length)->toBeGreaterThan(0)
             ->and($dom->querySelectorAll('[data-testid=edit-reason]'))->toHaveCount(1);
 
@@ -366,12 +429,14 @@ describe('contexto', function () {
     });
 });
 
-it('no dispara consultas de más al pintar ni al colocar una sesión, y no crecen con los grupos del semestre', function () {
-    // El recálculo del tablero de choques corre en la cola, no en la petición del editor.
+it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, y no crecen con los grupos del semestre', function () {
+    // El recálculo del tablero de choques corre en la cola, no en la petición del editor. Cada llamada es una petición
+    // nueva: la Query del editor es `scoped` y memoriza por petición.
     Queue::fake([RecomputeScheduleConflicts::class]);
     session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
     $this->actingAs($this->coordinator);
     $queries = function (Closure $action): int {
+        app()->forgetScopedInstances();
         DB::flushQueryLog();
         DB::enableQueryLog();
         $action();
@@ -397,9 +462,15 @@ it('no dispara consultas de más al pintar ni al colocar una sesión, y no crece
     $many = $render();
     $pick = $queries(fn () => $page->call('pick', $this->calcGroup->id));
     $place = $queries(fn () => $page->call('place', $this->calcGroup->id, 3, '07:00'));
+    $drawer = editorDrawerAs($this->coordinator, SESSION_DRAWER);
+    $openSession = $queries(fn () => $drawer->call('open', $this->calcGroup->sessions()->value('id')));
+    $groupDrawer = editorDrawerAs($this->coordinator, GROUP_DRAWER);
+    $openGroup = $queries(fn () => $groupDrawer->call('open', $this->calcGroup->id));
 
     expect($many)->toBe($few)
-        ->and($many)->toBeLessThanOrEqual(28)
-        ->and($pick)->toBeLessThanOrEqual(31)
-        ->and($place)->toBeLessThanOrEqual(67);
+        ->and($many)->toBeLessThanOrEqual(31)
+        ->and($pick)->toBeLessThanOrEqual(33)
+        ->and($place)->toBeLessThanOrEqual(68)
+        ->and($openSession)->toBeLessThanOrEqual(26)
+        ->and($openGroup)->toBeLessThanOrEqual(15);
 });

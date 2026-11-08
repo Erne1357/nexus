@@ -17,7 +17,8 @@ use App\Modules\Scheduling\Models\GroupSession;
 /*
 | Editor de horarios en el navegador (tarea 3.5, maqueta A): el coordinador entra por el menú, elige el semestre,
 | acomoda las horas de tres grupos tocando las celdas donde caben (el último con el teclado: flechas, Enter y Esc) y
-| queda con «0 choques».
+| queda con «0 choques»; pasa del cajón de una sesión al de su grupo y, al cerrarlo, el foco regresa a la sesión; en
+| celular cambia de día.
 */
 
 beforeEach(function () {
@@ -75,7 +76,21 @@ it('el coordinador entra por el menú, acomoda las horas de tres grupos del seme
         ->keys('[data-testid=week] [aria-label^="SCC-1005 · A"]', 'Escape')
         ->assertMissing('@selection-bar')
         ->assertSeeIn('@hard-count', '0 choques')
-        ->assertSee('Sin choques en este semestre')
+        ->assertSee('Sin choques en este semestre');
+
+    // Los cajones: de la sesión al grupo no regresa el foco; al cerrar el último, regresa a la sesión que lo abrió.
+    $page->click('[data-testid=week] [aria-label^="ACF-0904 · A"]')
+        ->assertSeeIn('@session-drawer', 'Sesión de ACF-0904 · A')
+        ->click('Ver el grupo')
+        ->assertSeeIn('@group-drawer', 'Cupos por carrera')
+        ->assertScript("document.activeElement?.getAttribute('aria-label')?.startsWith('ACF-0904 · A') === true", false)
+        ->keys('[data-testid=group-drawer] h2', 'Escape')
+        ->assertScript("document.activeElement?.getAttribute('aria-label')?.startsWith('ACF-0904 · A') === true", true);
+
+    // En celular, cambiar de día es del navegador.
+    $page->resize(390, 900)
+        ->click('[data-testid=day-list] button[aria-label^="Martes"]')
+        ->assertSeeIn('[data-testid=day-list] [data-day="2"]', 'SCC-1005 · A')
         ->assertNoJavaScriptErrors();
 
     $sessions = fn (string $code): array => GroupSession::query()->where('group_id', $this->groups[$code]->id)->get()
