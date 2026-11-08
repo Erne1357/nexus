@@ -16,7 +16,9 @@ use App\Modules\Scheduling\Actions\Quotas\AcceptSharedGroup;
 use App\Modules\Scheduling\Actions\Quotas\WithdrawGroupQuotaProposal;
 use App\Modules\Scheduling\Queries\AgreementsInboxQuery;
 use App\Modules\Scheduling\Validation\Minutes;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -37,10 +39,19 @@ use Mary\Traits\Toast;
  * va dirigido (`decide`) y cancela el que lo pidió (`cancel`). Cada método vuelve a autorizar: ver, que el acuerdo sea
  * del alcance (404 si no) y la ability. Todo lo que se pinta sale de AgreementsInboxQuery; las escrituras, de
  * AcceptRoomLoan, RejectRoomLoan, CancelRoomLoan, AcceptSharedGroup, RejectSharedGroup y WithdrawGroupQuotaProposal.
+ *
+ * Al aceptar o rechazar se abre el siguiente por decidir de la lista (o el primero, si era el último); si ya no queda
+ * ninguno, el panel se queda en el decidido. El jefe acepta varios a la vez con `acceptMany` (confirmado el 8 de
+ * noviembre de 2026): cada uno pasa por su Action y su transacción, con su bitácora y su aviso, y uno que falla no
+ * deshace los demás. Rechazar es uno por uno porque pide motivo. La selección vive en el navegador (`wire:model` sin
+ * `.live`) y viaja con `acceptMany`. La bandeja se lee una vez por petición.
  */
 new #[Title('Acuerdos')] class extends Component
 {
     use Toast;
+
+    /** Cuántos acuerdos se aceptan juntos a lo más (supuesto por confirmar). */
+    private const int MAX_BULK = 50;
 
     /** Id del acuerdo abierto; '' abre el primero por decidir (o enviado). */
     #[Url(as: 'acuerdo')]
@@ -72,6 +83,13 @@ new #[Title('Acuerdos')] class extends Component
 
     public string $comment = '';
 
+    /** @var list<string> Los acuerdos por decidir que el jefe eligió para aceptar juntos. */
+    public array $selected = [];
+
+    /** @var array{accepted: int, failed: list<array{label: string, message: string}>}|null Lo que pasó al aceptar varios. */
+    #[Locked]
+    public ?array $bulkResult = null;
+
     /** Lo resuelto en esta petición (periodo, campus y acuerdos por id); se suelta al escribir. */
     protected ?Term $loadedTerm = null;
 
@@ -79,6 +97,9 @@ new #[Title('Acuerdos')] class extends Component
 
     /** @var array<string, InterdepartmentalAgreement|null> */
     protected array $found = [];
+
+    /** @var array{decide: list<array<string, mixed>>, sent: list<array<string, mixed>>, done: list<array<string, mixed>>}|null La bandeja de esta petición. */
+    protected ?array $inbox = null;
 
     public function mount(Actor $context, AgreementsInboxQuery $query): void
     {
@@ -96,6 +117,16 @@ new #[Title('Acuerdos')] class extends Component
     public function updatedKind(): void
     {
         $this->kind = AgreementKind::tryFrom($this->kind)?->value ?? '';
+        $this->selected = [];
+        $this->bulkResult = null;
+        $this->inbox = null;
+    }
+
+    public function updatedSearch(): void
+    {
+        $this->selected = [];
+        $this->bulkResult = null;
+        $this->inbox = null;
     }
 
     /**
@@ -136,7 +167,8 @@ new #[Title('Acuerdos')] class extends Component
             return;
         }
 
-        $this->afterDecision();
+        $this->afterDecision([$id]);
+        $this->openNextPending($row, $context, $query);
         $this->success('Aceptaste '.$this->summary($row), e($row['from']['name']));
     }
 
@@ -184,7 +216,8 @@ new #[Title('Acuerdos')] class extends Component
             return;
         }
 
-        $this->afterDecision();
+        $this->afterDecision([$id]);
+        $this->openNextPending($row, $context, $query);
         $this->warning('Rechazaste '.$this->summary($row), is_int($cleared) && $cleared > 0 ? 'La sesión se quedó sin salón.' : e($row['from']['name']));
     }
 
@@ -212,8 +245,98 @@ new #[Title('Acuerdos')] class extends Component
             return;
         }
 
-        $this->afterDecision();
+        $this->afterDecision([$id]);
+        $this->mobileDetail = false;
         $this->info('Cancelaste '.$this->summary($row), is_int($cleared) && $cleared > 0 ? 'La sesión se quedó sin salón.' : e($row['to']['name']));
+    }
+
+    /**
+     * Acepta los acuerdos elegidos (hasta MAX_BULK), uno por uno, cada uno con su Action en su propia transacción:
+     * lleva su bitácora y su aviso como si se aceptara solo, y uno que falla no deshace los demás. Uno que el actor ya
+     * no ve o ya no decide (otro departamento, otro campus, un id que no es de un acuerdo) no se acepta ni se nombra:
+     * va a los que no se aceptaron como «Ya no está disponible.». Los demás se aceptan en el orden de la lista (del
+     * pedido más antiguo al más reciente, y por id), no en el que se eligieron, para que dos que compiten por los mismos
+     * lugares (HC-07) se resuelvan siempre igual. Lo que rechaza la regla se dice con su mensaje; un error de la base o
+     * cualquier otro se reporta y se dice sin detalle. Los que fallan y siguen por decidir se quedan elegidos.
+     */
+    public function acceptMany(Actor $context, AgreementsInboxQuery $query, AcceptRoomLoan $loan, AcceptSharedGroup $shared): void
+    {
+        $this->authorizeView();
+        abort_if($this->termId === null, 404);
+        $this->validate(
+            ['selected' => ['required', 'array', 'max:'.self::MAX_BULK], 'selected.*' => ['string']],
+            ['selected.required' => 'Elige los acuerdos que vas a aceptar.', 'selected.max' => 'Acepta hasta '.self::MAX_BULK.' a la vez.'],
+        );
+
+        $open = $this->agreementId === '' ? null : $this->findOrNull($this->agreementId, $context, $query);
+        $openRow = $open === null ? null : $query->row($open);
+        $accepted = [];
+        $failed = [];
+        $retry = [];
+        $candidates = [];
+
+        foreach (array_values(array_unique($this->selected)) as $id) {
+            $agreement = $this->findOrNull($id, $context, $query);
+
+            if ($agreement === null || Gate::denies('decide', $agreement)) {
+                $failed[] = ['label' => 'Un acuerdo', 'message' => 'Ya no está disponible.'];
+
+                continue;
+            }
+
+            $candidates[] = $agreement;
+        }
+
+        $inOrder = collect($candidates)->sortBy([
+            fn (InterdepartmentalAgreement $a, InterdepartmentalAgreement $b): int => $a->created_at?->format('Y-m-d H:i:s.u') <=> $b->created_at?->format('Y-m-d H:i:s.u'),
+            fn (InterdepartmentalAgreement $a, InterdepartmentalAgreement $b): int => strcmp($a->getKey(), $b->getKey()),
+        ]);
+
+        foreach ($inOrder as $agreement) {
+            try {
+                $agreement->kind === AgreementKind::RoomLoan ? $loan->handle($agreement, auth()->user()) : $shared->handle($agreement, auth()->user());
+                $accepted[] = $agreement->getKey();
+
+                continue;
+            } catch (ValidationException $e) {
+                $message = (string) collect($e->errors())->flatten()->first();
+            } catch (QueryException|DeadlockException $e) {
+                report($e);
+                $message = 'No se pudo aceptar por un error de la base de datos; intenta de nuevo.';
+            } catch (Throwable $e) {
+                report($e);
+                $message = 'No se pudo aceptar por un error inesperado; intenta de nuevo.';
+            }
+
+            try {
+                $fresh = $agreement->fresh() ?? $agreement;
+                $failed[] = ['label' => $this->label($query->row($fresh)), 'message' => $message];
+
+                if ($fresh->status === AgreementStatus::Proposed) {
+                    $retry[] = $agreement->getKey();
+                }
+            } catch (Throwable $e) {
+                report($e);
+                $failed[] = ['label' => 'Un acuerdo', 'message' => $message];
+            }
+        }
+
+        $this->afterDecision($accepted);
+        $this->selected = $retry;
+        $this->bulkResult = ['accepted' => count($accepted), 'failed' => $failed];
+
+        if ($openRow !== null && in_array($openRow['id'], $accepted, true)) {
+            $this->openNextPending($openRow, $context, $query);
+        }
+
+        $failed === []
+            ? $this->success('Aceptados '.count($accepted))
+            : $this->warning('Aceptados '.count($accepted), count($failed) === 1 ? 'Uno no se aceptó: el motivo está arriba de la lista.' : count($failed).' no se aceptaron: los motivos están arriba de la lista.');
+    }
+
+    public function dismissBulkResult(): void
+    {
+        $this->bulkResult = null;
     }
 
     /**
@@ -225,7 +348,8 @@ new #[Title('Acuerdos')] class extends Component
             return ['groups' => null];
         }
 
-        $groups = $query->inbox($context, $this->term(), $this->campus(), AgreementKind::tryFrom($this->kind), $this->search);
+        $groups = $this->inbox($context, $query);
+        $blocked = $query->blocked($groups['decide']);
         $selected = $this->selectedRow($context, $query, $groups);
         $agreement = $selected === null ? null : $this->findOrNull($selected['id'], $context, $query);
         $detail = $agreement === null ? null : $query->detail($agreement);
@@ -242,6 +366,9 @@ new #[Title('Acuerdos')] class extends Component
             'acceptBlock' => $detail === null ? null : $this->acceptBlock($detail),
             'maxComment' => AgreementRules::MAX_COMMENT_LENGTH,
             'filtered' => $this->kind !== '' || trim($this->search) !== '',
+            'blocked' => $blocked,
+            'selectable' => $this->selectable($groups['decide'], $blocked),
+            'maxBulk' => self::MAX_BULK,
         ];
     }
 
@@ -281,6 +408,64 @@ new #[Title('Acuerdos')] class extends Component
     }
 
     /**
+     * Los por decidir de una lista que se pueden aceptar: todos menos los préstamos cuyo bloque empalma.
+     *
+     * @param  list<array<string, mixed>>  $decide
+     * @param  array<string, mixed>  $blocked  Lo que da AgreementsInboxQuery::blocked() para esa lista.
+     * @return list<string>
+     */
+    private function selectable(array $decide, array $blocked): array
+    {
+        return array_values(array_diff(array_column($decide, 'id'), array_keys($blocked)));
+    }
+
+    /**
+     * La bandeja con el filtro y la búsqueda de ahora, leída una vez por petición; se suelta al decidir.
+     *
+     * @return array{decide: list<array<string, mixed>>, sent: list<array<string, mixed>>, done: list<array<string, mixed>>}
+     */
+    private function inbox(Actor $context, AgreementsInboxQuery $query): array
+    {
+        return $this->inbox ??= $query->inbox($context, $this->term(), $this->campus(), AgreementKind::tryFrom($this->kind), $this->search);
+    }
+
+    /**
+     * Después de aceptar o rechazar, abre el siguiente por decidir de la lista (el que seguía al decidido; si era el
+     * último, el primero) y lo anuncia al navegador para que lo muestre. Si ya no queda ninguno, se queda en el decidido
+     * y, en pantallas angostas, vuelve a la lista.
+     *
+     * @param  array<string, mixed>  $decided  El renglón del decidido, leído antes de decidir.
+     */
+    private function openNextPending(array $decided, Actor $context, AgreementsInboxQuery $query): void
+    {
+        $pending = $this->inbox($context, $query)['decide'];
+        $after = fn (array $row): bool => [$row['sortKey'], $row['id']] > [$decided['sortKey'], $decided['id']];
+        $next = collect($pending)->first($after) ?? $pending[0] ?? null;
+
+        if ($next === null) {
+            $this->agreementId = $decided['id'];
+            $this->mobileDetail = false;
+
+            return;
+        }
+
+        $this->agreementId = $next['id'];
+        $this->dispatch('agreement-shown');
+    }
+
+    /**
+     * Cómo se nombra un acuerdo en un aviso o en la lista de los que no se aceptaron, sin escapar.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function label(array $row): string
+    {
+        return $row['kind'] === AgreementKind::RoomLoan
+            ? "{$row['room']} · {$row['day_short']} {$row['hours']} · ".($row['group']['label'] ?? 'Grupo')
+            : ($row['group']['label'] ?? 'Grupo')." · {$row['seats']} ".($row['seats'] === 1 ? 'lugar' : 'lugares')." de {$row['career']['code']}";
+    }
+
+    /**
      * Ya escapado: MaryUI pinta los toasts como HTML.
      *
      * @param  array<string, mixed>  $detail
@@ -292,12 +477,17 @@ new #[Title('Acuerdos')] class extends Component
             : "{$detail['career']['code']} en {$detail['group']['label']}");
     }
 
-    private function afterDecision(): void
+    /**
+     * @param  list<string>  $decided  Los que se acaban de decidir, que salen de la selección.
+     */
+    private function afterDecision(array $decided): void
     {
         $this->found = [];
+        $this->inbox = null;
+        $this->bulkResult = null;
         $this->rejecting = false;
         $this->comment = '';
-        $this->mobileDetail = false;
+        $this->selected = array_values(array_diff($this->selected, $decided));
         $this->resetErrorBag();
     }
 

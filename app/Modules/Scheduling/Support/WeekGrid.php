@@ -115,6 +115,16 @@ final readonly class WeekGrid
     }
 
     /**
+     * Las horas de un texto como las pinta la semana (DESIGN.md: «7:00», sin cero a la izquierda): «el lunes de 07:00
+     * a 08:00» → «el lunes de 7:00 a 8:00». Es solo para mostrar los mensajes del validador junto a las horas de la
+     * pantalla; el mensaje guardado no cambia.
+     */
+    public static function prose(string $text): string
+    {
+        return (string) preg_replace('/(?<![\d:])0(\d:\d\d)(?!\d)/', '$1', $text);
+    }
+
+    /**
      * «7:00–9:00».
      */
     public static function range(string $startsAt, string $endsAt): string
@@ -241,7 +251,8 @@ final readonly class WeekGrid
 
     /**
      * La única parada de tabulación de la semana: la primera celda que coloca o la primera sesión que se abre y no
-     * queda bajo las celdas del grupo elegido (`covered`).
+     * queda bajo las celdas del grupo elegido (`covered`); si no hay ninguna, la primera celda que no se puede
+     * (`blocked`, que también recorren las flechas para leer su motivo), así Tab siempre entra a la semana.
      *
      * @param  array<int, list<array{id: string, open: bool, covered?: bool}>>  $laid
      * @param  array<int, list<array{key: string, state: string}>>|null  $cells
@@ -262,7 +273,9 @@ final readonly class WeekGrid
             }
         }
 
-        return null;
+        $blocked = $canPlace ? array_find(array_merge(...array_values($cells ?? [])), fn (array $cell): bool => $cell['state'] === 'blocked') : null;
+
+        return $blocked === null ? null : 'cell:'.$blocked['key'];
     }
 
     /**

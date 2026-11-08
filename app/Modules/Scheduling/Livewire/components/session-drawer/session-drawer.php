@@ -19,13 +19,17 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 
 /**
- * El cajón de una sesión del editor de horarios (tarea 3.5; DESIGN.md, "Editor de horarios"): día, inicio, fin y tipo;
- * «Guardar» la mueve (UpdateGroupSession) y «Quitar sesión» la quita completa (RemoveGroupSession), y los dos avisan a
- * la página con `schedule-changed` para que vuelva a pintar la semana. Abrirlo (`open-session`) no la vuelve a pintar.
- * Incrusta la sección del salón (`scheduling::components.session-room`, tarea 3.7), con la llave de la sesión y de su
- * `updated_at` para que se vuelva a montar cuando la sesión cambia; muestra lo que dice el validador de la sesión
- * (ScheduleEditorQuery::sessionPanel), leído al abrir, al guardar y cuando la sección asigna o quita el salón
- * (`session-room-saved`); el tipo se elige en el navegador y viaja al guardar.
+ * El cajón de una sesión del editor de horarios (tarea 3.5; DESIGN.md, "Editor de horarios"): arriba lo que dice el
+ * validador de la sesión (ScheduleEditorQuery::sessionPanel, leído al abrir, al guardar y cuando la sección del salón
+ * asigna o quita el salón, `session-room-saved`); luego día, inicio, fin y tipo, y la sección del salón
+ * (`scheduling::components.session-room`, tarea 3.7), con la llave de la sesión y de su `updated_at` para que se vuelva
+ * a montar cuando la sesión cambia. Cada cosa se guarda de una sola forma: «Guardar horario» (al pie) mueve la sesión
+ * (UpdateGroupSession) y «Asignar salón» (en su sección) asigna el salón. El día, las horas y el tipo viven en el
+ * navegador hasta «Guardar horario»: ahí se compara con lo guardado (FIELDS contra `panel`) y, mientras hay cambios, la
+ * sección del salón se esconde y dice por qué (sus sugerencias serían de la hora guardada), con «Descartar cambios»,
+ * sin ir al servidor. Guardar sin cambios no escribe. «Quitar sesión» la quita completa (RemoveGroupSession); guardar
+ * y quitar avisan a la página con `schedule-changed` para que vuelva a pintar la semana. Abrirlo (`open-session`) no
+ * la vuelve a pintar.
  *
  * El periodo y el campus son los de la página (`#[Locked]`); abrir pide ver el grupo (ScheduleEditorQuery::sees) y
  * guardar o quitar, editSessions, cada vez.
@@ -33,6 +37,9 @@ use Mary\Traits\Toast;
 new class extends Component
 {
     use Toast;
+
+    /** Los campos del horario y su llave en `panel` (lo guardado); el navegador compara con la misma lista. */
+    public const array FIELDS = ['day' => 'day', 'startsAt' => 'starts_at', 'endsAt' => 'ends_at', 'kind' => 'kind'];
 
     #[Locked]
     public string $termId = '';
@@ -80,9 +87,9 @@ new class extends Component
         abort_unless($editor->sees($context, $term, $campus, $session->group), 403);
 
         $this->sessionId = $session->id;
-        $this->fillFrom($session);
         $this->roomNotice = null;
         $this->panel = $editor->sessionPanel($context, $term, $campus, $session->id);
+        $this->fill($this->saved());
         $this->resetErrorBag();
         $this->show = true;
     }
@@ -112,6 +119,10 @@ new class extends Component
         $session = $editor->sessionOrFail($term, $campus, (string) $this->sessionId);
         $this->authorize('editSessions', $session->group);
 
+        if (array_map('strval', $this->only(array_keys(self::FIELDS))) === $this->saved()) {
+            return;
+        }
+
         $grid = WeekGrid::of($campus->profile);
         $this->validate([
             'day' => ['required', Rule::in(array_map('strval', array_column($grid->days, 'day')))],
@@ -134,8 +145,8 @@ new class extends Component
 
         $editor->forget();
         $this->sessionId = $result->session->id;
-        $this->fillFrom($result->session);
         $this->panel = $editor->sessionPanel($context, $term, $campus, $result->session->id);
+        $this->fill($this->saved());
         $this->roomNotice = $result->roomDropped ? "Quitamos el salón {$room}: estaba ocupado a esa hora." : null;
         $this->dispatch('schedule-changed');
 
@@ -169,12 +180,14 @@ new class extends Component
         $this->success('Sesión quitada', e($label));
     }
 
-    private function fillFrom(GroupSession $session): void
+    /**
+     * Lo guardado de los campos del horario, como van en ellos.
+     *
+     * @return array{day: string, startsAt: string, endsAt: string, kind: string}
+     */
+    private function saved(): array
     {
-        $this->day = (string) $session->day;
-        $this->startsAt = Clock::of($session->starts_at);
-        $this->endsAt = Clock::of($session->ends_at);
-        $this->kind = $session->kind->value;
+        return array_map(fn (string $key): string => (string) ($this->panel[$key] ?? ''), self::FIELDS);
     }
 
     private function labelOf(GroupSession $session): string

@@ -1,14 +1,18 @@
 {{--
     Salón de la sesión, dentro del cajón de la sesión del editor (maqueta `.impeccable/mocks/horarios/cajones.html`,
     estado `#sesion`):
-    - «Salón actual»: clave en Mono, tipo y su estado («Asignado», o los choques que deja: «Préstamo pendiente · HC-10»…)
-      con el detalle en renglones que parten; «Sin salón» en advertencia si no tiene. Quien asigna lo puede quitar.
-    - «Salones sugeridos»: un radio por salón (scheduling::session-room.row), del mejor al peor; el buscador de otro
-      salón con sus resultados aparte (los sugeridos que coinciden se resaltan en su lista) y, al elegir uno que
-      causaría choques, lo que pasaría al guardarlo. La elección vive en Alpine (`selected`) hasta «Asignar».
-    - Al pie, «Asignar salón» o «Asignar y pedir préstamo». Sin permiso o con el grupo sin editar, lo mismo en solo
-      lectura y con su motivo.
-    El editor lo incrusta con `wire:key="room-{sessionId}-{updated_at}"` para volver a montarlo cuando la sesión cambia.
+    - «Salón actual»: clave en Mono, tipo y su estado («Asignado», o lo que deja: «Préstamo pendiente» en `warning`,
+      como en los sugeridos, y los choques en `error`) con el detalle en renglones que parten; «Sin salón» en
+      advertencia si no tiene. Quien asigna lo puede quitar.
+    - «Salones sugeridos»: un radio por salón (scheduling::session-room.row), del mejor al peor; los tres primeros a la
+      vista y los demás con «Ver N más» (abiertos si la búsqueda resalta alguno). Si todos están libres, lo dice una
+      vez en lugar de una insignia por renglón. El buscador de otro salón con sus resultados aparte (los sugeridos que
+      coinciden se resaltan en su lista) y, al elegir uno que causaría choques, lo que pasaría al guardarlo. La
+      elección vive en Alpine (`selected`) hasta «Asignar».
+    - Al pie, «Asignar salón» o «Asignar y pedir préstamo»: la única forma de guardar el salón. Sin permiso o con el
+      grupo sin editar, lo mismo en solo lectura y con su motivo.
+    Las horas de los mensajes van como en la semana (WeekGrid::prose). El editor lo incrusta con
+    `wire:key="room-{sessionId}-{updated_at}"` para volver a montarlo cuando la sesión cambia.
 --}}
 <section aria-labelledby="session-room-title-{{ $sessionId }}" class="grid min-w-0 gap-5" data-testid="session-room"
     x-data="{ selected: '', loanRooms: @js($loanRooms) }"
@@ -30,7 +34,11 @@
                     <span class="font-mono text-base font-semibold">{{ $current['code'] }}</span>
                     <span>{{ $current['type'] }}</span>
                     @forelse ($current['conflicts'] as $conflict)
-                        <x-core::status-badge tone="error" :label="$conflict['label'].' · '.$conflict['rule']" :icon="$conflict['rule'] === 'HC-10' ? 'o-clock' : null" />
+                        @if ($conflict['rule'] === 'HC-10')
+                            <x-core::status-badge tone="warning" :label="$conflict['label'].' · '.$conflict['rule']" :icon="$current['state']['pending'] ? 'o-clock' : 'o-arrows-right-left'" />
+                        @else
+                            <x-core::status-badge tone="error" :label="$conflict['label'].' · '.$conflict['rule']" />
+                        @endif
                     @empty
                         <x-core::status-badge tone="success" label="Asignado" />
                     @endforelse
@@ -39,7 +47,7 @@
                     @endif
                 </div>
                 @foreach ($current['conflicts'] as $conflict)
-                    <p class="text-sm break-words"><b class="font-mono">{{ $conflict['rule'] }}</b> {{ $conflict['message'] }}</p>
+                    <p class="text-sm break-words"><b class="font-mono">{{ $conflict['rule'] }}</b> {{ \App\Modules\Scheduling\Support\WeekGrid::prose($conflict['message']) }}</p>
                 @endforeach
             @else
                 <div><x-core::status-badge tone="warning" label="Sin salón" icon="o-exclamation-triangle" /></div>
@@ -48,13 +56,32 @@
     </div>
 
     <div class="grid min-w-0 gap-2">
-        <h3 class="text-base font-semibold">Salones sugeridos</h3>
-        <div role="radiogroup" aria-label="Salones sugeridos" class="grid gap-2" data-testid="room-suggestions">
-            @forelse ($rooms as $row)
-                @include('scheduling::session-room.row', ['row' => $row, 'list' => 'suggested', 'matched' => in_array($row['id'], $matched, true)])
-            @empty
-                <p class="text-sm text-neutral">El campus no tiene salones activos.</p>
-            @endforelse
+        <h3 class="flex flex-wrap items-baseline justify-between gap-x-3 text-base font-semibold">
+            Salones sugeridos
+            @if ($allFree && $rooms !== [])
+                <span class="inline-flex items-center gap-1.5 text-sm font-normal text-success" data-testid="rooms-all-free"><x-icon name="o-check-circle" class="h-4 w-4" aria-hidden="true" />Todos libres a esa hora</span>
+            @endif
+        </h3>
+        {{-- `more` se arma de nuevo (otra llave) cuando la búsqueda resalta un sugerido que estaba tras «Ver N más». --}}
+        <div class="grid gap-2" x-data="{ more: {{ $revealed ? 'true' : 'false' }} }" wire:key="room-list-{{ $revealed ? 'open' : 'closed' }}" data-testid="room-list">
+            <div role="radiogroup" aria-label="Salones sugeridos" class="grid gap-2" data-testid="room-suggestions">
+                @forelse ($rooms as $index => $row)
+                    @if ($index < $shown)
+                        @include('scheduling::session-room.row', ['row' => $row, 'list' => 'suggested', 'matched' => in_array($row['id'], $matched, true)])
+                    @else
+                        <div x-show="more" x-cloak class="contents" wire:key="room-more-{{ $row['id'] }}">
+                            @include('scheduling::session-room.row', ['row' => $row, 'list' => 'suggested', 'matched' => in_array($row['id'], $matched, true)])
+                        </div>
+                    @endif
+                @empty
+                    <p class="text-sm text-neutral">El campus no tiene salones activos.</p>
+                @endforelse
+            </div>
+            @if (count($rooms) > $shown)
+                <button type="button" class="btn btn-ghost btn-sm justify-self-start" x-show="! more" x-on:click="more = true" data-testid="rooms-more">
+                    <x-icon name="o-chevron-down" class="h-4 w-4" aria-hidden="true" />Ver {{ count($rooms) - $shown }} más
+                </button>
+            @endif
         </div>
 
         <x-input wire:model.live.debounce.400ms="search" icon="o-magnifying-glass" placeholder="Buscar otro salón" aria-label="Buscar otro salón" class="mt-2" clearable />

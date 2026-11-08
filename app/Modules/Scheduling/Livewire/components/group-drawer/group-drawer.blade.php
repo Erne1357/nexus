@@ -1,10 +1,12 @@
 {{--
-    El cajón del grupo (maqueta `cajones.html`, `#grupo`): su materia, «CLAVE · grupo», el departamento que imparte, la
-    capacidad, el docente de solo lectura («Lo asigna Asignación docente»), sus sesiones (cada una abre su cajón, sin
-    regresar el foco: `data-drawer-switch`) y «Cupos por carrera» (scheduling::components.group-quotas).
+    El cajón del grupo (maqueta `cajones.html`, `#grupo`; hasta 448 px y nunca más ancho que la ventana): su materia,
+    «CLAVE · grupo», el departamento que imparte, la capacidad, el docente de solo lectura («Lo asigna Asignación
+    docente»), sus sesiones (cada una abre su cajón, sin regresar el foco: `data-drawer-switch`) y «Cupos por carrera»
+    (scheduling::components.group-quotas), que llena el resto del cajón y lleva «Guardar cupos» en el pie fijo, como el
+    cajón de la sesión.
 --}}
 <div>
-    <x-drawer wire:model.live="show" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="group-drawer-title" data-testid="group-drawer">
+    <x-drawer wire:model.live="show" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="group-drawer-title" data-testid="group-drawer">
         @if ($panel)
             @php($sessions = count($panel['sessions']))
             <div class="flex min-h-dvh flex-col">
@@ -16,7 +18,7 @@
                     <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar" />
                 </header>
 
-                <div class="flex-1 space-y-5 px-5 pt-4 pb-8">
+                <div class="flex flex-1 flex-col gap-5 px-5 pt-4">
                     <dl class="grid grid-cols-2 gap-x-6 gap-y-3">
                         <div>
                             <dt class="text-[11.5px] font-medium tracking-[0.09em] text-neutral uppercase">Imparte</dt>
@@ -41,7 +43,7 @@
                     <section class="grid gap-2" aria-labelledby="group-sessions-title">
                         <h3 id="group-sessions-title" class="flex flex-wrap items-baseline justify-between gap-2 text-base font-semibold">
                             Sesiones
-                            <span class="font-mono text-sm font-normal text-neutral">{{ $sessions }} {{ $sessions === 1 ? 'sesión' : 'sesiones' }} · {{ $panel['placed'] }} de {{ $panel['required'] }} h</span>
+                            <span class="text-sm font-normal text-neutral"><span class="font-mono">{{ $sessions }}</span> {{ $sessions === 1 ? 'sesión' : 'sesiones' }} · <span class="font-mono">{{ $panel['placed'] }}</span> de <span class="font-mono">{{ $panel['required'] }}</span> h</span>
                         </h3>
                         @if ($sessions > 0)
                             <ul class="divide-y divide-base-300 rounded-box border border-base-300">
@@ -52,7 +54,7 @@
                                             class="grid w-full grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-left hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary">
                                             <span>{{ $row['day'] }}</span>
                                             <span class="font-mono font-semibold">{{ $row['hours'] }}</span>
-                                            <span class="flex items-center gap-3 text-neutral">{{ $row['kind'] }} <span class="font-mono text-base-content">{{ $row['room'] ?? 'Sin salón' }}</span></span>
+                                            <span class="flex items-center gap-3 text-neutral">{{ $row['kind'] }} @if ($row['room'])<span class="font-mono text-base-content">{{ $row['room'] }}</span>@else<span class="text-base-content">Sin salón</span>@endif</span>
                                         </button>
                                     </li>
                                 @endforeach

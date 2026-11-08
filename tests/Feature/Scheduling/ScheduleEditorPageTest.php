@@ -20,8 +20,10 @@ use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use Dom\Element;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\ViewErrorBag;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -133,14 +135,22 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSee('ISIC-2010-224')
             ->assertSee('Vigente')
             ->assertSee('Prioridad')
-            ->assertSee('Horas colocadas')
-            ->assertSee('0 de 5')
             ->assertSee('0 choques');
 
         $tray = domOf($page)->querySelector('[data-testid=tray]');
 
-        expect(textOf($tray))->toContain('ACF-0904', 'Cálculo Vectorial', 'ACF-0904 · A', 'Sin docente', '0 de 2 h', 'AED-1026 · B', '0 de 3 h')
+        expect(textOf(domOf($page)->querySelector('[data-testid=editor-facts]')))->toContain('Horas colocadas 0 de 5')
+            ->and(textOf($tray))->toContain('ACF-0904', 'Cálculo Vectorial', 'ACF-0904 · A', 'Sin docente', '0 de 2 h', 'AED-1026 · B', '0 de 3 h')
             ->and(textOf(domOf($page)->querySelector('[data-testid=editor-semester]')))->toContain('Semestre 3 · 2 sin acomodar');
+    });
+
+    it('la bandeja es una sola parada de tabulación: la pieza elegida o la primera, con los botones del cajón fuera del Tab', function () {
+        $stops = fn (Testable $page): array => array_map(fn (Element $element): string => $element->getAttribute('data-group') ?? 'cajón', [...domOf($page)->querySelectorAll('[data-testid=tray] [tabindex="0"]')]);
+
+        expect($stops(editorAs($this->coordinator)))->toBe([$this->calcGroup->id])
+            ->and($stops(editorAs($this->coordinator)->call('pick', $this->dataGroup->id)))->toBe([$this->dataGroup->id])
+            ->and(domOf(editorAs($this->coordinator))->querySelectorAll('[data-testid=tray] [data-group-drawer][tabindex="-1"]')->length)->toBe(2)
+            ->and(domOf(editorAs($this->coordinator))->querySelector('[data-testid=skip-to-week]')?->getAttribute('href'))->toBe('#editor-week');
     });
 
     it('elige un grupo, ve dónde cabe y coloca una sesión en una celda que cabe', function () {
@@ -264,6 +274,20 @@ describe('coordinador de la carrera dueña', function () {
         $page->call('choosePlan', $retired->id)->assertOk()->assertSet('semester', '2')->assertSee('ACF-0902 · R');
     });
 
+    it('con una sola retícula la muestra como texto y, si es vieja, con «Prioridad» y sus grupos sin acomodar', function () {
+        view()->share('errors', new ViewErrorBag);
+        $html = view('scheduling::editor.controls', [
+            'careers' => [['id' => $this->isc->id, 'code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']],
+            'career' => $this->isc, 'plan' => $this->oldPlan, 'view' => 'semestre', 'teacherOptions' => [], 'roomOptions' => [],
+            'plans' => [['id' => $this->oldPlan->id, 'code' => 'ISIC-2004-296', 'is_current' => false, 'is_active' => true, 'unscheduled' => 2]],
+            'semesters' => [['semester' => 3, 'unscheduled' => 2]],
+        ])->render();
+        $plan = domOf($html)->querySelector('[data-testid="plan-ISIC-2004-296"]');
+
+        expect($plan?->tagName)->toBe('DIV')
+            ->and(textOf($plan))->toContain('ISIC-2004-296', 'Prioridad', '2 grupos sin acomodar');
+    });
+
     it('avisa de la retícula vieja con grupos sin acomodar y la abre con «Ir»', function () {
         editorGroup(editorSubject('ACF-0901', 'Cálculo Diferencial', $this->cb, theory: 4), 'V', ['study_plan_id' => $this->oldPlan->id, 'semester' => 1]);
 
@@ -277,7 +301,7 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSee('ACF-0901 · V');
     });
 
-    it('HC-01: colocar donde el docente ya da clase muestra el error y no escribe', function () {
+    it('HC-01: la celda donde el docente ya da clase es un botón deshabilitado con su motivo que deja tocar las sesiones de abajo, y colocar ahí muestra el error y no escribe', function () {
         $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
         $this->calcGroup->update(['teacher_id' => $teacher->id]);
         $busy = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->otherCampus->id, 'teacher_id' => $teacher->id, 'code' => 'F',
@@ -288,8 +312,12 @@ describe('coordinador de la carrera dueña', function () {
         $cell = domOf($page)->querySelector('[data-testid=week] [data-cell="1|07:00"]');
 
         expect($cell?->getAttribute('data-fit'))->toBe('blocked')
-            ->and($cell?->tagName)->not->toBe('BUTTON')
-            ->and($cell?->getAttribute('title'))->toContain('HC-01');
+            ->and($cell?->getAttribute('aria-disabled'))->toBe('true')
+            ->and($cell?->hasAttribute('wire:click'))->toBeFalse()
+            ->and($cell?->getAttribute('data-why'))->toStartWith('No se puede: HC-01')
+            ->and(explode(' ', (string) $cell?->getAttribute('class')))->toContain('pointer-events-none')
+            ->and(explode(' ', (string) $cell?->querySelector('[data-why-target]')?->getAttribute('class')))->toContain('pointer-events-auto')
+            ->and(textOf(domOf($page)->getElementById((string) $cell?->getAttribute('aria-describedby'))))->toContain('HC-01', 'Ana Pérez ya da Química');
 
         $page->call('place', $this->calcGroup->id, 1, '07:00');
 
@@ -326,6 +354,46 @@ describe('coordinador de la carrera dueña', function () {
             ->and(lastToastOf($drawer)['title'])->toBe('Sesión quitada');
     });
 
+    it('el horario sin guardar se nota en el navegador: el salón cede su lugar a su motivo y solo «Guardar horario» guarda, si hay cambios', function () {
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
+        Room::factory()->capacity(40)->create(['code' => 'A-7', 'building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id]);
+        $session = GroupSession::factory()->for($this->calcGroup)->on(2, '09:00', '10:00')->create();
+
+        $drawer = editorDrawerAs($jefe, SESSION_DRAWER)->dispatch('open-session', id: $session->id)->assertSee('Salones sugeridos');
+        $dom = domOf($drawer);
+        $gate = $dom->querySelector('[data-testid=room-gate]');
+        $save = $dom->querySelector('[data-testid=save-session]');
+
+        // Cambiar el día, las horas o el tipo no va al servidor: el navegador compara con lo guardado (`panel`).
+        expect(str_replace('\\u0022', '"', (string) $dom->querySelector('[data-testid=session-form]')?->getAttribute('x-data')))->toContain('"day":"day"', '"startsAt":"starts_at"', '"endsAt":"ends_at"', '"kind":"kind"')
+            ->and($dom->querySelector('select[wire\\:model="startsAt"]'))->not->toBeNull()
+            ->and($dom->querySelector('select[wire\\:model\\.live="startsAt"]'))->toBeNull()
+            ->and($dom->querySelector('[data-testid=room-section]')?->getAttribute('x-show'))->toBe('! dirty')
+            ->and($gate?->getAttribute('x-show'))->toBe('dirty')
+            ->and(textOf($gate))->toContain('Guarda el horario para ver los salones libres a esa hora', 'Descartar cambios')
+            ->and(textOf($save))->toBe('Guardar horario')
+            ->and($save?->getAttribute('x-bind:disabled'))->toBe('! dirty');
+
+        $drawer->call('save')->assertNotDispatched('schedule-changed');
+        expect(editorSessionsOf($this->calcGroup))->toBe(['2 09:00-10:00 teoria']);
+
+        $drawer->set('day', '4')->set('kind', 'practica')->call('save')->assertHasNoErrors()->assertDispatched('schedule-changed')
+            ->assertSet('panel.day', 4)->assertSet('day', '4')->assertSet('kind', 'practica');
+        expect(editorSessionsOf($this->calcGroup))->toBe(['4 09:00-10:00 practica']);
+    });
+
+    it('quien no acomoda el grupo ve el cajón de la sesión con «Guardar horario» deshabilitado y sin el aviso de cambios', function () {
+        $session = GroupSession::factory()->for($this->calcGroup)->on(2, '09:00', '10:00')->create();
+        $dom = domOf(editorDrawerAs(User::factory()->withRole(Role::Subdireccion)->create(), SESSION_DRAWER)->dispatch('open-session', id: $session->id));
+        $save = $dom->querySelector('[data-testid=save-session]');
+
+        expect($dom->querySelector('[data-testid=session-reason]'))->not->toBeNull()
+            ->and($save?->hasAttribute('disabled'))->toBeTrue()
+            ->and($save?->hasAttribute('x-bind:disabled'))->toBeFalse()
+            ->and($dom->querySelector('[data-testid=room-gate]'))->toBeNull()
+            ->and($dom->querySelector('[data-testid=session-room]'))->not->toBeNull();
+    });
+
     it('cambiar el tipo en el cajón no vuelve a validar el grupo: valida al abrir y al guardar', function () {
         $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
         $drawer = editorDrawerAs($this->coordinator, SESSION_DRAWER)->call('open', $session->id);
@@ -347,7 +415,7 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSee('Cálculo Vectorial')
             ->assertSee('CB · Ciencias Básicas')
             ->assertSee('Lo asigna Asignación docente')
-            ->assertSee('2 de 2 h')
+            ->assertSeeText('2 de 2 h')
             ->assertSee('Cupos por carrera');
     });
 
@@ -384,6 +452,38 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSet('teacherId', $teacher->id);
     });
 
+    it('«Ver por» desde un grupo elegido muestra a su docente y el salón de su primera sesión con salón, y al volver sigue elegido', function () {
+        $building = Building::factory()->create(['campus_id' => $this->campus->id]);
+        $first = Room::factory()->create(['code' => 'A-1', 'building_id' => $building->id]);
+        $own = Room::factory()->create(['code' => 'B-9', 'building_id' => $building->id]);
+        $this->calcGroup->update(['teacher_id' => Teacher::factory()->create(['name' => 'Ana Pérez'])->id]);
+        $this->dataGroup->update(['teacher_id' => ($zoe = Teacher::factory()->create(['name' => 'Zoé Ruiz']))->id]);
+        GroupSession::factory()->for($this->calcGroup)->inRoom($first)->on(1, '07:00', '09:00')->create();
+        GroupSession::factory()->for($this->dataGroup)->on(1, '09:00', '10:00')->create();
+        GroupSession::factory()->for($this->dataGroup)->inRoom($own)->on(3, '09:00', '11:00')->create();
+        $barOf = fn (Testable $page): string => textOf(domOf($page)->querySelector('[data-testid=person-bar]'));
+
+        $page = editorAs($this->coordinator)->call('pick', $this->dataGroup->id)->call('setView', 'docente')->assertSet('teacherId', $zoe->id);
+        expect($barOf($page))->toContain('Zoé Ruiz');
+
+        $page->call('setView', 'salon')->assertSet('roomId', $own->id);
+        expect($barOf($page))->toContain('B-9');
+
+        $page->call('setView', 'semestre')->assertSet('groupId', $this->dataGroup->id)->assertSeeHtml('data-testid="selection-bar"');
+    });
+
+    it('«Ver por» desde un grupo sin docente ni salón muestra al primero de la lista', function () {
+        $building = Building::factory()->create(['campus_id' => $this->campus->id]);
+        $room = Room::factory()->create(['code' => 'A-1', 'building_id' => $building->id]);
+        $this->calcGroup->update(['teacher_id' => ($ana = Teacher::factory()->create(['name' => 'Ana Pérez']))->id]);
+        GroupSession::factory()->for($this->calcGroup)->inRoom($room)->on(1, '07:00', '09:00')->create();
+        GroupSession::factory()->for($this->dataGroup)->on(1, '09:00', '10:00')->create();
+
+        editorAs($this->coordinator)->call('pick', $this->dataGroup->id)
+            ->call('setView', 'docente')->assertSet('teacherId', $ana->id)
+            ->call('setView', 'salon')->assertSet('roomId', $room->id);
+    });
+
     it('en la vista por docente, una sesión de otro campus fuera del horario de este se ve con su altura y cuenta sus horas', function () {
         $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
         $this->calcGroup->update(['teacher_id' => $teacher->id]);
@@ -402,6 +502,20 @@ describe('coordinador de la carrera dueña', function () {
 describe('coordinador de otra carrera', function () {
     beforeEach(function () {
         $this->other = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->iind->id])->create();
+    });
+
+    it('«Ver por» con un grupo que no es de su semestre no toma su docente ni su salón', function () {
+        $ana = Teacher::factory()->create(['name' => 'Ana Pérez']);
+        $room = Room::factory()->create(['code' => 'A-1', 'building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id]);
+        $this->calcGroup->update(['teacher_id' => $ana->id]);
+        GroupSession::factory()->for($this->calcGroup)->inRoom($room)->on(1, '07:00', '09:00')->create();
+
+        $page = editorAs($this->other, ['vista' => 'docente'])->set('groupId', $this->calcGroup->id)
+            ->call('setView', 'docente')->call('setView', 'salon')->assertOk();
+
+        expect($page->get('teacherId'))->not->toBe($ana->id)
+            ->and($page->get('roomId'))->not->toBe($room->id)
+            ->and($page->html())->not->toContain('Ana Pérez');
     });
 
     it('no ve la carrera ni la puede pedir por la URL', function () {

@@ -10,15 +10,22 @@
       semana (scheduling::editor.week); bajo 768 px, la lista de horas de un día (scheduling::editor.day-list).
     - Los cajones de la sesión y del grupo, componentes aparte (scheduling::components.session-drawer y .group-drawer)
       que se abren con `$dispatchTo` sin volver a pintar la página.
-    El teclado de la semana, el día del celular, «Ver» de un choque y el foco al cerrar un cajón son del componente
-    Alpine `scheduleEditor` (resources/js/app.js). Esc quita la selección si no hay cajón ni menú abiertos.
+    El teclado de la semana y de la bandeja, «Ir a la semana» (el primer enlace de la página, visible con el foco), el
+    día del celular, «Ver» de un choque y el foco al cerrar un cajón son del componente Alpine `scheduleEditor`
+    (resources/js/app.js). Esc quita la selección si no hay cajón ni menú abiertos.
 --}}
 <div class="space-y-4" x-data="scheduleEditor($wire.entangle('day'))"
     x-on:editor-placed.window="$nextTick(() => keep($event.detail.id))"
     x-on:keydown.escape.window="escape()"
+    x-on:scroll.window.passive="placeTip()"
+    x-on:resize.window="placeTip()"
     x-on:click.capture="remember($event)"
     x-on:open="drawerOpened()"
     x-on:close="drawerClosed()">
+    @unless ($message)
+        <a href="#editor-week" x-on:click.prevent="toWeek()" data-testid="skip-to-week"
+            class="btn btn-primary btn-sm pointer-events-none fixed top-[calc(var(--shell-top)+0.75rem)] left-1/2 z-20 -translate-x-1/2 -translate-y-[calc(100%+var(--shell-top))] opacity-0 shadow-float focus-visible:pointer-events-auto focus-visible:translate-y-0 focus-visible:opacity-100">Ir a la semana</a>
+    @endunless
     <div>
         <h1 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[1.625rem] leading-tight font-bold md:text-3xl">
             Horarios
@@ -31,7 +38,7 @@
                 <span class="font-medium text-base-content">{{ $campus->name }}</span>
                 <span>Retícula <span class="font-mono text-base-content">{{ $plan->code }}</span></span>
                 <span>Grupos <span class="font-mono text-base-content">{{ count($groups) }}</span></span>
-                <span>Horas colocadas <span class="font-mono text-base-content">{{ $placedHours }} de {{ $requiredHours }}</span></span>
+                <span>Horas colocadas <span class="text-base-content"><span class="font-mono">{{ $placedHours }}</span> de <span class="font-mono">{{ $requiredHours }}</span></span></span>
                 <a href="#choques" class="rounded-selector focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" data-testid="hard-count">
                     <x-core::status-badge :tone="$hardCount > 0 ? 'error' : 'success'" :label="$hardCount === 1 ? '1 choque' : $hardCount.' choques'" />
                 </a>

@@ -12,7 +12,7 @@
 <div class="grid gap-2.5 md:hidden" data-testid="day-list" data-day-list>
     <div class="grid grid-cols-(--days) gap-1.5" style="--days: repeat({{ count($grid->days) }}, minmax(0, 1fr))" role="group" aria-label="Día">
         @foreach ($grid->days as $day)
-            <button type="button" x-on:click="day = '{{ $day['day'] }}'" aria-pressed="{{ $day['day'] === $mobileDay ? 'true' : 'false' }}"
+            <button type="button" x-on:click="day = '{{ $day['day'] }}'" data-day-button aria-pressed="{{ $day['day'] === $mobileDay ? 'true' : 'false' }}"
                 x-bind:aria-pressed="String(day || '{{ $firstDay }}') === '{{ $day['day'] }}' ? 'true' : 'false'"
                 aria-label="{{ $day['name'] }}, {{ $busy[$day['day']] }} h ocupadas"
                 class="btn h-11 flex-col gap-0 border-base-300 px-0 leading-tight font-semibold shadow-none aria-pressed:btn-primary not-aria-pressed:bg-base-100">
