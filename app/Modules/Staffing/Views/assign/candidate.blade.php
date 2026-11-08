@@ -24,11 +24,11 @@
         </p>
         @include('staffing::assign.marks', ['candidate' => $candidate])
     </div>
-    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <span class="text-[12.5px]">
-            Puntaje <span class="font-mono font-semibold tabular-nums">{{ $candidate->scoreLabel() }}</span>
+    <div class="flex items-end justify-between gap-3">
+        <span class="grid text-[12.5px] leading-snug">
+            <span>Puntaje <span class="font-mono font-semibold tabular-nums">{{ $candidate->scoreLabel() }}</span></span>
             @if ($candidate->remainingLabel() !== null)
-                · Quedan <span class="font-mono font-semibold tabular-nums">{{ $candidate->remainingLabel() }}</span>
+                <span>Quedan <span class="font-mono font-semibold tabular-nums">{{ $candidate->remainingLabel() }}</span></span>
             @endif
         </span>
         @if ($canAssign)

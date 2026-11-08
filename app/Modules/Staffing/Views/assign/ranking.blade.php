@@ -6,7 +6,7 @@
     Con la caja de 46rem o más (consulta de contenedor) es una tabla de nueve columnas; debajo, cada docente ocupa dos
     renglones: lugar, nombre y botón, y sus cifras con su etiqueta. El motivo y los rechazos van bajo el renglón.
 --}}
-@php($grid = '@[46rem]:grid-cols-[1.75rem_minmax(10rem,1fr)_2.75rem_2.75rem_6.25rem_3rem_3.75rem_4.75rem_6.75rem]')
+@php($grid = '@[46rem]:grid-cols-[1.75rem_minmax(8.5rem,1fr)_2.75rem_2.75rem_6rem_3rem_3.75rem_5.25rem_6.25rem]')
 @php($flagged = array_values(array_filter($ranking->rows, fn ($candidate) => $candidate->isFlagged())))
 @php($flaggedMarks = array_intersect_key(\App\Modules\Staffing\Queries\RankingRow::MARKS, array_merge([], ...array_map(fn ($candidate) => $candidate->marks(), $flagged))))
 @php($size = count($ranking->rows))
@@ -17,7 +17,7 @@
     @else
         <div role="table" aria-label="Ranking de {{ $group->code }} · {{ $group->subject?->name }}">
             <div role="rowgroup">
-                <div role="row" @class(['hidden items-center gap-x-2.5 border-b border-base-300 bg-secondary/40 px-4 py-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-secondary-muted @[46rem]:grid', $grid])>
+                <div role="row" @class(['hidden items-center gap-x-2 border-b border-base-300 bg-secondary/40 px-4 py-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-secondary-muted @[46rem]:grid', $grid])>
                     <span role="columnheader">#</span>
                     <span role="columnheader">Docente</span>
                     <span role="columnheader" class="text-right">Base</span>
@@ -40,7 +40,7 @@
                     @php($current = $candidate->teacherId === $currentTeacherId)
                     <div wire:key="rank-{{ $group->id }}-{{ $candidate->teacherId }}" data-teacher="{{ $candidate->teacherId }}" @class(['bg-info/10' => $current])>
                         <div role="row" @class([
-                            'grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-2 px-4 py-2.5',
+                            'grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 px-4 py-2.5',
                             $grid,
                             'text-secondary-muted' => $candidate->isFlagged(),
                         ])>
@@ -55,7 +55,7 @@
                                 </span>
                                 @include('staffing::assign.marks', ['candidate' => $candidate])
                             </div>
-                            <div class="col-span-2 col-start-2 row-start-2 grid grid-cols-3 gap-x-3 gap-y-1.5 rounded-field bg-base-200 px-2.5 py-1.5 text-sm @[46rem]:contents">
+                            <div class="col-span-2 col-start-2 row-start-2 grid grid-cols-[repeat(3,auto)] justify-between gap-x-4 gap-y-1.5 rounded-field bg-base-200 px-2.5 py-1.5 text-sm @[46rem]:contents">
                                 @foreach ([
                                     ['Base', $candidate->baseHours, true],
                                     ['Veces', $candidate->historyCount, true],
@@ -86,12 +86,12 @@
                         </div>
 
                         @if ($pending !== null && $pending['group'] === $group->id && $pending['teacher'] === $candidate->teacherId && $pending['from'] === 'ranking')
-                            <div class="px-4 pb-3 @[46rem]:ps-[3.375rem]">
+                            <div class="px-4 pb-3 @[46rem]:ps-[3.25rem]">
                                 @include('staffing::assign.reason')
                             </div>
                         @endif
                         @if ($failure !== null && $failure['group'] === $group->id && $failure['teacher'] === $candidate->teacherId && $failure['from'] === 'ranking')
-                            <div class="px-4 pb-3 @[46rem]:ps-[3.375rem]">
+                            <div class="px-4 pb-3 @[46rem]:ps-[3.25rem]">
                                 @include('staffing::assign.failure')
                             </div>
                         @endif
