@@ -50,7 +50,7 @@ new #[Title('Acuerdos')] class extends Component
 {
     use Toast;
 
-    /** Cuántos acuerdos se aceptan juntos a lo más (supuesto por confirmar). */
+    /** Cuántos acuerdos se aceptan juntos a lo más (confirmado el 8 de noviembre de 2026). */
     private const int MAX_BULK = 50;
 
     /** Id del acuerdo abierto; '' abre el primero por decidir (o enviado). */
