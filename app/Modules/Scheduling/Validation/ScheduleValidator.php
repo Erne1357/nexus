@@ -23,6 +23,7 @@ use App\Modules\Scheduling\Rules\Constraints\TeacherHours;
 use App\Modules\Scheduling\Rules\Constraints\TeacherOverlap;
 use App\Modules\Scheduling\Rules\Constraints\TypicalStudentSchedule;
 use App\Modules\Scheduling\Rules\Constraints\WeeklyHours;
+use App\Modules\Scheduling\Rules\TeacherHourLimit;
 use Illuminate\Contracts\Container\Container;
 
 /**
@@ -174,6 +175,49 @@ final class ScheduleValidator
      */
     public function checkTeachers(Group $group, iterable $teachers): array
     {
+        [$state, $ids] = $this->withCandidates($group, $teachers);
+
+        $results = [];
+
+        foreach ($ids as $id) {
+            $result = $this->validate($state->withTeacher($group->id, $id), new ValidationScope([$group->id], [$id]), self::TEACHER_RULES);
+
+            $results[$id] = new ValidationResult($result->forGroup($group->id));
+        }
+
+        return $results;
+    }
+
+    /**
+     * Las horas de cada candidato si el grupo fuera suyo, con la misma cuenta de HC-08 (TeacherHourLimit): `before` sin
+     * este grupo y `after` con él, para que el ranking muestre «quedan 12 → 7» a todos, no solo a quien se pasa. Un
+     * candidato borrado no trae horas (null).
+     *
+     * @param  iterable<Teacher>  $teachers
+     * @return array<string, array{before: array<string, mixed>, after: array<string, mixed>}|null>
+     */
+    public function teacherHours(Group $group, iterable $teachers): array
+    {
+        [$state, $ids] = $this->withCandidates($group, $teachers);
+        $hours = [];
+
+        foreach ($ids as $id) {
+            $before = TeacherHourLimit::of($state, $id, $group->id);
+            $after = TeacherHourLimit::of($state->withTeacher($group->id, $id), $id);
+            $hours[$id] = $before === null || $after === null ? null : ['before' => $before, 'after' => $after];
+        }
+
+        return $hours;
+    }
+
+    /**
+     * La foto del grupo con los docentes candidatos que no traía, leídos en una sola consulta, y los ids en orden.
+     *
+     * @param  iterable<Teacher>  $teachers
+     * @return array{0: ScheduleState, 1: list<string>}
+     */
+    private function withCandidates(Group $group, iterable $teachers): array
+    {
         $state = $this->stateFor($group->term_id, $group->campus_id);
         $ids = [];
 
@@ -188,15 +232,7 @@ final class ScheduleValidator
             $this->states[self::key($group->term_id, $group->campus_id)] = $state;
         }
 
-        $results = [];
-
-        foreach ($ids as $id) {
-            $result = $this->validate($state->withTeacher($group->id, $id), new ValidationScope([$group->id], [$id]), self::TEACHER_RULES);
-
-            $results[$id] = new ValidationResult($result->forGroup($group->id));
-        }
-
-        return $results;
+        return [$state, $ids];
     }
 
     /**

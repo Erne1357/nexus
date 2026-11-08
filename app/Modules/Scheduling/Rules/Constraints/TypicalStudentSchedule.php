@@ -148,6 +148,13 @@ final class TypicalStudentSchedule implements Constraint
         $names = array_map(fn (string $subjectId): string => $state->subject($subjectId)?->name ?? $subjectId, $core);
         $last = array_pop($names);
         $list = $names === [] ? $last : implode(', ', $names).' y '.$last;
+        $groupIds = [];
+
+        foreach ($core as $subjectId) {
+            foreach ($bySubject[$subjectId] as $group) {
+                $groupIds[] = $group->id;
+            }
+        }
 
         foreach ($core as $subjectId) {
             foreach ($bySubject[$subjectId] as $group) {
@@ -157,7 +164,7 @@ final class TypicalStudentSchedule implements Constraint
                     'group',
                     $group->id,
                     $group->id,
-                    ['study_plan_id' => $studyPlanId, 'semester' => $semester, 'subjects' => $core],
+                    ['study_plan_id' => $studyPlanId, 'semester' => $semester, 'subjects' => $core, 'groups' => $groupIds],
                 );
             }
         }
