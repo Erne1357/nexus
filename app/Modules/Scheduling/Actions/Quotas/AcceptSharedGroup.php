@@ -21,7 +21,8 @@ use Illuminate\Validation\ValidationException;
  * propuesto), revisa HC-07 con los lugares del acuerdo (sobre `max_seats`, también cuando lo dice la base; al aceptar se revisa otra vez porque los
  * propuestos no contaban; supuesto por confirmar) y crea el cupo de la carrera con los lugares acordados. Si algo
  * falla, el acuerdo queda propuesto. Deja bitácora `quotas_updated` en el grupo y avisa con GroupQuotasChanged después
- * del commit. Quién puede lo decide InterdepartmentalAgreementPolicy antes de llamarla.
+ * del commit. Un deadlock se reintenta solo, hasta tres veces; si sigue, queda el mensaje de siempre («Otra persona está
+ * cambiando esta carga; intenta de nuevo.»). Quién puede lo decide InterdepartmentalAgreementPolicy antes de llamarla.
  */
 final class AcceptSharedGroup
 {
@@ -74,7 +75,7 @@ final class AcceptSharedGroup
                 GroupQuotasChanged::dispatch($group);
 
                 return $quota;
-            }));
+            }, 3));
         } catch (QueryException $e) {
             throw $this->rules->fromDatabase($e, 'max_seats') ?? $this->rules->fromUnique($e) ?? $e;
         }

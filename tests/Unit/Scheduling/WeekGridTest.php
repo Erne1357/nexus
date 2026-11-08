@@ -39,6 +39,13 @@ it('da los días y los bloques del perfil del campus, con su hora sin cero a la 
     ])->and(WeekGrid::range('07:00', '09:30'))->toBe('7:00–9:30');
 });
 
+it('escribe las horas de un mensaje como la semana, sin cero a la izquierda y sin tocar claves ni otras cifras', function () {
+    expect(WeekGrid::prose('El salón LE04 es de otro departamento y su préstamo para el viernes de 07:00 a 08:00 sigue pendiente.'))
+        ->toBe('El salón LE04 es de otro departamento y su préstamo para el viernes de 7:00 a 8:00 sigue pendiente.')
+        ->and(WeekGrid::prose('INF-1018 E · vie 07:00–09:00; de 10:00 a 13:00; grupo 05; HC-09'))
+        ->toBe('INF-1018 E · vie 7:00–9:00; de 10:00 a 13:00; grupo 05; HC-09');
+});
+
 it('acomoda cada sesión en su día con el renglón donde empieza y los que abarca, en bloques del perfil', function () {
     $laid = weekGrid(['block_minutes' => 30, 'day_start' => '07:00'])->lay([
         weekItem('a', 2, '08:00', '09:30'),
@@ -111,6 +118,15 @@ it('la parada de tabulación es la primera celda que coloca o, sin ella, la prim
     expect($grid->tabStop($laid, $cells, true))->toBe('cell:1|08:00')
         ->and($grid->tabStop($laid, $cells, false))->toBe('session:s')
         ->and($grid->tabStop($laid, null, false))->toBe('session:s');
+});
+
+it('si todo lo libre no se puede (HC-01, HC-02) y no hay sesiones que se abran, la parada es la primera celda que no se puede', function () {
+    $grid = weekGrid(['days' => [1], 'day_start' => '07:00', 'day_end' => '09:00']);
+    $blocked = ['fits' => false, 'rules' => ['HC-01'], 'messages' => ['Ana ya da clase.']];
+    $cells = $grid->cells(['1|07:00' => $blocked, '1|08:00' => $blocked], ['HC-01']);
+
+    expect($grid->tabStop($grid->lay([]), $cells, true))->toBe('cell:1|07:00')
+        ->and($grid->tabStop($grid->lay([]), $cells, false))->toBeNull();
 });
 
 it('extiende la ventana a las sesiones que caen fuera del horario o de los días del perfil, alineada a sus bloques', function () {

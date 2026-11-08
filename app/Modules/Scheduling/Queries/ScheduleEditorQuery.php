@@ -238,6 +238,22 @@ final class ScheduleEditorQuery
     }
 
     /**
+     * A quién y a qué salón lleva «Ver por» desde un grupo del semestre: su docente y el salón de su primera sesión que
+     * tiene uno (por día y hora); null en cada uno si no tiene o el grupo no es del semestre.
+     *
+     * @param  array{career: string, plan: string, semester: string}  $selection
+     * @return array{teacher: ?string, room: ?string}
+     */
+    public function lensOf(Actor $actor, Term $term, Campus $campus, array $selection, string $groupId): array
+    {
+        $board = $this->semester($actor, $term, $campus, $selection)['board'];
+        $group = $board === null ? null : array_find($board['groups'], fn (array $row): bool => $row['id'] === $groupId);
+        $session = $group === null ? null : array_find($group['sessions'], fn (array $row): bool => $row['room'] !== null);
+
+        return ['teacher' => $group['teacher_id'] ?? null, 'room' => $session['room']['id'] ?? null];
+    }
+
+    /**
      * Si el grupo está en el semestre de la selección (lo que se puede elegir en la bandeja).
      *
      * @param  array{career: string, plan: string, semester: string}  $selection
@@ -280,6 +296,7 @@ final class ScheduleEditorQuery
             'day' => $session->day,
             'starts_at' => Clock::of($session->starts_at),
             'ends_at' => Clock::of($session->ends_at),
+            'kind' => $session->kind->value,
             'updated_at' => (string) $session->updated_at?->getTimestamp(),
             'room' => $session->room?->code,
             'group' => ['id' => $group->id, 'label' => "{$group->subject->code} · {$group->code}", 'subject' => $group->subject->name, 'teacher' => $group->teacher?->name],
