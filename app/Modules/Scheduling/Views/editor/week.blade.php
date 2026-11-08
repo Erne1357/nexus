@@ -9,10 +9,12 @@
     (scheduling::editor.session).
 
     Con un grupo elegido cada celda dice si cabe (`fits`, `success/15` y «+»), si choca con una regla que se guarda
-    marcada (`clash`, rayas `error` con su regla) o si no se puede (`blocked`, HC-01 o HC-02: rayas neutras, sin
-    botón, con el motivo en `title` y para lectores de pantalla). Quien puede acomodar el grupo coloca tocando una
-    celda que cabe o choca; quien no, ve lo mismo sin botones y sin tapar los clics a las sesiones (las celdas sin botón
-    llevan `pointer-events-none`). Las celdas van sobre las sesiones de los demás grupos, que se atenúan; las del grupo
+    marcada (`clash`, rayas `error` con su regla) o si no se puede (`blocked`, HC-01 o HC-02: rayas neutras). Quien
+    puede acomodar el grupo coloca tocando una celda que cabe o choca; la que no se puede es un botón deshabilitado
+    (`aria-disabled`) que las flechas también recorren. El motivo de las que chocan o no se pueden va en
+    `aria-describedby` y, con el foco o bajo el puntero, en un aviso junto a la celda (`data-why`, `explain()` de
+    `scheduleEditor`). Quien no acomoda el grupo ve lo mismo sin botones, con el motivo para lectores de pantalla y sin
+    tapar los clics a las sesiones (`pointer-events-none`). Las celdas van sobre las sesiones de los demás grupos, que se atenúan; las del grupo
     elegido quedan a la vista y se abren.
 --}}
 @php
@@ -20,11 +22,12 @@
     $title = $selected ? $selected['subject']['code'].' · '.$selected['code'] : '';
     $headBg = 'bg-[color-mix(in_oklab,var(--color-secondary)_40%,var(--color-base-100))]';
 @endphp
-<div id="editor-week" tabindex="-1" class="max-h-[calc(100dvh-var(--shell-top)-2rem)] scroll-pt-13 scroll-ps-13 overflow-auto rounded-box [scrollbar-color:var(--color-base-300)_transparent] [scrollbar-width:thin] border border-base-300 bg-base-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary max-md:hidden" data-testid="week">
+<div id="editor-week" tabindex="-1" x-on:scroll="placeTip()" class="max-h-[calc(100dvh-var(--shell-top)-2rem)] scroll-pt-13 scroll-ps-13 overflow-auto rounded-box [scrollbar-color:var(--color-base-300)_transparent] [scrollbar-width:thin] border border-base-300 bg-base-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary max-md:hidden" data-testid="week">
     <div class="grid min-w-[calc(3.25rem+var(--units)*var(--lane))] grid-cols-[3.25rem_var(--cols)] select-none [--lane:7rem]"
         style="--cols: {{ implode(' ', array_map(fn (int $lanes): string => "minmax(calc({$lanes}*var(--lane)),{$lanes}fr)", $lanes)) }}; --units: {{ array_sum($lanes) }}"
         role="group" aria-label="Semana de {{ $grid->days[0]['name'] ?? '' }} a {{ mb_strtolower(array_last($grid->days)['name'] ?? '') }}"
-        x-on:keydown="key($event)" x-on:focusin="rove($event)">
+        x-on:keydown="key($event)" x-on:focusin="rove($event); explain($event)" x-on:focusout="explain({ target: $event.relatedTarget ?? document.body })"
+        x-on:mouseover="explain($event)" x-on:mouseleave="explain({ target: document.activeElement })">
         <div class="{{ $headBg }} sticky top-0 left-0 z-[7] border-e border-b border-base-300"></div>
         @foreach ($grid->days as $index => $day)
             <div @class([$headBg, 'sticky top-0 z-[6] flex min-w-0 flex-col justify-center border-b border-base-300 px-2 py-1.5', 'border-l' => $index > 0])>
@@ -51,22 +54,30 @@
                         @php
                             $why = $cell['why'];
                             $where = $dayVerb($day).' de '.$block['label'].' a '.\App\Modules\Scheduling\Support\WeekGrid::clock($block['ends_at']);
+                            $reason = match ($cell['state']) { 'clash' => 'Choca: '.$why, 'blocked' => 'No se puede: '.$why, default => null };
                             $classes = [
                                 'relative z-[3] mx-px my-px flex h-[calc(3.25rem-2px)] items-end justify-end gap-1 rounded-selector p-1 font-mono text-[11.5px] font-semibold',
                                 $fills[$cell['state']],
-                                $canPlace && $cell['state'] !== 'blocked' ? 'w-[calc(100%-2px)] cursor-pointer hover:brightness-95 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary' : '',
+                                $canPlace ? 'w-[calc(100%-2px)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary' : '',
+                                $canPlace && $cell['state'] !== 'blocked' ? 'cursor-pointer hover:brightness-95' : '',
+                                $canPlace && $cell['state'] === 'blocked' ? 'cursor-not-allowed' : '',
                                 $cell['state'] === 'fits' && $canPlace ? 'hover:bg-success/30' : '',
                             ];
                         @endphp
-                        @if ($canPlace && $cell['state'] !== 'blocked')
+                        @if ($canPlace)
                             <button type="button" @class($classes) data-cell="{{ $cell['key'] }}" data-fit="{{ $cell['state'] }}" wire:key="cell-{{ $cell['key'] }}"
                                 data-nav data-x="{{ $index + 0.5 }}" data-r0="{{ $h }}" data-r1="{{ $h + 1 }}" tabindex="{{ $tabStop === 'cell:'.$cell['key'] ? 0 : -1 }}"
-                                wire:click="place('{{ $selected['id'] }}', {{ $day['day'] }}, '{{ $block['starts_at'] }}')"
-                                aria-label="Colocar {{ $title }} el {{ $where }}{{ $cell['state'] === 'clash' ? ', con choque '.$why : '' }}"
-                                @if ($cell['state'] === 'clash') title="Choca: {{ $why }}" @endif>
+                                @if ($cell['state'] === 'blocked')
+                                    aria-disabled="true" aria-label="No se puede colocar {{ $title }} el {{ $where }}"
+                                @else
+                                    wire:click="place('{{ $selected['id'] }}', {{ $day['day'] }}, '{{ $block['starts_at'] }}')" aria-label="Colocar {{ $title }} el {{ $where }}"
+                                @endif
+                                @if ($reason) data-why="{{ $reason }}" aria-describedby="why-{{ $cell['key'] }}" @endif>
+                                @if ($reason)
+                                    <span id="why-{{ $cell['key'] }}" class="sr-only">{{ $reason }}</span>
+                                @endif
                         @else
-                            <div @class([...$classes, 'pointer-events-none']) data-cell="{{ $cell['key'] }}" data-fit="{{ $cell['state'] }}" wire:key="cell-{{ $cell['key'] }}"
-                                @if ($cell['state'] !== 'fits') title="{{ $cell['state'] === 'blocked' ? 'No se puede' : 'Choca' }}: {{ $why }}" @endif>
+                            <div @class([...$classes, 'pointer-events-none']) data-cell="{{ $cell['key'] }}" data-fit="{{ $cell['state'] }}" wire:key="cell-{{ $cell['key'] }}">
                                 <span class="sr-only">{{ ucfirst($where) }}: {{ match ($cell['state']) { 'fits' => 'cabe', 'clash' => 'choca, '.$why, default => 'no se puede, '.$why } }}</span>
                         @endif
                             @if ($cell['state'] === 'fits')
@@ -75,7 +86,7 @@
                                 <span aria-hidden="true">{{ implode(' ', $cell['rules']) }}</span>
                                 <x-icon :name="$cell['state'] === 'clash' ? 'o-exclamation-triangle' : 'o-no-symbol'" class="h-4 w-4 shrink-0" aria-hidden="true" />
                             @endif
-                        @if ($canPlace && $cell['state'] !== 'blocked')
+                        @if ($canPlace)
                             </button>
                         @else
                             </div>
@@ -106,3 +117,8 @@
         @endforeach
     </div>
 </div>
+
+{{-- El motivo de la celda con el foco o bajo el puntero (`data-why`), junto a ella y fuera de la caja para que no lo recorte. --}}
+<div x-cloak x-show="tip.text !== ''" x-text="tip.text" aria-hidden="true" data-testid="week-tip"
+    x-bind:style="`left: ${tip.left}px; top: ${tip.top}px; transform: translateY(${tip.above ? '-100%' : '0'})`"
+    class="pointer-events-none fixed z-20 max-w-80 rounded-field bg-neutral px-2.5 py-1.5 text-sm leading-snug text-neutral-content shadow-float max-md:hidden"></div>

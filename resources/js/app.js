@@ -1037,12 +1037,44 @@ document.addEventListener('alpine:init', () => {
 |   tocada ya no existe.
 | - Al cerrar el último cajón abierto, el foco regresa a lo que lo abrió (data-opener). Pasar de un cajón al otro
 |   (data-drawer-switch) no lo regresa.
+| - El motivo de una celda que choca o no se puede (data-why) se ve junto a ella con el foco o bajo el puntero (tip,
+|   `position: fixed` para que la caja de la semana no lo recorte) y se mueve con ella al desplazar.
 */
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('scheduleEditor', (day) => ({
         day,
         opener: null,
         switching: false,
+        tipFor: null,
+        tip: { text: '', left: 0, top: 0, above: false },
+
+        /** El motivo de la celda (data-why) con el foco o bajo el puntero; cualquier otro destino lo esconde. */
+        explain(event) {
+            this.tipFor = event.target?.closest?.('[data-why]') ?? null;
+            this.placeTip();
+        },
+
+        /** Pone el aviso junto a su celda (abajo, o arriba si no cabe); se vuelve a poner al desplazar. */
+        placeTip() {
+            const cell = this.tipFor;
+
+            if (!cell?.isConnected) {
+                this.tipFor = null;
+                this.tip.text = '';
+
+                return;
+            }
+
+            const rect = cell.getBoundingClientRect();
+            const above = rect.bottom + 112 > window.innerHeight;
+
+            this.tip = {
+                text: cell.dataset.why,
+                left: Math.max(8, Math.min(rect.left, window.innerWidth - 328)),
+                top: above ? rect.top - 4 : rect.bottom + 4,
+                above,
+            };
+        },
 
         remember(event) {
             if (event.target.closest('[data-drawer-switch]')) {

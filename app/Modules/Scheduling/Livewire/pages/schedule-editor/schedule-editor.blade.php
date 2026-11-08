@@ -16,6 +16,8 @@
 <div class="space-y-4" x-data="scheduleEditor($wire.entangle('day'))"
     x-on:editor-placed.window="$nextTick(() => keep($event.detail.id))"
     x-on:keydown.escape.window="escape()"
+    x-on:scroll.window.passive="placeTip()"
+    x-on:resize.window="placeTip()"
     x-on:click.capture="remember($event)"
     x-on:open="drawerOpened()"
     x-on:close="drawerClosed()">

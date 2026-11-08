@@ -277,7 +277,7 @@ describe('coordinador de la carrera dueña', function () {
             ->assertSee('ACF-0901 · V');
     });
 
-    it('HC-01: colocar donde el docente ya da clase muestra el error y no escribe', function () {
+    it('HC-01: la celda donde el docente ya da clase es un botón deshabilitado con su motivo, y colocar ahí muestra el error y no escribe', function () {
         $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
         $this->calcGroup->update(['teacher_id' => $teacher->id]);
         $busy = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->otherCampus->id, 'teacher_id' => $teacher->id, 'code' => 'F',
@@ -288,8 +288,10 @@ describe('coordinador de la carrera dueña', function () {
         $cell = domOf($page)->querySelector('[data-testid=week] [data-cell="1|07:00"]');
 
         expect($cell?->getAttribute('data-fit'))->toBe('blocked')
-            ->and($cell?->tagName)->not->toBe('BUTTON')
-            ->and($cell?->getAttribute('title'))->toContain('HC-01');
+            ->and($cell?->getAttribute('aria-disabled'))->toBe('true')
+            ->and($cell?->hasAttribute('wire:click'))->toBeFalse()
+            ->and($cell?->getAttribute('data-why'))->toStartWith('No se puede: HC-01')
+            ->and(textOf(domOf($page)->getElementById((string) $cell?->getAttribute('aria-describedby'))))->toContain('HC-01', 'Ana Pérez ya da Química');
 
         $page->call('place', $this->calcGroup->id, 1, '07:00');
 
