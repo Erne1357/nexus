@@ -30,25 +30,25 @@
                 @php($cell = $row['cell'])
                 <div class="grid grid-cols-[3rem_minmax(0,1fr)] items-start gap-2 border-t border-base-300 py-1.5 first-of-type:border-t-0" wire:key="row-{{ $day['day'] }}-{{ $row['block']['starts_at'] }}">
                     <span class="pt-2.5 font-mono text-[13px] text-neutral">{{ $row['block']['label'] }}</span>
-                    <div class="grid min-w-0 gap-1">
+                    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
                         @foreach ($row['items'] as $item)
                             <x-scheduling::editor.session :item="$item" :chain-classes="$chainClasses" mobile />
                         @endforeach
 
                         @if ($cell && $canPlace && $cell['state'] !== 'blocked')
                             <button type="button" wire:click="place('{{ $selected['id'] }}', {{ $day['day'] }}, '{{ $row['block']['starts_at'] }}')"
-                                @class(['flex h-11 w-full items-center gap-2 rounded-field px-2.5 text-left font-medium', $fills[$cell['state']]])
+                                @class(['flex h-11 w-full min-w-0 items-center gap-2 rounded-field px-2.5 text-left font-medium', $fills[$cell['state']]])
                                 aria-label="Colocar {{ $title }} el {{ mb_strtolower($day['name']) }} a las {{ $row['block']['label'] }}{{ $cell['state'] === 'clash' ? ', con choque '.$cell['why'] : '' }}">
                                 <x-icon :name="$cell['state'] === 'fits' ? 'o-plus' : 'o-exclamation-triangle'" class="h-4 w-4 shrink-0" aria-hidden="true" />
                                 <span class="truncate">{{ $cell['state'] === 'fits' ? 'Cabe · colocar una hora' : 'Choca: '.$cell['why'] }}</span>
                             </button>
                         @elseif ($cell)
-                            <div @class(['flex h-11 items-center gap-2 rounded-field px-2.5', $fills[$cell['state']]])>
+                            <div @class(['flex h-11 min-w-0 items-center gap-2 rounded-field px-2.5', $fills[$cell['state']]])>
                                 <x-icon :name="match ($cell['state']) { 'fits' => 'o-plus', 'clash' => 'o-exclamation-triangle', default => 'o-no-symbol' }" class="h-4 w-4 shrink-0" aria-hidden="true" />
                                 <span class="truncate">{{ match ($cell['state']) { 'fits' => 'Cabe', 'clash' => 'Choca: '.$cell['why'], default => 'No se puede: '.$cell['why'] } }}</span>
                             </div>
                         @elseif ($row['items'] === [] && $row['band'])
-                            <div @class(['flex h-11 items-center gap-2 rounded-field px-2.5', $row['band']['kind'] === 'preferred' ? $fills['preferred'] : $fills['blocked']])>
+                            <div @class(['flex h-11 min-w-0 items-center gap-2 rounded-field px-2.5', $row['band']['kind'] === 'preferred' ? $fills['preferred'] : $fills['blocked']])>
                                 <x-icon :name="match ($row['band']['kind']) { 'preferred' => 'o-star', 'blocked' => 'o-lock-closed', default => 'o-no-symbol' }" class="h-4 w-4 shrink-0" aria-hidden="true" />
                                 <span class="truncate">{{ $row['band']['label'] }}{{ ! empty($row['band']['reason']) ? ' · '.$row['band']['reason'] : '' }}</span>
                             </div>
