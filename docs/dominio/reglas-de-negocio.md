@@ -83,6 +83,9 @@ Cómo se colocan, mueven y quitan las sesiones de un grupo (tarea 3.5).
 - Todo grupo tiene al menos un cupo: el de su carrera dueña (`is_owner`).
 - Al aceptar un acuerdo de grupo compartido se crea el cupo de la otra carrera con el máximo acordado.
 - El coordinador de cada carrera ve el grupo en la retícula de su carrera con el cupo que le corresponde.
+- Repartir los cupos (tarea 3.6, `SetGroupQuotas`) es del jefe del departamento que imparte el grupo. La dueña y las carreras de su mismo departamento se crean, cambian y quitan directo; la carrera de otro departamento se **propone** (acuerdo, «Acuerdos entre departamentos») y el grupo queda con el cupo «Propuesto» hasta que su jefe lo acepta (`AcceptSharedGroup`). Proponer (`ProposeGroupQuota`) y retirar (`WithdrawGroupQuotaProposal`) son acciones propias; guardar cupos no propone. No se editan cupos en un grupo cancelado ni con la carga del departamento fuera de propuesta, asignación docente o ajuste (supuesto por confirmar); una carga sin registro no lo impide. La carrera dueña no se quita y todo cupo lleva de 1 a 999 lugares.
+- HC-07: la suma de los cupos del grupo no pasa su capacidad. Los propuestos no cuentan hasta aceptarse (supuesto por confirmar); al aceptar se revisa otra vez con los lugares del acuerdo, y si ya no caben el acuerdo queda propuesto y el mensaje dice cuántos lugares caben (supuesto por confirmar).
+- Una carrera de otro departamento que ya tiene cupo aceptado cambia sus lugares directo, sin nuevo acuerdo (supuesto por confirmar). Quitar el cupo de otra carrera lo borra y cancela su acuerdo; si deja de venir un propuesto, el acuerdo se cancela; si cambian los lugares de un propuesto, se retira y se propone de nuevo con los nuevos, solo cuando se pide en su renglón (supuesto por confirmar).
 - R3: la inscripción descuenta del cupo de la carrera del alumno; si se agota, lista de espera, aunque el grupo tenga lugares de otra carrera.
 
 ## Acuerdos entre departamentos
@@ -269,7 +272,9 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
-| Proponer o aceptar préstamo de salón | `jefe_departamento` de ambos departamentos | |
+| Ver acuerdos entre departamentos | `admin`, `subdireccion`, `jefe_departamento` y `jefe_proyecto_docente` de cualquiera de los dos departamentos | Préstamos de salón y grupos compartidos (`academic_load.agreement.view`; supuesto por confirmar para `subdireccion` y `jefe_proyecto_docente`, solo lectura) |
+| Proponer o aceptar préstamo de salón | `jefe_departamento` del departamento que lo pide (propone y cancela) y del dueño del salón (acepta o rechaza, con motivo) | Un salón sin dueño o del propio departamento no necesita préstamo; la sesión solo cuenta con un préstamo aceptado (HC-10) |
+| Proponer o aceptar grupo compartido | `jefe_departamento` del departamento que imparte (propone y cancela) y del departamento de la carrera (acepta o rechaza, con motivo) | Confirmado el 7 de noviembre de 2026. Una carrera tiene a lo más un acuerdo vivo por grupo; el cupo nace al aceptarse (HC-07) |
 | Cerrar carga | `jefe_departamento` | HC-15 |
 | Visto bueno | `subdireccion` | solo si `requires_subdireccion_approval` |
 | Publicar | `subdireccion`, o `jefe_departamento` si el campus no exige visto bueno | carga `closed` o `approved` |

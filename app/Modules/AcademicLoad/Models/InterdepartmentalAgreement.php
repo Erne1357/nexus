@@ -28,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 #[Fillable([
     'term_id', 'campus_id', 'kind', 'from_department_id', 'to_department_id', 'group_id', 'room_id', 'day', 'starts_at',
-    'ends_at', 'career_id', 'max_seats', 'status', 'comment', 'requested_by', 'decided_by', 'decided_at',
+    'ends_at', 'career_id', 'max_seats', 'status', 'comment', 'requested_by', 'decided_by', 'decided_at', 'cancelled_by', 'cancelled_at',
 ])]
 #[UseFactory(InterdepartmentalAgreementFactory::class)]
 class InterdepartmentalAgreement extends Model
@@ -47,6 +47,7 @@ class InterdepartmentalAgreement extends Model
             'day' => 'integer',
             'max_seats' => 'integer',
             'decided_at' => 'immutable_datetime',
+            'cancelled_at' => 'immutable_datetime',
         ];
     }
 
@@ -124,12 +125,22 @@ class InterdepartmentalAgreement extends Model
     }
 
     /**
-     * Quien lo aceptó, lo rechazó o lo canceló.
+     * Quien lo aceptó o lo rechazó.
      *
      * @return BelongsTo<User, $this>
      */
     public function decider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    /**
+     * Quien lo canceló.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function canceller(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 }
