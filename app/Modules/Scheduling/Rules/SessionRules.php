@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Rules;
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Campus;
@@ -15,6 +16,7 @@ use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ValidationResult;
 use App\Modules\Scheduling\Validation\Violation;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -59,33 +61,72 @@ final class SessionRules
     }
 
     /**
-     * El grupo no está cancelado y la carga de su departamento en su campus y periodo se puede editar.
+     * El grupo no está cancelado y la carga de su departamento en su campus y periodo se puede editar; la carga se lee
+     * con bloqueo compartido para que no cambie de estado mientras se escribe.
      *
      * @throws ValidationException
      */
     public function ensureEditable(Group $group): void
     {
-        if ($group->status === GroupStatus::Cancelled) {
-            throw self::invalid("El grupo {$group->code} está cancelado: no se editan sus sesiones.");
+        $reason = $this->editBlockedReasons([$group], lock: true)[$group->id];
+
+        if ($reason !== null) {
+            throw self::invalid($reason);
+        }
+    }
+
+    /**
+     * Por qué no se editan las sesiones de cada grupo, o null si se editan: el grupo está cancelado, su departamento no
+     * tiene carga en su campus y periodo, o esa carga no está en propuesta, asignación o ajustes. Es la regla de
+     * ensureEditable() para muchos grupos a la vez (el tablero del editor): una consulta de cargas y, solo si alguno no
+     * se edita, una de departamentos y una de campus para el mensaje.
+     *
+     * @param  iterable<Group>  $groups
+     * @return array<string, ?string> por id de grupo
+     */
+    public function editBlockedReasons(iterable $groups, bool $lock = false): array
+    {
+        $groups = collect($groups)->keyBy('id');
+        $open = $groups->reject(fn (Group $group): bool => $group->status === GroupStatus::Cancelled);
+
+        $loads = $open->isEmpty() ? collect() : AcademicLoad::query()
+            ->whereIn('term_id', $open->pluck('term_id')->unique()->values()->all())
+            ->whereIn('campus_id', $open->pluck('campus_id')->unique()->values()->all())
+            ->whereIn('department_id', $open->pluck('department_id')->unique()->values()->all())
+            ->when($lock, fn (Builder $query) => $query->sharedLock())
+            ->get(['term_id', 'campus_id', 'department_id', 'status'])
+            ->keyBy(fn (AcademicLoad $load): string => "{$load->term_id}|{$load->campus_id}|{$load->department_id}");
+
+        $reasons = [];
+        $departments = null;
+        $campuses = null;
+
+        foreach ($groups as $id => $group) {
+            if ($group->status === GroupStatus::Cancelled) {
+                $reasons[$id] = "El grupo {$group->code} está cancelado: no se editan sus sesiones.";
+
+                continue;
+            }
+
+            $load = $loads->get("{$group->term_id}|{$group->campus_id}|{$group->department_id}");
+
+            if ($load !== null && in_array($load->status, self::EDITABLE_LOADS, true)) {
+                $reasons[$id] = null;
+
+                continue;
+            }
+
+            $departments ??= Department::withTrashed()->whereIn('id', $open->pluck('department_id')->unique()->values()->all())->pluck('name', 'id');
+            $campuses ??= Campus::withTrashed()->whereIn('id', $open->pluck('campus_id')->unique()->values()->all())->pluck('name', 'id');
+            $department = $departments[$group->department_id] ?? '';
+            $campus = $campuses[$group->campus_id] ?? '';
+
+            $reasons[$id] = $load === null
+                ? "{$department} no tiene carga en {$campus} en este periodo: no se editan horarios."
+                : "La carga de {$department} en {$campus} está en ".mb_strtolower($load->status->label()).': no se editan horarios.';
         }
 
-        $load = AcademicLoad::query()
-            ->where('term_id', $group->term_id)
-            ->where('campus_id', $group->campus_id)
-            ->where('department_id', $group->department_id)
-            ->sharedLock()
-            ->first(['id', 'status']);
-
-        $department = $group->department()->withTrashed()->value('name');
-        $campus = $this->campusOf($group)->name;
-
-        if ($load === null) {
-            throw self::invalid("{$department} no tiene carga en {$campus} en este periodo: no se editan horarios.");
-        }
-
-        if (! in_array($load->status, self::EDITABLE_LOADS, true)) {
-            throw self::invalid("La carga de {$department} en {$campus} está en ".mb_strtolower($load->status->label()).': no se editan horarios.');
-        }
+        return $reasons;
     }
 
     /**

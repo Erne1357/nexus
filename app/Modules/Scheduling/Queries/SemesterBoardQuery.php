@@ -12,6 +12,8 @@ use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Rules\SessionRules;
+use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
 use Illuminate\Database\Eloquent\Builder;
@@ -28,15 +30,19 @@ use Illuminate\Support\Facades\Gate;
  * Por grupo: su materia (con el departamento que la imparte), su docente (id y nombre), capacidad, cupos (el dueño
  * primero), sesiones (por día y hora, con su salón y el departamento dueño del salón), las horas que pide su materia y
  * las que tiene colocadas, y lo que el actor puede hacer según GroupPolicy (`editSessions`, `assignRoom`,
- * `manageQuotas`). Además, las violaciones del validador
- * (validateGroup() con una sola foto) por grupo y, las que nombran una sesión, por sesión; solo los grupos y sesiones
- * que tienen alguna.
+ * `manageQuotas`). Nadie puede nada de eso si el grupo está cancelado o su carga no está en propuesta, asignación o
+ * ajustes: `editBlockedReason` dice por qué, con el mensaje de SessionRules::editBlockedReasons(), la misma regla que
+ * aplican las Actions. Además, las violaciones del validador (validateGroup() con una sola foto) por grupo y, las que
+ * nombran una sesión, por sesión; solo los grupos y sesiones que tienen alguna.
  *
  * No decide si el actor entra al semestre: eso es de la pantalla con PlanSemestersQuery::careerOrFail().
  */
 final class SemesterBoardQuery
 {
-    public function __construct(private readonly ScheduleValidator $validator) {}
+    public function __construct(
+        private readonly ScheduleValidator $validator,
+        private readonly SessionRules $rules,
+    ) {}
 
     /**
      * @return array{
@@ -54,6 +60,7 @@ final class SemesterBoardQuery
      *         required_hours: int,
      *         placed_hours: int|float,
      *         can: array{editSessions: bool, assignRoom: bool, manageQuotas: bool},
+     *         editBlockedReason: ?string,
      *     }>,
      *     violations: array{groups: array<string, list<Violation>>, sessions: array<string, list<Violation>>},
      * }
@@ -92,6 +99,7 @@ final class SemesterBoardQuery
             ->get();
 
         $gate = Gate::forUser($actor->user());
+        $blocked = $this->rules->editBlockedReasons($groups);
         $byGroup = [];
         $bySession = [];
 
@@ -136,8 +144,8 @@ final class SemesterBoardQuery
                 'sessions' => $group->sessions->map(fn (GroupSession $session): array => [
                     'id' => $session->id,
                     'day' => $session->day,
-                    'starts_at' => substr($session->starts_at, 0, 5),
-                    'ends_at' => substr($session->ends_at, 0, 5),
+                    'starts_at' => Clock::of($session->starts_at),
+                    'ends_at' => Clock::of($session->ends_at),
                     'kind' => $session->kind,
                     'room' => $session->room === null ? null : [
                         'id' => $session->room->id,
@@ -149,10 +157,11 @@ final class SemesterBoardQuery
                 'required_hours' => $group->subject->theory_hours + $group->subject->practice_hours,
                 'placed_hours' => $group->sessions->sum(fn (GroupSession $session): int => (int) $session->minutes) / 60,
                 'can' => [
-                    'editSessions' => $gate->allows('editSessions', $group),
-                    'assignRoom' => $gate->allows('assignRoom', $group),
-                    'manageQuotas' => $gate->allows('manageQuotas', $group),
+                    'editSessions' => $blocked[$group->id] === null && $gate->allows('editSessions', $group),
+                    'assignRoom' => $blocked[$group->id] === null && $gate->allows('assignRoom', $group),
+                    'manageQuotas' => $blocked[$group->id] === null && $gate->allows('manageQuotas', $group),
                 ],
+                'editBlockedReason' => $blocked[$group->id],
             ])->all(),
             'violations' => ['groups' => $byGroup, 'sessions' => $bySession],
         ];
