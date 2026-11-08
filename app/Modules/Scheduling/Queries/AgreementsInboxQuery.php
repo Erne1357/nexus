@@ -165,9 +165,12 @@ final class AgreementsInboxQuery
             ->get()
             ->keyBy('id');
 
-        $cleared = Activity::query()
+        $closedLoans = $agreements->filter(fn (InterdepartmentalAgreement $agreement): bool => $agreement->kind === AgreementKind::RoomLoan
+            && in_array($agreement->status, [AgreementStatus::Rejected, AgreementStatus::Cancelled], true));
+        $cleared = $closedLoans->isEmpty() ? [] : Activity::query()
+            ->where('subject_type', (new Group)->getMorphClass())
+            ->whereIn('subject_id', $closedLoans->pluck('group_id')->unique()->all())
             ->whereIn('event', [RejectRoomLoan::EVENT, CancelRoomLoan::EVENT])
-            ->whereIn('properties->agreement_id', $agreements->where('kind', AgreementKind::RoomLoan)->pluck('id')->all())
             ->get()
             ->map(fn (Activity $entry): ?string => $entry->properties['agreement_id'] ?? null)
             ->all();
@@ -218,9 +221,9 @@ final class AgreementsInboxQuery
      *     hours: list<int>,
      *     days: list<int>,
      *     day_labels: array<int, string>,
-     *     busy: list<array{day: int, starts_at: string, ends_at: string, label: string}>,
+     *     busy: list<array{day: int, starts_at: string, ends_at: string, label: string, rule: string}>,
      *     requested: array{day: int, starts_at: string, ends_at: string},
-     *     clash: ?array{day: int, starts_at: string, ends_at: string, label: string},
+     *     clash: ?array{day: int, starts_at: string, ends_at: string, label: string, rule: string},
      * }
      */
     private function week(InterdepartmentalAgreement $agreement): array
@@ -238,11 +241,11 @@ final class AgreementsInboxQuery
                 continue;
             }
 
-            $busy[] = ['day' => $session['day'], 'starts_at' => $session['starts_at'], 'ends_at' => $session['ends_at'], 'label' => "{$session['subject_code']} {$session['group_code']}"];
+            $busy[] = ['day' => $session['day'], 'starts_at' => $session['starts_at'], 'ends_at' => $session['ends_at'], 'label' => "{$session['subject_code']} {$session['group_code']}", 'rule' => 'HC-02'];
         }
 
         foreach ($schedule['blocks'] as $block) {
-            $busy[] = ['day' => $block['day'], 'starts_at' => $block['starts_at'], 'ends_at' => $block['ends_at'], 'label' => $block['reason'] === '' ? 'Bloqueado' : $block['reason']];
+            $busy[] = ['day' => $block['day'], 'starts_at' => $block['starts_at'], 'ends_at' => $block['ends_at'], 'label' => $block['reason'] === '' ? 'Bloqueado' : $block['reason'], 'rule' => 'HC-11'];
         }
 
         $requested = ['day' => (int) $agreement->day, 'starts_at' => substr($agreement->starts_at, 0, 5), 'ends_at' => substr($agreement->ends_at, 0, 5)];

@@ -98,3 +98,13 @@ it('rechazar un grupo compartido solo rechaza el acuerdo; en un préstamo no sir
         ->and(fn () => app(RejectSharedGroup::class)->handle($this->loan, 'x', $this->actor))->toThrow(ValidationException::class)
         ->and(fn () => app(RejectRoomLoan::class)->handle($shared, 'x', $this->actor))->toThrow(ValidationException::class);
 });
+
+it('si el departamento al que va dirigido ya no es dueño del salón, no rechaza ni quita el salón', function () {
+    $session = GroupSession::factory()->for($this->group)->on(1, '09:00', '10:00')->inRoom($this->room)->create();
+    $this->room->update(['department_id' => Department::factory()->create()->id]);
+
+    expect(fn () => app(RejectRoomLoan::class)->handle($this->loan, 'No.', $this->actor))->toThrow(ValidationException::class, 'ya no es de tu departamento');
+
+    expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed)
+        ->and($session->fresh()->room_id)->toBe($this->room->id);
+});

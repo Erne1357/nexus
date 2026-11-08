@@ -73,8 +73,12 @@ final class AcceptRoomLoan
             ->sharedLock()
             ->first();
 
-        if ($session !== null || $block !== null) {
-            throw ValidationException::withMessages(['room_id' => 'HC-02: el salón ya está ocupado a esa hora por otro grupo o un bloqueo; no se puede aceptar el préstamo.']);
+        if ($session !== null) {
+            throw ValidationException::withMessages(['room_id' => 'HC-02: el salón ya está ocupado a esa hora por otro grupo; no se puede aceptar el préstamo.']);
+        }
+
+        if ($block !== null) {
+            throw ValidationException::withMessages(['room_id' => 'HC-11: el salón está bloqueado a esa hora; no se puede aceptar el préstamo.']);
         }
     }
 }

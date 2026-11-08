@@ -7,6 +7,7 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\Clock;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
@@ -43,8 +44,8 @@ final class RoomScheduleQuery
                 'subject_name' => $session->group->subject->name,
                 'teacher' => $session->group->teacher?->name,
                 'day' => $session->day,
-                'starts_at' => substr($session->starts_at, 0, 5),
-                'ends_at' => substr($session->ends_at, 0, 5),
+                'starts_at' => Clock::of($session->starts_at),
+                'ends_at' => Clock::of($session->ends_at),
                 'kind' => $session->kind,
             ])
             ->all();
@@ -57,8 +58,8 @@ final class RoomScheduleQuery
             ->get(['day', 'starts_at', 'ends_at', 'reason', 'term_id'])
             ->map(fn (RoomBlock $block): array => [
                 'day' => (int) $block->day,
-                'starts_at' => substr($block->starts_at, 0, 5),
-                'ends_at' => substr($block->ends_at, 0, 5),
+                'starts_at' => Clock::of($block->starts_at),
+                'ends_at' => Clock::of($block->ends_at),
                 'reason' => (string) $block->reason,
                 'all_terms' => $block->term_id === null,
             ])

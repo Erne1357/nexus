@@ -36,7 +36,7 @@ beforeEach(function () {
     $this->building = Building::factory()->create(['campus_id' => $this->campus->id]);
 });
 
-function inboxOf(User $user, Term $term, Campus $campus, ?AgreementKind $kind = null, string $search = ''): array
+function agreementsInboxOf(User $user, Term $term, Campus $campus, ?AgreementKind $kind = null, string $search = ''): array
 {
     return app(AgreementsInboxQuery::class)->inbox(app(Actor::class)->forUser($user), $term, $campus, $kind, $search);
 }
@@ -78,7 +78,7 @@ it('el jefe ve «Por decidir» lo dirigido a su departamento y «Enviados» lo q
     $unrelated = loanOf($this->ii, $this->cb);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
 
-    $inbox = inboxOf($jefe, $this->term, $this->campus);
+    $inbox = agreementsInboxOf($jefe, $this->term, $this->campus);
     $ids = fn (string $group): array => array_column($inbox[$group], 'id');
 
     expect($ids('decide'))->toBe([$in->id])
@@ -92,7 +92,7 @@ it('trae por acuerdo el salón, las horas, el grupo, los departamentos, la carre
     $share = shareOf($this->ii, $this->sc);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
 
-    $rows = collect(inboxOf($jefe, $this->term, $this->campus)['decide'])->keyBy('id');
+    $rows = collect(agreementsInboxOf($jefe, $this->term, $this->campus)['decide'])->keyBy('id');
 
     expect($rows[$loan->id])->toMatchArray([
         'kind' => AgreementKind::RoomLoan, 'status' => AgreementStatus::Proposed, 'day' => 3, 'starts_at' => '09:00', 'ends_at' => '11:00',
@@ -110,8 +110,8 @@ it('los decididos traen quién decidió o canceló, cuándo y el motivo', functi
     $rejected = shareOf($this->sc, $this->cb, ['status' => AgreementStatus::Rejected, 'comment' => 'No hay lugares.', 'decided_by' => $decider->id, 'decided_at' => now()]);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
 
-    expect(inboxOf($jefe, $this->term, $this->campus)['done'][0])->toMatchArray(['id' => $rejected->id, 'decided_by' => 'Jefe de CB', 'comment' => 'No hay lugares.'])
-        ->and(inboxOf($jefe, $this->term, $this->campus)['done'][0]['decided_at'])->not->toBeNull();
+    expect(agreementsInboxOf($jefe, $this->term, $this->campus)['done'][0])->toMatchArray(['id' => $rejected->id, 'decided_by' => 'Jefe de CB', 'comment' => 'No hay lugares.'])
+        ->and(agreementsInboxOf($jefe, $this->term, $this->campus)['done'][0]['decided_at'])->not->toBeNull();
 });
 
 it('la Subdirección ve todos del campus y los propuestos van a «Enviados»; el admin igual', function () {
@@ -119,7 +119,7 @@ it('la Subdirección ve todos del campus y los propuestos van a «Enviados»; el
     $b = shareOf($this->cb, $this->ii, ['status' => AgreementStatus::Accepted, 'decided_at' => now()]);
     $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
 
-    $inbox = inboxOf($subdireccion, $this->term, $this->campus);
+    $inbox = agreementsInboxOf($subdireccion, $this->term, $this->campus);
 
     expect($inbox['decide'])->toBe([])
         ->and(array_column($inbox['sent'], 'id'))->toBe([$a->id])
@@ -136,16 +136,16 @@ it('no ve acuerdos de otro campus ni de otro periodo; coordinador y docente no v
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(1)])->create();
     $docente = User::factory()->withRole(Role::Docente)->create();
 
-    expect(array_merge(...array_values(inboxOf($jefe, $this->term, $this->campus))))->toBe([])
-        ->and(array_merge(...array_values(inboxOf($coordinador, $this->term, $this->campus))))->toBe([])
-        ->and(array_merge(...array_values(inboxOf($docente, $this->term, $this->campus))))->toBe([]);
+    expect(array_merge(...array_values(agreementsInboxOf($jefe, $this->term, $this->campus))))->toBe([])
+        ->and(array_merge(...array_values(agreementsInboxOf($coordinador, $this->term, $this->campus))))->toBe([])
+        ->and(array_merge(...array_values(agreementsInboxOf($docente, $this->term, $this->campus))))->toBe([]);
 });
 
 it('filtra por tipo y por texto: salón, grupo, materia, departamento y carrera', function () {
     $loan = loanOf($this->ii, $this->sc, [], 'SCC-1013');
     $share = shareOf($this->cb, $this->sc);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
-    $ids = fn (?AgreementKind $kind, string $search): array => array_column(inboxOf($jefe, $this->term, $this->campus, $kind, $search)['decide'], 'id');
+    $ids = fn (?AgreementKind $kind, string $search): array => array_column(agreementsInboxOf($jefe, $this->term, $this->campus, $kind, $search)['decide'], 'id');
 
     expect($ids(AgreementKind::RoomLoan, ''))->toBe([$loan->id])
         ->and($ids(AgreementKind::SharedGroup, ''))->toBe([$share->id])
@@ -157,22 +157,43 @@ it('filtra por tipo y por texto: salón, grupo, materia, departamento y carrera'
         ->and($ids(null, 'no existe'))->toBe([]);
 });
 
-it('ordena del más reciente al más antiguo y no hace una consulta por acuerdo', function () {
-    foreach (range(1, 5) as $i) {
+it('ordena del más reciente al más antiguo', function () {
+    foreach (range(1, 3) as $i) {
         loanOf($this->ii, $this->sc, ['created_at' => now()->subMinutes($i)]);
     }
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
-    $actor = app(Actor::class)->forUser($jefe);
-    $actor->allowsAny(AcademicLoadPermission::AgreementView);
 
-    DB::enableQueryLog();
-    $rows = app(AgreementsInboxQuery::class)->inbox($actor, $this->term, $this->campus)['decide'];
-    $few = count(DB::getQueryLog());
-    DB::disableQueryLog();
+    $times = array_column(agreementsInboxOf($jefe, $this->term, $this->campus)['decide'], 'requested_at');
 
-    expect($rows)->toHaveCount(5)
-        ->and(array_column($rows, 'requested_at'))->toBe(collect(array_column($rows, 'requested_at'))->sortDesc()->values()->all())
-        ->and($few)->toBeLessThan(25);
+    expect($times)->toHaveCount(3)->and($times)->toBe(collect($times)->sortDesc()->values()->all());
+});
+
+it('no hace una consulta por acuerdo: las mismas consultas con 1 que con 8 acuerdos', function () {
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
+    $count = function () use ($jefe): int {
+        $actor = app(Actor::class)->forUser($jefe);
+        $actor->allowsAny(AcademicLoadPermission::AgreementView);
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        app(AgreementsInboxQuery::class)->inbox($actor, $this->term, $this->campus);
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+
+    loanOf($this->ii, $this->sc, ['status' => AgreementStatus::Rejected]);
+    loanOf($this->ii, $this->sc);
+    shareOf($this->cb, $this->sc);
+    loanOf($this->ii, $this->sc, ['status' => AgreementStatus::Cancelled]);
+    $one = $count();
+    foreach (range(1, 4) as $i) {
+        loanOf($this->ii, $this->sc);
+        shareOf($this->cb, $this->sc);
+    }
+    loanOf($this->ii, $this->sc, ['status' => AgreementStatus::Cancelled]);
+
+    expect($count())->toBe($one);
 });
 
 it('el detalle de un préstamo trae la semana del salón con lo ocupado y el bloque pedido sin choque', function () {
@@ -191,13 +212,13 @@ it('el detalle de un préstamo trae la semana del salón con lo ocupado y el blo
         ->and($detail['week']['hours'])->toContain(9, 12);
 });
 
-it('HC-02: el detalle marca el choque con otro grupo o con un bloqueo del salón', function () {
+it('HC-11: el detalle marca el choque con un bloqueo del salón', function () {
     $loan = loanOf($this->ii, $this->sc, ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00']);
     RoomBlock::factory()->create(['room_id' => $loan->room_id, 'term_id' => $this->term->id, 'day' => 2, 'starts_at' => '10:00', 'ends_at' => '12:00', 'reason' => 'Mantenimiento']);
 
     $detail = app(AgreementsInboxQuery::class)->detail($loan);
 
-    expect($detail['clash'])->toMatchArray(['day' => 2, 'label' => 'Mantenimiento']);
+    expect($detail['clash'])->toMatchArray(['day' => 2, 'label' => 'Mantenimiento', 'rule' => 'HC-11']);
 });
 
 it('el detalle de un grupo compartido no trae semana', function () {
@@ -244,5 +265,13 @@ it('la búsqueda por grupo no trae acuerdos de grupos de otro periodo con la mis
     $mine = loanOf($this->ii, $this->sc, [], 'SCC-1013');
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
 
-    expect(array_column(inboxOf($jefe, $this->term, $this->campus, null, '3A')['decide'], 'id'))->toBe([$mine->id]);
+    expect(array_column(agreementsInboxOf($jefe, $this->term, $this->campus, null, '3A')['decide'], 'id'))->toBe([$mine->id]);
+});
+
+it('HC-02: el detalle marca el choque con una sesión de otro grupo', function () {
+    $loan = loanOf($this->ii, $this->sc, ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00']);
+    $other = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => Subject::factory()->create(['code' => 'ACF-0901'])->id, 'code' => '1B']);
+    GroupSession::factory()->for($other)->on(2, '10:00', '12:00')->inRoom($loan->room)->create();
+
+    expect(app(AgreementsInboxQuery::class)->detail($loan)['clash'])->toMatchArray(['day' => 2, 'label' => 'ACF-0901 1B', 'rule' => 'HC-02']);
 });

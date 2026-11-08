@@ -10,6 +10,7 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\SessionRules;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -22,7 +23,8 @@ use Illuminate\Validation\ValidationException;
  * Asigna, cambia o quita (`null`) el salón de una sesión desde el editor de horarios (tarea 3.7). No sabe de puestos:
  * quién asigna lo decide la pantalla con GroupPolicy::assignRoom (el jefe del departamento del grupo).
  *
- * En una transacción relee con bloqueo el grupo y la sesión y exige que se pueda editar (SessionRules). El salón,
+ * En una transacción toma la carga en compartido y luego bloquea el grupo y la sesión (el orden de LoadEditability; un
+ * deadlock se traduce a un error de validación) y exige que se pueda editar (SessionRules). El salón,
  * releído en compartido para que su dueño no cambie a medio camino, es del campus del grupo y está activo. Pregunta al
  * validador por la sesión en ese salón: si otro grupo lo ocupa a esa hora (HC-02) no se guarda y da su mensaje; un
  * salón más chico que el grupo (HC-05), de otro tipo (HC-06) o bloqueado (HC-11) se guarda y queda marcado
@@ -42,6 +44,7 @@ final class AssignSessionRoom
     public function __construct(
         private readonly SessionRules $rules,
         private readonly ScheduleValidator $validator,
+        private readonly LoadEditability $editability,
         private readonly SyncSessionLoans $loans,
     ) {}
 
@@ -50,8 +53,10 @@ final class AssignSessionRoom
      */
     public function handle(GroupSession $session, ?Room $room, User $actor): SessionResult
     {
-        return DB::transaction(function () use ($session, $room, $actor): SessionResult {
-            $group = Group::query()->lockForUpdate()->findOrFail($session->group_id);
+        [$session, $group, $loans] = $this->editability->guard(fn (): array => DB::transaction(function () use ($session, $room, $actor): array {
+            $group = Group::query()->findOrFail($session->group_id);
+            $this->editability->lockLoad($group);
+            $group = Group::query()->lockForUpdate()->findOrFail($group->id);
             $session = GroupSession::query()->lockForUpdate()->findOrFail($session->getKey());
             $old = SessionRules::snapshot($session);
 
@@ -59,7 +64,7 @@ final class AssignSessionRoom
             $this->validator->forget();
 
             if ($session->room_id === $room?->getKey()) {
-                return new SessionResult($session, $this->validator->validateGroup($group));
+                return [$session, $group, new LoanSyncResult];
             }
 
             if ($room !== null) {
@@ -96,10 +101,12 @@ final class AssignSessionRoom
 
             GroupScheduleChanged::dispatch($group);
 
-            $this->validator->forget();
+            return [$session, $group, $loans];
+        }));
 
-            return new SessionResult($session, $this->validator->validateGroup($group), loanRequested: $loans->requested, loanBlocked: $loans->blocked);
-        });
+        $this->validator->forget();
+
+        return new SessionResult($session, $this->validator->validateGroup($group), loanRequested: $loans->requested, loanBlocked: $loans->blocked);
     }
 
     /**
@@ -129,7 +136,7 @@ final class AssignSessionRoom
 
         $holder = Group::query()->whereKey($loan->group_id)->first();
         $state = $loan->status === AgreementStatus::Accepted ? 'prestado a' : 'pedido para';
-        $label = $holder === null ? 'otro grupo' : $this->rules->label($holder);
+        $label = $holder === null ? 'otro grupo' : SessionRules::label($holder);
 
         throw ValidationException::withMessages(['session' => "El salón {$room->code} ya está {$state} {$label} el "
             .Minutes::dayName($loan->day).' de '.substr($loan->starts_at, 0, 5).' a '.substr($loan->ends_at, 0, 5).'.']);
@@ -137,7 +144,7 @@ final class AssignSessionRoom
 
     private function describe(Group $group, GroupSession $session, ?Room $previous, ?Room $room): string
     {
-        $where = "la sesión de {$this->rules->label($group)} del ".SessionRules::describe($session);
+        $where = 'la sesión de '.SessionRules::label($group).' del '.SessionRules::describe($session);
 
         return match (true) {
             $room === null => "Quitó el salón {$previous?->code} de {$where}",

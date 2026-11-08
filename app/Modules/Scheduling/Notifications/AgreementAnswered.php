@@ -12,6 +12,7 @@ use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
+use App\Modules\Scheduling\Models\Group;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 
@@ -36,7 +37,7 @@ final class AgreementAnswered extends NexusNotification
 
     public function message(object $notifiable): NotificationMessage
     {
-        $agreement = $this->agreement->loadMissing(['room', 'toDepartment']);
+        $agreement = $this->agreement->loadMissing(['room' => fn ($room) => $room->withTrashed(), 'toDepartment' => fn ($department) => $department->withTrashed()]);
         $rejected = $agreement->status === AgreementStatus::Rejected;
         $what = $agreement->kind === AgreementKind::RoomLoan ? 'préstamo' : 'grupo compartido';
         $body = AgreementText::summary($agreement);
@@ -62,7 +63,12 @@ final class AgreementAnswered extends NexusNotification
      */
     private function roomWasCleared(InterdepartmentalAgreement $agreement): bool
     {
-        return Activity::query()->where('event', RejectRoomLoan::EVENT)->where('properties->agreement_id', $agreement->getKey())->exists();
+        return Activity::query()
+            ->where('subject_type', (new Group)->getMorphClass())
+            ->where('subject_id', $agreement->group_id)
+            ->where('event', RejectRoomLoan::EVENT)
+            ->get()
+            ->contains(fn (Activity $entry): bool => ($entry->properties['agreement_id'] ?? null) === $agreement->getKey());
     }
 
     public static function unavailableReason(Actor $context, NotificationMessage $message): ?string

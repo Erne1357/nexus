@@ -41,7 +41,7 @@ beforeEach(function () {
     ]);
     $this->subject = Subject::factory()->create(['code' => 'AED-1026', 'name' => 'Estructura de Datos', 'department_id' => $this->department->id, 'needs_lab' => true]);
     $this->group = Group::factory()->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'code' => '3B', 'capacity' => 30,
+        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'code' => 'I', 'capacity' => 30,
     ]);
     $this->building = Building::factory()->create(['campus_id' => $this->campus->id]);
     $this->room = assignRoomOf(['code' => 'CC-05', 'type' => RoomType::SalaComputo, 'capacity' => 32]);
@@ -90,7 +90,7 @@ it('deja la bitácora en el grupo con el salón de antes y de después y avisa c
     expect($heard)->toBe([$this->group->id])
         ->and($entry)
         ->event->toBe('session_room_assigned')
-        ->description->toBe('Asignó el salón CC-05 a la sesión de Estructura de Datos, grupo 3B del martes de 15:00 a 17:00')
+        ->description->toBe('Asignó el salón CC-05 a la sesión de Estructura de Datos, grupo I del martes de 15:00 a 17:00')
         ->and($entry->causer->is($this->actor))->toBeTrue()
         ->and($entry->subject->is($this->group))->toBeTrue()
         ->and($entry->attribute_changes->toArray())->toBe([
@@ -182,7 +182,7 @@ it('HC-10: quitar el salón cancela su préstamo y deja la bitácora', function 
     expect($result->session->room_id)->toBeNull()
         ->and(InterdepartmentalAgreement::query()->sole()->status)->toBe(AgreementStatus::Cancelled)
         ->and(Activity::query()->where('event', 'session_room_assigned')->latest('id')->first()->description)
-        ->toBe('Quitó el salón MM-L2 de la sesión de Estructura de Datos, grupo 3B del martes de 15:00 a 17:00');
+        ->toBe('Quitó el salón MM-L2 de la sesión de Estructura de Datos, grupo I del martes de 15:00 a 17:00');
 });
 
 it('HC-10: cambiar a otro salón cancela el préstamo del anterior y pide el del nuevo', function () {

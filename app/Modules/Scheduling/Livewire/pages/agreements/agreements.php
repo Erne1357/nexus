@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\AcademicLoad\Actions\Agreements\CancelAgreement;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
@@ -14,6 +13,7 @@ use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectSharedGroup;
 use App\Modules\Scheduling\Actions\Quotas\AcceptSharedGroup;
+use App\Modules\Scheduling\Actions\Quotas\WithdrawGroupQuotaProposal;
 use App\Modules\Scheduling\Queries\AgreementsInboxQuery;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -36,7 +36,7 @@ use Mary\Traits\Toast;
  * acuerdos (InterdepartmentalAgreementPolicy::viewAny) y solo los de su alcance; decide el jefe del departamento al que
  * va dirigido (`decide`) y cancela el que lo pidió (`cancel`). Cada método vuelve a autorizar: ver, que el acuerdo sea
  * del alcance (404 si no) y la ability. Todo lo que se pinta sale de AgreementsInboxQuery; las escrituras, de
- * AcceptRoomLoan, RejectRoomLoan, CancelRoomLoan, AcceptSharedGroup, RejectSharedGroup y CancelAgreement.
+ * AcceptRoomLoan, RejectRoomLoan, CancelRoomLoan, AcceptSharedGroup, RejectSharedGroup y WithdrawGroupQuotaProposal.
  */
 new #[Title('Acuerdos')] class extends Component
 {
@@ -188,7 +188,7 @@ new #[Title('Acuerdos')] class extends Component
         $this->warning('Rechazaste '.$this->summary($row), is_int($cleared) && $cleared > 0 ? 'La sesión se quedó sin salón.' : e($row['from']['name']));
     }
 
-    public function cancel(string $id, Actor $context, AgreementsInboxQuery $query, CancelAgreement $cancel, CancelRoomLoan $cancelLoan): void
+    public function cancel(string $id, Actor $context, AgreementsInboxQuery $query, WithdrawGroupQuotaProposal $withdraw, CancelRoomLoan $cancelLoan): void
     {
         $this->authorizeView();
         $agreement = $this->find($id, $context, $query);
@@ -205,7 +205,7 @@ new #[Title('Acuerdos')] class extends Component
         try {
             $cleared = $agreement->kind === AgreementKind::RoomLoan
                 ? $cancelLoan->handle($agreement, auth()->user())
-                : $cancel->handle($agreement, auth()->user());
+                : $withdraw->handle($agreement, auth()->user());
         } catch (ValidationException $e) {
             $this->report($e, 'No se canceló');
 
@@ -260,7 +260,7 @@ new #[Title('Acuerdos')] class extends Component
 
         $day = Minutes::dayName($clash['day']);
 
-        return "{$detail['room']} ya está ocupado el {$day} de {$clash['starts_at']} a {$clash['ends_at']} por {$clash['label']} (HC-02).";
+        return "{$detail['room']} ya está ocupado el {$day} de {$clash['starts_at']} a {$clash['ends_at']} por {$clash['label']} ({$clash['rule']}).";
     }
 
     /**
@@ -281,13 +281,15 @@ new #[Title('Acuerdos')] class extends Component
     }
 
     /**
+     * Ya escapado: MaryUI pinta los toasts como HTML.
+     *
      * @param  array<string, mixed>  $detail
      */
     private function summary(array $detail): string
     {
-        return $detail['kind'] === AgreementKind::RoomLoan
+        return e($detail['kind'] === AgreementKind::RoomLoan
             ? "{$detail['room']} · el ".mb_strtolower(Minutes::dayName((int) $detail['day']))
-            : "{$detail['career']['code']} en {$detail['group']['label']}";
+            : "{$detail['career']['code']} en {$detail['group']['label']}");
     }
 
     private function afterDecision(): void

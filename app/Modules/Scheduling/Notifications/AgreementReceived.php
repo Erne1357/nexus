@@ -33,7 +33,7 @@ final class AgreementReceived extends NexusNotification
 
     public function message(object $notifiable): NotificationMessage
     {
-        $agreement = $this->agreement->loadMissing(['room', 'career', 'fromDepartment']);
+        $agreement = $this->agreement->loadMissing(['room' => fn ($room) => $room->withTrashed(), 'career' => fn ($career) => $career->withTrashed(), 'fromDepartment' => fn ($department) => $department->withTrashed()]);
         $from = $agreement->fromDepartment->name;
 
         return new NotificationMessage(
