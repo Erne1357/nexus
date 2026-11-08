@@ -118,6 +118,7 @@ Lo que la junta interdepartamental acuerda de palabra (proceso-actual.md, D7) qu
 - El grupo compartido lo acepta o lo rechaza el jefe del departamento de la otra carrera, y el cupo de esa carrera se crea al aceptarlo (confirmado el 7 de noviembre de 2026). Si la otra carrera es del mismo departamento que imparte, no hace falta acuerdo (supuesto por confirmar).
 - Rechazar un acuerdo exige un motivo escrito; aceptarlo no (supuesto por confirmar).
 - Quien pidió un acuerdo lo cancela si ya no lo necesita: su sesión cambió de salón, de día o de horas, o quitó el cupo. Un acuerdo cancelado o rechazado no aparta el salón ni el cupo, y ningún acuerdo se borra (supuesto por confirmar).
+- Avisos (supuesto por confirmar): al pedirse un acuerdo, a los titulares de decidir acuerdos del departamento al que va dirigido, en el campus; al aceptarse o rechazarse, a los titulares de pedir acuerdos del departamento que lo pidió, y el rechazo lleva el motivo (y, en un préstamo, que la sesión se quedó sin salón). La Subdirección ve los acuerdos pero no recibe avisos. En la pantalla, un préstamo propuesto cuyo bloque empalma con otro grupo o un bloqueo del salón no se puede aceptar, solo rechazar (supuesto por confirmar), y los propuestos que el actor no decide aparecen en «Enviados».
 
 ## Elegibilidad y demanda
 
@@ -291,6 +292,9 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
+| Ver la carga por docente | `admin`, `subdireccion`, `jefe_departamento`, `jefe_proyecto_docente` (su departamento y campus) | Las horas asignadas suman todos los campus; las categorías son las de HC-08 (supuesto por confirmar en los nombres de las categorías) |
+| Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
+| Aprobar o rechazar cambio | `jefe_departamento` | |
 | Quitar el docente de un grupo | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | Con motivo; queda en el historial de asignaciones (supuesto por confirmar) |
 | Solicitar cambio | `docente` asignado al grupo (permiso personal `staffing.change_request.request_own`), `coordinador` de la carrera dueña y campus (`staffing.change_request.request`) | carga del departamento en `staffing` o `adjusting`; grupo no cancelado. El docente, una solicitud abierta por grupo (confirmado el 7 de noviembre de 2026). Ver "Solicitudes de cambio" |
 | Ver las solicitudes de cambio | quien la pidió, `jefe_departamento`, `jefe_proyecto_docente`, `subdireccion` | Alcance de campus y departamento del grupo (`staffing.change_request.view`; supuesto por confirmar para `jefe_proyecto_docente` y `subdireccion`, solo lectura) |

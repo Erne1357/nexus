@@ -1,0 +1,67 @@
+<?php
+
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
+
+/*
+| Acuerdos en el navegador (tarea 3.7, maqueta B): el jefe del departamento dueño del salón entra por el menú, abre un
+| préstamo pendiente, lo rechaza con motivo y la sesión de quien lo pidió queda sin salón.
+*/
+
+beforeEach(function () {
+    $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
+    $sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
+    $ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
+    $group = Group::factory()->create([
+        'term_id' => $term->id, 'campus_id' => $campus->id, 'code' => '3A',
+        'subject_id' => Subject::factory()->create(['code' => 'SCC-1013', 'name' => 'Redes', 'department_id' => $ii->id])->id,
+    ]);
+    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $campus->id])->id, 'department_id' => $sc->id, 'code' => 'LC-201']);
+    $this->session = GroupSession::factory()->for($group)->on(1, '09:00', '11:00')->inRoom($room)->create();
+    $this->loan = InterdepartmentalAgreement::factory()->create([
+        'term_id' => $term->id, 'campus_id' => $campus->id, 'group_id' => $group->id, 'room_id' => $room->id,
+        'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'from_department_id' => $ii->id, 'to_department_id' => $sc->id,
+    ]);
+
+    User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $campus->id, 'department_id' => $sc->id])->create(['username' => '19110005']);
+});
+
+it('el jefe dueño abre un préstamo pendiente desde el menú y lo rechaza con motivo; la sesión queda sin salón', function () {
+    visit('/login')
+        ->fill('username', '19110005')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->click('@hare')
+        ->click('a[data-label="Acuerdos"]')
+        ->assertPathIs('/scheduling/agreements')
+        ->assertSee('Por decidir')
+        ->assertSee('LC-201 · Lun 9:00–11:00')
+        ->click('[data-agreement="'.$this->loan->id.'"]')
+        ->assertSee('Préstamo de LC-201')
+        ->assertSee('Pedido')
+        ->click('@agreement-reject')
+        ->assertSee('Motivo del rechazo (obligatorio)')
+        ->assertSee('se queda sin salón')
+        ->fill('@agreement-comment', 'Se cruza con una práctica.')
+        ->click('@agreement-reject-confirm')
+        ->assertSee('Rechazaste LC-201')
+        ->assertSee('No tienes acuerdos por decidir.')
+        ->assertNoJavaScriptErrors();
+
+    expect($this->loan->fresh()->status)->toBe(AgreementStatus::Rejected)
+        ->and($this->session->fresh()->room_id)->toBeNull();
+});
