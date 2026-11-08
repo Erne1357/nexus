@@ -142,3 +142,15 @@ it('checkTeacher solo corre las reglas del docente', function () {
     expect($this->validator->validateGroup($group)->forRule('HC-02'))->not->toBe([])
         ->and($this->validator->checkTeacher($group, $this->teacher)->forRule('HC-02'))->toBe([]);
 });
+
+it('teacherHours da a cada candidato sus horas sin el grupo y con él', function () {
+    $group = validatorGroup(['subject_id' => Subject::factory()->create(['theory_hours' => 3, 'practice_hours' => 2])->id]);
+    $other = Teacher::factory()->create();
+
+    $hours = $this->validator->teacherHours($group, [$this->teacher, $other]);
+
+    expect($hours[$this->teacher->id]['before']['assigned_hours'])->toBe(0)
+        ->and($hours[$this->teacher->id]['after']['assigned_hours'])->toBe(5)
+        ->and($hours[$this->teacher->id]['after']['remaining_hours'])->toBe($hours[$this->teacher->id]['before']['remaining_hours'] - 5)
+        ->and($hours)->toHaveKey($other->id);
+});

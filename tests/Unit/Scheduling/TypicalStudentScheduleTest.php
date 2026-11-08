@@ -93,7 +93,8 @@ it('HC-03: sin choques de grupos únicos pero sin combinación, marca los grupos
 
     expect(array_map(fn (Violation $violation): ?string => $violation->groupId, $violations))->toEqualCanonicalizing(['b1', 'b2', 'c1'])
         ->and($violations[0]->message)->toBe('En el semestre 1 el alumno tipo no tiene una combinación sin empalmes entre Biología y Cálculo.')
-        ->and($violations[0]->related['subjects'])->toEqualCanonicalizing(['B', 'C']);
+        ->and($violations[0]->related['subjects'])->toEqualCanonicalizing(['B', 'C'])
+        ->and($violations[0]->related['groups'])->toEqualCanonicalizing(['b1', 'b2', 'c1']);
 });
 
 it('HC-03: solo revisa los semestres de los grupos del alcance', function () {
