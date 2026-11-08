@@ -168,6 +168,8 @@
             "scheduling.room.assign",
             "scheduling.schedule.view",
             "scheduling.session.edit",
+            "staffing.my_load.view",
+            "staffing.offer.view",
             "staffing.ranking.view",
             "staffing.teacher.assign",
             "students.student.view"

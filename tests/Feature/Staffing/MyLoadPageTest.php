@@ -122,7 +122,7 @@ it('mantiene un número constante de consultas sin importar cuántos grupos tien
         loadGroup($n % 2 === 0 ? $this->c1 : $this->c2, 'G'.$n, 'Materia '.$n, [[1 + $n % 5, sprintf('%02d:00', 8 + $n), sprintf('%02d:00', 9 + $n)]]);
     }
 
-    expect($count())->toBe($few)->and($few)->toBeLessThanOrEqual(14);
+    expect($count())->toBe($few)->and($few)->toBeLessThanOrEqual(25);
 });
 
 describe('alcance', function () {

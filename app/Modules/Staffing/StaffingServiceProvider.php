@@ -7,6 +7,7 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Enums\StaffingPermission;
 
 /**
@@ -19,10 +20,21 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     {
         return [
             new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
-                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
+                visible: static fn (Actor $context): bool => self::isTeacher($context) && $context->allowsAny(StaffingPermission::MyLoadView)),
             new NavigationItem('Oferta del departamento', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
-                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
+                visible: static fn (Actor $context): bool => self::isTeacher($context) && $context->allowsAny(StaffingPermission::OfferView)),
         ];
+    }
+
+    /**
+     * «Mi espacio» es de quien tiene una ficha de docente activa: el admin, que lo puede todo, no la tiene, así que no
+     * lo ve en el menú (la página igual responde si entra por la URL).
+     */
+    private static function isTeacher(Actor $context): bool
+    {
+        $user = $context->user();
+
+        return $user !== null && Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->exists();
     }
 
     /**

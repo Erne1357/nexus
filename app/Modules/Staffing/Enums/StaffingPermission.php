@@ -50,6 +50,6 @@ enum StaffingPermission: string implements Permission
      */
     public function appliesTo(): ?UnitApplicability
     {
-        return $this->isPersonal() ? null : UnitApplicability::academic();
+        return UnitApplicability::academic();
     }
 }

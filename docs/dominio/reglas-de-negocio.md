@@ -268,6 +268,8 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Crear grupos y editar sesiones | `coordinador` (de su carrera dueña), `jefe_departamento` (de su departamento) | carga en `proposed`, `staffing` o `adjusting` |
 | Definir cupos por carrera | `jefe_departamento` del departamento que imparte | acuerdo registrado si involucra otra carrera de otro departamento |
 | Asignar docente | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | HC-08, HC-09, HC-16 |
+| Ver la oferta de mis departamentos (HC-17) | `docente` (personal: `staffing.offer.view`) | Desde que la carga del departamento entra a staffing, y en cualquier estado posterior; incluye todos los campus (supuesto por confirmar). Ve todos los grupos no cancelados de los departamentos donde está adscrito, con su propio lugar y desglose en el ranking, nunca el de los demás. Sin una ficha de docente con su usuario, no hay nada que ver |
+| Ver mi carga | `docente` (personal: `staffing.my_load.view`) | Desde que la carga del departamento entra a staffing; incluye todos los campus (supuesto por confirmar). Sus grupos del periodo, por día, y la cuenta de sus horas (base, externas, asignadas y restantes) |
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
