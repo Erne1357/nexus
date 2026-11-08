@@ -48,7 +48,7 @@ final class TeacherHours implements Constraint
 
                 yield Violation::hard(
                     $this->rule(),
-                    "{$teacher->name} pasaría a {$total} h de {$limit} (faltan {$missing} h).",
+                    "{$teacher->name} suma {$total} h y su límite es {$limit} h: se pasa por {$missing} h.",
                     'teacher',
                     $teacherId,
                     $groupId,
