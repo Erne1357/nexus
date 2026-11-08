@@ -5,8 +5,10 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Agreements\CancelAgreement;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\AgreementRejected;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
@@ -20,7 +22,10 @@ use App\Modules\Scheduling\Actions\Agreements\AcceptRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectSharedGroup;
+use App\Modules\Scheduling\Actions\Sessions\AssignSessionRoom;
+use App\Modules\Scheduling\Actions\Sessions\RemoveGroupSession;
 use App\Modules\Scheduling\Actions\Sessions\SyncSessionLoans;
+use App\Modules\Scheduling\Actions\Sessions\UpdateGroupSession;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Notifications\AgreementAnswered;
@@ -291,4 +296,61 @@ it('el aviso de un préstamo cancelado se abre en Acuerdos y deja de abrirse si 
     expect(LoanCancelled::unavailableReason($context($this->jefeSc), $message))->toBeNull()
         ->and(LoanCancelled::unavailableReason($context(User::factory()->withRole(Role::Docente)->create()), $message))->toBe('Ya no ves los acuerdos de ese departamento.')
         ->and(LoanCancelled::unavailableReason($context($this->jefeSc), NotificationMessage::fromArray([...$data, 'parameters' => ['acuerdo' => fakeKey(71)]])))->toBe('Ese acuerdo ya no existe.');
+});
+
+describe('préstamos que cancela la sesión al cambiar', function () {
+    beforeEach(function () {
+        AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->ii->id]);
+        $this->session = GroupSession::factory()->for($this->group)->on(1, '09:00', '11:00')->inRoom($this->room)->create();
+        $this->pending = ($this->loan)();
+    });
+
+    it('alargar la sesión reemplaza su préstamo: el dueño recibe solo el aviso del nuevo, no el de cancelado', function () {
+        Notification::fake();
+
+        app(UpdateGroupSession::class)->handle($this->session, 1, '09:00', '12:00', $this->session->kind, $this->jefeIi);
+
+        expect($this->pending->fresh()->status)->toBe(AgreementStatus::Cancelled);
+        Notification::assertSentToTimes($this->jefeSc, AgreementReceived::class, 1);
+        Notification::assertSentTo($this->jefeSc, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($this->jefeSc)->body === 'LC-201 · Lun 9:00–12:00');
+        Notification::assertNotSentTo($this->jefeSc, LoanCancelled::class);
+    });
+
+    it('si el reemplazo no se puede pedir porque otro grupo ya aparta el salón, el aviso de cancelado sí sale', function () {
+        Notification::fake();
+        InterdepartmentalAgreement::factory()->create([
+            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'room_id' => $this->room->id,
+            'group_id' => Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id])->id,
+            'day' => 1, 'starts_at' => '11:00', 'ends_at' => '12:00', 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+        ]);
+
+        app(UpdateGroupSession::class)->handle($this->session, 1, '09:00', '12:00', $this->session->kind, $this->jefeIi);
+
+        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id]);
+        Notification::assertNotSentTo($this->jefeSc, AgreementReceived::class);
+    });
+
+    it('cambiar la sesión a un salón de otro departamento avisa al dueño del salón de antes que se canceló y pide el nuevo a su dueño', function () {
+        Notification::fake();
+        $cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
+        $jefeCb = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $cb->id])->create();
+        $other = Room::factory()->create(['building_id' => $this->room->building_id, 'department_id' => $cb->id, 'code' => 'CB-101']);
+
+        app(AssignSessionRoom::class)->handle($this->session, $other, $this->jefeIi);
+
+        Notification::assertSentToTimes($this->jefeSc, LoanCancelled::class, 1);
+        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id]);
+        Notification::assertSentTo($jefeCb, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($jefeCb)->title === 'Ingeniería Industrial te pide CB-101');
+        Notification::assertNotSentTo($jefeCb, LoanCancelled::class);
+    });
+
+    it('quitar la sesión cancela su préstamo y avisa al dueño', function () {
+        Notification::fake();
+
+        app(RemoveGroupSession::class)->handle($this->session, $this->jefeIi);
+
+        expect($this->pending->fresh()->status)->toBe(AgreementStatus::Cancelled);
+        Notification::assertSentToTimes($this->jefeSc, LoanCancelled::class, 1);
+        Notification::assertNotSentTo($this->jefeSc, AgreementReceived::class);
+    });
 });

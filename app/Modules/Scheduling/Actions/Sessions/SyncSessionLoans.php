@@ -42,7 +42,9 @@ use Illuminate\Validation\ValidationException;
  * Un salón sin dueño o del mismo departamento no necesita préstamo: cancela lo vivo de ese grupo, salón y día. Cada
  * préstamo cancelado o pedido deja su bitácora y su evento (los de AcademicLoad); pedir y cancelar avisan al dueño,
  * uno por préstamo y después del commit (NotifyDeciderOnAgreementRequested, NotifyOwnerOnLoanCancelled; confirmado el 8
- * de noviembre de 2026).
+ * de noviembre de 2026). Si en la misma corrida se pide un préstamo nuevo para ese grupo, salón y día, los cancelados
+ * son su reemplazo (alargar o mover la sesión dentro del día) y su AgreementCancelled lo dice (`replaced`): el dueño
+ * recibe solo el aviso del nuevo. Por eso los cancela sin avisar y los anuncia después de pedir.
  */
 final class SyncSessionLoans
 {
@@ -78,10 +80,17 @@ final class SyncSessionLoans
             $proposed = $loans->filter(fn (InterdepartmentalAgreement $loan): bool => $loan->status === AgreementStatus::Proposed
                 && $gaps->contains(fn (array $gap): bool => [$gap[0], $gap[1]] === self::span($loan)));
             $asked = $proposed->map(fn (InterdepartmentalAgreement $loan): array => self::span($loan));
+            $released = $loans->diff($accepted)->diff($proposed);
 
-            $this->cancelAll($loans->diff($accepted)->diff($proposed), $actor);
+            $this->cancelAll($released, $actor, announce: false);
 
-            return $this->requestAll($group, $room, $day, $gaps->reject(fn (array $gap): bool => $asked->contains([$gap[0], $gap[1]])), $actor);
+            [$result, $created] = $this->requestAll($group, $room, $day, $gaps->reject(fn (array $gap): bool => $asked->contains([$gap[0], $gap[1]])), $actor);
+
+            foreach ($released as $loan) {
+                $this->cancel->announce($loan, replaced: $created);
+            }
+
+            return $result;
         });
     }
 
@@ -145,12 +154,14 @@ final class SyncSessionLoans
     }
 
     /**
+     * Sin `announce`, quien llama los anuncia (CancelAgreement::announce) cuando sabe si se reemplazan.
+     *
      * @param  Collection<int, InterdepartmentalAgreement>  $loans
      */
-    private function cancelAll(Collection $loans, User $actor): void
+    private function cancelAll(Collection $loans, User $actor, bool $announce = true): void
     {
         foreach ($loans as $loan) {
-            $this->cancel->handle($loan, $actor);
+            $this->cancel->handle($loan, $actor, $announce);
         }
     }
 
@@ -158,26 +169,31 @@ final class SyncSessionLoans
      * Pide un préstamo por cada hueco, en minutos. El que choca con el préstamo vivo de otro grupo no se pide
      * (RequestRoomLoan lo rechaza en un savepoint, sin abortar la transacción), salvo el hueco estricto, que detiene.
      *
+     * Da el resultado y si creó algún préstamo nuevo (RequestRoomLoan regresa sin escribir el que ya existe).
+     *
      * @param  Collection<int, array{int, int, bool}>  $gaps  inicio, fin y si es estricto
+     * @return array{LoanSyncResult, bool}
      *
      * @throws ValidationException
      */
-    private function requestAll(Group $group, Room $room, int $day, Collection $gaps, User $actor): LoanSyncResult
+    private function requestAll(Group $group, Room $room, int $day, Collection $gaps, User $actor): array
     {
         if ($gaps->isEmpty()) {
-            return new LoanSyncResult;
+            return [new LoanSyncResult, false];
         }
 
         $term = Term::query()->findOrFail($group->term_id);
         $campus = Campus::query()->findOrFail($group->campus_id);
         $from = Department::withTrashed()->findOrFail($group->department_id);
         $requested = false;
+        $created = false;
         $blocked = false;
 
         foreach ($gaps as [$start, $end, $strict]) {
             try {
-                $this->request->handle($term, $campus, $from, $group->id, $room, $day, Minutes::format($start), Minutes::format($end), $actor);
+                $loan = $this->request->handle($term, $campus, $from, $group->id, $room, $day, Minutes::format($start), Minutes::format($end), $actor);
                 $requested = true;
+                $created = $created || $loan->wasRecentlyCreated;
             } catch (ValidationException $exception) {
                 if ($strict || ! array_key_exists('room_id', $exception->errors())) {
                     throw $exception;
@@ -187,7 +203,7 @@ final class SyncSessionLoans
             }
         }
 
-        return new LoanSyncResult($requested, $blocked);
+        return [new LoanSyncResult($requested, $blocked), $created];
     }
 
     /**
