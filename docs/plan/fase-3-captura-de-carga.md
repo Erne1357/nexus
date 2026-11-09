@@ -81,6 +81,10 @@ Decisión en [ADR-0018](../decisiones/0018-permisos-por-puesto-y-perfil-activo.m
 
 ## Riesgos y notas
 
+- **Demo por puntos (9 de noviembre de 2026):** `php artisan demo:seed --hasta=<punto>` deja la demo al inicio de cada etapa de esta fase (`horarios`, `asignacion`, `salones` y `cierre`), con lo anterior terminado en todos los departamentos (#336 y #341 a #347).
+  - Sirve para probar cada pantalla desde su etapa con volumen.
+  - Sirve también para ensayar la 3.13 con coordinadores y jefes antes de capturar la carga real.
+  - Detalle en [testing.md](../arquitectura/testing.md), «Demo por puntos del proceso».
 - **Mapa de módulos (7 de noviembre de 2026, [ADR-0020](../decisiones/0020-staffing-a-la-derecha-de-scheduling.md)):** Staffing queda a la derecha de Scheduling (`Faculty --> Scheduling --> Staffing`). El docente vigente es `groups.teacher_id` y solo lo cambia `SetGroupTeacher` (Scheduling), que `AssignTeacher` (Staffing) llama; HC-08 y HC-09 viven en el validador de Scheduling; `change_requests` (3.11) es de Staffing.
 - **Pendiente de la planeación (usuario, 5 de noviembre de 2026, D17 de la migración del SII):** una carrera tiene varias retículas activas a la vez (la actual para quien entra y las que siguen cursando alumnos de generaciones anteriores). La planeación de la carga debe considerarlas todas y **dar prioridad a las materias de retículas y especialidades viejas**, porque ahí ya no puede haber más alumnos. El detalle se define al planear esta fase.
 - El editor de horarios es la pieza con más riesgo de UI. Primero una versión por clic (seleccionar grupo, clic en celda) y solo si sobra tiempo arrastrar y soltar.
