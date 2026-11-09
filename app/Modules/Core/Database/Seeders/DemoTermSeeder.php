@@ -36,7 +36,7 @@ class DemoTermSeeder extends Seeder
     /**
      * @var array<string, array{0: string, 1: string}> etapa => [inicio, fin], todas de lunes a viernes
      */
-    private const array CALENDAR_20271 = [
+    public const array CALENDAR_20271 = [
         'catalog_validation' => ['2026-11-02', '2026-11-06'],
         'proposal' => ['2026-11-09', '2026-11-20'],
         'scheduling' => ['2026-11-23', '2026-12-04'],
