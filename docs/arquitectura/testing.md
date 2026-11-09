@@ -225,7 +225,7 @@ Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su ram
 | Job | Contenido | Bloquea el merge |
 |---|---|---|
 | `lint` | Pint en modo verificación (`./vendor/bin/pint --test`) | Sí |
-| `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey; reporte de cobertura por módulo | Sí |
+| `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey; reporte de cobertura por módulo; las 20 pruebas y los 10 archivos más lentos de la corrida en el resumen del job (`--log-junit` y `.github/scripts/slowest-tests.py`, informativo) | Sí |
 | `browser` | Browser tests de Pest 5 en el contenedor `dev` con Chromium | Sí |
 | `rendimiento` | Presupuestos de rendimiento (aún no existe) | No (informa; ver arriba) |
 
