@@ -184,6 +184,16 @@ final class ScheduleState
         return $this->rooms[$id] ?? null;
     }
 
+    /**
+     * Los salones que trae la foto, por id: los del campus y los de otros campus que usan sus sesiones.
+     *
+     * @return array<string, StateRoom>
+     */
+    public function rooms(): array
+    {
+        return $this->rooms;
+    }
+
     public function teacher(string $id): ?StateTeacher
     {
         return $this->teachers[$id] ?? null;
