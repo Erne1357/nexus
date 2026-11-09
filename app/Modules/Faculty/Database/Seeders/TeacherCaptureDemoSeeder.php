@@ -20,8 +20,9 @@ use RuntimeException;
  *
  * Con `$complete` (demo por puntos, lleva al punto 3, docs/arquitectura/testing.md) hace lo contrario, como el jefe que
  * termina la captura antes de validar: a cada docente activo sin disponibilidad en el periodo o sin perfil le devuelve
- * lo último que se le quitó, y a quien aun así queda sin disponibilidad le pone un bloque preferente. Las horas externas
- * no se tocan: no tenerlas también es una captura completa.
+ * lo último que se le quitó, y a quien aun así queda sin disponibilidad le pone un bloque preferente. Quien nunca tuvo
+ * perfil (un alta sin materias calificadas) se queda sin él: no hace falta para ser candidato, solo suma al ranking. Las
+ * horas externas no se tocan: no tenerlas también es una captura completa.
  */
 class TeacherCaptureDemoSeeder extends Seeder
 {
