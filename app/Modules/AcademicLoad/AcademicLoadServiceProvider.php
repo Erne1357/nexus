@@ -3,7 +3,12 @@
 namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
+use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
+use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\CareerProposalReturned;
 use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
@@ -12,14 +17,23 @@ use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
 use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
 use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermOpened;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -99,6 +113,50 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::ProposalSubmit,
                 AcademicLoadPermission::ProposalView,
             ],
+        ];
+    }
+
+    /**
+     * Demo por puntos: cada carrera ofrecida en los campus del volumen propone y envía, y cada departamento acepta
+     * todas sus partes (AcademicLoadDemoSeeder en modo completo); así nacen los grupos y las cargas con partes pasan a
+     * propuesta, lo que lleva a «horarios». Necesita los catálogos validados del punto anterior (HC-14).
+     */
+    public function demoSteps(): array
+    {
+        return [
+            new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeeder(AcademicLoadDemoSeeder::class, [
+                'campuses' => $demo->campuses,
+                'term' => $demo->termCode,
+                'seed' => $demo->seed,
+                'complete' => true,
+            ])),
+        ];
+    }
+
+    public function demoChecks(): array
+    {
+        $campusIds = fn (DemoContext $demo): array => Campus::query()->whereIn('code', $demo->campuses)->pluck('id')->all();
+        $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo));
+
+        return [
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Cada carrera ofrecida tiene su propuesta aceptada', function (DemoContext $demo) use ($campusIds, $proposals): true|string {
+                $offered = CareerCampus::query()->whereIn('campus_id', $campusIds($demo))->where('is_active', true)->count();
+                $accepted = $proposals($demo)->where('status', ProposalStatus::Accepted)->count();
+
+                return $accepted === $offered ? true : "{$accepted} de {$offered} carreras ofrecidas tienen su propuesta aceptada.";
+            }),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Ninguna parte de propuesta pendiente ni regresada', function (DemoContext $demo) use ($proposals): true|string {
+                $open = ProposalReview::query()->whereIn('career_proposal_id', $proposals($demo)->select('id'))->where('status', '!=', ProposalReviewStatus::Accepted)->count();
+
+                return $open === 0 ? true : "{$open} partes siguen sin aceptar.";
+            }),
+            new DemoCheck([DemoCheckpoint::Scheduling], 'Las cargas con partes aceptadas están en propuesta', function (DemoContext $demo) use ($campusIds, $proposals): true|string {
+                $withParts = ProposalReview::query()->whereIn('career_proposal_id', $proposals($demo)->select('id'))->select('department_id');
+                $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo))
+                    ->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count();
+
+                return $behind === 0 ? true : "{$behind} cargas con partes aceptadas no están en propuesta.";
+            }),
         ];
     }
 }

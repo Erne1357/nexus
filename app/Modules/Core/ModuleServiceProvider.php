@@ -3,6 +3,8 @@
 namespace App\Modules\Core;
 
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Navigation\NavigationItem;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -115,6 +117,41 @@ abstract class ModuleServiceProvider extends ServiceProvider
      * @return list<Permission>
      */
     public function adminDenies(): array
+    {
+        return [];
+    }
+
+    /**
+     * Pasos con los que el módulo siembra la demo por puntos (`php artisan demo:seed --hasta=`). Un punto es el
+     * inicio de una etapa del proceso (`DemoCheckpoint`); un paso **lleva a** un punto terminando la etapa anterior
+     * (validar todos los catálogos lleva a «propuesta»). Core los corre por punto en el orden de
+     * bootstrap/providers.php y, dentro del módulo, en el de esta lista. Solo en consola, nunca en producción.
+     *
+     * @return list<DemoStep>
+     */
+    public function demoSteps(): array
+    {
+        return [];
+    }
+
+    /**
+     * Lo que los pasos del módulo garantizan al llegar a cada punto (conteos baratos). El comando las imprime y sale
+     * con error si una falla; la prueba de la demo por puntos las revisa en cada punto.
+     *
+     * @return list<DemoCheck>
+     */
+    public function demoChecks(): array
+    {
+        return [];
+    }
+
+    /**
+     * Eventos del módulo que se descartan mientras se siembra la demo por puntos (recálculos caros por cada cambio).
+     * El módulo que los silencia agrega un paso suyo que recalcula una sola vez.
+     *
+     * @return list<class-string>
+     */
+    public function demoQuietEvents(): array
     {
         return [];
     }
