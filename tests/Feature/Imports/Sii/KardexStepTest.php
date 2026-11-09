@@ -5,6 +5,7 @@ use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Imports\Sii\SiiStepOutOfOrder;
 use App\Modules\Imports\Sii\Steps\KardexStep;
+use App\Modules\Students\Models\Student;
 use Illuminate\Support\Facades\File;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
@@ -71,6 +72,9 @@ function kardexStepRow(string $control, string $subject, string $term, int|strin
 beforeEach(function () {
     $this->dir = SiiFixtures::dir();
     File::copyDirectory(base_path('tests/Fixtures/imports/sii/minimo'), $this->dir);
+    foreach (['S1', 'S2', 'S3', 'S4', 'S5'] as $controlNumber) {
+        Student::factory()->create(['control_number' => $controlNumber]);
+    }
 });
 
 afterEach(fn () => File::deleteDirectory($this->dir));
@@ -134,7 +138,7 @@ it('avisa por línea, sin número de control, el periodo, el estatus y la califi
 
     expect($run['rows'])->toBe([kardexStepRow('S1', 'ACF-0901', '20253', '', 'aprobada', 1)])
         ->and(kardexMessages($run['incidents']))->toBe([
-            'historia_alumno.csv:2 El periodo de esta línea no es un periodo del SII (año desde 1964 y 1, 2 o 3): no pasa al kárdex.',
+            'historia_alumno.csv:2 El periodo de esta línea no es un periodo del SII (año de 1964 al próximo y 1, 2 o 3): no pasa al kárdex.',
             'historia_alumno.csv:3 El estatus de la materia de esta línea no es A, R ni P: no pasa al kárdex.',
             'historia_alumno.csv:4 La calificación de esta línea no se entiende: pasa al kárdex sin calificación.',
             'historia_alumno.csv:5 Esta línea no trae número de control: no pasa al kárdex.',
@@ -184,7 +188,7 @@ it('las materias del periodo en curso salen de la selección como cursando', fun
     );
 });
 
-it('si el periodo más reciente de la selección ya pasó a la historia, no hay materias en curso', function () {
+it('si todos los periodos de la selección ya pasaron a la historia, no hay materias en curso', function () {
     writeSiiHistory($this->dir, [['20263', 'S1', 'CD1', '85', 'O1', 'A'], ['20263', 'S2', 'CD1', '90', 'O1', 'A']]);
     writeSiiSelection($this->dir, [['20263', 'S1', 'CD1', 'N', 'I'], ['20263', 'S2', 'CD1', 'N', 'I'], ['20263', 'S3', 'CD1', 'N', 'I']]);
 
@@ -192,9 +196,57 @@ it('si el periodo más reciente de la selección ya pasó a la historia, no hay 
 
     expect(array_column($run['rows'], 'result'))->toBe(['aprobada', 'aprobada'])
         ->and(kardexMessages($run['incidents']))->toContain(
-            'kardex El periodo más reciente de seleccion_materias (20263) ya está en la historia: ninguna materia pasa como cursando.',
+            'kardex Todos los periodos de seleccion_materias ya están en la historia: ninguna materia pasa como cursando.',
             'kardex 1 renglones de seleccion_materias de periodos cerrados no están en la historia: no pasan al kárdex, que en esos periodos sale solo de la historia.',
         );
+});
+
+it('pasan como cursando los dos periodos en curso: el que corre y el siguiente ya seleccionado', function () {
+    writeSiiHistory($this->dir, [['20261', 'S1', 'CD1', '85', 'O1', 'A']]);
+    writeSiiSelection($this->dir, [
+        ['20261', 'S1', 'CD1', 'N', 'I'],
+        ['20263', 'S1', 'QU1', 'N', 'I'],
+        ['20271', 'S1', 'CD2', 'N', 'I'],
+    ]);
+
+    expect(kardexStepRun($this->dir, ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0902', 'QU1' => 'AEF-1001'])['rows'])->toBe([
+        kardexStepRow('S1', 'ACF-0901', '20261', 85, 'aprobada', 1),
+        kardexStepRow('S1', 'AEF-1001', '20263', '', 'cursando', 1),
+        kardexStepRow('S1', 'ACF-0902', '20271', '', 'cursando', 1),
+    ]);
+});
+
+it('no pasan los renglones de alumnos que no están en Nexus y se cuentan sin número de control', function () {
+    writeSiiHistory($this->dir, [['20251', 'NOEXISTE1', 'CD1', '85', 'O1', 'A'], ['20251', 'S1', 'CD1', '85', 'O1', 'A']]);
+    writeSiiSelection($this->dir, [['20263', 'NOEXISTE2', 'QU1', 'N', 'I'], ['20263', 'S1', 'QU1', 'N', 'I']]);
+
+    $run = kardexStepRun($this->dir);
+
+    expect(array_column($run['rows'], 'control_number'))->toBe(['S1', 'S1'])
+        ->and(kardexMessages($run['incidents']))->toContain(
+            'kardex 1 renglones de la historia son de alumnos que no están en Nexus: no pasan al kárdex.',
+            'kardex 1 renglones de la selección de 20263 son de alumnos que no están en Nexus: no pasan al kárdex.',
+        )
+        ->and(json_encode($run['incidents']))->not->toContain('NOEXISTE');
+});
+
+it('en la selección repetida por dos claves del SII queda la oportunidad mayor', function () {
+    writeSiiSelection($this->dir, [['20263', 'S1', 'CD1', 'N', 'I'], ['20263', 'S1', 'CD2', 'S', 'I']]);
+    writeSiiHistory($this->dir, []);
+
+    $run = kardexStepRun($this->dir);
+
+    expect($run['rows'])->toBe([kardexStepRow('S1', 'ACF-0901', '20263', '', 'cursando', 2)])
+        ->and(kardexMessages($run['incidents']))->toContain('kardex 1 renglones de la selección de 20263 repiten alumno, materia de Nexus y periodo: pasa uno, con la oportunidad mayor.');
+});
+
+it('se detiene si dos renglones distintos chocan en la misma llave, en vez de perder uno', function () {
+    writeSiiHistory($this->dir, [['20251', 'S1', 'CD1', '85', 'O1', 'A'], ['20251', 'S2', 'CD1', '85', 'O1', 'A']]);
+    $migration = new SiiMigration(SiiExport::open($this->dir), '/nonexistent');
+    $migration->remember('subject_for', fn (): array => ['CD1' => 'ACF-0901']);
+
+    expect(fn () => iterator_to_array((new KardexStep(fn (string $tuple): int => 42))->batches($migration)))
+        ->toThrow(RuntimeException::class, 'chocaron en la misma llave');
 });
 
 it('sin historia no migra el kárdex y lo avisa', function () {

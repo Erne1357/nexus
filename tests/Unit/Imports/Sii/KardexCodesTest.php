@@ -66,7 +66,7 @@ it('reconoce una calificación que no se entiende', function (string $value, boo
     'decimal' => ['85.5', false],
 ]);
 
-it('acepta solo periodos del SII desde 1964', function (string $term, bool $valid) {
+it('acepta solo periodos del SII de 1964 al próximo año', function (string $term, bool $valid) {
     expect(KardexCodes::term($term))->toBe($valid);
 })->with([
     'Ene-Jun' => ['20251', true],
@@ -74,6 +74,9 @@ it('acepta solo periodos del SII desde 1964', function (string $term, bool $vali
     'Ago-Dic' => ['20263', true],
     'el primero' => ['19643', true],
     'antes de 1964' => ['19013', false],
+    'el próximo año' => [((int) date('Y') + 1).'1', true],
+    'dentro de dos años' => [((int) date('Y') + 2).'1', false],
+    'año imposible' => ['99993', false],
     'año cero' => ['00011', false],
     'sufijo 4' => ['20254', false],
     'corto' => ['9', false],

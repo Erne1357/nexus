@@ -16,7 +16,8 @@ use App\Modules\Students\Enums\KardexResult;
  *   otro posterior, `periodo_acredita_materia`).
  * - Una aprobada con 0 queda sin calificación: son equivalencias acreditadas sin número (K2, confirmado el 9 de
  *   noviembre de 2026); las de 1 a 69 conservan la suya.
- * - Un periodo es el código del SII, año y 1, 2 o 3, desde 1964, año en que se fundó el ITCJ (supuesto por confirmar).
+ * - Un periodo es el código del SII, año y 1, 2 o 3, del año en que se fundó el ITCJ (1964) al próximo (supuesto por
+ *   confirmar).
  */
 final class KardexCodes
 {
@@ -77,10 +78,12 @@ final class KardexCodes
     }
 
     /**
-     * Si es un periodo del SII: cuatro dígitos de año desde 1964 y 1 (Ene-Jun), 2 (verano) o 3 (Ago-Dic).
+     * Si es un periodo del SII: el año, de 1964 al próximo, y 1 (Ene-Jun), 2 (verano) o 3 (Ago-Dic).
      */
     public static function term(string $value): bool
     {
-        return preg_match('/^(\d{4})[123]$/', $value, $match) === 1 && (int) $match[1] >= self::FIRST_YEAR;
+        return preg_match('/^(\d{4})[123]$/', $value, $match) === 1
+            && (int) $match[1] >= self::FIRST_YEAR
+            && (int) $match[1] <= (int) date('Y') + 1;
     }
 }

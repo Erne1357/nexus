@@ -16,12 +16,12 @@ use Throwable;
 /**
  * Migra la exportación del SII a Nexus por el motor de importación. Con `--dry-run` corre todo y lo revierte.
  * Imprime solo cuentas por lote, nunca valores; el detalle por fila está en `<dir>/_incidencias.csv`. Sube el límite
- * de memoria a 1 GB porque el paso `kardex` guarda una llave por cada uno de los dos millones de renglones de la
- * historia.
+ * de memoria a 1 GB si era menor, porque el paso `kardex` guarda una llave por cada uno de los dos millones de
+ * renglones de la historia; uno mayor o sin límite se respeta.
  */
 final class MigrateSii extends Command
 {
-    private const string MEMORY_LIMIT = '1G';
+    private const int MEMORY_LIMIT = 1024 * 1024 * 1024;
 
     protected $signature = 'imports:migrate-sii
         {dir : Carpeta con la exportación del SII}
@@ -34,7 +34,7 @@ final class MigrateSii extends Command
 
     public function handle(RunSiiMigration $migration): int
     {
-        ini_set('memory_limit', self::MEMORY_LIMIT);
+        $this->raiseMemoryLimit();
 
         if ($this->laravel->isProduction() && ! $this->option('force')) {
             $this->components->error('En producción hay que pasar --force.');
@@ -110,5 +110,28 @@ final class MigrateSii extends Command
         }
 
         return $user;
+    }
+
+    /**
+     * Sube `memory_limit` a 1 GB si el actual es menor; -1 (sin límite) o uno mayor se quedan.
+     */
+    private function raiseMemoryLimit(): void
+    {
+        $current = (string) ini_get('memory_limit');
+
+        if ($current === '-1') {
+            return;
+        }
+
+        $bytes = (int) $current * match (strtoupper(substr($current, -1))) {
+            'G' => 1024 ** 3,
+            'M' => 1024 ** 2,
+            'K' => 1024,
+            default => 1,
+        };
+
+        if ($bytes < self::MEMORY_LIMIT) {
+            ini_set('memory_limit', (string) self::MEMORY_LIMIT);
+        }
     }
 }

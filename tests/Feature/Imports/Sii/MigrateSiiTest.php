@@ -372,3 +372,20 @@ final class UnknownCampusStep implements SiiStep
         yield new SiiBatch('departments', 'departamentos.csv', [['code' => 'AAA', 'name' => 'A']], campus: 'ZZ');
     }
 }
+
+it('sube el límite de memoria a 1 GB si era menor y respeta uno mayor o sin límite', function (string $before, string $after) {
+    $original = (string) ini_get('memory_limit');
+    ini_set('memory_limit', $before);
+
+    try {
+        $this->artisan('imports:migrate-sii', ['dir' => '/no/existe'])->assertFailed();
+
+        expect(ini_get('memory_limit'))->toBe($after);
+    } finally {
+        ini_set('memory_limit', $original);
+    }
+})->with([
+    'menor' => ['512M', '1073741824'],
+    'mayor' => ['2G', '2G'],
+    'sin límite' => ['-1', '-1'],
+]);
