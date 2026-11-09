@@ -61,7 +61,8 @@ use Spatie\Activitylog\Models\Activity;
  *   recordatorios a CEA, EE y MM (solo reciben los que aún tienen algo pendiente: CEA en `massive`, MM en `demo`) para el «último recordatorio» del tablero.
  *
  * `$mode` (demo por puntos, docs/arquitectura/testing.md): `mixed` hace todo lo anterior; `previous` (lleva al punto 2)
- * solo valida los periodos anteriores y simula los cambios, y deja el último todo pendiente; `validated` (lleva al punto
+ * solo valida los periodos anteriores y simula los cambios (sin dar de baja más que aulas, porque los espacios de
+ * práctica grandes son los que no alcanzan para el punto 7), y deja el último todo pendiente; `validated` (lleva al punto
  * 3) valida cada revisión del último periodo que falte, cada una empezada y validada por el jefe de su departamento,
  * sin observaciones.
  *
@@ -173,7 +174,7 @@ class CatalogValidationDemoSeeder extends Seeder
                 }
 
                 if ($changed) {
-                    $this->simulateChanges($current, $config);
+                    $this->simulateChanges($current, $config, classroomsOnly: $mode === 'previous');
                 }
 
                 if ($mode === 'mixed') {
@@ -208,11 +209,12 @@ class CatalogValidationDemoSeeder extends Seeder
     }
 
     /**
-     * Los cambios entre periodos, con las Actions de cada módulo.
+     * Los cambios entre periodos, con las Actions de cada módulo; con `$classroomsOnly`, de los salones solo da de baja
+     * aulas.
      *
      * @param  array{deactivate: int, create: int, reactivate: int, subjects: int, rooms: int, flags: int, calm: int}  $config
      */
-    private function simulateChanges(Term $term, array $config): void
+    private function simulateChanges(Term $term, array $config, bool $classroomsOnly = false): void
     {
         $campuses = $this->openedCampuses($term);
         $departments = Department::query()->where('is_active', true)->orderBy('code')->get();
@@ -256,7 +258,7 @@ class CatalogValidationDemoSeeder extends Seeder
             }
 
             foreach ($campuses as $campus) {
-                $this->changeRooms($campus, $department, $config);
+                $this->changeRooms($campus, $department, $config, $classroomsOnly);
             }
         }
     }
@@ -264,13 +266,14 @@ class CatalogValidationDemoSeeder extends Seeder
     /**
      * @param  array{deactivate: int, create: int, reactivate: int, subjects: int, rooms: int, flags: int, calm: int}  $config
      */
-    private function changeRooms(Campus $campus, Department $department, array $config): void
+    private function changeRooms(Campus $campus, Department $department, array $config, bool $classroomsOnly = false): void
     {
         $rooms = Room::query()->where('campus_id', $campus->getKey())->where('department_id', $department->getKey())->orderBy('code');
 
         $reactivate = (clone $rooms)->where('is_active', false)->limit(1)->get();
+        $retired = (clone $rooms)->where('is_active', true)->when($classroomsOnly, fn ($query) => $query->where('type', RoomType::Aula->value));
 
-        foreach ((clone $rooms)->where('is_active', true)->limit($config['rooms'])->get() as $room) {
+        foreach ($retired->limit($config['rooms'])->get() as $room) {
             app(UpdateRoom::class)->handle($room, ['is_active' => false]);
         }
 

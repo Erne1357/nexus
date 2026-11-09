@@ -16,6 +16,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
@@ -276,8 +277,10 @@ it('reparte las observaciones en registros distintos', function () {
     expect($flags->groupBy(fn (CatalogReviewFlag $flag): string => $flag->review_id.'/'.$flag->flaggable_id)->filter(fn ($same) => $same->count() > 1)->count())->toBe(0);
 });
 
-it('en modo previous valida el periodo anterior y simula los cambios, y deja todo el actual pendiente (demo por puntos, punto 2)', function () {
+it('en modo previous valida el periodo anterior y simula los cambios sin dar de baja más que aulas, y deja todo el actual pendiente (demo por puntos, punto 2)', function () {
     seedCatalogScenario();
+    Room::query()->orderBy('code')->limit(10)->update(['type' => RoomType::Laboratorio->value]);
+    $labs = Room::query()->where('type', RoomType::Laboratorio->value)->where('is_active', true)->count();
 
     runCatalogDemoSeeder('massive', 'previous');
 
@@ -288,7 +291,9 @@ it('en modo previous valida el periodo anterior y simula los cambios, y deja tod
         ->and((clone $current)->where('status', '!=', ReviewStatus::Pending)->count())->toBe(0)
         ->and(app(CatalogReviewQuery::class)->summary(cvReview('20271', 'CB', Catalog::Teachers))['added'])->not->toBeEmpty()
         ->and(CatalogReviewFlag::count())->toBe(0)
-        ->and(Activity::query()->where('event', 'reminded')->count())->toBe(0);
+        ->and(Activity::query()->where('event', 'reminded')->count())->toBe(0)
+        ->and(Room::query()->where('is_active', false)->count())->toBeGreaterThan(0)
+        ->and(Room::query()->where('type', RoomType::Laboratorio->value)->where('is_active', true)->count())->toBe($labs);
 });
 
 it('en modo validated empieza y valida cada revisión del periodo actual con el jefe de su departamento, sin observaciones (demo por puntos, punto 3)', function () {
