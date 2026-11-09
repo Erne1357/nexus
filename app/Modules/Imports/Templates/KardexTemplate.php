@@ -17,9 +17,9 @@ use Illuminate\Validation\Rule;
  * tiene `is_active`, así que no ofrece "desactivar faltantes".
  *
  * El periodo se guarda con el código del SII (`20251` Ene-Jun, `20252` verano, `20253` Ago-Dic); se aceptan
- * también `2025-1` y `2025/1`. Todavía no hay una exportación real: el resultado se reconoce con sus variantes
- * comunes (aprobado, AC, acreditada, NA, no acreditada, en curso) y se ajusta en la integración 1.16
- * (confirmado el 29 de octubre de 2026). Busca cada alumno y cada materia una vez por corrida: un kardex trae
+ * también `2025-1` y `2025/1`. El resultado se reconoce con sus variantes comunes (aprobado, AC, acreditada, NA,
+ * no acreditada, en curso; confirmado el 29 de octubre de 2026); el paso `kardex` de la migración del SII ya le
+ * entrega los valores de Nexus. Busca cada alumno y cada materia una vez por corrida: un kardex trae
  * cientos de miles de filas con los mismos alumnos y materias. Al terminar el lote despacha el recálculo del
  * progreso.
  */

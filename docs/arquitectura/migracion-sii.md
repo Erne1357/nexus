@@ -24,7 +24,7 @@ Si las cuentas cuadran, la corrida real es la misma línea sin `--dry-run`.
 | Opción | Qué hace |
 |---|---|
 | `--dry-run` | Corre todo dentro de una transacción que se revierte, sin cola, y borra los archivos subidos. Sí deja `_incidencias.csv` y `_nexus/`. La tabla de la consola dice cuántas altas y cambios haría cada lote |
-| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente` y `alumnos`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras |
+| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente`, `alumnos` y `kardex`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras; `kardex`, materias (y los alumnos ya migrados, de esta corrida o de una anterior) |
 | `--user=<username>` | Quién aplica los lotes; debe tener permiso de aplicar importaciones |
 | `--force` | Obligatorio en producción |
 
@@ -56,6 +56,7 @@ Toda plantilla da de alta lo que falta por su clave natural y, en lo que ya exis
 | `plazas` | `positions` | Horas base de la plaza de cada tipo (la suma de las claves de ese tipo) | Tipo y vigencia; nunca quita una plaza que ya no venga |
 | `historial_docente` | `teacher_history` | Nada: solo agrega los grupos que faltan | Lo que ya existe |
 | `alumnos` | `students` | Nombre, carrera, plan, campus, semestre (si es válido), estatus (si el código del SII es uno de los conocidos), modalidad y motivo del SII | Estado activo y número de control |
+| `kardex` | `kardex` | Calificación, resultado y oportunidad de cada alumno, materia y periodo; una materia «cursando» pasa a su resultado cuando llega a la historia | Nunca borra una fila que ya no venga |
 
 Lo más delicado: una segunda corrida devuelve al semestre y al orden del SII las materias que alguien acomodó en el editor de la retícula (D21) y los semestres que se corrigieron a mano en las materias cuyo semestre se tomó por nombre (D18). También devuelve los nombres de materias y aulas al del SII o del curado. Los pendientes resueltos en «Por validar» sobreviven.
 
@@ -73,6 +74,7 @@ El usuario decidió el 5 de noviembre de 2026 que si una segunda corrida pisa lo
 | `plazas` | Por decidir (no lo mencionó) | Gana el SII; no quita plazas |
 | `historial_docente` | El SII (horarios) | Solo agrega |
 | `alumnos` | Probablemente el SII | Gana el SII |
+| `kardex` | Por decidir (no lo mencionó; el kárdex no se edita en Nexus) | Gana el SII; no borra filas |
 
 Hasta decidirlo: corre en seco, mira los «Cambios» de cada lote y no hagas la corrida real de un paso cuyos cambios pisarían curaduría, o córrela solo con los pasos que sí deben tomar el SII (`--only`). La opción de conservar lo de Nexus por paso queda como issue de seguimiento.
 
@@ -84,4 +86,5 @@ De la revisión de la rama (5 de noviembre de 2026), para hacer antes de la corr
 - **Perfilador y lector:** el perfilador corta en la primera línea ilegible después de un renglón en blanco y cuenta el resto como anotación al final; la migración sigue leyendo los renglones que vengan después (y cuenta como malformadas las líneas ilegibles). Si el perfil muestra una anotación al final de más de unas líneas, revísala antes de migrar.
 - **Fallas secundarias del motor:** `ValidateImportBatch` y `ApplyImportBatch` todavía mandan al log con `report()` las fallas al marcar un lote fallido (la original sí llega limpia a la migración), y `ApplyImportBatch` guarda el mensaje de la excepción en el lote.
 - **Plazas** (paso del 6 de noviembre de 2026): confirmar con Recursos Humanos que E35, E36, E37 y E38 son asignatura, medio tiempo, tres cuartos y tiempo completo, que la jornada de apoyo es de 36 horas y qué significan los códigos 10, 20 y 95 de `tipo_nombramiento`; averiguar por qué 117 docentes con grupos en 20263 no están en `docentes2` (se quedan sin plaza y sin horas base).
+- **Kárdex** (paso del 9 de noviembre de 2026): confirmar con Servicios Escolares qué significa cada código de `tipo_evaluacion` (sobre todo E1 con estatus A y calificación 0, RC, RU, AC, EA y CG) y el `status_seleccion` S; preguntar por qué hay renglones de `seleccion_materias` de periodos cerrados, con calificación, que no están en la historia (no se migran, K3). El paso guarda una llave por renglón de la historia: el comando sube su límite de memoria a 1 GB.
 - **Lo demás** (seguimientos de la revisión): el lector abre cada archivo tres veces; `ext-intl` no está en `composer.json`; dos lotes con el mismo nombre en `_nexus/`; la fusión de materias que ignora el semestre (T7 M1) y el mapa de alias por plan para el kárdex van al plan de la parte 2.
