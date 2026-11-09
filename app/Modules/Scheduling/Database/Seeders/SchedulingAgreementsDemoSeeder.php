@@ -37,10 +37,12 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\RoomSuggestionQuery;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
 use RuntimeException;
@@ -80,8 +82,13 @@ use RuntimeException;
  *    RoomSuggestionQuery con AssignSessionRoom; se saltan las sesiones de los grupos con un préstamo rechazado o
  *    cancelado, para que sigan sin salón.
  *
- * Determinista con `$seed` sobre los mismos datos. Idempotente: si el periodo y el campus ya tienen acuerdos, no hace
- * nada. Se niega a correr en producción.
+ * Con `$mode = 'quotas'` (el paso de Scheduling que lleva al punto 5 «asignacion» de `demo:seed`) solo corre el paso 2,
+ * en todos los departamentos editables y con todos los grupos compartidos aceptados: los cupos quedan decididos, sin
+ * acuerdos pendientes, sin préstamos ni salones. Lo que una Action rechace lo detiene con el motivo, en vez de dejar el
+ * punto a medias.
+ *
+ * Determinista con `$seed` sobre los mismos datos. Idempotente: si el periodo y el campus ya tienen acuerdos (con
+ * `quotas`, grupos compartidos), no hace nada. Se niega a correr en producción.
  */
 final class SchedulingAgreementsDemoSeeder extends Seeder
 {
@@ -96,6 +103,9 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     private const array DIRECT_GROUPS = ['demo' => 4, 'massive' => 25];
 
     private const array CLEAN_DEPARTMENTS = ['demo' => 3, 'massive' => 4];
+
+    /** La demo mezclada de siempre, o solo los cupos completos del punto 5. */
+    public const array MODES = ['mixed', 'quotas'];
 
     private const array LOAN_REJECTIONS = [
         'El salón está reservado para prácticas de nuestros propios grupos en ese horario.',
@@ -135,12 +145,19 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      * @param  array<string, float|int>  $ratios  sobrescribe `loans`, `shared`, `direct_quota_groups` y `suggested_rooms`
      * @param  array<string, list<string>>|null  $cleanDepartments  códigos de departamento limpios por campus, de
      *                                                              SchedulingDemoSeeder::cleanDepartments(); sin ellos se deducen igual que ese seeder
+     * @param  string  $mode  uno de MODES
      *
-     * @throws RuntimeException en producción o si el periodo no existe
+     * @throws RuntimeException en producción, si el periodo no existe o, con `quotas`, si algo no se puede completar
+     * @throws InvalidArgumentException con un modo desconocido
      */
-    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $ratios = [], ?array $cleanDepartments = null): void
+    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $ratios = [], ?array $cleanDepartments = null, string $mode = 'mixed'): void
     {
         $this->refuseProduction();
+
+        if (! in_array($mode, self::MODES, true)) {
+            throw new InvalidArgumentException("Modo desconocido «{$mode}»: usa ".implode(', ', self::MODES).'.');
+        }
+
         $this->random = new Randomizer(new Mt19937($seed));
         $this->ratios = [
             'loans' => self::LOANS[$profile] ?? self::LOANS['demo'],
@@ -162,9 +179,11 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         config(['queue.default' => 'sync']);
 
         try {
-            Event::fakeFor(function () use ($found, $termModel, $profile, $cleanDepartments): void {
+            Event::fakeFor(function () use ($found, $termModel, $profile, $cleanDepartments, $mode): void {
                 foreach ($found as $campus) {
-                    $this->seedCampus($termModel, $campus, $profile, $cleanDepartments[$campus->code] ?? null);
+                    $mode === 'quotas'
+                        ? $this->seedCampusQuotas($termModel, $campus)
+                        : $this->seedCampus($termModel, $campus, $profile, $cleanDepartments[$campus->code] ?? null);
                 }
             }, [GroupScheduleChanged::class, GroupQuotasChanged::class]);
         } finally {
@@ -209,6 +228,38 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         if ($this->rejections !== []) {
             $this->command?->info("Acuerdos en {$campus->code}: intentos rechazados por las reglas [".collect($this->rejections)->map(fn (int $total, string $phase): string => "{$phase}: {$total}")->implode(', ').'].');
         }
+    }
+
+    /**
+     * Los cupos completos del punto 5: grupos compartidos, todos aceptados, y cupos directos en todos los departamentos
+     * editables.
+     *
+     * @throws RuntimeException si el campus no tiene grupos editables o una Action rechaza un paso
+     */
+    private function seedCampusQuotas(Term $term, Campus $campus): void
+    {
+        $already = InterdepartmentalAgreement::query()->where('term_id', $term->id)->where('campus_id', $campus->id)
+            ->where('kind', AgreementKind::SharedGroup->value)->exists();
+
+        if ($already) {
+            $this->command?->info("Cupos en {$campus->code}: ya hay grupos compartidos, no se hace nada.");
+
+            return;
+        }
+
+        $editable = $this->editableDepartments($term, $campus);
+        $usable = Group::query()->with('subject')
+            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', '!=', GroupStatus::Cancelled->value)
+            ->whereIn('department_id', array_keys($editable))
+            ->get()->sortBy(fn (Group $group): string => self::groupKey($group))->values();
+
+        if ($usable->isEmpty()) {
+            throw new RuntimeException("{$campus->code} no tiene grupos editables: hace falta llegar antes al punto 4 (propuestas aceptadas).");
+        }
+
+        $accepted = $this->seedSharedGroups($term, $campus, $usable, complete: true);
+
+        $this->command?->info("Cupos en {$campus->code}: {$accepted} grupos compartidos aceptados, {$this->summary['direct']} grupos con cupo directo.");
     }
 
     /** Cuenta un intento que una Action rechazó (ValidationException); se informa al final del campus. */
@@ -488,8 +539,12 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
 
     /**
      * @param  Collection<int, Group>  $usable  grupos editables, limpios o no
+     * @param  bool  $complete  todos aceptados, y lo que una Action rechace detiene el seeder
+     * @return int los grupos compartidos aceptados
+     *
+     * @throws RuntimeException con `$complete`, si una Action rechaza un paso
      */
-    private function seedSharedGroups(Term $term, Campus $campus, $usable): void
+    private function seedSharedGroups(Term $term, Campus $campus, $usable, bool $complete = false): int
     {
         $offered = Career::query()->whereIn('id', CareerCampus::query()->where('campus_id', $campus->id)->where('is_active', true)->select('career_id'))
             ->where('is_active', true)->orderBy('code')->get()->keyBy('id');
@@ -546,8 +601,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
 
             try {
                 app(SetGroupQuotas::class)->handle($group, [$group->owner_career_id => $group->capacity - $reserved] + ($direct === null ? [] : [$direct->id => $seats]), $head);
-            } catch (ValidationException) {
-                $this->rejected('cupos');
+            } catch (ValidationException $exception) {
+                $this->failOrCount($complete, $exception, "Los cupos de {$group->code} no se pudieron repartir", 'cupos');
 
                 continue;
             }
@@ -560,15 +615,16 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             foreach ($picked as $career) {
                 try {
                     $agreements[] = app(ProposeGroupQuota::class)->handle($group, $career, $seats, $head);
-                } catch (ValidationException) {
-                    $this->rejected('cupos');
+                } catch (ValidationException $exception) {
+                    $this->failOrCount($complete, $exception, "El grupo compartido {$group->code} con {$career->code} no se pudo proponer", 'cupos');
 
                     continue;
                 }
             }
         }
 
-        $decisions = $this->decisions($agreements, 0.40, 0.20, 0.10, reserve: false);
+        $decisions = $complete ? array_fill(0, count($agreements), 'accepted') : $this->decisions($agreements, 0.40, 0.20, 0.10, reserve: false);
+        $accepted = 0;
 
         foreach ($agreements as $index => $agreement) {
             $decision = $decisions[$index];
@@ -582,12 +638,30 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
                     'cancelled' => app(WithdrawGroupQuotaProposal::class)->handle($agreement, $requester),
                     default => null,
                 };
-            } catch (ValidationException) {
-                $this->rejected('decisiones de grupos compartidos');
+            } catch (ValidationException $exception) {
+                $this->failOrCount($complete, $exception, 'Un grupo compartido no se pudo aceptar', 'decisiones de grupos compartidos');
 
                 continue;
             }
+
+            $accepted += $decision === 'accepted' ? 1 : 0;
         }
+
+        return $accepted;
+    }
+
+    /**
+     * Con `$complete`, detiene el seeder con los motivos de la Action; si no, solo cuenta el intento rechazado.
+     *
+     * @throws RuntimeException
+     */
+    private function failOrCount(bool $complete, ValidationException $exception, string $what, string $phase): void
+    {
+        if ($complete) {
+            throw new RuntimeException("{$what}: ".implode(' ', Arr::flatten($exception->errors())), previous: $exception);
+        }
+
+        $this->rejected($phase);
     }
 
     // ------------------------------------------------------------ salones sugeridos
