@@ -344,6 +344,28 @@ describe('salones completos (punto 7 de la demo)', function () {
             ->and(GroupSession::query()->whereNotNull('room_id')->exists())->toBeFalse();
     });
 
+    it('demo por puntos: la revisión de la oferta del punto 5, y el paso de salones del punto 7 con la suya', function () {
+        $provider = app()->getProvider(SchedulingServiceProvider::class);
+        $demo = DemoContext::for(DemoVolume::Demo);
+        $checks = collect($provider->demoChecks());
+        $supply = $checks->first(fn (DemoCheck $check): bool => str_starts_with($check->label, 'La oferta de salones'));
+        $closing = $checks->first(fn (DemoCheck $check): bool => str_starts_with($check->label, 'Toda sesión presencial'));
+        $step = collect($provider->demoSteps())->first(fn (DemoStep $step): bool => $step->reaches === DemoCheckpoint::Closing);
+
+        $this->crowd->first()->update(['capacity' => 60]);
+        expect(($supply->passes)($demo))->toStartWith('1 sesiones no tendrían salón sin choque');
+
+        $this->crowd->first()->update(['capacity' => 40]);
+        expect($supply->at)->toBe([DemoCheckpoint::Staffing])
+            ->and(($supply->passes)($demo))->toBeTrue()
+            ->and(($closing->passes)($demo))->toBe('25 sesiones presenciales sin salón.');
+
+        ($step->run)($demo);
+
+        expect($closing->at)->toBe([DemoCheckpoint::Closing])
+            ->and(($closing->passes)($demo))->toBeTrue();
+    });
+
     it('volver a correrlo no cambia salones ni pide más préstamos', function () {
         seedSchedulingAgreements(mode: 'rooms');
         $before = [GroupSession::query()->orderBy('id')->pluck('room_id', 'id')->all(), InterdepartmentalAgreement::query()->count()];
