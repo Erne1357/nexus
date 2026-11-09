@@ -19,7 +19,7 @@ def main() -> int:
         return 0
 
     path = sys.argv[1]
-    limit = int(sys.argv[2]) if len(sys.argv) > 2 else 20
+    limit = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 20
 
     try:
         root = ElementTree.parse(path).getroot()
