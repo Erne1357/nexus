@@ -70,6 +70,26 @@ class FacilitiesDemoSeeder extends Seeder
     ];
 
     /**
+     * Las claves de los salones que agrega `withProcessRooms` en un campus.
+     *
+     * @return list<string>
+     */
+    public static function processRoomCodes(string $campus): array
+    {
+        $codes = [];
+
+        foreach (self::PROCESS_BUILDINGS[$campus] ?? [] as $building) {
+            foreach ($building['rooms'] as $group) {
+                for ($i = 1; $i <= $group['count']; $i++) {
+                    $codes[] = $group['prefix'].sprintf('%02d', $i);
+                }
+            }
+        }
+
+        return $codes;
+    }
+
+    /**
      * Los datos de `data/buildings.php`.
      *
      * @return array<string, list<array<string, mixed>>>

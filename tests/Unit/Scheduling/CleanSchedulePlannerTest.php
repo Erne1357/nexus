@@ -78,9 +78,28 @@ it('parte las horas de la materia en sesiones de dos horas, con la práctica de 
         ['minutes' => 120, 'kind' => SessionKind::Practica, 'practiceSpace' => true],
         ['minutes' => 120, 'kind' => SessionKind::Practica, 'practiceSpace' => true],
     ])->and(array_sum(array_column(CleanSchedulePlanner::pieces(5, 5, true, 5), 'minutes')))->toBe(600)
-        ->and(count(CleanSchedulePlanner::pieces(5, 5, true, 5)))->toBe(5)
+        ->and(array_column(CleanSchedulePlanner::pieces(5, 5, true, 5), 'minutes'))->toBe([180, 120, 180, 120])
+        ->and(array_column(CleanSchedulePlanner::pieces(5, 5, true, 5), 'practiceSpace'))->toBe([false, false, true, true])
+        ->and(array_sum(array_column(CleanSchedulePlanner::pieces(12, 8, true, 5), 'minutes')))->toBe(1200)
+        ->and(count(CleanSchedulePlanner::pieces(12, 8, true, 5)))->toBeLessThanOrEqual(5)
         ->and(CleanSchedulePlanner::pieces(0, 0, false, 5))->toBe([]);
 });
+
+it('una materia sin horas no se puede colocar y lo dice', function () {
+    (new CleanSchedulePlanner)->plan([plannerGroup('z', 'P1|1', 'S1', [])], PLANNER_DAYS, 420, 1260, 60);
+})->throws(RuntimeException::class, 'Grupo z');
+
+it('respeta las sesiones que un grupo ya tiene: no les encima otro grupo del semestre ni pasa el tope con ellas', function () {
+    $fixed = plannerGroup('fijo', 'P1|1', 'S1', [[120, SessionKind::Teoria]]) + ['sessions' => [['day' => 1, 'start' => 420, 'end' => 540, 'kind' => SessionKind::Teoria, 'roomId' => null]]];
+    $plan = (new CleanSchedulePlanner(['D1' => 1]))->plan([$fixed, plannerGroup('nuevo', 'P2|1', 'S2', [[120, SessionKind::Teoria]])], [1], 420, 660, 60, plannerRooms());
+
+    expect($plan)->not->toHaveKey('fijo')
+        ->and($plan['nuevo'][0]['start'])->toBeGreaterThanOrEqual(540);
+});
+
+it('una ventana más corta que un bloque no deja colocar nada', function () {
+    (new CleanSchedulePlanner)->plan([plannerGroup('w', 'P1|1', 'S1', [[60, SessionKind::Teoria]])], [1], 420, 450, 60);
+})->throws(RuntimeException::class, 'Grupo w');
 
 it('da a cada grupo sus horas exactas, en días distintos, dentro de la ventana y alineadas a los bloques', function () {
     $groups = [

@@ -85,6 +85,7 @@ it('para la demo por puntos con el volumen masivo agrega edificios y salones gra
         ->and($process->pluck('capacity')->all())->toBe([35, 36, 37, 38, 39, 40])
         ->and($process->pluck('department_id')->filter()->all())->toBe([])
         ->and($process->every(fn (Room $room): bool => $room->type === RoomType::Laboratorio && $room->is_active))->toBeTrue()
+        ->and(array_intersect(array_column($mixed, 'code'), [...FacilitiesDemoSeeder::processRoomCodes('C1'), ...FacilitiesDemoSeeder::processRoomCodes('C2')]))->toBe([])
         ->and(array_values(array_filter($snapshot(), fn (array $room): bool => preg_match('/^(LG|N|LN)\d/', $room['code']) !== 1)))->toBe($mixed)
         ->and($added('C1'))->toBe(88)
         ->and($added('C2'))->toBe(56)

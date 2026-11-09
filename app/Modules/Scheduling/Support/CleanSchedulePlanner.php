@@ -45,32 +45,39 @@ final class CleanSchedulePlanner
     /**
      * Las sesiones de una materia: `[minutos, tipo, espacio de práctica]`, de dos horas y una última con lo que sobre;
      * la práctica de una materia con laboratorio va aparte, en espacio de práctica (HC-06). Si salen más sesiones que
-     * días, todo va en sesiones de teoría repartidas en los días.
+     * días, prueba sesiones de tres y de cuatro horas antes de juntar todo en sesiones de teoría repartidas en los días.
      *
      * @return list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>
      */
     public static function pieces(int $theoryHours, int $practiceHours, bool $needsLab, int $dayCount): array
     {
-        $pieces = $needsLab && $practiceHours > 0
-            ? [...self::split($theoryHours, SessionKind::Teoria, false), ...self::split($practiceHours, SessionKind::Practica, true)]
-            : self::split($theoryHours + $practiceHours, SessionKind::Teoria, false);
+        foreach ([2, 3, 4] as $pieceHours) {
+            $pieces = $needsLab && $practiceHours > 0
+                ? [...self::split($theoryHours, SessionKind::Teoria, false, $pieceHours), ...self::split($practiceHours, SessionKind::Practica, true, $pieceHours)]
+                : self::split($theoryHours + $practiceHours, SessionKind::Teoria, false, $pieceHours);
 
-        return count($pieces) > $dayCount
-            ? self::split($theoryHours + $practiceHours, SessionKind::Teoria, false, $dayCount)
-            : $pieces;
+            if (count($pieces) <= $dayCount) {
+                return $pieces;
+            }
+        }
+
+        return self::split($theoryHours + $practiceHours, SessionKind::Teoria, false, (int) ceil(($theoryHours + $practiceHours) / max(1, $dayCount)));
     }
 
     /**
-     * @param  list<array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}>  $groups
+     * Un grupo que ya trae sesiones (`sessions`) no se mueve: cuenta en su plan y semestre, en su departamento y, si
+     * alguna no tiene salón, aparta uno para ella; no sale en el resultado.
+     *
+     * @param  list<array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>, sessions?: list<array{day: int, start: int, end: int, kind: SessionKind, roomId: ?string}>}>  $groups
      * @param  list<int>  $days
      * @param  RoomSupply|null  $supply  la oferta de salones del campus; sin ella (campus sin salones) no se revisan
      * @return array<string, list<array{day: int, start: int, end: int, kind: SessionKind}>> por id de grupo
      *
-     * @throws RuntimeException si un grupo no cabe sin choque
+     * @throws RuntimeException si un grupo no tiene horas o no cabe sin choque
      */
     public function plan(array $groups, array $days, int $dayStart, int $dayEnd, int $blockMinutes, ?RoomSupply $supply = null): array
     {
-        $starts = range($dayStart, $dayEnd - $blockMinutes, $blockMinutes);
+        $starts = $dayEnd - $blockMinutes >= $dayStart ? range($dayStart, $dayEnd - $blockMinutes, $blockMinutes) : [];
         $variants = [];
         $ordinals = [];
         $taken = [];
@@ -82,10 +89,14 @@ final class CleanSchedulePlanner
             $variant = $variants[$cohort][$group['subject']] = ($variants[$cohort][$group['subject']] ?? -1) + 1;
             $option = "{$cohort}|{$variant}";
 
-            if ($group['pieces'] === []) {
-                $plan[$group['id']] = [];
+            if (isset($group['sessions'])) {
+                $this->keep($group, $group['sessions'], $taken[$option], $blockMinutes, $supply);
 
                 continue;
+            }
+
+            if ($group['pieces'] === []) {
+                throw new RuntimeException("El horario limpio no puede colocar {$group['label']}: su materia no tiene horas de teoría ni de práctica.");
             }
 
             $ordinal = $ordinals[$cohort][$group['subject']];
@@ -111,6 +122,8 @@ final class CleanSchedulePlanner
 
         foreach ($starts as $start) {
             if ($start + $longest > $dayEnd) {
+                $blocked['ventana']++;
+
                 continue;
             }
 
@@ -150,6 +163,27 @@ final class CleanSchedulePlanner
     }
 
     /**
+     * Las sesiones que el grupo ya tiene: ocupan su plan y semestre y su departamento, y a las que no tienen salón se
+     * les aparta uno si queda (las que sí tienen ya están en la oferta).
+     *
+     * @param  array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}  $group
+     * @param  list<array{day: int, start: int, end: int, kind: SessionKind, roomId: ?string}>  $sessions
+     * @param  array<int, list<array{int, int}>>|null  $taken
+     */
+    private function keep(array $group, array $sessions, ?array &$taken, int $blockMinutes, ?RoomSupply $supply): void
+    {
+        $taken ??= [];
+
+        foreach ($sessions as $session) {
+            if ($session['roomId'] === null && $session['kind'] !== SessionKind::Virtual) {
+                $supply?->reserve($session['day'], $session['start'], $session['end'], $group['capacity'], $session['kind'] === SessionKind::Practica, $group['department']);
+            }
+        }
+
+        $this->commit($group, $sessions, $taken, $blockMinutes);
+    }
+
+    /**
      * Cada sesión por su lado, de la más larga a la más corta: el primer día libre y la primera hora que quepa, en días
      * distintos. Lo que aparta en salones se suelta si al final una sesión no cabe.
      *
@@ -166,13 +200,15 @@ final class CleanSchedulePlanner
         usort($order, fn (int $a, int $b): int => [$group['pieces'][$b]['minutes'], $a] <=> [$group['pieces'][$a]['minutes'], $b]);
         $rotated = [...array_slice($days, $ordinal % count($days)), ...array_slice($days, 0, $ordinal % count($days))];
         $placed = [];
+        $usedDays = [];
 
         foreach ($order as $index) {
             $piece = $group['pieces'][$index];
+            $single = ['pieces' => [$piece]] + $group;
             $found = null;
 
             foreach ($rotated as $day) {
-                if (in_array($day, array_column($placed, 'day'), true)) {
+                if (isset($usedDays[$day])) {
                     continue;
                 }
 
@@ -184,7 +220,7 @@ final class CleanSchedulePlanner
                     }
 
                     $session = ['day' => $day, 'start' => $start, 'end' => $start + $piece['minutes'], 'kind' => $piece['kind']];
-                    $reason = $this->blocker(['pieces' => [$piece]] + $group, [$session], $taken, $blockMinutes, $supply);
+                    $reason = $this->blocker($single, [$session], $taken, $blockMinutes, $supply);
 
                     if ($reason === null) {
                         $found = $session;
@@ -205,6 +241,7 @@ final class CleanSchedulePlanner
             }
 
             $placed[$index] = $found;
+            $usedDays[$found['day']] = true;
         }
 
         ksort($placed);
@@ -413,11 +450,13 @@ final class CleanSchedulePlanner
     }
 
     /**
+     * Las horas en sesiones de a lo más `$pieceHours`, lo más parejas posible.
+     *
      * @return list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>
      */
-    private static function split(int $hours, SessionKind $kind, bool $practiceSpace, ?int $max = null): array
+    private static function split(int $hours, SessionKind $kind, bool $practiceSpace, int $pieceHours = 2): array
     {
-        $count = min((int) ceil($hours / 2), $max ?? PHP_INT_MAX);
+        $count = (int) ceil($hours / max(1, $pieceHours));
         $pieces = [];
 
         for ($index = 0; $index < $count; $index++) {

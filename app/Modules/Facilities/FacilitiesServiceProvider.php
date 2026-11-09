@@ -15,7 +15,6 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
-use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Listeners\BlockDepartmentDeletionWithRooms;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -74,26 +73,35 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Con Campus I, sus prácticas grandes caben en los 6 laboratorios generales (sin dueño, de 35 lugares o más): sin
-     * ellos, el horario limpio no cabe con HC-05 (medición del Riel B, 9 de noviembre de 2026).
+     * Con el volumen masivo, cada campus tiene los salones grandes sin dueño que pide su número de grupos
+     * (FacilitiesDemoSeeder::PROCESS_BUILDINGS): sin ellos, el horario limpio y el paso de salones no caben con HC-05 y
+     * HC-06 (mediciones de los rieles A y B, 9 de noviembre de 2026). La misma condición que el paso.
      */
     public function demoChecks(): array
     {
         return [
-            new DemoCheck(DemoCheckpoint::staged(), 'Campus I tiene laboratorios generales de 35 lugares o más', function (DemoContext $demo): true|string {
-                if (! in_array('C1', $demo->campuses, true)) {
+            new DemoCheck(DemoCheckpoint::staged(), 'Con el masivo, cada campus tiene sus salones grandes de la demo por puntos', function (DemoContext $demo): true|string {
+                if ($demo->volume !== DemoVolume::Massive) {
                     return true;
                 }
 
-                $rooms = Room::query()
-                    ->whereIn('campus_id', Campus::query()->where('code', 'C1')->select('id'))
-                    ->where('is_active', true)
-                    ->where('type', RoomType::Laboratorio)
-                    ->whereNull('department_id')
-                    ->where('capacity', '>=', 35)
-                    ->count();
+                $missing = [];
 
-                return $rooms >= 6 ? true : "Solo hay {$rooms}; hacen falta 6.";
+                foreach ($demo->campuses as $code) {
+                    $expected = FacilitiesDemoSeeder::processRoomCodes($code);
+                    $found = Room::query()
+                        ->whereIn('campus_id', Campus::query()->where('code', $code)->select('id'))
+                        ->whereIn('code', $expected)
+                        ->where('is_active', true)
+                        ->whereNull('department_id')
+                        ->count();
+
+                    if ($found !== count($expected)) {
+                        $missing[] = sprintf('%s tiene %d de %d', $code, $found, count($expected));
+                    }
+                }
+
+                return $missing === [] ? true : implode('; ', $missing).'.';
             }),
         ];
     }
