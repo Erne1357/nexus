@@ -57,7 +57,7 @@ function seedStaffingDemo(): void
 }
 
 /**
- * La cadena del DemoSeeder hasta Scheduling, sin Staffing, con C1 y C2 y pocos docentes y alumnos.
+ * La cadena del DemoSeeder hasta Scheduling, sin Staffing, con C1 y C2 y pocos docentes y alumnos (los mínimos que siguen dando traslados justos: es la prueba más cara del archivo).
  */
 function seedTwoCampusWorld(): void
 {
@@ -71,8 +71,8 @@ function seedTwoCampusWorld(): void
             $this->callWith(AcademicDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
             $this->callWith(DemoStaffSeeder::class, ['campuses' => ['C1', 'C2']]);
             $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
-            $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C1' => 60, 'C2' => 80]]);
-            $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C1' => 10, 'C2' => 20]]);
+            $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C1' => 30, 'C2' => 40]]);
+            $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C1' => 6, 'C2' => 10]]);
             $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C1', 'C2']]]);
             $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
             $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
@@ -114,8 +114,11 @@ function staffingLoadsByStatus(): array
         ->all();
 }
 
-it('pasa a asignación las cargas sin choques duros, deja una en ajustes, veta las que los tienen y rankea sus grupos', function () {
+it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankeadas, asignaciones dentro y fuera del primer lugar (HC-16), reemplazos y quitadas, solicitudes en sus cuatro estados (3.11) y carga por docente (HC-08), sin duplicar al repetir', function () {
+    // Un solo DemoSeeder para todas las revisiones: es lo más caro del archivo.
     seedStaffingDemo();
+
+    // Cargas: en asignación, en ajustes y vetadas en propuesta, con sus grupos rankeados.
     $byStatus = staffingLoadsByStatus();
     $open = AcademicLoad::query()->where('term_id', $this->term->id)
         ->whereIn('status', [LoadStatus::Staffing, LoadStatus::Adjusting])->pluck('department_id');
@@ -127,10 +130,8 @@ it('pasa a asignación las cargas sin choques duros, deja una en ajustes, veta l
         ->and($byStatus[LoadStatus::Proposed->value] ?? [])->not->toBeEmpty()
         ->and($groups)->not->toBeEmpty()
         ->and($ranked->count())->toBeGreaterThan((int) floor($groups->count() * 0.9));
-});
 
-it('asigna al primer lugar y fuera de él con motivo (HC-16), con reemplazos, docentes quitados y grupos sin docente, sin duplicar al repetir', function () {
-    seedStaffingDemo();
+    // Asignaciones: primer lugar sin motivo, fuera de él con motivo, reemplazos, quitadas y grupos sin docente.
     $assignments = GroupTeacherAssignment::query()->where('term_id', $this->term->id)->get();
     $latest = $assignments->sortByDesc(fn (GroupTeacherAssignment $row): string => $row->assigned_at->format('U.u').$row->id)->groupBy('group_id')->map->first();
     $replaced = $assignments->filter(fn (GroupTeacherAssignment $row): bool => $row->replaced_at !== null && $latest[$row->group_id]->id !== $row->id);
@@ -151,21 +152,7 @@ it('asigna al primer lugar y fuera de él con motivo (HC-16), con reemplazos, do
 
     expect($openLoads->filter(fn (AcademicLoad $load): bool => ! $groupsOf($load)->whereNotNull('teacher_id')->exists()))->not->toBeEmpty();
 
-    $before = [GroupTeacherAssignment::query()->count(), ChangeRequest::query()->count(), Group::query()->whereNotNull('teacher_id')->count()];
-
-    (new class extends Seeder
-    {
-        public function run(): void
-        {
-            $this->callWith(StaffingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2']]);
-        }
-    })->setContainer(app())->__invoke();
-
-    expect([GroupTeacherAssignment::query()->count(), ChangeRequest::query()->count(), Group::query()->whereNotNull('teacher_id')->count()])->toBe($before);
-});
-
-it('deja solicitudes de cambio en sus cuatro estados (3.11) y la carga por docente con quien excede su tope (HC-08), quien queda justo y honorarios', function () {
-    seedStaffingDemo();
+    // Solicitudes de cambio y carga por docente.
     $requests = ChangeRequest::query()->where('term_id', $this->term->id)->get();
     $applied = $requests->where('status', ChangeRequestStatus::Applied);
 
@@ -198,6 +185,19 @@ it('deja solicitudes de cambio en sus cuatro estados (3.11) y la carga por docen
         ->and($seeded->filter(fn (TeacherTermLoad $load): bool => $load->assigned_hours > $load->limit_hours)->pluck('teacher_id')->all())->toBe([])
         ->and($seeded->where('remaining_hours', '<', 0)->every(fn (TeacherTermLoad $load): bool => $load->external_hours > 0))->toBeTrue()
         ->and($loads->where('remaining_hours', '<', 0)->filter(fn (TeacherTermLoad $load): bool => $load->assigned_hours > $load->limit_hours)->pluck('teacher_id')->all())->toBe([]);
+
+    // Volver a correr no duplica nada.
+    $before = [GroupTeacherAssignment::query()->count(), ChangeRequest::query()->count(), Group::query()->whereNotNull('teacher_id')->count()];
+
+    (new class extends Seeder
+    {
+        public function run(): void
+        {
+            $this->callWith(StaffingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2']]);
+        }
+    })->setContainer(app())->__invoke();
+
+    expect([GroupTeacherAssignment::query()->count(), ChangeRequest::query()->count(), Group::query()->whereNotNull('teacher_id')->count()])->toBe($before);
 });
 
 it('con dos campus siembra traslados justos entre campus (SC-09) y con la misma semilla deja la misma asignación', function () {
