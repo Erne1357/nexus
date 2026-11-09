@@ -10,6 +10,11 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -19,6 +24,7 @@ use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\SchedulingServiceProvider;
 
 /*
 | Acuerdos de prueba (tareas 3.6 y 3.7): un departamento que imparte con 16 grupos de 40 lugares y una sesión cada uno,
@@ -220,6 +226,21 @@ describe('cupos completos (punto 5 de la demo)', function () {
         AcademicLoad::query()->update(['status' => LoadStatus::Draft]);
 
         expect(fn () => seedSchedulingAgreements(mode: 'quotas'))->toThrow(RuntimeException::class, 'no tiene grupos editables');
+    });
+
+    it('demo por puntos: el paso de cupos del punto 5 deja los cupos decididos, sin acuerdos pendientes', function () {
+        $provider = app()->getProvider(SchedulingServiceProvider::class);
+        $demo = DemoContext::for(DemoVolume::Demo);
+        $steps = array_values(array_filter($provider->demoSteps(), fn (DemoStep $step): bool => $step->reaches === DemoCheckpoint::Staffing));
+        $check = collect($provider->demoChecks())->first(fn (DemoCheck $check): bool => str_starts_with($check->label, 'Cupos decididos'));
+
+        expect(($check->passes)($demo))->toBe('No hay grupos compartidos aceptados.');
+
+        ($steps[0]->run)($demo);
+
+        expect($steps[0]->label)->toStartWith('Cupos')
+            ->and($check->at)->toBe(DemoCheckpoint::since(DemoCheckpoint::Staffing))
+            ->and(($check->passes)($demo))->toBeTrue();
     });
 
     it('rechaza un modo desconocido', function () {
