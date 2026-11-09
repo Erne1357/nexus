@@ -189,7 +189,8 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                     app(SyncScheduleConflicts::class)->handle($demo->term(), $campus);
                 }
             }),
-            // Antes del horario limpio: HC-03 depende de qué carreras atiende cada grupo.
+            // Antes del horario limpio, como en el proceso: los cupos de cada grupo se deciden junto con sus horarios, y
+            // al llegar a «asignacion» ya no queda ningún acuerdo por decidir.
             new DemoStep(DemoCheckpoint::Staffing, 'Cupos: grupos compartidos aceptados y cupos directos', fn (DemoContext $demo) => $demo->runSeeder(SchedulingAgreementsDemoSeeder::class, [
                 'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
                 'campuses' => $demo->campuses,
