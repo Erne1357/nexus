@@ -77,11 +77,9 @@ final class StaffingSupplyDemoSeeder extends Seeder
             $missing = self::COVERAGE * $demand[$department->id] - ($capacity[$department->id] ?? 0);
 
             for ($n = 1; $n <= (int) ceil(max(0, $missing) / self::HIRE_HOURS); $n++) {
-                $rfc = $this->rfc($next++);
-
-                if (Teacher::withTrashed()->where('rfc', $rfc)->exists()) {
-                    continue;
-                }
+                do {
+                    $rfc = $this->rfc($next++);
+                } while (Teacher::withTrashed()->where('rfc', $rfc)->exists());
 
                 $teacher = app(CreateTeacher::class)->handle([
                     'rfc' => $rfc,

@@ -234,29 +234,17 @@ final class StaffingServiceProvider extends ModuleServiceProvider
 
                 return $unstaffed === 0 && $unrecorded === 0 ? true : "{$unstaffed} grupos sin docente y {$unrecorded} con docente sin asignación vigente.";
             }),
-            new DemoCheck([DemoCheckpoint::Rooms], 'La carga por docente está al día', function (DemoContext $demo) use ($groups): true|string {
-                $teachers = $groups($demo)->whereNotNull('teacher_id')->distinct()->count('teacher_id');
+            new DemoCheck([DemoCheckpoint::Rooms], 'La carga por docente está al día', function (DemoContext $demo): true|string {
+                $teachers = Group::query()->active()->where('term_id', $demo->term()->getKey())->whereNotNull('teacher_id')->distinct()->count('teacher_id');
                 $loads = TeacherTermLoad::query()->where('term_id', $demo->term()->getKey())->where('groups_count', '>', 0)->count();
 
                 return $teachers === $loads ? true : "{$teachers} docentes con grupos y {$loads} cargas por docente con grupos.";
             }),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Cero choques duros de docente (HC-01, HC-08, HC-09)', fn (DemoContext $demo): true|string => ($hard = DB::table('schedule_conflicts')
-                ->where('term_id', $demo->term()->getKey())->where('severity', 'hard')->whereIn('rule', ['HC-01', 'HC-08', 'HC-09'])->whereNull('resolved_at')->count()) === 0
+                ->where('term_id', $demo->term()->getKey())->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+                ->where('severity', 'hard')->whereIn('rule', ['HC-01', 'HC-08', 'HC-09'])->whereNull('resolved_at')->count()) === 0
                 ? true
                 : "{$hard} choques duros de docente."),
-        ];
-    }
-
-    /**
-     * Lo que encolaría un ranking o una carga por docente en cada escritura de la demo: los pasos de Staffing los
-     * recalculan una vez.
-     */
-    public function demoQuietEvents(): array
-    {
-        return [
-            GroupsCreated::class, GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class,
-            PositionChanged::class, ExternalLoadChanged::class, AvailabilityChanged::class, QualificationChanged::class,
-            AdscriptionChanged::class, TeacherUpdated::class, TeacherAccessChanged::class,
         ];
     }
 }

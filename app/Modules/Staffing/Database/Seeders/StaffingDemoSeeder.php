@@ -451,7 +451,8 @@ final class StaffingDemoSeeder extends Seeder
      * primero de su ranking que pasa HC-01, HC-08 y HC-09, el primer lugar si el ranking se recalculara en ese momento.
      * Al que se queda sin nadie se le busca lugar moviendo un grupo de un candidato a otro docente (repair). Luego lo
      * escribe: las primeras de cada departamento (`actions`) que van al primer lugar guardado por AssignTeacher, las
-     * demás en bloque.
+     * demás en bloque (el docente del grupo y su fila del historial, sin bitácora, como el modo `mixed`). Solo toca los
+     * grupos de las cargas en asignación. Los rankings guardados se quedan como los calculó el punto 5.
      */
     private function assignAll(Term $term, Campus $campus): void
     {
@@ -461,6 +462,7 @@ final class StaffingDemoSeeder extends Seeder
 
         $groups = Group::query()->active()->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->where('groups.term_id', $term->id)->where('groups.campus_id', $campus->id)->whereNull('groups.teacher_id')
+            ->whereIn('groups.department_id', AcademicLoad::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', LoadStatus::Staffing)->select('department_id'))
             ->orderBy('subjects.code')->orderBy('groups.code')->select('groups.*')->get();
         $rankings = $this->rankingsOf($term, $groups->modelKeys());
         $departments = Department::query()->withTrashed()->whereIn('id', $groups->pluck('department_id')->unique()->all())->get()->keyBy('id');
