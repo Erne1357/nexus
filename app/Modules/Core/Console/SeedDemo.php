@@ -33,6 +33,13 @@ final class SeedDemo extends Command
     /** La semilla de DemoSeeder y MassiveSeeder, y la de `--semilla` por omisión. */
     private const int SHOWCASE_SEED = 2027;
 
+    /**
+     * El límite de memoria mientras siembra: con el masivo, la asignación de docentes de unos 3 600 grupos pasa de los
+     * 128 MB de la consola (medido el 9 de noviembre de 2026), y un error fatal no deja ni el reporte. El mismo de las
+     * pruebas (phpunit.xml).
+     */
+    private const string MEMORY_LIMIT = '1G';
+
     public function handle(DemoRunner $runner, DemoPlan $plan): int
     {
         if ($this->laravel->environment('production')) {
@@ -84,6 +91,7 @@ final class SeedDemo extends Command
         }
 
         $started = hrtime(true);
+        ini_set('memory_limit', self::MEMORY_LIMIT);
         config(['queue.default' => 'sync']);
         $this->call('migrate:fresh', ['--force' => true]);
 

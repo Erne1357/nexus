@@ -31,7 +31,10 @@ use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Console\RecomputeConflicts;
+use App\Modules\Scheduling\Database\Seeders\CleanScheduleDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
+use App\Modules\Scheduling\Enums\ConflictSeverity;
+use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
@@ -187,13 +190,17 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                     app(SyncScheduleConflicts::class)->handle($demo->term(), $campus);
                 }
             }),
-            // Antes del horario limpio: HC-03 depende de qué carreras atiende cada grupo.
+            // Los cupos terminan la etapa 4, como el horario limpio que sigue.
             new DemoStep(DemoCheckpoint::Staffing, 'Cupos: grupos compartidos aceptados y cupos directos', fn (DemoContext $demo) => $demo->runSeeder(SchedulingAgreementsDemoSeeder::class, [
                 'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
                 'seed' => $demo->seed,
                 'mode' => 'quotas',
+            ])),
+            new DemoStep(DemoCheckpoint::Staffing, 'Horario limpio: horas exactas y sin choques, sin docente ni salón', fn (DemoContext $demo) => $demo->runSeeder(CleanScheduleDemoSeeder::class, [
+                'campuses' => $demo->campuses,
+                'term' => $demo->termCode,
             ])),
         ];
     }
@@ -236,6 +243,24 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 
                 return $conflicts === 0 ? true : "{$conflicts} choques HC-13.";
             }),
+            // Desde «asignacion», lo que deja el horario limpio (#338): todo grupo activo con horario y cero choques duros
+            // vigentes (los pasos que cambian horarios, docentes o salones recalculan al terminar); en «asignacion»,
+            // todavía sin docentes.
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Todo grupo activo tiene horario', fn (DemoContext $demo): true|string => ($missing = $groups($demo)->where('status', '!=', GroupStatus::Cancelled)->whereDoesntHave('sessions')->count()) === 0
+                ? true
+                : "{$missing} grupos activos sin horario."),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Cero choques duros', function (DemoContext $demo) use ($groups): true|string {
+                $hard = ScheduleConflict::query()->whereIn('group_id', $groups($demo)->select('id'))
+                    ->where('severity', ConflictSeverity::Hard)->whereNull('resolved_at')
+                    ->get(['rule'])->countBy('rule');
+
+                return $hard->isEmpty()
+                    ? true
+                    : 'Choques duros: '.$hard->map(fn (int $count, string $rule): string => "{$rule} ({$count})")->implode(', ').'.';
+            }),
+            new DemoCheck([DemoCheckpoint::Staffing], 'Ningún grupo tiene docente todavía', fn (DemoContext $demo): true|string => ($assigned = $groups($demo)->where('status', '!=', GroupStatus::Cancelled)->whereNotNull('teacher_id')->count()) === 0
+                ? true
+                : "{$assigned} grupos ya tienen docente."),
         ];
     }
 }
