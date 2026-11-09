@@ -16,7 +16,8 @@ use Throwable;
 
 /**
  * Siembra la demo hasta el inicio de una etapa: corre, punto por punto, los pasos que declaran los módulos; al llegar
- * a cada punto corre sus revisiones; al final deja el calendario de 20271 con la etapa del punto en curso. No borra la
+ * a cada punto corre sus revisiones; al final deja el calendario de 20271 con la etapa del punto en curso. Un paso que
+ * lanza o un punto con una revisión fallida detienen la corrida, sin calendario, y quedan en el reporte. No borra la
  * base (eso lo hace `demo:seed`), así las pruebas lo corren sobre la suya.
  *
  * Como `MassiveSeeder` (`WithoutModelEvents`), todo corre sin eventos de modelo, y los eventos que los módulos piden
@@ -51,7 +52,15 @@ final readonly class DemoRunner
             foreach ($checkpoints as $checkpoint) {
                 foreach ($this->plan->stepsFor($checkpoint) as $step) {
                     $started = hrtime(true);
-                    ($step->run)($demo);
+
+                    try {
+                        ($step->run)($demo);
+                    } catch (Throwable $exception) {
+                        $checks[] = ['checkpoint' => $checkpoint, 'label' => $step->label, 'passed' => false, 'reason' => $this->describe($exception)];
+
+                        return;
+                    }
+
                     $seconds = (hrtime(true) - $started) / 1e9;
 
                     $this->authenticateAdmin();
@@ -64,6 +73,10 @@ final readonly class DemoRunner
 
                 if ($afterCheckpoint !== null) {
                     $afterCheckpoint($checkpoint, $results);
+                }
+
+                if (in_array(false, array_column($results, 'passed'), true)) {
+                    return;
                 }
             }
 
@@ -90,7 +103,7 @@ final readonly class DemoRunner
         try {
             $result = ($check->passes)($demo);
         } catch (Throwable $exception) {
-            $result = $exception->getMessage();
+            $result = $this->describe($exception);
         }
 
         return [
@@ -104,6 +117,14 @@ final readonly class DemoRunner
     /**
      * El admin, en cuanto existe, aunque hubiera otro usuario autenticado; al terminar, `run()` devuelve el que había.
      */
+    /**
+     * El motivo de una excepción para el reporte, con dónde se lanzó.
+     */
+    private function describe(Throwable $exception): string
+    {
+        return sprintf('%s (%s:%d)', $exception->getMessage(), basename($exception->getFile()), $exception->getLine());
+    }
+
     private function authenticateAdmin(): void
     {
         if (Auth::user()?->username === 'admin') {

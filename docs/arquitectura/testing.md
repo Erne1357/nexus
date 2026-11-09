@@ -48,7 +48,7 @@ La base es ancha en unit: las reglas de negocio son lo que más cambia y lo más
   ```bash
   docker compose exec app php artisan migrate:fresh --seed --seeder='Database\Seeders\MassiveSeeder'
   ```
-- **Demo por puntos del proceso** (`php artisan demo:seed`, `app/Modules/Core/Console/SeedDemo.php`): borra la base de la conexión y siembra la demo hasta el **inicio** de una etapa, con todo lo anterior terminado en todos los departamentos y esa etapa recién abierta, sin nada capturado (decisión del usuario, 9 de noviembre de 2026). Así se prueba la app de ese punto en adelante. Sin `--force` pide confirmación; nunca corre en producción. Imprime cada paso con su tiempo, las revisiones del punto (✓ o ✗) y los usuarios para entrar, y sale con error si una revisión falla.
+- **Demo por puntos del proceso** (`php artisan demo:seed`, `app/Modules/Core/Console/SeedDemo.php`): borra la base de la conexión y siembra la demo hasta el **inicio** de una etapa, con todo lo anterior terminado en todos los departamentos y esa etapa recién abierta, sin nada capturado (decisión del usuario, 9 de noviembre de 2026). Así se prueba la app de ese punto en adelante. Sin `--force` pide confirmación; nunca corre en producción. Imprime cada paso con su tiempo, las revisiones del punto (✓ o ✗) y los usuarios para entrar. Un paso que lanza o un punto con una revisión fallida detienen la corrida: el comando lo muestra en la tabla («punto, paso o revisión, motivo») y sale con error.
 
   ```bash
   docker compose exec -e DB_DATABASE=nexus_massive_a app php artisan demo:seed --hasta=asignacion --volumen=masivo --force
