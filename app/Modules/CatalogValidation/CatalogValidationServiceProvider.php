@@ -145,6 +145,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
                 ? $allIn('20263', ReviewStatus::Validated)
                 : true),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Toda revisión de Ene-Jun 2027 validada (HC-14)', fn (DemoContext $demo): true|string => $allIn($demo->termCode, ReviewStatus::Validated)),
+            new DemoCheck([DemoCheckpoint::Proposal], 'Cada catálogo lo validó un jefe, no el admin (CV-S1)', fn (DemoContext $demo): true|string => ($byAdmin = $reviews($demo->termCode)->where('validated_by', $demo->admin()->getKey())->count()) === 0
+                ? true
+                : "{$byAdmin} revisiones las validó el admin: a su departamento le falta jefe."),
         ];
     }
 }

@@ -398,3 +398,16 @@ it('no corre en producción', function () {
         ->and(User::query()->count())->toBe(0)
         ->and(Term::query()->count())->toBe(0);
 });
+
+it('con todos los departamentos nombra jefe también a los que no tienen carreras ni materias en el campus (demo por puntos, CV-S1)', function () {
+    seedDemoCatalog(['C2']);
+
+    (new DatabaseSeeder)->setContainer(app())->callWith(DemoStaffSeeder::class, ['campuses' => ['C2'], 'allDepartments' => true]);
+
+    $heads = RoleAssignment::query()->current()->where('role', Role::JefeDepartamento)->pluck('org_unit_id');
+
+    expect(Department::query()->where('is_active', true)->pluck('id')->diff($heads)->all())->toBe([])
+        ->and(demoStaff()->pluck('username')->all())->toContain('jefe.ee', 'jefe.mm')
+        ->and(demoStaff()->pluck('username')->filter(fn (string $username): bool => str_starts_with($username, 'jpd.'))->sort()->values()->all())
+        ->toBe(['jpd.cb.c2', 'jpd.cea.c2', 'jpd.ii.c2', 'jpd.sc.c2']);
+});
