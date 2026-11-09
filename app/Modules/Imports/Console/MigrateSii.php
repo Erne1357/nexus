@@ -15,10 +15,14 @@ use Throwable;
 
 /**
  * Migra la exportación del SII a Nexus por el motor de importación. Con `--dry-run` corre todo y lo revierte.
- * Imprime solo cuentas por lote, nunca valores; el detalle por fila está en `<dir>/_incidencias.csv`.
+ * Imprime solo cuentas por lote, nunca valores; el detalle por fila está en `<dir>/_incidencias.csv`. Sube el límite
+ * de memoria a 1 GB porque el paso `kardex` guarda una llave por cada uno de los dos millones de renglones de la
+ * historia.
  */
 final class MigrateSii extends Command
 {
+    private const string MEMORY_LIMIT = '1G';
+
     protected $signature = 'imports:migrate-sii
         {dir : Carpeta con la exportación del SII}
         {--dry-run : Corre todo y revierte sin dejar rastro}
@@ -30,6 +34,8 @@ final class MigrateSii extends Command
 
     public function handle(RunSiiMigration $migration): int
     {
+        ini_set('memory_limit', self::MEMORY_LIMIT);
+
         if ($this->laravel->isProduction() && ! $this->option('force')) {
             $this->components->error('En producción hay que pasar --force.');
 
