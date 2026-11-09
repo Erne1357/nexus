@@ -67,19 +67,50 @@ final class TeacherRosterGenerator
 
     private const array SURNAMES = ['Hernández', 'García', 'Martínez', 'López', 'González', 'Pérez', 'Rodríguez', 'Sánchez', 'Ramírez', 'Cruz', 'Flores', 'Gómez', 'Morales', 'Vázquez', 'Jiménez', 'Reyes', 'Díaz', 'Torres', 'Gutiérrez', 'Ruiz', 'Mendoza', 'Aguilar', 'Ortiz', 'Moreno', 'Castillo', 'Romero', 'Álvarez', 'Chávez', 'Rivera', 'Juárez', 'Domínguez', 'Guerrero', 'Estrada', 'Ortega', 'Contreras', 'Soto', 'Delgado', 'Navarro', 'Rangel', 'Villa', 'Carrasco', 'Holguín', 'Terrazas', 'Márquez', 'Lozano', 'Salas', 'Meza', 'Barraza', 'Ponce', 'Sandoval'];
 
-    public function __construct(private readonly Randomizer $random) {}
+    /**
+     * Disponibilidad de siempre: en cada hora empieza un bloque con 35 % de probabilidad y 65 de cada 100 bloques son
+     * «no disponible», así que queda bloqueada como un tercio de la semana.
+     */
+    public const int BLOCK_CHANCE = 35;
+
+    public const int UNAVAILABLE_SHARE = 65;
+
+    /**
+     * Disponibilidad del modo proceso (demo por puntos, docs/arquitectura/testing.md): 15 % por hora y 40 de cada
+     * 100 bloques «no disponible», unos 10 % de la semana, para que HC-09 deje asignar todos los grupos en el punto 6.
+     */
+    public const int PROCESS_BLOCK_CHANCE = 15;
+
+    public const int PROCESS_UNAVAILABLE_SHARE = 40;
+
+    public function __construct(
+        private readonly Randomizer $random,
+        private readonly int $blockChance = self::BLOCK_CHANCE,
+        private readonly int $unavailableShare = self::UNAVAILABLE_SHARE,
+    ) {}
+
+    /**
+     * El generador del modo proceso: la misma variedad con la disponibilidad más holgada.
+     */
+    public static function forProcess(Randomizer $random): self
+    {
+        return new self($random, self::PROCESS_BLOCK_CHANCE, self::PROCESS_UNAVAILABLE_SHARE);
+    }
 
     /**
      * @param  string  $campusCode  clave del campus (da la primera letra del RFC)
      * @param  list<int>  $subjectCounts  materias de cada departamento, en el orden de la lista del seeder
+     * @param  list<int>  $departmentWeights  peso de cada departamento para la adscripción principal, en el mismo orden;
+     *                                        vacío, sus materias más 2
      * @return list<array<string, mixed>>
      */
-    public function generate(string $campusCode, int $count, array $subjectCounts): array
+    public function generate(string $campusCode, int $count, array $subjectCounts, array $departmentWeights = []): array
     {
         $teachers = [];
+        $weights = $departmentWeights !== [] ? $departmentWeights : array_map(fn (int $subjects): int => $subjects + 2, $subjectCounts);
 
         for ($i = 0; $i < $count; $i++) {
-            $teachers[] = $this->teacher($campusCode, $i, $subjectCounts);
+            $teachers[] = $this->teacher($campusCode, $i, $subjectCounts, $weights);
         }
 
         return $teachers;
@@ -87,14 +118,15 @@ final class TeacherRosterGenerator
 
     /**
      * @param  list<int>  $subjectCounts
+     * @param  list<int>  $weights
      * @return array<string, mixed>
      */
-    private function teacher(string $campusCode, int $i, array $subjectCounts): array
+    private function teacher(string $campusCode, int $i, array $subjectCounts, array $weights): array
     {
         $rfc = $this->rfc($campusCode, $i);
         $isActive = $i % 17 !== 5;
         $deleted = $i % 23 === 7;
-        $adscriptions = $this->adscriptions($i, $subjectCounts);
+        $adscriptions = $this->adscriptions($i, $weights);
         $pool = $subjectCounts[$adscriptions[0]['dept']];
         $name = $this->name($i);
         $profile = $this->profile($pool);
@@ -141,15 +173,16 @@ final class TeacherRosterGenerator
     }
 
     /**
-     * La principal y, a veces, uno o dos departamentos más, distintos.
+     * La principal (los primeros docentes, una por departamento; luego, según `$weights`) y, a veces, uno o dos
+     * departamentos más, distintos.
      *
-     * @param  list<int>  $subjectCounts
+     * @param  list<int>  $weights
      * @return list<array{dept: int, primary: bool}>
      */
-    private function adscriptions(int $i, array $subjectCounts): array
+    private function adscriptions(int $i, array $weights): array
     {
-        $departments = count($subjectCounts);
-        $primary = $i < $departments ? $i : $this->weightedDepartment($subjectCounts);
+        $departments = count($weights);
+        $primary = $i < $departments ? $i : $this->weightedDepartment($weights);
         $adscriptions = [['dept' => $primary, 'primary' => true]];
 
         if ($departments > 1 && $i % 5 === 1) {
@@ -168,11 +201,10 @@ final class TeacherRosterGenerator
     }
 
     /**
-     * @param  list<int>  $subjectCounts
+     * @param  list<int>  $weights
      */
-    private function weightedDepartment(array $subjectCounts): int
+    private function weightedDepartment(array $weights): int
     {
-        $weights = array_map(fn (int $subjects): int => $subjects + 2, $subjectCounts);
         $pick = $this->random->getInt(1, array_sum($weights));
 
         foreach ($weights as $dept => $weight) {
@@ -240,14 +272,14 @@ final class TeacherRosterGenerator
             $hour = 7;
 
             while ($hour < 21) {
-                if ($this->random->getInt(1, 100) > 35) {
+                if ($this->random->getInt(1, 100) > $this->blockChance) {
                     $hour++;
 
                     continue;
                 }
 
                 $length = min($this->random->getInt(1, 3), 21 - $hour);
-                $kind = $this->random->getInt(1, 100) <= 65 ? 'unavailable' : 'preferred';
+                $kind = $this->random->getInt(1, 100) <= $this->unavailableShare ? 'unavailable' : 'preferred';
                 $last = array_key_last($blocks);
 
                 if ($last !== null && $blocks[$last]['day'] === $day && $blocks[$last]['kind'] === $kind && $blocks[$last]['ends_at'] === sprintf('%02d:00', $hour)) {

@@ -2,12 +2,20 @@
 
 namespace App\Modules\CatalogValidation;
 
+use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Listeners\CreateReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnCampusUpdated;
 use App\Modules\CatalogValidation\Listeners\NotifyPendingReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\CampusUpdated;
@@ -102,6 +110,44 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
             CatalogValidationPermission::ReviewValidate,
             CatalogValidationPermission::ReviewReopen,
             CatalogValidationPermission::ReviewFlag,
+        ];
+    }
+
+    /**
+     * Demo por puntos:
+     * - a «validación», en el masivo, Ago-Dic 2026 validado como foto anterior y las altas y bajas hacia Ene-Jun 2027
+     *   (sin dar de baja más que aulas); Ene-Jun 2027 queda todo pendiente;
+     * - a «propuesta», cada revisión de Ene-Jun 2027 empezada y validada por el jefe de su departamento, sin observaciones.
+     */
+    public function demoSteps(): array
+    {
+        $profile = fn (DemoContext $demo): string => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo';
+
+        return [
+            new DemoStep(DemoCheckpoint::CatalogValidation, 'Foto del periodo anterior y altas y bajas', fn (DemoContext $demo) => $demo->runSeeder(CatalogValidationDemoSeeder::class, ['profile' => $profile($demo), 'mode' => 'previous'])),
+            new DemoStep(DemoCheckpoint::Proposal, 'Catálogos de Ene-Jun 2027 validados por cada jefe', fn (DemoContext $demo) => $demo->runSeeder(CatalogValidationDemoSeeder::class, ['profile' => $profile($demo), 'mode' => 'validated'])),
+        ];
+    }
+
+    public function demoChecks(): array
+    {
+        $reviews = fn (string $termCode) => CatalogReview::query()->whereRelation('term', 'code', $termCode);
+        $allIn = function (string $termCode, ReviewStatus $status) use ($reviews): true|string {
+            $total = $reviews($termCode)->count();
+            $other = $reviews($termCode)->where('status', '!=', $status)->count();
+
+            return $total > 0 && $other === 0 ? true : "{$other} de {$total} revisiones de {$termCode} no están en «{$status->label()}».";
+        };
+
+        return [
+            new DemoCheck([DemoCheckpoint::CatalogValidation], 'Toda revisión de Ene-Jun 2027 pendiente', fn (DemoContext $demo): true|string => $allIn($demo->termCode, ReviewStatus::Pending)),
+            new DemoCheck([DemoCheckpoint::CatalogValidation], 'En el masivo, Ago-Dic 2026 validado como foto anterior', fn (DemoContext $demo): true|string => $demo->volume === DemoVolume::Massive
+                ? $allIn('20263', ReviewStatus::Validated)
+                : true),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Toda revisión de Ene-Jun 2027 validada (HC-14)', fn (DemoContext $demo): true|string => $allIn($demo->termCode, ReviewStatus::Validated)),
+            new DemoCheck([DemoCheckpoint::Proposal], 'Cada catálogo lo validó un jefe, no el admin (CV-S1)', fn (DemoContext $demo): true|string => ($byAdmin = $reviews($demo->termCode)->where('validated_by', $demo->admin()->getKey())->count()) === 0
+                ? true
+                : "{$byAdmin} revisiones las validó el admin: a su departamento le falta jefe."),
         ];
     }
 }
