@@ -13,12 +13,17 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\SubjectRoomDefault;
+use App\Modules\Scheduling\Actions\Sessions\AssignSessionRoom;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Models\ScheduleConflict;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Acuerdos de prueba (tareas 3.6 y 3.7): un departamento que imparte con 16 grupos de 40 lugares y una sesión cada uno,
@@ -224,5 +229,75 @@ describe('cupos completos (punto 5 de la demo)', function () {
 
     it('rechaza un modo desconocido', function () {
         expect(fn () => seedSchedulingAgreements(mode: 'todo'))->toThrow(InvalidArgumentException::class);
+    });
+});
+
+describe('salones completos (punto 7 de la demo)', function () {
+    beforeEach(function () {
+        // Nueve grupos más el lunes de 7:00 a 9:00 junto al primero: diez sesiones a la vez y solo ocho salones sin
+        // dueño, así que dos van a salones del otro departamento y piden préstamo.
+        $this->crowd = collect(range(1, 9))->map(function (): Group {
+            $group = Group::factory()->withQuota()->create([
+                'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'capacity' => 40,
+                'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
+            ]);
+            GroupSession::factory()->for($group)->on(1, '07:00', '09:00')->create();
+
+            return $group;
+        });
+    });
+
+    it('da salón a toda sesión presencial sin choques duros y deja aceptados los préstamos que pidió (HC-02, HC-05, HC-10)', function () {
+        $virtual = GroupSession::factory()->for($this->groups[1])->on(3, '18:00', '19:00')->virtual()->create();
+
+        seedSchedulingAgreements(mode: 'rooms');
+
+        $loans = InterdepartmentalAgreement::query()->where('kind', AgreementKind::RoomLoan->value)->get();
+        $hard = ScheduleConflict::query()->whereIn('rule', ['HC-02', 'HC-05', 'HC-06', 'HC-10', 'HC-11'])->pluck('message')->all();
+
+        expect(GroupSession::query()->whereKeyNot($virtual->id)->whereNull('room_id')->count())->toBe(0)
+            ->and($virtual->fresh()->room_id)->toBeNull()
+            ->and($loans)->toHaveCount(2)
+            ->and($loans->every(fn (InterdepartmentalAgreement $loan): bool => $loan->status === AgreementStatus::Accepted && $loan->to_department_id === $this->dueno->id))->toBeTrue()
+            ->and($hard)->toBe([]);
+    });
+
+    it('HC-06: la práctica de una materia con laboratorio va a un espacio de práctica; el salón por defecto de la materia va primero', function () {
+        $building = Building::query()->firstOrFail();
+        $lab = Room::factory()->ofType(RoomType::Laboratorio)->capacity(40)->create(['building_id' => $building->id]);
+        $favorite = Room::query()->whereNull('department_id')->orderByDesc('code')->firstOrFail();
+        $subject = Subject::factory()->create(['department_id' => $this->imparte->id, 'needs_lab' => true]);
+        SubjectRoomDefault::factory()->create(['subject_id' => $subject->id, 'campus_id' => $this->campus->id, 'room_id' => $favorite->id, 'priority' => 1]);
+        $group = Group::factory()->withQuota()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'capacity' => 30, 'subject_id' => $subject->id]);
+        $theory = GroupSession::factory()->for($group)->on(4, '15:00', '16:00')->create();
+        $practice = GroupSession::factory()->for($group)->on(5, '15:00', '17:00')->practica()->create();
+
+        seedSchedulingAgreements(mode: 'rooms');
+
+        expect($practice->fresh()->room_id)->toBe($lab->id)
+            ->and($theory->fresh()->room_id)->toBe($favorite->id);
+    });
+
+    it('deja bitácora de una asignación por departamento con la Action, y las demás quedan escritas igual', function () {
+        seedSchedulingAgreements(mode: 'rooms');
+
+        expect(Activity::query()->where('event', AssignSessionRoom::EVENT)->count())->toBe(1)
+            ->and(GroupSession::query()->whereNull('room_id')->count())->toBe(0);
+    });
+
+    it('se detiene sin escribir nada si una sesión no tiene salón que le sirva (HC-05)', function () {
+        $this->crowd->first()->update(['capacity' => 60]);
+
+        expect(fn () => seedSchedulingAgreements(mode: 'rooms'))->toThrow(RuntimeException::class, 'no tienen un salón libre')
+            ->and(GroupSession::query()->whereNotNull('room_id')->exists())->toBeFalse();
+    });
+
+    it('volver a correrlo no cambia salones ni pide más préstamos', function () {
+        seedSchedulingAgreements(mode: 'rooms');
+        $before = [GroupSession::query()->orderBy('id')->pluck('room_id', 'id')->all(), InterdepartmentalAgreement::query()->count()];
+
+        seedSchedulingAgreements(mode: 'rooms');
+
+        expect([GroupSession::query()->orderBy('id')->pluck('room_id', 'id')->all(), InterdepartmentalAgreement::query()->count()])->toBe($before);
     });
 });
