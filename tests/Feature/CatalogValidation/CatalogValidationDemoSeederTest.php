@@ -69,9 +69,9 @@ function seedCatalogScenario(array $campuses = ['C1', 'C2'], bool $previous = tr
     }
 }
 
-function runCatalogDemoSeeder(string $profile = 'demo'): void
+function runCatalogDemoSeeder(string $profile = 'demo', string $mode = 'mixed'): void
 {
-    (new DatabaseSeeder)->setContainer(app())->callWith(CatalogValidationDemoSeeder::class, ['profile' => $profile]);
+    (new DatabaseSeeder)->setContainer(app())->callWith(CatalogValidationDemoSeeder::class, ['profile' => $profile, 'mode' => $mode]);
 }
 
 function cvReview(string $term, string $department, Catalog $catalog, ?string $campus = null): CatalogReview
@@ -274,4 +274,36 @@ it('reparte las observaciones en registros distintos', function () {
     $flags = CatalogReviewFlag::query()->get();
 
     expect($flags->groupBy(fn (CatalogReviewFlag $flag): string => $flag->review_id.'/'.$flag->flaggable_id)->filter(fn ($same) => $same->count() > 1)->count())->toBe(0);
+});
+
+it('en modo previous valida el periodo anterior y simula los cambios, y deja todo el actual pendiente (demo por puntos, punto 2)', function () {
+    seedCatalogScenario();
+
+    runCatalogDemoSeeder('massive', 'previous');
+
+    $current = CatalogReview::query()->whereRelation('term', 'code', '20271');
+
+    expect(CatalogReview::query()->whereRelation('term', 'code', '20263')->where('status', '!=', ReviewStatus::Validated)->count())->toBe(0)
+        ->and((clone $current)->count())->toBeGreaterThan(0)
+        ->and((clone $current)->where('status', '!=', ReviewStatus::Pending)->count())->toBe(0)
+        ->and(app(CatalogReviewQuery::class)->summary(cvReview('20271', 'CB', Catalog::Teachers))['added'])->not->toBeEmpty()
+        ->and(CatalogReviewFlag::count())->toBe(0)
+        ->and(Activity::query()->where('event', 'reminded')->count())->toBe(0);
+});
+
+it('en modo validated empieza y valida cada revisión del periodo actual con el jefe de su departamento, sin observaciones (demo por puntos, punto 3)', function () {
+    seedCatalogScenario(previous: false);
+
+    runCatalogDemoSeeder('demo', 'validated');
+
+    $reviews = CatalogReview::query()->whereRelation('term', 'code', '20271')->with(['department', 'validator'])->get();
+
+    expect($reviews)->not->toBeEmpty()
+        ->and($reviews->every(fn (CatalogReview $review): bool => $review->status === ReviewStatus::Validated && $review->validator->name === "Jefe {$review->department->code}"))->toBeTrue()
+        ->and(Activity::query()->where('description', 'like', 'Empezó la revisión de %')->count())->toBe($reviews->count())
+        ->and(CatalogReviewFlag::count())->toBe(0);
+});
+
+it('rechaza un modo que no existe', function () {
+    expect(fn () => runCatalogDemoSeeder('demo', 'todo'))->toThrow(RuntimeException::class, 'Modo desconocido');
 });
