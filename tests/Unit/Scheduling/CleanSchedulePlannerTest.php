@@ -15,13 +15,13 @@ use App\Modules\Scheduling\Validation\State\StateRoom;
 | docentes que no choquen (HC-01). Las horas van en minutos desde la medianoche.
 */
 
-const PLANNER_DAYS = [1, 2, 3, 4, 5];
+const CLEAN_PLANNER_DAYS = [1, 2, 3, 4, 5];
 
 /**
  * @param  list<array{0: int, 1: SessionKind, 2?: bool}>  $pieces  [minutos, tipo, espacio de práctica]
  * @return array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}
  */
-function plannerGroup(string $id, string $cohort, string $subject, array $pieces = [[120, SessionKind::Teoria], [120, SessionKind::Teoria]], ?string $department = 'D1', int $capacity = 30): array
+function cleanPlannerGroup(string $id, string $cohort, string $subject, array $pieces = [[120, SessionKind::Teoria], [120, SessionKind::Teoria]], ?string $department = 'D1', int $capacity = 30): array
 {
     return [
         'id' => $id,
@@ -34,7 +34,7 @@ function plannerGroup(string $id, string $cohort, string $subject, array $pieces
     ];
 }
 
-function plannerRooms(int $classrooms = 20, int $labs = 0, int $capacity = 40): RoomSupply
+function cleanPlannerRooms(int $classrooms = 20, int $labs = 0, int $capacity = 40): RoomSupply
 {
     $rooms = [];
 
@@ -52,7 +52,7 @@ function plannerRooms(int $classrooms = 20, int $labs = 0, int $capacity = 40): 
 /**
  * @param  array<string, list<array{day: int, start: int, end: int, kind: SessionKind}>>  $plan
  */
-function plannerOverlap(array $plan, string $a, string $b): bool
+function cleanPlannerOverlap(array $plan, string $a, string $b): bool
 {
     foreach ($plan[$a] as $mine) {
         foreach ($plan[$b] as $other) {
@@ -86,28 +86,28 @@ it('parte las horas de la materia en sesiones de dos horas, con la práctica de 
 });
 
 it('una materia sin horas no se puede colocar y lo dice', function () {
-    (new CleanSchedulePlanner)->plan([plannerGroup('z', 'P1|1', 'S1', [])], PLANNER_DAYS, 420, 1260, 60);
+    (new CleanSchedulePlanner)->plan([cleanPlannerGroup('z', 'P1|1', 'S1', [])], CLEAN_PLANNER_DAYS, 420, 1260, 60);
 })->throws(RuntimeException::class, 'Grupo z');
 
 it('respeta las sesiones que un grupo ya tiene: no les encima otro grupo del semestre ni pasa el tope con ellas', function () {
-    $fixed = plannerGroup('fijo', 'P1|1', 'S1', [[120, SessionKind::Teoria]]) + ['sessions' => [['day' => 1, 'start' => 420, 'end' => 540, 'kind' => SessionKind::Teoria, 'roomId' => null]]];
-    $plan = (new CleanSchedulePlanner(['D1' => 1]))->plan([$fixed, plannerGroup('nuevo', 'P2|1', 'S2', [[120, SessionKind::Teoria]])], [1], 420, 660, 60, plannerRooms());
+    $fixed = cleanPlannerGroup('fijo', 'P1|1', 'S1', [[120, SessionKind::Teoria]]) + ['sessions' => [['day' => 1, 'start' => 420, 'end' => 540, 'kind' => SessionKind::Teoria, 'roomId' => null]]];
+    $plan = (new CleanSchedulePlanner(['D1' => 1]))->plan([$fixed, cleanPlannerGroup('nuevo', 'P2|1', 'S2', [[120, SessionKind::Teoria]])], [1], 420, 660, 60, cleanPlannerRooms());
 
     expect($plan)->not->toHaveKey('fijo')
         ->and($plan['nuevo'][0]['start'])->toBeGreaterThanOrEqual(540);
 });
 
 it('una ventana más corta que un bloque no deja colocar nada', function () {
-    (new CleanSchedulePlanner)->plan([plannerGroup('w', 'P1|1', 'S1', [[60, SessionKind::Teoria]])], [1], 420, 450, 60);
+    (new CleanSchedulePlanner)->plan([cleanPlannerGroup('w', 'P1|1', 'S1', [[60, SessionKind::Teoria]])], [1], 420, 450, 60);
 })->throws(RuntimeException::class, 'Grupo w');
 
 it('da a cada grupo sus horas exactas, en días distintos, dentro de la ventana y alineadas a los bloques', function () {
     $groups = [
-        plannerGroup('a', 'P1|1', 'S1', [[120, SessionKind::Teoria], [60, SessionKind::Teoria], [120, SessionKind::Practica, true]]),
-        plannerGroup('b', 'P1|1', 'S2'),
+        cleanPlannerGroup('a', 'P1|1', 'S1', [[120, SessionKind::Teoria], [60, SessionKind::Teoria], [120, SessionKind::Practica, true]]),
+        cleanPlannerGroup('b', 'P1|1', 'S2'),
     ];
 
-    $plan = (new CleanSchedulePlanner)->plan($groups, PLANNER_DAYS, 420, 1260, 60, plannerRooms(labs: 2));
+    $plan = (new CleanSchedulePlanner)->plan($groups, CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms(labs: 2));
 
     foreach ($groups as $group) {
         $sessions = $plan[$group['id']];
@@ -120,32 +120,32 @@ it('da a cada grupo sus horas exactas, en días distintos, dentro de la ventana 
             expect($session['start'])->toBeGreaterThanOrEqual(420)
                 ->and($session['end'])->toBeLessThanOrEqual(1260)
                 ->and(($session['start'] - 420) % 60)->toBe(0)
-                ->and(PLANNER_DAYS)->toContain($session['day']);
+                ->and(CLEAN_PLANNER_DAYS)->toContain($session['day']);
         }
     }
 });
 
 it('no encima los grupos de un mismo plan y semestre, así el alumno tipo tiene combinación (HC-03)', function () {
-    $groups = array_map(fn (int $n): array => plannerGroup("g{$n}", 'P1|3', "S{$n}"), range(1, 8));
+    $groups = array_map(fn (int $n): array => cleanPlannerGroup("g{$n}", 'P1|3', "S{$n}"), range(1, 8));
 
-    $plan = (new CleanSchedulePlanner)->plan($groups, PLANNER_DAYS, 420, 1260, 60, plannerRooms());
+    $plan = (new CleanSchedulePlanner)->plan($groups, CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms());
 
     foreach (range(1, 7) as $a) {
         foreach (range($a + 1, 8) as $b) {
-            expect(plannerOverlap($plan, "g{$a}", "g{$b}"))->toBeFalse();
+            expect(cleanPlannerOverlap($plan, "g{$a}", "g{$b}"))->toBeFalse();
         }
     }
 });
 
 it('acomoda un semestre lleno aunque la misma hora en todos los días ya no quepa', function () {
     $pieces = CleanSchedulePlanner::pieces(3, 2, false, 5);
-    $groups = array_map(fn (int $n): array => plannerGroup("g{$n}", 'P1|7', "S{$n}", array_map(fn (array $piece): array => [$piece['minutes'], $piece['kind']], $pieces)), range(1, 12));
+    $groups = array_map(fn (int $n): array => cleanPlannerGroup("g{$n}", 'P1|7', "S{$n}", array_map(fn (array $piece): array => [$piece['minutes'], $piece['kind']], $pieces)), range(1, 12));
 
-    $plan = (new CleanSchedulePlanner)->plan($groups, PLANNER_DAYS, 420, 1260, 60, plannerRooms());
+    $plan = (new CleanSchedulePlanner)->plan($groups, CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms());
 
     foreach (range(1, 11) as $a) {
         foreach (range($a + 1, 12) as $b) {
-            expect(plannerOverlap($plan, "g{$a}", "g{$b}"))->toBeFalse();
+            expect(cleanPlannerOverlap($plan, "g{$a}", "g{$b}"))->toBeFalse();
         }
     }
 
@@ -153,9 +153,9 @@ it('acomoda un semestre lleno aunque la misma hora en todos los días ya no quep
 });
 
 it('no pasa del tope de grupos simultáneos de un departamento, aun en planes distintos', function () {
-    $groups = array_map(fn (int $n): array => plannerGroup("g{$n}", "P{$n}|1", 'S1'), range(1, 6));
+    $groups = array_map(fn (int $n): array => cleanPlannerGroup("g{$n}", "P{$n}|1", 'S1'), range(1, 6));
 
-    $plan = (new CleanSchedulePlanner(['D1' => 2]))->plan($groups, PLANNER_DAYS, 420, 1260, 60, plannerRooms());
+    $plan = (new CleanSchedulePlanner(['D1' => 2]))->plan($groups, CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms());
     $load = [];
 
     foreach ($plan as $sessions) {
@@ -171,40 +171,40 @@ it('no pasa del tope de grupos simultáneos de un departamento, aun en planes di
 
 it('el tope del departamento cuenta los grupos de todos los campus que coloca la misma instancia', function () {
     $planner = new CleanSchedulePlanner(['D1' => 1]);
-    $first = $planner->plan([plannerGroup('c1', 'C1|P|1', 'S1', [[120, SessionKind::Teoria]])], [1], 420, 540, 60, plannerRooms());
-    $second = $planner->plan([plannerGroup('c2', 'C2|P|1', 'S1', [[120, SessionKind::Teoria]])], [1, 2], 420, 540, 60, plannerRooms());
+    $first = $planner->plan([cleanPlannerGroup('c1', 'C1|P|1', 'S1', [[120, SessionKind::Teoria]])], [1], 420, 540, 60, cleanPlannerRooms());
+    $second = $planner->plan([cleanPlannerGroup('c2', 'C2|P|1', 'S1', [[120, SessionKind::Teoria]])], [1, 2], 420, 540, 60, cleanPlannerRooms());
 
-    expect(plannerOverlap([...$first, ...$second], 'c1', 'c2'))->toBeFalse();
+    expect(cleanPlannerOverlap([...$first, ...$second], 'c1', 'c2'))->toBeFalse();
 });
 
 it('solo coloca una sesión donde le queda un salón: la práctica de laboratorio en un espacio de práctica (HC-02, HC-06)', function () {
-    $groups = array_map(fn (int $n): array => plannerGroup("g{$n}", "P{$n}|1", 'S1', [[120, SessionKind::Practica, true]], "D{$n}"), range(1, 3));
+    $groups = array_map(fn (int $n): array => cleanPlannerGroup("g{$n}", "P{$n}|1", 'S1', [[120, SessionKind::Practica, true]], "D{$n}"), range(1, 3));
 
-    $plan = (new CleanSchedulePlanner)->plan($groups, [1], 420, 780, 60, plannerRooms(classrooms: 10, labs: 1));
+    $plan = (new CleanSchedulePlanner)->plan($groups, [1], 420, 780, 60, cleanPlannerRooms(classrooms: 10, labs: 1));
 
-    expect(plannerOverlap($plan, 'g1', 'g2'))->toBeFalse()
-        ->and(plannerOverlap($plan, 'g1', 'g3'))->toBeFalse()
-        ->and(plannerOverlap($plan, 'g2', 'g3'))->toBeFalse();
+    expect(cleanPlannerOverlap($plan, 'g1', 'g2'))->toBeFalse()
+        ->and(cleanPlannerOverlap($plan, 'g1', 'g3'))->toBeFalse()
+        ->and(cleanPlannerOverlap($plan, 'g2', 'g3'))->toBeFalse();
 });
 
 it('falla con el grupo y el motivo cuando no cabe sin choque', function () {
     $planner = new CleanSchedulePlanner;
 
-    expect(fn () => $planner->plan([plannerGroup('x', 'P1|1', 'S1', [[180, SessionKind::Teoria]])], [1], 420, 540, 60, plannerRooms()))
+    expect(fn () => $planner->plan([cleanPlannerGroup('x', 'P1|1', 'S1', [[180, SessionKind::Teoria]])], [1], 420, 540, 60, cleanPlannerRooms()))
         ->toThrow(RuntimeException::class, 'Grupo x')
-        ->and(fn () => $planner->plan([plannerGroup('y', 'P1|1', 'S1', capacity: 50)], PLANNER_DAYS, 420, 1260, 60, plannerRooms(capacity: 40)))
+        ->and(fn () => $planner->plan([cleanPlannerGroup('y', 'P1|1', 'S1', capacity: 50)], CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms(capacity: 40)))
         ->toThrow(RuntimeException::class, 'salón');
 });
 
 it('sin salones que revisar (campus que no los usa) solo cuida el semestre, el departamento y la ventana', function () {
-    $plan = (new CleanSchedulePlanner)->plan([plannerGroup('a', 'P1|1', 'S1', capacity: 500)], PLANNER_DAYS, 420, 1260, 60);
+    $plan = (new CleanSchedulePlanner)->plan([cleanPlannerGroup('a', 'P1|1', 'S1', capacity: 500)], CLEAN_PLANNER_DAYS, 420, 1260, 60);
 
     expect($plan['a'])->toHaveCount(2);
 });
 
 it('da lo mismo con los mismos datos', function () {
-    $groups = array_map(fn (int $n): array => plannerGroup("g{$n}", 'P'.($n % 3).'|1', "S{$n}"), range(1, 12));
+    $groups = array_map(fn (int $n): array => cleanPlannerGroup("g{$n}", 'P'.($n % 3).'|1', "S{$n}"), range(1, 12));
 
-    expect((new CleanSchedulePlanner(['D1' => 4]))->plan($groups, PLANNER_DAYS, 420, 1260, 60, plannerRooms()))
-        ->toBe((new CleanSchedulePlanner(['D1' => 4]))->plan($groups, PLANNER_DAYS, 420, 1260, 60, plannerRooms()));
+    expect((new CleanSchedulePlanner(['D1' => 4]))->plan($groups, CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms()))
+        ->toBe((new CleanSchedulePlanner(['D1' => 4]))->plan($groups, CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms()));
 });
