@@ -7,6 +7,8 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -23,6 +25,7 @@ use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
+use App\Modules\Staffing\StaffingServiceProvider;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentProgress;
 use Database\Seeders\DatabaseSeeder;
@@ -162,4 +165,19 @@ it('da de alta docentes de asignatura donde la capacidad no llega a 1.35 veces l
         ->and($hired->sole()->adscriptions->sole()->is_primary)->toBeTrue()
         ->and($hired->sole()->positions->sole()->base_hours)->toBe(StaffingSupplyDemoSeeder::HIRE_HOURS)
         ->and($hired->sole()->positions->sole()->valid_from->lte($this->term->starts_on))->toBeTrue();
+});
+
+it('la revisión del punto 5 compara cada carga con los grupos de su mismo campus: una carga sin grupos ahí puede quedarse en borrador', function () {
+    ($this->group)('A1', 1, '07:00', '09:00', 1);
+    ($this->teacher)('Ana', 4);
+    $other = Campus::factory()->create(['code' => 'C1']);
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $other->id, 'department_id' => $this->department->id]);
+    ($this->seedMode)('start');
+    $check = collect(app(StaffingServiceProvider::class, ['app' => app()])->demoChecks())->firstWhere('label', 'Toda carga con grupos está en asignación');
+
+    expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBeTrue();
+
+    AcademicLoad::query()->whereKey($this->load->id)->update(['status' => LoadStatus::Proposed->value]);
+
+    expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBe('1 cargas con grupos no están en asignación.');
 });

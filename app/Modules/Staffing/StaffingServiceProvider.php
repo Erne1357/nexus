@@ -212,10 +212,15 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
 
         return [
-            new DemoCheck([DemoCheckpoint::Staffing], 'Toda carga con grupos está en asignación', function (DemoContext $demo) use ($groups): true|string {
+            new DemoCheck([DemoCheckpoint::Staffing], 'Toda carga con grupos está en asignación', function (DemoContext $demo): true|string {
                 $pending = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->where('status', '!=', LoadStatus::Staffing)
                     ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
-                    ->whereIn('department_id', $groups($demo)->select('department_id'))->count();
+                    ->whereExists(Group::query()->active()->selectRaw('1')
+                        ->whereColumn('groups.term_id', 'academic_loads.term_id')
+                        ->whereColumn('groups.campus_id', 'academic_loads.campus_id')
+                        ->whereColumn('groups.department_id', 'academic_loads.department_id')
+                        ->toBase())
+                    ->count();
 
                 return $pending === 0 ? true : "{$pending} cargas con grupos no están en asignación.";
             }),

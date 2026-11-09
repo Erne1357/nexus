@@ -57,7 +57,6 @@ use App\Modules\Staffing\Models\TeacherTermLoad;
 use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Seeder;
-use Illuminate\Process\Pool;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -692,8 +691,8 @@ final class StaffingDemoSeeder extends Seeder
     }
 
     /**
-     * Un `staffing:rank` por departamento y campus contra la misma base que este proceso, `PARALLEL_RANKINGS` a la vez
-     * (los de más grupos primero, así los bloques tardan parecido).
+     * Un `staffing:rank` por departamento y campus contra la misma base que este proceso, hasta `PARALLEL_RANKINGS` a la
+     * vez: en cuanto uno termina entra el siguiente, y los de más grupos van primero, así el más largo no espera a nadie.
      *
      * @param  list<array{0: string, 1: string}>  $scopes  campus y departamento
      */
@@ -701,20 +700,38 @@ final class StaffingDemoSeeder extends Seeder
     {
         $connection = (string) config('database.default');
         $env = ['DB_CONNECTION' => $connection, 'DB_DATABASE' => (string) config("database.connections.{$connection}.database")];
+        $running = [];
+        $failures = [];
+        $settle = function (int $slots) use (&$running, &$failures): void {
+            while (count($running) >= $slots) {
+                foreach ($running as $key => $process) {
+                    if (! $process->running()) {
+                        $result = $process->wait();
 
-        foreach (array_chunk($scopes, self::PARALLEL_RANKINGS) as $chunk) {
-            $results = Process::pool(function (Pool $pool) use ($term, $chunk, $env): void {
-                foreach ($chunk as [$campus, $department]) {
-                    $pool->path(base_path())->env($env)->timeout(900)
-                        ->command([PHP_BINARY, '-d', 'memory_limit=1G', 'artisan', 'staffing:rank', $term->code, "--campus={$campus}", "--department={$department}"]);
+                        if ($result->failed()) {
+                            $failures[] = trim($result->errorOutput() ?: $result->output());
+                        }
+
+                        unset($running[$key]);
+                    }
                 }
-            })->start()->wait();
 
-            foreach ($results as $result) {
-                if ($result->failed()) {
-                    throw new RuntimeException('Falló un ranking en paralelo: '.trim($result->errorOutput() ?: $result->output()));
+                if (count($running) >= $slots) {
+                    usleep(200_000);
                 }
             }
+        };
+
+        foreach ($scopes as [$campus, $department]) {
+            $settle(self::PARALLEL_RANKINGS);
+            $running[] = Process::path(base_path())->env($env)->timeout(900)
+                ->start([PHP_BINARY, '-d', 'memory_limit=1G', 'artisan', 'staffing:rank', $term->code, "--campus={$campus}", "--department={$department}"]);
+        }
+
+        $settle(1);
+
+        if ($failures !== []) {
+            throw new RuntimeException('Falló un ranking en paralelo: '.$failures[0]);
         }
     }
 
