@@ -2,8 +2,9 @@
 
 namespace App\Modules\Core\Console;
 
-use App\Modules\Core\Demo\DemoAdmin;
+use App\Modules\Core\Database\Seeders\DemoAdminPasswordSeeder;
 use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoPlan;
 use App\Modules\Core\Demo\DemoReport;
 use App\Modules\Core\Demo\DemoRunner;
 use App\Modules\Core\Enums\DemoCheckpoint;
@@ -29,7 +30,10 @@ final class SeedDemo extends Command
 
     protected $description = 'Borra la base y siembra la demo hasta el inicio de una etapa del proceso';
 
-    public function handle(DemoRunner $runner): int
+    /** La semilla de DemoSeeder y MassiveSeeder, y la de `--semilla` por omisión. */
+    private const int SHOWCASE_SEED = 2027;
+
+    public function handle(DemoRunner $runner, DemoPlan $plan): int
     {
         if ($this->laravel->environment('production')) {
             $this->error('Los datos demo no se siembran en producción.');
@@ -59,6 +63,18 @@ final class SeedDemo extends Command
             return self::INVALID;
         }
 
+        if ($target === DemoCheckpoint::All && $seed !== self::SHOWCASE_SEED) {
+            $this->error('«todo» siembra DemoSeeder o MassiveSeeder con su propia semilla ('.self::SHOWCASE_SEED.'): --semilla no aplica.');
+
+            return self::INVALID;
+        }
+
+        if ($target !== DemoCheckpoint::All && ($missing = $this->checkpointsWithoutSteps($plan, $target)) !== []) {
+            $this->error(sprintf('Todavía no se puede llegar a «%s»: no hay pasos para %s. Se agregan con los pasos de cada módulo (docs/arquitectura/testing.md, «Demo por puntos del proceso»).', $target->value, implode(', ', $missing)));
+
+            return self::FAILURE;
+        }
+
         $database = DB::connection()->getDatabaseName();
 
         if (! $this->option('force') && ! $this->confirm("Esto borra la base «{$database}» y la vuelve a sembrar. ¿Seguir?")) {
@@ -78,7 +94,7 @@ final class SeedDemo extends Command
                 '--class' => $volume === DemoVolume::Massive ? 'Database\Seeders\MassiveSeeder' : 'Database\Seeders\DemoSeeder',
                 '--force' => true,
             ]);
-            DemoAdmin::useDemoPassword();
+            $this->call('db:seed', ['--class' => DemoAdminPasswordSeeder::class, '--force' => true]);
         } else {
             $report = $runner->run($target, DemoContext::for($volume, $seed, $this));
             $this->printChecks($report, $target);
@@ -89,6 +105,19 @@ final class SeedDemo extends Command
         $this->printUsers();
 
         return $report?->failed() ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Los puntos del camino a `$target` que todavía no tienen pasos: llegar ahí dejaría la base vacía de esa etapa.
+     *
+     * @return list<string>
+     */
+    private function checkpointsWithoutSteps(DemoPlan $plan, DemoCheckpoint $target): array
+    {
+        return array_values(array_map(
+            fn (DemoCheckpoint $checkpoint): string => $checkpoint->value,
+            array_filter(DemoCheckpoint::upTo($target), fn (DemoCheckpoint $checkpoint): bool => $plan->stepsFor($checkpoint) === []),
+        ));
     }
 
     /**
@@ -113,7 +142,7 @@ final class SeedDemo extends Command
 
     private function printUsers(): void
     {
-        $this->line('Usuarios (contraseña «'.DemoAdmin::PASSWORD.'»): admin (todo el Tec), coord.isc.c2 (coordinador de ISC en Campus II), jefe.sc (jefe de Sistemas y Computación).');
+        $this->line('Usuarios (contraseña «'.DemoAdminPasswordSeeder::PASSWORD.'»): admin (todo el Tec), coord.isc.c2 (coordinador de ISC en Campus II), jefe.sc (jefe de Sistemas y Computación).');
         $this->line('Docentes: su número de empleado, con la contraseña de NEXUS_DEFAULT_PASSWORD (piden cambiarla).');
     }
 }

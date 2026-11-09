@@ -1,5 +1,8 @@
 <?php
 
+use App\Modules\Core\Demo\DemoPlan;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Models\User;
 
 /*
@@ -33,7 +36,7 @@ it('rechaza una semilla que no es número', function () {
 it('sin --force pregunta antes de borrar y con «no» deja la base como estaba', function () {
     User::factory()->create();
 
-    $this->artisan('demo:seed', ['--hasta' => 'propuesta'])
+    $this->artisan('demo:seed', ['--hasta' => 'validacion'])
         ->expectsConfirmation('Esto borra la base «'.config('database.connections.pgsql.database').'» y la vuelve a sembrar. ¿Seguir?', 'no')
         ->expectsOutput('Sin cambios.')
         ->assertExitCode(1);
@@ -47,4 +50,21 @@ it('se niega en producción', function () {
     $this->artisan('demo:seed', ['--force' => true])
         ->expectsOutputToContain('Los datos demo no se siembran en producción.')
         ->assertExitCode(1);
+});
+
+it('no deja pedir un punto cuyo camino tiene puntos sin pasos, y lo dice antes de borrar', function () {
+    User::factory()->create();
+    app()->instance(DemoPlan::class, new DemoPlan([new DemoStep(DemoCheckpoint::Catalogs, 'base', fn () => null)]));
+
+    $this->artisan('demo:seed', ['--hasta' => 'propuesta', '--force' => true])
+        ->expectsOutputToContain('Todavía no se puede llegar a «propuesta»: no hay pasos para validacion, propuesta.')
+        ->assertExitCode(1);
+
+    expect(User::query()->count())->toBe(1);
+});
+
+it('todo usa la semilla de DemoSeeder y MassiveSeeder y rechaza otra', function () {
+    $this->artisan('demo:seed', ['--hasta' => 'todo', '--semilla' => '7', '--force' => true])
+        ->expectsOutputToContain('«todo» siembra DemoSeeder o MassiveSeeder con su propia semilla (2027): --semilla no aplica.')
+        ->assertExitCode(2);
 });

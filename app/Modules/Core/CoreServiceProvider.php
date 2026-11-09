@@ -11,11 +11,11 @@ use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Console\SeedDemo;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
+use App\Modules\Core\Database\Seeders\DemoAdminPasswordSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Database\Seeders\TermHistorySeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
-use App\Modules\Core\Demo\DemoAdmin;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoPlan;
@@ -150,29 +150,32 @@ final class CoreServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Demo por puntos: lo base, el admin con la contraseña demo y los periodos llevan a «catálogos»; abrir 20271 en
-     * los campus del volumen (en el masivo también 20263, la foto anterior de la validación) lleva a «validación».
-     * Sin TermCalendarDemoSeeder: el calendario de 20271 lo escribe DemoRunner y no hay ventanas propias de Campus I.
+     * Demo por puntos: lo base, el admin con la contraseña demo y los periodos 20261, 20263 y 20271 llevan a
+     * «catálogos»; abrir 20271 en los campus del volumen (en el masivo también 20263, la foto anterior de la
+     * validación) lleva a «validación». En el masivo, el historial de periodos desde 2014 va justo antes de abrir,
+     * después de los alumnos, como en MassiveSeeder (StudentsDemoSeeder liga el periodo de ingreso solo a los que ya
+     * existen). Sin TermCalendarDemoSeeder: el calendario de 20271 lo escribe DemoRunner, sin ventanas propias de
+     * Campus I, y 20263 queda sin calendario.
      */
     public function demoSteps(): array
     {
         return [
             new DemoStep(DemoCheckpoint::Catalogs, 'Campus, organigrama, admin y periodos', function (DemoContext $demo): void {
-                foreach ([CampusSeeder::class, OrgChartSeeder::class, AdminUserSeeder::class, DemoTermSeeder::class] as $seeder) {
+                foreach ([CampusSeeder::class, OrgChartSeeder::class, AdminUserSeeder::class, DemoAdminPasswordSeeder::class, DemoTermSeeder::class] as $seeder) {
                     $demo->runSeeder($seeder);
                 }
-
-                DemoAdmin::useDemoPassword();
-
+            }),
+            new DemoStep(DemoCheckpoint::CatalogValidation, 'Abrir Ene-Jun 2027', function (DemoContext $demo): void {
                 if ($demo->volume === DemoVolume::Massive) {
                     $demo->runSeeder(TermHistorySeeder::class);
                 }
+
+                $demo->runSeeder(TermOpeningDemoSeeder::class, [
+                    'openings' => $demo->volume === DemoVolume::Massive
+                        ? [$demo->termCode => $demo->campuses, '20263' => $demo->campuses]
+                        : [$demo->termCode => $demo->campuses],
+                ]);
             }),
-            new DemoStep(DemoCheckpoint::CatalogValidation, 'Abrir Ene-Jun 2027', fn (DemoContext $demo) => $demo->runSeeder(TermOpeningDemoSeeder::class, [
-                'openings' => $demo->volume === DemoVolume::Massive
-                    ? [$demo->termCode => $demo->campuses, '20263' => $demo->campuses]
-                    : [$demo->termCode => $demo->campuses],
-            ])),
         ];
     }
 
@@ -193,7 +196,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
             new DemoCheck(DemoCheckpoint::staged(), 'El admin entra con la contraseña demo', function (DemoContext $demo): true|string {
                 $admin = $demo->admin();
 
-                return Hash::check(DemoAdmin::PASSWORD, $admin->password) && ! $admin->must_change_password
+                return Hash::check(DemoAdminPasswordSeeder::PASSWORD, $admin->password) && ! $admin->must_change_password
                     ? true
                     : 'El admin no tiene la contraseña demo o debe cambiarla.';
             }),

@@ -58,7 +58,8 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Demo por puntos: los edificios y salones de los campus del volumen llevan a «catálogos».
+     * Demo por puntos: los edificios y salones de los campus del volumen llevan a «catálogos», con los laboratorios
+     * generales de Campus I que solo trae este modo (FacilitiesDemoSeeder::PROCESS_ROOMS).
      */
     public function demoSteps(): array
     {
@@ -66,27 +67,28 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
             new DemoStep(DemoCheckpoint::Catalogs, 'Edificios y salones', fn (DemoContext $demo) => $demo->runSeeder(FacilitiesDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'seed' => $demo->seed,
+                'forProcess' => true,
             ])),
         ];
     }
 
     /**
-     * Con Campus I, sus prácticas grandes caben en salones de práctica de 35 lugares o más (los 6 laboratorios
-     * generales): sin ellos, el horario limpio no cabe con HC-05 (medición del Riel B, 9 de noviembre de 2026).
+     * Con Campus I, sus prácticas grandes caben en los 6 laboratorios generales (sin dueño, de 35 lugares o más): sin
+     * ellos, el horario limpio no cabe con HC-05 (medición del Riel B, 9 de noviembre de 2026).
      */
     public function demoChecks(): array
     {
         return [
-            new DemoCheck(DemoCheckpoint::staged(), 'Campus I tiene salones de práctica de 35 lugares o más', function (DemoContext $demo): true|string {
+            new DemoCheck(DemoCheckpoint::staged(), 'Campus I tiene laboratorios generales de 35 lugares o más', function (DemoContext $demo): true|string {
                 if (! in_array('C1', $demo->campuses, true)) {
                     return true;
                 }
 
-                $practice = array_values(array_filter(RoomType::cases(), fn (RoomType $type): bool => $type->isPracticeSpace()));
                 $rooms = Room::query()
                     ->whereIn('campus_id', Campus::query()->where('code', 'C1')->select('id'))
                     ->where('is_active', true)
-                    ->whereIn('type', $practice)
+                    ->where('type', RoomType::Laboratorio)
+                    ->whereNull('department_id')
                     ->where('capacity', '>=', 35)
                     ->count();
 

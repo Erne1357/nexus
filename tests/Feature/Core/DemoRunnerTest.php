@@ -13,6 +13,7 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Enums\StageStatus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\TermCalendarQuery;
 use Illuminate\Support\Facades\Event;
 
@@ -128,14 +129,17 @@ it('silencia los eventos que piden los módulos y deja pasar los demás', functi
     expect($heard)->toBe(['normal']);
 });
 
-it('deja al admin autenticado para las Actions de los pasos', function () {
+it('corre los pasos como admin y al terminar devuelve al usuario que había', function () {
+    $other = User::factory()->create(['username' => 'coord.prueba']);
+    $this->actingAs($other);
     $user = null;
 
     demoRunnerWith([new DemoStep(DemoCheckpoint::Catalogs, 'quién', function () use (&$user): void {
         $user = auth()->user()?->username;
     })])->run(DemoCheckpoint::Catalogs, DemoContext::for(DemoVolume::Demo));
 
-    expect($user)->toBe('admin');
+    expect($user)->toBe('admin')
+        ->and(auth()->user()?->username)->toBe('coord.prueba');
 });
 
 it('se niega en producción', function () {

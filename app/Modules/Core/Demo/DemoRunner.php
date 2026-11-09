@@ -20,8 +20,8 @@ use Throwable;
  * base (eso lo hace `demo:seed`), así las pruebas lo corren sobre la suya.
  *
  * Como `MassiveSeeder` (`WithoutModelEvents`), todo corre sin eventos de modelo, y los eventos que los módulos piden
- * silenciar (`demoQuietEvents()`) se descartan. El admin queda autenticado en cuanto existe, porque las Actions que usan
- * los pasos registran quién hizo cada cosa.
+ * silenciar (`demoQuietEvents()`) se descartan. Mientras corre, el admin queda autenticado en cuanto existe, porque las
+ * Actions que usan los pasos registran quién hizo cada cosa; al terminar vuelve el usuario que había.
  */
 final readonly class DemoRunner
 {
@@ -42,6 +42,8 @@ final readonly class DemoRunner
         $checkpoints = DemoCheckpoint::upTo($target);
         $steps = [];
         $checks = [];
+
+        $previousUser = Auth::user();
 
         $work = function () use ($checkpoints, $target, $demo, $afterCheckpoint, &$steps, &$checks): void {
             $this->authenticateAdmin();
@@ -70,7 +72,12 @@ final readonly class DemoRunner
 
         $withoutModelEvents = fn () => Model::withoutEvents($work);
         $quiet = $this->plan->quietEvents();
-        $quiet === [] ? $withoutModelEvents() : Event::fakeFor($withoutModelEvents, $quiet);
+
+        try {
+            $quiet === [] ? $withoutModelEvents() : Event::fakeFor($withoutModelEvents, $quiet);
+        } finally {
+            $previousUser === null ? Auth::forgetUser() : Auth::setUser($previousUser);
+        }
 
         return new DemoReport($steps, $checks);
     }
@@ -94,9 +101,12 @@ final readonly class DemoRunner
         ];
     }
 
+    /**
+     * El admin, en cuanto existe, aunque hubiera otro usuario autenticado; al terminar, `run()` devuelve el que había.
+     */
     private function authenticateAdmin(): void
     {
-        if (Auth::check()) {
+        if (Auth::user()?->username === 'admin') {
             return;
         }
 
