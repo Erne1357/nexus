@@ -295,7 +295,11 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             return;
         }
 
-        $plan = $this->roomPlan($term, $campus);
+        ['plan' => $plan, 'missing' => $missing] = $this->roomPlan($term, $campus);
+
+        if ($missing !== []) {
+            throw new RuntimeException(count($missing)." sesiones de {$campus->code} no tienen un salón libre que les sirva sin choque (HC-02, HC-05, HC-06, HC-11); por ejemplo: ".implode('; ', array_slice($missing, 0, 5)).'.');
+        }
         $first = [];
         $bulk = [];
 
@@ -361,9 +365,9 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      * sin dueño antes que los que piden préstamo. Si con esas preferencias a alguna sesión no le toca salón, reparte
      * de nuevo solo por el más justo.
      *
-     * @return list<array{session: StateSession, group: StateGroup, room: StateRoom, label: string}>
+     * No escribe nada.
      *
-     * @throws RuntimeException si alguna sesión no tiene salón posible; no escribe nada
+     * @return array{plan: list<array{session: StateSession, group: StateGroup, room: StateRoom, label: string}>, missing: list<string>}
      */
     private function roomPlan(Term $term, Campus $campus): array
     {
@@ -406,11 +410,23 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             }
 
             if ($missing === []) {
-                return $plan;
+                break;
             }
         }
 
-        throw new RuntimeException(count($missing)." sesiones de {$campus->code} no tienen un salón libre que les sirva sin choque (HC-02, HC-05, HC-06, HC-11); por ejemplo: ".implode('; ', array_slice($missing, 0, 5)).'.');
+        return ['plan' => $plan, 'missing' => $missing];
+    }
+
+    /**
+     * Las sesiones presenciales sin salón del campus a las que el paso de salones (modo `rooms`) no podría darles uno
+     * sin choque, descritas («Cálculo Integral, grupo A3 el lunes de 7:00 a 9:00»). La usa la revisión del punto 5 de
+     * la demo, «la oferta de salones alcanza para el horario». No escribe nada.
+     *
+     * @return list<string>
+     */
+    public function missingRooms(Term $term, Campus $campus): array
+    {
+        return $this->roomPlan($term, $campus)['missing'];
     }
 
     /**

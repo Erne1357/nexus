@@ -310,6 +310,19 @@ describe('salones completos (punto 7 de la demo)', function () {
             ->and(GroupSession::query()->whereNotNull('room_id')->exists())->toBeFalse();
     });
 
+    it('dice qué sesiones se quedarían sin salón posible, sin escribir nada', function () {
+        $seeder = new SchedulingAgreementsDemoSeeder;
+
+        expect($seeder->missingRooms($this->term, $this->campus))->toBe([]);
+
+        $this->crowd->first()->update(['capacity' => 60]);
+        $missing = $seeder->missingRooms($this->term, $this->campus);
+
+        expect($missing)->toHaveCount(1)
+            ->and($missing[0])->toContain('el lunes de 7:00 a 9:00')
+            ->and(GroupSession::query()->whereNotNull('room_id')->exists())->toBeFalse();
+    });
+
     it('volver a correrlo no cambia salones ni pide más préstamos', function () {
         seedSchedulingAgreements(mode: 'rooms');
         $before = [GroupSession::query()->orderBy('id')->pluck('room_id', 'id')->all(), InterdepartmentalAgreement::query()->count()];
