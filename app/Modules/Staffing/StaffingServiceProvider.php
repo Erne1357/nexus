@@ -2,9 +2,17 @@
 
 namespace App\Modules\Staffing;
 
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Faculty\Events\AdscriptionChanged;
@@ -18,15 +26,23 @@ use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
+use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
 use App\Modules\Staffing\Models\ChangeRequest;
+use App\Modules\Staffing\Models\GroupTeacherAssignment;
+use App\Modules\Staffing\Models\StaffingRanking;
+use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -160,6 +176,82 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         return [
             StaffingPermission::OfferView,
             StaffingPermission::MyLoadView,
+        ];
+    }
+
+    /**
+     * Demo por puntos:
+     * - a «validación», altas de docentes de asignatura donde la capacidad no llega a 1.35 veces la demanda esperada
+     *   (StaffingSupplyDemoSeeder), antes de validar 20271;
+     * - a «asignación», cada carga en propuesta pasa a asignación con su jefe y se calcula el ranking de todos los grupos;
+     * - a «salones», docente para todo grupo activo, `teacher_term_loads` y choques al día.
+     */
+    public function demoSteps(): array
+    {
+        $staffing = fn (DemoContext $demo, string $mode) => $demo->runSeeder(StaffingDemoSeeder::class, [
+            'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
+            'campuses' => $demo->campuses,
+            'term' => $demo->termCode,
+            'seed' => $demo->seed,
+            'mode' => $mode,
+        ]);
+
+        return [
+            new DemoStep(DemoCheckpoint::CatalogValidation, 'Plantilla suficiente para la asignación', fn (DemoContext $demo) => $demo->runSeeder(StaffingSupplyDemoSeeder::class, [
+                'campuses' => $demo->campuses, 'term' => $demo->termCode, 'seed' => $demo->seed,
+            ])),
+            new DemoStep(DemoCheckpoint::Staffing, 'Cargas a asignación y rankings', fn (DemoContext $demo) => $staffing($demo, 'start')),
+            new DemoStep(DemoCheckpoint::Rooms, 'Docente para todo grupo', fn (DemoContext $demo) => $staffing($demo, 'staffed')),
+        ];
+    }
+
+    public function demoChecks(): array
+    {
+        $groups = fn (DemoContext $demo): Builder => Group::query()->active()
+            ->where('term_id', $demo->term()->getKey())
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
+
+        return [
+            new DemoCheck([DemoCheckpoint::Staffing], 'Toda carga con grupos está en asignación', function (DemoContext $demo) use ($groups): true|string {
+                $pending = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->where('status', '!=', LoadStatus::Staffing)
+                    ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+                    ->whereIn('department_id', $groups($demo)->select('department_id'))->count();
+
+                return $pending === 0 ? true : "{$pending} cargas con grupos no están en asignación.";
+            }),
+            new DemoCheck([DemoCheckpoint::Staffing], 'Todo grupo activo tiene ranking', fn (DemoContext $demo): true|string => ($missing = $groups($demo)->whereNotIn('id', StaffingRanking::query()->select('group_id'))->count()) === 0
+                ? true
+                : "{$missing} grupos sin ranking."),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Todo grupo activo tiene docente con su asignación vigente', function (DemoContext $demo) use ($groups): true|string {
+                $unstaffed = $groups($demo)->whereNull('teacher_id')->count();
+                $unrecorded = $groups($demo)->whereNotNull('teacher_id')
+                    ->whereNotIn('id', GroupTeacherAssignment::query()->whereNull('replaced_at')->select('group_id'))->count();
+
+                return $unstaffed === 0 && $unrecorded === 0 ? true : "{$unstaffed} grupos sin docente y {$unrecorded} con docente sin asignación vigente.";
+            }),
+            new DemoCheck([DemoCheckpoint::Rooms], 'La carga por docente está al día', function (DemoContext $demo) use ($groups): true|string {
+                $teachers = $groups($demo)->whereNotNull('teacher_id')->distinct()->count('teacher_id');
+                $loads = TeacherTermLoad::query()->where('term_id', $demo->term()->getKey())->where('groups_count', '>', 0)->count();
+
+                return $teachers === $loads ? true : "{$teachers} docentes con grupos y {$loads} cargas por docente con grupos.";
+            }),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Cero choques duros de docente (HC-01, HC-08, HC-09)', fn (DemoContext $demo): true|string => ($hard = DB::table('schedule_conflicts')
+                ->where('term_id', $demo->term()->getKey())->where('severity', 'hard')->whereIn('rule', ['HC-01', 'HC-08', 'HC-09'])->whereNull('resolved_at')->count()) === 0
+                ? true
+                : "{$hard} choques duros de docente."),
+        ];
+    }
+
+    /**
+     * Lo que encolaría un ranking o una carga por docente en cada escritura de la demo: los pasos de Staffing los
+     * recalculan una vez.
+     */
+    public function demoQuietEvents(): array
+    {
+        return [
+            GroupsCreated::class, GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class,
+            PositionChanged::class, ExternalLoadChanged::class, AvailabilityChanged::class, QualificationChanged::class,
+            AdscriptionChanged::class, TeacherUpdated::class, TeacherAccessChanged::class,
         ];
     }
 }

@@ -27,6 +27,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
+use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
@@ -37,6 +38,7 @@ use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\ValidationResult;
 use App\Modules\Scheduling\Validation\ValidationScope;
+use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
@@ -136,6 +138,12 @@ final class StaffingDemoSeeder extends Seeder
 
     /** Los modos de `run()`. */
     public const array MODES = ['mixed', 'start', 'staffed'];
+
+    /**
+     * En el modo `staffed`, a cuántos candidatos de un grupo sin docente se les intenta liberar lugar, y entre cuántos se
+     * busca a quién pasarle el grupo que se mueve.
+     */
+    private const int REPAIR_CANDIDATES = 25;
 
     /**
      * Por perfil: parte de los grupos que se asignan, asignaciones por AssignTeacher por departamento, reemplazos y
@@ -437,9 +445,12 @@ final class StaffingDemoSeeder extends Seeder
     }
 
     /**
-     * Da docente a cada grupo activo sin docente del campus, contra una foto del campus que se va actualizando: primero
-     * el de menos candidatos, con el primero de su ranking que pasa. Las primeras de cada departamento (`actions`) que
-     * van al primer lugar guardado pasan por AssignTeacher; las demás se escriben en bloque.
+     * Da docente a cada grupo activo sin docente del campus. Primero lo planea contra una foto del campus que se va
+     * actualizando: los grupos de las horas más saturadas de su departamento van antes (byCongestion) y cada uno toma al
+     * primero de su ranking que pasa HC-01, HC-08 y HC-09, el primer lugar si el ranking se recalculara en ese momento.
+     * Al que se queda sin nadie se le busca lugar moviendo un grupo de un candidato a otro docente (repair). Luego lo
+     * escribe: las primeras de cada departamento (`actions`) que van al primer lugar guardado por AssignTeacher, las
+     * demás en bloque.
      */
     private function assignAll(Term $term, Campus $campus): void
     {
@@ -452,12 +463,29 @@ final class StaffingDemoSeeder extends Seeder
             ->orderBy('subjects.code')->orderBy('groups.code')->select('groups.*')->get();
         $rankings = $this->rankingsOf($term, $groups->modelKeys());
         $departments = Department::query()->withTrashed()->whereIn('id', $groups->pluck('department_id')->unique()->all())->get()->keyBy('id');
+        $plan = [];
+
+        foreach ($this->byCongestion($groups, $rankings) as $group) {
+            $teacherId = $this->fitting($group->id, $rankings[$group->id] ?? [], 1)[0] ?? null;
+
+            if ($teacherId !== null) {
+                $this->state = $this->state->withTeacher($group->id, $teacherId);
+                $plan[$group->id] = $teacherId;
+            }
+        }
+
+        foreach ($groups as $group) {
+            if (! isset($plan[$group->id])) {
+                $this->repair($group->id, $rankings, $plan);
+            }
+        }
+
         $budget = [];
 
-        foreach ($groups->sortBy(fn (Group $group): int => count($rankings[$group->id] ?? []))->values() as $group) {
-            $order = $rankings[$group->id] ?? [];
+        foreach ($groups as $group) {
             $department = $departments[$group->department_id];
-            $teacherId = $this->fitting($group->id, $order, 1)[0] ?? null;
+            $teacherId = $plan[$group->id] ?? null;
+            $order = $rankings[$group->id] ?? [];
             $head = $this->head($campus, $department);
             $budget[$department->id] ??= (int) $this->profile['actions'];
 
@@ -470,12 +498,99 @@ final class StaffingDemoSeeder extends Seeder
 
             if (! $written) {
                 $this->unstaffed[$campus->code][$department->code] = ($this->unstaffed[$campus->code][$department->code] ?? 0) + 1;
+            }
+        }
+    }
 
+    /**
+     * Los grupos en el orden en que se planea su docente: primero los que caen en las horas en que su departamento tiene
+     * más grupos por candidato (en esas horas cada docente sirve para uno solo, HC-01); en empate, el orden de llegada.
+     *
+     * @param  Collection<int, Group>  $groups
+     * @param  array<string, list<string>>  $rankings
+     * @return Collection<int, Group>
+     */
+    private function byCongestion(Collection $groups, array $rankings): Collection
+    {
+        $busy = [];
+
+        foreach ($groups as $group) {
+            foreach ($this->hoursOf($group->id) as $hour) {
+                $busy[$group->department_id][$hour] = ($busy[$group->department_id][$hour] ?? 0) + 1;
+            }
+        }
+
+        return $groups->sortByDesc(function (Group $group) use ($busy, $rankings): float {
+            $peak = max([0, ...array_map(fn (string $hour): int => $busy[$group->department_id][$hour], $this->hoursOf($group->id))]);
+
+            return $peak / max(1, count($rankings[$group->id] ?? []));
+        })->values();
+    }
+
+    /**
+     * Las horas de la semana que ocupa el grupo, como «día|hora».
+     *
+     * @return list<string>
+     */
+    private function hoursOf(string $groupId): array
+    {
+        $hours = [];
+
+        foreach ($this->state->sessionsOf($groupId) as $session) {
+            for ($hour = intdiv($session->start, 60); $hour * 60 < $session->end; $hour++) {
+                $hours[] = "{$session->day}|{$hour}";
+            }
+        }
+
+        return array_values(array_unique($hours));
+    }
+
+    /**
+     * Busca lugar para un grupo sin candidato que pase: a uno de sus primeros candidatos que solo choca (HC-01) o no le
+     * alcanzan las horas (HC-08) por un grupo planeado en esta corrida, se le quita ese grupo si así le cabe este y otro
+     * docente que pasa toma el que se movió. Los dos quedan en el primer lugar que pasa al momento de decidir.
+     *
+     * @param  array<string, list<string>>  $rankings
+     * @param  array<string, string>  $plan  grupo => docente, de esta corrida
+     */
+    private function repair(string $groupId, array $rankings, array &$plan): bool
+    {
+        $byTeacher = [];
+
+        foreach ($plan as $planned => $teacherId) {
+            $byTeacher[$teacherId][] = $planned;
+        }
+
+        foreach (array_slice($rankings[$groupId] ?? [], 0, self::REPAIR_CANDIDATES) as $teacherId) {
+            $result = $this->check($groupId, $teacherId);
+            $hard = array_unique(array_map(fn (Violation $violation): string => $violation->rule, array_filter($result?->violations() ?? [], fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard)));
+
+            if ($result === null || $hard === [] || array_diff($hard, ['HC-01', 'HC-08']) !== []) {
                 continue;
             }
 
-            $this->state = $this->state->withTeacher($group->id, $teacherId);
+            foreach ($byTeacher[$teacherId] ?? [] as $moved) {
+                $without = $this->state->withTeacher($moved, null);
+
+                if (! $this->fits($groupId, $teacherId, $without)) {
+                    continue;
+                }
+
+                $with = $without->withTeacher($groupId, $teacherId);
+
+                foreach (array_slice($rankings[$moved] ?? [], 0, self::REPAIR_CANDIDATES) as $other) {
+                    if ($other !== $teacherId && $this->fits($moved, $other, $with)) {
+                        $this->state = $with->withTeacher($moved, $other);
+                        $plan[$groupId] = $teacherId;
+                        $plan[$moved] = $other;
+
+                        return true;
+                    }
+                }
+            }
         }
+
+        return false;
     }
 
     /**
@@ -755,9 +870,9 @@ final class StaffingDemoSeeder extends Seeder
         return $fits;
     }
 
-    private function fits(string $groupId, string $teacherId): bool
+    private function fits(string $groupId, string $teacherId, ?ScheduleState $state = null): bool
     {
-        $result = $this->check($groupId, $teacherId);
+        $result = $this->check($groupId, $teacherId, $state);
 
         return $result !== null && ! $result->hasHard();
     }
@@ -766,13 +881,15 @@ final class StaffingDemoSeeder extends Seeder
      * Lo que diría el validador del grupo si fuera del docente (HC-01, HC-08, HC-09 y SC-09), con la foto actual; null
      * si la foto no conoce al docente.
      */
-    private function check(string $groupId, string $teacherId): ?ValidationResult
+    private function check(string $groupId, string $teacherId, ?ScheduleState $state = null): ?ValidationResult
     {
-        if ($this->state->teacher($teacherId) === null) {
+        $state ??= $this->state;
+
+        if ($state->teacher($teacherId) === null) {
             return null;
         }
 
-        $result = $this->validator->validate($this->state->withTeacher($groupId, $teacherId), new ValidationScope([$groupId], [$teacherId]), ScheduleValidator::TEACHER_RULES);
+        $result = $this->validator->validate($state->withTeacher($groupId, $teacherId), new ValidationScope([$groupId], [$teacherId]), ScheduleValidator::TEACHER_RULES);
 
         return new ValidationResult($result->forGroup($groupId));
     }
