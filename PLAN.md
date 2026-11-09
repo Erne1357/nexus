@@ -96,7 +96,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | 2026-11-09 | Cierre de la sesión de los tres rieles de la fase 3: no queda nada sin mezclar. El plan de la fase 4 gana un «Punto de partida» con cinco partes:
   - lo que ya existe;
   - los ajustes que impone el mapa de módulos: las guardas de HC-15 y el snapshot los arma Scheduling, porque AcademicLoad no ve grupos;
-  - las preguntas de negocio: grupos `confirmed`, justificación, reapertura, visto bueno en Campus II, solicitudes de cambio y grupos compartidos propuestos al cerrar, alcance de lo publicado, «Mi carga» después de publicar, layout del SII y servidor;
+  - once preguntas de negocio: grupos `confirmed`, justificación, reapertura, visto bueno en Campus II, solicitudes de cambio y grupos compartidos propuestos al cerrar, alcance de lo publicado, lo que ve el docente después de publicar, cargas sin grupos, layout del SII y servidor;
   - el punto `publicacion` de la demo;
   - las notas de los rieles.
 

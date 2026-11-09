@@ -23,7 +23,8 @@ Esta sección se escribió al cerrar la sesión de los tres rieles de la fase 3,
   - La 4.9 y la 4.10 necesitan la 3.13.
   - La 4.7 necesita el servidor.
 - **Demo por puntos, hasta `cierre`:** la corrida es `php artisan demo:seed --hasta=cierre --volumen=masivo --force`.
-  - Deja cada carga en `staffing` y cada grupo activo con horario, docente y salón en toda sesión presencial, con cero choques duros. Desde ahí arranca la 4.1.
+  - Deja en `staffing` cada carga con grupos en su campus, y cada grupo activo con horario, docente y salón en toda sesión presencial, con cero choques duros. Desde ahí arranca la 4.1.
+  - Un departamento sin partes en un campus deja su carga en `draft`; por ejemplo, EE y MM en Campus II.
   - Con el volumen demo tarda unos 26 s y con el masivo unos 9 min.
   - Detalle en [testing.md](../arquitectura/testing.md), «Demo por puntos del proceso».
 - **PR abiertos:** no queda ninguno de la fase 3. Siguen abiertos los de la 1.16 (#284 y #305, de otra sesión; no se tocan) y sus issues #273 a #282.
@@ -38,6 +39,7 @@ Esta sección se escribió al cerrar la sesión de los tres rieles de la fase 3,
   - Las Actions de `Actions/Transitions/` (`ProposeLoad`, `StartStaffing`, `StartAdjusting`, `ReturnToStaffing`) son el modelo para `CloseLoad`, `ApproveLoad` y `PublishLoad`, que todavía no existen.
 - **Lo que le falta a un grupo para cerrar (HC-15):**
   - `ConflictBoardQuery` y `GroupBoardStatus` (Scheduling) ya cuentan, por grupo activo, cuatro faltantes: un choque duro, las sesiones, el docente o el salón de alguna sesión presencial. Respetan el perfil del campus (`uses_time_blocks`, `uses_rooms`).
+  - Los choques duros los leen de `schedule_conflicts`, una tabla derivada que el job en cola recalcula después, así que puede ir atrasada.
   - El tablero «Choques y avance» (`/scheduling/conflicts`) los muestra por departamento y carrera.
   - `BlockStaffingWithHardConflicts` (Scheduling) es el modelo de guarda: escucha `LoadTransitioning` y veta con un motivo por cada cosa que falta.
 - **Edición congelada al cerrar:** `LoadEditability` (Scheduling) solo deja editar con la carga en `proposed`, `staffing` o `adjusting`, según la carga del departamento del grupo.
@@ -59,15 +61,21 @@ El mapa es `AcademicLoad → Scheduling → Staffing`, así que AcademicLoad no 
 
 - **4.1:**
   - `CloseLoad` (AcademicLoad) solo hace la transición `staffing → closed`, que es la única forma de cerrar.
-  - Las guardas de HC-15 van en un listener de Scheduling sobre `LoadTransitioning`, como `BlockStaffingWithHardConflicts`, y reutilizan el conteo del tablero en lugar de repetirlo. El docente y el salón también son de Scheduling: `groups.teacher_id` y `group_sessions.room_id`.
+  - Las guardas de HC-15 van en un listener de Scheduling sobre `LoadTransitioning`, como `BlockStaffingWithHardConflicts`, y reutilizan del tablero los faltantes de sesiones, docente y salón. Los choques duros no los toman de `schedule_conflicts`, que puede ir atrasada: los calcula el validador en ese momento, como hace hoy `BlockStaffingWithHardConflicts`. El docente y el salón también son de Scheduling: `groups.teacher_id` y `group_sessions.room_id`.
   - El listener valida el campus completo con `ScheduleValidator::validateLoad`, porque HC-01 cruza departamentos y campus. Con 400 grupos tarda menos de 5 s.
+  - El validador es `scoped` y guarda la foto que leyó. El listener y la Query del resumen llaman `forget()` antes de validar, como `AssignTeacher` y `StaffingBlockersQuery` (#313). Si no, en el mismo request o job validan una foto vieja, por ejemplo justo después de asignar el último docente o salón.
   - Un préstamo de salón pendiente ya es choque duro (HC-10), así que también bloquea el cierre.
   - El resumen de bloqueos antes de cerrar sigue el patrón de `StaffingBlockersQuery` (Staffing): una Query hace la misma cuenta que el veto, y la pantalla deshabilita el botón con su motivo. El veto sigue decidiendo.
   - La justificación de HC-15 no tiene tabla ni campo. La 4.1 la crea y actualiza `docs/dominio/modelo-de-datos.md` en el mismo PR.
   - La reapertura se agrega al diagrama de `docs/proceso/proceso-propuesto.md` y a `LoadStatus::transitions()`.
-- **4.2:** `approved → adjusting` ya existe. Hoy una carga sale de `adjusting` solo en automático, cuando se aplica la última solicitud de cambio aprobada (`ReturnToStaffing`); ninguna pantalla lo hace a mano. Una carga que Subdirección regresa sin solicitudes se quedaría en `adjusting` sin salida. La 4.2 necesita un «Volver a asignación» para el jefe, que pasa por el veto de choques duros.
+- **4.2:** `approved → adjusting` ya existe. Hoy una carga sale de `adjusting` solo en automático, cuando se aplica la última solicitud de cambio aprobada (`ReturnToStaffing`); ninguna pantalla lo hace a mano. Una carga que Subdirección regresa sin solicitudes se quedaría en `adjusting` sin salida. La 4.2 necesita un «Volver a asignación» para el jefe, que pasa por el veto de choques duros. Ese botón ya hace falta hoy:
+  - Si la vuelta automática al aplicar la última solicitud la veta Scheduling por choques duros, la solicitud queda aplicada y la carga se queda en `adjusting` (`MarkChangeRequestApplied`, supuesto por confirmar). Al corregir los choques no hay salida, porque `ReturnToStaffing` solo lo llama esa Action.
+  - El botón exige lo mismo que la vuelta automática: ninguna solicitud aprobada sin aplicar y pasar el veto.
 - **4.3:**
-  - El contenido del snapshot (grupos, sesiones, docentes, salones y cupos) lo arma Scheduling al pasar a `published`, por ejemplo con un listener de `LoadTransitioned`. Lo mismo para alimentar `teacher_subject_history`.
+  - El contenido del snapshot (grupos, sesiones, docentes, salones y cupos) lo arma Scheduling **dentro de la transacción de `TransitionLoad`**, igual que `teacher_subject_history`, para que no haya cargas `published` sin snapshot. Hay dos vías:
+    - un listener de Scheduling sobre `LoadTransitioning` con `to = published`, que es síncrono y puede vetar con motivo si algo falla;
+    - un contrato declarado en AcademicLoad que Scheduling implementa y `PublishLoad` llama.
+  - No sirve un listener de `LoadTransitioned`: implementa `ShouldDispatchAfterCommit`, así que correría después del commit, y si fallara la carga quedaría publicada sin snapshot.
   - `load_snapshots` puede quedarse en AcademicLoad, con un `payload` jsonb versionado de forma documentada.
   - Si el snapshot usa `teacher_term_loads` (Staffing), hay que tener en cuenta que es derivada y se refresca en cola (`RefreshTeacherLoads`). Se recalcula en `sync` antes de armar el snapshot, o se cuenta desde los grupos.
 - **4.4 y 4.5:** la consulta pública y los exportes leen solo el `payload` del snapshot, así que pueden vivir en AcademicLoad sin importar Scheduling. La forma del payload es el contrato entre la 4.3 y las 4.4 y 4.5: se publica primero, como el validador en la fase 3.
@@ -95,21 +103,22 @@ El mapa es `AcademicLoad → Scheduling → Staffing`, así que AcademicLoad no 
    - que Staffing vete el cierre con «N solicitudes de cambio pendientes»;
    - que el cierre las rechace con un comentario automático.
 
-   En cualquiera de las dos, aprobar exigiría la carga en `staffing` o `adjusting`.
+   En cualquiera de las dos, aprobar exigiría la carga en `staffing` o `adjusting`. El veto sería un listener de Staffing sobre `LoadTransitioning`, porque `change_requests` es de Staffing. Así, las guardas del cierre quedan en dos listeners: Scheduling para HC-15 y Staffing para las solicitudes.
 6. **Grupo compartido propuesto al cerrar:** un acuerdo de grupo compartido que sigue `proposed` no es choque para el validador; solo `QuotaRules` lo mira. ¿Bloquea el cierre, se cancela solo al cerrar o se queda?
 7. **Alcance de lo publicado (4.3 y 4.4):** la carga es por departamento, pero la consulta por carrera y semestre, por docente y por salón cruza departamentos. Un semestre mezcla grupos de Ciencias Básicas y del departamento de la carrera, un salón se presta, y un docente da clase en varios departamentos y campus. Hay dos preguntas:
    - ¿La consulta pública muestra lo que cada departamento ya publicó, con un aviso de que el semestre está incompleto, o espera a que publique el campus completo?
    - ¿Las versiones son por carga, y la consulta toma la última de cada una?
-8. **«Mi carga» después de publicar:** `TeacherScheduleQuery` y `RoomScheduleQuery` leen las tablas vivas, no el snapshot. ¿El docente ve lo publicado o lo vivo?
-9. **Exportación al SII (4.6):** sigue esperando el layout de sistemas del ITCJ.
-10. **Servidor (4.7):** sin él no hay piloto ni H5. Si sigue sin fecha, conviene decidir con el usuario un plan B para el piloto, como el túnel que se usó para la demo de la 1.16.
+8. **Lo que ve el docente después de publicar:** «Mi carga» (`MyLoadQuery`) y la oferta (`TeacherOfferQuery`, visible desde `staffing` y en cualquier estado posterior) son de Staffing y leen las tablas vivas, no el snapshot. ¿El docente ve lo publicado o lo vivo?
+9. **Cargas sin grupos:** un departamento sin partes en un campus tiene su carga en `draft`, y `draft` solo pasa a `proposed`. ¿Se cierra y se publica vacía, se queda fuera del cierre, o no cuenta para el campus?
+10. **Exportación al SII (4.6):** sigue esperando el layout de sistemas del ITCJ.
+11. **Servidor (4.7):** sin él no hay piloto ni H5. Si sigue sin fecha, conviene decidir con el usuario un plan B para el piloto, como el túnel que se usó para la demo de la 1.16.
 
 ### Demo por puntos en la fase 4
 
 La fase extiende `demo:seed` como dice [testing.md](../arquitectura/testing.md): el punto va en `DemoCheckpoint` antes de `todo`, y sus pasos y revisiones van en el provider del módulo que hace cada cosa.
 
 - **Punto 8, `publicacion` («Empezando la publicación»):**
-  - Al llegar, toda carga está `closed`, o `approved` donde el campus exige visto bueno.
+  - Al llegar, toda carga con grupos en su campus está `closed`, o `approved` donde el campus exige visto bueno. Las cargas sin grupos siguen lo que decida la pregunta 9.
   - Los pasos son el cierre (con la 4.1) y el visto bueno (con la 4.2).
   - Sus revisiones confirman que cada carga pasa HC-15. Si la 4.1 exige grupos `confirmed`, el paso hacia `publicacion` los confirma, porque en `cierre` todos siguen `planned`.
 - **La demo mezclada (`todo`):** agrega cargas cerradas, aprobadas, regresadas por Subdirección y publicadas, con más de una versión de snapshot. Así la 4.2, la 4.4 y la 4.5 tienen pantallas llenas con volumen.
