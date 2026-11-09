@@ -14,13 +14,17 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherPosition;
+use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
+use App\Modules\Students\Models\Student;
+use App\Modules\Students\Models\StudentProgress;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\DB;
 
@@ -36,9 +40,9 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->department = Department::factory()->create(['code' => 'II']);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id]);
-    $subject = Subject::factory()->create(['department_id' => $this->department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
-    $career = Career::factory()->create(['department_id' => $this->department->id]);
-    $plan = StudyPlan::factory()->create(['career_id' => $career->id]);
+    $subject = $this->subject = Subject::factory()->create(['department_id' => $this->department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
+    $career = $this->career = Career::factory()->create(['department_id' => $this->department->id]);
+    $plan = $this->plan = StudyPlan::factory()->create(['career_id' => $career->id]);
     CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => $this->campus->id]);
     $this->group = function (string $code, int $day, string $startsAt, string $endsAt, int $semester) use ($subject, $career, $plan): Group {
         $group = Group::factory()->withQuota()->create([
@@ -123,4 +127,39 @@ it('en modo staffed deja sin docente al grupo que no tiene candidato que pase, s
 
 it('rechaza un modo que no existe', function () {
     expect(fn () => ($this->seedMode)('todo'))->toThrow(RuntimeException::class, 'Modo desconocido');
+});
+
+it('en modo staffed mueve un grupo a otro docente para que quepa uno que se quedaría sin nadie', function () {
+    $first = ($this->group)('A1', 2, '09:00', '11:00', 1);
+    $second = ($this->group)('A2', 1, '07:00', '09:00', 3);
+    $ana = ($this->teacher)('Ana', 2);
+    $beatriz = ($this->teacher)('Beatriz', 2);
+    TeacherSubjectQualification::factory()->for($ana)->for($this->subject)->preferente()->create();
+    TeacherAvailability::factory()->unavailable()->create(['teacher_id' => $beatriz->id, 'term_id' => $this->term->id, 'day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00']);
+    ($this->seedMode)('start');
+
+    ($this->seedMode)('staffed');
+
+    expect($second->refresh()->teacher_id)->toBe($ana->id)
+        ->and($first->refresh()->teacher_id)->toBe($beatriz->id)
+        ->and(GroupTeacherAssignment::query()->whereNotNull('replaced_at')->exists())->toBeFalse();
+});
+
+it('da de alta docentes de asignatura donde la capacidad no llega a 1.35 veces la demanda esperada, y al repetir ya no (demo por puntos, punto 2)', function () {
+    $this->plan->subjects()->attach($this->subject->id, ['semester' => 1]);
+    Student::factory()->count(70)->create(['study_plan_id' => $this->plan->id, 'career_id' => $this->career->id, 'campus_id' => $this->campus->id])
+        ->each(fn (Student $student) => StudentProgress::factory()->create(['student_id' => $student->id, 'subjects_available' => [$this->subject->id]]));
+    ($this->teacher)('Ana', 1);
+    $supply = fn () => (new DatabaseSeeder)->setContainer(app())->callWith(StaffingSupplyDemoSeeder::class, ['campuses' => ['C2']]);
+
+    $supply();
+    $supply();
+
+    $hired = Teacher::query()->where('rfc', 'like', 'Z%')->with(['adscriptions', 'positions'])->get();
+
+    expect($hired)->toHaveCount(1)
+        ->and($hired->sole()->adscriptions->sole()->department_id)->toBe($this->department->id)
+        ->and($hired->sole()->adscriptions->sole()->is_primary)->toBeTrue()
+        ->and($hired->sole()->positions->sole()->base_hours)->toBe(StaffingSupplyDemoSeeder::HIRE_HOURS)
+        ->and($hired->sole()->positions->sole()->valid_from->lte($this->term->starts_on))->toBeTrue();
 });

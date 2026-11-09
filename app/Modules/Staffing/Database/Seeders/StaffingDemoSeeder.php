@@ -110,9 +110,10 @@ use RuntimeException;
  * solo pasa a asignación cada carga en propuesta, como su jefe (un veto de Scheduling falla con su motivo), y calcula
  * el ranking de todos los departamentos con grupos activos. `staffed` (lleva al punto 6) da docente a todo grupo activo
  * sin docente, campus por campus en orden de clave (cada campus se fotografía después de escribir el anterior, así HC-01
- * y HC-08 cuentan lo de los dos): primero el grupo con menos candidatos, con el primero de su ranking que pasa HC-01,
- * HC-08 y HC-09, que en un ranking recién calculado sería el primer lugar, sin motivo; luego recalcula
- * `teacher_term_loads` y los choques. El grupo que no tiene candidato que pase se queda sin docente y se imprime.
+ * y HC-08 cuentan lo de los dos; ver assignAll): los de las horas más saturadas primero, cada uno con el primero de su
+ * ranking que pasa HC-01, HC-08 y HC-09, que en un ranking recién calculado sería el primer lugar, sin motivo, y una
+ * reparación para los que se quedan sin nadie; luego recalcula `teacher_term_loads` y los choques. El grupo que aun así
+ * no tiene candidato que pase se queda sin docente y se imprime.
  *
  * Determinista con `$seed` sobre los mismos datos: todo lo que se ordena antes de barajar o de escoger va por llaves
  * naturales (claves de materia y de grupo, RFC, códigos), no por los UUIDv7, que dentro del mismo milisegundo traen
