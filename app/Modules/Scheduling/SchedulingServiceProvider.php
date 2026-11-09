@@ -36,6 +36,7 @@ use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
@@ -202,6 +203,13 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
             ])),
+            new DemoStep(DemoCheckpoint::Closing, 'Salón para toda sesión presencial y préstamos aceptados', fn (DemoContext $demo) => $demo->runSeeder(SchedulingAgreementsDemoSeeder::class, [
+                'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
+                'campuses' => $demo->campuses,
+                'term' => $demo->termCode,
+                'seed' => $demo->seed,
+                'mode' => 'rooms',
+            ])),
         ];
     }
 
@@ -235,6 +243,25 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 return match (true) {
                     $pending > 0 => "{$pending} acuerdos siguen pendientes.",
                     $shared === 0 => 'No hay grupos compartidos aceptados.',
+                    default => true,
+                };
+            }),
+            new DemoCheck([DemoCheckpoint::Staffing], 'La oferta de salones alcanza para el horario', function (DemoContext $demo): true|string {
+                $seeder = app(SchedulingAgreementsDemoSeeder::class);
+                $missing = Campus::query()->whereIn('code', $demo->campuses)->orderBy('code')->get()
+                    ->flatMap(fn (Campus $campus): array => $campus->profile->usesRooms ? $seeder->missingRooms($demo->term(), $campus) : [])->all();
+
+                return $missing === [] ? true : count($missing).' sesiones no tendrían salón sin choque, por ejemplo: '.implode('; ', array_slice($missing, 0, 3)).'.';
+            }),
+            new DemoCheck([DemoCheckpoint::Closing], 'Toda sesión presencial tiene salón, sin choques de salón (HC-02, HC-05, HC-06, HC-10, HC-11)', function (DemoContext $demo) use ($groups): true|string {
+                $roomless = GroupSession::query()->whereIn('group_id', $groups($demo)->where('status', '!=', GroupStatus::Cancelled->value)->select('id'))
+                    ->whereNull('room_id')->where('kind', '!=', SessionKind::Virtual->value)->count();
+                $conflicts = ScheduleConflict::query()->whereIn('group_id', $groups($demo)->select('id'))
+                    ->whereIn('rule', ['HC-02', 'HC-05', 'HC-06', 'HC-10', 'HC-11'])->whereNull('resolved_at')->count();
+
+                return match (true) {
+                    $roomless > 0 => "{$roomless} sesiones presenciales sin salón.",
+                    $conflicts > 0 => "{$conflicts} choques de salón.",
                     default => true,
                 };
             }),
