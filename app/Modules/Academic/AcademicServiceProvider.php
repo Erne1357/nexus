@@ -66,14 +66,15 @@ final class AcademicServiceProvider extends ModuleServiceProvider
 
     /**
      * Demo por puntos: el catálogo académico de los campus del volumen y sus usuarios de prueba (subdirección, jefes,
-     * jefes de proyecto docente y coordinadores) llevan a «catálogos».
+     * jefes de proyecto docente y coordinadores) llevan a «catálogos»; hay jefe para todo departamento activo, porque
+     * cada uno valida sus catálogos con su jefe (CV-S1).
      */
     public function demoSteps(): array
     {
         return [
             new DemoStep(DemoCheckpoint::Catalogs, 'Catálogo académico y usuarios de prueba', function (DemoContext $demo): void {
                 $demo->runSeeder(AcademicDemoSeeder::class, ['campuses' => $demo->campuses]);
-                $demo->runSeeder(DemoStaffSeeder::class, ['campuses' => $demo->campuses]);
+                $demo->runSeeder(DemoStaffSeeder::class, ['campuses' => $demo->campuses, 'allDepartments' => true]);
             }),
         ];
     }

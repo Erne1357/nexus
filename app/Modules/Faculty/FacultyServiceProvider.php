@@ -14,6 +14,7 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
+use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Listeners\BlockDepartmentDeletionWithTeachers;
 use App\Modules\Faculty\Models\Teacher;
@@ -86,16 +87,25 @@ final class FacultyServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Demo por puntos: los docentes del volumen, sus usuarios y los jefes de proyecto docente llevan a «catálogos»,
-     * con los mismos números que DemoSeeder y MassiveSeeder.
+     * Demo por puntos:
+     * - a «catálogos», los docentes del volumen en modo proceso (FacultyDemoSeeder: más plantilla repartida por las
+     *   horas de cada departamento y disponibilidad más holgada, para que en «salones» todo grupo tenga docente), sus
+     *   usuarios y los jefes de proyecto docente;
+     * - a «validación», la variedad de captura de Ene-Jun 2027 (unos sin disponibilidad, sin perfil o con horas externas);
+     * - a «propuesta», la captura completa, como la deja el jefe antes de validar.
      */
     public function demoSteps(): array
     {
+        $profile = fn (DemoContext $demo): string => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo';
+
         return [
             new DemoStep(DemoCheckpoint::Catalogs, 'Docentes, sus usuarios y jefes de proyecto docente', fn (DemoContext $demo) => $demo->runSeeder(FacultyDemoSeeder::class, [
                 'teachersPerCampus' => $demo->volume === DemoVolume::Massive ? ['C1' => 350, 'C2' => 250] : ['C2' => 120],
                 'seed' => $demo->seed,
+                'forProcess' => true,
             ])),
+            new DemoStep(DemoCheckpoint::CatalogValidation, 'Captura docente con variedad', fn (DemoContext $demo) => $demo->runSeeder(TeacherCaptureDemoSeeder::class, ['profile' => $profile($demo)])),
+            new DemoStep(DemoCheckpoint::Proposal, 'Captura docente completa', fn (DemoContext $demo) => $demo->runSeeder(TeacherCaptureDemoSeeder::class, ['profile' => $profile($demo), 'complete' => true])),
         ];
     }
 
@@ -105,6 +115,25 @@ final class FacultyServiceProvider extends ModuleServiceProvider
             new DemoCheck(DemoCheckpoint::staged(), 'Hay docentes activos con usuario', fn (): true|string => Teacher::query()->where('is_active', true)->whereNotNull('user_id')->exists()
                 ? true
                 : 'Ningún docente activo tiene usuario.'),
+            new DemoCheck([DemoCheckpoint::CatalogValidation], 'Captura docente con variedad: hay docentes con y sin disponibilidad', function (DemoContext $demo): true|string {
+                $missing = self::teachersWithoutAvailability($demo);
+                $active = Teacher::query()->where('is_active', true)->count();
+
+                return $missing > 0 && $missing < $active ? true : "{$missing} de {$active} docentes activos sin disponibilidad.";
+            }),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Todo docente activo tiene disponibilidad capturada', fn (DemoContext $demo): true|string => ($missing = self::teachersWithoutAvailability($demo)) === 0
+                ? true
+                : "{$missing} docentes activos sin disponibilidad."),
         ];
+    }
+
+    /**
+     * Docentes activos sin ningún bloque de disponibilidad vivo en el periodo de la demo.
+     */
+    private static function teachersWithoutAvailability(DemoContext $demo): int
+    {
+        $termId = $demo->term()->getKey();
+
+        return Teacher::query()->where('is_active', true)->whereDoesntHave('availability', fn ($query) => $query->where('term_id', $termId))->count();
     }
 }
