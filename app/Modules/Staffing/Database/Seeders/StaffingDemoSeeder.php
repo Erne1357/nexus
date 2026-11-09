@@ -27,6 +27,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
+use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
@@ -37,6 +38,7 @@ use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\ValidationResult;
 use App\Modules\Scheduling\Validation\ValidationScope;
+use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
@@ -55,7 +57,6 @@ use App\Modules\Staffing\Models\TeacherTermLoad;
 use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Seeder;
-use Illuminate\Process\Pool;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -104,6 +105,15 @@ use RuntimeException;
  * por grupo y con el masivo tardaría más de diez minutos. Por lo mismo, con el perfil massive los rankings se calculan
  * en paralelo con `staffing:rank`, un proceso por departamento y campus, de seis en seis.
  *
+ * `$mode` (demo por puntos, docs/arquitectura/testing.md): `mixed` hace todo lo anterior. `start` (lleva al punto 5)
+ * solo pasa a asignación cada carga en propuesta, como su jefe (un veto de Scheduling falla con su motivo), y calcula
+ * el ranking de todos los departamentos con grupos activos. `staffed` (lleva al punto 6) da docente a todo grupo activo
+ * sin docente, campus por campus en orden de clave (cada campus se fotografía después de escribir el anterior, así HC-01
+ * y HC-08 cuentan lo de los dos; ver assignAll): los de las horas más saturadas primero, cada uno con el primero de su
+ * ranking que pasa HC-01, HC-08 y HC-09, que en un ranking recién calculado sería el primer lugar, sin motivo, y una
+ * reparación para los que se quedan sin nadie; luego recalcula `teacher_term_loads` y los choques. El grupo que aun así
+ * no tiene candidato que pase se queda sin docente y se imprime.
+ *
  * Determinista con `$seed` sobre los mismos datos: todo lo que se ordena antes de barajar o de escoger va por llaves
  * naturales (claves de materia y de grupo, RFC, códigos), no por los UUIDv7, que dentro del mismo milisegundo traen
  * bits al azar. `$overrides` cambia valores del perfil (las pruebas siembran traslados justos con el perfil demo). Si
@@ -125,6 +135,15 @@ final class StaffingDemoSeeder extends Seeder
 
     /** El departamento queda en asignación sin ningún docente. */
     private const string UNTOUCHED = 'untouched';
+
+    /** Los modos de `run()`. */
+    public const array MODES = ['mixed', 'start', 'staffed'];
+
+    /**
+     * En el modo `staffed`, a cuántos candidatos de un grupo sin docente se les intenta liberar lugar, y entre cuántos se
+     * busca a quién pasarle el grupo que se mueve.
+     */
+    private const int REPAIR_CANDIDATES = 25;
 
     /**
      * Por perfil: parte de los grupos que se asignan, asignaciones por AssignTeacher por departamento, reemplazos y
@@ -279,15 +298,25 @@ final class StaffingDemoSeeder extends Seeder
     /** @var array<string, float> paso => segundos */
     private array $timings = [];
 
+    /** @var array<string, array<string, int>> campus => departamento => grupos sin candidato que pase (modo `staffed`) */
+    private array $unstaffed = [];
+
     /**
      * @param  list<string>  $campuses  claves de campus
      * @param  array<string, int|float|bool>  $overrides  sobrescribe valores del perfil (`campus_travel`, `assigned`…)
+     * @param  string  $mode  uno de MODES (ver la docblock de la clase)
      *
-     * @throws RuntimeException en producción, si el periodo no existe o si falla un ranking en paralelo
+     * @throws RuntimeException en producción, con un modo que no existe, si el periodo no existe, si falla un ranking en
+     *                          paralelo o si Scheduling veta pasar una carga a asignación en el modo `start`
      */
-    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $overrides = []): void
+    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $overrides = [], string $mode = 'mixed'): void
     {
         $this->refuseProduction();
+
+        if (! in_array($mode, self::MODES, true)) {
+            throw new RuntimeException("Modo desconocido: {$mode}.");
+        }
+
         $started = hrtime(true);
         $this->random = new Randomizer(new Mt19937($seed));
         $this->profile = [...(self::PROFILES[$profile] ?? self::PROFILES['demo']), ...$overrides];
@@ -298,6 +327,12 @@ final class StaffingDemoSeeder extends Seeder
         $this->admin = User::query()->where('username', 'admin')->first() ?? User::query()->first()
             ?? throw new RuntimeException('Hace falta un usuario para la bitácora: corre antes AdminUserSeeder.');
         $found = Campus::query()->whereIn('code', $campuses)->orderBy('code')->get();
+
+        if ($mode !== 'mixed') {
+            $this->runProcess($termModel, $found, $mode, $started);
+
+            return;
+        }
 
         if (GroupTeacherAssignment::query()->where('term_id', $termModel->id)->whereIn('campus_id', $found->modelKeys())->exists()) {
             $this->command?->info("Asignación docente: {$term} ya tiene asignaciones en ".$found->pluck('code')->implode(', ').'; no se toca.');
@@ -326,6 +361,239 @@ final class StaffingDemoSeeder extends Seeder
         }
 
         $this->summary($termModel, $found, $profile, (hrtime(true) - $started) / 1e9);
+    }
+
+    /**
+     * Los modos `start` y `staffed` de la demo por puntos (ver la docblock de la clase), con la cola en `sync` y los
+     * eventos de recálculo descartados, como el modo `mixed`.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     */
+    private function runProcess(Term $term, Collection $campuses, string $mode, int|float $started): void
+    {
+        $previousQueue = config('queue.default');
+        config(['queue.default' => 'sync']);
+
+        try {
+            Setting::query()->firstOrCreate(
+                ['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'staffing.honorarios_max_hours'],
+                ['value' => self::HONORARIOS_MAX_HOURS],
+            );
+
+            Event::fakeFor(function () use ($term, $campuses, $mode): void {
+                if ($mode === 'start') {
+                    $this->timed('a asignación', function () use ($term, $campuses): void {
+                        foreach ($campuses as $campus) {
+                            $this->startAll($term, $campus);
+                        }
+                    });
+                    $this->timed('ranking', fn () => $this->rank($term, $campuses));
+
+                    return;
+                }
+
+                $this->timed('asignaciones', function () use ($term, $campuses): void {
+                    foreach ($campuses as $campus) {
+                        $this->assignAll($term, $campus);
+                        $this->command?->info(sprintf('  %s: memoria pico %d MB.', $campus->code, memory_get_peak_usage(true) / 1048576));
+                    }
+                });
+                $this->timed('carga por docente', fn () => app(RefreshTeacherTermLoads::class)->handle($term));
+            }, self::FAKED_EVENTS);
+
+            if ($mode === 'staffed') {
+                $this->timed('choques', function () use ($term, $campuses): void {
+                    foreach ($campuses as $campus) {
+                        app(SyncScheduleConflicts::class)->handle($term, $campus);
+                    }
+                });
+            }
+        } finally {
+            config(['queue.default' => $previousQueue]);
+        }
+
+        $unstaffed = implode('; ', array_map(
+            fn (string $campus, array $departments): string => $campus.': '.implode(', ', array_map(fn (string $code, int $total): string => "{$code} {$total}", array_keys($departments), $departments)),
+            array_keys($this->unstaffed), $this->unstaffed,
+        ));
+        $this->command?->info(sprintf('Asignación docente (%s) en %.1f s: %s.', $mode, (hrtime(true) - $started) / 1e9,
+            implode(', ', array_map(fn (string $step, float $seconds): string => sprintf('%s %.1f s', $step, $seconds), array_keys($this->timings), $this->timings))));
+
+        if ($mode === 'staffed') {
+            $this->command?->info(sprintf('  Asignaciones: %d por AssignTeacher, %d en bloque; sin candidato que pase: %s.',
+                $this->counts['por AssignTeacher'] ?? 0, $this->counts['en bloque'] ?? 0, $unstaffed === '' ? 'ninguno' : $unstaffed));
+        }
+    }
+
+    /**
+     * Pasa a asignación cada carga en propuesta del campus, como el jefe de su departamento. Un veto falla con su motivo.
+     */
+    private function startAll(Term $term, Campus $campus): void
+    {
+        $loads = AcademicLoad::query()->with('department')
+            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', LoadStatus::Proposed)
+            ->get()->sortBy('department.code');
+
+        foreach ($loads as $load) {
+            try {
+                app(StartStaffing::class)->handle($load, $this->head($campus, $load->department), 'Horario sin choques duros: pasa a asignación docente.');
+            } catch (ValidationException $exception) {
+                throw new RuntimeException(sprintf('La carga de %s en %s no pasa a asignación: %s', $load->department->code, $campus->code, Arr::first(Arr::flatten($exception->errors()))), previous: $exception);
+            }
+        }
+
+        $this->command?->info(sprintf('Asignación docente en %s: pasan a asignación %s.', $campus->code, $loads->isEmpty() ? 'ninguna carga' : $loads->pluck('department.code')->implode(', ')));
+    }
+
+    /**
+     * Da docente a cada grupo activo sin docente del campus. Primero lo planea contra una foto del campus que se va
+     * actualizando: los grupos de las horas más saturadas de su departamento van antes (byCongestion) y cada uno toma al
+     * primero de su ranking que pasa HC-01, HC-08 y HC-09, el primer lugar si el ranking se recalculara en ese momento.
+     * Al que se queda sin nadie se le busca lugar moviendo un grupo de un candidato a otro docente (repair). Luego lo
+     * escribe: las primeras de cada departamento (`actions`) que van al primer lugar guardado por AssignTeacher, las
+     * demás en bloque (el docente del grupo y su fila del historial, sin bitácora, como el modo `mixed`). Solo toca los
+     * grupos de las cargas en asignación. Los rankings guardados se quedan como los calculó el punto 5.
+     */
+    private function assignAll(Term $term, Campus $campus): void
+    {
+        $this->validator = app(ScheduleValidator::class);
+        $this->validator->forget();
+        $this->state = $this->validator->stateFor($term->id, $campus->id);
+
+        $groups = Group::query()->active()->join('subjects', 'subjects.id', '=', 'groups.subject_id')
+            ->where('groups.term_id', $term->id)->where('groups.campus_id', $campus->id)->whereNull('groups.teacher_id')
+            ->whereIn('groups.department_id', AcademicLoad::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', LoadStatus::Staffing)->select('department_id'))
+            ->orderBy('subjects.code')->orderBy('groups.code')->select('groups.*')->get();
+        $rankings = $this->rankingsOf($term, $groups->modelKeys());
+        $departments = Department::query()->withTrashed()->whereIn('id', $groups->pluck('department_id')->unique()->all())->get()->keyBy('id');
+        $plan = [];
+
+        foreach ($this->byCongestion($groups, $rankings) as $group) {
+            $teacherId = $this->fitting($group->id, $rankings[$group->id] ?? [], 1)[0] ?? null;
+
+            if ($teacherId !== null) {
+                $this->state = $this->state->withTeacher($group->id, $teacherId);
+                $plan[$group->id] = $teacherId;
+            }
+        }
+
+        foreach ($groups as $group) {
+            if (! isset($plan[$group->id])) {
+                $this->repair($group->id, $rankings, $plan);
+            }
+        }
+
+        $budget = [];
+
+        foreach ($groups as $group) {
+            $department = $departments[$group->department_id];
+            $teacherId = $plan[$group->id] ?? null;
+            $order = $rankings[$group->id] ?? [];
+            $head = $this->head($campus, $department);
+            $budget[$department->id] ??= (int) $this->profile['actions'];
+
+            if ($teacherId !== null && $budget[$department->id] > 0 && $teacherId === $order[0]) {
+                $written = $this->assignWithAction($group, $teacherId, $head, null);
+                $budget[$department->id] -= $written ? 1 : 0;
+            } else {
+                $written = $teacherId !== null && $this->assignDirectly($group, $teacherId, 1, count($order), null, $head);
+            }
+
+            if (! $written) {
+                $this->unstaffed[$campus->code][$department->code] = ($this->unstaffed[$campus->code][$department->code] ?? 0) + 1;
+            }
+        }
+    }
+
+    /**
+     * Los grupos en el orden en que se planea su docente: primero los que caen en las horas en que su departamento tiene
+     * más grupos por candidato (en esas horas cada docente sirve para uno solo, HC-01); en empate, el orden de llegada.
+     *
+     * @param  Collection<int, Group>  $groups
+     * @param  array<string, list<string>>  $rankings
+     * @return Collection<int, Group>
+     */
+    private function byCongestion(Collection $groups, array $rankings): Collection
+    {
+        $busy = [];
+
+        foreach ($groups as $group) {
+            foreach ($this->hoursOf($group->id) as $hour) {
+                $busy[$group->department_id][$hour] = ($busy[$group->department_id][$hour] ?? 0) + 1;
+            }
+        }
+
+        return $groups->sortByDesc(function (Group $group) use ($busy, $rankings): float {
+            $peak = max([0, ...array_map(fn (string $hour): int => $busy[$group->department_id][$hour], $this->hoursOf($group->id))]);
+
+            return $peak / max(1, count($rankings[$group->id] ?? []));
+        })->values();
+    }
+
+    /**
+     * Las horas de la semana que ocupa el grupo, como «día|hora».
+     *
+     * @return list<string>
+     */
+    private function hoursOf(string $groupId): array
+    {
+        $hours = [];
+
+        foreach ($this->state->sessionsOf($groupId) as $session) {
+            for ($hour = intdiv($session->start, 60); $hour * 60 < $session->end; $hour++) {
+                $hours[] = "{$session->day}|{$hour}";
+            }
+        }
+
+        return array_values(array_unique($hours));
+    }
+
+    /**
+     * Busca lugar para un grupo sin candidato que pase: a uno de sus primeros candidatos que solo choca (HC-01) o no le
+     * alcanzan las horas (HC-08) por un grupo planeado en esta corrida, se le quita ese grupo si así le cabe este y otro
+     * docente que pasa toma el que se movió. Los dos quedan en el primer lugar que pasa al momento de decidir.
+     *
+     * @param  array<string, list<string>>  $rankings
+     * @param  array<string, string>  $plan  grupo => docente, de esta corrida
+     */
+    private function repair(string $groupId, array $rankings, array &$plan): bool
+    {
+        $byTeacher = [];
+
+        foreach ($plan as $planned => $teacherId) {
+            $byTeacher[$teacherId][] = $planned;
+        }
+
+        foreach (array_slice($rankings[$groupId] ?? [], 0, self::REPAIR_CANDIDATES) as $teacherId) {
+            $result = $this->check($groupId, $teacherId);
+            $hard = array_unique(array_map(fn (Violation $violation): string => $violation->rule, array_filter($result?->violations() ?? [], fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard)));
+
+            if ($result === null || $hard === [] || array_diff($hard, ['HC-01', 'HC-08']) !== []) {
+                continue;
+            }
+
+            foreach ($byTeacher[$teacherId] ?? [] as $moved) {
+                $without = $this->state->withTeacher($moved, null);
+
+                if (! $this->fits($groupId, $teacherId, $without)) {
+                    continue;
+                }
+
+                $with = $without->withTeacher($groupId, $teacherId);
+
+                foreach (array_slice($rankings[$moved] ?? [], 0, self::REPAIR_CANDIDATES) as $other) {
+                    if ($other !== $teacherId && $this->fits($moved, $other, $with)) {
+                        $this->state = $with->withTeacher($moved, $other);
+                        $plan[$groupId] = $teacherId;
+                        $plan[$moved] = $other;
+
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -426,8 +694,8 @@ final class StaffingDemoSeeder extends Seeder
     }
 
     /**
-     * Un `staffing:rank` por departamento y campus contra la misma base que este proceso, `PARALLEL_RANKINGS` a la vez
-     * (los de más grupos primero, así los bloques tardan parecido).
+     * Un `staffing:rank` por departamento y campus contra la misma base que este proceso, hasta `PARALLEL_RANKINGS` a la
+     * vez: en cuanto uno termina entra el siguiente, y los de más grupos van primero, así el más largo no espera a nadie.
      *
      * @param  list<array{0: string, 1: string}>  $scopes  campus y departamento
      */
@@ -435,20 +703,38 @@ final class StaffingDemoSeeder extends Seeder
     {
         $connection = (string) config('database.default');
         $env = ['DB_CONNECTION' => $connection, 'DB_DATABASE' => (string) config("database.connections.{$connection}.database")];
+        $running = [];
+        $failures = [];
+        $settle = function (int $slots) use (&$running, &$failures): void {
+            while (count($running) >= $slots) {
+                foreach ($running as $key => $process) {
+                    if (! $process->running()) {
+                        $result = $process->wait();
 
-        foreach (array_chunk($scopes, self::PARALLEL_RANKINGS) as $chunk) {
-            $results = Process::pool(function (Pool $pool) use ($term, $chunk, $env): void {
-                foreach ($chunk as [$campus, $department]) {
-                    $pool->path(base_path())->env($env)->timeout(900)
-                        ->command([PHP_BINARY, '-d', 'memory_limit=1G', 'artisan', 'staffing:rank', $term->code, "--campus={$campus}", "--department={$department}"]);
+                        if ($result->failed()) {
+                            $failures[] = trim($result->errorOutput() ?: $result->output());
+                        }
+
+                        unset($running[$key]);
+                    }
                 }
-            })->start()->wait();
 
-            foreach ($results as $result) {
-                if ($result->failed()) {
-                    throw new RuntimeException('Falló un ranking en paralelo: '.trim($result->errorOutput() ?: $result->output()));
+                if (count($running) >= $slots) {
+                    usleep(200_000);
                 }
             }
+        };
+
+        foreach ($scopes as [$campus, $department]) {
+            $settle(self::PARALLEL_RANKINGS);
+            $running[] = Process::path(base_path())->env($env)->timeout(900)
+                ->start([PHP_BINARY, '-d', 'memory_limit=1G', 'artisan', 'staffing:rank', $term->code, "--campus={$campus}", "--department={$department}"]);
+        }
+
+        $settle(1);
+
+        if ($failures !== []) {
+            throw new RuntimeException('Falló un ranking en paralelo: '.$failures[0]);
         }
     }
 
@@ -605,9 +891,9 @@ final class StaffingDemoSeeder extends Seeder
         return $fits;
     }
 
-    private function fits(string $groupId, string $teacherId): bool
+    private function fits(string $groupId, string $teacherId, ?ScheduleState $state = null): bool
     {
-        $result = $this->check($groupId, $teacherId);
+        $result = $this->check($groupId, $teacherId, $state);
 
         return $result !== null && ! $result->hasHard();
     }
@@ -616,13 +902,15 @@ final class StaffingDemoSeeder extends Seeder
      * Lo que diría el validador del grupo si fuera del docente (HC-01, HC-08, HC-09 y SC-09), con la foto actual; null
      * si la foto no conoce al docente.
      */
-    private function check(string $groupId, string $teacherId): ?ValidationResult
+    private function check(string $groupId, string $teacherId, ?ScheduleState $state = null): ?ValidationResult
     {
-        if ($this->state->teacher($teacherId) === null) {
+        $state ??= $this->state;
+
+        if ($state->teacher($teacherId) === null) {
             return null;
         }
 
-        $result = $this->validator->validate($this->state->withTeacher($groupId, $teacherId), new ValidationScope([$groupId], [$teacherId]), ScheduleValidator::TEACHER_RULES);
+        $result = $this->validator->validate($state->withTeacher($groupId, $teacherId), new ValidationScope([$groupId], [$teacherId]), ScheduleValidator::TEACHER_RULES);
 
         return new ValidationResult($result->forGroup($groupId));
     }
