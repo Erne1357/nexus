@@ -25,14 +25,14 @@ use Illuminate\Support\Facades\DB;
  *
  * @param  list<string>  $campuses
  */
-function seedDemoFacilities(array $campuses = ['C2'], int $seed = 2027, bool $forProcess = false): void
+function seedDemoFacilities(array $campuses = ['C2'], int $seed = 2027, bool $withProcessRooms = false): void
 {
     $seeder = (new DatabaseSeeder)->setContainer(app());
 
     $seeder->call(CampusSeeder::class);
     $seeder->call(DemoTermSeeder::class);
     $seeder->callWith(AcademicDemoSeeder::class, ['campuses' => $campuses]);
-    $seeder->callWith(FacilitiesDemoSeeder::class, ['campuses' => $campuses, 'seed' => $seed, 'forProcess' => $forProcess]);
+    $seeder->callWith(FacilitiesDemoSeeder::class, ['campuses' => $campuses, 'seed' => $seed, 'withProcessRooms' => $withProcessRooms]);
 }
 
 function campusId(string $code): string
@@ -72,20 +72,23 @@ it('siembra Campus I con más edificios y salones', function () {
         ->and(Room::withTrashed()->where('campus_id', campusId('C1'))->count())->toBeBetween(165, 200);
 });
 
-it('para la demo por puntos agrega a Campus I seis laboratorios generales sin dueño, sin cambiar los demás salones', function () {
+it('para la demo por puntos con el volumen masivo agrega edificios y salones grandes sin dueño, sin cambiar los demás', function () {
     $snapshot = fn (): array => Room::withTrashed()->orderBy('campus_id')->orderBy('code')->get(['campus_id', 'code', 'capacity', 'type', 'department_id', 'features'])->toArray();
     seedDemoFacilities(['C1', 'C2']);
     $mixed = $snapshot();
 
-    seedDemoFacilities(['C1', 'C2'], forProcess: true);
+    seedDemoFacilities(['C1', 'C2'], withProcessRooms: true);
     $process = Room::query()->where('campus_id', campusId('C1'))->where('code', 'like', 'LG%')->orderBy('code')->get();
+    $added = fn (string $campus): int => Room::query()->where('campus_id', campusId($campus))->where(fn ($query) => $query->where('code', 'like', 'LG%')->orWhere('code', 'like', 'N%')->orWhere('code', 'like', 'LN%'))->count();
 
     expect($process)->toHaveCount(6)
         ->and($process->pluck('capacity')->all())->toBe([35, 36, 37, 38, 39, 40])
         ->and($process->pluck('department_id')->filter()->all())->toBe([])
         ->and($process->every(fn (Room $room): bool => $room->type === RoomType::Laboratorio && $room->is_active))->toBeTrue()
-        ->and(array_values(array_filter($snapshot(), fn (array $room): bool => ! str_starts_with($room['code'], 'LG'))))->toBe($mixed)
-        ->and(Room::query()->where('campus_id', campusId('C2'))->where('code', 'like', 'LG%')->exists())->toBeFalse();
+        ->and(array_values(array_filter($snapshot(), fn (array $room): bool => preg_match('/^(LG|N|LN)\d/', $room['code']) !== 1)))->toBe($mixed)
+        ->and($added('C1'))->toBe(88)
+        ->and($added('C2'))->toBe(56)
+        ->and(Room::query()->whereIn('campus_id', [campusId('C1'), campusId('C2')])->where(fn ($query) => $query->where('code', 'like', 'N%')->orWhere('code', 'like', 'LN%'))->whereNotNull('department_id')->exists())->toBeFalse();
 });
 
 it('cubre los cinco tipos de salón, con y sin departamento dueño, en cada campus', function () {

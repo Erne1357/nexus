@@ -7,6 +7,7 @@ use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -58,8 +59,8 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Demo por puntos: los edificios y salones de los campus del volumen llevan a «catálogos», con los laboratorios
-     * generales de Campus I que solo trae este modo (FacilitiesDemoSeeder::PROCESS_ROOMS).
+     * Demo por puntos: los edificios y salones de los campus del volumen llevan a «catálogos». Con el volumen masivo,
+     * además, los edificios y salones grandes que pide su número de grupos (FacilitiesDemoSeeder::PROCESS_BUILDINGS).
      */
     public function demoSteps(): array
     {
@@ -67,7 +68,7 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
             new DemoStep(DemoCheckpoint::Catalogs, 'Edificios y salones', fn (DemoContext $demo) => $demo->runSeeder(FacilitiesDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'seed' => $demo->seed,
-                'forProcess' => true,
+                'withProcessRooms' => $demo->volume === DemoVolume::Massive,
             ])),
         ];
     }
