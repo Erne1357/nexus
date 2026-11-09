@@ -25,7 +25,9 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
+use Closure;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Random\Engine\Mt19937;
@@ -45,6 +47,11 @@ use RuntimeException;
  * - los avisos («envió», «reenvió», «regresó») los mandan los listeners en el momento (la cola va en `sync`
  *   mientras corre) y el seeder marca como leídos los más viejos de cada usuario, para que la campana tenga de
  *   los dos.
+ *
+ * Con `$complete` (el paso de AcademicLoad que lleva al punto 4 «horarios» de `demo:seed`), en cambio, cada carrera
+ * ofrecida propone y envía, y cada departamento acepta todas sus partes; así nacen todos los grupos y cada carga con
+ * partes pasa a `proposed`. Lo que no se pueda (una carrera sin coordinador, un departamento sin jefe o sin sus
+ * catálogos validados, un envío rechazado) detiene el seeder con el motivo, en vez de dejar el punto a medias.
  *
  * Determinista con `$seed`. Idempotente: una propuesta que ya no está en borrador no se toca, así que volver a
  * correrlo solo completa lo que falte. Se niega a correr en producción.
@@ -73,10 +80,11 @@ final class AcademicLoadDemoSeeder extends Seeder
 
     /**
      * @param  list<string>  $campuses  claves de campus
+     * @param  bool  $complete  todas las carreras envían y todas las partes se aceptan (punto 4 de la demo)
      *
-     * @throws RuntimeException en producción o si el periodo no existe
+     * @throws RuntimeException en producción, si el periodo no existe o, con `$complete`, si algo no se puede completar
      */
-    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, int $returnEvery = 4, int $pendingEvery = 3, int $readOlderThan = 3): void
+    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, int $returnEvery = 4, int $pendingEvery = 3, int $readOlderThan = 3, bool $complete = false): void
     {
         $this->refuseProduction();
         $this->random = new Randomizer(new Mt19937($seed));
@@ -90,12 +98,18 @@ final class AcademicLoadDemoSeeder extends Seeder
                 $campus = Campus::query()->where('code', $code)->firstOrFail();
 
                 if (! TermOpening::query()->where('term_id', $termModel->id)->where('campus_id', $campus->id)->exists()) {
+                    if ($complete) {
+                        throw new RuntimeException("El periodo {$term} no está abierto en {$code}: no se pueden enviar sus propuestas.");
+                    }
+
                     $this->command?->warn("El periodo {$term} no está abierto en {$code}: no se arman propuestas ahí.");
 
                     continue;
                 }
 
-                $this->seedCampus($termModel, $campus, $returnEvery, $pendingEvery);
+                $complete
+                    ? $this->completeCampus($termModel, $campus)
+                    : $this->seedCampus($termModel, $campus, $returnEvery, $pendingEvery);
             }
 
             $this->markOlderNoticesRead($readOlderThan);
@@ -106,11 +120,7 @@ final class AcademicLoadDemoSeeder extends Seeder
 
     private function seedCampus(Term $term, Campus $campus, int $returnEvery, int $pendingEvery): void
     {
-        $careers = Career::query()
-            ->whereIn('id', CareerCampus::query()->where('campus_id', $campus->id)->where('is_active', true)->select('career_id'))
-            ->orderBy('code')
-            ->get();
-
+        $careers = $this->offeredCareers($campus);
         $decision = 0;
 
         foreach ($careers->values() as $index => $career) {
@@ -171,6 +181,63 @@ final class AcademicLoadDemoSeeder extends Seeder
                 $this->submit($proposal, $coordinator);
             }
         }
+    }
+
+    /**
+     * Cada carrera ofrecida corrige unas filas, envía, y cada departamento acepta su parte con su jefe; una propuesta
+     * regresada antes se vuelve a enviar. Lo que no se pueda, se detiene con el motivo.
+     *
+     * @throws RuntimeException
+     */
+    private function completeCampus(Term $term, Campus $campus): void
+    {
+        foreach ($this->offeredCareers($campus) as $career) {
+            $where = "{$career->code} en {$campus->code}";
+            $coordinator = $this->coordinatorOf($campus, $career) ?? throw new RuntimeException("{$where} no tiene coordinador: nadie puede enviar su propuesta.");
+            $proposal = app(StartCareerProposal::class)->handle($term, $campus, $career, $coordinator);
+
+            if (in_array($proposal->status, [ProposalStatus::Draft, ProposalStatus::Returned], true)) {
+                $this->adjustRows($proposal, $coordinator);
+                $proposal = $this->orFail(fn (): CareerProposal => app(SubmitCareerProposal::class)->handle($proposal, $coordinator), "La propuesta de {$where} no se pudo enviar");
+            }
+
+            foreach ($this->pendingParts($proposal) as $part) {
+                $what = "La parte de {$part->department->code} en la propuesta de {$where}";
+                $head = $this->headOf($campus, $part->department) ?? throw new RuntimeException("{$what} no tiene jefe que la acepte.");
+
+                $this->orFail(fn () => app(AcceptProposalReview::class)->handle($part, $head), "{$what} no se pudo aceptar");
+            }
+        }
+    }
+
+    /**
+     * Corre una Action y, si la rechaza, detiene el seeder con sus motivos.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $work
+     * @return T
+     *
+     * @throws RuntimeException
+     */
+    private function orFail(Closure $work, string $what): mixed
+    {
+        try {
+            return $work();
+        } catch (ValidationException $exception) {
+            throw new RuntimeException("{$what}: ".implode(' ', Arr::flatten($exception->errors())), previous: $exception);
+        }
+    }
+
+    /**
+     * @return Collection<int, Career>
+     */
+    private function offeredCareers(Campus $campus): Collection
+    {
+        return Career::query()
+            ->whereIn('id', CareerCampus::query()->where('campus_id', $campus->id)->where('is_active', true)->select('career_id'))
+            ->orderBy('code')
+            ->get();
     }
 
     /**

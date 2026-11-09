@@ -4,6 +4,7 @@ use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\AcademicLoadServiceProvider;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
@@ -18,15 +19,22 @@ use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoPlan;
+use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
+use App\Modules\Scheduling\SchedulingServiceProvider;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\Event;
 
 /*
 | Propuestas y bandejas de prueba (tareas 2.7 a 2.9): el demo con el periodo 20271 abierto en C2 y los catálogos
@@ -61,9 +69,14 @@ beforeEach(function () {
         ->update(['status' => ReviewStatus::Validated]);
 });
 
-function seedProposals(): void
+function seedProposals(array $params = []): void
 {
-    (new AcademicLoadDemoSeeder)->setContainer(app())->run();
+    (new AcademicLoadDemoSeeder)->setContainer(app())->run(...$params);
+}
+
+function validateEveryCatalogReview(Term $term): void
+{
+    CatalogReview::query()->where('term_id', $term->id)->update(['status' => ReviewStatus::Validated]);
 }
 
 it('arma una propuesta por carrera ofrecida en C2, con borrador y propuestas enviadas, regresadas o aceptadas', function () {
@@ -106,6 +119,81 @@ it('volver a correrlo no duplica propuestas, partes ni avisos', function () {
     seedProposals();
 
     expect([CareerProposal::query()->count(), ProposalReview::query()->count(), DatabaseNotification::query()->count()])->toBe($before);
+});
+
+describe('completo (punto 4 de la demo)', function () {
+    it('cada carrera ofrecida envía y cada departamento acepta todas sus partes; sus cargas pasan a propuesta', function () {
+        validateEveryCatalogReview($this->term);
+
+        seedProposals(['complete' => true]);
+
+        $offered = CareerCampus::query()->where('campus_id', $this->c2->id)->where('is_active', true)->count();
+        $withParts = ProposalReview::query()->distinct()->pluck('department_id');
+
+        expect(CareerProposal::query()->where('campus_id', $this->c2->id)->where('status', ProposalStatus::Accepted)->count())->toBe($offered)
+            ->and(ProposalReview::query()->where('status', '!=', 'accepted')->count())->toBe(0)
+            ->and(AcademicLoad::query()->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count())->toBe(0)
+            ->and(AcademicLoad::query()->whereNotIn('department_id', $withParts)->where('status', '!=', LoadStatus::Draft)->count())->toBe(0);
+    });
+
+    it('termina lo que dejó la demo mezclada: reenvía las regresadas y acepta las pendientes', function () {
+        validateEveryCatalogReview($this->term);
+        seedProposals();
+        expect(ProposalReview::query()->where('status', '!=', 'accepted')->exists())->toBeTrue();
+
+        seedProposals(['complete' => true]);
+
+        expect(CareerProposal::query()->where('status', '!=', ProposalStatus::Accepted)->count())->toBe(0)
+            ->and(ProposalReview::query()->where('status', '!=', 'accepted')->count())->toBe(0);
+    });
+
+    it('se detiene con el motivo si un departamento no tiene sus catálogos validados (HC-14)', function () {
+        expect(fn () => seedProposals(['complete' => true]))->toThrow(RuntimeException::class, 'no se pudo aceptar');
+    });
+
+    it('se detiene si el periodo no está abierto en el campus', function () {
+        expect(fn () => seedProposals(['complete' => true, 'campuses' => ['C1']]))->toThrow(RuntimeException::class, 'no está abierto en C1');
+    });
+});
+
+it('demo por puntos: los pasos que llevan a «horarios» dejan todas sus revisiones en verde', function () {
+    validateEveryCatalogReview($this->term);
+    $plan = app(DemoPlan::class);
+    $demo = DemoContext::for(DemoVolume::Demo);
+
+    Event::fakeFor(function () use ($plan, $demo): void {
+        foreach ($plan->stepsFor(DemoCheckpoint::Scheduling) as $step) {
+            ($step->run)($demo);
+        }
+    }, $plan->quietEvents());
+
+    // Solo las revisiones de AcademicLoad y Scheduling: las de los puntos anteriores las cubren sus módulos y esta base
+    // no pasa por ellos (por ejemplo, la contraseña demo del admin).
+    $checks = DemoPlan::fromModules([app()->getProvider(AcademicLoadServiceProvider::class), app()->getProvider(SchedulingServiceProvider::class)])
+        ->checksAt(DemoCheckpoint::Scheduling);
+    $failed = collect($checks)
+        ->map(fn (DemoCheck $check): string|true => ($check->passes)($demo) === true ? true : $check->label.': '.($check->passes)($demo))
+        ->reject(fn (string|true $result): bool => $result === true)->values()->all();
+
+    expect($plan->stepsFor(DemoCheckpoint::Scheduling))->not->toBeEmpty()
+        ->and($checks)->toHaveCount(5)
+        ->and($failed)->toBe([]);
+});
+
+it('demo por puntos: una carga se compara con las partes de su campus, no con las de otro', function () {
+    validateEveryCatalogReview($this->term);
+    seedProposals(['complete' => true]);
+    $c1 = Campus::query()->where('code', 'C1')->firstOrFail();
+    $teaching = ProposalReview::query()->value('department_id');
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'department_id' => $teaching]);
+    $check = collect(app()->getProvider(AcademicLoadServiceProvider::class)->demoChecks())
+        ->first(fn (DemoCheck $check): bool => $check->label === 'Las cargas con partes aceptadas están en propuesta');
+
+    expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBeTrue();
+
+    AcademicLoad::query()->where('campus_id', $this->c2->id)->where('department_id', $teaching)->update(['status' => LoadStatus::Draft]);
+
+    expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBe('1 cargas con partes aceptadas no están en propuesta.');
 });
 
 it('no corre en producción', function () {
