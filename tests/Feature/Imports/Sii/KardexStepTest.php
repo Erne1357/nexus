@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Imports\Sii\SiiExport;
 use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
@@ -38,18 +39,23 @@ function writeSiiSelection(string $dir, array $rows): void
 }
 
 /**
+ * Sin `$withSiiCode` quita de cada fila la clave del SII, que solo revisan las pruebas que la necesitan.
+ *
  * @param  array<string|int, string>  $subjectFor  clave del SII → clave de Nexus
+ * @param  array<string, array<string|int, string>>  $subjectForPlan  plan → clave del SII → clave de Nexus
  * @return array{rows: list<array<string, scalar|null>>, incidents: list<array{level: string, ref: string, message: string}>}
  */
-function kardexStepRun(string $dir, array $subjectFor = ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0901', 'QU1' => 'AEF-1001']): array
+function kardexStepRun(string $dir, array $subjectFor = ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0901', 'QU1' => 'AEF-1001'], array $subjectForPlan = [], bool $withSiiCode = false): array
 {
     $migration = new SiiMigration(SiiExport::open($dir), '/nonexistent');
     $migration->remember('subject_for', fn (): array => $subjectFor);
+    $migration->remember('subject_for_plan', fn (): array => $subjectForPlan);
     $out = ['rows' => [], 'incidents' => []];
 
     foreach ((new KardexStep)->batches($migration) as $batch) {
         expect($batch->template)->toBe('kardex');
-        $out = ['rows' => array_values([...$batch->rows]), 'incidents' => $batch->incidents];
+        $rows = array_values([...$batch->rows]);
+        $out = ['rows' => $withSiiCode ? $rows : array_map(fn (array $row): array => array_diff_key($row, ['sii_subject_code' => true]), $rows), 'incidents' => $batch->incidents];
     }
 
     return $out;
@@ -244,9 +250,25 @@ it('se detiene si dos renglones distintos chocan en la misma llave, en vez de pe
     writeSiiHistory($this->dir, [['20251', 'S1', 'CD1', '85', 'O1', 'A'], ['20251', 'S2', 'CD1', '85', 'O1', 'A']]);
     $migration = new SiiMigration(SiiExport::open($this->dir), '/nonexistent');
     $migration->remember('subject_for', fn (): array => ['CD1' => 'ACF-0901']);
+    $migration->remember('subject_for_plan', fn (): array => []);
 
     expect(fn () => iterator_to_array((new KardexStep(fn (string $tuple): int => 42))->batches($migration)))
         ->toThrow(RuntimeException::class, 'chocaron en la misma llave');
+});
+
+it('lleva la clave del SII a la materia de la retícula del alumno y guarda la clave original', function () {
+    $plan = StudyPlan::factory()->create(['code' => 'ISIC-2010-224']);
+    Student::factory()->for($plan)->create(['control_number' => 'S6', 'career_id' => $plan->career_id]);
+    writeSiiHistory($this->dir, [['20221', 'S6', '3BE', '80', 'O1', 'A'], ['20221', 'S1', '3BE', '90', 'O1', 'A']]);
+    writeSiiSelection($this->dir, [['20263', 'S6', '3BE', 'N', 'I']]);
+
+    $run = kardexStepRun($this->dir, ['3BE' => 'AEC-1008'], ['ISIC-2010-224' => ['3BE' => '3EB', '3EB' => '3EB']], withSiiCode: true);
+
+    expect(array_map(fn (array $row): array => [$row['control_number'], $row['subject_code'], $row['sii_subject_code']], $run['rows']))->toBe([
+        ['S6', '3EB', '3BE'],
+        ['S1', 'AEC-1008', '3BE'],
+        ['S6', '3EB', '3BE'],
+    ]);
 });
 
 it('sin historia no migra el kárdex y lo avisa', function () {
@@ -270,9 +292,13 @@ it('solo lee las columnas que usa: ni el usuario ni las fechas', function () {
         ->and(KardexStep::SELECTION_COLUMNS)->toEqualCanonicalizing(['periodo', 'no_de_control', 'materia', 'repeticion', 'status_seleccion']);
 });
 
-it('el paso de materias debe correr antes', function () {
+it('el paso de materias debe correr antes, también su mapa por plan', function () {
     writeSiiHistory($this->dir, [['20251', 'S1', 'CD1', '85', 'O1', 'A']]);
     $migration = new SiiMigration(SiiExport::open($this->dir), '/nonexistent');
 
     expect(fn () => iterator_to_array((new KardexStep)->batches($migration)))->toThrow(SiiStepOutOfOrder::class);
+
+    $migration->remember('subject_for', fn (): array => ['CD1' => 'ACF-0901']);
+
+    expect(fn () => iterator_to_array((new KardexStep)->batches($migration)))->toThrow(SiiStepOutOfOrder::class, 'subject_for_plan');
 });

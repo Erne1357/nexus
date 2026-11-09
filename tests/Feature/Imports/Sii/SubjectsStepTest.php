@@ -421,6 +421,51 @@ it('no funde variantes con créditos distintos', function () {
     expect(collect($subjects['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['X1', 'X2', 'Y1', 'Y2']);
 });
 
+it('funde variantes con horas distintas: queda la materia de la variante presencial con sus horas, y avisa', function () {
+    writeSiiSubjects($this->dir, [['P1', '1', '110100', 'CONTABILIDAD FINANCIERA'], ['P2', '1', '110100', 'CONTABILIDAD FINANCIERA']], [
+        ['A', '1', 'P1', '4', '4', '0', '2', '', 'A'],
+        ['A2', '2', 'P2', '4', '2', '2', '2', '', 'A'],
+    ], [['A2', '2', 'P2', 'AEC-1008']]);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $placements = collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224');
+    $warning = collect($run['subjects']['incidents'])->first(fn (array $i): bool => $i['ref'] === 'AAA-2010-224/P1' && str_contains($i['message'], 'horas distintas'));
+
+    expect($placements->pluck('code')->all())->toBe(['P1'])
+        ->and($placements->first())->toMatchArray(['theory_hours' => '4', 'practice_hours' => '0', 'credits' => '4'])
+        ->and(collect($run['subject_aliases']['rows'])->keyBy('code')['P2']['subject'])->toBe('P1')
+        ->and($warning)->not->toBeNull()
+        ->and($warning['message'])->toContain('P1')->toContain('P2')->toContain('presencial')->toContain('supuesto por confirmar');
+});
+
+it('funde variantes cuyo nombre solo cambia de singular a plural', function () {
+    writeSiiSubjects($this->dir, [['T1', '1', '110100', 'TUTORIA'], ['T2', '1', '110100', 'TUTORIAS']], [
+        ['A', '1', 'T2', '1', '1', '0', '1', '', 'A'],
+        ['A2', '2', 'T1', '1', '0', '1', '1', '', 'A'],
+    ]);
+
+    $placements = collect(subjectsStepRun($this->dir, $this->curated)['subjects']['rows'])->where('plan', 'AAA-2010-224');
+
+    expect($placements->pluck('code')->all())->toBe(['T2'])
+        ->and($placements->first())->toMatchArray(['theory_hours' => '1', 'practice_hours' => '0']);
+});
+
+it('recuerda por plan a qué materia de Nexus va cada clave del SII, aunque su alias apunte a otra', function () {
+    writeSiiSubjects($this->dir, [['P1', '1', '110100', 'CONTABILIDAD FINANCIERA'], ['P2', '1', '110100', 'CONTABILIDAD FINANCIERA']], [
+        ['A', '1', 'P1', '4', '4', '0', '2', '', 'A'],
+        ['A2', '2', 'P2', '4', '2', '2', '2', '', 'A'],
+        ['B', '1', 'P2', '4', '2', '2', '3', '', 'A'],
+    ], [['A2', '2', 'P2', 'AEC-1008'], ['B', '1', 'P2', 'AEC-1008']]);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $byPlan = $run['migration']->remember('subject_for_plan', fn () => throw new LogicException('debía estar armado'));
+    $subjectFor = $run['migration']->remember('subject_for', fn () => throw new LogicException('debía estar armado'));
+
+    expect($byPlan['AAA-2010-224'])->toBe(['P1' => 'P1', 'P2' => 'P1'])
+        ->and($byPlan['BBB-2010-300'])->toBe(['P2' => 'AEC-1008'])
+        ->and($subjectFor['P2'])->toBe('AEC-1008');
+});
+
 it('no depende del orden de los renglones del SII', function () {
     $planFor = [...SUBJECTS_STEP_PLAN_FOR, 'A3/4' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'mixta']];
     $catalog = [['Q1', '1', '110100', 'DIBUJO'], ['Q2', '1', '110100', 'DIBUJO']];

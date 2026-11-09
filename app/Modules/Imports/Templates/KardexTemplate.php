@@ -19,7 +19,8 @@ use Illuminate\Validation\Rule;
  * El periodo se guarda con el código del SII (`20251` Ene-Jun, `20252` verano, `20253` Ago-Dic); se aceptan
  * también `2025-1` y `2025/1`. El resultado se reconoce con sus variantes comunes (aprobado, AC, acreditada, NA,
  * no acreditada, en curso; confirmado el 29 de octubre de 2026); el paso `kardex` de la migración del SII ya le
- * entrega los valores de Nexus. Busca cada alumno y cada materia una vez por corrida: un kardex trae
+ * entrega los valores de Nexus. `sii_subject_code` (opcional) guarda la clave del SII con la que el alumno cursó la
+ * materia. Busca cada alumno y cada materia una vez por corrida: un kardex trae
  * cientos de miles de filas con los mismos alumnos y materias. Al terminar el lote despacha el recálculo del
  * progreso.
  */
@@ -65,6 +66,7 @@ class KardexTemplate extends ImportTemplate
             'grade' => 'calificación',
             'result' => 'resultado',
             'attempt' => 'oportunidad',
+            'sii_subject_code' => 'clave del SII',
         ];
     }
 
@@ -87,6 +89,7 @@ class KardexTemplate extends ImportTemplate
             'grade' => ['nullable', 'numeric', 'between:0,100'],
             'result' => ['required', Rule::enum(KardexResult::class)],
             'attempt' => ['required', 'integer', 'min:1'],
+            'sii_subject_code' => ['nullable', 'string', 'max:20'],
         ];
     }
 
@@ -99,6 +102,8 @@ class KardexTemplate extends ImportTemplate
         }
 
         $row['subject_code'] = is_string($row['subject_code']) ? Str::upper($row['subject_code']) : $row['subject_code'];
+        $code = self::asText($row['sii_subject_code'] ?? null);
+        $row['sii_subject_code'] = is_string($code) && trim($code) !== '' ? Str::upper(trim($code)) : null;
 
         if (is_string($row['term_code']) && preg_match('/^([0-9]{4})\D?([123])$/', $row['term_code'], $term)) {
             $row['term_code'] = $term[1].$term[2];
@@ -154,6 +159,7 @@ class KardexTemplate extends ImportTemplate
             'grade' => $row['grade'],
             'result' => $row['result'],
             'attempt' => $row['attempt'],
+            'sii_subject_code' => $row['sii_subject_code'],
         ];
     }
 

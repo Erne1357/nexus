@@ -32,7 +32,8 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * pendientes de Servicios Escolares, con la retícula del SII de la que salió en `sii_grid`) y `subject_aliases`, con cada clave del SII de cada lugar emitido o pendiente,
  * también las que se unieron en una clave TecNM. Recuerda `subject_for`: clave del SII →
  * clave de materia de Nexus, para los pasos de grupos y kárdex (las claves numéricas quedan como llaves int de
- * PHP: búscalas con `$map[$clave] ?? null`).
+ * PHP: búscalas con `$map[$clave] ?? null`), y `subject_for_plan`: plan de Nexus → clave del SII → materia de
+ * Nexus, para que el kárdex lleve la clave de cada alumno a la materia de su retícula.
  */
 final class SubjectsStep implements SiiStep
 {
@@ -61,8 +62,9 @@ final class SubjectsStep implements SiiStep
 
         $pending = $placements->pending();
         $rows = $this->subjectRows($migration, [...$grid, ...$pending], $catalog, $departmentForArea, $incidents);
-        [$subjectFor, $aliases, $aliasIncidents] = $placements->aliases($grid, $pending);
+        [$subjectFor, $aliases, $aliasIncidents, $subjectForPlan] = $placements->aliases($grid, $pending);
         $migration->remember('subject_for', fn (): array => $subjectFor);
+        $migration->remember('subject_for_plan', fn (): array => $subjectForPlan);
 
         yield new SiiBatch('subjects', 'materias.csv', array_values(array_diff_key($rows, $pending)), incidents: $incidents);
         yield new SiiBatch('pending_placements', 'materias_pendientes.csv', array_values(array_map(
