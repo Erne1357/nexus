@@ -395,6 +395,7 @@ final class StaffingDemoSeeder extends Seeder
                 $this->timed('asignaciones', function () use ($term, $campuses): void {
                     foreach ($campuses as $campus) {
                         $this->assignAll($term, $campus);
+                        $this->command?->info(sprintf('  %s: memoria pico %d MB.', $campus->code, memory_get_peak_usage(true) / 1048576));
                     }
                 });
                 $this->timed('carga por docente', fn () => app(RefreshTeacherTermLoads::class)->handle($term));
