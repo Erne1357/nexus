@@ -34,6 +34,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -150,10 +151,17 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
                 return $open === 0 ? true : "{$open} partes siguen sin aceptar.";
             }),
-            new DemoCheck([DemoCheckpoint::Scheduling], 'Las cargas con partes aceptadas están en propuesta', function (DemoContext $demo) use ($campusIds, $proposals): true|string {
-                $withParts = ProposalReview::query()->whereIn('career_proposal_id', $proposals($demo)->select('id'))->select('department_id');
+            // Una carga se compara con las partes de su mismo campus: un departamento que imparte en Campus I y no en
+            // Campus II deja su carga de Campus II en borrador.
+            new DemoCheck([DemoCheckpoint::Scheduling], 'Las cargas con partes aceptadas están en propuesta', function (DemoContext $demo) use ($campusIds): true|string {
                 $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo))
-                    ->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count();
+                    ->where('status', '!=', LoadStatus::Proposed)
+                    ->whereExists(fn (QueryBuilder $parts) => $parts->selectRaw('1')->from('proposal_reviews')
+                        ->join('career_proposals', 'career_proposals.id', '=', 'proposal_reviews.career_proposal_id')
+                        ->whereColumn('proposal_reviews.department_id', 'academic_loads.department_id')
+                        ->whereColumn('career_proposals.campus_id', 'academic_loads.campus_id')
+                        ->whereColumn('career_proposals.term_id', 'academic_loads.term_id'))
+                    ->count();
 
                 return $behind === 0 ? true : "{$behind} cargas con partes aceptadas no están en propuesta.";
             }),
