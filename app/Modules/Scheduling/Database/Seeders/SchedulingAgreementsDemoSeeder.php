@@ -19,6 +19,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Scheduling\Actions\Agreements\AcceptRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\CancelRoomLoan;
 use App\Modules\Scheduling\Actions\Agreements\RejectRoomLoan;
@@ -31,11 +32,18 @@ use App\Modules\Scheduling\Actions\Sessions\AssignSessionRoom;
 use App\Modules\Scheduling\Actions\Sessions\SyncSessionLoans;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Enums\GroupStatus;
+use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Events\GroupQuotasChanged;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\RoomSuggestionQuery;
+use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Support\RoomSupply;
+use App\Modules\Scheduling\Validation\State\StateGroup;
+use App\Modules\Scheduling\Validation\State\StateRoom;
+use App\Modules\Scheduling\Validation\State\StateSession;
+use Closure;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -87,8 +95,18 @@ use RuntimeException;
  * acuerdos pendientes, sin préstamos ni salones. Lo que una Action rechace lo detiene con el motivo, en vez de dejar el
  * punto a medias.
  *
+ * Con `$mode = 'rooms'` (el paso de Scheduling que lleva al punto 7 «cierre») toda sesión presencial de los grupos
+ * activos de departamentos editables recibe un salón de RoomSupply, sin crear HC-02, HC-05, HC-06 ni HC-11: primero
+ * las prácticas con laboratorio, que tienen menos salones, y en cada una el salón por defecto de la materia si sirve.
+ * Si alguna sesión no tiene salón posible, se detiene antes de escribir con cuántas son y ejemplos (el horario no se
+ * repara aquí). La primera sesión de cada departamento pasa por AssignSessionRoom con su jefe, para que la bitácora y
+ * el editor tengan una asignación real (el validador de cada una tarda segundos con un campus lleno); las demás se
+ * escriben en bloque. Los salones de otro departamento piden su préstamo con SyncSessionLoans y el jefe dueño lo
+ * acepta con AcceptRoomLoan (HC-10). Un campus que no usa salones se salta.
+ *
  * Determinista con `$seed` sobre los mismos datos. Idempotente: si el periodo y el campus ya tienen acuerdos (con
- * `quotas`, grupos compartidos), no hace nada. Se niega a correr en producción.
+ * `quotas`, grupos compartidos), no hace nada; con `rooms`, solo completa las sesiones sin salón y los préstamos sin
+ * aceptar. Se niega a correr en producción.
  */
 final class SchedulingAgreementsDemoSeeder extends Seeder
 {
@@ -104,8 +122,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
 
     private const array CLEAN_DEPARTMENTS = ['demo' => 3, 'massive' => 4];
 
-    /** La demo mezclada de siempre, o solo los cupos completos del punto 5. */
-    public const array MODES = ['mixed', 'quotas'];
+    /** La demo mezclada de siempre, solo los cupos completos del punto 5 o solo los salones completos del punto 7. */
+    public const array MODES = ['mixed', 'quotas', 'rooms'];
 
     private const array LOAN_REJECTIONS = [
         'El salón está reservado para prácticas de nuestros propios grupos en ese horario.',
@@ -147,7 +165,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      *                                                              SchedulingDemoSeeder::cleanDepartments(); sin ellos se deducen igual que ese seeder
      * @param  string  $mode  uno de MODES
      *
-     * @throws RuntimeException en producción, si el periodo no existe o, con `quotas`, si algo no se puede completar
+     * @throws RuntimeException en producción, si el periodo no existe o, con `quotas` o `rooms`, si algo no se puede completar
      * @throws InvalidArgumentException con un modo desconocido
      */
     public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $ratios = [], ?array $cleanDepartments = null, string $mode = 'mixed'): void
@@ -181,9 +199,11 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         try {
             Event::fakeFor(function () use ($found, $termModel, $profile, $cleanDepartments, $mode): void {
                 foreach ($found as $campus) {
-                    $mode === 'quotas'
-                        ? $this->seedCampusQuotas($termModel, $campus)
-                        : $this->seedCampus($termModel, $campus, $profile, $cleanDepartments[$campus->code] ?? null);
+                    match ($mode) {
+                        'quotas' => $this->seedCampusQuotas($termModel, $campus),
+                        'rooms' => $this->seedCampusRooms($termModel, $campus),
+                        default => $this->seedCampus($termModel, $campus, $profile, $cleanDepartments[$campus->code] ?? null),
+                    };
                 }
             }, [GroupScheduleChanged::class, GroupQuotasChanged::class]);
         } finally {
@@ -260,6 +280,172 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         $accepted = $this->seedSharedGroups($term, $campus, $usable, complete: true);
 
         $this->command?->info("Cupos en {$campus->code}: {$accepted} grupos compartidos aceptados, {$this->summary['direct']} grupos con cupo directo.");
+    }
+
+    /**
+     * Los salones completos del punto 7: un salón para cada sesión presencial sin salón y sus préstamos aceptados.
+     *
+     * @throws RuntimeException si alguna sesión no tiene salón posible o una Action rechaza un paso
+     */
+    private function seedCampusRooms(Term $term, Campus $campus): void
+    {
+        if (! $campus->profile->usesRooms) {
+            $this->command?->info("Salones en {$campus->code}: el campus no usa salones, no se hace nada.");
+
+            return;
+        }
+
+        ['plan' => $plan, 'missing' => $missing] = $this->roomPlan($term, $campus);
+
+        if ($missing !== []) {
+            throw new RuntimeException(count($missing)." sesiones de {$campus->code} no tienen un salón libre que les sirva sin choque (HC-02, HC-05, HC-06, HC-11); por ejemplo: ".implode('; ', array_slice($missing, 0, 5)).'.');
+        }
+        $first = [];
+        $bulk = [];
+
+        foreach ($plan as $item) {
+            isset($first[$item['group']->departmentId]) ? $bulk[] = $item : $first[$item['group']->departmentId] = $item;
+        }
+
+        $rooms = Room::query()->whereIn('id', array_unique(array_map(fn (array $item): string => $item['room']->id, $plan)))->get()->keyBy('id');
+
+        foreach ($first as $departmentId => $item) {
+            $this->orFail(fn () => app(AssignSessionRoom::class)->handle(
+                GroupSession::query()->findOrFail($item['session']->id),
+                $rooms[$item['room']->id],
+                $this->head(AcademicLoadPermission::AgreementRequest, $campus, $departmentId),
+            ), "El salón de {$item['label']} no se pudo asignar");
+        }
+
+        $table = (new GroupSession)->getTable();
+
+        foreach (array_chunk($bulk, 500) as $chunk) {
+            DB::update(
+                "update {$table} as gs set room_id = v.room_id::uuid, updated_at = now() from (values ".implode(', ', array_fill(0, count($chunk), '(?, ?)')).') as v(id, room_id) where gs.id = v.id::uuid',
+                array_merge(...array_map(fn (array $item): array => [$item['session']->id, $item['room']->id], $chunk)),
+            );
+        }
+
+        $groups = Group::query()->whereIn('id', array_unique(array_map(fn (array $item): string => $item['group']->id, $bulk)))->get()->keyBy('id');
+        $loanKeys = [];
+
+        foreach ($bulk as $item) {
+            $room = $item['room'];
+
+            if ($room->departmentId !== null && $room->departmentId !== $item['group']->departmentId) {
+                $loanKeys["{$item['group']->id}|{$room->id}|{$item['session']->day}"] = $item;
+            }
+        }
+
+        foreach ($loanKeys as $item) {
+            $this->orFail(fn () => $this->loans->resync(
+                $groups[$item['group']->id], $rooms[$item['room']->id], $item['session']->day,
+                $this->head(AcademicLoadPermission::AgreementRequest, $campus, $item['group']->departmentId),
+            ), "El préstamo del salón {$item['room']->code} para {$item['label']} no se pudo pedir");
+        }
+
+        $accepted = 0;
+
+        InterdepartmentalAgreement::query()
+            ->where('term_id', $term->id)->where('campus_id', $campus->id)
+            ->where('kind', AgreementKind::RoomLoan->value)->where('status', AgreementStatus::Proposed->value)
+            ->orderBy('created_at')->orderBy('id')
+            ->each(function (InterdepartmentalAgreement $loan) use ($campus, &$accepted): void {
+                $this->orFail(fn () => app(AcceptRoomLoan::class)->handle($loan, $this->head(AcademicLoadPermission::AgreementDecide, $campus, $loan->to_department_id)), 'Un préstamo de salón no se pudo aceptar');
+                $accepted++;
+            });
+
+        $this->command?->info("Salones en {$campus->code}: ".count($plan).' sesiones con salón ('.count($first)." con AssignSessionRoom), {$accepted} préstamos aceptados.");
+    }
+
+    /**
+     * Qué salón le toca a cada sesión presencial sin salón de los grupos activos de departamentos editables del campus,
+     * apartado en RoomSupply: primero las prácticas con laboratorio, luego por día, hora de inicio, la más larga
+     * primero y el grupo; el salón por defecto de la materia va primero si sirve, y los del departamento del grupo o
+     * sin dueño antes que los que piden préstamo. Si con esas preferencias a alguna sesión no le toca salón, reparte
+     * de nuevo solo por el más justo.
+     *
+     * No escribe nada.
+     *
+     * @return array{plan: list<array{session: StateSession, group: StateGroup, room: StateRoom, label: string}>, missing: list<string>}
+     */
+    private function roomPlan(Term $term, Campus $campus): array
+    {
+        $editable = $this->editableDepartments($term, $campus);
+        $state = app(ScheduleStateQuery::class)->forCampus($term, $campus);
+        $defaults = SubjectRoomDefault::query()->where('campus_id', $campus->id)->orderBy('priority')->orderBy('room_id')->get(['subject_id', 'room_id'])
+            ->groupBy('subject_id')->map(fn (Collection $rows): array => $rows->pluck('room_id')->all())->all();
+        $pending = [];
+
+        foreach ($state->groups() as $group) {
+            if (! $group->isActive || $group->campusId !== $campus->id || ! isset($editable[$group->departmentId])) {
+                continue;
+            }
+
+            $needsLab = $state->subject($group->subjectId)?->needsLab ?? false;
+
+            foreach ($state->sessionsOf($group->id) as $session) {
+                if ($session->roomId === null && $session->kind !== SessionKind::Virtual) {
+                    $pending[] = ['session' => $session, 'group' => $group, 'practice' => $needsLab && $session->kind === SessionKind::Practica];
+                }
+            }
+        }
+
+        $order = fn (array $item): array => [$item['practice'] ? 0 : 1, $item['session']->day, $item['session']->start, -$item['session']->end, $item['group']->code, (string) $item['session']->id];
+        usort($pending, fn (array $a, array $b): int => $order($a) <=> $order($b));
+
+        // Con preferencias (salón por defecto, propio antes que préstamo) el reparto se ve como en el uso normal; si así
+        // no alcanza, se reparte otra vez solo por el salón más justo antes de rendirse.
+        foreach ([true, false] as $preferences) {
+            $supply = RoomSupply::fromState($state, $campus->id);
+            $plan = [];
+            $missing = [];
+
+            foreach ($pending as ['session' => $session, 'group' => $group, 'practice' => $practice]) {
+                $label = "{$state->labelOf($group->id)} el {$session->describe()}";
+                $room = $preferences
+                    ? $supply->reserve($session->day, $session->start, $session->end, $group->capacity, $practice, $group->departmentId, $defaults[$group->subjectId] ?? [])
+                    : $supply->reserve($session->day, $session->start, $session->end, $group->capacity, $practice);
+                $room === null ? $missing[] = $label : $plan[] = ['session' => $session, 'group' => $group, 'room' => $room, 'label' => $label];
+            }
+
+            if ($missing === []) {
+                break;
+            }
+        }
+
+        return ['plan' => $plan, 'missing' => $missing];
+    }
+
+    /**
+     * Las sesiones presenciales sin salón del campus a las que el paso de salones (modo `rooms`) no podría darles uno
+     * sin choque, descritas («Cálculo Integral, grupo A3 el lunes de 7:00 a 9:00»). La usa la revisión del punto 5 de
+     * la demo, «la oferta de salones alcanza para el horario». No escribe nada.
+     *
+     * @return list<string>
+     */
+    public function missingRooms(Term $term, Campus $campus): array
+    {
+        return $this->roomPlan($term, $campus)['missing'];
+    }
+
+    /**
+     * Corre una Action y, si la rechaza, detiene el seeder con sus motivos.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $work
+     * @return T
+     *
+     * @throws RuntimeException
+     */
+    private function orFail(Closure $work, string $what): mixed
+    {
+        try {
+            return $work();
+        } catch (ValidationException $exception) {
+            throw new RuntimeException("{$what}: ".implode(' ', Arr::flatten($exception->errors())), previous: $exception);
+        }
     }
 
     /** Cuenta un intento que una Action rechazó (ValidationException); se informa al final del campus. */
