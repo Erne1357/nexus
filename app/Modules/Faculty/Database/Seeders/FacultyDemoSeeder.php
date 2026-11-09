@@ -90,7 +90,9 @@ class FacultyDemoSeeder extends Seeder
                 ? TeacherRosterGenerator::forProcess($random)->generate($code, (int) round($count * self::PROCESS_ROSTER_FACTOR), $subjectCounts, array_column($catalog, 'hours'))
                 : (new TeacherRosterGenerator($random))->generate($code, $count, $subjectCounts);
 
-            $heads[$code] = DB::transaction(fn (): array => $this->insert($roster, $catalog, $campuses[$code], $terms, $admin, $totals));
+            $heads[$code] = DB::transaction(function () use ($roster, $catalog, $campuses, $code, $terms, $admin, &$totals): array {
+                return $this->insert($roster, $catalog, $campuses[$code], $terms, $admin, $totals);
+            });
         }
 
         $inserted = (hrtime(true) - $started) / 1e9;
