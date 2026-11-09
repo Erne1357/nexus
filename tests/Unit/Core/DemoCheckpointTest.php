@@ -22,7 +22,9 @@ it('lista los puntos en el orden del proceso', function () {
         DemoCheckpoint::Catalogs,
         DemoCheckpoint::CatalogValidation,
         DemoCheckpoint::Proposal,
-    ])->and(DemoCheckpoint::upTo(DemoCheckpoint::Catalogs))->toBe([DemoCheckpoint::Catalogs]);
+    ])->and(DemoCheckpoint::upTo(DemoCheckpoint::Catalogs))->toBe([DemoCheckpoint::Catalogs])
+        ->and(DemoCheckpoint::since(DemoCheckpoint::Rooms))->toBe([DemoCheckpoint::Rooms, DemoCheckpoint::Closing])
+        ->and(DemoCheckpoint::since(DemoCheckpoint::All))->toBe([]);
 });
 
 it('cada punto empieza la etapa de su nombre y lleva su número', function () {

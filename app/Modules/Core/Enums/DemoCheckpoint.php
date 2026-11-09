@@ -76,6 +76,20 @@ enum DemoCheckpoint: string
     }
 
     /**
+     * Los puntos del proceso desde `$first` en adelante, para una revisión que vale de ahí en adelante («abierto desde
+     * la validación»).
+     *
+     * @return list<self>
+     */
+    public static function since(self $first): array
+    {
+        $staged = self::staged();
+        $index = array_search($first, $staged, true);
+
+        return $index === false ? [] : array_slice($staged, $index);
+    }
+
+    /**
      * Los puntos por los que pasa la demo para llegar a `$target`, en orden y con él incluido.
      *
      * @return list<self>

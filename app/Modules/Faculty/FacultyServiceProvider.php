@@ -3,11 +3,17 @@
 namespace App\Modules\Faculty;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\UnitAdscriptions;
+use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Listeners\BlockDepartmentDeletionWithTeachers;
 use App\Modules\Faculty\Models\Teacher;
@@ -76,6 +82,29 @@ final class FacultyServiceProvider extends ModuleServiceProvider
             ],
             Role::JefeDepartamento->value => $byDepartment,
             Role::JefeProyectoDocente->value => $byDepartment,
+        ];
+    }
+
+    /**
+     * Demo por puntos: los docentes del volumen, sus usuarios y los jefes de proyecto docente llevan a «catálogos»,
+     * con los mismos números que DemoSeeder y MassiveSeeder.
+     */
+    public function demoSteps(): array
+    {
+        return [
+            new DemoStep(DemoCheckpoint::Catalogs, 'Docentes, sus usuarios y jefes de proyecto docente', fn (DemoContext $demo) => $demo->runSeeder(FacultyDemoSeeder::class, [
+                'teachersPerCampus' => $demo->volume === DemoVolume::Massive ? ['C1' => 350, 'C2' => 250] : ['C2' => 120],
+                'seed' => $demo->seed,
+            ])),
+        ];
+    }
+
+    public function demoChecks(): array
+    {
+        return [
+            new DemoCheck(DemoCheckpoint::staged(), 'Hay docentes activos con usuario', fn (): true|string => Teacher::query()->where('is_active', true)->whereNotNull('user_id')->exists()
+                ? true
+                : 'Ningún docente activo tiene usuario.'),
         ];
     }
 }

@@ -68,6 +68,9 @@ $campusOne[] = ['code' => 'LC', 'name' => 'Laboratorio de Cómputo', 'rooms' => 
 $campusOne[] = ['code' => 'LQ', 'name' => 'Laboratorios de Ciencias', 'rooms' => [
     ['prefix' => 'LQ', 'count' => 10, 'type' => 'laboratorio', 'capacity' => [15, 30], 'label' => 'Laboratorio de Química ', 'owner' => 'CB', 'features' => $labFeatures, 'long' => true],
     ['prefix' => 'LS', 'count' => 6, 'type' => 'laboratorio', 'capacity' => [15, 25], 'label' => 'Laboratorio de Sistemas ', 'features' => $labFeatures, 'deleted' => 1],
+    // Sin dueño y de 35 a 40 lugares: las prácticas grandes de Campus I no cabían con HC-05 en los laboratorios de
+    // arriba (demo por puntos, medición del Riel B del 9 de noviembre de 2026).
+    ['prefix' => 'LG', 'count' => 6, 'type' => 'laboratorio', 'capacity' => [35, 40], 'label' => 'Laboratorio general ', 'features' => $labFeatures],
 ]];
 $campusOne[] = ['code' => 'IE', 'name' => 'Edificio de Ingeniería Eléctrica', 'rooms' => [
     ['prefix' => 'IE', 'count' => 10, 'type' => 'laboratorio', 'capacity' => [15, 25], 'label' => 'Laboratorio de Electrónica ', 'owner' => 'EE', 'features' => $labFeatures, 'inactive' => 1],
