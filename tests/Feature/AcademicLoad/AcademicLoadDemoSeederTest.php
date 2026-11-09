@@ -180,6 +180,22 @@ it('demo por puntos: los pasos que llevan a «horarios» dejan todas sus revisio
         ->and($failed)->toBe([]);
 });
 
+it('demo por puntos: una carga se compara con las partes de su campus, no con las de otro', function () {
+    validateEveryCatalogReview($this->term);
+    seedProposals(['complete' => true]);
+    $c1 = Campus::query()->where('code', 'C1')->firstOrFail();
+    $teaching = ProposalReview::query()->value('department_id');
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'department_id' => $teaching]);
+    $check = collect(app()->getProvider(AcademicLoadServiceProvider::class)->demoChecks())
+        ->first(fn (DemoCheck $check): bool => $check->label === 'Las cargas con partes aceptadas están en propuesta');
+
+    expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBeTrue();
+
+    AcademicLoad::query()->where('campus_id', $this->c2->id)->where('department_id', $teaching)->update(['status' => LoadStatus::Draft]);
+
+    expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBe('1 cargas con partes aceptadas no están en propuesta.');
+});
+
 it('no corre en producción', function () {
     app()->detectEnvironment(fn (): string => 'production');
 
