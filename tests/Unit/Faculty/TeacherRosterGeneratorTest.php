@@ -146,3 +146,35 @@ it('las plazas de un docente no repiten tipo y «desde», que es la clave de la 
         }
     }
 });
+
+it('con pesos por departamento, la adscripción principal sigue los pesos y aun así hay un docente de cada departamento', function () {
+    $teachers = (new TeacherRosterGenerator(new Randomizer(new Mt19937(2027))))->generate('C2', 300, [8, 5, 0, 12], [1, 1, 1, 97]);
+    $primaries = array_count_values(array_map(fn (array $teacher): int => $teacher['adscriptions'][0]['dept'], $teachers));
+
+    expect(array_keys($primaries))->toEqualCanonicalizing([0, 1, 2, 3])
+        ->and($primaries[3])->toBeGreaterThan(250);
+});
+
+it('el modo proceso deja como una décima parte de la semana no disponible; el de siempre, como un tercio', function () {
+    $unavailableShare = function (TeacherRosterGenerator $generator): float {
+        $blocked = 0;
+        $withAvailability = 0;
+
+        foreach ($generator->generate('C2', 400, [8, 5, 0, 12]) as $teacher) {
+            if ($teacher['availability'] === []) {
+                continue;
+            }
+
+            $withAvailability++;
+
+            foreach ($teacher['availability'] as $block) {
+                $blocked += $block['kind'] === 'unavailable' ? (int) substr($block['ends_at'], 0, 2) - (int) substr($block['starts_at'], 0, 2) : 0;
+            }
+        }
+
+        return $blocked / ($withAvailability * 5 * 14);
+    };
+
+    expect($unavailableShare(TeacherRosterGenerator::forProcess(new Randomizer(new Mt19937(2027)))))->toBeBetween(0.06, 0.14)
+        ->and($unavailableShare(new TeacherRosterGenerator(new Randomizer(new Mt19937(2027)))))->toBeBetween(0.28, 0.40);
+});

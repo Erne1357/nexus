@@ -223,3 +223,24 @@ it('ningún docente tiene bloques de disponibilidad traslapados en un día', fun
 
     expect($overlaps)->toBe(0);
 });
+
+it('en modo proceso siembra 40 % más docentes y reparte la adscripción principal por las horas de cada departamento en los planes', function () {
+    $seeder = (new DatabaseSeeder)->setContainer(app());
+    $seeder->call([CampusSeeder::class, AdminUserSeeder::class, DemoTermSeeder::class]);
+    $seeder->callWith(AcademicDemoSeeder::class, ['campuses' => ['C2']]);
+    $seeder->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C2' => 50], 'forProcess' => true]);
+
+    $hours = DB::table('study_plan_subjects')
+        ->join('study_plans', 'study_plans.id', '=', 'study_plan_subjects.study_plan_id')
+        ->join('subjects', 'subjects.id', '=', 'study_plan_subjects.subject_id')
+        ->join('career_campus', 'career_campus.career_id', '=', 'study_plans.career_id')
+        ->join('campuses', 'campuses.id', '=', 'career_campus.campus_id')
+        ->where('campuses.code', 'C2')->where('study_plans.is_active', true)
+        ->groupBy('subjects.department_id')->selectRaw('subjects.department_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
+        ->orderByDesc('hours')->pluck('hours', 'department_id');
+    $primaries = DB::table('teacher_departments')->where('is_primary', true)->groupBy('department_id')->selectRaw('department_id, count(*) as total')->pluck('total', 'department_id');
+
+    expect(DB::table('teachers')->count())->toBe(70)
+        ->and($primaries->sortDesc()->keys()->first())->toBe($hours->keys()->first())
+        ->and($primaries[$hours->keys()->first()])->toBeGreaterThan($primaries[$hours->keys()->last()]);
+});

@@ -3,12 +3,17 @@
 namespace App\Modules\Academic;
 
 use App\Modules\Academic\Authorization\AcademicScopeLabels;
+use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
+use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\Academic\Enums\AcademicPermission;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Authorization\ScopeLabels;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
@@ -56,6 +61,21 @@ final class AcademicServiceProvider extends ModuleServiceProvider
                 ability: 'viewAny', arguments: [Subject::class]),
             new NavigationItem('Planes de estudio', 'academic.plans', 'o-rectangle-group', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [StudyPlan::class], childRoutes: ['academic.plans.show']),
+        ];
+    }
+
+    /**
+     * Demo por puntos: el catálogo académico de los campus del volumen y sus usuarios de prueba (subdirección, jefes,
+     * jefes de proyecto docente y coordinadores) llevan a «catálogos»; hay jefe para todo departamento activo, porque
+     * cada uno valida sus catálogos con su jefe (CV-S1).
+     */
+    public function demoSteps(): array
+    {
+        return [
+            new DemoStep(DemoCheckpoint::Catalogs, 'Catálogo académico y usuarios de prueba', function (DemoContext $demo): void {
+                $demo->runSeeder(AcademicDemoSeeder::class, ['campuses' => $demo->campuses]);
+                $demo->runSeeder(DemoStaffSeeder::class, ['campuses' => $demo->campuses, 'allDepartments' => true]);
+            }),
         ];
     }
 }

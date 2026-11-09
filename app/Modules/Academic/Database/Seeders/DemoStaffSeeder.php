@@ -41,10 +41,13 @@ class DemoStaffSeeder extends Seeder
 
     /**
      * @param  list<string>  $campuses  claves de los campus
+     * @param  bool  $allDepartments  además, `jefe.<depto>` para todo departamento activo, aunque no tenga carreras ni
+     *                                materias en esos campus (demo por puntos: cada departamento valida sus catálogos con
+     *                                su jefe, CV-S1)
      *
      * @throws RuntimeException en producción o si falta alguno de los campus
      */
-    public function run(array $campuses = ['C2']): void
+    public function run(array $campuses = ['C2'], bool $allDepartments = false): void
     {
         $this->refuseProduction();
 
@@ -82,6 +85,18 @@ class DemoStaffSeeder extends Seeder
                 $alias = $aliases[$career->code] ?? Str::lower($career->code);
 
                 $this->user("coord.{$alias}.{$suffix}", "Coordinación de {$career->name} · {$campus->name}", Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => $career->id]);
+            }
+        }
+
+        if (! $allDepartments) {
+            return;
+        }
+
+        foreach (Department::query()->where('is_active', true)->whereNotIn('id', array_keys($headed))->orderBy('code')->get() as $department) {
+            $slug = Str::lower($department->code);
+
+            if (! $this->seatTaken(Role::JefeDepartamento, $department->id, "jefe.{$slug}")) {
+                $this->user("jefe.{$slug}", "Jefatura de {$department->name}", Role::JefeDepartamento, ['org_unit_id' => $department->id]);
             }
         }
     }

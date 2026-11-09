@@ -67,6 +67,8 @@ Un provider que sobrescriba `boot()` debe llamar a `parent::boot()`. La base no 
 
 Las entradas del menú del módulo se declaran en el método `navigation()` de su provider (ver "Navegación").
 
+La demo por puntos del proceso (`php artisan demo:seed --hasta=`) también se declara en el provider: `demoSteps()` da los pasos con los que el módulo siembra la demo (`DemoStep`, cada uno **lleva a** un `DemoCheckpoint` terminando la etapa anterior), `demoChecks()` lo que esos pasos garantizan al llegar a cada punto (`DemoCheck`) y `demoQuietEvents()` los eventos del módulo que se descartan mientras siembra. Core los junta en `DemoPlan`, como el menú, sin conocer a ningún módulo (ver `docs/arquitectura/testing.md`, "Demo por puntos del proceso").
+
 Reglas:
 
 - **Actions** son la única puerta de escritura. Reciben datos ya validados, abren la transacción, escriben, registran bitácora y disparan eventos. Los componentes Livewire nunca escriben en modelos directamente.

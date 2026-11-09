@@ -43,6 +43,18 @@ class FacilitiesDemoSeeder extends Seeder
     private const array BLOCK_HOURS = [[7, 9], [9, 11], [11, 13], [13, 15], [15, 18], [17, 20]];
 
     /**
+     * Salones que solo siembra la demo por puntos (`forProcess`): con los laboratorios de los archivos, las prácticas
+     * grandes de Campus I no caben con HC-05 en el horario limpio (medición del Riel B, 9 de noviembre de 2026). Van
+     * sin dueño, con capacidades fijas y después de todo lo demás, con su propia semilla, así la demo mezclada
+     * (`DemoSeeder`, `MassiveSeeder`) queda igual.
+     */
+    private const array PROCESS_ROOMS = [
+        'C1' => [
+            ['building' => 'LQ', 'prefix' => 'LG', 'count' => 6, 'type' => 'laboratorio', 'capacity' => [35, 40], 'pin' => [35, 36, 37, 38, 39, 40], 'label' => 'Laboratorio general '],
+        ],
+    ];
+
+    /**
      * Los datos de `data/buildings.php`.
      *
      * @return array<string, list<array<string, mixed>>>
@@ -55,11 +67,12 @@ class FacilitiesDemoSeeder extends Seeder
     /**
      * @param  list<string>  $campuses  claves de los campus cuyas instalaciones se siembran
      * @param  int  $seed  semilla: la misma da las mismas capacidades, bloqueos y salones por defecto
+     * @param  bool  $forProcess  la demo por puntos: agrega los salones de PROCESS_ROOMS
      *
      * @throws RuntimeException en producción o si falta algún campus, algún departamento dueño o el periodo
      * @throws InvalidArgumentException si un campus no tiene datos
      */
-    public function run(array $campuses = ['C2'], int $seed = 2027): void
+    public function run(array $campuses = ['C2'], int $seed = 2027, bool $forProcess = false): void
     {
         $this->refuseProduction();
 
@@ -75,7 +88,7 @@ class FacilitiesDemoSeeder extends Seeder
         $data = self::data();
         $now = CarbonImmutable::now();
 
-        DB::transaction(function () use ($campuses, $campusIds, $termId, $departmentIds, $data, $seed, $now): void {
+        DB::transaction(function () use ($campuses, $campusIds, $termId, $departmentIds, $data, $seed, $forProcess, $now): void {
             foreach ($campuses as $code) {
                 $buildings = $data[$code] ?? throw new InvalidArgumentException("No hay edificios demo para el campus {$code}.");
                 $campusId = $campusIds[$code];
@@ -85,6 +98,10 @@ class FacilitiesDemoSeeder extends Seeder
                 $this->seedRooms($campusId, $buildings, $departmentIds, $random, $now);
                 $this->seedBlocks($campusId, $termId, $random, $now);
                 $this->seedDefaults($campusId, $random, $now);
+
+                if ($forProcess) {
+                    $this->seedProcessRooms($campusId, $code, $seed, $now);
+                }
             }
         });
     }
@@ -132,6 +149,26 @@ class FacilitiesDemoSeeder extends Seeder
 
         foreach (array_chunk($rows, self::CHUNK) as $chunk) {
             DB::table('rooms')->upsert($chunk, ['campus_id', 'code'], ['building_id', 'name', 'type', 'capacity', 'department_id', 'features', 'is_active', 'updated_at']);
+        }
+    }
+
+    /**
+     * Los salones de PROCESS_ROOMS del campus, en su edificio de los archivos.
+     */
+    private function seedProcessRooms(string $campusId, string $code, int $seed, CarbonImmutable $now): void
+    {
+        $buildingIds = DB::table('buildings')->where('campus_id', $campusId)->pluck('id', 'code')->all();
+        $random = new Randomizer(new Mt19937(($seed + crc32("process-{$code}")) & 0x7FFFFFFF));
+        $rows = [];
+
+        foreach (self::PROCESS_ROOMS[$code] ?? [] as $group) {
+            for ($i = 1; $i <= $group['count']; $i++) {
+                $rows[] = $this->roomRow($campusId, $buildingIds[$group['building']], $group, $i, null, $random, $now);
+            }
+        }
+
+        if ($rows !== []) {
+            DB::table('rooms')->upsert($rows, ['campus_id', 'code'], ['building_id', 'name', 'type', 'capacity', 'department_id', 'features', 'is_active', 'updated_at']);
         }
     }
 

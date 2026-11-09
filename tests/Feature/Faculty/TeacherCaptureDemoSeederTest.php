@@ -35,9 +35,9 @@ function seedCaptureScenario(bool $open = true): Term
     return $term;
 }
 
-function runCaptureSeeder(string $profile = 'massive'): void
+function runCaptureSeeder(string $profile = 'massive', bool $complete = false): void
 {
-    (new DatabaseSeeder)->setContainer(app())->callWith(TeacherCaptureDemoSeeder::class, ['profile' => $profile]);
+    (new DatabaseSeeder)->setContainer(app())->callWith(TeacherCaptureDemoSeeder::class, ['profile' => $profile, 'complete' => $complete]);
 }
 
 it('rechaza correr en producción', function () {
@@ -92,4 +92,22 @@ it('lo que quita lo borra de forma lógica y no cuenta como capturado', function
     runCaptureSeeder('massive');
 
     expect(TeacherAvailability::withTrashed()->count())->toBe($trashed);
+});
+
+it('completa la captura que la variedad quitó: todo docente activo vuelve a tener su disponibilidad y su perfil, y las horas externas no cambian (demo por puntos, punto 3)', function () {
+    $term = seedCaptureScenario();
+    $original = TeacherAvailability::query()->orderBy('id')->pluck('id')->all();
+    runCaptureSeeder();
+    $external = TeacherExternalLoad::query()->count();
+    $withoutAvailability = fn (): int => Teacher::query()->whereDoesntHave('availability', fn ($query) => $query->where('term_id', $term->id))->count();
+    $withoutProfile = fn (): int => Teacher::query()->whereDoesntHave('qualifications')->count();
+
+    expect($withoutAvailability())->toBeGreaterThan(0)->and($withoutProfile())->toBeGreaterThan(0);
+
+    runCaptureSeeder(complete: true);
+
+    expect($withoutAvailability())->toBe(0)
+        ->and($withoutProfile())->toBe(0)
+        ->and(TeacherAvailability::query()->orderBy('id')->pluck('id')->all())->toBe($original)
+        ->and(TeacherExternalLoad::query()->count())->toBe($external);
 });
