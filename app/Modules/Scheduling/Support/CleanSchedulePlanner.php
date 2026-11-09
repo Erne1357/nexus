@@ -164,7 +164,8 @@ final class CleanSchedulePlanner
 
     /**
      * Las sesiones que el grupo ya tiene: ocupan su plan y semestre y su departamento, y a las que no tienen salón se
-     * les aparta uno si queda (las que sí tienen ya están en la oferta).
+     * les aparta uno si queda (las que sí tienen ya están en la oferta); espacio de práctica solo para la práctica de
+     * una materia con laboratorio. Si no queda salón, la sesión se queda como está: no se mueve lo que ya existía.
      *
      * @param  array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}  $group
      * @param  list<array{day: int, start: int, end: int, kind: SessionKind, roomId: ?string}>  $sessions
@@ -173,10 +174,11 @@ final class CleanSchedulePlanner
     private function keep(array $group, array $sessions, ?array &$taken, int $blockMinutes, ?RoomSupply $supply): void
     {
         $taken ??= [];
+        $needsLab = in_array(true, array_column($group['pieces'], 'practiceSpace'), true);
 
         foreach ($sessions as $session) {
             if ($session['roomId'] === null && $session['kind'] !== SessionKind::Virtual) {
-                $supply?->reserve($session['day'], $session['start'], $session['end'], $group['capacity'], $session['kind'] === SessionKind::Practica, $group['department']);
+                $supply?->reserve($session['day'], $session['start'], $session['end'], $group['capacity'], $needsLab && $session['kind'] === SessionKind::Practica, $group['department']);
             }
         }
 
