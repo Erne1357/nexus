@@ -86,15 +86,45 @@ it('un punto sin pasos ni revisiones no falla', function () {
         ->and($report->steps)->toBe([]);
 });
 
-it('una revisión fallida o que lanza queda en el reporte con su motivo', function () {
-    $report = demoRunnerWith(checks: [
-        new DemoCheck([DemoCheckpoint::Catalogs], 'docentes', fn (): string => 'faltan 3'),
-        new DemoCheck([DemoCheckpoint::Catalogs], 'alumnos', fn () => throw new RuntimeException('boom')),
-        new DemoCheck([DemoCheckpoint::Catalogs], 'salones', fn (): bool => true),
-    ])->run(DemoCheckpoint::Catalogs, DemoContext::for(DemoVolume::Demo));
+it('una revisión fallida o que lanza queda en el reporte con su motivo y detiene la corrida', function () {
+    $ran = false;
+
+    $report = demoRunnerWith(
+        [new DemoStep(DemoCheckpoint::CatalogValidation, 'después', function () use (&$ran): void {
+            $ran = true;
+        })],
+        [
+            new DemoCheck([DemoCheckpoint::Catalogs], 'docentes', fn (): string => 'faltan 3'),
+            new DemoCheck([DemoCheckpoint::Catalogs], 'alumnos', fn () => throw new RuntimeException('boom')),
+            new DemoCheck([DemoCheckpoint::Catalogs], 'salones', fn (): bool => true),
+        ],
+    )->run(DemoCheckpoint::CatalogValidation, DemoContext::for(DemoVolume::Demo));
+
+    $reasons = array_column($report->checks, 'reason', 'label');
 
     expect($report->failed())->toBeTrue()
-        ->and(array_column($report->checks, 'reason', 'label'))->toBe(['docentes' => 'faltan 3', 'alumnos' => 'boom', 'salones' => null]);
+        ->and($reasons['docentes'])->toBe('faltan 3')
+        ->and($reasons['alumnos'])->toStartWith('boom (DemoRunnerTest.php:')
+        ->and($reasons['salones'])->toBeNull()
+        ->and($ran)->toBeFalse();
+});
+
+it('un paso que lanza detiene la corrida y queda en el reporte con su punto y su motivo', function () {
+    $ran = false;
+
+    $report = demoRunnerWith([
+        new DemoStep(DemoCheckpoint::Catalogs, 'docentes', fn () => throw new RuntimeException('Falta el campus C9.')),
+        new DemoStep(DemoCheckpoint::Catalogs, 'alumnos', function () use (&$ran): void {
+            $ran = true;
+        }),
+    ])->run(DemoCheckpoint::Proposal, DemoContext::for(DemoVolume::Demo));
+
+    expect($report->failed())->toBeTrue()
+        ->and($report->checks[0]['checkpoint'])->toBe(DemoCheckpoint::Catalogs)
+        ->and($report->checks[0]['label'])->toBe('docentes')
+        ->and($report->checks[0]['reason'])->toStartWith('Falta el campus C9. (DemoRunnerTest.php:')
+        ->and($ran)->toBeFalse()
+        ->and($report->steps)->toBe([]);
 });
 
 it('pone en curso la etapa del punto en el calendario de 20271, también al correrlo dos veces', function () {
