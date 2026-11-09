@@ -118,6 +118,21 @@ it('no encima los grupos de un mismo plan y semestre, así el alumno tipo tiene 
     }
 });
 
+it('acomoda un semestre lleno aunque la misma hora en todos los días ya no quepa', function () {
+    $pieces = CleanSchedulePlanner::pieces(3, 2, false, 5);
+    $groups = array_map(fn (int $n): array => plannerGroup("g{$n}", 'P1|7', "S{$n}", array_map(fn (array $piece): array => [$piece['minutes'], $piece['kind']], $pieces)), range(1, 12));
+
+    $plan = (new CleanSchedulePlanner)->plan($groups, PLANNER_DAYS, 420, 1260, 60, plannerRooms());
+
+    foreach (range(1, 11) as $a) {
+        foreach (range($a + 1, 12) as $b) {
+            expect(plannerOverlap($plan, "g{$a}", "g{$b}"))->toBeFalse();
+        }
+    }
+
+    expect(array_sum(array_map(fn (array $sessions): int => array_sum(array_map(fn (array $session): int => $session['end'] - $session['start'], $sessions)), $plan)))->toBe(12 * 300);
+});
+
 it('no pasa del tope de grupos simultáneos de un departamento, aun en planes distintos', function () {
     $groups = array_map(fn (int $n): array => plannerGroup("g{$n}", "P{$n}|1", 'S1'), range(1, 6));
 

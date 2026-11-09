@@ -11,8 +11,9 @@ use RuntimeException;
  * carga pueda pasar a asignación sin choques duros y que en el punto siguiente haya docentes que no choquen. Por cada
  * grupo, en el orden en que llegan:
  *
- * - sus horas exactas (HC-12) en sesiones de dos horas y una última con lo que sobre, en días distintos y a la misma
- *   hora, con la práctica de las materias con laboratorio aparte (`pieces()`);
+ * - sus horas exactas (HC-12) en sesiones de dos horas y una última con lo que sobre, en días distintos, con la
+ *   práctica de las materias con laboratorio aparte (`pieces()`); primero busca la misma hora en todos sus días y, si
+ *   no queda, cada sesión a la hora que quepa, porque con un semestre lleno la misma hora deja huecos sueltos;
  * - dentro de la ventana del campus y alineadas a sus bloques desde `dayStart` (HC-04);
  * - sin encimarse con los grupos del mismo plan y semestre que son su misma opción (el primer grupo de cada materia
  *   con los primeros, el segundo con los segundos), así el alumno tipo siempre tiene combinación (HC-03);
@@ -32,6 +33,9 @@ final class CleanSchedulePlanner
 
     /** @var array<string, array<int, array<int, int>>> grupos de cada departamento por día y bloque, en todos los campus */
     private array $departmentLoad = [];
+
+    /** @var array<string, list<array{string, int, int, int}>> salones apartados por grupo: [salón, día, inicio, fin] */
+    private array $reservations = [];
 
     /**
      * @param  array<string, int>  $departmentCaps  grupos simultáneos por departamento; uno que no aparece no tiene tope
@@ -84,7 +88,8 @@ final class CleanSchedulePlanner
                 continue;
             }
 
-            $plan[$group['id']] = $this->placeGroup($group, $this->rotate($starts, $cohort, $ordinals[$cohort][$group['subject']], $variant), $this->dayPatterns(count($group['pieces']), $days, $ordinals[$cohort][$group['subject']]), $dayEnd, $blockMinutes, $taken[$option], $supply);
+            $ordinal = $ordinals[$cohort][$group['subject']];
+            $plan[$group['id']] = $this->placeGroup($group, $this->rotate($starts, $cohort, $ordinal, $variant), $days, $ordinal, $dayEnd, $blockMinutes, $taken[$option], $supply);
         }
 
         return $plan;
@@ -93,20 +98,19 @@ final class CleanSchedulePlanner
     /**
      * @param  array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}  $group
      * @param  list<int>  $starts
-     * @param  list<list<int>>  $patterns
+     * @param  list<int>  $days
      * @param  array<int, list<array{int, int}>>|null  $taken  lo que ya ocupa esta opción del plan y semestre, por día
      * @return list<array{day: int, start: int, end: int, kind: SessionKind}>
      */
-    private function placeGroup(array $group, array $starts, array $patterns, int $dayEnd, int $blockMinutes, ?array &$taken, ?RoomSupply $supply): array
+    private function placeGroup(array $group, array $starts, array $days, int $ordinal, int $dayEnd, int $blockMinutes, ?array &$taken, ?RoomSupply $supply): array
     {
         $taken ??= [];
+        $patterns = $this->dayPatterns(count($group['pieces']), $days, $ordinal);
         $blocked = ['días' => $patterns === [] ? 1 : 0, 'ventana' => 0, 'semestre' => 0, 'departamento' => 0, 'salón' => 0];
         $longest = max(array_column($group['pieces'], 'minutes'));
 
         foreach ($starts as $start) {
             if ($start + $longest > $dayEnd) {
-                $blocked['ventana']++;
-
                 continue;
             }
 
@@ -117,26 +121,20 @@ final class CleanSchedulePlanner
                     $sessions[] = ['day' => $pattern[$index], 'start' => $start, 'end' => $start + $piece['minutes'], 'kind' => $piece['kind']];
                 }
 
-                $reason = match (true) {
-                    $this->overlapsTaken($sessions, $taken) => 'semestre',
-                    ! $this->departmentFits($group['department'], $sessions, $blockMinutes) => 'departamento',
-                    ! $this->reserveRooms($group, $sessions, $supply) => 'salón',
-                    default => null,
-                };
+                $reason = $this->blocker($group, $sessions, $taken, $blockMinutes, $supply);
 
-                if ($reason !== null) {
-                    $blocked[$reason]++;
-
-                    continue;
+                if ($reason === null) {
+                    return $this->commit($group, $sessions, $taken, $blockMinutes);
                 }
 
-                foreach ($sessions as $session) {
-                    $taken[$session['day']][] = [$session['start'], $session['end']];
-                    $this->loadDepartment($group['department'], $session, $blockMinutes);
-                }
-
-                return $sessions;
+                $blocked[$reason]++;
             }
+        }
+
+        $sessions = $patterns === [] ? null : $this->placeLoose($group, $starts, $days, $ordinal, $dayEnd, $blockMinutes, $taken, $supply, $blocked);
+
+        if ($sessions !== null) {
+            return $this->commit($group, $sessions, $taken, $blockMinutes);
         }
 
         $reasons = array_filter($blocked);
@@ -149,6 +147,102 @@ final class CleanSchedulePlanner
             $group['capacity'],
             implode(', ', array_map(fn (string $reason, int $times): string => "{$reason} ({$times})", array_keys($reasons), $reasons)) ?: 'la falta de días',
         ));
+    }
+
+    /**
+     * Cada sesión por su lado, de la más larga a la más corta: el primer día libre y la primera hora que quepa, en días
+     * distintos. Lo que aparta en salones se suelta si al final una sesión no cabe.
+     *
+     * @param  array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}  $group
+     * @param  list<int>  $starts
+     * @param  list<int>  $days
+     * @param  array<int, list<array{int, int}>>  $taken
+     * @param  array<string, int>  $blocked
+     * @return list<array{day: int, start: int, end: int, kind: SessionKind}>|null en el orden de las piezas del grupo
+     */
+    private function placeLoose(array $group, array $starts, array $days, int $ordinal, int $dayEnd, int $blockMinutes, array $taken, ?RoomSupply $supply, array &$blocked): ?array
+    {
+        $order = array_keys($group['pieces']);
+        usort($order, fn (int $a, int $b): int => [$group['pieces'][$b]['minutes'], $a] <=> [$group['pieces'][$a]['minutes'], $b]);
+        $rotated = [...array_slice($days, $ordinal % count($days)), ...array_slice($days, 0, $ordinal % count($days))];
+        $placed = [];
+
+        foreach ($order as $index) {
+            $piece = $group['pieces'][$index];
+            $found = null;
+
+            foreach ($rotated as $day) {
+                if (in_array($day, array_column($placed, 'day'), true)) {
+                    continue;
+                }
+
+                foreach ($starts as $start) {
+                    if ($start + $piece['minutes'] > $dayEnd) {
+                        $blocked['ventana']++;
+
+                        continue;
+                    }
+
+                    $session = ['day' => $day, 'start' => $start, 'end' => $start + $piece['minutes'], 'kind' => $piece['kind']];
+                    $reason = $this->blocker(['pieces' => [$piece]] + $group, [$session], $taken, $blockMinutes, $supply);
+
+                    if ($reason === null) {
+                        $found = $session;
+
+                        break 2;
+                    }
+
+                    $blocked[$reason]++;
+                }
+            }
+
+            if ($found === null) {
+                foreach ($placed as $session) {
+                    $this->releaseRoom($group, $session, $supply);
+                }
+
+                return null;
+            }
+
+            $placed[$index] = $found;
+        }
+
+        ksort($placed);
+
+        return array_values($placed);
+    }
+
+    /**
+     * Lo que impide colocar las sesiones, o null si caben; si caben, ya quedaron apartados sus salones.
+     *
+     * @param  array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}  $group
+     * @param  list<array{day: int, start: int, end: int, kind: SessionKind}>  $sessions
+     * @param  array<int, list<array{int, int}>>  $taken
+     */
+    private function blocker(array $group, array $sessions, array $taken, int $blockMinutes, ?RoomSupply $supply): ?string
+    {
+        return match (true) {
+            $this->overlapsTaken($sessions, $taken) => 'semestre',
+            ! $this->departmentFits($group['department'], $sessions, $blockMinutes) => 'departamento',
+            ! $this->reserveRooms($group, $sessions, $supply) => 'salón',
+            default => null,
+        };
+    }
+
+    /**
+     * @param  array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}  $group
+     * @param  list<array{day: int, start: int, end: int, kind: SessionKind}>  $sessions
+     * @param  array<int, list<array{int, int}>>  $taken
+     * @return list<array{day: int, start: int, end: int, kind: SessionKind}>
+     */
+    private function commit(array $group, array $sessions, array &$taken, int $blockMinutes): array
+    {
+        foreach ($sessions as $session) {
+            $taken[$session['day']][] = [$session['start'], $session['end']];
+            $this->loadDepartment($group['department'], $session, $blockMinutes);
+        }
+
+        return $sessions;
     }
 
     /**
@@ -234,7 +328,27 @@ final class CleanSchedulePlanner
             $reserved[] = [$room->id, $session['day'], $session['start'], $session['end']];
         }
 
+        $this->reservations[$group['id']] = [...$this->reservations[$group['id']] ?? [], ...$reserved];
+
         return true;
+    }
+
+    /**
+     * Suelta el salón que se apartó para una sesión del grupo.
+     *
+     * @param  array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}  $group
+     * @param  array{day: int, start: int, end: int, kind: SessionKind}  $session
+     */
+    private function releaseRoom(array $group, array $session, ?RoomSupply $supply): void
+    {
+        foreach ($this->reservations[$group['id']] ?? [] as $key => [$roomId, $day, $start, $end]) {
+            if ($day === $session['day'] && $start === $session['start'] && $end === $session['end']) {
+                $supply?->release($roomId, $day, $start, $end);
+                unset($this->reservations[$group['id']][$key]);
+
+                return;
+            }
+        }
     }
 
     /**
