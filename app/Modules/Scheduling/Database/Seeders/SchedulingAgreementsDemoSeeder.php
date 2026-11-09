@@ -358,7 +358,8 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      * Qué salón le toca a cada sesión presencial sin salón de los grupos activos de departamentos editables del campus,
      * apartado en RoomSupply: primero las prácticas con laboratorio, luego por día, hora de inicio, la más larga
      * primero y el grupo; el salón por defecto de la materia va primero si sirve, y los del departamento del grupo o
-     * sin dueño antes que los que piden préstamo.
+     * sin dueño antes que los que piden préstamo. Si con esas preferencias a alguna sesión no le toca salón, reparte
+     * de nuevo solo por el más justo.
      *
      * @return list<array{session: StateSession, group: StateGroup, room: StateRoom, label: string}>
      *
@@ -368,7 +369,6 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     {
         $editable = $this->editableDepartments($term, $campus);
         $state = app(ScheduleStateQuery::class)->forCampus($term, $campus);
-        $supply = RoomSupply::fromState($state, $campus->id);
         $defaults = SubjectRoomDefault::query()->where('campus_id', $campus->id)->orderBy('priority')->orderBy('room_id')->get(['subject_id', 'room_id'])
             ->groupBy('subject_id')->map(fn (Collection $rows): array => $rows->pluck('room_id')->all())->all();
         $pending = [];
@@ -390,20 +390,27 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         $order = fn (array $item): array => [$item['practice'] ? 0 : 1, $item['session']->day, $item['session']->start, -$item['session']->end, $item['group']->code, (string) $item['session']->id];
         usort($pending, fn (array $a, array $b): int => $order($a) <=> $order($b));
 
-        $plan = [];
-        $missing = [];
+        // Con preferencias (salón por defecto, propio antes que préstamo) el reparto se ve como en el uso normal; si así
+        // no alcanza, se reparte otra vez solo por el salón más justo antes de rendirse.
+        foreach ([true, false] as $preferences) {
+            $supply = RoomSupply::fromState($state, $campus->id);
+            $plan = [];
+            $missing = [];
 
-        foreach ($pending as ['session' => $session, 'group' => $group, 'practice' => $practice]) {
-            $label = "{$state->labelOf($group->id)} el {$session->describe()}";
-            $room = $supply->reserve($session->day, $session->start, $session->end, $group->capacity, $practice, $group->departmentId, $defaults[$group->subjectId] ?? []);
-            $room === null ? $missing[] = $label : $plan[] = ['session' => $session, 'group' => $group, 'room' => $room, 'label' => $label];
+            foreach ($pending as ['session' => $session, 'group' => $group, 'practice' => $practice]) {
+                $label = "{$state->labelOf($group->id)} el {$session->describe()}";
+                $room = $preferences
+                    ? $supply->reserve($session->day, $session->start, $session->end, $group->capacity, $practice, $group->departmentId, $defaults[$group->subjectId] ?? [])
+                    : $supply->reserve($session->day, $session->start, $session->end, $group->capacity, $practice);
+                $room === null ? $missing[] = $label : $plan[] = ['session' => $session, 'group' => $group, 'room' => $room, 'label' => $label];
+            }
+
+            if ($missing === []) {
+                return $plan;
+            }
         }
 
-        if ($missing !== []) {
-            throw new RuntimeException(count($missing)." sesiones de {$campus->code} no tienen un salón libre que les sirva sin choque (HC-02, HC-05, HC-06, HC-11); por ejemplo: ".implode('; ', array_slice($missing, 0, 5)).'.');
-        }
-
-        return $plan;
+        throw new RuntimeException(count($missing)." sesiones de {$campus->code} no tienen un salón libre que les sirva sin choque (HC-02, HC-05, HC-06, HC-11); por ejemplo: ".implode('; ', array_slice($missing, 0, 5)).'.');
     }
 
     /**

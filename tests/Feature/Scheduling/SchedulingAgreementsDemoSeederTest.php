@@ -285,6 +285,24 @@ describe('salones completos (punto 7 de la demo)', function () {
             ->and(GroupSession::query()->whereNull('room_id')->count())->toBe(0);
     });
 
+    it('si las preferencias dejan una sesión sin salón, reparte otra vez solo por el salón más justo', function () {
+        $building = Building::query()->firstOrFail();
+        $big = Room::factory()->capacity(60)->create(['building_id' => $building->id]);
+        $medium = Room::factory()->capacity(50)->create(['building_id' => $building->id]);
+        $subject = Subject::factory()->create(['department_id' => $this->imparte->id]);
+        SubjectRoomDefault::factory()->create(['subject_id' => $subject->id, 'campus_id' => $this->campus->id, 'room_id' => $big->id, 'priority' => 1]);
+        $prefersBig = Group::factory()->withQuota()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'capacity' => 50, 'subject_id' => $subject->id, 'code' => 'A1']);
+        $needsBig = Group::factory()->withQuota()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'capacity' => 60, 'code' => 'Z9',
+            'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id]);
+        $first = GroupSession::factory()->for($prefersBig)->on(6, '07:00', '09:00')->create();
+        $second = GroupSession::factory()->for($needsBig)->on(6, '07:00', '09:00')->create();
+
+        seedSchedulingAgreements(mode: 'rooms');
+
+        expect($first->fresh()->room_id)->toBe($medium->id)
+            ->and($second->fresh()->room_id)->toBe($big->id);
+    });
+
     it('se detiene sin escribir nada si una sesión no tiene salón que le sirva (HC-05)', function () {
         $this->crowd->first()->update(['capacity' => 60]);
 
