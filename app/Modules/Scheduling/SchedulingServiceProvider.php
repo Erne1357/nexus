@@ -3,6 +3,8 @@
 namespace App\Modules\Scheduling;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Events\AgreementAccepted;
 use App\Modules\AcademicLoad\Events\AgreementCancelled;
 use App\Modules\AcademicLoad\Events\AgreementRejected;
@@ -15,6 +17,7 @@ use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -29,6 +32,7 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Console\RecomputeConflicts;
 use App\Modules\Scheduling\Database\Seeders\CleanScheduleDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
@@ -186,6 +190,14 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                     app(SyncScheduleConflicts::class)->handle($demo->term(), $campus);
                 }
             }),
+            // Los cupos terminan la etapa 4, como el horario limpio que sigue.
+            new DemoStep(DemoCheckpoint::Staffing, 'Cupos: grupos compartidos aceptados y cupos directos', fn (DemoContext $demo) => $demo->runSeeder(SchedulingAgreementsDemoSeeder::class, [
+                'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
+                'campuses' => $demo->campuses,
+                'term' => $demo->termCode,
+                'seed' => $demo->seed,
+                'mode' => 'quotas',
+            ])),
             new DemoStep(DemoCheckpoint::Staffing, 'Horario limpio: horas exactas y sin choques, sin docente ni salón', fn (DemoContext $demo) => $demo->runSeeder(CleanScheduleDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
@@ -211,6 +223,18 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                     $sessions > 0 => "{$sessions} sesiones ya colocadas.",
                     $foreignQuotas > 0 => "{$foreignQuotas} cupos de otras carreras.",
                     $agreements > 0 => "{$agreements} acuerdos entre departamentos.",
+                    default => true,
+                };
+            }),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Cupos decididos: hay grupos compartidos aceptados y ningún acuerdo pendiente', function (DemoContext $demo): true|string {
+                $agreements = InterdepartmentalAgreement::query()->where('term_id', $demo->term()->getKey())
+                    ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
+                $pending = (clone $agreements)->where('status', AgreementStatus::Proposed->value)->count();
+                $shared = (clone $agreements)->where('kind', AgreementKind::SharedGroup->value)->where('status', AgreementStatus::Accepted->value)->count();
+
+                return match (true) {
+                    $pending > 0 => "{$pending} acuerdos siguen pendientes.",
+                    $shared === 0 => 'No hay grupos compartidos aceptados.',
                     default => true,
                 };
             }),
