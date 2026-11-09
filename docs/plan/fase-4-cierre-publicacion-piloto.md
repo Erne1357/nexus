@@ -110,8 +110,9 @@ El mapa es `AcademicLoad → Scheduling → Staffing`, así que AcademicLoad no 
    - ¿Las versiones son por carga, y la consulta toma la última de cada una?
 8. **Lo que ve el docente después de publicar:** «Mi carga» (`MyLoadQuery`) y la oferta (`TeacherOfferQuery`, visible desde `staffing` y en cualquier estado posterior) son de Staffing y leen las tablas vivas, no el snapshot. ¿El docente ve lo publicado o lo vivo?
 9. **Cargas sin grupos:** un departamento sin partes en un campus tiene su carga en `draft`, y `draft` solo pasa a `proposed`. ¿Se cierra y se publica vacía, se queda fuera del cierre, o no cuenta para el campus?
-10. **Exportación al SII (4.6):** sigue esperando el layout de sistemas del ITCJ.
-11. **Servidor (4.7):** sin él no hay piloto ni H5. Si sigue sin fecha, conviene decidir con el usuario un plan B para el piloto, como el túnel que se usó para la demo de la 1.16.
+10. **Docente dado de baja:** si a un docente lo dan de baja después de asignarlo, su grupo conserva `teacher_id`. Ni el validador ni el tablero revisan que el docente siga activo; `ScheduleStateQuery` lo hace con la materia y el salón, pero no con el docente. ¿Bloquea el cierre, o la baja debe quitarlo de sus grupos?
+11. **Exportación al SII (4.6):** sigue esperando el layout de sistemas del ITCJ.
+12. **Servidor (4.7):** sin él no hay piloto ni H5. Si sigue sin fecha, conviene decidir con el usuario un plan B para el piloto, como el túnel que se usó para la demo de la 1.16.
 
 ### Demo por puntos en la fase 4
 
@@ -153,7 +154,7 @@ La fase extiende `demo:seed` como dice [testing.md](../arquitectura/testing.md):
 
 **Riel C (Staffing).**
 
-- **Docente asignado:** un grupo lo tiene cuando `groups.teacher_id` no es nulo y hay una fila vigente en `group_teacher_assignments` (`replaced_at` nulo). Las dos las escribe `AssignTeacher`, que llama a `SetGroupTeacher`. El docente no acepta su carga: con HC-17 ve la oferta y «Mi carga» en solo lectura, y solo puede pedir cambios de horario o de salón.
+- **Docente asignado:** un grupo lo tiene cuando `groups.teacher_id` no es nulo, y la guarda y el tablero miran solo eso. La fila vigente de `group_teacher_assignments` (`replaced_at` nulo) es su historial (HC-16), y la escribe la misma transacción: `AssignTeacher` y `UnassignTeacher` llaman a `SetGroupTeacher`. Solo la demo `todo` escribe `teacher_id` directo (`SchedulingDemoSeeder`). El docente no acepta su carga: con HC-17 ve la oferta y «Mi carga» en solo lectura, y solo puede pedir cambios de horario o de salón.
 - **Después del cierre:** `AssignTeacher`, `UnassignTeacher` y `RequestChange` ya se niegan, porque exigen la carga en `staffing` o `adjusting`, y las pantallas muestran el motivo.
 - **Para la 4.8:**
   - Pantallas de Staffing: `/staffing/assign`, `/carga-por-docente`, `/staffing/change-requests`, `/mi-espacio/oferta` y `/mi-espacio/mi-carga`.
