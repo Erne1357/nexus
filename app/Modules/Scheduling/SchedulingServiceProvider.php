@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Events\AgreementRejected;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -17,7 +18,6 @@ use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\Term;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Facilities\Events\RoomBlockAdded;
@@ -26,6 +26,7 @@ use App\Modules\Facilities\Events\RoomUpdated;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\PositionChanged;
+use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Console\RecomputeConflicts;
 use App\Modules\Scheduling\Database\Seeders\CleanScheduleDemoSeeder;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
@@ -43,6 +44,8 @@ use App\Modules\Scheduling\Listeners\NotifyOwnerOnLoanCancelled;
 use App\Modules\Scheduling\Listeners\NotifyRequesterOnAgreementDecided;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -164,12 +167,25 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Demo por puntos: el horario limpio lleva a «asignacion»: todo grupo activo con sus horas exactas, sin choques
-     * duros, sin docente y sin salón (CleanScheduleDemoSeeder, #338).
+     * Demo por puntos: aceptar cada parte crea grupos y GroupsCreated recalcularía los choques del campus en cada
+     * aceptación (21.9 s contra 4.1 s con el volumen demo); se descarta mientras se siembra y los choques se
+     * recalculan una vez por campus al llegar a «horarios».
+     *
+     * @return list<class-string>
      */
+    public function demoQuietEvents(): array
+    {
+        return [GroupsCreated::class];
+    }
+
     public function demoSteps(): array
     {
         return [
+            new DemoStep(DemoCheckpoint::Scheduling, 'Choques recalculados una vez por campus', function (DemoContext $demo): void {
+                foreach (Campus::query()->whereIn('code', $demo->campuses)->orderBy('code')->get() as $campus) {
+                    app(SyncScheduleConflicts::class)->handle($demo->term(), $campus);
+                }
+            }),
             new DemoStep(DemoCheckpoint::Staffing, 'Horario limpio: horas exactas y sin choques, sin docente ni salón', fn (DemoContext $demo) => $demo->runSeeder(CleanScheduleDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
@@ -177,35 +193,48 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         ];
     }
 
-    /**
-     * Desde «asignacion», ningún grupo activo sin horario y cero choques duros vigentes en `schedule_conflicts` (los
-     * pasos que cambian horarios, docentes o salones recalculan al terminar); en «asignacion», todavía sin docentes.
-     */
     public function demoChecks(): array
     {
-        $activeGroups = fn (DemoContext $demo): Builder => Group::query()
-            ->where('term_id', Term::query()->where('code', $demo->termCode)->value('id'))
-            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
-            ->where('status', '!=', GroupStatus::Cancelled);
+        $groups = fn (DemoContext $demo): Builder => Group::query()->where('term_id', $demo->term()->getKey())
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
 
         return [
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Todo grupo activo tiene horario', fn (DemoContext $demo): true|string => ($missing = $activeGroups($demo)->whereDoesntHave('sessions')->count()) === 0
+            new DemoCheck([DemoCheckpoint::Scheduling], 'Hay grupos, sin sesiones, sin cupos de otras carreras y sin acuerdos', function (DemoContext $demo) use ($groups): true|string {
+                $total = $groups($demo)->count();
+                $sessions = GroupSession::query()->whereIn('group_id', $groups($demo)->select('id'))->count();
+                $foreignQuotas = GroupQuota::query()->join('groups', 'groups.id', '=', 'group_quotas.group_id')
+                    ->whereIn('groups.id', $groups($demo)->select('id'))->whereColumn('group_quotas.career_id', '!=', 'groups.owner_career_id')->count();
+                $agreements = InterdepartmentalAgreement::query()->where('term_id', $demo->term()->getKey())->count();
+
+                return match (true) {
+                    $total === 0 => 'No hay grupos.',
+                    $sessions > 0 => "{$sessions} sesiones ya colocadas.",
+                    $foreignQuotas > 0 => "{$foreignQuotas} cupos de otras carreras.",
+                    $agreements > 0 => "{$agreements} acuerdos entre departamentos.",
+                    default => true,
+                };
+            }),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Ningún grupo de materia o plan inactivo ni de carrera no ofrecida (HC-13)', function (DemoContext $demo) use ($groups): true|string {
+                $conflicts = ScheduleConflict::query()->whereIn('group_id', $groups($demo)->select('id'))->where('rule', 'HC-13')->whereNull('resolved_at')->count();
+
+                return $conflicts === 0 ? true : "{$conflicts} choques HC-13.";
+            }),
+            // Desde «asignacion», lo que deja el horario limpio (#338): todo grupo activo con horario y cero choques duros
+            // vigentes (los pasos que cambian horarios, docentes o salones recalculan al terminar); en «asignacion»,
+            // todavía sin docentes.
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Todo grupo activo tiene horario', fn (DemoContext $demo): true|string => ($missing = $groups($demo)->where('status', '!=', GroupStatus::Cancelled)->whereDoesntHave('sessions')->count()) === 0
                 ? true
                 : "{$missing} grupos activos sin horario."),
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Cero choques duros', function (DemoContext $demo): true|string {
-                $hard = ScheduleConflict::query()
-                    ->where('term_id', Term::query()->where('code', $demo->termCode)->value('id'))
-                    ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
-                    ->where('severity', ConflictSeverity::Hard)
-                    ->whereNull('resolved_at')
-                    ->get(['rule'])
-                    ->countBy('rule');
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Cero choques duros', function (DemoContext $demo) use ($groups): true|string {
+                $hard = ScheduleConflict::query()->whereIn('group_id', $groups($demo)->select('id'))
+                    ->where('severity', ConflictSeverity::Hard)->whereNull('resolved_at')
+                    ->get(['rule'])->countBy('rule');
 
                 return $hard->isEmpty()
                     ? true
                     : 'Choques duros: '.$hard->map(fn (int $count, string $rule): string => "{$rule} ({$count})")->implode(', ').'.';
             }),
-            new DemoCheck([DemoCheckpoint::Staffing], 'Ningún grupo tiene docente todavía', fn (DemoContext $demo): true|string => ($assigned = $activeGroups($demo)->whereNotNull('teacher_id')->count()) === 0
+            new DemoCheck([DemoCheckpoint::Staffing], 'Ningún grupo tiene docente todavía', fn (DemoContext $demo): true|string => ($assigned = $groups($demo)->where('status', '!=', GroupStatus::Cancelled)->whereNotNull('teacher_id')->count()) === 0
                 ? true
                 : "{$assigned} grupos ya tienen docente."),
         ];
