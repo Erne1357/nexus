@@ -68,13 +68,14 @@ beforeEach(function () {
     ]);
 });
 
-function seedSchedulingAgreements(array $clean = [], array $ratios = []): void
+function seedSchedulingAgreements(array $clean = [], array $ratios = [], string $mode = 'mixed'): void
 {
     app()->call([new SchedulingAgreementsDemoSeeder, 'run'], [
         'profile' => 'demo',
         'campuses' => ['C2'],
         'ratios' => [...['loans' => 10, 'shared' => 8, 'direct_quota_groups' => 0, 'suggested_rooms' => 1], ...$ratios],
         'cleanDepartments' => ['C2' => $clean],
+        'mode' => $mode,
     ]);
 }
 
@@ -179,4 +180,49 @@ it('se niega a correr en producción', function () {
     app()->detectEnvironment(fn () => 'production');
 
     expect(fn () => seedSchedulingAgreements())->toThrow(RuntimeException::class);
+});
+
+describe('cupos completos (punto 5 de la demo)', function () {
+    beforeEach(function () {
+        $this->sameDepartment = Career::factory()->create(['department_id' => $this->imparte->id]);
+        CareerCampus::factory()->create(['career_id' => $this->sameDepartment->id, 'campus_id' => $this->campus->id]);
+    });
+
+    it('acepta todos los grupos compartidos con su cupo, reparte cupos directos y no toca salones ni pide préstamos', function () {
+        seedSchedulingAgreements(ratios: ['direct_quota_groups' => 2], mode: 'quotas');
+
+        $shared = InterdepartmentalAgreement::query()->where('kind', AgreementKind::SharedGroup->value)->get();
+
+        expect($shared)->not->toBeEmpty()
+            ->and($shared->every(fn (InterdepartmentalAgreement $agreement): bool => $agreement->status === AgreementStatus::Accepted))->toBeTrue()
+            ->and($shared->every(fn (InterdepartmentalAgreement $agreement): bool => GroupQuota::query()->where('group_id', $agreement->group_id)->where('career_id', $agreement->career_id)->where('max_seats', $agreement->max_seats)->exists()))->toBeTrue()
+            ->and(GroupQuota::query()->where('career_id', $this->sameDepartment->id)->count())->toBe(2)
+            ->and(InterdepartmentalAgreement::query()->where('kind', AgreementKind::RoomLoan->value)->exists())->toBeFalse()
+            ->and(GroupSession::query()->whereNotNull('room_id')->exists())->toBeFalse();
+    });
+
+    it('HC-07: ningún grupo reparte más lugares que su capacidad', function () {
+        seedSchedulingAgreements(ratios: ['direct_quota_groups' => 2], mode: 'quotas');
+
+        expect(Group::query()->get()->filter(fn (Group $group): bool => GroupQuota::query()->where('group_id', $group->id)->sum('max_seats') > $group->capacity))->toBeEmpty();
+    });
+
+    it('volver a correrlo no agrega acuerdos ni cupos', function () {
+        seedSchedulingAgreements(mode: 'quotas');
+        $before = [InterdepartmentalAgreement::query()->count(), GroupQuota::query()->count()];
+
+        seedSchedulingAgreements(mode: 'quotas');
+
+        expect([InterdepartmentalAgreement::query()->count(), GroupQuota::query()->count()])->toBe($before);
+    });
+
+    it('se detiene si el campus no tiene grupos editables', function () {
+        AcademicLoad::query()->update(['status' => LoadStatus::Draft]);
+
+        expect(fn () => seedSchedulingAgreements(mode: 'quotas'))->toThrow(RuntimeException::class, 'no tiene grupos editables');
+    });
+
+    it('rechaza un modo desconocido', function () {
+        expect(fn () => seedSchedulingAgreements(mode: 'todo'))->toThrow(InvalidArgumentException::class);
+    });
 });
