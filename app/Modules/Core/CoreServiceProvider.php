@@ -8,7 +8,21 @@ use App\Modules\Core\Authorization\DefaultScopeLabels;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\ScopeLabels;
+use App\Modules\Core\Console\SeedDemo;
+use App\Modules\Core\Database\Seeders\AdminUserSeeder;
+use App\Modules\Core\Database\Seeders\CampusSeeder;
+use App\Modules\Core\Database\Seeders\DemoAdminPasswordSeeder;
+use App\Modules\Core\Database\Seeders\DemoTermSeeder;
+use App\Modules\Core\Database\Seeders\OrgChartSeeder;
+use App\Modules\Core\Database\Seeders\TermHistorySeeder;
+use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoPlan;
+use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\CorePermission;
+use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermCalendarChanged;
@@ -20,6 +34,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
@@ -27,6 +42,7 @@ use App\Modules\Core\Queries\UnitAdscriptions;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Hash;
 use Livewire\ComponentHookRegistry;
 use Spatie\Activitylog\Models\Activity;
 
@@ -59,6 +75,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->getProviders(ModuleServiceProvider::class),
         ));
 
+        // Solo lo usa la consola (`demo:seed`): se arma cuando se pide, con los pasos de todos los módulos.
+        $this->app->bind(DemoPlan::class, fn (Application $app): DemoPlan => DemoPlan::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
+
         // Sin estado: nombra lo que Core no conoce. Un módulo con esos datos lo reemplaza en su register().
         $this->app->bindIf(ScopeLabels::class, DefaultScopeLabels::class);
 
@@ -75,6 +96,10 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function boot(): void
     {
         parent::boot();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([SeedDemo::class]);
+        }
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen(Login::class, ForgetActiveRole::class);
@@ -121,6 +146,60 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 CorePermission::TermManageCalendar,
                 CorePermission::TermOpen,
             ],
+        ];
+    }
+
+    /**
+     * Demo por puntos: lo base, el admin con la contraseña demo y los periodos 20261, 20263 y 20271 llevan a
+     * «catálogos»; abrir 20271 en los campus del volumen (en el masivo también 20263, la foto anterior de la
+     * validación) lleva a «validación». En el masivo, el historial de periodos desde 2014 va justo antes de abrir,
+     * después de los alumnos, como en MassiveSeeder (StudentsDemoSeeder liga el periodo de ingreso solo a los que ya
+     * existen). Sin TermCalendarDemoSeeder: el calendario de 20271 lo escribe DemoRunner, sin ventanas propias de
+     * Campus I, y 20263 queda sin calendario.
+     */
+    public function demoSteps(): array
+    {
+        return [
+            new DemoStep(DemoCheckpoint::Catalogs, 'Campus, organigrama, admin y periodos', function (DemoContext $demo): void {
+                foreach ([CampusSeeder::class, OrgChartSeeder::class, AdminUserSeeder::class, DemoAdminPasswordSeeder::class, DemoTermSeeder::class] as $seeder) {
+                    $demo->runSeeder($seeder);
+                }
+            }),
+            new DemoStep(DemoCheckpoint::CatalogValidation, 'Abrir Ene-Jun 2027', function (DemoContext $demo): void {
+                if ($demo->volume === DemoVolume::Massive) {
+                    $demo->runSeeder(TermHistorySeeder::class);
+                }
+
+                $demo->runSeeder(TermOpeningDemoSeeder::class, [
+                    'openings' => $demo->volume === DemoVolume::Massive
+                        ? [$demo->termCode => $demo->campuses, '20263' => $demo->campuses]
+                        : [$demo->termCode => $demo->campuses],
+                ]);
+            }),
+        ];
+    }
+
+    public function demoChecks(): array
+    {
+        $openedIn = fn (DemoContext $demo): int => TermOpening::query()
+            ->where('term_id', $demo->term()->getKey())
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+            ->count();
+
+        return [
+            new DemoCheck([DemoCheckpoint::Catalogs], 'Ene-Jun 2027 todavía sin abrir', fn (DemoContext $demo): true|string => ($opened = $openedIn($demo)) === 0
+                ? true
+                : "Ya está abierto en {$opened} campus."),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::CatalogValidation), 'Ene-Jun 2027 abierto en los campus del volumen', fn (DemoContext $demo): true|string => ($opened = $openedIn($demo)) === count($demo->campuses)
+                ? true
+                : sprintf('Abierto en %d de %d campus.', $opened, count($demo->campuses))),
+            new DemoCheck(DemoCheckpoint::staged(), 'El admin entra con la contraseña demo', function (DemoContext $demo): true|string {
+                $admin = $demo->admin();
+
+                return Hash::check(DemoAdminPasswordSeeder::PASSWORD, $admin->password) && ! $admin->must_change_password
+                    ? true
+                    : 'El admin no tiene la contraseña demo o debe cambiarla.';
+            }),
         ];
     }
 }
