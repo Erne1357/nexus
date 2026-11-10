@@ -3,8 +3,10 @@
 namespace App\Modules\AcademicLoad\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\UnitApplicability;
+use App\Modules\Core\Enums\OrgUnitKind;
 
 /**
  * Permisos del módulo AcademicLoad: la carga académica de un departamento, la propuesta de una carrera y la
@@ -22,6 +24,7 @@ enum AcademicLoadPermission: string implements Permission
     case LoadClose = 'academic_load.load.close';
     case LoadReopen = 'academic_load.load.reopen';
     case LoadApprove = 'academic_load.load.approve';
+    case LoadExport = 'academic_load.load.export';
     case ProposalCreate = 'academic_load.proposal.create';
     case ProposalUpdate = 'academic_load.proposal.update';
     case ProposalSubmit = 'academic_load.proposal.submit';
@@ -41,6 +44,7 @@ enum AcademicLoadPermission: string implements Permission
             self::LoadClose => 'Cerrar la carga de un departamento',
             self::LoadReopen => 'Reabrir una carga cerrada, aprobada o publicada',
             self::LoadApprove => 'Dar el visto bueno a una carga cerrada',
+            self::LoadExport => 'Descargar el PDF por departamento y el Excel de lo publicado',
             self::ProposalCreate => 'Armar la propuesta de una carrera',
             self::ProposalUpdate => 'Corregir la propuesta de una carrera',
             self::ProposalSubmit => 'Enviar la propuesta de una carrera',
@@ -53,6 +57,7 @@ enum AcademicLoadPermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
+            self::LoadExport => [Dimension::Campus],
             self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
             default => [Dimension::Campus, Dimension::Career],
         };
@@ -64,10 +69,14 @@ enum AcademicLoadPermission: string implements Permission
     }
 
     /**
-     * Lo académico (AZ-02, AZ-S16): a los departamentos académicos y a la Subdirección Académica.
+     * Lo académico (AZ-02, AZ-S16): a los departamentos académicos y a la Subdirección Académica. Los exportes del
+     * personal de lo publicado (`LoadExport`) también al Departamento de Servicios Escolares, que captura la carga en
+     * el SII (supuesto por confirmar).
      */
     public function appliesTo(): ?UnitApplicability
     {
-        return UnitApplicability::academic();
+        return $this === self::LoadExport
+            ? UnitApplicability::of([OrgUnitKind::DepartamentoAcademico], [OrgTree::ACADEMIC, OrgTree::SCHOOL_SERVICES])
+            : UnitApplicability::academic();
     }
 }
