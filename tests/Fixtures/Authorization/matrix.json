@@ -78,6 +78,7 @@
         "subdireccion": [
             "academic_load.agreement.view",
             "academic_load.load.approve",
+            "academic_load.load.export_sii",
             "academic_load.load.reopen",
             "academic_load.load.view",
             "academic_load.proposal.view",
@@ -152,6 +153,7 @@
             "academic_load.agreement.view",
             "academic_load.load.approve",
             "academic_load.load.close",
+            "academic_load.load.export_sii",
             "academic_load.load.propose",
             "academic_load.load.reopen",
             "academic_load.load.start_staffing",

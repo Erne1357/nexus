@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Imports\Sii\SiiFile;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Genera los dos archivos que el SII espera (`grupos.csv` y `horarios.csv`) con la forma exacta de sus tablas
@@ -49,11 +50,40 @@ final class SiiLoadExport
      */
     public function files(Term $term, Campus $campus): array
     {
-        $aliases = $this->aliases($entries = $this->entries($term, $campus));
+        return $this->filesOf($term->code, $this->latestSnapshots($term, $campus));
+    }
+
+    /**
+     * La última versión publicada de cada carga del periodo y el campus que tenga alguna.
+     *
+     * @return Collection<int, LoadSnapshot>
+     */
+    public function latestSnapshots(Term $term, Campus $campus): Collection
+    {
+        return LoadSnapshot::query()->latestVersion()
+            ->whereIn('academic_load_id', AcademicLoad::query()
+                ->where('term_id', $term->getKey())
+                ->where('campus_id', $campus->getKey())
+                ->where('current_version', '>', 0)
+                ->select('id'))
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Los dos archivos de estas versiones: las que leyó `SiiExport` al pedirse, para que el archivo diga exactamente
+     * lo que nombra su llave aunque se publique otra versión mientras espera en la cola.
+     *
+     * @param  iterable<LoadSnapshot>  $snapshots
+     * @return array{'grupos.csv': string, 'horarios.csv': string}
+     */
+    public function filesOf(string $termCode, iterable $snapshots): array
+    {
+        $aliases = $this->aliases($entries = $this->entries($snapshots));
 
         $blocks = [];
         foreach ($entries as $entry) {
-            $rows = $this->rows($entry['group'], $term->code, $aliases);
+            $rows = $this->rows($entry['group'], $termCode, $aliases);
             $blocks[] = ['sort' => [$entry['department'], trim($rows[0]['key']), (string) $entry['group']['code']], 'rows' => $rows];
         }
         usort($blocks, fn (array $a, array $b): int => $a['sort'] <=> $b['sort']);
@@ -74,20 +104,15 @@ final class SiiLoadExport
     }
 
     /**
-     * Los grupos de la última versión publicada de cada carga, ordenados por departamento, materia y grupo.
+     * Los grupos de esas versiones, con el departamento de su carga.
      *
+     * @param  iterable<LoadSnapshot>  $snapshots
      * @return list<array{department: string, group: array<string, mixed>}>
      */
-    private function entries(Term $term, Campus $campus): array
+    private function entries(iterable $snapshots): array
     {
-        $loads = AcademicLoad::query()
-            ->where('term_id', $term->getKey())
-            ->where('campus_id', $campus->getKey())
-            ->where('current_version', '>', 0)
-            ->select('id');
-
         $entries = [];
-        foreach (LoadSnapshot::query()->latestVersion()->whereIn('academic_load_id', $loads)->get() as $snapshot) {
+        foreach ($snapshots as $snapshot) {
             foreach ($snapshot->payload['groups'] as $group) {
                 $entries[] = ['department' => (string) $snapshot->payload['department']['code'], 'group' => $group];
             }
