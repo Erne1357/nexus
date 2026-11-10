@@ -31,12 +31,12 @@ final class NotifyLoadClosing
 
     public function __construct(private readonly RecipientsQuery $recipients, private readonly NotifyHolders $notifyHolders) {}
 
-    public function handle(AcademicLoad $load, LoadStatus $from, LoadStatus $to): int
+    public function handle(AcademicLoad $load, LoadStatus $from, LoadStatus $to, ?string $reason = null): int
     {
         $load->loadMissing(['department', 'campus']);
 
         [$permission, $notification] = match (true) {
-            $to === LoadStatus::Adjusting && in_array($from, self::REOPENED_FROM, true) => [AcademicLoadPermission::LoadClose, new LoadReopened($load, $load->department, $this->reason($load, $from))],
+            $to === LoadStatus::Adjusting && in_array($from, self::REOPENED_FROM, true) => [AcademicLoadPermission::LoadClose, new LoadReopened($load, $load->department, $reason)],
             $to === LoadStatus::Closed && $load->campus->profile->requiresSubdireccionApproval => [AcademicLoadPermission::LoadApprove, new LoadAwaitingApproval($load, $load->department)],
             $to === LoadStatus::Approved => [AcademicLoadPermission::LoadClose, new LoadApproved($load, $load->department)],
             default => [null, null],
@@ -54,16 +54,5 @@ final class NotifyLoadClosing
         $holders = $this->recipients->holders($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
 
         return $this->notifyHolders->handle($holders, $notification)->count();
-    }
-
-    /**
-     * El comentario de la última transición de esa carga que salió de `$from` hacia ajustes.
-     */
-    private function reason(AcademicLoad $load, LoadStatus $from): ?string
-    {
-        return $load->transitions()
-            ->where('from_status', $from)->where('to_status', LoadStatus::Adjusting)
-            ->latest('created_at')->latest('id')
-            ->value('comment');
     }
 }

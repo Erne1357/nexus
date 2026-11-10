@@ -16,6 +16,6 @@ final class NotifyOnLoadClosingTransition implements ShouldQueue
 
     public function handle(LoadTransitioned $event): void
     {
-        $this->notifyLoadClosing->handle($event->load, $event->from, $event->to);
+        $this->notifyLoadClosing->handle($event->load, $event->from, $event->to, $event->comment);
     }
 }
