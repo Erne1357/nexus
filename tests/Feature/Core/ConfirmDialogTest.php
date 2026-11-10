@@ -19,3 +19,30 @@ it('el layout trae el diálogo de confirmar una sola vez y Campus lo usa en luga
         ->and($html)->toContain('data-confirm-tone="error"')
         ->and($html)->not->toContain('wire:confirm');
 });
+
+it('ya no queda wire:confirm en las vistas de Core, Academic, Facilities y Faculty', function () {
+    $files = [];
+
+    foreach (['Academic', 'Core', 'Facilities', 'Faculty'] as $module) {
+        $dir = base_path("app/Modules/{$module}");
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+
+        foreach ($iterator as $file) {
+            $path = str_replace('\\', '/', $file->getPathname());
+
+            if (! str_ends_with($path, '.blade.php')
+                || str_contains($path, 'Academic/Views/plans/')
+                || str_contains($path, 'pending-placements')
+                || str_ends_with($path, 'Core/Views/components/confirm-dialog.blade.php')
+                || str_ends_with($path, 'Core/Views/components/row-menu-item.blade.php')) {
+                continue;
+            }
+
+            if (str_contains(file_get_contents($path), 'wire:confirm')) {
+                $files[] = $path;
+            }
+        }
+    }
+
+    expect($files)->toBe([]);
+});

@@ -40,7 +40,10 @@
                     <x-core::row-menu-item
                         :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'"
                         wire:click="toggleActive"
-                        wire:confirm="{{ $record->teacher->is_active ? '¿Dar de baja al docente '.$record->teacher->rfc.'? Se desactiva su usuario y terminan sus jefaturas vigentes.' : '¿Activar al docente '.$record->teacher->rfc.'? Su usuario vuelve a estar activo.' }}"
+                        x-confirm="{{ $record->teacher->is_active ? 'Se desactiva su usuario y terminan sus jefaturas vigentes.' : 'Su usuario vuelve a estar activo.' }}"
+                        data-confirm-title="{{ $record->teacher->is_active ? '¿Dar de baja al docente '.$record->teacher->rfc.'?' : '¿Activar al docente '.$record->teacher->rfc.'?' }}"
+                        data-confirm-button="{{ $record->teacher->is_active ? 'Dar de baja' : 'Activar' }}"
+                        data-confirm-tone="{{ $record->teacher->is_active ? 'error' : 'primary' }}"
                         spinner="toggleActive"
                         data-testid="toggle-active"
                     />
@@ -51,7 +54,10 @@
                     <x-core::row-menu-item
                         label="Restablecer contraseña"
                         wire:click="resetPassword"
-                        wire:confirm="¿Restablecer la contraseña de {{ $record->teacher->rfc }}? Vuelve a la contraseña por defecto y tendrá que cambiarla al entrar."
+                        x-confirm="Vuelve a la contraseña por defecto y tendrá que cambiarla al entrar."
+                        data-confirm-title="¿Restablecer la contraseña de {{ $record->teacher->rfc }}?"
+                        data-confirm-button="Restablecer"
+                        data-confirm-tone="warning"
                         spinner="resetPassword"
                         data-testid="reset-password"
                     />
@@ -149,7 +155,7 @@
                         <span class="flex justify-end gap-1 max-md:col-span-2 max-md:justify-start max-md:-ms-3">
                             @if ($canQualify[$qualification->id])
                                 <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" wire:click="editQualification('{{ $qualification->id }}')" spinner="editQualification('{{ $qualification->id }}')" :data-testid="'edit-qualification-'.$loop->index" aria-label="Editar {{ $qualification->subject?->code }} del perfil" />
-                                <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeQualification('{{ $qualification->id }}')" wire:confirm="¿Quitar {{ $qualification->subject?->code }} del perfil de {{ $record->teacher->name }}? Queda en la bitácora." spinner="removeQualification('{{ $qualification->id }}')" :data-testid="'remove-qualification-'.$loop->index" aria-label="Quitar {{ $qualification->subject?->code }} del perfil" />
+                                <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeQualification('{{ $qualification->id }}')" x-confirm="Queda en la bitácora." data-confirm-title="¿Quitar {{ $qualification->subject?->code }} del perfil de {{ $record->teacher->name }}?" data-confirm-button="Quitar" data-confirm-tone="error" spinner="removeQualification('{{ $qualification->id }}')" :data-testid="'remove-qualification-'.$loop->index" aria-label="Quitar {{ $qualification->subject?->code }} del perfil" />
                             @else
                                 <span class="tooltip tooltip-left" data-tip="Solo quien administra el departamento de la materia cambia su perfil.">
                                     <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" disabled aria-label="Editar {{ $qualification->subject?->code }}: solo quien administra su departamento" />
@@ -181,7 +187,7 @@
                             <span class="flex justify-end gap-1 max-md:col-span-2 max-md:justify-start max-md:-ms-3">
                                 @if ($canManageLoads)
                                     <x-button label="Editar" icon="o-pencil-square" class="btn-ghost btn-sm" wire:click="editLoad('{{ $load->id }}')" spinner="editLoad('{{ $load->id }}')" :data-testid="'edit-load-'.$loop->index" aria-label="Editar las horas de {{ $load->source }}" />
-                                    <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeLoad('{{ $load->id }}')" wire:confirm="¿Quitar las {{ $load->hours }} h de {{ $load->source }}? Queda en la bitácora." spinner="removeLoad('{{ $load->id }}')" :data-testid="'remove-load-'.$loop->index" aria-label="Quitar las horas de {{ $load->source }}" />
+                                    <x-button label="Quitar" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeLoad('{{ $load->id }}')" x-confirm="Queda en la bitácora." data-confirm-title="¿Quitar las {{ $load->hours }} h de {{ $load->source }}?" data-confirm-button="Quitar" data-confirm-tone="error" spinner="removeLoad('{{ $load->id }}')" :data-testid="'remove-load-'.$loop->index" aria-label="Quitar las horas de {{ $load->source }}" />
                                 @endif
                             </span>
                         </div>

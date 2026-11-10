@@ -34,7 +34,10 @@
         <x-core::row-menu-item
             :label="$career->is_active ? 'Desactivar' : 'Activar'"
             wire:click="toggleActive('{{ $career->id }}')"
-            wire:confirm="{{ $career->is_active ? '¿Desactivar la carrera '.$career->code.'?' : '¿Activar la carrera '.$career->code.'?' }}"
+            x-confirm="{{ $career->is_active ? 'La carrera deja de estar disponible para nuevos usos hasta que se reactive.' : 'La carrera vuelve a estar disponible.' }}"
+            data-confirm-title="{{ $career->is_active ? '¿Desactivar la carrera '.$career->code.'?' : '¿Activar la carrera '.$career->code.'?' }}"
+            data-confirm-button="{{ $career->is_active ? 'Desactivar' : 'Activar' }}"
+            data-confirm-tone="{{ $career->is_active ? 'error' : 'primary' }}"
             :spinner="'toggleActive(\''.$career->id.'\')'"
         />
 
@@ -44,7 +47,10 @@
             <x-core::row-menu-item
                 label="Borrar"
                 wire:click="delete('{{ $career->id }}')"
-                wire:confirm="¿Borrar la carrera {{ $career->code }}? Dejará de aparecer en el catálogo y se cerrarán los alcances de sus coordinadores."
+                x-confirm="Dejará de aparecer en el catálogo y se cerrarán los alcances de sus coordinadores."
+                data-confirm-title="¿Borrar la carrera {{ $career->code }}?"
+                data-confirm-button="Borrar"
+                data-confirm-tone="error"
                 :spinner="'delete(\''.$career->id.'\')'"
                 danger
             />

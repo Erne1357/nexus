@@ -618,7 +618,7 @@ describe('copiar el calendario de otro periodo', function () {
             ->set('sourceId', $this->other->id)
             ->assertSee('Reemplazar calendario')
             ->assertSee('Se reemplazará la ventana actual del periodo.')
-            ->assertSeeHtml('wire:confirm="Se reemplazará la ventana actual del periodo."')
+            ->assertSeeHtml('x-confirm="Se reemplazará la ventana actual del periodo."')
             ->call('copyCalendar');
 
         expect(termPageWindows($this->term, Stage::Staffing))->toBe([])
@@ -635,7 +635,7 @@ describe('copiar el calendario de otro periodo', function () {
             ->assertSee('Este periodo no tiene calendario.')
             ->call('openCopy')
             ->set('sourceId', $this->other->id)
-            ->assertSeeHtml('wire:confirm="Se reemplazarán las 2 ventanas actuales del periodo, 2 de ellas de campus inactivos."')
+            ->assertSeeHtml('x-confirm="Se reemplazarán las 2 ventanas actuales del periodo, 2 de ellas de campus inactivos."')
             ->call('copyCalendar');
 
         expect(TermStage::where('term_id', $this->term->id)->count())->toBe(3);

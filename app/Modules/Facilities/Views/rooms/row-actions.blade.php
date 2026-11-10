@@ -30,7 +30,10 @@
         <x-core::row-menu-item
             :label="$room->is_active ? 'Desactivar' : 'Activar'"
             wire:click="toggleActive('{{ $room->id }}')"
-            wire:confirm="{{ $room->is_active ? '¿Desactivar el salón '.$room->code.'?' : '¿Activar el salón '.$room->code.'?' }}"
+            x-confirm="{{ $room->is_active ? 'El salón deja de estar disponible hasta que se reactive.' : 'El salón vuelve a estar disponible.' }}"
+            data-confirm-title="{{ $room->is_active ? '¿Desactivar el salón '.$room->code.'?' : '¿Activar el salón '.$room->code.'?' }}"
+            data-confirm-button="{{ $room->is_active ? 'Desactivar' : 'Activar' }}"
+            data-confirm-tone="{{ $room->is_active ? 'error' : 'primary' }}"
             :spinner="'toggleActive(\''.$room->id.'\')'"
         />
     </x-core::row-menu>
