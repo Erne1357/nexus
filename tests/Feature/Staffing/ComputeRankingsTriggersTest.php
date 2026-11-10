@@ -229,3 +229,11 @@ it('el job no hace nada si el departamento ya no existe', function () {
 
     expect(StaffingRanking::query()->count())->toBe(0);
 });
+
+it('Ranking docente: un cambio solo de salón no vuelve a rankear, porque el salón no cambia el ranking', function () {
+    $this->ownGroup->update(['teacher_id' => $this->teacher->id]);
+
+    GroupScheduleChanged::dispatch($this->ownGroup, false);
+
+    expect(queuedRankingScopes())->toBe([]);
+});
