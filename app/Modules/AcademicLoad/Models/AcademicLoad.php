@@ -73,4 +73,14 @@ class AcademicLoad extends Model
     {
         return $this->hasMany(LoadTransition::class);
     }
+
+    /**
+     * Sus versiones publicadas, de la primera a la última.
+     *
+     * @return HasMany<LoadSnapshot, $this>
+     */
+    public function snapshots(): HasMany
+    {
+        return $this->hasMany(LoadSnapshot::class)->orderBy('version');
+    }
 }

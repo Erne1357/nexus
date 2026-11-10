@@ -115,7 +115,7 @@
 
                 <footer class="sticky bottom-0 flex items-center justify-between gap-2 border-t border-base-300 bg-base-100 px-5 py-3.5">
                     <x-button label="Quitar sesión" icon="o-trash" class="btn-ghost text-error" wire:click="remove" spinner="remove" :disabled="$readonly" data-testid="remove-session"
-                        wire:confirm="¿Quitar la sesión de {{ $panel['group']['label'] }} del {{ \App\Modules\Scheduling\Validation\Minutes::dayName($panel['day']) }} de {{ \App\Modules\Scheduling\Support\WeekGrid::range($panel['starts_at'], $panel['ends_at']) }}? Se quita completa." />
+                        wire:confirm="¿Quitar la sesión de {{ $panel['group']['label'] }} del {{ \App\Modules\Scheduling\Validation\Minutes::dayName($panel['day']) }} de {{ \App\Modules\Core\Support\WeekGrid::range($panel['starts_at'], $panel['ends_at']) }}? Se quita completa." />
                     @if ($readonly)
                         <x-button label="Guardar horario" icon="o-check" class="btn-primary" disabled data-testid="save-session" />
                     @else
