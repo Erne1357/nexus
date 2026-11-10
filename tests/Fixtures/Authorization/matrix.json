@@ -23,6 +23,8 @@
             "academic_load.agreement.request",
             "academic_load.agreement.view",
             "academic_load.load.close",
+            "academic_load.load.export",
+            "academic_load.load.export_sii",
             "academic_load.load.propose",
             "academic_load.load.start_staffing",
             "academic_load.load.view",
@@ -58,6 +60,7 @@
         ],
         "jefe_proyecto_docente": [
             "academic_load.agreement.view",
+            "academic_load.load.export",
             "academic_load.load.view",
             "academic_load.proposal_review.view",
             "faculty.teacher.create",
@@ -78,6 +81,7 @@
         "subdireccion": [
             "academic_load.agreement.view",
             "academic_load.load.approve",
+            "academic_load.load.export",
             "academic_load.load.export_sii",
             "academic_load.load.reopen",
             "academic_load.load.view",
@@ -132,6 +136,12 @@
         "codes=SERVICIOS-ESCOLARES": [
             "academic.placement.validate"
         ],
+        "codes=SERVICIOS-ESCOLARES,SUB-ACADEMICA": [
+            "academic_load.load.export_sii"
+        ],
+        "kinds=departamento_academico;codes=SERVICIOS-ESCOLARES,SUB-ACADEMICA": [
+            "academic_load.load.export"
+        ],
         "kinds=departamento_academico;codes=SUB-ACADEMICA": [
             "academic.career.create",
             "academic.career.delete",
@@ -153,7 +163,6 @@
             "academic_load.agreement.view",
             "academic_load.load.approve",
             "academic_load.load.close",
-            "academic_load.load.export_sii",
             "academic_load.load.propose",
             "academic_load.load.reopen",
             "academic_load.load.start_staffing",

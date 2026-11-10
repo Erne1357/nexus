@@ -3,11 +3,14 @@
 namespace App\Modules\AcademicLoad\Exports\Sii;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
-use App\Modules\AcademicLoad\Exports\PublishedExport;
+use App\Modules\AcademicLoad\Exports\StaffExport;
+use App\Modules\AcademicLoad\Exports\StaffExports;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -19,27 +22,53 @@ use ZipArchive;
  * publicada de cada carga. Las versiones se fijan al pedirlo, así que la llave (periodo, campus y hash de los ids de
  * snapshot) nombra exactamente lo que el archivo trae; publicar otra versión cambia la llave y pide un archivo nuevo.
  *
- * Lo descarga quien tiene `academic_load.load.export_sii` en el campus: admin y Subdirección (supuesto por confirmar).
+ * Lo descarga quien tiene `academic_load.load.export_sii`: el jefe del Departamento de Servicios Escolares, que captura
+ * la carga en el SII, la Subdirección Académica y el admin (supuesto por confirmar). Se ofrece en «Exportes del
+ * personal» de la consulta publicada (`StaffExports`, tipo `sii`).
  * Se serializa con ids y códigos, nunca con el payload.
  */
-final class SiiExport implements PublishedExport
+final class SiiFilesExport implements StaffExport
 {
     /**
      * @param  list<string>  $snapshotIds
+     * @param  list<string>  $departmentIds  los departamentos que publicaron, para el permiso
      */
-    private function __construct(
+    public function __construct(
         public readonly string $campusId,
         public readonly string $termCode,
         public readonly string $campusCode,
         public readonly array $snapshotIds,
+        public readonly array $departmentIds,
     ) {}
 
-    public static function for(Term $term, Campus $campus): self
+    /**
+     * Las versiones vigentes del campus y periodo; null si no hay nada publicado (404 sin encolar).
+     */
+    public static function fromRequest(PublishedScheduleQuery $query, Term $term, Campus $campus, Request $request): ?static
     {
-        $ids = app(SiiLoadExport::class)->latestSnapshots($term, $campus)->modelKeys();
-        sort($ids);
+        return self::for($term, $campus);
+    }
 
-        return new self($campus->getKey(), $term->code, $campus->code, array_values($ids));
+    public static function for(Term $term, Campus $campus): ?self
+    {
+        $snapshots = app(SiiLoadExport::class)->latestSnapshots($term, $campus);
+
+        if ($snapshots->isEmpty()) {
+            return null;
+        }
+
+        return new self(
+            $campus->getKey(),
+            $term->code,
+            $campus->code,
+            $snapshots->modelKeys(),
+            $snapshots->map(fn (LoadSnapshot $snapshot): string => $snapshot->payload['department']['id'])->unique()->values()->all(),
+        );
+    }
+
+    public static function label(): string
+    {
+        return 'Archivos para el SII';
     }
 
     public function key(): string
@@ -62,9 +91,14 @@ final class SiiExport implements PublishedExport
         return AcademicLoadPermission::LoadExportSii;
     }
 
+    /**
+     * Como los demás exportes del personal: el campus y los departamentos que publicaron más Servicios Escolares. El
+     * permiso solo aplica a Servicios Escolares y a la Subdirección Académica, así que no lo tiene el jefe de un
+     * departamento académico.
+     */
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId);
+        return Target::of(campus: $this->campusId, unit: StaffExports::units($this->departmentIds));
     }
 
     /**
