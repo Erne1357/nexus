@@ -11,15 +11,14 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\RecipientsQuery;
-use App\Modules\Scheduling\Enums\ConflictSeverity;
-use App\Modules\Scheduling\Enums\GroupStatus;
-use App\Modules\Scheduling\Enums\SessionKind;
+use App\Modules\Scheduling\Queries\ClosingBlockers;
 use App\Modules\Scheduling\Queries\ConflictBoardQuery;
+use App\Modules\Scheduling\Queries\GroupClosingFlags;
+use App\Modules\Scheduling\Queries\GroupClosingFlagsQuery;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -27,10 +26,11 @@ use Illuminate\Support\Str;
  * periodo, un renglón por departamento con una entrada por carga con grupos (por campus) y lo que le falta a cada una,
  * contado por grupo como el veto de HC-15.
  *
- * Lee todo en unas cuantas consultas, sin importar cuántas cargas haya: las cargas, una agregación de los grupos por
- * campus y departamento, las solicitudes de cambio y los acuerdos (AgreementsAnswered::countsByLoad). Los choques duros
- * son los vigentes de `schedule_conflicts` (como ConflictBoardQuery), no los del validador, que tardaría segundos por
- * carga; por eso el tablero dice cuándo se recalcularon y el veto sigue decidiendo al cerrar.
+ * Lee todo en unas cuantas consultas, sin importar cuántas cargas haya: las cargas, las banderas de HC-15 de los grupos
+ * del periodo (GroupClosingFlagsQuery, contadas con la regla por grupo del veto), las solicitudes de cambio y los
+ * acuerdos (AgreementsAnswered::countsByLoad). Los choques duros son los vigentes de `schedule_conflicts` (como
+ * ConflictBoardQuery), no los del validador, que tardaría segundos por carga; por eso el tablero dice cuándo se
+ * recalcularon y el veto sigue decidiendo al cerrar.
  *
  * Una carga sin grupos se queda en borrador y no aparece por campus; un departamento sin grupos en ningún campus va al
  * final. A una carga publicada no se le cuentan faltantes: ya pasó el cierre (se reabre para corregirla).
@@ -43,6 +43,7 @@ final class ClosingBoardQuery
         private readonly AgreementsAnswered $agreements,
         private readonly ConflictBoardQuery $conflicts,
         private readonly RecipientsQuery $recipients,
+        private readonly GroupClosingFlagsQuery $flags,
     ) {}
 
     /**
@@ -102,19 +103,24 @@ final class ClosingBoardQuery
     /**
      * El jefe de cada departamento de los renglones, por id: quienes tienen vigente pasar la carga a asignación
      * (`academic_load.load.start_staffing`, que solo tiene la jefatura; RecipientsQuery::holders) en sus campus con
-     * grupos, por nombre; ninguno si no hay titular. Va aparte de board() porque pregunta por departamento.
+     * grupos, por nombre; ninguno si no hay titular. Va aparte de board() y lee a los titulares una vez para todos los
+     * renglones (RecipientsQuery::holdersByKey).
      *
      * @param  list<array{department: Department, loads: list<LoadProgress>}>  $rows
      * @return array<string, list<string>>
      */
     public function heads(array $rows): array
     {
-        return collect($rows)->mapWithKeys(function (array $row): array {
+        $targets = collect($rows)->mapWithKeys(function (array $row): array {
             $campuses = array_values(array_unique(array_map(fn (LoadProgress $load): string => $load->load->campus_id, $row['loads'])));
-            $holders = $this->recipients->holders(AcademicLoadPermission::LoadStartStaffing, Target::of(campus: $campuses === [] ? null : $campuses, unit: $row['department']->id));
 
-            return [$row['department']->id => array_map(fn (array $holder): string => $holder['user']->name, $holders)];
+            return [$row['department']->id => Target::of(campus: $campuses === [] ? null : $campuses, unit: $row['department']->id)];
         })->all();
+
+        return array_map(
+            fn (array $holders): array => array_map(fn (array $holder): string => $holder['user']->name, $holders),
+            $this->recipients->holdersByKey(AcademicLoadPermission::LoadStartStaffing, $targets),
+        );
     }
 
     /**
@@ -137,45 +143,16 @@ final class ClosingBoardQuery
     }
 
     /**
-     * Las cifras de cada carga del periodo, con una consulta para los grupos, una para las solicitudes y una para los
-     * acuerdos. Sin horario y sin salón cuentan solo si el perfil del campus usa bloques de tiempo y salones.
+     * Las cifras de cada carga del periodo, con una consulta para las banderas de los grupos (GroupClosingFlagsQuery),
+     * una para las solicitudes y una para los acuerdos. Cada carga se cuenta con la regla por grupo del veto
+     * (ClosingBlockers::tally) y el perfil de su campus, pero con los choques duros vigentes de `schedule_conflicts`.
      *
      * @param  \Illuminate\Database\Eloquent\Collection<int, AcademicLoad>  $loads
      * @return Collection<int, LoadProgress>
      */
     private function progress(Term $term, Collection $loads): Collection
     {
-        $justified = "coalesce(btrim(g.close_justification), '') <> ''";
-        $roomless = 'exists (select 1 from group_sessions s where s.group_id = g.id and s.is_active and s.room_id is null and s.kind <> ?)';
-        // Los grupos distintos que faltan: lo que falta siempre (choque duro, sin docente, docente de baja) y, según el
-        // perfil del campus, sin horario (U) y sin salón (R); se cuentan las cuatro combinaciones y se elige por campus.
-        $always = 'exists (select 1 from schedule_conflicts c where c.group_id = g.id and c.resolved_at is null and c.severity = ?)'
-            ." or (g.teacher_id is null and not ({$justified}))"
-            .' or exists (select 1 from teachers t where t.id = g.teacher_id and (not t.is_active or t.deleted_at is not null))';
-        $unscheduled = 'not exists (select 1 from group_sessions s where s.group_id = g.id and s.is_active)';
-        $withoutRoom = "({$roomless} and not ({$justified}))";
-        $hard = ConflictSeverity::Hard->value;
-        $virtual = SessionKind::Virtual->value;
-
-        $groups = DB::table('groups as g')
-            ->where('g.term_id', $term->getKey())
-            ->where('g.status', '<>', GroupStatus::Cancelled->value)
-            ->groupBy('g.campus_id', 'g.department_id')
-            ->select(['g.campus_id', 'g.department_id'])
-            ->selectRaw('count(*) as groups')
-            ->selectRaw('count(*) filter (where exists (select 1 from schedule_conflicts c where c.group_id = g.id and c.resolved_at is null and c.severity = ?)) as hard', [ConflictSeverity::Hard->value])
-            ->selectRaw('count(*) filter (where not exists (select 1 from group_sessions s where s.group_id = g.id and s.is_active)) as unscheduled')
-            ->selectRaw("count(*) filter (where g.teacher_id is null and not ({$justified})) as without_teacher")
-            ->selectRaw("count(*) filter (where {$roomless} and not ({$justified})) as without_room", [SessionKind::Virtual->value])
-            ->selectRaw('count(*) filter (where exists (select 1 from teachers t where t.id = g.teacher_id and (not t.is_active or t.deleted_at is not null))) as inactive_teacher')
-            ->selectRaw("count(*) filter (where ({$justified}) and g.teacher_id is null) as justified_teacher")
-            ->selectRaw("count(*) filter (where ({$justified}) and g.teacher_id is not null and {$roomless}) as justified_room", [SessionKind::Virtual->value])
-            ->selectRaw("count(*) filter (where {$always} or {$unscheduled} or {$withoutRoom}) as blocking_ur", [$hard, $virtual])
-            ->selectRaw("count(*) filter (where {$always} or {$unscheduled}) as blocking_u", [$hard])
-            ->selectRaw("count(*) filter (where {$always} or {$withoutRoom}) as blocking_r", [$hard, $virtual])
-            ->selectRaw("count(*) filter (where {$always}) as blocking", [$hard])
-            ->get()
-            ->keyBy(fn (object $row): string => "{$row->campus_id}|{$row->department_id}");
+        $groups = $this->flags->ofTerm($term->getKey())->groupBy(fn (GroupClosingFlags $group): string => "{$group->campusId}|{$group->departmentId}");
 
         $requests = ChangeRequest::query()->toBase()
             ->where('term_id', $term->getKey())
@@ -188,31 +165,27 @@ final class ClosingBoardQuery
 
         return $loads->map(function (AcademicLoad $load) use ($groups, $requests, $agreements): LoadProgress {
             $key = "{$load->campus_id}|{$load->department_id}";
-            $row = $groups[$key] ?? null;
-            $profile = $load->campus->profile;
+            $ofLoad = $groups[$key] ?? collect();
+            $blockers = ClosingBlockers::tally($ofLoad, $load->campus->profile);
 
             // Una carga publicada ya pasó el cierre: no se le cuentan faltantes, como en «Cierre de la carga».
             if (in_array($load->status, [LoadStatus::Published, LoadStatus::Reanalysis], true)) {
-                return new LoadProgress(
-                    load: $load,
-                    groups: (int) ($row->groups ?? 0),
-                    justified: (int) ($row->justified_teacher ?? 0) + ($profile->usesRooms ? (int) ($row->justified_room ?? 0) : 0),
-                );
+                return new LoadProgress(load: $load, groups: $ofLoad->count(), justified: $blockers->justified);
             }
 
             return new LoadProgress(
                 load: $load,
-                groups: (int) ($row->groups ?? 0),
-                hard: (int) ($row->hard ?? 0),
-                unscheduled: $profile->usesTimeBlocks ? (int) ($row->unscheduled ?? 0) : 0,
-                withoutTeacher: (int) ($row->without_teacher ?? 0),
-                withoutRoom: $profile->usesRooms ? (int) ($row->without_room ?? 0) : 0,
-                inactiveTeacher: (int) ($row->inactive_teacher ?? 0),
+                groups: $ofLoad->count(),
+                hard: $blockers->conflicted,
+                unscheduled: $blockers->unscheduled,
+                withoutTeacher: $blockers->withoutTeacher,
+                withoutRoom: $blockers->withoutRoom,
+                inactiveTeacher: $blockers->inactiveTeacher,
                 requests: (int) ($requests[$key] ?? 0),
                 shared: $agreements[$key]['proposed'] ?? 0,
                 awaiting: $agreements[$key]['awaiting'] ?? 0,
-                justified: (int) ($row->justified_teacher ?? 0) + ($profile->usesRooms ? (int) ($row->justified_room ?? 0) : 0),
-                blockingGroups: (int) ($row?->{'blocking'.($profile->usesTimeBlocks || $profile->usesRooms ? '_' : '').($profile->usesTimeBlocks ? 'u' : '').($profile->usesRooms ? 'r' : '')} ?? 0),
+                justified: $blockers->justified,
+                blockingGroups: $blockers->groups,
             );
         });
     }

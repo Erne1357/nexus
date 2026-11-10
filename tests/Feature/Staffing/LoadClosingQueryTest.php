@@ -238,6 +238,42 @@ it('el jefe ve el cierre de su departamento; Subdirección y el admin, de todos,
         ->and($codesFor(User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->world->campus->id, 'department_id' => $this->world->department->id])->create()))->toBe([]);
 });
 
+it('la línea de estados marca un paso actual en cualquier estado, con o sin visto bueno de Subdirección', function (LoadStatus $status, bool $approval) {
+    $this->world->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'requires_subdireccion_approval' => $approval]]);
+    $this->world->load->update(['status' => $status]);
+
+    $current = array_values(array_filter(loadClosingOf()->steps(), fn (array $step): bool => $step['state'] === 'current'));
+
+    expect($current)->toHaveCount(1)
+        ->and($current[0]['status'])->toBe($status === LoadStatus::Reanalysis ? LoadStatus::Published : $status);
+})->with(LoadStatus::cases())->with(['con visto bueno' => true, 'sin visto bueno' => false]);
+
+it('una carga con visto bueno en un campus que no lo exige tiene su paso en la línea, entre Cerrada y Publicada', function () {
+    $this->world->load->update(['status' => LoadStatus::Approved]);
+    $this->world->group();
+
+    expect(array_map(fn (array $step): string => "{$step['status']->value}:{$step['state']}", loadClosingOf()->steps()))->toBe([
+        'draft:past', 'proposed:past', 'staffing:past', 'adjusting:skipped', 'closed:past', 'approved:current', 'published:next',
+    ]);
+});
+
+it('una carga en asignación sin grupos activos no está lista para cerrar: la línea dice que no tiene grupos', function () {
+    $this->world->group(['status' => 'cancelled']);
+
+    $closing = loadClosingOf();
+
+    expect($closing->isReady())->toBeFalse()
+        ->and($closing->headline())->toMatchArray(['tone' => 'neutral', 'title' => 'Sin grupos']);
+});
+
+it('trae el departamento de la carga aunque esté dado de baja', function () {
+    $this->world->group();
+    $this->world->department->delete();
+
+    expect($this->query->findOrFail($this->world->load->id)->department?->name)->toBe('Sistemas y Computación')
+        ->and($this->query->loadsOf($this->world->term->id, $this->world->department->id)->first()->department?->name)->toBe('Sistemas y Computación');
+});
+
 it('una sesión virtual sin salón no falta', function () {
     $group = $this->world->group(scheduled: false);
     GroupSession::factory()->for($group)->virtual()->on(2, '07:00', '09:00')->create();

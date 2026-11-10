@@ -5,6 +5,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Scheduling\Actions\JustifyGroups;
 use App\Modules\Scheduling\Models\Group;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -76,6 +77,36 @@ it('la policy va por grupo: uno de otro departamento en la lista no se justifica
     expect($result['justified'])->toBe([$own->id])
         ->and($result['skipped'])->toBe([['code' => $foreign->code, 'reason' => 'Lo justifica quien cierra la carga de Eléctrica y Electrónica.']])
         ->and($foreign->fresh()->close_justification)->toBeNull();
+});
+
+it('un deadlock aborta el lote completo con un mensaje claro: no sigue con los demás grupos', function () {
+    $first = $this->world->group(teacher: false);
+    $second = $this->world->group(teacher: false);
+    $attempts = 0;
+
+    Group::updating(function () use (&$attempts): void {
+        $attempts++;
+        $deadlock = new QueryException('pgsql', 'update ...', [], new PDOException('deadlock detected', 0));
+        $deadlock->errorInfo = ['40P01', 7, 'deadlock detected'];
+
+        throw $deadlock;
+    });
+
+    expect(fn () => justifyGroupsOf([$first, $second]))->toThrow(
+        fn (ValidationException $e) => expect($e->errors())->toBe(['groups' => ['Otra persona está cambiando estas cargas: no se justificó ningún grupo. Intenta de nuevo.']]),
+    );
+    expect($attempts)->toBe(1)
+        ->and($second->fresh()->close_justification)->toBeNull();
+});
+
+it('un error de base que no es de regla no se toma como rechazo: aborta el lote', function () {
+    $first = $this->world->group(teacher: false);
+    $second = $this->world->group(teacher: false);
+
+    Group::updating(fn () => throw new QueryException('pgsql', 'update ...', [], new PDOException('otro')));
+
+    expect(fn () => justifyGroupsOf([$first, $second]))->toThrow(QueryException::class);
+    expect($second->fresh()->close_justification)->toBeNull();
 });
 
 it('el motivo es obligatorio', function () {

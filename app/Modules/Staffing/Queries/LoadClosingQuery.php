@@ -12,12 +12,14 @@ use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\AcademicLoad\Rules\Constraints\AgreementsAnswered;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Enums\GroupStatus;
-use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\ClosingBlockers;
 use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
+use App\Modules\Scheduling\Queries\GroupClosingFlags;
+use App\Modules\Scheduling\Queries\GroupClosingFlagsQuery;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Rules\ScheduleSummary;
@@ -25,6 +27,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Str;
 
 /**
@@ -47,6 +50,7 @@ final class LoadClosingQuery
 {
     public function __construct(
         private readonly ClosingBlockersQuery $closingBlockers,
+        private readonly GroupClosingFlagsQuery $flags,
         private readonly AgreementsAnswered $agreements,
     ) {}
 
@@ -88,7 +92,7 @@ final class LoadClosingQuery
             ->select('academic_loads.*')
             ->selectSub($this->activeGroupsCount(), 'active_groups')
             ->orderBy('campuses.code')
-            ->with(['campus', 'department'])
+            ->with(['campus', 'department' => fn ($query) => $query->withTrashed()])
             ->get();
     }
 
@@ -98,7 +102,7 @@ final class LoadClosingQuery
     public function findOrFail(string $id): AcademicLoad
     {
         /** @var AcademicLoad */
-        return KeyLookup::findOrFail(AcademicLoad::query()->with(['campus', 'department', 'term']), $id);
+        return KeyLookup::findOrFail(AcademicLoad::query()->with(['campus', 'department' => fn ($query) => $query->withTrashed(), 'term']), $id);
     }
 
     /**
@@ -127,79 +131,37 @@ final class LoadClosingQuery
     /**
      * Lo que le falta a la carga para cerrar (fresco, con el validador al momento), o null si no aplica: una carga en
      * borrador no tiene grupos y una publicada ya pasó el cierre.
+     *
+     * @param  SupportCollection<string, GroupClosingFlags>|null  $flags  las de la carga, si ya se leyeron
      */
-    public function blockers(AcademicLoad $load): ?ClosingBlockers
+    public function blockers(AcademicLoad $load, ?SupportCollection $flags = null): ?ClosingBlockers
     {
         return in_array($load->status, [LoadStatus::Draft, LoadStatus::Published, LoadStatus::Reanalysis], true)
             ? null
-            : $this->closingBlockers->of($load);
+            : $this->closingBlockers->of($load, $flags);
     }
 
     /**
-     * Los grupos activos de la carga sin docente o con alguna sesión presencial sin salón (si el campus usa salones), con
-     * su justificación, quién y cuándo, por clave de materia y de grupo: la lista de «Justificaciones». Con `$groupIds`,
-     * solo esos (el drawer de un grupo).
+     * Los grupos activos de la carga que se justifican (GroupClosingFlags::needsJustification: sin docente o, si el
+     * campus usa salones, con alguna sesión presencial sin salón), con su justificación, quién y cuándo, por clave de
+     * materia y de grupo: la lista de «Justificaciones». Con `$groupIds`, solo esos (el drawer de un grupo).
      *
      * @param  list<string>|null  $groupIds
      * @return list<array{id: string, code: string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
      */
     public function items(AcademicLoad $load, ?array $groupIds = null): array
     {
-        $load->loadMissing(['campus', 'department', 'term']);
-        $profile = $load->campus->profile;
-        $roomless = GroupSession::query()->toBase()
-            ->selectRaw('count(*)')
-            ->whereColumn('group_sessions.group_id', 'groups.id')
-            ->where('group_sessions.is_active', true)
-            ->whereNull('group_sessions.room_id')
-            ->where('group_sessions.kind', '<>', SessionKind::Virtual->value);
-
-        $rows = $this->groupsOf($load)
-            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->join('careers', 'careers.id', '=', 'groups.owner_career_id')
-            ->leftJoin('users as justifiers', 'justifiers.id', '=', 'groups.close_justified_by')
-            ->select(['groups.id', 'groups.code', 'groups.semester', 'groups.teacher_id', 'groups.close_justification', 'groups.close_justified_at'])
-            ->addSelect(['subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code', 'justifiers.name as justified_by'])
-            ->selectSub($roomless, 'roomless_sessions')
-            ->where(fn (Builder $missing) => $missing->whereNull('groups.teacher_id')
-                ->when($profile->usesRooms, fn (Builder $query) => $query->orWhereExists(fn (QueryBuilder $sessions) => $sessions->selectRaw('1')->from('group_sessions')
-                    ->whereColumn('group_sessions.group_id', 'groups.id')
-                    ->where('group_sessions.is_active', true)
-                    ->whereNull('group_sessions.room_id')
-                    ->where('group_sessions.kind', '<>', SessionKind::Virtual->value))))
-            ->when($groupIds !== null, fn (Builder $query) => $query->whereIn('groups.id', $groupIds))
-            ->orderBy('subjects.code')->orderBy('groups.code')
-            ->toBase()->get();
-
-        $schedules = GroupSession::query()->whereIn('group_id', $rows->pluck('id')->all())->where('is_active', true)
-            ->orderBy('day')->orderBy('starts_at')
-            ->get(['group_id', 'day', 'starts_at', 'ends_at'])
-            ->groupBy('group_id');
-
-        return $rows->map(fn (object $row): array => [
-            'id' => $row->id,
-            'code' => $row->code,
-            'subject_code' => $row->subject_code,
-            'subject_name' => $row->subject_name,
-            'career_code' => $row->career_code,
-            'semester' => (int) $row->semester,
-            'schedule' => ScheduleSummary::of(($schedules[$row->id] ?? collect())->map(fn (GroupSession $session): array => [
-                'day' => $session->day, 'starts_at' => $session->starts_at, 'ends_at' => $session->ends_at,
-            ]))->label(),
-            'lacks_teacher' => $row->teacher_id === null,
-            'roomless_sessions' => $profile->usesRooms ? (int) $row->roomless_sessions : 0,
-            'justification' => $row->close_justification === null || trim($row->close_justification) === '' ? null : $row->close_justification,
-            'justified_by' => $row->justified_by,
-            'justified_at' => $row->close_justified_at === null ? null : CarbonImmutable::parse($row->close_justified_at)->setTimezone(config('app.timezone')),
-        ])->values()->all();
+        return $this->itemsOf($load, $this->flags->ofLoad($load, $groupIds));
     }
 
     /**
-     * El detalle de la carga. `$blockers` es lo que la pantalla ya calculó con blockers(); sin él, lo calcula.
+     * El detalle de la carga. `$blockers` es lo que la pantalla ya calculó con blockers(); sin él, lo calcula. Las
+     * banderas de los grupos se leen una vez para la lista, los faltantes, los grupos activos y los docentes de baja.
      */
     public function of(AcademicLoad $load, ?ClosingBlockers $blockers = null): LoadClosing
     {
-        $items = $this->items($load);
+        $flags = $this->flags->ofLoad($load);
+        $items = $this->itemsOf($load, $flags);
         $requests = ChangeRequest::query()
             ->where('term_id', $load->term_id)->where('campus_id', $load->campus_id)->where('department_id', $load->department_id)
             ->whereIn('status', [ChangeRequestStatus::Pending, ChangeRequestStatus::Approved])
@@ -207,16 +169,14 @@ final class LoadClosingQuery
             ->pluck('total', 'status');
 
         $pending = $this->agreements->pending($load);
+        $inactive = $flags->filter(fn (GroupClosingFlags $group): bool => $group->inactiveTeacher)->pluck('teacherId')->unique()->values()->all();
 
         return new LoadClosing(
             load: $load,
-            activeGroups: $this->groupsOf($load)->count(),
-            blockers: $blockers ?? $this->blockers($load),
+            activeGroups: $flags->count(),
+            blockers: $blockers ?? $this->blockers($load, $flags),
             roomlessSessions: (int) collect($items)->whereNull('justification')->sum('roomless_sessions'),
-            inactiveTeachers: $this->groupsOf($load)
-                ->join('teachers', 'teachers.id', '=', 'groups.teacher_id')
-                ->where(fn (Builder $inactive) => $inactive->where('teachers.is_active', false)->orWhereNotNull('teachers.deleted_at'))
-                ->distinct()->orderBy('teachers.name')->pluck('teachers.name')->all(),
+            inactiveTeachers: $inactive === [] ? [] : Teacher::withTrashed()->whereKey($inactive)->distinct()->orderBy('name')->pluck('name')->all(),
             pendingRequests: (int) ($requests[ChangeRequestStatus::Pending->value] ?? 0),
             approvedRequests: (int) ($requests[ChangeRequestStatus::Approved->value] ?? 0),
             sharedWaitingOn: $pending['proposed']->map(fn (InterdepartmentalAgreement $agreement): string => $agreement->toDepartment->name ?? $agreement->to_department_id)->values()->all(),
@@ -227,6 +187,57 @@ final class LoadClosingQuery
             items: $items,
             history: $this->history($load),
         );
+    }
+
+    /**
+     * @param  SupportCollection<string, GroupClosingFlags>  $flags
+     * @return list<array{id: string, code: string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
+     */
+    private function itemsOf(AcademicLoad $load, SupportCollection $flags): array
+    {
+        $load->loadMissing(['campus', 'department' => fn ($query) => $query->withTrashed(), 'term']);
+        $profile = $load->campus->profile;
+        $needing = $flags->filter(fn (GroupClosingFlags $group): bool => $group->needsJustification($profile));
+
+        if ($needing->isEmpty()) {
+            return [];
+        }
+
+        $rows = Group::query()
+            ->whereIn('groups.id', $needing->keys()->all())
+            ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
+            ->join('careers', 'careers.id', '=', 'groups.owner_career_id')
+            ->leftJoin('users as justifiers', 'justifiers.id', '=', 'groups.close_justified_by')
+            ->select(['groups.id', 'groups.code', 'groups.semester', 'groups.close_justification', 'groups.close_justified_at'])
+            ->addSelect(['subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code', 'justifiers.name as justified_by'])
+            ->orderBy('subjects.code')->orderBy('groups.code')
+            ->toBase()->get();
+
+        $schedules = GroupSession::query()->whereIn('group_id', $rows->pluck('id')->all())->where('is_active', true)
+            ->orderBy('day')->orderBy('starts_at')
+            ->get(['group_id', 'day', 'starts_at', 'ends_at'])
+            ->groupBy('group_id');
+
+        return $rows->map(function (object $row) use ($needing, $profile, $schedules): array {
+            $group = $needing[$row->id];
+
+            return [
+                'id' => $row->id,
+                'code' => $row->code,
+                'subject_code' => $row->subject_code,
+                'subject_name' => $row->subject_name,
+                'career_code' => $row->career_code,
+                'semester' => (int) $row->semester,
+                'schedule' => ScheduleSummary::of(($schedules[$row->id] ?? collect())->map(fn (GroupSession $session): array => [
+                    'day' => $session->day, 'starts_at' => $session->starts_at, 'ends_at' => $session->ends_at,
+                ]))->label(),
+                'lacks_teacher' => $group->lacksTeacher(),
+                'roomless_sessions' => $profile->usesRooms ? $group->roomlessSessions : 0,
+                'justification' => $group->justified ? $row->close_justification : null,
+                'justified_by' => $row->justified_by,
+                'justified_at' => $row->close_justified_at === null ? null : CarbonImmutable::parse($row->close_justified_at)->setTimezone(config('app.timezone')),
+            ];
+        })->values()->all();
     }
 
     /**

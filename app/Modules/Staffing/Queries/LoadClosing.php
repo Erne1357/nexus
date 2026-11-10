@@ -116,7 +116,7 @@ final readonly class LoadClosing
     }
 
     /**
-     * Lista para cerrar: en asignación, con grupos y sin nada que falte.
+     * Lista para cerrar: en asignación, con grupos y sin nada que falte (sin grupos, headline() lo dice).
      */
     public function isReady(): bool
     {
@@ -176,7 +176,7 @@ final readonly class LoadClosing
 
     /**
      * Lo que dice la línea del estado: su tono y su icono (el color nunca va solo), el título («Faltan 21 para cerrar»,
-     * «Lista para cerrar», «Cerrada el 07/12/2026») y una línea de detalle.
+     * «Lista para cerrar», «Sin grupos», «Cerrada el 07/12/2026») y una línea de detalle.
      *
      * @return array{tone: string, icon: string, title: string, detail: string}
      */
@@ -191,9 +191,11 @@ final readonly class LoadClosing
         return match ($load->status) {
             LoadStatus::Draft => ['tone' => 'neutral', 'icon' => 'o-pencil', 'title' => 'En borrador', 'detail' => 'La carga no tiene grupos: nacen al aceptar la parte del departamento en una propuesta de carrera.'],
             LoadStatus::Proposed => ['tone' => 'info', 'icon' => 'o-document-text', 'title' => $missing > 0 ? 'En Propuesta · '.mb_strtolower($this->missingLabel()) : 'En Propuesta', 'detail' => $missing > 0 ? $this->shortList() : 'Para cerrarla, primero pásala a asignación docente.'],
-            LoadStatus::Staffing => $missing > 0
-                ? ['tone' => $this->hasHardConflicts() ? 'error' : 'warning', 'icon' => $this->hasHardConflicts() ? 'o-x-circle' : 'o-exclamation-triangle', 'title' => $this->missingLabel().' para cerrar', 'detail' => $this->shortList()]
-                : ['tone' => 'success', 'icon' => 'o-check-circle', 'title' => 'Lista para cerrar', 'detail' => self::plural($this->activeGroups, 'grupo activo', 'grupos activos').' · '.self::plural($this->justifiedCount(), 'justificado', 'justificados')],
+            LoadStatus::Staffing => match (true) {
+                $missing > 0 => ['tone' => $this->hasHardConflicts() ? 'error' : 'warning', 'icon' => $this->hasHardConflicts() ? 'o-x-circle' : 'o-exclamation-triangle', 'title' => $this->missingLabel().' para cerrar', 'detail' => $this->shortList()],
+                $this->activeGroups === 0 => ['tone' => 'neutral', 'icon' => 'o-minus-circle', 'title' => 'Sin grupos', 'detail' => 'La carga no tiene grupos activos: no hay nada que cerrar.'],
+                default => ['tone' => 'success', 'icon' => 'o-check-circle', 'title' => 'Lista para cerrar', 'detail' => self::plural($this->activeGroups, 'grupo activo', 'grupos activos').' · '.self::plural($this->justifiedCount(), 'justificado', 'justificados')],
+            },
             LoadStatus::Adjusting => [
                 'tone' => 'info',
                 'icon' => 'o-arrow-path-rounded-square',
@@ -230,9 +232,11 @@ final readonly class LoadClosing
     }
 
     /**
-     * La línea de estados: Borrador, Propuesta, Asignación, Ajustes, Cerrada, Aprobada (solo si el campus exige el visto
-     * bueno) y Publicada, cada uno con la fecha en que la carga llegó a él por última vez (`dd/mm`) y si ya pasó, es el
-     * actual, se visitó después (Ajustes, que es una vuelta), se saltó (Ajustes, si la carga nunca pasó por ahí) o sigue.
+     * La línea de estados: Borrador, Propuesta, Asignación, Ajustes, Cerrada, Aprobada y Publicada, cada uno con la fecha
+     * en que la carga llegó a él por última vez (`dd/mm`) y si ya pasó, es el actual, se visitó después (Ajustes, que es
+     * una vuelta), se saltó (Ajustes, si la carga nunca pasó por ahí) o sigue. Aprobada va si el campus exige el visto
+     * bueno o si la carga está o estuvo ahí (el perfil pudo cambiar), así que todo estado tiene su paso; re-análisis es
+     * el de Publicada.
      *
      * @return list<array{status: LoadStatus, label: string, state: 'past'|'current'|'seen'|'skipped'|'next', date: ?string}>
      */
@@ -240,7 +244,7 @@ final readonly class LoadClosing
     {
         $order = [LoadStatus::Draft, LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Closed];
 
-        if ($this->load->campus->profile->requiresSubdireccionApproval) {
+        if ($this->load->campus->profile->requiresSubdireccionApproval || $this->load->status === LoadStatus::Approved || $this->lastReached(LoadStatus::Approved) !== null) {
             $order[] = LoadStatus::Approved;
         }
 

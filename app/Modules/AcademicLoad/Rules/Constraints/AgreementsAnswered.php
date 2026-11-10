@@ -26,13 +26,14 @@ use Illuminate\Database\Eloquent\Collection;
 final class AgreementsAnswered
 {
     /**
+     * La guarda de CloseLoad: solo cuenta, sin traer los acuerdos (pending() es para las pantallas).
+     *
      * @return list<string>
      */
     public function reasons(AcademicLoad $load): array
     {
-        $pending = $this->pending($load);
-        $proposed = $pending['proposed']->count();
-        $awaiting = $pending['awaiting']->count();
+        $proposed = $this->proposedBy($load)->count();
+        $awaiting = $this->awaitedBy($load)->count();
 
         return array_values(array_filter([
             $proposed === 0 ? null : ($proposed === 1
@@ -54,19 +55,8 @@ final class AgreementsAnswered
     public function pending(AcademicLoad $load): array
     {
         return [
-            'proposed' => $this->open($load->term_id)
-                ->where('campus_id', $load->campus_id)
-                ->where('kind', AgreementKind::SharedGroup)
-                ->where('from_department_id', $load->department_id)
-                ->with('toDepartment:id,code,name')
-                ->orderBy('created_at')
-                ->get(),
-            'awaiting' => $this->open($load->term_id)
-                ->where('campus_id', $load->campus_id)
-                ->where('to_department_id', $load->department_id)
-                ->with('fromDepartment:id,code,name')
-                ->orderBy('created_at')
-                ->get(),
+            'proposed' => $this->proposedBy($load)->with('toDepartment:id,code,name')->orderBy('created_at')->get(),
+            'awaiting' => $this->awaitedBy($load)->with('fromDepartment:id,code,name')->orderBy('created_at')->get(),
         ];
     }
 
@@ -94,6 +84,31 @@ final class AgreementsAnswered
         }
 
         return $counts;
+    }
+
+    /**
+     * Los grupos compartidos que propuso el departamento y siguen sin respuesta.
+     *
+     * @return Builder<InterdepartmentalAgreement>
+     */
+    private function proposedBy(AcademicLoad $load): Builder
+    {
+        return $this->open($load->term_id)
+            ->where('campus_id', $load->campus_id)
+            ->where('kind', AgreementKind::SharedGroup)
+            ->where('from_department_id', $load->department_id);
+    }
+
+    /**
+     * Los acuerdos que esperan la respuesta del departamento.
+     *
+     * @return Builder<InterdepartmentalAgreement>
+     */
+    private function awaitedBy(AcademicLoad $load): Builder
+    {
+        return $this->open($load->term_id)
+            ->where('campus_id', $load->campus_id)
+            ->where('to_department_id', $load->department_id);
     }
 
     /**
