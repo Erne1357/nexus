@@ -532,6 +532,17 @@ Las vistas del docente (tarea 3.10, Mi espacio › Oferta y Mi carga), ajustadas
 - **Oferta, panel:** `x-drawer` a la derecha (`w-full max-w-md`) con su botón de cerrar (`o-x-mark`, `btn-ghost btn-circle`, 44 px en celular), como el de Carga por docente. «Tu lugar» con sus marcas en insignia y, con la de choque, una caja `error/10` «Choca con tu horario» con cada grupo suyo que se empalma («A4 · Ingeniería Económica · C1 Lu 08:00–10:00»). «Tu desglose» como tabla con encabezados «Criterio · Tuyo · Puntos», en 14 px; «Horas base vigentes» dice que es el primer criterio del orden y no suma puntos.
 - **Mi carga:** la ecuación de horas en una franja (dos por renglón en celular, sin los signos); los días en columnas cuando su caja mide 56rem o más y uno debajo de otro antes, así ninguna insignia se sale de su día. Cada bloque con la materia en 14 px, sus horas, grupo y salón en Mono (o «Sin salón» con `o-exclamation-triangle` en `warning`, en texto normal) y el campus. Entre dos bloques, «Hueco de N h» o, si cambia el campus, «Traslado C2 → C1 · 3 h» con sus minutos libres: neutro, o en `warning` con `o-exclamation-triangle` si son menos de `staffing.min_campus_travel_minutes` (SC-09; nunca bloquea).
 
+### Publicación
+El componente de publicar la carga de un departamento (`academic-load::components.publish-load`, tarea 4.3). Lo eligió el usuario el 10 de noviembre de 2026: la maqueta B, «Línea de versiones» (maquetas en `.impeccable/mocks/publicar-carga/`, galería https://claude.ai/artifact/EnemqYXNDGXVG28i9YEsfR). Lo montan la pantalla de cierre del departamento y el tablero de Subdirección.
+- **La línea:** un punto por publicación, con su versión en Mono dentro del círculo, la fecha y cuántos grupos tenía. La vigente va rellena en `success` y dice «vigente»; las anteriores van con borde `success`. La siguiente aparece punteada en `primary` y es el botón: «Publicar» la primera vez, después «Publicar versión N» con «Reemplaza a la vN en la consulta». Si no se puede publicar, ese último punto va gris, con candado, «No se puede publicar» y el motivo escrito debajo: permiso, ya publicada, sin cerrar o falta el visto bueno. Desde 768 px la línea va de lado y se desplaza dentro de su caja; en el celular va vertical.
+- **Detalle de una versión:** tocar un punto abre debajo quién publicó, cuándo («a las 10:31», en Mono), el comentario y unas pastillas neutras con los grupos, las sesiones y lo que cambió contra la anterior (grupos que entraron y salieron, cambios de docente y de salón). Tocarlo otra vez lo cierra.
+- **Confirmación** (`x-modal`):
+  - cuatro cifras (grupos, sesiones, docentes y salones), con la diferencia contra la versión vigente;
+  - los grupos sin docente, que salen como «Por asignar»;
+  - qué pasa con la consulta pública y con el historial docente;
+  - un comentario opcional y «Publicar versión N».
+  - Un veto (HC-15) aparece arriba, en un aviso de error con sus motivos, y la carga no se publica.
+
 ## Elevation & Depth
 
 Plano. La profundidad la dan las superficies (blanco sobre platino) y los filetes, no las sombras.
