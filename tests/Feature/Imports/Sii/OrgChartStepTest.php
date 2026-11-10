@@ -36,7 +36,7 @@ beforeEach(function () {
     Storage::fake('imports');
     app()->instance('sii.steps', [OrgChartStep::class]);
 
-    $this->dir = sys_get_temp_dir().'/sii-'.uniqid();
+    $this->dir = sys_get_temp_dir().'/sii-'.bin2hex(random_bytes(6));
     File::copyDirectory(base_path('tests/Fixtures/imports/sii/minimo'), $this->dir);
     writeSiiOrgChart($this->dir);
     User::factory()->admin()->create(['username' => 'migrador']);
