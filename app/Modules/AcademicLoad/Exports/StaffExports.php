@@ -24,9 +24,9 @@ final class StaffExports
 
     /**
      * Las unidades sobre las que se pregunta el permiso de un exporte del personal (`academic_load.load.export`, campus y
-     * unidad): los departamentos que cubre y el Departamento de Servicios Escolares, que captura la carga en el SII y
-     * descarga lo de todos (supuesto por confirmar). Así lo descarga el jefe de alguno de esos departamentos,
-     * Subdirección (que los cubre en el árbol) y Servicios Escolares.
+     * unidad): los departamentos que publicaron en el campus y el Departamento de Servicios Escolares, que captura la
+     * carga en el SII. Así lo descarga el jefe de cualquiera de esos departamentos, también el PDF de otro departamento
+     * (confirmado el 10 de noviembre de 2026), Subdirección (que los cubre en el árbol) y Servicios Escolares.
      *
      * @param  list<string>  $departmentIds
      * @return list<string>
