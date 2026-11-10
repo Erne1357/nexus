@@ -31,15 +31,19 @@ namespace App\Modules\Imports\Sii;
  *    sus lugares toman la de más planes; en empate, la del plan de versión más reciente. Avisa (supuesto por confirmar).
  * 5. Nombre: el de la clave de Nexus es el más frecuente entre sus renglones del SII (SubjectName::key()); en empate,
  *    el del plan de versión más reciente y luego el primero en orden alfabético. Si el SII trae otros, avisa.
- * 6. Sin semestre (D18, R10): un lugar con semestre 0 toma el semestre más frecuente (en empate, el menor) de los
+ * 6. Estatus N: un lugar cuyas variantes del SII traen todas estatus `N` (ya no se ofrece) no entra a la retícula: pasa
+ *    a pending() con aviso, para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar, 10
+ *    de noviembre de 2026; antes no se migraba y se perdía el kárdex de quien lo aprobó). Si otra variante sigue
+ *    vigente, se funde con ella como cualquier variante.
+ * 7. Sin semestre (D18, R10): un lugar con semestre 0 toma el semestre más frecuente (en empate, el menor) de los
  *    lugares con semestre con el mismo nombre normalizado (de cualquiera de sus claves del SII), primero en planes de
  *    la misma carrera y si no hay, de cualquiera, con advertencia que nombra de dónde lo tomó. Si nada empata, no
  *    entra a la retícula: queda en pending() y avisa que va a la lista de pendientes de Servicios Escolares, que le
  *    asigna semestre (D19; detalles del empate, supuestos por confirmar).
  *
- * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}
- * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}
- * @phpstan-type GridPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, materias: list<string>, sources: list<string>}
+ * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
+ * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
+ * @phpstan-type GridPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool, materias: list<string>, sources: list<string>}
  */
 final class SubjectPlacements
 {
@@ -533,6 +537,7 @@ final class SubjectPlacements
                 'practice' => $hours['practice'],
                 'name' => '',
                 'specialty' => $specialty,
+                'retired' => array_all($variants, fn (array $variant): bool => $variant['retired']),
                 'materias' => array_values(array_unique([$chosen['materia'], ...array_column($variants, 'materia')])),
                 'sources' => array_column($variants, 'materia'),
             ];
@@ -646,7 +651,7 @@ final class SubjectPlacements
         $this->pending = [];
         $byName = [];
         foreach ($grid as $ref => $placement) {
-            if ($placement['semester'] > 0) {
+            if ($placement['semester'] > 0 && ! $placement['retired']) {
                 foreach (array_unique(array_map($this->nameKey(...), $placement['materias'])) as $name) {
                     $byName[$name][] = ['ref' => (string) $ref, 'career' => $placement['career'], 'semester' => $placement['semester']];
                 }
@@ -654,6 +659,14 @@ final class SubjectPlacements
         }
 
         foreach ($grid as $ref => $placement) {
+            if ($placement['retired']) {
+                $this->pending[(string) $ref] = $placement;
+                unset($grid[$ref]);
+                $this->warn((string) $ref, "Lugar {$ref}: el SII lo trae con estatus N (ya no se ofrece): no entra a la retícula; pasa a la lista de pendientes para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar).");
+
+                continue;
+            }
+
             if ($placement['semester'] > 0) {
                 continue;
             }

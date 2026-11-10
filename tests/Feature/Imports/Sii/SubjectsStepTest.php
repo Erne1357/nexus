@@ -260,12 +260,12 @@ it('deja todas las claves del SII como alias', function () {
 
     expect($aliases['CD1']['subject'])->toBe('ACF-0901')
         ->and($aliases['CD1D'])->toBe(['code' => 'CD1D', 'subject' => 'ACF-0901', 'plan' => 'AAA-2010-224'])
-        ->and($aliases->keys()->sort()->values()->all())->toBe(['CD1', 'CD1D', 'CD2', 'CD3', 'ESP', 'ESQ', 'ETB', 'ETC', 'ETI', 'OLD', 'OLDP', 'OPT', 'PRB1', 'PRB2', 'PRG', 'RES', 'SS', 'ZZZ'])
+        ->and($aliases->keys()->sort()->values()->all())->toBe(['CD1', 'CD1D', 'CD2', 'CD3', 'ESP', 'ESQ', 'ETB', 'ETC', 'ETI', 'NNN', 'OLD', 'OLDP', 'OPT', 'PRB1', 'PRB2', 'PRG', 'RES', 'SS', 'ZZZ'])
         ->and(collect($run['subjects']['rows'])->pluck('sii_code')->unique()->all())->toBe([''])
         ->and($subjectFor['CD1D'])->toBe('ACF-0901')
         ->and($subjectFor['CD3'])->toBe('CD3')
         ->and($subjectFor['ZZZ'])->toBe('ZZZ')
-        ->and(array_key_exists('NNN', $subjectFor))->toBeFalse();
+        ->and($subjectFor['NNN'])->toBe('NNN');
 });
 
 it('emite un solo lugar por plan aunque venga de dos variantes', function () {
@@ -585,13 +585,27 @@ it('las claves del SII de los pendientes quedan como alias y en subject_for', fu
         ->and($run['migration']->remember('subject_for', fn () => []))->toHaveKey('ZZZ');
 });
 
-it('no migra un lugar con estatus N', function () {
-    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
-    $warning = collect($subjects['incidents'])->first(fn (array $i): bool => str_contains($i['ref'], 'NNN'));
+it('un lugar con estatus N no entra a la retícula: pasa a «Por validar», para no perder el kárdex de quien lo aprobó', function () {
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $warning = collect($run['subjects']['incidents'])->first(fn (array $i): bool => str_contains($i['ref'], 'NNN'));
 
-    expect(collect($subjects['rows'])->pluck('code'))->not->toContain('NNN')
-        ->and($warning)->not->toBeNull()
-        ->and($warning['message'])->toContain('estatus N');
+    expect(collect($run['subjects']['rows'])->pluck('code'))->not->toContain('NNN')
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2010-224', 'NNN'))->not->toBeNull()
+        ->and($warning['message'])->toContain('estatus N')->toContain('pendientes')->toContain('supuesto por confirmar');
+});
+
+it('un lugar con estatus N que es la variante de otro vigente se funde con él', function () {
+    writeSiiSubjects($this->dir, [['LOG', '1', '110100', 'LOGISTICA'], ['LOGD', '1', '110100', 'LOGISTICA']], [
+        ['A', '1', 'LOG', '4', '2', '2', '9', '', 'A'],
+        ['A2', '2', 'LOGD', '4', '2', '2', '9', '', 'N'],
+    ]);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $forPlan = $run['migration']->remember('subject_for_plan', fn () => throw new LogicException('debía estar armado'));
+
+    expect(subjectsStepRow($run['subjects'], 'AAA-2010-224', 'LOG'))->toMatchArray(['semester' => '9'])
+        ->and($run['pending_placements']['rows'])->toBe([])
+        ->and($forPlan['AAA-2010-224']['LOGD'])->toBe('LOG');
 });
 
 it('una retícula excluida no migra sus materias y avisa una sola vez', function () {
