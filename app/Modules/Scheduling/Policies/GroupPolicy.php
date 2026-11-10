@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Policies;
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\AuthorizesActor;
@@ -17,6 +18,8 @@ use App\Modules\Scheduling\Models\Group;
  *   docente de su departamento en su campus) y el coordinador de su carrera dueña en su campus.
  * - Lo gestionan y acomodan sus sesiones el coordinador de su carrera dueña y el jefe de su departamento.
  * - Asignan salón y reparten cupos el jefe de su departamento.
+ * - Justifica que se quede sin docente o sin salón al cerrar (HC-15) quien cierra la carga de su departamento
+ *   (`academic_load.load.close`, el jefe; P2, confirmado el 10 de noviembre de 2026).
  *
  * La condición de estado de la carga (`proposed`, `staffing` o `adjusting`) la revisa la Action que escribe.
  */
@@ -47,6 +50,11 @@ final class GroupPolicy
     public function manageQuotas(User $user, Group $group): bool
     {
         return $this->can($user, SchedulingPermission::QuotaManage, $group);
+    }
+
+    public function justify(User $user, Group $group): bool
+    {
+        return $this->actor($user)->allows(AcademicLoadPermission::LoadClose, Target::of(campus: $group->campus_id, unit: $group->department_id));
     }
 
     private function can(User $user, SchedulingPermission $permission, Group $group): bool

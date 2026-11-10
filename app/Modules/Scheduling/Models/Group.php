@@ -9,6 +9,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Database\Factories\GroupFactory;
 use App\Modules\Scheduling\Enums\GroupStatus;
@@ -27,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * reticular donde se acomoda, su clave del SII, su docente vigente, su capacidad y su estado. Su departamento es el
  * de la materia.
  */
-#[Fillable(['term_id', 'campus_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status', 'proposal_item_id', 'notes'])]
+#[Fillable(['term_id', 'campus_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status', 'proposal_item_id', 'notes', 'close_justification', 'close_justified_by', 'close_justified_at'])]
 #[UseFactory(GroupFactory::class)]
 class Group extends Model
 {
@@ -43,6 +44,7 @@ class Group extends Model
             'semester' => 'integer',
             'capacity' => 'integer',
             'status' => GroupStatus::class,
+            'close_justified_at' => 'immutable_datetime',
         ];
     }
 
@@ -113,6 +115,16 @@ class Group extends Model
     /**
      * @return HasMany<GroupSession, $this>
      */
+    /**
+     * Quien escribió la justificación de HC-15 (JustifyGroup).
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function justifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'close_justified_by');
+    }
+
     public function sessions(): HasMany
     {
         return $this->hasMany(GroupSession::class);

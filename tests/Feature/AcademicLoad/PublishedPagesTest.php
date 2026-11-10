@@ -16,6 +16,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Livewire\Exceptions\MethodNotFoundException;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -446,4 +447,15 @@ describe('personal con sesión', function () {
 
         expect(PublishedThrottle::who($request))->toBe((string) $user->getKey());
     });
+});
+
+describe('datos de la vista', function () {
+    it('un invitado no puede llamar with() de una página pública para ver más de lo que pinta', function (string $component, Closure $parameters) {
+        expect(fn () => Livewire::test($component, $parameters($this))->call('with'))
+            ->toThrow(MethodNotFoundException::class);
+    })->with([
+        'inicio' => ['academic-load::pages.published.index', fn (): array => []],
+        'semestre' => ['academic-load::pages.published.semester', fn ($test): array => ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'ISC']],
+        'docente' => ['academic-load::pages.published.teacher', fn ($test): array => ['periodo' => '20271', 'campus' => 'C2', 'docente' => $test->laura['id']]],
+    ]);
 });
