@@ -1,7 +1,7 @@
 @php
     $day = fn (\Carbon\CarbonInterface $at): string => str_replace('.', '', $at->timezone(config('app.timezone'))->locale('es')->translatedFormat('j M Y'));
     $clock = fn (\Carbon\CarbonInterface $at): string => $at->timezone(config('app.timezone'))->format('G:i');
-    $titleId = "publish-{$loadId}-title";
+    $titleId = "{$domId}-title";
     $sameDay = collect($versions)->countBy(fn (array $version): string => $day($version['publishedAt']));
 @endphp
 

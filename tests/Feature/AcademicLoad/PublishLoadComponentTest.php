@@ -190,3 +190,64 @@ it('si dos versiones son del mismo día, el punto también dice la hora', functi
     Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load->fresh()])
         ->assertSeeInOrder(['10 dic 2026, 8:05', '10 dic 2026, 16:40']);
 });
+
+it('publica quien tiene publish: el jefe sin visto bueno, Subdirección en cualquier campus y la aprobada donde se exige', function (Closure $arrange) {
+    componentGroup();
+    $user = $arrange();
+
+    Livewire::actingAs($user)->test(PUBLISH_COMPONENT, ['load' => $this->load->fresh()])
+        ->call('confirm')
+        ->call('publish')
+        ->assertDispatched('load-published');
+
+    expect($this->load->fresh()->status)->toBe(LoadStatus::Published);
+})->with([
+    'el jefe del departamento, campus sin visto bueno' => [fn () => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create()],
+    'Subdirección en un campus sin visto bueno' => [fn () => test()->subdireccion],
+    'Subdirección, carga aprobada donde se exige visto bueno' => [function () {
+        test()->campus->update(['settings' => ['requires_subdireccion_approval' => true]]);
+        test()->load->update(['status' => LoadStatus::Approved]);
+
+        return test()->subdireccion;
+    }],
+]);
+
+it('con visto bueno, el jefe no publica la carga aprobada', function () {
+    $this->campus->update(['settings' => ['requires_subdireccion_approval' => true]]);
+    $this->load->update(['status' => LoadStatus::Approved]);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
+
+    Livewire::actingAs($jefe)->test(PUBLISH_COMPONENT, ['load' => $this->load->fresh()])
+        ->assertSee('En este campus publica Subdirección, después de su visto bueno.')
+        ->call('confirm')
+        ->assertForbidden();
+});
+
+it('no ofrece publicar en ningún estado que no sea cerrada o aprobada (ni re-análisis, que es de R2, aparte)', function (LoadStatus $status) {
+    $this->load->update(['status' => $status]);
+
+    Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load->fresh()])
+        ->assertDontSeeHtml('data-testid="publish-next"')
+        ->call('confirm')
+        ->assertSet('confirming', false);
+})->with([LoadStatus::Draft, LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Published]);
+
+it('si la carga cambió con la confirmación abierta, el veto sale en la confirmación', function () {
+    componentGroup();
+    $component = Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load])->call('confirm');
+    $this->load->update(['status' => LoadStatus::Staffing]);
+
+    $component->call('publish')
+        ->assertSet('confirming', true)
+        ->assertSet('vetoes', ['La carga está en Asignación: no puede pasar a Publicada.'])
+        ->assertNotDispatched('load-published');
+});
+
+it('dos instancias de la misma carga en una página no repiten ids del DOM', function () {
+    $first = Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load]);
+    $second = Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load]);
+    $idOf = fn ($component): string => (string) preg_replace('/^.*aria-labelledby="([^"]+)".*$/s', '$1', $component->html());
+
+    expect($idOf($first))->not->toBe($idOf($second))
+        ->and($idOf($first))->not->toContain($this->load->id);
+});

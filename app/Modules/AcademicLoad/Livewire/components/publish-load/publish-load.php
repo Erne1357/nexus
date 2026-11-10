@@ -22,9 +22,12 @@ use Mary\Traits\Toast;
  * `<livewire:academic-load::components.publish-load :load="$load" wire:key="publish-{$load->id}" />`; al publicar
  * despacha `load-published` (con `loadId` y `version`) para que la pantalla se refresque.
  *
- * Lo ve quien puede ver la carga (`view`). Publica quien tiene `publish` (Subdirección, o el jefe del departamento si
- * el campus no exige visto bueno) con la carga cerrada o aprobada; si no, el último punto dice por qué no se puede
- * (DESIGN.md, «Nada oculto por permiso»). Cada método recarga la carga con KeyLookup y vuelve a autorizar.
+ * Montarlo pide `view` (no `publish`): quien ve la carga ve sus versiones y, si no puede publicar, el último punto dice
+ * por qué (DESIGN.md, «Nada oculto por permiso»). Publica quien tiene `publish` (Subdirección, o el jefe del
+ * departamento si el campus no exige visto bueno) con la carga cerrada o aprobada. Cada método recarga la carga con
+ * KeyLookup y vuelve a autorizar; si la carga cambió con la confirmación abierta, el veto de TransitionLoad sale como
+ * motivo en la confirmación. Los ids del DOM salen del id de la instancia, así que la misma carga puede estar dos veces
+ * en una página (la pantalla y un drawer).
  */
 new class extends Component
 {
@@ -63,6 +66,7 @@ new class extends Component
         $list = $versions->versions($load);
 
         return [
+            'domId' => 'publish-'.$this->getId(),
             'load' => $load,
             'versions' => $list,
             'current' => $load->current_version,
