@@ -24,7 +24,7 @@ Si las cuentas cuadran, la corrida real es la misma línea sin `--dry-run`.
 | Opción | Qué hace |
 |---|---|
 | `--dry-run` | Corre todo dentro de una transacción que se revierte, sin cola, y borra los archivos subidos. Sí deja `_incidencias.csv` y `_nexus/`. La tabla de la consola dice cuántas altas y cambios haría cada lote |
-| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `archivo`, `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente`, `alumnos`, `kardex` y `verificacion`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras; `kardex`, materias (y los alumnos ya migrados, de esta corrida o de una anterior). `verificacion` no se detiene: si en la corrida no corrieron `archivo` y `kardex`, avisa que no verificó (ver «Verificación contra el SII original») |
+| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `archivo`, `organigrama`, `carreras`, `materias`, `seriacion`, `aulas`, `docentes`, `plazas`, `historial_docente`, `alumnos`, `kardex` y `verificacion`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `seriacion`, carreras y materias; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras; `kardex`, materias (y los alumnos ya migrados, de esta corrida o de una anterior). `verificacion` no se detiene: si en la corrida no corrieron `archivo` y `kardex`, avisa que no verificó (ver «Verificación contra el SII original») |
 | `--user=<username>` | Quién aplica los lotes; debe tener permiso de aplicar importaciones |
 | `--force` | Obligatorio en producción |
 
@@ -131,6 +131,8 @@ Toda plantilla da de alta lo que falta por su clave natural y, en lo que ya exis
 | `materias` | `subjects` | De la materia: nombre, departamento, horas teóricas y prácticas, créditos y tipo (si lo trae). De su lugar en la retícula: semestre, especialidad (si la trae) y orden en el semestre (si el SII trae `renglon`). El nombre de la especialidad, si el SII lo trae | Estado; un lugar quitado de la retícula (es error) |
 | | `pending_placements` | La materia, igual que `subjects`; de un pendiente sin resolver, especialidad, retícula del SII, renglón y semestre sugerido (tal cual: vacío lo borra) | Los pendientes resueltos (no se reabren); si la materia ya está en la retícula, no crea pendiente |
 | | `subject_aliases` | Nada: solo da de alta las claves que faltan | Las que ya existen |
+| `seriacion` | `prerequisites` | El tipo (seriación o correquisito) de un requisito que ya está en la seriación del plan | Nunca borra una seriación que el SII ya no trae ni la capturada en Nexus; una quitada no se restaura (es error) |
+| | `pending_prerequisites` | De un requisito que espera y no ha entrado, el tipo y la retícula del SII | Los que ya entraron a la seriación (avisa); su nota |
 | `aulas` | `rooms` | Edificio (lo crea si el campus no lo tiene), nombre, tipo, capacidad y departamento dueño, del curado `aulas.csv` | Estado, características y los edificios que ya existen |
 | `docentes` | `teachers` | Nombre, correo (si es válido) y fecha de ingreso; agrega las adscripciones nuevas | Estado, grado (el SII no lo trae), adscripción principal; nunca quita adscripciones |
 | `plazas` | `positions` | Horas base de la plaza de cada tipo (la suma de las claves de ese tipo) | Tipo y vigencia; nunca quita una plaza que ya no venga |
@@ -154,6 +156,32 @@ La migración nunca decide un semestre (confirmado, 10 de noviembre de 2026): lo
 
 En todos los casos lo aprobado en una materia de «Por validar» cuenta en el avance del alumno y el kárdex la encuentra por su clave del SII.
 
+## Seriación del SII (`seriacion`)
+
+El SII exportó la seriación en `requisitos_materia` (`carrera`, `reticula`, `materia`, `materia_relacion`, `tipo_requisito`): `P` es pre-requisito (la materia pide haber aprobado `materia_relacion`; en Nexus, seriación) y `C`, co-requisito (se cursa a la par; correquisito). La exportación del 10 de noviembre de 2026 trae 1 934 renglones (1 770 `P` y 164 `C`) de 50 retículas, con un renglón donde la materia se pide a sí misma, un ciclo de `P` y algunas claves que no están en la retícula. El archivo es **opcional**, como los del kárdex: sin él, el paso avisa una vez («La exportación no trae requisitos_materia») y no migra seriación. Lo hace `SeriationStep`, justo después de `materias`, porque necesita `plan_for` y `subject_for_plan` y lee de la base qué materias quedaron en la retícula y cuáles en «Por validar» (en seco también: todo va en la misma transacción). Las reglas están en [reglas-de-negocio.md](../dominio/reglas-de-negocio.md), «Migración de la seriación del SII».
+
+- **Cada renglón** va al plan de Nexus de su retícula, y sus dos claves a las materias de ese plan (`subject_for_plan`, como el kárdex). Lo que no pasa queda en `_incidencias.csv`: una advertencia por retícula excluida del curado, con cuántos renglones; una por plan y clave del SII sin materia de Nexus en ese plan; una por renglón cuyas dos claves son la misma materia de Nexus (la que se pide a sí misma, o dos claves fundidas); un **error** por línea con un `tipo_requisito` que no es `P` ni `C`, y uno por requisito con una materia que no está en la retícula ni en «Por validar» del plan.
+- **Un requisito por plan, materia y requisito.** Si varias retículas del SII de un plan lo traen, es uno; si unas dicen `P` y otras `C`, queda seriación, lo más estricto, con aviso (supuesto por confirmar).
+- **Lote `prerequisites`** (las dos materias en la retícula): la plantilla de la seriación (tarea 1.9) revisa ciclos con la del plan y con los renglones anteriores; el que cierra uno es error del lote, como el ciclo de `P` de la exportación real. Van primero los que piden una materia de un semestre anterior, así en un ciclo entra ese y el otro es el error (supuesto por confirmar). Un `P` cuyo requisito no va en un semestre anterior y un `C` entre semestres distintos avisan y se migran igual: es dato del SII.
+- **Lote `pending_prerequisites`** (alguna materia en «Por validar», la otra en la retícula o también en «Por validar»): los **requisitos que esperan** (`study_plan_prerequisite_pendings`), con la retícula del SII de la que salieron y sin revisar ciclos. Decisión del usuario del 10 de noviembre de 2026 (confirmada): se guardan aparte, ligados al plan, y **entran solos a la seriación cuando Servicios Escolares le asigna semestre a la materia** (y a la otra, si también esperaba). Con la exportación real son unos 730.
+- **Cuando entran.** `ResolvePendingPlacement`, al final y en la misma transacción, llama a `ApplyWaitingPrerequisites`: todos los requisitos que esperaban en el plan con sus dos materias ya en la retícula pasan a `subject_prerequisites` con su tipo, quedan con `applied_at` y dejan bitácora con quién validó la materia. Uno que cerraría un ciclo de seriación no entra: sigue esperando con una nota que lo dice, y «Por validar» lo avisa al agregar la materia. Si la seriación ya tiene ese requisito (alguien lo capturó en el editor), se queda como está y el que esperaba queda aplicado (supuesto por confirmar). En «Por validar», el panel de una materia dice qué requisitos entran con ella y cuáles esperan a la otra materia.
+- **Segunda corrida.** Un requisito que ya está en la seriación toma el tipo del SII; uno que espera y no ha entrado, el tipo y la retícula del SII. Nunca borra una seriación que el SII ya no trae ni la que se capturó en Nexus. Si una materia que esperaba ya se validó, el requisito va directo a la seriación.
+
+Para consultar los que esperan:
+
+```sql
+-- Cuántos requisitos esperan por plan y cuántos ya entraron.
+select p.code, count(*) filter (where w.applied_at is null) as esperan, count(*) filter (where w.applied_at is not null) as entraron
+from study_plan_prerequisite_pendings w join study_plans p on p.id = w.study_plan_id
+group by p.code order by p.code;
+
+-- Los que siguen esperando aunque sus dos materias ya estén en la retícula (cerrarían un ciclo).
+select p.code, s.code as materia, r.code as requisito, w.kind, w.note
+from study_plan_prerequisite_pendings w
+join study_plans p on p.id = w.study_plan_id join subjects s on s.id = w.subject_id join subjects r on r.id = w.prerequisite_subject_id
+where w.applied_at is null and w.note is not null;
+```
+
 ## Decisión pendiente: qué gana en cada paso (D23)
 
 El usuario decidió el 5 de noviembre de 2026 que si una segunda corrida pisa lo que se editó en Nexus se decide **paso por paso, más adelante** (en el corte). Lo que espera: los catálogos que se limpian en Nexus (aulas, edificios, retículas) se quedan con lo de Nexus, y lo que cambia en el SII (alumnos, docentes, horarios) probablemente toma lo del SII. Hoy el código no tiene esa opción: en cada paso gana el SII o el curado en los campos de la tabla.
@@ -163,6 +191,7 @@ El usuario decidió el 5 de noviembre de 2026 que si una segunda corrida pisa lo
 | `organigrama` | Por decidir (no lo mencionó; es un catálogo curado) | Gana el curado |
 | `carreras` | Por decidir (no lo mencionó; es un catálogo curado) | Gana el curado; el plan actual, la exportación |
 | `materias` | Se queda Nexus (retículas) | Gana el SII |
+| `seriacion` | Por decidir (no lo mencionó; es parte de la retícula) | Gana el SII en el tipo; no borra |
 | `aulas` | Se queda Nexus (aulas y edificios) | Gana el curado; los edificios que existen no se tocan |
 | `docentes` | Probablemente el SII | Gana el SII |
 | `plazas` | Por decidir (no lo mencionó) | Gana el SII; no quita plazas |
