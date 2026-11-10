@@ -19,8 +19,8 @@ use OpenSpout\Writer\XLSX\Writer;
  * El Excel de todo lo publicado de un campus y periodo (tarea 4.5): un renglón por sesión de cada grupo (o uno solo
  * si el grupo no tiene horario), con su departamento, materia, grupo, capacidad, docente, carrera dueña, retícula,
  * semestre, día, horas, tipo, salón, edificio y si el salón es prestado. Solo para el personal con sesión
- * (`academic_load.load.export`; decisión del usuario del 10 de noviembre de 2026). Se arma con openspout, que ya usa
- * Imports.
+ * (`academic_load.load.export`; decisión del usuario del 10 de noviembre de 2026: el Excel completo, para cualquiera
+ * del personal que cubre alguno de los departamentos que publicaron). Se arma con openspout, que ya usa Imports.
  */
 final class CampusWorkbook implements StaffExport
 {
@@ -43,7 +43,7 @@ final class CampusWorkbook implements StaffExport
     {
         $ids = $query->snapshotIds($term, $campus);
 
-        return $ids === [] ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, array_keys($query->scheduleOf($term, $campus, $ids)->loads));
+        return $ids === [] ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, array_keys($query->departmentsOf($ids)));
     }
 
     public static function label(): string
@@ -89,8 +89,10 @@ final class CampusWorkbook implements StaffExport
             $writer->getCurrentSheet()->setName("{$this->termCode} {$this->campusCode}");
             $writer->addRow(Row::fromValuesWithStyle(self::HEADER, (new Style)->withFontBold(true)));
 
+            $profile = $schedule->profile();
+
             foreach ($schedule->groups() as $group) {
-                foreach (self::rows($group, $schedule->loads[$group->departmentId]['department']['code'] ?? '') as $row) {
+                foreach (self::rows($group, $schedule->loads[$group->departmentId]['department']['code'] ?? '', $profile->usesRooms, $profile->usesTimeBlocks) as $row) {
                     $writer->addRow(Row::fromValues($row));
                 }
             }
@@ -104,11 +106,12 @@ final class CampusWorkbook implements StaffExport
     }
 
     /**
-     * Los renglones de un grupo: uno por sesión, o uno sin horario.
+     * Los renglones de un grupo: uno por sesión, o uno sin horario (también en un campus sin bloques de tiempo). En un
+     * campus sin salones, las columnas de salón van vacías en lugar de decir «Por asignar».
      *
      * @return list<list<string|int|null>>
      */
-    public static function rows(PublishedGroup $group, string $departmentCode): array
+    public static function rows(PublishedGroup $group, string $departmentCode, bool $usesRooms = true, bool $usesTimeBlocks = true): array
     {
         $owner = array_find($group->placements, fn (array $placement): bool => $placement['is_owner']) ?? ($group->placements[0] ?? null);
         $base = [
@@ -124,7 +127,7 @@ final class CampusWorkbook implements StaffExport
             $owner['semester'] ?? null,
         ];
 
-        if ($group->sessions === []) {
+        if ($group->sessions === [] || ! $usesTimeBlocks) {
             return [[...$base, null, null, null, null, null, null, null]];
         }
 
@@ -134,9 +137,9 @@ final class CampusWorkbook implements StaffExport
             WeekTime::clock($session->startsAt),
             WeekTime::clock($session->endsAt),
             $session->kindLabel,
-            $session->room['code'] ?? ($session->kind === 'virtual' ? 'Virtual' : 'Por asignar'),
-            $session->room['building']['name'] ?? null,
-            $session->room !== null && $session->room['owner_department_id'] !== null && $session->room['owner_department_id'] !== $group->departmentId ? 'Sí' : 'No',
+            $usesRooms ? ($session->room['code'] ?? ($session->kind === 'virtual' ? 'Virtual' : 'Por asignar')) : null,
+            $usesRooms ? ($session->room['building']['name'] ?? null) : null,
+            $usesRooms ? ($session->isLoanedTo($group->departmentId) ? 'Sí' : 'No') : null,
         ], $group->sessions);
     }
 }
