@@ -2,6 +2,7 @@
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Exports\CampusWorkbook;
+use App\Modules\AcademicLoad\Exports\Sii\SiiFilesExport;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
@@ -87,6 +88,9 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
                 'excel' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'excel']),
                 'department' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'departamento']),
                 'departments' => collect($schedule->loads)->map(fn (array $load): array => $load['department'])->sortBy('code')->values()->all(),
+                'sii' => ($sii = SiiFilesExport::fromRequest($published, $context->term, $context->campus, request())) !== null && Gate::allows('download', $sii)
+                    ? route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'sii'])
+                    : null,
             ] : null,
         ];
     }

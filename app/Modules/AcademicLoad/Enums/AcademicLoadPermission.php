@@ -27,6 +27,7 @@ enum AcademicLoadPermission: string implements Permission
     case LoadExport = 'academic_load.load.export';
     case LoadPublish = 'academic_load.load.publish';
     case LoadPublishApproved = 'academic_load.load.publish_approved';
+    case LoadExportSii = 'academic_load.load.export_sii';
     case ProposalCreate = 'academic_load.proposal.create';
     case ProposalUpdate = 'academic_load.proposal.update';
     case ProposalSubmit = 'academic_load.proposal.submit';
@@ -49,6 +50,7 @@ enum AcademicLoadPermission: string implements Permission
             self::LoadExport => 'Descargar el PDF por departamento y el Excel de lo publicado',
             self::LoadPublish => 'Publicar la carga cerrada de un campus sin visto bueno',
             self::LoadPublishApproved => 'Publicar la carga que aprobó Subdirección',
+            self::LoadExportSii => 'Descargar los archivos para el SII de lo publicado en un campus',
             self::ProposalCreate => 'Armar la propuesta de una carrera',
             self::ProposalUpdate => 'Corregir la propuesta de una carrera',
             self::ProposalSubmit => 'Enviar la propuesta de una carrera',
@@ -61,7 +63,7 @@ enum AcademicLoadPermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
+            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
             default => [Dimension::Campus, Dimension::Career],
         };
     }
@@ -74,12 +76,15 @@ enum AcademicLoadPermission: string implements Permission
     /**
      * Lo académico (AZ-02, AZ-S16): a los departamentos académicos y a la Subdirección Académica. Los exportes del
      * personal de lo publicado (`LoadExport`) también al Departamento de Servicios Escolares, que captura la carga en
-     * el SII (supuesto por confirmar).
+     * el SII (supuesto por confirmar). Los archivos para el SII (`LoadExportSii`) solo a Servicios Escolares y a la
+     * Subdirección Académica, no a los departamentos académicos (supuesto por confirmar).
      */
     public function appliesTo(): ?UnitApplicability
     {
-        return $this === self::LoadExport
-            ? UnitApplicability::of([OrgUnitKind::DepartamentoAcademico], [OrgTree::ACADEMIC, OrgTree::SCHOOL_SERVICES])
-            : UnitApplicability::academic();
+        return match ($this) {
+            self::LoadExport => UnitApplicability::of([OrgUnitKind::DepartamentoAcademico], [OrgTree::ACADEMIC, OrgTree::SCHOOL_SERVICES]),
+            self::LoadExportSii => UnitApplicability::of([], [OrgTree::ACADEMIC, OrgTree::SCHOOL_SERVICES]),
+            default => UnitApplicability::academic(),
+        };
     }
 }

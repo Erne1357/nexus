@@ -37,6 +37,9 @@
                     <p class="text-sm text-neutral">Todo lo publicado de {{ $context->campus->name }} en {{ $context->term->name }}.</p>
                 </div>
                 <a href="{{ $staffExports['excel'] }}" class="btn btn-outline btn-sm max-md:h-11 max-md:w-full" data-testid="published-export-excel"><x-icon name="o-table-cells" class="h-4 w-4" aria-hidden="true" />Excel del campus</a>
+                @if ($staffExports['sii'] !== null)
+                    <a href="{{ $staffExports['sii'] }}" class="btn btn-outline btn-sm max-md:h-11 max-md:w-full" data-testid="published-export-sii"><x-icon name="o-archive-box-arrow-down" class="h-4 w-4" aria-hidden="true" />Archivos para el SII</a>
+                @endif
                 <form method="get" action="{{ $staffExports['department'] }}" class="flex flex-wrap items-end gap-2 max-md:w-full">
                     <label class="grid gap-1 max-md:w-full">
                         <span class="text-xs font-medium uppercase tracking-wider text-neutral">Departamento</span>
