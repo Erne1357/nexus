@@ -17,7 +17,9 @@ use Illuminate\Support\Facades\DB;
  * plan (PlanGrid), de 500 en 500. Lo aprobado da créditos y materias; lo aprobado y lo que está cursando dicen
  * su especialidad, y su semestre limita hasta dónde puede cursar. Escribe por alumno con un upsert por bloque:
  * volver a calcular reescribe el avance, también si el alumno cambió de plan. Un alumno cuyo plan todavía no
- * tiene retícula se queda sin avance, en lugar de uno en ceros que parecería que ya terminó; al final se borra
+ * tiene retícula se queda sin avance, en lugar de uno en ceros que parecería que ya terminó. Un plan cuyas materias
+ * esperan todas en «Por validar» (una retícula histórica del SII sin ningún semestre, D18) sí tiene retícula: lo
+ * aprobado en ellas cuenta; al final se borra
  * el de los alumnos borrados. Todo va en una sola transacción: quien lee el avance mientras se recalcula (los
  * elegibles) ve el anterior completo y no una mezcla de bloques, y si el recálculo falla a la mitad, el avance
  * se queda como estaba. Al final vuelve a calcular el periodo en curso de cada campus (TermInProgressQuery).
@@ -65,7 +67,7 @@ final class RefreshStudentProgress
                 foreach ($students as $student) {
                     $grid = $grids[$student->study_plan_id] ??= $this->grids->forPlan($student->study_plan_id);
 
-                    if ($grid->credits === []) {
+                    if ($grid->credits === [] && $grid->unplaced === []) {
                         $withoutGrid[] = $student->id;
 
                         continue;
