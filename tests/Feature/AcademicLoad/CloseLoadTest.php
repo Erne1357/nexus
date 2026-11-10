@@ -50,12 +50,16 @@ function closeLoadSharedGroup(AcademicLoad $load, array $attributes = [], Agreem
     ]);
 }
 
-it('cierra la carga de asignación con su historial, bitácora y evento', function () {
+it('cierra la carga de asignación con quién y cuándo, su historial, bitácora y evento', function () {
     Event::fake([LoadTransitioned::class]);
+    $this->freezeTime();
 
     app(CloseLoad::class)->handle($this->load, $this->user, 'Todo asignado');
 
-    expect($this->load->fresh()->status)->toBe(LoadStatus::Closed);
+    $load = $this->load->fresh();
+    expect($load->status)->toBe(LoadStatus::Closed)
+        ->and($load->closed_by)->toBe($this->user->id)
+        ->and($load->closed_at->toDateTimeString())->toBe(now()->toDateTimeString());
 
     $row = LoadTransition::query()->firstOrFail();
     expect($row->from_status)->toBe(LoadStatus::Staffing)
