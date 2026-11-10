@@ -6,6 +6,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Enums\RankingMark;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Queries\TeacherOfferQuery;
+use App\Modules\Staffing\Support\PublishedStamps;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -23,6 +24,10 @@ use Livewire\Component;
  * confirmar): la cifra del filtro cuenta exactamente lo que muestra. Las marcas de cada ficha son las de la asignación
  * (RankingMark). El panel muestra solo el desglose del propio docente y, con la marca «choque», con cuál de sus grupos
  * y a qué hora choca (TeacherOfferQuery::clashesWith).
+ *
+ * Con la carga del departamento publicada, las fichas son las de su última versión publicada (P8) y el encabezado lo
+ * dice en una línea discreta, «Publicado el 8 dic. 2026 · v2» (PublishedStamps); si la pestaña junta cargas de varios
+ * campus, cada línea lleva su campus.
  */
 new #[Title('Oferta del departamento')] class extends Component
 {
@@ -80,7 +85,7 @@ new #[Title('Oferta del departamento')] class extends Component
         $teacher = Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
 
         if ($term === null || $teacher === null) {
-            return ['term' => $term, 'teacher' => $teacher, 'offer' => null, 'departments' => [], 'current' => null, 'groups' => [], 'visible' => [], 'semesters' => [], 'counts' => [], 'mine' => 0, 'selected' => null, 'clashes' => []];
+            return ['term' => $term, 'teacher' => $teacher, 'offer' => null, 'departments' => [], 'current' => null, 'groups' => [], 'visible' => [], 'semesters' => [], 'counts' => [], 'mine' => 0, 'published' => [], 'selected' => null, 'clashes' => []];
         }
 
         $offer = $query->forTeacher($teacher, $term);
@@ -111,6 +116,7 @@ new #[Title('Oferta del departamento')] class extends Component
             'semesters' => array_values(array_unique(array_column($groups, 'semester'))),
             'counts' => array_map(count(...), $byState),
             'mine' => count(array_filter($groups, fn (array $group): bool => $group['is_mine'])),
+            'published' => PublishedStamps::of(array_map(fn (array $group): array => ['department' => $current['name'], 'campus' => $group['campus_code'], 'published' => $group['published']], $groups)),
             'selected' => $selected,
             'clashes' => $selected !== null && in_array(RankingMark::Clash, $selected['marks'], true) ? $query->clashesWith($teacher, $term, $selected['id']) : [],
         ];
