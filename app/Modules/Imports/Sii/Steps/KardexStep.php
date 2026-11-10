@@ -30,7 +30,9 @@ use RuntimeException;
  *
  * Nexus guarda una fila por alumno, materia y periodo, y dos claves del SII pueden ser la misma materia de Nexus: de
  * los renglones repetidos queda la aprobada antes que la reprobada, luego la de mayor calificación y luego la última
- * del archivo (supuesto por confirmar). Para no tener los dos millones de renglones en memoria, la historia se lee
+ * del archivo (supuesto por confirmar). Un renglón de la historia con un periodo que no es del SII pasa sin periodo,
+ * para que Servicios Escolares capture el bueno (decidido el 10 de noviembre de 2026); los de una misma materia sin
+ * periodo cuentan como repetidos entre sí. Para no tener los dos millones de renglones en memoria, la historia se lee
  * dos veces: la primera guarda, por llave (un hash de 64 bits del alumno, la materia y el periodo), un entero con
  * la línea que gana, y la segunda emite esas líneas. El entero lleva además una huella de 15 bits de la llave:
  * si dos llaves distintas chocan, el paso se detiene en vez de perder un renglón.
@@ -144,7 +146,6 @@ final class KardexStep implements SiiStep
             $result = KardexCodes::result($row['estatus_materia']);
             $unreadable = match (true) {
                 $row['no_de_control'] === '' => 'Esta línea no trae número de control: no pasa al kárdex.',
-                ! KardexCodes::term($row['periodo']) => 'El periodo de esta línea no es un periodo del SII (año de '.KardexCodes::FIRST_YEAR.' al próximo y 1, 2 o 3): no pasa al kárdex.',
                 $result === null => 'El estatus de la materia de esta línea no es A, R ni P: no pasa al kárdex.',
                 default => null,
             };
@@ -157,6 +158,7 @@ final class KardexStep implements SiiStep
                 continue;
             }
 
+            $term = KardexCodes::term($row['periodo']) ? $row['periodo'] : '';
             $subject = $subjects->for($students[$row['no_de_control']] ?? null, $row['materia']);
 
             if (! isset($students[$row['no_de_control']]) || $subject === null) {
@@ -172,6 +174,10 @@ final class KardexStep implements SiiStep
             $attempt = KardexCodes::attempt($row['tipo_evaluacion']);
 
             if ($tally !== null) {
+                if ($term === '') {
+                    $tally['lines'][] = $this->warning("{$file}:{$line}", "El periodo «{$row['periodo']}» de esta línea no es un periodo del SII (año de ".KardexCodes::FIRST_YEAR.' al próximo y 1, 2 o 3): pasa al kárdex sin periodo, para que Servicios Escolares capture el bueno.');
+                }
+
                 if (! KardexCodes::readableGrade($row['calificacion'])) {
                     $tally['lines'][] = $this->warning("{$file}:{$line}", 'La calificación de esta línea no se entiende: pasa al kárdex sin calificación.');
                 }
@@ -183,7 +189,7 @@ final class KardexStep implements SiiStep
             }
 
             $grade = KardexCodes::grade($row['calificacion'], $result);
-            $tuple = "{$row['no_de_control']}|{$subject}|{$row['periodo']}";
+            $tuple = "{$row['no_de_control']}|{$subject}|{$term}";
 
             yield $line => [
                 'key' => $this->key($tuple),
@@ -192,7 +198,7 @@ final class KardexStep implements SiiStep
                 'row' => [
                     'control_number' => $row['no_de_control'],
                     'subject_code' => $subject,
-                    'term_code' => $row['periodo'],
+                    'term_code' => $term,
                     'grade' => $grade ?? '',
                     'result' => $result->value,
                     'attempt' => $attempt ?? 1,

@@ -25,7 +25,7 @@ it('lista los puntos en el orden del proceso', function () {
         DemoCheckpoint::CatalogValidation,
         DemoCheckpoint::Proposal,
     ])->and(DemoCheckpoint::upTo(DemoCheckpoint::Catalogs))->toBe([DemoCheckpoint::Catalogs])
-        ->and(DemoCheckpoint::since(DemoCheckpoint::Closing))->toBe([DemoCheckpoint::Closing, DemoCheckpoint::Publication, DemoCheckpoint::Reanalysis])
+        ->and(DemoCheckpoint::since(DemoCheckpoint::Rooms))->toBe([DemoCheckpoint::Rooms, DemoCheckpoint::Closing, DemoCheckpoint::Publication, DemoCheckpoint::Reanalysis])
         ->and(DemoCheckpoint::since(DemoCheckpoint::All))->toBe([]);
 });
 
@@ -41,7 +41,9 @@ it('cada punto empieza la etapa de su nombre y lleva su número', function () {
         ->and(DemoCheckpoint::Reanalysis->number())->toBe(9)
         ->and(DemoCheckpoint::Publication->stage())->toBe(Stage::Publication)
         ->and(DemoCheckpoint::Reanalysis->stage())->toBe(Stage::Reanalysis)
+        ->and(DemoCheckpoint::Publication->label())->toBe('Empezando la publicación')
         ->and(DemoCheckpoint::Reanalysis->label())->toBe('Empezando el re-análisis')
+        ->and(DemoCheckpoint::tryFrom('publicacion'))->toBe(DemoCheckpoint::Publication)
         ->and(DemoCheckpoint::All->number())->toBeNull()
         ->and(DemoCheckpoint::Staffing->label())->toBe('Empezando la asignación docente')
         ->and(DemoCheckpoint::tryFrom('asignacion'))->toBe(DemoCheckpoint::Staffing)

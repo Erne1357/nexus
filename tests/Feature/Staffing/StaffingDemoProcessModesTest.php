@@ -152,13 +152,14 @@ it('da de alta docentes de asignatura donde la capacidad no llega a 1.35 veces l
     $this->plan->subjects()->attach($this->subject->id, ['semester' => 1]);
     Student::factory()->count(70)->create(['study_plan_id' => $this->plan->id, 'career_id' => $this->career->id, 'campus_id' => $this->campus->id])
         ->each(fn (Student $student) => StudentProgress::factory()->create(['student_id' => $student->id, 'subjects_available' => [$this->subject->id]]));
-    ($this->teacher)('Ana', 1);
+    $ana = ($this->teacher)('Ana', 1);
     $supply = fn () => (new DatabaseSeeder)->setContainer(app())->callWith(StaffingSupplyDemoSeeder::class, ['campuses' => ['C2']]);
 
     $supply();
     $supply();
 
-    $hired = Teacher::query()->where('rfc', 'like', 'Z%')->with(['adscriptions', 'positions'])->get();
+    // Las altas son los docentes que no existían: el RFC de la factory es aleatorio y puede empezar con Z, como las altas.
+    $hired = Teacher::query()->whereKeyNot($ana->id)->with(['adscriptions', 'positions'])->get();
 
     expect($hired)->toHaveCount(1)
         ->and($hired->sole()->adscriptions->sole()->department_id)->toBe($this->department->id)

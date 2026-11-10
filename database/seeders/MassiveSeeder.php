@@ -21,6 +21,7 @@ use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Scheduling\Events\GroupsCreated;
+use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -99,6 +100,13 @@ class MassiveSeeder extends Seeder
         $this->callWith(StaffingDemoSeeder::class, ['profile' => 'massive', 'campuses' => ['C1', 'C2']]);
 
         $this->command?->info(sprintf('Asignación docente, solicitudes de cambio y carga por docente: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $started = hrtime(true);
+        // Cargas cerradas con justificaciones y una reabierta por campus (tarea 4.1); SC no se toca. Las que este paso deja
+        // cerradas (II de C1 y CB de C2, medido) las publica con sus versiones el paso de la publicación (tarea 4.3).
+        $this->callWith(LoadClosingDemoSeeder::class, ['profile' => 'massive', 'campuses' => ['C1', 'C2'], 'keepOpen' => ['SC']]);
+
+        $this->command?->info(sprintf('Cargas cerradas y reabiertas: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $this->call(LoginScreenDemoSeeder::class);
     }

@@ -3,6 +3,7 @@
 namespace App\Modules\Staffing;
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
@@ -22,16 +23,21 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
+use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
+use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Listeners\BlockClosingWithPendingChangeRequests;
+use App\Modules\Staffing\Listeners\BlockReturnWithApprovedChangeRequests;
 use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
@@ -87,6 +93,8 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class]);
         }
 
+        Event::listen(LoadTransitioning::class, BlockClosingWithPendingChangeRequests::class);
+        Event::listen(LoadTransitioning::class, BlockReturnWithApprovedChangeRequests::class);
         Event::listen(GroupsCreated::class, RerankOnGroupsCreated::class);
         Event::listen([GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class], RerankOnGroupChange::class);
         Event::listen([
@@ -184,12 +192,24 @@ final class StaffingServiceProvider extends ModuleServiceProvider
      * - a «validación», altas de docentes de asignatura donde la capacidad no llega a 1.35 veces la demanda esperada
      *   (StaffingSupplyDemoSeeder), antes de validar 20271;
      * - a «asignación», cada carga en propuesta pasa a asignación con su jefe y se calcula el ranking de todos los grupos;
-     * - a «salones», docente para todo grupo activo, `teacher_term_loads` y choques al día.
+     * - a «salones», docente para todo grupo activo, `teacher_term_loads` y choques al día;
+     * - a «publicación» (LoadClosingDemoSeeder), el cierre de la 4.1: primero el terreno limpio (solicitudes pendientes
+     *   rechazadas, acuerdos propuestos respondidos); luego la variedad de justificaciones, grupos a los que se les quita
+     *   el docente o el salón de una sesión con su justificación; y al final cada carga con grupos se cierra con su jefe.
+     *   Staffing ve AcademicLoad, Scheduling y lo suyo, así que el paso vive aquí.
      */
     public function demoSteps(): array
     {
+        $profile = fn (DemoContext $demo): string => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo';
         $staffing = fn (DemoContext $demo, string $mode) => $demo->runSeeder(StaffingDemoSeeder::class, [
-            'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
+            'profile' => $profile($demo),
+            'campuses' => $demo->campuses,
+            'term' => $demo->termCode,
+            'seed' => $demo->seed,
+            'mode' => $mode,
+        ]);
+        $closing = fn (DemoContext $demo, string $mode) => $demo->runSeeder(LoadClosingDemoSeeder::class, [
+            'profile' => $profile($demo),
             'campuses' => $demo->campuses,
             'term' => $demo->termCode,
             'seed' => $demo->seed,
@@ -202,6 +222,9 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             ])),
             new DemoStep(DemoCheckpoint::Staffing, 'Cargas a asignación y rankings', fn (DemoContext $demo) => $staffing($demo, 'start')),
             new DemoStep(DemoCheckpoint::Rooms, 'Docente para todo grupo', fn (DemoContext $demo) => $staffing($demo, 'staffed')),
+            new DemoStep(DemoCheckpoint::Publication, 'Terreno limpio para cerrar: solicitudes de cambio pendientes rechazadas y acuerdos propuestos aceptados o cancelados', fn (DemoContext $demo) => $closing($demo, 'clean')),
+            new DemoStep(DemoCheckpoint::Publication, 'Grupos sin docente o sin salón, con la justificación del jefe', fn (DemoContext $demo) => $closing($demo, 'justified')),
+            new DemoStep(DemoCheckpoint::Publication, 'Cada carga con grupos, cerrada por su jefe (grupos confirmados)', fn (DemoContext $demo) => $closing($demo, 'closed')),
         ];
     }
 
@@ -227,12 +250,13 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             new DemoCheck([DemoCheckpoint::Staffing], 'Todo grupo activo tiene ranking', fn (DemoContext $demo): true|string => ($missing = $groups($demo)->whereNotIn('id', StaffingRanking::query()->select('group_id'))->count()) === 0
                 ? true
                 : "{$missing} grupos sin ranking."),
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Todo grupo activo tiene docente con su asignación vigente', function (DemoContext $demo) use ($groups): true|string {
-                $unstaffed = $groups($demo)->whereNull('teacher_id')->count();
+            // Desde «publicacion», el grupo sin docente pasa con la justificación del jefe (HC-15).
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Todo grupo activo tiene docente con su asignación vigente, o justificación', function (DemoContext $demo) use ($groups): true|string {
+                $unstaffed = $groups($demo)->whereNull('teacher_id')->whereNull('close_justification')->count();
                 $unrecorded = $groups($demo)->whereNotNull('teacher_id')
                     ->whereNotIn('id', GroupTeacherAssignment::query()->whereNull('replaced_at')->select('group_id'))->count();
 
-                return $unstaffed === 0 && $unrecorded === 0 ? true : "{$unstaffed} grupos sin docente y {$unrecorded} con docente sin asignación vigente.";
+                return $unstaffed === 0 && $unrecorded === 0 ? true : "{$unstaffed} grupos sin docente ni justificación y {$unrecorded} con docente sin asignación vigente.";
             }),
             new DemoCheck([DemoCheckpoint::Rooms], 'La carga por docente está al día', function (DemoContext $demo): true|string {
                 $teachers = Group::query()->active()->where('term_id', $demo->term()->getKey())->whereNotNull('teacher_id')->distinct()->count('teacher_id');
@@ -245,6 +269,52 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 ->where('severity', 'hard')->whereIn('rule', ['HC-01', 'HC-08', 'HC-09'])->whereNull('resolved_at')->count()) === 0
                 ? true
                 : "{$hard} choques duros de docente."),
+            ...$this->publicationChecks(),
+        ];
+    }
+
+    /**
+     * Lo que deja el cierre al llegar a «publicacion», comparado por campus y periodo: cada carga con grupos activos,
+     * cerrada y limpia según ClosingBlockersQuery (HC-15); sus grupos activos confirmados; al menos un grupo justificado;
+     * y las cargas sin grupos, todavía en borrador.
+     *
+     * @return list<DemoCheck>
+     */
+    private function publicationChecks(): array
+    {
+        $loads = fn (DemoContext $demo, bool $withGroups): Builder => AcademicLoad::query()->where('term_id', $demo->term()->getKey())
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+            ->whereExists(Group::query()->active()->selectRaw('1')
+                ->whereColumn('groups.term_id', 'academic_loads.term_id')
+                ->whereColumn('groups.campus_id', 'academic_loads.campus_id')
+                ->whereColumn('groups.department_id', 'academic_loads.department_id')
+                ->toBase(), not: ! $withGroups);
+        $groups = fn (DemoContext $demo): Builder => Group::query()->active()->where('term_id', $demo->term()->getKey())
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
+
+        return [
+            new DemoCheck([DemoCheckpoint::Publication], 'Toda carga con grupos está cerrada y sin pendientes de cierre (HC-15)', function (DemoContext $demo) use ($loads): true|string {
+                $withGroups = $loads($demo, true)->with(['department', 'campus', 'term'])->get();
+                $open = $withGroups->filter(fn (AcademicLoad $load): bool => $load->status !== LoadStatus::Closed);
+                $blocked = $withGroups->diff($open)->mapWithKeys(fn (AcademicLoad $load): array => [
+                    "{$load->department->code} en {$load->campus->code}" => app(ClosingBlockersQuery::class)->of($load)->reasons(),
+                ])->filter();
+
+                return match (true) {
+                    $open->isNotEmpty() => $open->count().' cargas con grupos no están cerradas: '.$open->map(fn (AcademicLoad $load): string => "{$load->department->code} en {$load->campus->code} ({$load->status->label()})")->implode(', ').'.',
+                    $blocked->isNotEmpty() => 'Cargas cerradas con pendientes: '.$blocked->map(fn (array $reasons, string $load): string => "{$load}: ".implode(' ', $reasons))->implode('; '),
+                    default => true,
+                };
+            }),
+            new DemoCheck([DemoCheckpoint::Publication], 'Todo grupo activo está confirmado', fn (DemoContext $demo): true|string => ($planned = $groups($demo)->where('status', '!=', GroupStatus::Confirmed)->count()) === 0
+                ? true
+                : "{$planned} grupos activos siguen sin confirmar."),
+            new DemoCheck([DemoCheckpoint::Publication], 'Hay grupos sin docente o sin salón que pasan con justificación', fn (DemoContext $demo): true|string => $groups($demo)->whereNotNull('close_justification')->exists()
+                ? true
+                : 'Ningún grupo justificado.'),
+            new DemoCheck([DemoCheckpoint::Publication], 'Las cargas sin grupos siguen en borrador', fn (DemoContext $demo): true|string => ($moved = $loads($demo, false)->where('status', '!=', LoadStatus::Draft)->count()) === 0
+                ? true
+                : "{$moved} cargas sin grupos salieron de borrador."),
         ];
     }
 }
