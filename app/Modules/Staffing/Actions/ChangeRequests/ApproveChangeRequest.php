@@ -43,6 +43,7 @@ final class ApproveChangeRequest
                 ->where('term_id', $request->term_id)
                 ->where('campus_id', $request->campus_id)
                 ->where('department_id', $request->department_id)
+                ->lockForUpdate()
                 ->first();
 
             if (! ChangeRequestRules::acceptsRequests($load?->status)) {
