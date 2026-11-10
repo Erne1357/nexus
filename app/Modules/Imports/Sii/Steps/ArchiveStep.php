@@ -15,7 +15,8 @@ use App\Modules\Imports\Sii\SiiStep;
  *
  * No pasa por el motor de importación porque no transforma nada: escribe por su cuenta y entrega un reporte por archivo
  * (plantilla `sii_archivo`; filas, válidas y altas = renglones guardados, o los que guardaría en un ensayo, en el que
- * solo lee y cuenta).
+ * solo lee y cuenta). Si escribió, deja la marca `archived` en la corrida: la verificación (VerificationStep) solo
+ * compara contra el archivo de su misma corrida.
  */
 final class ArchiveStep implements SiiStep
 {
@@ -32,8 +33,13 @@ final class ArchiveStep implements SiiStep
     public function batches(SiiMigration $migration): iterable
     {
         $export = $migration->export();
+        $counts = $this->archive->handle($export, $migration->dryRun());
 
-        foreach ($this->archive->handle($export, $migration->dryRun()) as $file => $rows) {
+        if (! $migration->dryRun()) {
+            $migration->remember('archived', fn (): bool => true);
+        }
+
+        foreach ($counts as $file => $rows) {
             yield new SiiBatchReport(ArchiveSiiExport::SCHEMA, $export->fileName(SiiFile::from($file)), $rows, $rows, 0, 0, $rows, 0);
         }
     }

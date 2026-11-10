@@ -20,6 +20,7 @@ use App\Modules\Imports\Sii\Steps\StudentsStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
 use App\Modules\Imports\Sii\Steps\TeacherHistoryStep;
 use App\Modules\Imports\Sii\Steps\TeachersStep;
+use App\Modules\Imports\Sii\Steps\VerificationStep;
 use App\Modules\Imports\Templates\CareersTemplate;
 use App\Modules\Imports\Templates\DepartmentsTemplate;
 use App\Modules\Imports\Templates\EvaluationsTemplate;
@@ -68,7 +69,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
     /**
      * Pasos de la migración del SII, en el orden en que corren. Cada tarea que escribe un paso lo agrega aquí;
      * las pruebas los sustituyen ligando `sii.steps`. El archivo del SII original va primero, para que quede guardado
-     * aunque un paso posterior se detenga.
+     * aunque un paso posterior se detenga, y la verificación contra ese original va al final, cuando ya se aplicó todo.
      *
      * @var list<class-string<SiiStep>>
      */
@@ -83,6 +84,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         TeacherHistoryStep::class,
         StudentsStep::class,
         KardexStep::class,
+        VerificationStep::class,
     ];
 
     public function register(): void
