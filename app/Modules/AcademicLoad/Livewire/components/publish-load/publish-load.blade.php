@@ -22,7 +22,7 @@
                         'bg-success text-success-content' => $isCurrent,
                         'bg-base-100 text-success' => ! $isCurrent,
                     ])>v{{ $version['version'] }}</span>
-                    <span class="font-semibold group-aria-expanded:underline underline-offset-3">{{ $day($version['publishedAt']) }}@if ($sameDay[$day($version['publishedAt'])] > 1), {{ $clock($version['publishedAt']) }}@endif @if ($isCurrent) · vigente @endif</span>
+                    <span class="font-semibold group-aria-expanded:underline underline-offset-3">{{ $day($version['publishedAt']).($sameDay[$day($version['publishedAt'])] > 1 ? ', '.$clock($version['publishedAt']) : '').($isCurrent ? ' · vigente' : '') }}</span>
                     <span class="col-start-2 md:col-start-1 text-[12.5px] text-neutral"><span class="font-mono">{{ number_format($version['groups']) }}</span> grupos</span>
                 </button>
             </li>
