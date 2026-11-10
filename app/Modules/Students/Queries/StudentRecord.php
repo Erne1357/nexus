@@ -20,7 +20,7 @@ final readonly class StudentRecord
      * @param  array<int, list<GridCell>>  $semesters  semestre → sus materias: primero las del tronco común y luego las de cada especialidad, en el orden de `$specialties`; cada grupo por clave
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la retícula, por su clave, y cuántas tiene cada una
      * @param  list<array{index: int, name: string, size: int}>  $chains  cadenas de seriación, por su primera materia
-     * @param  list<array{term: string|null, label: string, records: list<KardexRecord>}>  $kardex  del periodo más antiguo al más reciente, y al final lo que no tiene periodo
+     * @param  list<array{term: string|null, label: string, records: list<KardexRecord>}>  $kardex  primero lo que no tiene periodo y luego del periodo más antiguo al más reciente
      */
     public function __construct(
         public Student $student,

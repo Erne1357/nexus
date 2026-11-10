@@ -123,13 +123,14 @@ final readonly class PlanGrid
 
     /**
      * Los créditos de la retícula con una sola especialidad: la que eligió el alumno o, si todavía no elige, la
-     * de más créditos, para no dar por cumplido un porcentaje antes de tiempo.
+     * de más créditos, para no dar por cumplido un porcentaje antes de tiempo. Suma las materias que esperan
+     * semestre, que también son del plan y cuentan en lo aprobado.
      *
      * @param  array<string, true>  $chosen
      */
     private function gridCredits(array $chosen): int
     {
-        $common = 0;
+        $common = array_sum($this->unplaced);
         $bySpecialty = [];
 
         foreach ($this->credits as $subject => $subjectCredits) {

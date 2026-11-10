@@ -184,3 +184,7 @@ it('lo aprobado en un lugar por validar (sin semestre) cuenta en créditos y mat
         'subjects_available' => ['B'],
     ]);
 });
+
+it('sin créditos capturados, el total de la retícula suma también las materias que esperan semestre', function () {
+    expect((new PlanGrid(credits: ['A' => 60], unplaced: ['P' => 10]))->totalFor([]))->toBe(70);
+});

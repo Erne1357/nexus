@@ -159,11 +159,6 @@ final class KardexStep implements SiiStep
             }
 
             $term = KardexCodes::term($row['periodo']) ? $row['periodo'] : '';
-
-            if ($term === '' && $tally !== null) {
-                $tally['lines'][] = $this->warning("{$file}:{$line}", 'El periodo de esta línea no es un periodo del SII (año de '.KardexCodes::FIRST_YEAR.' al próximo y 1, 2 o 3): pasa al kárdex sin periodo, para que Servicios Escolares capture el bueno.');
-            }
-
             $subject = $subjects->for($students[$row['no_de_control']] ?? null, $row['materia']);
 
             if (! isset($students[$row['no_de_control']]) || $subject === null) {
@@ -179,6 +174,10 @@ final class KardexStep implements SiiStep
             $attempt = KardexCodes::attempt($row['tipo_evaluacion']);
 
             if ($tally !== null) {
+                if ($term === '') {
+                    $tally['lines'][] = $this->warning("{$file}:{$line}", "El periodo «{$row['periodo']}» de esta línea no es un periodo del SII (año de ".KardexCodes::FIRST_YEAR.' al próximo y 1, 2 o 3): pasa al kárdex sin periodo, para que Servicios Escolares capture el bueno.');
+                }
+
                 if (! KardexCodes::readableGrade($row['calificacion'])) {
                     $tally['lines'][] = $this->warning("{$file}:{$line}", 'La calificación de esta línea no se entiende: pasa al kárdex sin calificación.');
                 }

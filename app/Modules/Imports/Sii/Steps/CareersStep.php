@@ -52,7 +52,7 @@ final class CareersStep implements SiiStep
     {
         $plans = $this->plansByKey($migration);
         $careers = $this->careersByCode($migration);
-        $siiRows = $this->siiCareerRows($migration);
+        [$siiRows, $credits] = $this->siiCareerRows($migration);
         $this->checkContract($plans, $careers, array_keys($siiRows));
 
         $planFor = $migration->remember('plan_for', fn (): array => $this->planFor($plans));
@@ -60,7 +60,7 @@ final class CareersStep implements SiiStep
         $facts = $this->studentFacts($migration, $planFor);
 
         yield $this->careersBatch($plans, $careers, $planFor, $facts);
-        yield $this->plansBatch($planFor, $versions, $facts, $this->credits($migration));
+        yield $this->plansBatch($planFor, $versions, $facts, $credits);
     }
 
     /**
@@ -92,39 +92,34 @@ final class CareersStep implements SiiStep
     }
 
     /**
-     * Las fechas de inicio de cada (carrera, retícula) del SII.
+     * Las fechas de inicio de cada (carrera, retícula) del SII y, de las que los traen como un entero mayor que cero,
+     * todos sus créditos totales distintos, de menor a mayor (una retícula puede venir en varios renglones).
      *
-     * @return array<string, list<string>>
+     * @return array{array<string, list<string>>, array<string, list<int>>}
      */
     private function siiCareerRows(SiiMigration $migration): array
     {
         $rows = [];
-
-        foreach ($migration->export()->reader(SiiFile::Carreras)->rows() as $row) {
-            $rows[trim($row['carrera']).'/'.trim($row['reticula'])][] = $row['fecha_inicio'] ?? '';
-        }
-
-        return $rows;
-    }
-
-    /**
-     * Los créditos totales de cada (carrera, retícula) del SII que los trae como un entero mayor que cero.
-     *
-     * @return array<string, int>
-     */
-    private function credits(SiiMigration $migration): array
-    {
         $credits = [];
 
         foreach ($migration->export()->reader(SiiFile::Carreras)->rows() as $row) {
+            $key = trim($row['carrera']).'/'.trim($row['reticula']);
+            $rows[$key][] = $row['fecha_inicio'] ?? '';
             $value = trim($row['creditos_totales'] ?? '');
 
             if (is_numeric($value) && (int) $value > 0) {
-                $credits[trim($row['carrera']).'/'.trim($row['reticula'])] ??= (int) $value;
+                $credits[$key][(int) $value] = true;
             }
         }
 
-        return $credits;
+        $credits = array_map(function (array $values): array {
+            $values = array_keys($values);
+            sort($values);
+
+            return $values;
+        }, $credits);
+
+        return [$rows, $credits];
     }
 
     /**
@@ -312,7 +307,7 @@ final class CareersStep implements SiiStep
      * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
      * @param  array<string, string>  $versions
      * @param  array{campuses: array<string, array<string, true>>, unknownCampuses: array<string, int>, active: array<string, true>, entrants: array<string, array<string, int>>}  $facts
-     * @param  array<string, int>  $credits  créditos totales por (carrera, retícula) del SII
+     * @param  array<string, list<int>>  $credits  créditos totales distintos por (carrera, retícula) del SII
      */
     private function plansBatch(array $planFor, array $versions, array $facts, array $credits): SiiBatch
     {
@@ -373,13 +368,23 @@ final class CareersStep implements SiiStep
      *
      * @param  list<string>  $keys
      * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
-     * @param  array<string, int>  $credits
+     * @param  array<string, list<int>>  $credits
      * @param  list<array{level: string, ref: string, message: string}>  $incidents
      */
     private function planCredits(string $code, array $keys, array $planFor, array $credits, array &$incidents): ?string
     {
         sort($keys, SORT_STRING);
-        $known = array_intersect_key($credits, array_flip($keys));
+        $known = [];
+
+        foreach ($keys as $key) {
+            if (isset($credits[$key])) {
+                $known[$key] = max($credits[$key]);
+
+                if (count($credits[$key]) > 1) {
+                    $incidents[] = ['level' => 'warning', 'ref' => $key, 'message' => "La retícula {$key} del SII viene varias veces en carreras con créditos totales distintos (".implode(', ', $credits[$key])."): quedan {$known[$key]}, los mayores (supuesto por confirmar)."];
+                }
+            }
+        }
 
         if ($known === []) {
             return null;

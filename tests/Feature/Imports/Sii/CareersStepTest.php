@@ -216,8 +216,8 @@ it('el curado real cubre cada carrera incluida', function () {
 
 it('lleva al plan los créditos totales de su retícula del SII; si sus retículas difieren, quedan los de la presencial, con aviso', function () {
     writeSiiCareers($this->dir, [
-        ['A', '1', '15/08/2010', '260'], ['A2', '2', '15/08/2010', '250'], ['A', '3', '15/08/2004', '440.00'],
-        ['B', '1', '15/08/2010', ''], ['C', '1', '15/08/2005', '0'], ['D', '1', '15/08/2010', '260'],
+        ['A2', '2', '15/08/2010', '250'], ['A', '1', '15/08/2010', '260'], ['A', '3', '15/08/2004', '440.00'],
+        ['B', '1', '15/08/2010', ''], ['C', '1', '15/08/2005', '0'], ['D', '1', '15/08/2010', '260'], ['D', '1', '15/08/2010', '250'],
         ['D', '2', '15/08/1980', '380'], ['X', '9', '15/08/2010', '260'],
     ], [['A', '1', 'ACT', '20253', '2']]);
 
@@ -229,6 +229,10 @@ it('lleva al plan los créditos totales de su retícula del SII; si sus retícul
         ->and($plans['BBB-2010-300']['credits'])->toBeNull()
         ->and($plans['CCC-2005-200']['credits'])->toBeNull()
         ->and($plans['DDD-IS-80-160']['credits'])->toBe('380')
+        ->and($plans['DDD-2010-1']['credits'])->toBe('260')
         ->and(collect($batch['incidents'])->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'créditos'))->values()->all())
-        ->toBe(['El plan AAA-2010-224 junta retículas del SII con créditos totales distintos (A/1 260, A2/2 250): quedan 260, de la presencial (supuesto por confirmar).']);
+        ->toBe([
+            'El plan AAA-2010-224 junta retículas del SII con créditos totales distintos (A/1 260, A2/2 250): quedan 260, de la presencial (supuesto por confirmar).',
+            'La retícula D/1 del SII viene varias veces en carreras con créditos totales distintos (250, 260): quedan 260, los mayores (supuesto por confirmar).',
+        ]);
 });

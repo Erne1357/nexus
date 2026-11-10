@@ -703,3 +703,35 @@ it('una clave TecNM que en la misma retícula es la clave del SII de otra materi
     expect(collect($subjects['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['ECO', 'TFC-0001'])
         ->and(subjectsStepMessages($subjects))->toContain('warning|A/1|')->toContain('la conserva TFC-0001');
 });
+
+it('una materia que vuelve a su clave del SII y choca con otra de la misma retícula también se separa', function () {
+    writeSiiSubjects($this->dir, [['X1', '1', '110100', 'EQUIS'], ['Y1', '1', '110100', 'YE'], ['N1', '1', '110100', 'ENE']], [
+        ['A', '1', 'X1', '4', '2', '2', '1', '', 'A'],
+        ['A', '1', 'Y1', '4', '2', '2', '2', '', 'A'],
+        ['A', '1', 'N1', '4', '2', '2', '3', '', 'A'],
+    ], [['A', '1', 'Y1', 'X1'], ['A', '1', 'N1', 'Y1']]);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+
+    expect(collect($subjects['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['N1', 'X1', 'Y1']);
+});
+
+it('la materia que pierde una clave TecNM dentro de su retícula no vota por las horas de esa clave', function () {
+    writeSiiSubjects($this->dir, [
+        ['PA1', '1', '110100', 'PROCESOS DE FABRICACION'], ['PA2', '1', '110100', 'PROCESOS DE FABRICACION'],
+        ['PC1', '1', '110100', 'PROCESOS DE FABRICACION'], ['FC1', '1', '110100', 'FISICA'], ['FB1', '1', '110100', 'FISICA'],
+    ], [
+        ['A', '1', 'PA1', '4', '2', '2', '4', '', 'A'],
+        ['A2', '2', 'PA2', '4', '2', '2', '4', '', 'A'],
+        ['C', '1', 'PC1', '4', '2', '2', '4', '', 'A'],
+        ['C', '1', 'FC1', '5', '3', '2', '4', '', 'A'],
+        ['B', '1', 'FB1', '5', '3', '2', '4', '', 'A'],
+    ], [['A', '1', 'PA1', 'INC-1023'], ['A2', '2', 'PA2', 'INC-1023'], ['C', '1', 'PC1', 'INC-1023'], ['C', '1', 'FC1', 'INC-1023'], ['B', '1', 'FB1', 'INC-1023']]);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+
+    expect(subjectsStepRow($subjects, 'CCC-2009-201', 'INC-1023'))->toMatchArray(['credits' => '4'])
+        ->and(subjectsStepRow($subjects, 'CCC-2009-201', 'FC1'))->not->toBeNull()
+        ->and(subjectsStepRow($subjects, 'BBB-2010-300', 'FB1'))->not->toBeNull()
+        ->and(subjectsStepMessages($subjects))->not->toContain('empate');
+});
