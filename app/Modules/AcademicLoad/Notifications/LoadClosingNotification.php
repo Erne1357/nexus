@@ -10,9 +10,9 @@ use Illuminate\Support\Str;
 
 /**
  * Base de los avisos del cierre de una carga (tarea 4.2): todos llevan a la pantalla de cierre del departamento
- * (`staffing.closing`, la pantalla de cierre de la tarea 4.1; mientras no exista, abrir el aviso dice que esa pantalla no está
- * disponible, NexusNotification::unavailableReason), en el periodo y el campus de la carga. Cada aviso define su
- * título, ícono y tono.
+ * (`staffing.closing?departamento=<id>`, «Cierre de la carga» de la tarea 4.1), en el periodo y el campus de la carga:
+ * al abrirlo, la credencial cambia a ese campus y la pantalla abre su pestaña. Cada aviso define su título, ícono y
+ * tono.
  */
 abstract class LoadClosingNotification extends NexusNotification
 {

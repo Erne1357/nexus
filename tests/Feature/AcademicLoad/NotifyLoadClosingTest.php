@@ -10,7 +10,6 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Notifications\LoadApproved;
 use App\Modules\AcademicLoad\Notifications\LoadAwaitingApproval;
 use App\Modules\AcademicLoad\Notifications\LoadReopened;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
@@ -102,7 +101,7 @@ it('una transición que no aplica no avisa', function () {
     Notification::assertNothingSent();
 });
 
-it('guarda el puesto y, mientras no exista la pantalla de cierre, el aviso dice que no está disponible', function () {
+it('guarda el puesto y lleva a «Cierre de la carga» con el departamento', function () {
     $s = approvalNoticeScenario();
     $this->actingAs($s['subdireccion']);
 
@@ -111,5 +110,20 @@ it('guarda el puesto y, mientras no exista la pantalla de cierre, el aviso dice 
     $message = NotificationMessage::fromArray($stored->data);
 
     expect($stored->data['role'])->toBe('jefe_departamento')
-        ->and(LoadReopened::unavailableReason(app(Actor::class)->forUser($s['jefe']), $message))->toBe('Esa pantalla no está disponible.');
+        ->and($message->route)->toBe('staffing.closing')
+        ->and($message->parameters)->toBe(['departamento' => $s['department']->id]);
+});
+
+it('Subdirección cierra también, pero los avisos al jefe no le llegan', function () {
+    Notification::fake();
+    $s = approvalNoticeScenario();
+    $this->actingAs($s['subdireccion']);
+
+    app(ApproveLoad::class)->handle($s['load'], $s['subdireccion']);
+    app(ReopenLoad::class)->handle($s['load']->fresh(), $s['subdireccion'], 'Falta un grupo');
+
+    Notification::assertSentTo($s['jefe'], LoadApproved::class);
+    Notification::assertSentTo($s['jefe'], LoadReopened::class);
+    Notification::assertNotSentTo($s['subdireccion'], LoadApproved::class);
+    Notification::assertNotSentTo($s['subdireccion'], LoadReopened::class);
 });

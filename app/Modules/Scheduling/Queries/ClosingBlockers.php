@@ -5,6 +5,7 @@ namespace App\Modules\Scheduling\Queries;
 /**
  * Lo que le falta a la carga de un departamento para cerrarse o publicarse (HC-15), contado por grupo activo
  * (ClosingBlockersQuery). `justified` no bloquea: son los grupos sin docente o sin salón que pasan con justificación.
+ * `groups` son los grupos distintos que bloquean: uno sin docente ni salón cuenta en dos cifras y ahí una vez.
  */
 final readonly class ClosingBlockers
 {
@@ -15,6 +16,7 @@ final readonly class ClosingBlockers
         public int $withoutRoom = 0,
         public int $inactiveTeacher = 0,
         public int $justified = 0,
+        public int $groups = 0,
     ) {}
 
     public function isClear(): bool

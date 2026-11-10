@@ -19,7 +19,7 @@ use App\Modules\Scheduling\Models\Group;
  * - Lo gestionan y acomodan sus sesiones el coordinador de su carrera dueña y el jefe de su departamento.
  * - Asignan salón y reparten cupos el jefe de su departamento.
  * - Justifica que se quede sin docente o sin salón al cerrar (HC-15) quien cierra la carga de su departamento
- *   (`academic_load.load.close`, el jefe; P2, confirmado el 10 de noviembre de 2026).
+ *   (`academic_load.load.close`: el jefe y Subdirección; P2, confirmado el 10 de noviembre de 2026).
  *
  * La condición de estado de la carga (`proposed`, `staffing` o `adjusting`) la revisa la Action que escribe.
  */

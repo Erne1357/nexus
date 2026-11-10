@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Lo que la carga de un departamento deja pendiente con otros departamentos al cerrarse (HC-15, tarea 4.1), en el
@@ -19,7 +20,8 @@ use Illuminate\Database\Eloquent\Builder;
  *   apartados, mientras el que decide ya cerró.
  *
  * Un préstamo que el departamento pidió y sigue sin respuesta no se cuenta aquí: ya es choque duro de su sesión
- * (HC-10) y lo veta Scheduling.
+ * (HC-10) y lo veta Scheduling. La guarda de CloseLoad usa reasons(); las pantallas de cierre leen la misma regla con
+ * pending() (una carga) y countsByLoad() (todas las de un periodo).
  */
 final class AgreementsAnswered
 {
@@ -28,13 +30,9 @@ final class AgreementsAnswered
      */
     public function reasons(AcademicLoad $load): array
     {
-        $proposed = $this->pending($load)
-            ->where('kind', AgreementKind::SharedGroup)
-            ->where('from_department_id', $load->department_id)
-            ->count();
-        $awaiting = $this->pending($load)
-            ->where('to_department_id', $load->department_id)
-            ->count();
+        $pending = $this->pending($load);
+        $proposed = $pending['proposed']->count();
+        $awaiting = $pending['awaiting']->count();
 
         return array_values(array_filter([
             $proposed === 0 ? null : ($proposed === 1
@@ -47,13 +45,64 @@ final class AgreementsAnswered
     }
 
     /**
+     * Los acuerdos que detienen el cierre de la carga, del más antiguo al más reciente: `proposed`, los grupos
+     * compartidos que propuso el departamento (con el departamento que debe responder); `awaiting`, los que esperan
+     * su respuesta (con el que los pidió).
+     *
+     * @return array{proposed: Collection<int, InterdepartmentalAgreement>, awaiting: Collection<int, InterdepartmentalAgreement>}
+     */
+    public function pending(AcademicLoad $load): array
+    {
+        return [
+            'proposed' => $this->open($load->term_id)
+                ->where('campus_id', $load->campus_id)
+                ->where('kind', AgreementKind::SharedGroup)
+                ->where('from_department_id', $load->department_id)
+                ->with('toDepartment:id,code,name')
+                ->orderBy('created_at')
+                ->get(),
+            'awaiting' => $this->open($load->term_id)
+                ->where('campus_id', $load->campus_id)
+                ->where('to_department_id', $load->department_id)
+                ->with('fromDepartment:id,code,name')
+                ->orderBy('created_at')
+                ->get(),
+        ];
+    }
+
+    /**
+     * Las mismas cuentas para todas las cargas de un periodo, en una consulta (el tablero «Avance del cierre»): por
+     * `campus_id|department_id`, cuántos grupos compartidos propuso el departamento sin respuesta y cuántos acuerdos
+     * esperan su respuesta. Una carga sin ninguno no aparece.
+     *
+     * @return array<string, array{proposed: int, awaiting: int}>
+     */
+    public function countsByLoad(string $termId): array
+    {
+        $counts = [];
+
+        foreach ($this->open($termId)->toBase()->get(['campus_id', 'kind', 'from_department_id', 'to_department_id']) as $agreement) {
+            if ($agreement->kind === AgreementKind::SharedGroup->value) {
+                $key = "{$agreement->campus_id}|{$agreement->from_department_id}";
+                $counts[$key] ??= ['proposed' => 0, 'awaiting' => 0];
+                $counts[$key]['proposed']++;
+            }
+
+            $key = "{$agreement->campus_id}|{$agreement->to_department_id}";
+            $counts[$key] ??= ['proposed' => 0, 'awaiting' => 0];
+            $counts[$key]['awaiting']++;
+        }
+
+        return $counts;
+    }
+
+    /**
      * @return Builder<InterdepartmentalAgreement>
      */
-    private function pending(AcademicLoad $load): Builder
+    private function open(string $termId): Builder
     {
         return InterdepartmentalAgreement::query()
-            ->where('term_id', $load->term_id)
-            ->where('campus_id', $load->campus_id)
+            ->where('term_id', $termId)
             ->where('status', AgreementStatus::Proposed);
     }
 }

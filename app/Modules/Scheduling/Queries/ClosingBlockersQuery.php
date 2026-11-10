@@ -49,25 +49,32 @@ final class ClosingBlockersQuery
         }
 
         $justified = fn (object $row): bool => $row->close_justification !== null && trim($row->close_justification) !== '';
-        $withoutTeacher = fn (object $row): bool => $row->teacher_id === null;
-        $withoutRoom = fn (object $row): bool => $profile->usesRooms && (bool) $row->missing_room;
+        $conflicted = $this->conflicted($load, $rows->pluck('id')->all());
+        $checks = [
+            'unscheduled' => fn (object $row): bool => $profile->usesTimeBlocks && ! $row->has_sessions,
+            'withoutTeacher' => fn (object $row): bool => $row->teacher_id === null && ! $justified($row),
+            'withoutRoom' => fn (object $row): bool => $profile->usesRooms && (bool) $row->missing_room && ! $justified($row),
+            'inactiveTeacher' => fn (object $row): bool => (bool) $row->inactive_teacher,
+        ];
 
         return new ClosingBlockers(
-            conflicted: $this->conflicted($load, $rows->pluck('id')->all()),
-            unscheduled: $profile->usesTimeBlocks ? $rows->reject(fn (object $row): bool => (bool) $row->has_sessions)->count() : 0,
-            withoutTeacher: $rows->filter(fn (object $row): bool => $withoutTeacher($row) && ! $justified($row))->count(),
-            withoutRoom: $rows->filter(fn (object $row): bool => $withoutRoom($row) && ! $justified($row))->count(),
-            inactiveTeacher: $rows->filter(fn (object $row): bool => (bool) $row->inactive_teacher)->count(),
-            justified: $rows->filter(fn (object $row): bool => $justified($row) && ($withoutTeacher($row) || $withoutRoom($row)))->count(),
+            conflicted: count($conflicted),
+            unscheduled: $rows->filter($checks['unscheduled'])->count(),
+            withoutTeacher: $rows->filter($checks['withoutTeacher'])->count(),
+            withoutRoom: $rows->filter($checks['withoutRoom'])->count(),
+            inactiveTeacher: $rows->filter($checks['inactiveTeacher'])->count(),
+            justified: $rows->filter(fn (object $row): bool => $justified($row) && ($row->teacher_id === null || ($profile->usesRooms && (bool) $row->missing_room)))->count(),
+            groups: $rows->filter(fn (object $row): bool => in_array($row->id, $conflicted, true) || array_any($checks, fn (callable $check): bool => $check($row)))->count(),
         );
     }
 
     /**
-     * Los grupos del departamento con al menos un choque duro.
+     * Los ids de los grupos del departamento con al menos un choque duro.
      *
      * @param  list<string>  $groupIds
+     * @return list<string>
      */
-    private function conflicted(AcademicLoad $load, array $groupIds): int
+    private function conflicted(AcademicLoad $load, array $groupIds): array
     {
         $department = Department::query()->withTrashed()->whereKey($load->department_id)->firstOrFail();
 
@@ -77,6 +84,6 @@ final class ClosingBlockersQuery
             fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
         );
 
-        return count(array_intersect(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))), $groupIds));
+        return array_values(array_intersect(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))), $groupIds));
     }
 }
