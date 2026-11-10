@@ -11,20 +11,29 @@ use App\Modules\Imports\Sii\SiiVerification;
 
 /**
  * Verificación de la corrida contra el SII original (decisión del 10 de noviembre de 2026, confirmada: cada corrida
- * compara el original con Nexus y avisa si algo no cuadra). Es el último paso: con VerifySiiMigration compara el archivo
- * `sii_archivo` con el kárdex y el avance de Nexus y deja el resultado en el esquema `sii_verificacion`.
+ * compara el original con Nexus y avisa si algo no cuadra). Es el último paso: con VerifySiiMigration compara el
+ * archivo `sii_archivo` con el kárdex y el avance de Nexus y deja el resultado en el esquema `sii_verificacion`.
  *
- * Necesita el archivo de esta misma corrida (paso `archivo`), la historia del SII en la exportación y el kárdex aplicado
- * en esta corrida (paso `kardex`, que deja los mapas de claves que usa). Si falta algo, o si la corrida es un ensayo, no
- * verifica y lo dice. Nunca revierte nada de lo aplicado.
+ * Necesita el archivo de esta misma corrida (paso `archivo`), la historia del SII en la exportación y el kárdex
+ * aplicado en esta corrida (paso `kardex`, que deja los mapas de claves que usa). Si falta algo, no verifica, lo dice
+ * y, en una corrida real, deja `sii_verificacion` vacía con la razón en `_corrida`. En un ensayo no toca nada. Nunca
+ * revierte nada de lo aplicado.
  *
  * Como ArchiveStep, no pasa por el motor de importación: entrega un reporte por tabla (plantilla `sii_verificacion`).
- * En `materias`, las filas son los renglones de la historia comparados, las advertencias los de créditos distintos y
- * los de una clave fuera de la retícula del SII que cuenta en Nexus, y los errores los que no pasaron sin explicación; en `alumnos`, las filas son los alumnos y los errores los completos
- * en el SII e incompletos en Nexus. Las altas son los renglones escritos. A las incidencias van el resumen (nivel
- * `info`), un error por alumno completo en el SII e incompleto en Nexus (con su número de control: `_incidencias.csv`
- * vive en `storage/`), un error por clave del SII de los renglones que no pasaron sin explicación, una advertencia por
- * clave del SII fuera de la retícula del alumno en el SII que cuenta en Nexus y una por materia con créditos distintos. A la consola, solo el resumen: nunca un número de control.
+ * - `materias`: filas = renglones de la historia comparados; advertencias = los renglones de las tres advertencias
+ *   de abajo; errores = los que no pasaron sin explicación.
+ * - `alumnos`: filas = alumnos; errores = completos en el SII que en Nexus están incompletos o no están (si su
+ *   retícula se migra).
+ * Las altas son los renglones escritos y las diferencias, los errores.
+ *
+ * Incidencias:
+ * - el resumen (nivel `info`);
+ * - un error por alumno completo en el SII e incompleto o ausente en Nexus, con su número de control
+ *   (`_incidencias.csv` vive en `storage/`);
+ * - un error por clave del SII de los renglones que no pasaron sin explicación;
+ * - una advertencia por clave del SII aprobada en la retícula del alumno en el SII que en Nexus no cuenta, una por
+ *   clave fuera de esa retícula que en Nexus sí cuenta y una por materia con créditos distintos.
+ * A la consola va solo el resumen: nunca un número de control.
  */
 final class VerificationStep implements SiiStep
 {
@@ -40,9 +49,14 @@ final class VerificationStep implements SiiStep
      */
     public function batches(SiiMigration $migration): iterable
     {
+        $dir = $migration->export()->dir();
         $missing = $this->missing($migration);
 
         if ($missing !== null) {
+            if (! $migration->dryRun()) {
+                $this->verify->skip($dir, $missing);
+            }
+
             $message = "No se verificó la migración contra el SII: {$missing}";
 
             yield new SiiBatchReport(VerifySiiMigration::SCHEMA, 'sin verificar', 0, 0, 0, 0, 0, 0,
@@ -57,8 +71,10 @@ final class VerificationStep implements SiiStep
         $subjectFor = $migration->remember('subject_for', fn (): array => []);
         /** @var array<string, array<string|int, string>> $subjectForPlan */
         $subjectForPlan = $migration->remember('subject_for_plan', fn (): array => []);
+        /** @var array<string, mixed> $planFor */
+        $planFor = $migration->remember('plan_for', fn (): array => []);
 
-        $verification = $this->verify->handle($subjectFor, $subjectForPlan);
+        $verification = $this->verify->handle($dir, $subjectFor, $subjectForPlan, $planFor);
 
         yield $this->subjectsReport($verification);
         yield $this->studentsReport($verification);
@@ -87,29 +103,33 @@ final class VerificationStep implements SiiStep
         }
 
         $incidents = $this->info($summary);
-        $errors = 0;
         $warnings = 0;
 
         foreach ($verification->unexplained as $group) {
-            $errors += $group['rows'];
             $lines = $group['lines'].($group['rows'] > count(explode(', ', $group['lines'])) ? ', …' : '');
-            $incidents[] = ['level' => 'error', 'ref' => $group['materia'], 'message' => "{$group['rows']} renglones de la historia con la clave {$group['materia']} no pasaron al kárdex de Nexus y no se sabe por qué (líneas {$lines}): revisa ".VerifySiiMigration::SCHEMA.'.materias.'];
+            $incidents[] = $this->issue('error', $group['materia'], "{$group['rows']} renglones de la historia con la clave {$group['materia']} no pasaron al kárdex de Nexus y no se sabe por qué (líneas {$lines}): revisa ".VerifySiiMigration::SCHEMA.'.materias.');
+        }
+
+        foreach ($verification->outsidePlanApproved as $group) {
+            $warnings += $group['rows'];
+            $incidents[] = $this->issue('warning', $group['materia'], "La clave del SII {$group['materia']} está en la retícula del alumno en el SII y está aprobada, pero llegó a {$group['subjects']}, que no está en la retícula de su plan en Nexus: cuenta en el SII y no en Nexus. {$group['rows']} renglones de la historia.");
         }
 
         foreach ($verification->outsideSiiGrid as $group) {
             $warnings += $group['rows'];
-            $incidents[] = ['level' => 'warning', 'ref' => $group['materia'], 'message' => "La clave del SII {$group['materia']} no está en la retícula del alumno en el SII, pero llegó a {$group['subjects']}, que está en su plan de Nexus: cuenta en Nexus y no en el SII. {$group['rows']} renglones de la historia."];
+            $incidents[] = $this->issue('warning', $group['materia'], "La clave del SII {$group['materia']} no está en la retícula del alumno en el SII, pero llegó a {$group['subjects']}, que está en su plan de Nexus: cuenta en Nexus y no en el SII. {$group['rows']} renglones de la historia.");
         }
 
         foreach ($verification->creditsDiffer as $group) {
             $warnings += $group['rows'];
             $sii = $group['sii'] ?? 'no trae un número';
-            $incidents[] = ['level' => 'warning', 'ref' => $group['materia'], 'message' => "La clave del SII {$group['materia']} llegó a {$group['subject']}, que en Nexus tiene {$group['nexus']} créditos y en la retícula del alumno en el SII {$sii}: {$group['rows']} renglones de la historia."];
+            $incidents[] = $this->issue('warning', $group['materia'], "La clave del SII {$group['materia']} llegó a {$group['subject']}, que en Nexus tiene {$group['nexus']} créditos y en la retícula del alumno en el SII {$sii}: {$group['rows']} renglones de la historia.");
         }
 
         $rows = $verification->historyRows;
+        $errors = $verification->unexplainedRows();
 
-        return new SiiBatchReport(VerifySiiMigration::SCHEMA, 'materias', $rows, $rows - $errors - $warnings, $warnings, $errors, $rows, 0, $incidents, $summary);
+        return new SiiBatchReport(VerifySiiMigration::SCHEMA, 'materias', $rows, $rows - $errors - $warnings, $warnings, $errors, $rows, 0, $incidents, $summary, $errors);
     }
 
     private function studentsReport(SiiVerification $verification): SiiBatchReport
@@ -119,21 +139,26 @@ final class VerificationStep implements SiiStep
 
         foreach ($verification->statuses as $status) {
             $name = $status['status'] === '' ? '(vacío)' : $status['status'];
-            $summary[] = "Estatus {$name} del SII: {$status['students']} alumnos, {$status['completeSii']} completos en el SII, {$status['completeNexus']} completos en Nexus, {$status['missing']} no están en Nexus.";
+            $summary[] = "Estatus {$name} del SII: {$status['students']} alumnos, {$status['completeSii']} completos en el SII, {$status['completeNexus']} completos en Nexus, {$status['missing']} no están en Nexus ({$status['excluded']} de retículas que no se migran).";
         }
 
-        $incidents = [...$this->info($summary), ['level' => 'info', 'ref' => 'avance', 'message' => $timing]];
+        $summary[] = "{$verification->lostCredits} alumnos incompletos en Nexus cuentan menos créditos en Nexus que en el SII.";
+        $incidents = [...$this->info($summary), $this->issue('info', 'avance', $timing)];
 
         foreach ($verification->incompleteInNexus as $student) {
             $nexus = $student['nexus'] === null ? 'sin avance' : "{$student['nexus']} de ".($student['planTotal'] ?? '?').' créditos';
             $lost = (float) $student['lost'] > 0 ? ": Nexus cuenta {$student['lost']} créditos menos que el SII." : '.';
-            $incidents[] = ['level' => 'error', 'ref' => $student['control'], 'message' => "Completo en el SII ({$student['sii']} de {$student['required']} créditos de la retícula {$student['grid']}) e incompleto en Nexus ({$nexus} del plan {$student['plan']}){$lost}"];
+            $incidents[] = $this->issue('error', $student['control'], "Completo en el SII ({$student['sii']} de {$student['required']} créditos de la retícula {$student['grid']}) e incompleto en Nexus ({$nexus} del plan {$student['plan']}){$lost}");
         }
 
-        $errors = count($verification->incompleteInNexus);
+        foreach ($verification->missingFromNexus as $student) {
+            $incidents[] = $this->issue('error', $student['control'], "Completo en el SII ({$student['sii']} de {$student['required']} créditos de la retícula {$student['grid']}), que se migra, y no está en Nexus.");
+        }
+
+        $errors = count($verification->incompleteInNexus) + count($verification->missingFromNexus);
         $rows = $verification->students;
 
-        return new SiiBatchReport(VerifySiiMigration::SCHEMA, 'alumnos', $rows, $rows - $errors, 0, $errors, $rows, 0, $incidents, [...$summary, $timing]);
+        return new SiiBatchReport(VerifySiiMigration::SCHEMA, 'alumnos', $rows, $rows - $errors, 0, $errors, $rows, 0, $incidents, [...$summary, $timing], $errors);
     }
 
     /**
@@ -142,6 +167,15 @@ final class VerificationStep implements SiiStep
      */
     private function info(array $lines): array
     {
-        return array_map(fn (string $line): array => ['level' => 'info', 'ref' => 'resumen', 'message' => $line], $lines);
+        return array_map(fn (string $line): array => $this->issue('info', 'resumen', $line), $lines);
+    }
+
+    /**
+     * @param  'error'|'warning'|'info'  $level
+     * @return array{level: 'error'|'warning'|'info', ref: string, message: string}
+     */
+    private function issue(string $level, string $ref, string $message): array
+    {
+        return ['level' => $level, 'ref' => $ref, 'message' => $message];
     }
 }

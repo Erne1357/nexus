@@ -122,7 +122,14 @@ it('compara la corrida con Nexus, avisa de lo que no cuadra y marca la corrida �
         ->toContain('«no pasó: sin explicar»: 1 renglones')
         ->toContain('Estatus EGR del SII: 2 alumnos, 2 completos en el SII, 1 completos en Nexus, 0 no están en Nexus')
         ->toContain('Migración terminada con diferencias')
-        ->not->toContain('S2');
+        ->not->toContain('S2')
+        ->and(DB::table('sii_verificacion._corrida')->value('estado'))->toBe('con diferencias');
+
+    $allRows = array_map(str_getcsv(...), array_slice(file("{$this->dir}/_incidencias.csv", FILE_IGNORE_NEW_LINES), 1));
+    preg_match('/Incidencias: (\d+)/', $output, $count);
+
+    expect((int) $count[1])->toBe(count(array_filter($allRows, fn (array $row): bool => $row[4] !== 'info')))
+        ->and(count(array_filter($allRows, fn (array $row): bool => $row[4] === 'info')))->toBeGreaterThan(0);
 });
 
 it('sin diferencias termina como siempre', function () {
@@ -133,7 +140,8 @@ it('sin diferencias termina como siempre', function () {
     expect(($this->migrate)())->toBe(0);
 
     expect(array_filter(verificationIncidentRows($this->dir), fn (array $row): bool => $row[4] === 'error'))->toBe([])
-        ->and(Artisan::output())->toContain('Migración terminada. Incidencias:')->not->toContain('con diferencias');
+        ->and(Artisan::output())->toContain('Migración terminada. Incidencias:')->not->toContain('con diferencias')
+        ->and(DB::table('sii_verificacion._corrida')->value('estado'))->toBe('verificada');
 });
 
 it('en seco no verifica y lo dice', function () {
@@ -152,5 +160,6 @@ it('sin el paso archivo en la corrida no verifica y lo dice', function () {
     expect(verificationIncidentRows($this->dir))->toHaveCount(1)
         ->and(verificationIncidentRows($this->dir)[0][5])->toContain('el paso archivo no corrió en esta corrida')
         ->and(Artisan::output())->toContain('No se verificó la migración contra el SII')
-        ->and(DB::table('pg_tables')->where('schemaname', 'sii_verificacion')->exists())->toBeFalse();
+        ->and(DB::table('sii_verificacion._corrida')->value('estado'))->toBe('no verificada')
+        ->and(DB::table('sii_verificacion.materias')->count())->toBe(0);
 });

@@ -2,14 +2,12 @@
 
 namespace App\Modules\Imports\Sii;
 
-use App\Modules\Imports\Actions\VerifySiiMigration;
-
 /**
  * Lo que dejó una corrida: un reporte por lote, cuántas incidencias se escribieron y cuántos renglones de la
  * exportación no se pudieron leer (no se migran; el detalle por archivo está en las incidencias).
  *
  * La corrida queda «con diferencias» cuando la verificación contra el SII (paso `verificacion`) encontró algo que no
- * cuadra: los errores de sus reportes.
+ * cuadra (las diferencias de sus reportes). `$incidents` no cuenta las de nivel `info` (el resumen de la verificación).
  */
 final readonly class SiiMigrationReport
 {
@@ -24,10 +22,7 @@ final readonly class SiiMigrationReport
      */
     public function differences(): int
     {
-        return array_sum(array_map(
-            fn (SiiBatchReport $batch): int => $batch->template === VerifySiiMigration::SCHEMA ? $batch->errors : 0,
-            $this->batches,
-        ));
+        return array_sum(array_map(fn (SiiBatchReport $batch): int => $batch->differences, $this->batches));
     }
 
     /**

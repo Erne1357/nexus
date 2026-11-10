@@ -30,8 +30,8 @@ use Tests\Unit\Imports\Sii\SiiFixtures;
  *
  * @param  list<array{0: string, 1: string, 2: string}>  $students  número de control, retícula (`A/1`) y estatus
  * @param  list<array{0: string, 1: string, 2: string}>  $grid  retícula, clave del SII y créditos
- * @param  list<array{0: string, 1: string, 2: string, 3: string}>  $history  periodo, número de control, clave y estatus
- * @param  array<string, string>  $totals  créditos totales por retícula
+ * @param  list<array{0: string, 1: string, 2: string, 3: string, 4?: string}>  $history  periodo, número de control, clave, estatus y calificación
+ * @param  list<array{0: string, 1: string}>  $totals  renglones de `carreras`: retícula y créditos totales (una retícula puede repetirse)
  */
 function archiveVerificationExport(string $dir, array $students, array $grid, array $history, array $totals): void
 {
@@ -40,21 +40,22 @@ function archiveVerificationExport(string $dir, array $students, array $grid, ar
     SiiFixtures::write("{$dir}/alumnos_todos.csv", SiiFile::Alumnos, array_map(fn (array $s): string => SiiFixtures::line(SiiFile::Alumnos, [
         'no_de_control' => "'{$s[0]}'", 'carrera' => "'{$split($s[1])[0]}'", 'reticula' => "'{$split($s[1])[1]}'", 'estatus_alumno' => "'{$s[2]}'",
     ]), $students));
-    SiiFixtures::write("{$dir}/carreras.csv", SiiFile::Carreras, array_map(fn (string $key, string $total): string => SiiFixtures::line(SiiFile::Carreras, [
-        'carrera' => "'{$split($key)[0]}'", 'reticula' => "'{$split($key)[1]}'", 'creditos_totales' => $total,
-    ]), array_keys($totals), $totals));
+    SiiFixtures::write("{$dir}/carreras.csv", SiiFile::Carreras, array_map(fn (array $t): string => SiiFixtures::line(SiiFile::Carreras, [
+        'carrera' => "'{$split($t[0])[0]}'", 'reticula' => "'{$split($t[0])[1]}'", 'creditos_totales' => $t[1],
+    ]), $totals));
     SiiFixtures::write("{$dir}/materias_carreras.csv", SiiFile::MateriasCarreras, array_map(fn (array $g): string => SiiFixtures::line(SiiFile::MateriasCarreras, [
         'carrera' => "'{$split($g[0])[0]}'", 'reticula' => $split($g[0])[1], 'materia' => "'{$g[1]}'", 'creditos_materia' => $g[2],
     ]), $grid));
     SiiFixtures::write("{$dir}/historia_alumno.csv", SiiFile::HistoriaAlumno, array_map(fn (array $h): string => SiiFixtures::line(SiiFile::HistoriaAlumno, [
-        'periodo' => "'{$h[0]}'", 'no_de_control' => "'{$h[1]}'", 'materia' => "'{$h[2]}'", 'estatus_materia' => "'{$h[3]}'",
+        'periodo' => "'{$h[0]}'", 'no_de_control' => "'{$h[1]}'", 'materia' => "'{$h[2]}'", 'estatus_materia' => "'{$h[3]}'", 'calificacion' => $h[4] ?? '',
     ]), $history));
 
     app(ArchiveSiiExport::class)->handle(SiiExport::open($dir));
 }
 
 /**
- * Corre el paso como lo corre la migración: con los mapas de claves y lo que dejaron los pasos anteriores de la corrida.
+ * Corre el paso como lo corre la migración: con los mapas de claves, las retículas que se migran (solo la A/1) y lo que
+ * dejaron los pasos anteriores de la corrida.
  *
  * @param  list<string>  $done  marcas de los pasos que ya corrieron (`archived`, `kardex_applied`)
  * @return list<SiiBatchReport>
@@ -62,8 +63,9 @@ function archiveVerificationExport(string $dir, array $students, array $grid, ar
 function runVerificationStep(string $dir, bool $dryRun = false, array $done = ['archived', 'kardex_applied']): array
 {
     $migration = new SiiMigration(SiiExport::open($dir), '/nonexistent', $dryRun);
-    $migration->remember('subject_for', fn (): array => ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0901', 'QU1' => 'AEF-1001', 'PE1' => 'PEN-0001', 'DI1' => 'DIF-0001', 'OU1' => 'OUT-0001', 'QU9' => 'AEF-1001']);
+    $migration->remember('subject_for', fn (): array => ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0901', 'QU1' => 'AEF-1001', 'PE1' => 'PEN-0001', 'DI1' => 'DIF-0001', 'OU1' => 'OUT-0001', 'OU2' => 'OUT-0001', 'QU9' => 'AEF-1001']);
     $migration->remember('subject_for_plan', fn (): array => ['AAA-2010-224' => ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0901', 'QU1' => 'AEF-1001', 'PE1' => 'PEN-0001', 'DI1' => 'DIF-0001']]);
+    $migration->remember('plan_for', fn (): array => ['A/1' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'presencial']]);
 
     foreach ($done as $flag) {
         $migration->remember($flag, fn (): bool => true);
@@ -120,10 +122,10 @@ beforeEach(function () {
         'sii_subject_code' => $siiCode,
     ]);
 
-    // SII: la retícula A/1 (el plan AAA-2010-224) pide 10 créditos; OU1 y QU9 solo están en la A/3.
+    // SII: la retícula A/1 (el plan AAA-2010-224) pide 10 créditos; OU1 y QU9 solo están en la A/3, que no se migra.
     $this->students = [['S1', 'A/1', 'EGR'], ['S2', 'A/1', 'EGR'], ['S3', 'A/1', 'ACT'], ['S9', 'A/1', 'EGR']];
     $this->grid = [['A/1', 'CD1', '5'], ['A/1', 'CD2', '5'], ['A/1', 'QU1', '5'], ['A/1', 'PE1', '4'], ['A/1', 'DI1', '5'], ['A/3', 'OU1', '3'], ['A/3', 'QU9', '5']];
-    $this->totals = ['A/1' => '10', 'A/3' => '10'];
+    $this->totals = [['A/1', '10'], ['A/3', '10']];
     $this->history = [
         ['20251', 'S1', 'CD1', 'A'],   // 2: igual
         ['20251', 'S1', 'QU1', 'A'],   // 3: igual
@@ -133,8 +135,8 @@ beforeEach(function () {
         ['20251', 'S2', 'CD1', 'A'],   // 7: CD1 y CD2 son ACF-0901
         ['20253', 'S2', 'CD2', 'A'],   // 8
         ['20251', 'S9', 'CD1', 'A'],   // 9: S9 no está en Nexus
-        ['20261', 'S3', 'CD1', 'R'],   // 10: igual
-        ['20261', 'S3', 'CD2', 'R'],   // 11: ACF-0901 en 20261 ya la trae la línea 10
+        ['20261', 'S3', 'CD1', 'R', '60'],   // 10: igual
+        ['20261', 'S3', 'CD2', 'R', '50'],   // 11: también es ACF-0901 en 20261, y la 10 tiene mejor calificación
         ['20261', 'S3', 'XYZ', 'A'],   // 12: XYZ no está en ninguna retícula
         ['20261', 'S3', 'QU1', 'A'],   // 13: no llegó y no se sabe por qué
         ['20263', 'S3', 'QU1', 'A'],   // 14: tampoco
@@ -329,8 +331,9 @@ it('resume el conteo por diagnóstico y, por estatus del SII, los completos en e
         '«no pasó: la clave del SII no está en ninguna retícula»: 1 renglones.',
         '«no pasó: sin explicar»: 2 renglones.',
         'Se compararon 4 alumnos del SII con su avance en Nexus (sii_verificacion.alumnos).',
-        'Estatus ACT del SII: 1 alumnos, 0 completos en el SII, 0 completos en Nexus, 0 no están en Nexus.',
-        'Estatus EGR del SII: 3 alumnos, 2 completos en el SII, 1 completos en Nexus, 1 no están en Nexus.',
+        'Estatus ACT del SII: 1 alumnos, 0 completos en el SII, 0 completos en Nexus, 0 no están en Nexus (0 de retículas que no se migran).',
+        'Estatus EGR del SII: 3 alumnos, 2 completos en el SII, 1 completos en Nexus, 1 no están en Nexus (0 de retículas que no se migran).',
+        '1 alumnos incompletos en Nexus cuentan menos créditos en Nexus que en el SII.',
     ];
 
     expect(array_map(fn (string $line): string => substr($line, strlen('info resumen ')), array_values(array_filter(
@@ -386,11 +389,165 @@ it('no verifica y dice por qué si falta algo de la corrida', function (bool $dr
     expect($reports)->toHaveCount(1)
         ->and([$reports[0]->template, $reports[0]->file, $reports[0]->rows, $reports[0]->errors])->toBe(['sii_verificacion', 'sin verificar', 0, 0])
         ->and(verificationIncidents($reports))->toBe(["warning verificacion No se verificó la migración contra el SII: {$reason}"])
-        ->and($reports[0]->notes)->toBe(["No se verificó la migración contra el SII: {$reason}"])
-        ->and(DB::table('pg_tables')->where('schemaname', 'sii_verificacion')->exists())->toBeFalse();
+        ->and($reports[0]->notes)->toBe(["No se verificó la migración contra el SII: {$reason}"]);
+
+    if ($dryRun) {
+        expect(DB::table('pg_tables')->where('schemaname', 'sii_verificacion')->exists())->toBeFalse();
+    } else {
+        expect(DB::table('sii_verificacion._corrida')->get(['carpeta', 'estado', 'razon'])->map(fn (object $row): array => (array) $row)->all())->toBe([
+            ['carpeta' => $this->dir, 'estado' => 'no verificada', 'razon' => $reason],
+        ])
+            ->and(DB::table('sii_verificacion.materias')->count())->toBe(0)
+            ->and(DB::table('sii_verificacion.alumnos')->count())->toBe(0);
+    }
 })->with([
     'en seco' => [true, ['archived', 'kardex_applied'], true, 'la corrida es un ensayo (--dry-run) y nada se escribió.'],
     'sin el archivo de esta corrida' => [false, ['kardex_applied'], true, 'el paso archivo no corrió en esta corrida, así que sii_archivo no es esta exportación (corre la migración completa o agrega --only=archivo).'],
     'sin historia en la exportación' => [false, ['archived'], false, 'la exportación no trae historia_alumno: no hay kárdex del SII contra qué comparar.'],
     'sin el kárdex de esta corrida' => [false, ['archived'], true, 'el paso kardex no corrió en esta corrida, así que el kárdex de Nexus no es el de esta exportación (agrega --only=kardex).'],
 ]);
+
+it('anota en _corrida la carpeta, cuándo y si la corrida quedó verificada o con diferencias', function () {
+    ($this->archive)();
+    runVerificationStep($this->dir);
+
+    $run = DB::table('sii_verificacion._corrida')->sole();
+
+    expect([$run->carpeta, $run->estado, $run->razon])->toBe([$this->dir, 'con diferencias', '3 renglones o alumnos no cuadran: errores del paso verificacion en _incidencias.csv.'])
+        ->and($run->verificado_en)->not->toBeNull();
+
+    $this->history = [['20251', 'S1', 'CD1', 'A']];
+    ($this->archive)();
+    runVerificationStep($this->dir);
+
+    expect(DB::table('sii_verificacion._corrida')->get(['estado', 'razon'])->map(fn (object $row): array => (array) $row)->all())->toBe([
+        ['estado' => 'verificada', 'razon' => null],
+    ]);
+});
+
+it('si una corrida real se salta la verificación, vacía los resultados de la anterior', function () {
+    ($this->archive)();
+    runVerificationStep($this->dir);
+
+    expect(DB::table('sii_verificacion.materias')->count())->toBe(14);
+
+    runVerificationStep($this->dir, done: ['kardex_applied']);
+
+    expect(DB::table('sii_verificacion.materias')->count())->toBe(0)
+        ->and(DB::table('sii_verificacion.alumnos')->count())->toBe(0)
+        ->and(DB::table('sii_verificacion._corrida')->value('estado'))->toBe('no verificada');
+});
+
+it('da error por el alumno completo en el SII que no está en Nexus si su retícula se migra; si no se migra, solo lo cuenta', function () {
+    $this->students = [['S9', 'A/1', 'EGR'], ['S8', 'A/3', 'EGR']];
+    $this->totals = [['A/1', '10'], ['A/3', '8']];
+    $this->history = [['20251', 'S9', 'CD1', 'A'], ['20253', 'S9', 'QU1', 'A'], ['20251', 'S8', 'OU1', 'A'], ['20253', 'S8', 'QU9', 'A']];
+    ($this->archive)();
+
+    $reports = runVerificationStep($this->dir);
+
+    $students = DB::table('sii_verificacion.alumnos')->get()->keyBy('no_de_control');
+
+    expect([$students['S9']->completo_sii, $students['S9']->en_nexus, $students['S9']->reticula_migrada])->toBe([true, false, true])
+        ->and([$students['S8']->completo_sii, $students['S8']->en_nexus, $students['S8']->reticula_migrada])->toBe([true, false, false])
+        ->and(verificationIncidents($reports, 'error'))->toBe([
+            'error S9 Completo en el SII (10 de 10 créditos de la retícula A/1), que se migra, y no está en Nexus.',
+        ])
+        ->and($reports[1]->notes)->toContain('Estatus EGR del SII: 2 alumnos, 2 completos en el SII, 0 completos en Nexus, 2 no están en Nexus (1 de retículas que no se migran).');
+});
+
+it('un estatus de la historia distinto de A, R y P no pasa al kárdex: es «sin explicar» antes que cualquier otro diagnóstico', function () {
+    $this->history = [['20251', 'S1', 'CD1', 'A'], ['20251', 'S1', 'CD1', 'X']];
+    ($this->archive)();
+
+    runVerificationStep($this->dir);
+
+    expect(DB::table('sii_verificacion.materias')->orderBy('_linea')->pluck('diagnostico', '_linea')->all())->toBe([
+        2 => VerificationDiagnosis::Same->value,
+        3 => VerificationDiagnosis::Unexplained->value,
+    ]);
+});
+
+it('de los renglones que caen en la misma fila del kárdex queda uno, como en el paso kardex: la aprobada, la de mayor calificación y la última', function () {
+    $this->history = [
+        ['19001', 'S1', 'PE1', 'A', '80'],   // 2: dos periodos que no existen, misma fila sin periodo
+        ['0', 'S1', 'PE1', 'A', '90'],       // 3: gana por calificación
+        ['20251', 'S1', 'CD1', 'R', '60'],   // 4
+        ['20251', 'S1', 'CD1', 'A', '70'],   // 5: gana por aprobada
+        ['20251', 'S1', 'CD1', 'R', '95'],   // 6
+        ['20251', 'S1', 'QU1', 'A', ''],     // 7
+        ['20251', 'S1', 'QU1', 'A', ''],     // 8: empate, gana la última
+    ];
+    ($this->archive)();
+
+    runVerificationStep($this->dir);
+
+    expect(DB::table('sii_verificacion.materias')->orderBy('_linea')->pluck('diagnostico', '_linea')->all())->toBe([
+        2 => VerificationDiagnosis::KeptOther->value,
+        3 => VerificationDiagnosis::PlanPending->value,
+        4 => VerificationDiagnosis::KeptOther->value,
+        5 => VerificationDiagnosis::Same->value,
+        6 => VerificationDiagnosis::KeptOther->value,
+        7 => VerificationDiagnosis::KeptOther->value,
+        8 => VerificationDiagnosis::Same->value,
+    ]);
+});
+
+it('advierte por clave de lo aprobado en la retícula del alumno en el SII que en Nexus no cuenta', function () {
+    $this->grid[] = ['A/1', 'OU2', '3'];
+    $this->history[] = ['20253', 'S3', 'OU2', 'A'];
+    ($this->kardex)('S3', 'OUT-0001', '20253', 'OU2');
+    ($this->archive)();
+
+    $reports = runVerificationStep($this->dir);
+
+    expect(DB::table('sii_verificacion.materias')->where('_linea', 16)->value('diagnostico'))->toBe(VerificationDiagnosis::OutsidePlan->value)
+        ->and(DB::table('sii_verificacion.materias')->where('_linea', 16)->value('en_reticula_sii'))->toBeTrue()
+        ->and(array_values(preg_grep('/^warning OU/', verificationIncidents($reports, 'warning'))))->toBe([
+            'warning OU2 La clave del SII OU2 está en la retícula del alumno en el SII y está aprobada, pero llegó a OUT-0001, que no está en la retícula de su plan en Nexus: cuenta en el SII y no en Nexus. 1 renglones de la historia.',
+        ]);
+});
+
+it('de un alumno repetido en alumnos_todos queda el primero', function () {
+    $this->students = [['S1', 'A/1', 'EGR'], ['S1', 'A/3', 'ACT']];
+    $this->history = [['20251', 'S1', 'CD1', 'A']];
+    ($this->archive)();
+
+    runVerificationStep($this->dir);
+
+    expect(DB::table('sii_verificacion.alumnos')->get(['_linea', 'no_de_control', 'reticula_sii', 'estatus_sii'])->map(fn (object $row): array => (array) $row)->all())->toBe([
+        ['_linea' => 2, 'no_de_control' => 'S1', 'reticula_sii' => 'A/1', 'estatus_sii' => 'EGR'],
+    ])
+        ->and(DB::table('sii_verificacion.materias')->value('reticula_sii'))->toBe('A/1');
+});
+
+it('toma los créditos totales de una retícula repetida en carreras como el paso carreras: solo un entero mayor que cero, y sin él no está completo', function () {
+    $this->students = [['S1', 'A/1', 'EGR'], ['S8', 'A/3', 'EGR'], ['S7', 'A/4', 'EGR'], ['S6', 'A/5', 'EGR']];
+    $this->totals = [['A/1', "''"], ['A/1', '260'], ['A/3', '0'], ['A/3', '260'], ['A/4', "''"], ['A/5', '0']];
+    $this->history = [['20251', 'S1', 'CD1', 'A']];
+    ($this->archive)();
+
+    runVerificationStep($this->dir);
+
+    expect(DB::table('sii_verificacion.alumnos')->orderBy('no_de_control')->get(['no_de_control', 'creditos_requeridos_sii', 'completo_sii'])
+        ->map(fn (object $row): array => [$row->no_de_control, $row->creditos_requeridos_sii === null ? null : (int) $row->creditos_requeridos_sii, $row->completo_sii])->all())->toBe([
+            ['S1', 260, false],
+            ['S6', null, false],
+            ['S7', null, false],
+            ['S8', 260, false],
+        ]);
+});
+
+it('de una clave repetida en una retícula del SII toma sus créditos mayores', function () {
+    $this->grid = [['A/1', 'CD1', '5'], ['A/1', 'CD1', '7'], ['A/1', 'QU1', '5']];
+    $this->history = [['20251', 'S1', 'CD1', 'A'], ['20251', 'S1', 'QU1', 'A']];
+    ($this->archive)();
+
+    runVerificationStep($this->dir);
+
+    $row = DB::table('sii_verificacion.materias')->where('_linea', 2)->sole();
+
+    expect((float) $row->creditos_sii)->toBe(7.0)
+        ->and($row->diagnostico)->toBe(VerificationDiagnosis::CreditsDiffer->value)
+        ->and((float) DB::table('sii_verificacion.alumnos')->where('no_de_control', 'S1')->value('creditos_sii'))->toBe(12.0);
+});
