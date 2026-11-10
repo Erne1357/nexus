@@ -16,14 +16,17 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Actions\JustifyGroup;
 use App\Modules\Scheduling\Actions\Sessions\AssignSessionRoom;
+use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Enums\SessionKind;
+use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\RoomSuggestionQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -87,7 +90,10 @@ final class PublicationShowcaseDemoSeeder extends Seeder
         foreach (array_slice(self::REOPENINGS, 0, max(0, $versions - 1)) as $index => $reason) {
             app(ReopenLoad::class)->handle($load->fresh(), $subdireccion, $reason);
             app(ReturnToStaffing::class)->handle($load->fresh(), $head, 'Se corrigen los salones');
-            $this->moveRooms($load, $head, $index);
+            // Cada cambio de salón recalcularía los choques de todo el campus (GroupScheduleChanged); se recalculan una vez
+            // por versión. El cambio de salón no mueve la hora de inicio, así que la clave del grupo no cambia.
+            Event::fakeFor(fn () => $this->moveRooms($load, $head, $index), [GroupScheduleChanged::class]);
+            app(SyncScheduleConflicts::class)->handle($load->term, $load->campus);
             $this->justifyMissing($load, $head);
             $this->closeAndPublish($load, $head, null, $reason);
         }
