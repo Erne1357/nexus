@@ -3,12 +3,12 @@
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Scheduling\Actions\Sessions\RemoveGroupSession;
 use App\Modules\Scheduling\Actions\Sessions\UpdateGroupSession;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
-use App\Modules\Scheduling\Support\WeekGrid;
 use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Validation\Rule;

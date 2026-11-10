@@ -1,10 +1,10 @@
 <?php
 
 use App\Modules\Core\Models\CampusProfile;
-use App\Modules\Scheduling\Support\WeekGrid;
+use App\Modules\Core\Support\WeekGrid;
 
 /*
-| WeekGrid (tarea 3.5): la semana del editor de horarios con el perfil del campus. Da los días y los bloques de la
+| WeekGrid (tareas 3.5 y 4.4): la semana de un horario con el perfil del campus. Da los días y los bloques de la
 | cuadrícula y acomoda cada sesión en su día: desde qué renglón y cuántos abarca, y en qué carril va cuando otras del
 | mismo día coinciden con ella.
 */
