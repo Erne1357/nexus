@@ -20,11 +20,11 @@ use App\Modules\Imports\Sii\SiiVerification;
  *
  * Como ArchiveStep, no pasa por el motor de importación: entrega un reporte por tabla (plantilla `sii_verificacion`).
  * En `materias`, las filas son los renglones de la historia comparados, las advertencias los de créditos distintos y
- * los errores los que no pasaron sin explicación; en `alumnos`, las filas son los alumnos y los errores los completos
+ * los de una clave fuera de la retícula del SII que cuenta en Nexus, y los errores los que no pasaron sin explicación; en `alumnos`, las filas son los alumnos y los errores los completos
  * en el SII e incompletos en Nexus. Las altas son los renglones escritos. A las incidencias van el resumen (nivel
  * `info`), un error por alumno completo en el SII e incompleto en Nexus (con su número de control: `_incidencias.csv`
- * vive en `storage/`), un error por clave del SII de los renglones que no pasaron sin explicación y una advertencia por
- * materia con créditos distintos. A la consola, solo el resumen: nunca un número de control.
+ * vive en `storage/`), un error por clave del SII de los renglones que no pasaron sin explicación, una advertencia por
+ * clave del SII fuera de la retícula del alumno en el SII que cuenta en Nexus y una por materia con créditos distintos. A la consola, solo el resumen: nunca un número de control.
  */
 final class VerificationStep implements SiiStep
 {
@@ -96,9 +96,14 @@ final class VerificationStep implements SiiStep
             $incidents[] = ['level' => 'error', 'ref' => $group['materia'], 'message' => "{$group['rows']} renglones de la historia con la clave {$group['materia']} no pasaron al kárdex de Nexus y no se sabe por qué (líneas {$lines}): revisa ".VerifySiiMigration::SCHEMA.'.materias.'];
         }
 
+        foreach ($verification->outsideSiiGrid as $group) {
+            $warnings += $group['rows'];
+            $incidents[] = ['level' => 'warning', 'ref' => $group['materia'], 'message' => "La clave del SII {$group['materia']} no está en la retícula del alumno en el SII, pero llegó a {$group['subjects']}, que está en su plan de Nexus: cuenta en Nexus y no en el SII. {$group['rows']} renglones de la historia."];
+        }
+
         foreach ($verification->creditsDiffer as $group) {
             $warnings += $group['rows'];
-            $sii = $group['sii'] === null ? 'no la trae' : $group['sii'];
+            $sii = $group['sii'] ?? 'no trae un número';
             $incidents[] = ['level' => 'warning', 'ref' => $group['materia'], 'message' => "La clave del SII {$group['materia']} llegó a {$group['subject']}, que en Nexus tiene {$group['nexus']} créditos y en la retícula del alumno en el SII {$sii}: {$group['rows']} renglones de la historia."];
         }
 

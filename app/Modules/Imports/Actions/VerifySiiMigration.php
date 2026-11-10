@@ -220,6 +220,7 @@ final class VerifySiiMigration
                     when sps.id is null and pd.id is not null then {$diagnosis(VerificationDiagnosis::PlanPending)}
                     when sps.id is null then {$diagnosis(VerificationDiagnosis::OutsidePlan)}
                     when d.subject_id is not null then {$diagnosis(VerificationDiagnosis::SameSubject)}
+                    when l.materia is null then {$diagnosis(VerificationDiagnosis::OutsideSiiGrid)}
                     when l.creditos is distinct from s.credits then {$diagnosis(VerificationDiagnosis::CreditsDiffer)}
                     else {$diagnosis(VerificationDiagnosis::Same)}
                 end
@@ -333,6 +334,13 @@ final class VerifySiiMigration
             ->map(fn (object $row): array => ['materia' => (string) $row->clave_sii, 'rows' => (int) $row->renglones, 'lines' => (string) $row->lineas])
             ->all();
 
+        $outsideSiiGrid = DB::table("{$schema}.materias")
+            ->where('diagnostico', VerificationDiagnosis::OutsideSiiGrid->value)
+            ->selectRaw("clave_sii, string_agg(distinct clave_nexus, ', ' order by clave_nexus) as claves_nexus, count(*) as renglones")
+            ->groupBy('clave_sii')->orderBy('clave_sii')->get()
+            ->map(fn (object $row): array => ['materia' => (string) $row->clave_sii, 'subjects' => (string) $row->claves_nexus, 'rows' => (int) $row->renglones])
+            ->all();
+
         $creditsDiffer = DB::table("{$schema}.materias")
             ->where('diagnostico', VerificationDiagnosis::CreditsDiffer->value)
             ->selectRaw('clave_sii, clave_nexus, creditos_sii, creditos_nexus, count(*) as renglones')
@@ -353,6 +361,7 @@ final class VerifySiiMigration
             $statuses,
             $incomplete,
             $unexplained,
+            $outsideSiiGrid,
             $creditsDiffer,
             $progressSeconds,
         );

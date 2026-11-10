@@ -62,7 +62,7 @@ function archiveVerificationExport(string $dir, array $students, array $grid, ar
 function runVerificationStep(string $dir, bool $dryRun = false, array $done = ['archived', 'kardex_applied']): array
 {
     $migration = new SiiMigration(SiiExport::open($dir), '/nonexistent', $dryRun);
-    $migration->remember('subject_for', fn (): array => ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0901', 'QU1' => 'AEF-1001', 'PE1' => 'PEN-0001', 'DI1' => 'DIF-0001', 'OU1' => 'OUT-0001']);
+    $migration->remember('subject_for', fn (): array => ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0901', 'QU1' => 'AEF-1001', 'PE1' => 'PEN-0001', 'DI1' => 'DIF-0001', 'OU1' => 'OUT-0001', 'QU9' => 'AEF-1001']);
     $migration->remember('subject_for_plan', fn (): array => ['AAA-2010-224' => ['CD1' => 'ACF-0901', 'CD2' => 'ACF-0901', 'QU1' => 'AEF-1001', 'PE1' => 'PEN-0001', 'DI1' => 'DIF-0001']]);
 
     foreach ($done as $flag) {
@@ -120,9 +120,9 @@ beforeEach(function () {
         'sii_subject_code' => $siiCode,
     ]);
 
-    // SII: la retícula A/1 (el plan AAA-2010-224) pide 10 créditos; OU1 solo está en la A/3.
+    // SII: la retícula A/1 (el plan AAA-2010-224) pide 10 créditos; OU1 y QU9 solo están en la A/3.
     $this->students = [['S1', 'A/1', 'EGR'], ['S2', 'A/1', 'EGR'], ['S3', 'A/1', 'ACT'], ['S9', 'A/1', 'EGR']];
-    $this->grid = [['A/1', 'CD1', '5'], ['A/1', 'CD2', '5'], ['A/1', 'QU1', '5'], ['A/1', 'PE1', '4'], ['A/1', 'DI1', '5'], ['A/3', 'OU1', '3']];
+    $this->grid = [['A/1', 'CD1', '5'], ['A/1', 'CD2', '5'], ['A/1', 'QU1', '5'], ['A/1', 'PE1', '4'], ['A/1', 'DI1', '5'], ['A/3', 'OU1', '3'], ['A/3', 'QU9', '5']];
     $this->totals = ['A/1' => '10', 'A/3' => '10'];
     $this->history = [
         ['20251', 'S1', 'CD1', 'A'],   // 2: igual
@@ -138,6 +138,7 @@ beforeEach(function () {
         ['20261', 'S3', 'XYZ', 'A'],   // 12: XYZ no está en ninguna retícula
         ['20261', 'S3', 'QU1', 'A'],   // 13: no llegó y no se sabe por qué
         ['20263', 'S3', 'QU1', 'A'],   // 14: tampoco
+        ['20253', 'S3', 'QU9', 'A'],   // 15: QU9 no está en la retícula A/1, pero llega a AEF-1001, que sí está en el plan
     ];
 
     ($this->kardex)('S1', 'ACF-0901', '20251', 'CD1');
@@ -148,6 +149,7 @@ beforeEach(function () {
     ($this->kardex)('S2', 'ACF-0901', '20251', 'CD1');
     ($this->kardex)('S2', 'ACF-0901', '20253', 'CD2');
     ($this->kardex)('S3', 'ACF-0901', '20261', 'CD1', 'reprobada');
+    ($this->kardex)('S3', 'AEF-1001', '20253', 'QU9');
 
     $this->archive = fn () => archiveVerificationExport($this->dir, $this->students, $this->grid, $this->history, $this->totals);
 });
@@ -172,12 +174,14 @@ it('da a cada renglón de la historia el diagnóstico que le toca', function () 
         12 => VerificationDiagnosis::UnknownKey->value,
         13 => VerificationDiagnosis::Unexplained->value,
         14 => VerificationDiagnosis::Unexplained->value,
+        15 => VerificationDiagnosis::OutsideSiiGrid->value,
     ])
         ->and(array_column(VerificationDiagnosis::cases(), 'value'))->toBe([
             'igual',
             'pendiente del plan: cuenta',
             'fuera de la retícula del plan: no cuenta',
             'otra clave del SII es la misma materia: cuenta una vez',
+            'fuera de la retícula del SII, en el plan de Nexus: cuenta en Nexus',
             'créditos distintos',
             'alumno no está en Nexus',
             'no pasó: el mismo alumno tiene la misma materia de Nexus en el mismo periodo (se queda uno)',
@@ -281,14 +285,31 @@ it('agrupa por clave del SII los renglones que no pasaron sin explicación, con 
         ->and($reports[0]->errors)->toBe(2);
 });
 
-it('advierte de los créditos distintos, agrupados por materia', function () {
+it('advierte de los créditos distintos solo si la materia está en las dos retículas, agrupados por materia', function () {
+    $this->history[] = ['20263', 'S1', 'DI1', 'R'];
+    ($this->kardex)('S1', 'DIF-0001', '20263', 'DI1', 'reprobada');
     ($this->archive)();
     $reports = runVerificationStep($this->dir);
 
-    expect(verificationIncidents($reports, 'warning'))->toBe([
-        'warning DI1 La clave del SII DI1 llegó a DIF-0001, que en Nexus tiene 4 créditos y en la retícula del alumno en el SII 5: 1 renglones de la historia.',
-    ])
-        ->and($reports[0]->warnings)->toBe(1);
+    expect(DB::table('sii_verificacion.materias')->where('diagnostico', VerificationDiagnosis::CreditsDiffer->value)->orderBy('_linea')->pluck('_linea')->all())->toBe([6, 16])
+        ->and(array_values(preg_grep('/^warning DI1 /', verificationIncidents($reports, 'warning'))))->toBe([
+            'warning DI1 La clave del SII DI1 llegó a DIF-0001, que en Nexus tiene 4 créditos y en la retícula del alumno en el SII 5: 2 renglones de la historia.',
+        ]);
+});
+
+it('la clave fuera de la retícula del SII del alumno que llega a una materia de su plan en Nexus es otro diagnóstico, con advertencia por clave', function () {
+    ($this->archive)();
+    $reports = runVerificationStep($this->dir);
+
+    $row = DB::table('sii_verificacion.materias')->where('_linea', 15)->sole();
+
+    expect($row->diagnostico)->toBe(VerificationDiagnosis::OutsideSiiGrid->value)
+        ->and($row->creditos_sii)->toBeNull()
+        ->and($row->clave_nexus)->toBe('AEF-1001')
+        ->and(array_values(preg_grep('/^warning QU9 /', verificationIncidents($reports, 'warning'))))->toBe([
+            'warning QU9 La clave del SII QU9 no está en la retícula del alumno en el SII, pero llegó a AEF-1001, que está en su plan de Nexus: cuenta en Nexus y no en el SII. 1 renglones de la historia.',
+        ])
+        ->and(verificationIncidents($reports, 'error'))->each->not->toContain('QU9');
 });
 
 it('resume el conteo por diagnóstico y, por estatus del SII, los completos en el SII y en Nexus, en las incidencias y en la consola', function () {
@@ -296,11 +317,12 @@ it('resume el conteo por diagnóstico y, por estatus del SII, los completos en e
     $reports = runVerificationStep($this->dir);
 
     $summary = [
-        'Se compararon 13 renglones de la historia del SII con el kárdex de Nexus (sii_verificacion.materias).',
+        'Se compararon 14 renglones de la historia del SII con el kárdex de Nexus (sii_verificacion.materias).',
         '«igual»: 3 renglones.',
         '«pendiente del plan: cuenta»: 1 renglones.',
         '«fuera de la retícula del plan: no cuenta»: 1 renglones.',
         '«otra clave del SII es la misma materia: cuenta una vez»: 2 renglones.',
+        '«fuera de la retícula del SII, en el plan de Nexus: cuenta en Nexus»: 1 renglones.',
         '«créditos distintos»: 1 renglones.',
         '«alumno no está en Nexus»: 1 renglones.',
         '«no pasó: el mismo alumno tiene la misma materia de Nexus en el mismo periodo (se queda uno)»: 1 renglones.',
@@ -318,7 +340,7 @@ it('resume el conteo por diagnóstico y, por estatus del SII, los completos en e
         ->and([...$reports[0]->notes, ...$reports[1]->notes])->toContain(...$summary)
         ->and(implode("\n", [...$reports[0]->notes, ...$reports[1]->notes]))->not->toContain('S2')
         ->and(array_map(fn (SiiBatchReport $report): array => [$report->template, $report->file, $report->rows, $report->valid, $report->warnings, $report->errors, $report->created, $report->changed], $reports))->toBe([
-            ['sii_verificacion', 'materias', 13, 10, 1, 2, 13, 0],
+            ['sii_verificacion', 'materias', 14, 10, 2, 2, 14, 0],
             ['sii_verificacion', 'alumnos', 4, 3, 0, 1, 4, 0],
         ]);
 });
