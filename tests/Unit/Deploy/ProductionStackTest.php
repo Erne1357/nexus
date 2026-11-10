@@ -1,5 +1,6 @@
 <?php
 
+use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
 
 /*
@@ -46,7 +47,7 @@ it('publica puertos solo desde Caddy y deja el proxy de desarrollo fuera de prod
     expect($publishers)->toBe(['caddy'])
         ->and($prod['nginx']['profiles'])->not->toBeEmpty();
 
-    foreach (['app', 'queue', 'postgres', 'valkey', 'backup'] as $internal) {
+    foreach (['app', 'queue', 'scheduler', 'postgres', 'valkey', 'backup'] as $internal) {
         expect($prod[$internal] ?? [])->not->toHaveKey('ports');
     }
 });
@@ -58,7 +59,7 @@ it('fuerza valores seguros de producción aunque el .env traiga los de desarroll
         ->and($environment['APP_DEBUG'])->toBe('false')
         ->and($environment['SESSION_SECURE_COOKIE'])->toBe('true')
         ->and($environment['APP_URL'])->toStartWith('https://');
-})->with(['app', 'queue']);
+})->with(['app', 'queue', 'scheduler']);
 
 it('ejecuta las migraciones solo en el contenedor app y hace esperar a queue', function () {
     $prod = deployServices('compose.prod.yaml');
@@ -114,4 +115,26 @@ it('deja apagada por defecto la contraseña previa al sitio del túnel de demost
         ->and($caddyfile)->toContain('{$BASIC_AUTH_HASH:b2Zm}')
         ->and($template)->toMatch('/^# BASIC_AUTH_USER=/m')
         ->and($template)->not->toMatch('/^BASIC_AUTH_/m');
+});
+
+it('corre lo programado solo en producción, sin migrar y después de app', function () {
+    $base = deployServices('compose.yaml')['scheduler'];
+    $prod = deployServices('compose.prod.yaml')['scheduler'];
+
+    expect($base['command'])->toBe(['php', 'artisan', 'schedule:work'])
+        ->and($base['profiles'])->toBe(['scheduler'])
+        ->and($prod['profiles'])->toBeInstanceOf(TaggedValue::class)
+        ->and($prod['profiles']->getTag())->toBe('reset')
+        ->and($prod['environment']['RUN_MIGRATIONS'])->toBe('false')
+        ->and($prod['depends_on']['app']['condition'])->toBe('service_healthy')
+        ->and($prod['volumes'])->toContain('app-storage:/app/storage/app');
+});
+
+it('deja las cabeceras de seguridad a la aplicación y en Caddy solo HSTS', function () {
+    $caddyfile = file_get_contents(dirname(__DIR__, 3).'/docker/caddy/Caddyfile');
+
+    expect($caddyfile)->toContain('Strict-Transport-Security')
+        ->and($caddyfile)->toContain('-Server')
+        ->and($caddyfile)->not->toContain('X-Content-Type-Options')
+        ->and($caddyfile)->not->toContain('Referrer-Policy');
 });

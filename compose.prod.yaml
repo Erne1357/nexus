@@ -86,6 +86,19 @@ services:
         condition: service_healthy
     logging: *logging
 
+  # Corre lo programado (schedule:work); compose.yaml lo deja fuera del desarrollo con un perfil.
+  scheduler:
+    profiles: !reset []
+    environment:
+      <<: *app-environment
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - app-storage:/app/storage/app
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
   postgres:
     logging: *logging
 

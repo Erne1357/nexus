@@ -17,7 +17,11 @@ Runbook del servidor on-premise del ITCJ. La decisión y sus alternativas están
 | `valkey` | Caché, sesiones y colas (volumen `valkey-data`) | No |
 | `backup` | `pg_dump` diario hacia `BACKUP_DIR` con retención | No |
 
-No hay un servicio `scheduler` (`schedule:run`): el código no programa ninguna tarea (`routes/console.php` no define horarios). Los recálculos pesados (`scheduling:recompute-conflicts`, `staffing:refresh-teacher-loads`) corren por eventos y colas, o a mano. Si una tarea futura usa `Schedule::`, hay que agregar el servicio en el mismo PR.
+El servicio `scheduler` corre `php artisan schedule:work` con la misma imagen y el mismo `.env` que `queue`: lo programado en `routes/console.php` (la primera tarea es la limpieza diaria de los exportes de lo publicado, `academic-load:prune-exports`, 3:30). En desarrollo no arranca, porque `compose.yaml` lo pone en el perfil `scheduler` y solo `compose.prod.yaml` se lo quita; ahí se corre a mano con `php artisan schedule:run`. Los recálculos pesados (`scheduling:recompute-conflicts`, `staffing:refresh-teacher-loads`) siguen por eventos y colas, o a mano.
+
+Los exportes de lo publicado (PDF, Excel y SII) viven en `storage/app/exports`, dentro del volumen `app-storage`. No hace falta respaldarlos: se vuelven a armar desde las versiones publicadas.
+
+**Cabeceras de seguridad:** las pone la aplicación (middleware de Core, tarea 4.8), con o sin proxy. Caddy solo agrega HSTS, porque termina TLS, y quita `Server`.
 
 Volúmenes de Docker: `postgres-data`, `valkey-data`, `app-storage` (archivos compartidos entre `app` y `queue`), `caddy-data` (certificados) y `caddy-config`. **Nunca ejecutes `docker compose down -v` en producción**: borra la base de datos y los certificados.
 
@@ -315,7 +319,7 @@ Despliegue limpio con el overlay de producción en un proyecto aparte (`-p nexus
 | Restauración B (sobre producción) | se alteró un dato, se restauró: volvió el original; `/up` 200 | 9 s |
 | `basic_auth` del túnel | apagada: 200; encendida: 401 sin credenciales o con contraseña errónea, 200 con la correcta | — |
 
-Con la base casi vacía los tiempos de respaldo y restauración son mínimos; con los datos reales de R1 se medirán de nuevo en el servidor. Hallazgos corregidos en este ensayo: faltaba documentar el primer administrador (`ADMIN_INITIAL_PASSWORD` no estaba en la plantilla del `.env` y el seeder falla sin ella), el primer respaldo sale vacío por salir antes de las migraciones, y se añadió la contraseña opt-in para el túnel.
+Desde el 10 de noviembre de 2026, `X-Content-Type-Options` y `Referrer-Policy` las pone la aplicación y no Caddy. Con la base casi vacía los tiempos de respaldo y restauración son mínimos; con los datos reales de R1 se medirán de nuevo en el servidor. Hallazgos corregidos en este ensayo: faltaba documentar el primer administrador (`ADMIN_INITIAL_PASSWORD` no estaba en la plantilla del `.env` y el seeder falla sin ella), el primer respaldo sale vacío por salir antes de las migraciones, y se añadió la contraseña opt-in para el túnel.
 
 **Sigue esperando al servidor real:** el dominio y su DNS, los puertos 80 y 443 abiertos (el certificado de Let's Encrypt no se pudo ensayar, solo la CA interna), quién copia `BACKUP_DIR` fuera del servidor, y el primer PR `develop` → `main` con el tag `v1.0.0` (tarea 4.10).
 
