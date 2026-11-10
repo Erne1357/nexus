@@ -72,6 +72,7 @@ Detalle: `docs/arquitectura/arquitectura.md`.
 - **Enums** PHP respaldados por string. Eventos con `timestamptz`; horas de sesión con `time`. Zona `America/Ciudad_Juarez`.
 - **Catálogos:** soft deletes + `is_active`; nunca borrado físico. Bitácora: nunca se edita ni se borra.
 - **UI:** componentes MaryUI; Tailwind utilitario; tokens de tema en [DESIGN.md](DESIGN.md). Sin CSS a mano salvo tokens.
+- **Diálogos:** nunca los del navegador (`confirm()`, `alert()`, `prompt()` ni `wire:confirm`). Para lo corto, `x-modal`; para lo que lleva mucha información, `x-drawer`, que es el preferido ([ADR-0023](docs/decisiones/0023-sin-dialogos-nativos-del-navegador.md)).
 - **Formato:** Pint antes de cada commit; CI lo verifica.
 
 ## 6. Pruebas (obligatorio)
