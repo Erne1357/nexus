@@ -133,7 +133,7 @@ it('HC-18: republicar crea la versión 2, conserva la 1 y lleva el historial a l
     expect($second->version)->toBe(2)
         ->and($this->load->fresh()->current_version)->toBe(2)
         ->and($first->fresh()->payload)->toEqual($first->payload)
-        ->and($first->payload['groups'][0]['teacher']['id'])->toBe($this->teacher->id)
+        ->and(collect($first->payload['groups'])->firstWhere('code', 'A')['teacher']['id'])->toBe($this->teacher->id)
         ->and(collect($second->payload['groups'])->firstWhere('code', 'A')['teacher']['id'])->toBe($replacement->id)
         ->and(TeacherSubjectHistory::query()->pluck('teacher_id')->all())->toBe([$replacement->id])
         ->and(TeacherSubjectHistory::onlyTrashed()->pluck('teacher_id')->all())->toBe([$this->teacher->id]);
