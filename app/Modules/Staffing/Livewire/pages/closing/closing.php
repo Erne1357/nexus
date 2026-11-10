@@ -17,15 +17,16 @@ use Mary\Traits\Toast;
 /**
  * Cierre de la carga (tarea 4.1; reglas-de-negocio.md, "Cierre y reapertura de la carga"; maqueta B2, elegida por el
  * usuario el 10 de noviembre de 2026): la carga de un departamento en el periodo activo, con una pestaña por campus
- * donde tiene grupos (con una sola, sin pestañas). De la carga elegida: la línea de estados, lo que le falta para cerrar
- * en cifras con la pantalla donde se arregla, las justificaciones de los grupos sin docente o sin salón
+ * donde tiene grupos (con una sola, sin pestañas). De la carga elegida: la línea de estados y, debajo, la publicación
+ * con su línea de versiones (`academic-load::components.publish-load`, que avisa con `load-published`), lo que le falta
+ * para cerrar en cifras con la pantalla donde se arregla, las justificaciones de los grupos sin docente o sin salón
  * (`staffing::components.closing-justifications`, con su drawer aparte, `closing-justify-drawer`: los dos avisan con
  * `closing-justified` y aquí se revisa otra vez lo que falta), el historial y sus acciones (ClosesLoads).
  *
  * Entra quien cierra la carga de algún departamento (`academic_load.load.close`: el jefe y Subdirección, y el admin);
  * el jefe va a su departamento y Subdirección y el admin eligen (`?departamento=<id>`, como llegan los avisos del
- * cierre). Un departamento que no puede cerrar es 403. `?campus=<código>` elige la pestaña; sin él, la del campus de la
- * credencial si tiene grupos ahí, o la primera.
+ * cierre). Un departamento que no puede cerrar es 403; uno que sí, pero sin carga en el periodo, lo dice. `?campus=`
+ * elige la pestaña; sin él, la del campus de la credencial si tiene grupos ahí, o la primera.
  */
 new #[Title('Cierre de la carga')] class extends Component
 {
@@ -104,12 +105,24 @@ new #[Title('Cierre de la carga')] class extends Component
     }
 
     /**
+     * La publicación (academic-load::components.publish-load) publicó una versión de la carga a la vista: vuelve a leerla
+     * para la línea de estados, la insignia y el historial, y ya no calcula lo que falta.
+     */
+    #[On('load-published')]
+    public function published(string $loadId, int $version): void
+    {
+        if ($this->loadId === $loadId) {
+            $this->refreshLoad(app(LoadClosingQuery::class));
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function with(LoadClosingQuery $query): array
     {
         if ($this->loadId === null) {
-            return ['closing' => null, 'tabs' => collect(), 'actions' => []];
+            return ['closing' => null, 'tabs' => collect(), 'actions' => [], 'canViewLoad' => false];
         }
 
         $load = $this->closingLoad($query);
@@ -119,6 +132,7 @@ new #[Title('Cierre de la carga')] class extends Component
             'closing' => $closing,
             'tabs' => $query->loadsOf($load->term_id, $load->department_id),
             'actions' => $this->loadActions($closing),
+            'canViewLoad' => Gate::allows('view', $load),
         ];
     }
 
@@ -150,7 +164,16 @@ new #[Title('Cierre de la carga')] class extends Component
             ? $departments->firstWhere('has_groups', true) ?? $departments->first()
             : $departments->firstWhere('id', $this->department);
 
-        abort_if($this->department !== '' && $department === null, 403);
+        if ($this->department !== '' && $department === null) {
+            // Uno que puede cerrar pero sin carga en el periodo (el del jefe, sin filas en academic_loads) lo dice; uno
+            // ajeno es 403.
+            $own = $query->closableDepartment($context, $this->department) ?? abort(403);
+            $this->departments = $departments->filter(fn (Department $option): bool => $option->has_groups)
+                ->map(fn (Department $option): array => ['id' => $option->id, 'name' => "{$option->code} · {$option->name}"])->values()->all();
+            $this->message = "{$own->name} no tiene carga en {$term->name}.";
+
+            return;
+        }
 
         $this->departments = $departments->filter(fn (Department $option): bool => $option->has_groups || $option->is($department))
             ->map(fn (Department $option): array => ['id' => $option->id, 'name' => "{$option->code} · {$option->name}"])->values()->all();

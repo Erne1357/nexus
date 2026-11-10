@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\AcademicLoad\Rules\Constraints\AgreementsAnswered;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Enums\GroupStatus;
@@ -77,6 +78,18 @@ final class LoadClosingQuery
     }
 
     /**
+     * Un departamento por un id del cliente si el usuario puede cerrar su carga (`academic_load.load.close` sobre él),
+     * aunque no tenga carga en el periodo; null si no existe o no lo cierra.
+     */
+    public function closableDepartment(Actor $actor, string $departmentId): ?Department
+    {
+        /** @var Department|null $department */
+        $department = KeyLookup::find(Department::query()->withTrashed(), $departmentId);
+
+        return $department !== null && $actor->allows(AcademicLoadPermission::LoadClose, Target::of(unit: $department->getKey())) ? $department : null;
+    }
+
+    /**
      * Las cargas del departamento en el periodo con grupos activos, por código de campus, con su campus y cuántos
      * grupos activos tienen (`active_groups`).
      *
@@ -115,17 +128,33 @@ final class LoadClosingQuery
     }
 
     /**
-     * De `$groupIds` (del cliente), los que son grupos activos de la carga, en el mismo orden.
+     * De `$groupIds` (del cliente), los que son grupos activos de la carga, con su clave, en el mismo orden.
      *
      * @param  list<string>  $groupIds
-     * @return list<string>
+     * @return array<string, string>
      */
-    public function groupIdsOf(AcademicLoad $load, array $groupIds): array
+    public function groupCodesOf(AcademicLoad $load, array $groupIds): array
     {
-        $ids = array_values(array_filter($groupIds, fn (mixed $id): bool => is_string($id) && Str::isUuid($id)));
-        $own = $ids === [] ? [] : $this->groupsOf($load)->whereIn('groups.id', $ids)->pluck('groups.id')->all();
+        $ids = array_values(array_unique(array_filter($groupIds, fn (mixed $id): bool => is_string($id) && Str::isUuid($id))));
+        $own = $ids === [] ? [] : $this->groupsOf($load)->whereIn('groups.id', $ids)->pluck('groups.code', 'groups.id')->all();
 
-        return array_values(array_intersect($ids, $own));
+        $codes = [];
+
+        foreach ($ids as $id) {
+            if (isset($own[$id])) {
+                $codes[$id] = $own[$id];
+            }
+        }
+
+        return $codes;
+    }
+
+    /**
+     * Cuántos grupos activos tiene la carga (los que confirma el cierre).
+     */
+    public function activeGroupCount(AcademicLoad $load): int
+    {
+        return $this->groupsOf($load)->count();
     }
 
     /**

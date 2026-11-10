@@ -22,9 +22,9 @@ use Livewire\Attributes\Locked;
  * Las acciones de una carga en «Cierre de la carga» y en el detalle de «Avance del cierre» (tareas 4.1 y 4.2): cerrar
  * con confirmación y comentario opcional (CloseLoad), reabrir con motivo (ReopenLoad), volver a asignación
  * (ReturnToStaffing) y, solo si el perfil del campus exige el visto bueno, aprobar (ApproveLoad) o regresar con
- * comentarios (que es reabrir). Cada método vuelve a autorizar con su ability (close, reopen, startStaffing, approve):
- * la petición puede llegar de una pantalla que abrió otra sesión. Lo que vetan las guardas se ve en la pantalla, sin ids
- * de regla, y en un toast.
+ * comentarios (que es reabrir). Publicar es aparte: la pantalla monta academic-load::components.publish-load. Cada
+ * método vuelve a autorizar con su ability (close, reopen, startStaffing, approve): la petición puede llegar de una
+ * pantalla que abrió otra sesión. Lo que vetan las guardas se ve en la pantalla, sin ids de regla, y en un toast.
  *
  * Lo que le falta a la carga sale del validador al momento (LoadClosingQuery::blockers), que tarda con cargas grandes:
  * se calcula al elegir la carga y después de cada acción, y se guarda aquí (`blockers`) para no repetirlo en cada
@@ -93,7 +93,7 @@ trait ClosesLoads
         $load = $this->closingLoad($query);
         Gate::authorize('close', $load);
         $this->validate(['closeComment' => ['nullable', 'string', 'max:500']], attributes: ['closeComment' => 'comentario']);
-        $groups = $query->of($load, $this->cachedBlockers())->activeGroups;
+        $groups = $query->activeGroupCount($load);
 
         $this->showClose = false;
 
@@ -179,6 +179,17 @@ trait ClosesLoads
     }
 
     /**
+     * La carga cambió fuera de estas acciones (se publicó): olvida el último veto y vuelve a revisar lo que le falta, que
+     * de una publicada ya no se calcula.
+     */
+    protected function refreshLoad(LoadClosingQuery $query): void
+    {
+        $load = $this->closingLoad($query);
+        $this->reset('vetoReasons', 'vetoTitle');
+        $this->checkBlockers($load, $query);
+    }
+
+    /**
      * Lleva a la pantalla donde se arregla un faltante, con la credencial en el campus y el periodo de la carga para
      * que esa pantalla muestre esta carga. `$screen`: conflicts, editor, assign, change-requests o agreements.
      */
@@ -204,7 +215,8 @@ trait ClosesLoads
     /**
      * Las acciones de la carga en su estado, en el orden en que se muestran: la que no aplica en ese estado no está; la
      * que el rol o lo que falta no permite va con su motivo (`reason`), que la pantalla escribe junto a los botones salvo
-     * si ya lo dice la línea del estado (`explained`, «Faltan N para cerrar»). La publicación llega con la tarea 4.3.
+     * si ya lo dice la línea del estado (`explained`, «Faltan N para cerrar»). Publicar no está aquí: es la publicación
+     * con su línea de versiones (academic-load::components.publish-load), que la pantalla monta aparte y dice su motivo.
      *
      * @return list<array{key: string, label: string, icon: string, primary: bool, reason: ?string, explained: bool}>
      */
@@ -270,10 +282,6 @@ trait ClosesLoads
                 'reason' => Gate::allows('approve', $load) ? null : 'Da el visto bueno Subdirección.',
                 'explained' => false,
             ];
-        }
-
-        if (($status === LoadStatus::Closed && ! $approval) || $status === LoadStatus::Approved) {
-            $actions[] = ['key' => 'publish', 'label' => 'Publicar', 'icon' => 'o-paper-airplane', 'primary' => true, 'reason' => 'La publicación llega con la tarea 4.3.', 'explained' => false];
         }
 
         return $actions;

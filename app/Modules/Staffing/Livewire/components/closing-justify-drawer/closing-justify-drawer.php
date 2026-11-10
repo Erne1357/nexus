@@ -17,7 +17,8 @@ use Mary\Traits\Toast;
  * justificación»), aparte de la lista para que abrirlo o cerrarlo no vuelva a pintar las justificaciones ni la
  * página: se abre con `open-justification` desde el navegador. Quien cierra la carga, mientras se edita, escribe,
  * cambia o quita la justificación (JustifyGroup); los demás la leen, con el motivo. Al guardar avisa con
- * `closing-justified`: la lista se vuelve a pintar y la página revisa lo que falta y lo dice.
+ * `closing-justified`: la lista se vuelve a pintar y la página revisa lo que falta y lo dice. Si con el drawer abierto
+ * el grupo deja de necesitar justificación (ya tiene docente y salón, o se canceló), lo dice con su botón para cerrar.
  */
 new class extends Component
 {
@@ -28,6 +29,10 @@ new class extends Component
 
     #[Locked]
     public ?string $groupId = null;
+
+    /** La clave del grupo abierto, para decirlo aunque deje de faltarle algo. */
+    #[Locked]
+    public ?string $groupCode = null;
 
     public bool $show = false;
 
@@ -46,6 +51,7 @@ new class extends Component
 
         $this->resetValidation();
         $this->groupId = $group->getKey();
+        $this->groupCode = $group->code;
         $this->justification = (string) $group->close_justification;
         $this->show = true;
     }

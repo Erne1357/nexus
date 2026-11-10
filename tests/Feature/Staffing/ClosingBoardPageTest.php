@@ -141,6 +141,46 @@ it('Subdirección reabre una carga publicada con motivo desde el detalle', funct
         ->and(lastToastOf($page)['title'])->toBe('Carga reabierta');
 });
 
+it('tocar el renglón abre la primera carga que sigue sin cerrar; si todas pasaron el cierre, la primera', function () {
+    closingBoardPage($this->subdireccion)
+        ->call('open', $this->world->department->id)
+        ->assertSet('loadId', $this->world->load->id);
+
+    $this->world->load->update(['status' => LoadStatus::Closed]);
+    $c1Load = $this->world->load->newQuery()->where('campus_id', $this->c1->id)->sole();
+
+    closingBoardPage($this->subdireccion)
+        ->call('open', $this->world->department->id)
+        ->assertSet('loadId', $c1Load->id);
+});
+
+it('cerrar el drawer con Esc o con el velo olvida la carga y los modales', function () {
+    closingBoardPage($this->subdireccion)
+        ->call('open', $this->world->department->id, 'C2')
+        ->call('askReopen')
+        ->set('showDrawer', false)
+        ->assertSet('loadId', null)
+        ->assertSet('showReopen', false)
+        ->assertSet('blockers', null)
+        ->assertDontSeeHtml('data-testid="load-drawer"');
+});
+
+it('el detalle monta la publicación de la carga debajo de la línea de estados y se refresca al publicar', function () {
+    $this->world->load->update(['status' => LoadStatus::Closed]);
+
+    $page = closingBoardPage($this->subdireccion)
+        ->call('open', $this->world->department->id, 'C2')
+        ->assertSeeLivewire('academic-load::components.publish-load')
+        ->assertDontSeeHtml('data-testid="action-publish"');
+
+    expect(domOf($page)->querySelector('[data-testid="load-drawer"] [data-testid="load-publication"] [data-testid="publish-load"]'))->not->toBeNull();
+
+    $this->world->load->update(['status' => LoadStatus::Published, 'current_version' => 1]);
+    $page->dispatch('load-published', loadId: $this->world->load->id, version: 1)
+        ->assertSet('blockers', null)
+        ->assertSee('Publicada · v1');
+});
+
 it('el admin también ve el tablero', function () {
     closingBoardPage(User::factory()->admin()->create())->assertOk()->assertSee('Avance del cierre');
 });

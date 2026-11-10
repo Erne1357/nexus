@@ -176,7 +176,7 @@
 
     <x-drawer wire:model.live="showDrawer" right @keydown.window.escape="if (! document.querySelector('.modal.modal-open')) close()" class="w-full max-w-2xl p-0!" role="dialog" aria-modal="true" aria-labelledby="load-drawer-title" data-testid="board-drawer">
         @if ($closing)
-            @include('staffing::closing.load-drawer', ['closing' => $closing, 'tabs' => $tabs, 'actions' => $actions])
+            @include('staffing::closing.load-drawer', ['closing' => $closing, 'tabs' => $tabs, 'actions' => $actions, 'canViewLoad' => $canViewLoad])
         @endif
     </x-drawer>
 

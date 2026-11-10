@@ -2,7 +2,8 @@
     Cierre de la carga (tarea 4.1; DESIGN.md, «Cierre de la carga»: maqueta B2, elegida por el usuario el 10 de noviembre
     de 2026). El título con el departamento y el periodo; a quien ve varios, el selector «Departamento». Una pestaña por
     campus donde el departamento tiene grupos, con la insignia del estado de su carga (con uno solo, la insignia va junto
-    al título). De la carga elegida: la línea de estados con la línea del estado y sus acciones; «Para cerrar» en cifras;
+    al título). De la carga elegida: la línea de estados con la línea del estado y sus acciones; debajo, a todo el ancho,
+    la publicación con su línea de versiones (staffing::closing.publication); «Para cerrar» en cifras;
     el historial y las justificaciones (staffing::components.closing-justifications, con su drawer aparte). Desde 1280 px
     el historial es una columna lateral; antes, va entre «Para cerrar» y las justificaciones, que son largas.
 --}}
@@ -64,6 +65,8 @@
                 <div class="max-md:w-full">@include('staffing::closing.actions', ['actions' => $actions, 'load' => $load, 'prefix' => 'page'])</div>
             </div>
         </section>
+
+        @include('staffing::closing.publication', ['load' => $load, 'visible' => $canViewLoad, 'key' => 'publish'])
 
         {{-- Desde 1280 px el historial va a la derecha, pegado arriba; antes, entre «Para cerrar» y «Justificaciones». --}}
         <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-[auto_1fr]">

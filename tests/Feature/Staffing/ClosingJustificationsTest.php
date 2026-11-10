@@ -150,6 +150,33 @@ describe('justificar en lote', function () {
         }
     });
 
+    it('al cambiar de pestaña, de búsqueda o de filtro se vacía la selección', function (string $property, string $value) {
+        $group = $this->world->group(teacher: false);
+
+        closingJustifications($this->jefe)
+            ->set('selected', [$group->id])
+            ->set($property, $value)
+            ->assertSet('selected', []);
+    })->with([
+        'pestaña' => ['tab', 'all'],
+        'búsqueda' => ['search', 'Tópicos'],
+        'filtro' => ['lack', 'teacher'],
+    ]);
+
+    it('solo justifica los elegidos que siguen en la vista: no sobrescribe uno que ya se justificó en otro lado', function () {
+        $pending = $this->world->group(teacher: false);
+        $elsewhere = $this->world->group(teacher: false);
+        $list = closingJustifications($this->jefe)->set('selected', [$pending->id, $elsewhere->id])->set('bulkReason', 'Contratación en trámite');
+        $this->world->justify($elsewhere, 'El docente renunció el viernes', $this->jefe);
+
+        $list->call('justifySelected')->assertHasNoErrors();
+
+        expect(closingBulkResult($list))->toStartWith('Justificados 1 · No se justificaron 1')
+            ->and(textOf(domOf($list)->querySelector('[data-testid="bulk-skipped"] li')))->toBe($elsewhere->code.'Cambió mientras estaba elegido y ya no está en esta vista: no se tocó.')
+            ->and($pending->fresh()->close_justification)->toBe('Contratación en trámite')
+            ->and($elsewhere->fresh()->close_justification)->toBe('El docente renunció el viernes');
+    });
+
     it('pide el motivo', function () {
         $group = $this->world->group(teacher: false);
 
@@ -195,7 +222,7 @@ describe('justificar en lote', function () {
         $list->call('justifySelected');
 
         expect(closingBulkResult($list))->toStartWith('Justificados 0 · No se justificaron 1')
-            ->and(textOf(domOf($list)->querySelector('[data-testid="bulk-skipped"] li')))->toBe($group->code.'El grupo ya tiene docente y salón: no necesita justificación.');
+            ->and(textOf(domOf($list)->querySelector('[data-testid="bulk-skipped"] li')))->toBe($group->code.'Cambió mientras estaba elegido y ya no está en esta vista: no se tocó.');
     });
 });
 
@@ -244,6 +271,20 @@ describe('el drawer de un grupo', function () {
             ->assertHasErrors('justification');
 
         expect($group->fresh()->close_justification)->toBe('Contratación en trámite');
+    });
+
+    it('si el grupo deja de faltar con el drawer abierto, lo dice y se puede cerrar', function () {
+        $group = $this->world->group(teacher: false);
+        $drawer = closingJustifyDrawer($this->jefe)->dispatch('open-justification', id: $group->id)->assertSee('Justificar');
+
+        $group->update(['teacher_id' => $this->world->teacher()->id]);
+
+        $drawer->call('$refresh')
+            ->assertSet('show', true)
+            ->assertSee('Este grupo ya no necesita justificación')
+            ->assertSee($group->code)
+            ->assertSeeHtml('data-testid="justify-not-needed"')
+            ->assertDontSeeHtml('data-testid="save-justification"');
     });
 
     it('un grupo de otra carga no se abre', function () {

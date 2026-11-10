@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Queries\KeyLookup;
@@ -9,6 +10,7 @@ use App\Modules\Staffing\Livewire\Concerns\ClosesLoads;
 use App\Modules\Staffing\Queries\ClosingBoardQuery;
 use App\Modules\Staffing\Queries\LoadClosingQuery;
 use Illuminate\Support\Facades\Gate;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -22,8 +24,9 @@ use Mary\Traits\Toast;
  * la búsqueda, y un renglón por departamento con su jefe (ClosingBoardQuery::heads), una insignia por carga y los
  * faltantes sumados por columna (ClosingBoardQuery, con los choques duros
  * vigentes de `schedule_conflicts`; por eso dice cuándo se recalcularon). Tocar un renglón o una insignia abre el
- * drawer de esa carga: el selector de campus, la línea de estados, «Para cerrar», «Justificaciones» e «Historial», sus
- * acciones (ClosesLoads; ahí el validador sí corre, para esa carga) y «Abrir en Cierre de la carga».
+ * drawer de esa carga: el selector de campus, la línea de estados, la publicación con su línea de versiones
+ * (academic-load::components.publish-load, que avisa con `load-published`), «Para cerrar», «Justificaciones» e
+ * «Historial», sus acciones (ClosesLoads; ahí el validador sí corre, para esa carga) y «Abrir en Cierre de la carga».
  *
  * Lo ven quienes reabren cargas (`academic_load.load.reopen`: Subdirección y el admin), que también las cierran, sin
  * ser paso obligatorio (confirmado el 10 de noviembre de 2026). Cada método vuelve a autorizar.
@@ -50,7 +53,8 @@ new #[Title('Avance del cierre')] class extends Component
     }
 
     /**
-     * Abre el drawer con la carga de un departamento: la del campus pedido o, si no, la primera que sigue sin cerrar.
+     * Abre el drawer con la carga de un departamento: la del campus pedido o, si no, la primera que sigue sin cerrar
+     * (ni cerrada, ni aprobada, ni publicada o en re-análisis) y, si todas pasaron el cierre, la primera.
      */
     public function open(string $departmentId, LoadClosingQuery $query, string $campusCode = ''): void
     {
@@ -59,7 +63,9 @@ new #[Title('Avance del cierre')] class extends Component
         $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId);
         $term = app(Actor::class)->activeTerm() ?? abort(404);
         $loads = $query->loadsOf($term->getKey(), $department->getKey());
-        $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus->code === $campusCode) ?? $loads->first();
+        $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus->code === $campusCode)
+            ?? $loads->first(fn (AcademicLoad $candidate): bool => ! in_array($candidate->status, [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published, LoadStatus::Reanalysis], true))
+            ?? $loads->first();
 
         abort_if($load === null, 404);
         $this->authorizeLoad($load);
@@ -94,6 +100,28 @@ new #[Title('Avance del cierre')] class extends Component
     }
 
     /**
+     * Esc o el velo cierran el drawer por wire:model: entonces también se olvidan la carga y sus modales.
+     */
+    public function updatedShowDrawer(bool $open): void
+    {
+        if (! $open) {
+            $this->closeDrawer();
+        }
+    }
+
+    /**
+     * La publicación del drawer (academic-load::components.publish-load) publicó una versión: vuelve a leer la carga
+     * para la línea de estados, el historial y la insignia, y ya no calcula lo que falta.
+     */
+    #[On('load-published')]
+    public function published(string $loadId, int $version): void
+    {
+        if ($this->showDrawer && $this->loadId === $loadId) {
+            $this->refreshLoad(app(LoadClosingQuery::class));
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function with(ClosingBoardQuery $board, LoadClosingQuery $query, Actor $context): array
@@ -120,6 +148,7 @@ new #[Title('Avance del cierre')] class extends Component
             'closing' => $closing,
             'tabs' => $tabs,
             'actions' => $closing === null ? [] : $this->loadActions($closing),
+            'canViewLoad' => $closing !== null && Gate::allows('view', $closing->load),
         ];
     }
 

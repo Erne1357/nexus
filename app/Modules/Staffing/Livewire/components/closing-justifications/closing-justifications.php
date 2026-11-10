@@ -16,7 +16,8 @@ use Livewire\Component;
  * «Justificaciones» de una carga (HC-15; DESIGN.md, «Cierre de la carga»), aparte de la página para que abrir el drawer
  * de un grupo o justificar no vuelva a pintar todo: los grupos sin docente o sin salón con su justificación, quién y
  * cuándo (LoadClosingQuery::items), filtrados en el servidor por pestaña («Por justificar», «Justificados», «Todos»),
- * búsqueda (clave, materia; sin importar acentos) y «Sin docente · Sin salón», y de 50 en 50.
+ * búsqueda (clave, materia; sin importar acentos) y «Sin docente · Sin salón», y de 50 en 50. Cambiar de vista vacía la
+ * selección, y el lote solo toma los elegidos que siguen en la vista.
  *
  * Con acciones (en «Cierre de la carga»), quien cierra la carga mientras se edita justifica un grupo en su drawer
  * (`staffing::components.closing-justify-drawer`, que se abre en el navegador sin pasar por aquí) o varios a la vez
@@ -69,19 +70,23 @@ new class extends Component
         $this->load(app(LoadClosingQuery::class));
     }
 
+    /**
+     * Otra pestaña, búsqueda o filtro es otra vista: vuelve a la primera página y vacía la selección, para que el lote
+     * no justifique grupos que ya no se ven.
+     */
     public function updatedTab(): void
     {
-        $this->shown = self::PAGE;
+        $this->resetView();
     }
 
     public function updatedSearch(): void
     {
-        $this->shown = self::PAGE;
+        $this->resetView();
     }
 
     public function updatedLack(): void
     {
-        $this->shown = self::PAGE;
+        $this->resetView();
     }
 
     public function showMore(): void
@@ -120,11 +125,17 @@ new class extends Component
         $this->validateSelection();
         $this->validate(['bulkReason' => ['required', 'string', 'max:500']], ['bulkReason.required' => 'Escribe la justificación.'], ['bulkReason' => 'justificación']);
 
-        // Solo grupos de esta carga; la Action vuelve a preguntar la policy por grupo y dice cuál ya no necesita justificación.
-        $ids = $query->groupIdsOf($load, $this->selected);
+        // Solo grupos de esta carga y, de ellos, los que siguen en la vista: uno que cambió mientras estaba elegido (se
+        // justificó en otro lado, ya tiene docente) no se toca, y se dice. La Action vuelve a preguntar la policy por grupo.
+        $own = $query->groupCodesOf($load, $this->selected);
+        $visible = array_flip(array_column($this->filtered($query->items($load))['view'], 'id'));
+        $outOfView = array_map(
+            fn (string $code): array => ['code' => $code, 'reason' => 'Cambió mientras estaba elegido y ya no está en esta vista: no se tocó.'],
+            array_values(array_diff_key($own, $visible)),
+        );
 
         try {
-            $result = $action->handle($ids, $this->bulkReason, $context->user() ?? abort(403));
+            $result = $action->handle(array_map('strval', array_keys(array_intersect_key($own, $visible))), $this->bulkReason, $context->user() ?? abort(403));
         } catch (ValidationException $e) {
             foreach ($e->errors() as $key => $messages) {
                 $this->addError($key === 'groups' ? 'selected' : 'bulkReason', $messages[0]);
@@ -133,7 +144,7 @@ new class extends Component
             return false;
         }
 
-        $this->bulkResult = ['justified' => count($result['justified']), 'skipped' => $result['skipped']];
+        $this->bulkResult = ['justified' => count($result['justified']), 'skipped' => [...$result['skipped'], ...$outOfView]];
         $this->reset('selected', 'bulkReason', 'showBulk');
         $this->dispatch('closing-justified', code: null, removed: false, updated: false)->to('staffing::pages.closing');
 
@@ -152,26 +163,13 @@ new class extends Component
     {
         $load = $this->load($query);
         $items = $query->items($load);
-        $pending = count(array_filter($items, fn (array $item): bool => $item['justification'] === null));
-        $tab = in_array($this->tab, ['pending', 'done', 'all'], true) ? $this->tab : ($pending > 0 ? 'pending' : 'done');
-        $needle = Str::lower(Str::ascii(trim($this->search)));
-        $inTab = array_values(array_filter($items, fn (array $item): bool => match ($tab) {
-            'pending' => $item['justification'] === null,
-            'done' => $item['justification'] !== null,
-            default => true,
-        } && ($needle === '' || str_contains(Str::lower(Str::ascii($item['code'].' '.$item['subject_code'].' '.$item['subject_name'])), $needle))));
-        $lacks = fn (array $item, string $lack): bool => match ($lack) {
-            'teacher' => $item['lacks_teacher'],
-            'room' => $item['roomless_sessions'] > 0,
-            default => true,
-        };
-        $view = array_values(array_filter($inTab, fn (array $item): bool => $lacks($item, $this->lack)));
+        ['tab' => $tab, 'pending' => $pending, 'inTab' => $inTab, 'view' => $view] = $this->filtered($items);
 
         return [
             'load' => $load,
             'activeTab' => $tab,
             'counts' => ['pending' => $pending, 'done' => count($items) - $pending, 'all' => count($items)],
-            'lackCounts' => collect(['' => '', 'teacher' => 'teacher', 'room' => 'room'])->map(fn (string $lack): int => count(array_filter($inTab, fn (array $item): bool => $lacks($item, $lack))))->all(),
+            'lackCounts' => collect(['' => '', 'teacher' => 'teacher', 'room' => 'room'])->map(fn (string $lack): int => count(array_filter($inTab, fn (array $item): bool => self::lacks($item, $lack))))->all(),
             'usesRooms' => $load->campus->profile->usesRooms,
             'total' => count($items),
             'rows' => array_slice($view, 0, $this->shown),
@@ -181,6 +179,50 @@ new class extends Component
             'max' => JustifyGroups::MAX,
             'prefix' => $this->withActions ? 'page' : 'drawer',
         ];
+    }
+
+    /**
+     * La pestaña (sin elegir, «Por justificar» si queda alguno), los que faltan de justificar, los de la pestaña con la
+     * búsqueda (`inTab`) y, de esos, los del filtro «Sin docente · Sin salón» (`view`): lo que se ve.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return array{tab: string, pending: int, inTab: list<array<string, mixed>>, view: list<array<string, mixed>>}
+     */
+    private function filtered(array $items): array
+    {
+        $pending = count(array_filter($items, fn (array $item): bool => $item['justification'] === null));
+        $tab = in_array($this->tab, ['pending', 'done', 'all'], true) ? $this->tab : ($pending > 0 ? 'pending' : 'done');
+        $needle = Str::lower(Str::ascii(trim($this->search)));
+        $inTab = array_values(array_filter($items, fn (array $item): bool => match ($tab) {
+            'pending' => $item['justification'] === null,
+            'done' => $item['justification'] !== null,
+            default => true,
+        } && ($needle === '' || str_contains(Str::lower(Str::ascii($item['code'].' '.$item['subject_code'].' '.$item['subject_name'])), $needle))));
+
+        return [
+            'tab' => $tab,
+            'pending' => $pending,
+            'inTab' => $inTab,
+            'view' => array_values(array_filter($inTab, fn (array $item): bool => self::lacks($item, $this->lack))),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private static function lacks(array $item, string $lack): bool
+    {
+        return match ($lack) {
+            'teacher' => $item['lacks_teacher'],
+            'room' => $item['roomless_sessions'] > 0,
+            default => true,
+        };
+    }
+
+    private function resetView(): void
+    {
+        $this->shown = self::PAGE;
+        $this->reset('selected');
     }
 
     private function validateSelection(): void

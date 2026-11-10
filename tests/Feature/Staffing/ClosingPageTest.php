@@ -66,7 +66,7 @@ describe('lo que se ve en cada estado', function () {
         expect(closingActionDisabled($page, 'close'))->toBeFalse();
     });
 
-    it('cerrada: «Reabrir carga» y «Publicar» deshabilitados con su motivo escrito', function () {
+    it('cerrada: «Reabrir carga» deshabilitado con su motivo escrito y la publicación debajo de la línea de estados', function () {
         $this->world->load->update(['status' => LoadStatus::Closed]);
         $this->world->group();
         $this->world->transition(LoadStatus::Staffing, LoadStatus::Closed, $this->jefe, 'Todo asignado', now()->setDate(2026, 12, 7));
@@ -75,11 +75,36 @@ describe('lo que se ve en cada estado', function () {
             ->assertSee('Cerrada el 07/12/2026')
             ->assertSee('Por Laura Ramos · falta publicarla')
             ->assertSee('Solo Subdirección reabre la carga.')
-            ->assertSee('La publicación llega con la tarea 4.3.')
+            ->assertDontSee('La publicación llega con la tarea 4.3.')
+            ->assertDontSeeHtml('data-testid="action-publish"')
+            ->assertSeeLivewire('academic-load::components.publish-load')
             ->assertSee('Todo asignado');
 
         expect(closingActionDisabled($page, 'reopen'))->toBeTrue()
-            ->and(closingActionDisabled($page, 'publish'))->toBeTrue();
+            ->and(domOf($page)->querySelector('[data-testid="load-publication"] [data-testid="publish-load"]'))->not->toBeNull();
+    });
+
+    it('con la carga cerrada, el jefe y Subdirección ven la publicación', function (string $who) {
+        $this->world->load->update(['status' => LoadStatus::Closed]);
+        $this->world->group();
+        $user = $who === 'jefe' ? $this->jefe : User::factory()->withRole(Role::Subdireccion)->create();
+
+        closingPage($user, ['departamento' => $this->world->department->id])
+            ->assertSeeLivewire('academic-load::components.publish-load')
+            ->assertSee('Publicar');
+    })->with(['jefe', 'Subdirección']);
+
+    it('al publicar (`load-published`) vuelve a leer la carga: la línea de estados, la insignia y lo que falta', function () {
+        $this->world->load->update(['status' => LoadStatus::Closed]);
+        $this->world->group();
+        $this->world->transition(LoadStatus::Staffing, LoadStatus::Closed, $this->jefe);
+        $page = closingPage($this->jefe)->assertSee('Cerrada el');
+
+        $this->world->load->update(['status' => LoadStatus::Published, 'current_version' => 1]);
+        $page->dispatch('load-published', loadId: $this->world->load->id, version: 1)
+            ->assertSet('blockers', null)
+            ->assertSee('Publicada · v1')
+            ->assertSee('La carga ya pasó el cierre. Para cambiarla, Subdirección la reabre.');
     });
 
     it('publicada: con su versión y sin calcular lo que falta', function () {
@@ -89,7 +114,7 @@ describe('lo que se ve en cada estado', function () {
         closingPage($this->jefe)
             ->assertSee('Publicada · v2')
             ->assertSee('La carga ya pasó el cierre. Para cambiarla, Subdirección la reabre.')
-            ->assertDontSeeHtml('data-testid="action-publish"');
+            ->assertSeeLivewire('academic-load::components.publish-load');
     });
 
     it('reabierta: dice quién y cuándo la reabrió, con su motivo, y ofrece «Volver a asignación»', function () {

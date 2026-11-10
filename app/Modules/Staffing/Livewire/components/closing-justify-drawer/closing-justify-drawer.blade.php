@@ -4,7 +4,8 @@
     falta con «Asignar en Asignación docente» o «Asignar salón en Horarios» (los de la página, `$parent`); el campo
     «Justificación» y quién y cuándo justificó. Al pie, fijo: «Quitar justificación», «Cancelar» y «Guardar
     justificación». Si la carga ya no se edita o el usuario no cierra la carga, el campo se deshabilita y un
-    `alert-info` dice por qué. `close()` es del x-drawer.
+    `alert-info` dice por qué. Si el grupo deja de necesitar justificación con el drawer abierto, lo dice con «Cerrar».
+    `close()` es del x-drawer.
 --}}
 <div>
     <x-drawer wire:model.live="show" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="justify-title" data-testid="justify-drawer">
@@ -70,6 +71,26 @@
                     @else
                         <x-button label="Cerrar" class="btn-ghost max-md:h-11" @click="close()" />
                     @endif
+                </footer>
+            </div>
+        @elseif ($show && $groupCode !== null)
+            {{-- Con el drawer abierto, al grupo le asignaron docente y salón (o se canceló): ya no está en la lista. --}}
+            <div class="flex min-h-dvh flex-col" data-testid="justify-not-needed">
+                <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+                    <h2 id="justify-title" class="min-w-0 flex-1 text-xl font-bold leading-tight">Grupo <span class="font-mono">{{ $groupCode }}</span></h2>
+                    <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle max-md:h-11 max-md:w-11" @click="close()" aria-label="Cerrar el panel" />
+                </header>
+                <div class="flex-1 px-5 pt-4 pb-6">
+                    <div role="status" class="alert alert-success alert-soft items-start text-sm">
+                        <x-icon name="o-check-circle" class="mt-0.5 h-5 w-5" aria-hidden="true" />
+                        <div>
+                            <p class="font-semibold">Este grupo ya no necesita justificación</p>
+                            <p>Ya tiene docente y salón, o dejó de estar activo.</p>
+                        </div>
+                    </div>
+                </div>
+                <footer class="sticky bottom-0 flex justify-end border-t border-base-300 bg-base-100 px-5 py-3">
+                    <x-button label="Cerrar" class="btn-ghost max-md:h-11" @click="close()" data-testid="close-not-needed" />
                 </footer>
             </div>
         @endif

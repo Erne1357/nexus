@@ -1,9 +1,9 @@
 {{--
     El detalle de una carga en «Avance del cierre» (maqueta E): el departamento; el selector de campus con el estado de
-    cada carga (con una sola, no va); la línea de estados; la línea del estado en una franja de su tono; lo que vetó la
-    última acción; las pestañas «Para cerrar», «Justificaciones» (solo lectura: se escriben en «Cierre de la carga») e
+    cada carga (con una sola, no va); la línea de estados; la línea del estado en una franja de su tono; la publicación
+    con su línea de versiones, vertical (staffing::closing.publication); lo que vetó la última acción; las pestañas «Para cerrar», «Justificaciones» (solo lectura: se escriben en «Cierre de la carga») e
     «Historial», que cambian en el navegador; y al pie, fijo, «Abrir en Cierre de la carga» y las acciones de la carga.
-    `$closing`, `$tabs` y `$actions`; `close()` es del x-drawer.
+    `$closing`, `$tabs`, `$actions` y `$canViewLoad`; `close()` es del x-drawer.
 --}}
 @php($load = $closing->load)
 @php($headline = $closing->headline())
@@ -53,6 +53,8 @@
         ])>
             @include('staffing::closing.headline', ['closing' => $closing])
         </div>
+
+        @include('staffing::closing.publication', ['load' => $load, 'visible' => $canViewLoad, 'key' => 'publish-drawer'])
 
         @include('staffing::closing.veto')
 
