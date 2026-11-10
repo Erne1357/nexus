@@ -43,3 +43,25 @@ it('confirma en el diálogo de Nexus: cancelar no hace nada y confirmar corre la
 
     expect($this->c2->fresh()->is_active)->toBeFalse();
 });
+
+it('Esc cancela solo el diálogo: no llega a los atajos de la ventana de abajo', function () {
+    $page = visit('/login')
+        ->fill('username', 'admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/campus');
+
+    $page->script('(() => { window.__escSeen = false; window.addEventListener("keydown", (e) => { if (e.key === "Escape") { window.__escSeen = true; } }); return true; })()');
+
+    $page->click('table [aria-label="Acciones de C2"]')
+        ->click('table [role="menuitem"]:has-text("Desactivar")')
+        ->assertSeeIn('#nexus-confirm', '¿Desactivar el campus C2?')
+        ->keys('@confirm-cancel', ['Escape'])
+        ->assertScript('document.getElementById("nexus-confirm").open === false')
+        ->assertScript('window.__escSeen === false')
+        ->assertScript('document.activeElement?.getAttribute("aria-label") === "Acciones de C2"')
+        ->assertNoJavaScriptErrors();
+
+    expect($this->c2->fresh()->is_active)->toBeTrue();
+});

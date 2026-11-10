@@ -8,7 +8,8 @@
     en «Cancelar», que es lo seguro; Esc o un clic fuera también cancelan.
 --}}
 <div x-data="nexusConfirm" x-on:nexus-confirm.window="show($event.detail)" data-testid="confirm-dialog">
-    <x-modal id="nexus-confirm" box-class="max-w-md" x-on:close="cancel()">
+    {{-- Esc cancela solo este diálogo: no llega a los Esc de la ventana (el cajón o el editor de abajo). --}}
+    <x-modal id="nexus-confirm" box-class="max-w-md" x-on:close="cancel()" x-on:keydown.escape.stop="">
         <div class="grid gap-2 pe-8">
             <h2 class="text-lg font-bold leading-snug" x-text="title"></h2>
             <p class="text-sm text-neutral" x-text="message"></p>
