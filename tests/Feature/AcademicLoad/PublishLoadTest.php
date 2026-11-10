@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Transitions\PublishLoad;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
@@ -13,6 +14,7 @@ use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -29,7 +31,7 @@ beforeEach(function () {
     $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Closed, 'department_id' => departmentKey(10)]);
     $this->publisher = User::factory()->create(['name' => 'Laura Méndez']);
     $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => $this->load->campus_id])->id, 'department_id' => departmentKey(10)]);
-    $this->teacher = Teacher::factory()->create();
+    $this->teacher = publishTeacher();
 
     $this->taught = publishGroup(['code' => 'A', 'teacher_id' => $this->teacher->id]);
     GroupSession::factory()->for($this->taught)->inRoom($room)->on(1, '07:00', '09:00')->create();
@@ -38,15 +40,32 @@ beforeEach(function () {
     publishGroup(['code' => 'C', 'status' => 'cancelled']);
 });
 
+/**
+ * Un grupo de 2 h sin choques duros: su carrera se ofrece en el campus (HC-13) y cabe en el salón (HC-05).
+ */
 function publishGroup(array $attributes): Group
 {
-    return Group::factory()->withQuota()->create([
+    $group = Group::factory()->withQuota()->create([
         'term_id' => test()->load->term_id,
         'campus_id' => test()->load->campus_id,
-        'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10)])->id,
+        'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10), 'theory_hours' => 2, 'practice_hours' => 0])->id,
         'capacity' => 30,
         ...$attributes,
     ]);
+    CareerCampus::factory()->create(['career_id' => $group->owner_career_id, 'campus_id' => $group->campus_id]);
+
+    return $group;
+}
+
+/**
+ * Un docente con horas base para sus grupos (HC-08).
+ */
+function publishTeacher(): Teacher
+{
+    $teacher = Teacher::factory()->create();
+    TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $teacher->id]);
+
+    return $teacher;
 }
 
 function publish(?AcademicLoad $load = null): LoadSnapshot
@@ -105,7 +124,7 @@ it('lleva al historial docente cada grupo con docente, con fuente nexus', functi
 it('HC-18: republicar crea la versión 2, conserva la 1 y lleva el historial a la nueva', function () {
     $first = publish();
     backToClosed();
-    $replacement = Teacher::factory()->create();
+    $replacement = publishTeacher();
     $this->taught->update(['teacher_id' => $replacement->id]);
 
     $second = publish();
