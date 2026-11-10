@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\Core\Models\Campus;
@@ -30,10 +31,10 @@ new class extends Component
     {
         $contexts = $this->contexts($published);
         $context = array_find($contexts, fn (array $entry): bool => $entry['term']->code === $termCode) ?? ($contexts[0] ?? null);
-        $this->periodo = $termCode !== null && Term::query()->where('code', $termCode)->exists() ? $termCode : ($context['term']->code ?? '');
+        $this->periodo = PublishedContextQuery::isCode($termCode) && Term::query()->where('code', $termCode)->exists() ? $termCode : ($context['term']->code ?? '');
 
         $first = array_find($contexts, fn (array $entry): bool => $entry['term']->code === $this->periodo)['campuses'][0] ?? null;
-        $given = $campusCode !== null && Campus::query()->where('code', $campusCode)->where('is_active', true)->exists();
+        $given = PublishedContextQuery::isCode($campusCode) && Campus::query()->where('code', $campusCode)->where('is_active', true)->exists();
         $this->campus = $given ? $campusCode : ($first->code ?? '');
     }
 
@@ -88,11 +89,11 @@ new class extends Component
         $terms = array_map(fn (array $entry): array => ['id' => $entry['term']->code, 'name' => $entry['term']->name], $contexts);
         $campuses = array_map(fn (Campus $campus): array => ['id' => $campus->code, 'name' => $campus->name], $current['campuses'] ?? []);
 
-        if ($this->periodo !== '' && ! in_array($this->periodo, array_column($terms, 'id'), true) && ($term = Term::query()->where('code', $this->periodo)->first()) !== null) {
+        if (PublishedContextQuery::isCode($this->periodo) && ! in_array($this->periodo, array_column($terms, 'id'), true) && ($term = Term::query()->where('code', $this->periodo)->first()) !== null) {
             $terms[] = ['id' => $term->code, 'name' => $term->name];
         }
 
-        if ($this->campus !== '' && ! in_array($this->campus, array_column($campuses, 'id'), true) && ($campus = Campus::query()->where('code', $this->campus)->first()) !== null) {
+        if (PublishedContextQuery::isCode($this->campus) && ! in_array($this->campus, array_column($campuses, 'id'), true) && ($campus = Campus::query()->where('code', $this->campus)->first()) !== null) {
             $campuses[] = ['id' => $campus->code, 'name' => $campus->name];
         }
 

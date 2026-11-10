@@ -31,7 +31,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     private ?PublishedContext $context = null;
 
     #[Url(as: 'dia')]
-    public int $day = 0;
+    public string $day = '';
 
     public function mount(string $periodo, string $campus, string $salon, PublishedContextQuery $contexts): void
     {
@@ -71,7 +71,8 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
         $groups = $schedule->room($this->salon);
         $week = PublishedWeek::week($groups, $profile);
         $days = $week['grid']->days;
-        $day = array_find($days, fn (array $row): bool => $row['day'] === $this->day)['day'] ?? $days[0]['day'] ?? 1;
+        $wanted = ctype_digit($this->day) ? (int) $this->day : 0;
+        $day = array_find($days, fn (array $row): bool => $row['day'] === $wanted)['day'] ?? $days[0]['day'] ?? 1;
 
         return [
             ...$week,
