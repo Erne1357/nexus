@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -93,6 +94,7 @@ it('sin versiones publicadas en el campus y periodo da una vista vacía', functi
 
 it('guarda lo publicado en caché y una versión nueva lo reemplaza', function () {
     config(['cache.stores.array.serialize' => true]);
+    Cache::purge('array');
     $query = app(PublishedScheduleQuery::class);
     $query->schedule($this->term, $this->c2);
 
@@ -105,6 +107,27 @@ it('guarda lo publicado en caché y una versión nueva lo reemplaza', function (
 
     expect($cachedQueries)->toBe(1)
         ->and(publishedQueryLabels($query->schedule($this->term, $this->c2)->groups()))->toBe(['ACF-0904 · D', 'AED-1026 · G']);
+});
+
+it('la caché de un campus no se mezcla con la de otro campus ni otro periodo', function () {
+    $query = app(PublishedScheduleQuery::class);
+    $query->schedule($this->term, $this->c2);
+
+    expect(publishedQueryLabels($query->schedule($this->term, $this->c1)->groups()))->toBe(['ACF-0901 · F'])
+        ->and(publishedQueryLabels($query->schedule($this->previousTerm, $this->c2)->groups()))->toBe(['ACF-0903 · H']);
+});
+
+it('no guarda en caché el RFC, la justificación ni quién publicó', function () {
+    config(['cache.stores.array.serialize' => true]);
+    Cache::purge('array');
+    app(PublishedScheduleQuery::class)->schedule($this->term, $this->c1);
+
+    $cached = json_encode(Cache::get('published-schedule:v1:'.$this->term->id.':'.$this->c1->id.':'.app(PublishedScheduleQuery::class)->version($this->term, $this->c1)), JSON_UNESCAPED_UNICODE);
+
+    expect($cached)->not->toContain('RIML800101AB1')
+        ->not->toContain('published_by')
+        ->not->toContain('justification')
+        ->toContain('Laura Ríos Medina');
 });
 
 it('da los grupos publicados de un docente en todos los campus del periodo', function () {

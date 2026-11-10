@@ -20,6 +20,7 @@ final class FakePublishedExport implements PublishedExport
         public ?string $unitId = null,
         public bool $fails = false,
         public string $counter = '',
+        public string $filename = 'Horario de prueba.pdf',
     ) {}
 
     public function key(): string
@@ -29,7 +30,7 @@ final class FakePublishedExport implements PublishedExport
 
     public function filename(): string
     {
-        return 'Horario de prueba.pdf';
+        return $this->filename;
     }
 
     public function mimeType(): string
