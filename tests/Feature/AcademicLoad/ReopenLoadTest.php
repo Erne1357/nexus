@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\AcademicLoad\Actions\Transitions\ReopenLoad;
+use App\Modules\AcademicLoad\Actions\Transitions\StartAdjusting;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioned;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
@@ -79,3 +80,13 @@ it('la policy deja reabrir al admin y a Subdirección, y niega a los demás', fu
     'jefe de proyecto docente' => [Role::JefeProyectoDocente, false],
     'coordinador' => [Role::Coordinador, false],
 ]);
+
+it('desde cerrada, aprobada o publicada solo se pasa a ajustes reabriendo, no con una solicitud de cambio', function (LoadStatus $status) {
+    $load = AcademicLoad::factory()->inStatus($status)->create();
+
+    expect(fn () => app(StartAdjusting::class)->handle($load, $this->user, 'Solicitud de cambio aprobada'))->toThrow(
+        fn (ValidationException $e) => expect($e->errors()['status'])->toBe(["La carga está en {$status->label()}: una solicitud de cambio solo la pasa a ajustes desde asignación."]),
+    );
+
+    expect($load->fresh()->status)->toBe($status);
+})->with([LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published]);

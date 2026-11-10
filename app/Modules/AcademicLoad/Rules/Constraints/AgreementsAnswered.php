@@ -15,7 +15,8 @@ use Illuminate\Database\Eloquent\Builder;
  * - un grupo compartido que el departamento propuso y sigue sin respuesta, porque aparta lugares del grupo
  *   (P6, confirmado el 10 de noviembre de 2026);
  * - un acuerdo, préstamo o grupo compartido, que espera la respuesta del propio departamento (supuesto por
- *   confirmar).
+ *   confirmar): el departamento que lo pidió no debe quedarse esperando, con su choque HC-10 o sus lugares
+ *   apartados, mientras el que decide ya cerró.
  *
  * Un préstamo que el departamento pidió y sigue sin respuesta no se cuenta aquí: ya es choque duro de su sesión
  * (HC-10) y lo veta Scheduling.
