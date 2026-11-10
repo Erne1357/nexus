@@ -11,12 +11,14 @@ use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\CareerProposalReturned;
 use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
+use App\Modules\AcademicLoad\Events\LoadTransitioned;
 use App\Modules\AcademicLoad\Exports\PublishedExport;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
 use App\Modules\AcademicLoad\Listeners\BlockReviewReopeningAfterDraft;
 use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
 use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
 use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
+use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -68,6 +70,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(LoadStatusesRequested::class, ReportLoadStatuses::class);
         Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
+        Event::listen(LoadTransitioned::class, NotifyOnLoadClosingTransition::class);
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
     }

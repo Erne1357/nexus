@@ -135,7 +135,7 @@
         <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="student-kardex" wire:key="student-kardex">
             @forelse ($record->kardex as $term)
                 <div class="flex flex-wrap items-center justify-between gap-2 border-base-300 bg-base-200/60 px-5 py-2.5 font-bold [&:not(:first-child)]:border-t">
-                    <span><span class="font-mono">{{ $term['term'] }}</span> · {{ $term['label'] }}</span>
+                    <span>@if ($term['term'] !== null)<span class="font-mono">{{ $term['term'] }}</span> · @endif{{ $term['label'] }}</span>
                     <span class="text-sm font-normal text-neutral"><span class="font-mono">{{ count($term['records']) }}</span> materias</span>
                 </div>
                 @foreach ($term['records'] as $row)

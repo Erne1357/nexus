@@ -13,14 +13,22 @@
 {$APP_DOMAIN} {
 	encode zstd gzip
 
+	# Opt-in: contraseña previa al sitio para mostrarlo por un túnel (ver
+	# docs/operacion/despliegue.md, «Mostrar la prueba de concepto»). Sin
+	# BASIC_AUTH_USER el matcher es falso y no se pide nada. Caddy aprovisiona
+	# basic_auth aunque el matcher no coincida, así que el respaldo del hash debe
+	# ser base64 válido: «b2Zm» es «off» en base64; con «off» Caddy no arranca.
+	@gate expression `"{$BASIC_AUTH_USER:}" != ""`
+	basic_auth @gate {
+		{$BASIC_AUTH_USER:off} {$BASIC_AUTH_HASH:b2Zm}
+	}
+
 	request_body {
 		max_size 20MB
 	}
 
 	header {
 		Strict-Transport-Security "max-age=15552000"
-		X-Content-Type-Options "nosniff"
-		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
 	}
 

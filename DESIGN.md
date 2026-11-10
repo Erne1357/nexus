@@ -122,7 +122,7 @@ Nexus apunta a sustituir todo el SII (académico, servicios escolares, recursos 
 1. **Primero la tarea, después el adorno.** Tablas densas, filtros visibles, acciones claras.
 2. **El estado siempre a la vista.** Choques, pendientes y bloqueos se ven donde ocurren, con la misma insignia en toda la aplicación.
 3. **Nada oculto por permiso.** Lo que el rol o el estado no permite se muestra deshabilitado con su motivo en un tooltip; solo lo de otro alcance (otro campus u otro departamento) no se muestra.
-4. **Una sola forma de hacer cada cosa.** Un tipo de tabla, de formulario, de modal y de insignia, tomados de MaryUI con los tokens de este archivo.
+4. **Una sola forma de hacer cada cosa.** Un tipo de tabla, de formulario, de modal y de insignia, tomados de MaryUI con los tokens de este archivo. Nunca los diálogos del navegador (`confirm()`, `alert()`, `wire:confirm`): para una pregunta o un aviso corto, un `x-modal`; para lo que lleva mucha información, un `x-drawer`, que es el preferido (ADR-0023, decisión del usuario del 10 de noviembre de 2026).
 5. **Sirve en cualquier pantalla,** del celular al proyector.
 
 **Base técnica.** MaryUI sobre daisyUI y Tailwind 4. Los componentes se usan tal cual y la identidad entra por tokens; no hay CSS por pantalla (CLAUDE.md, "Convenciones"). Iconos: Heroicons de MaryUI, contorno de 1.5. Su tamaño va con `w-*` y `h-*`, nunca con `size-*`: MaryUI les pone `w-5 h-5` si la clase no trae un `w-` o un `h-`, y eso le gana a `size-*` (lo revisa `tests/Arch/BladeIconsTest.php`). El movimiento del menú usa Alpine, que ya viene con Livewire.
@@ -241,7 +241,7 @@ La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php
 #### Acciones de fila
 El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados del celular:
 - **Visible, solo lo frecuente:** «Editar» (y «Retícula» en Planes), en `btn-ghost btn-sm`. Lo demás se pliega en un botón **«Acciones»** (`btn-ghost btn-sm`, con `o-chevron-down`) que abre `<x-core::row-menu>`; entre 768 y 1199 px, en la tabla, los botones quedan solo con su icono (`o-ellipsis-horizontal` en «Acciones») y su nombre accesible (`aria-label="Acciones de <CLAVE>"`).
-- **Dentro del menú**, un `<x-core::row-menu-item>` por acción: Desactivar o Activar, Ofrecer en el campus, Borrar (en `text-error`). Conservan su `wire:confirm`, su `spinner` y su `data-testid`.
+- **Dentro del menú**, un `<x-core::row-menu-item>` por acción: Desactivar o Activar, Ofrecer en el campus, Borrar (en `text-error`). Conservan su `spinner` y su `data-testid`. La confirmación de Desactivar o Borrar va en un modal, nunca en el diálogo del navegador (ADR-0023). Los que todavía usan `wire:confirm` se reemplazan en #374.
 - **Lo deshabilitado se queda en el menú, deshabilitado, con su motivo escrito en un segundo renglón** del elemento («Borrar — Solo se borra una carrera sin planes de estudio.»). Nada se oculta por permiso y un tooltip no lo ve quien usa teclado o pantalla táctil.
 - **El menú no se corta:** es un `popover` del navegador, en la capa superior, así que la caja con `overflow` de la tabla ni el pie de la página lo cortan. Se abre debajo del botón y, si no cabe, arriba. Esc o un clic fuera lo cierran y el foco vuelve al botón; las flechas, Inicio y Fin recorren los elementos.
 
@@ -540,6 +540,17 @@ Las vistas del docente (tarea 3.10, Mi espacio › Oferta y Mi carga), ajustadas
 - **Oferta, fichas:** sin franja de color: la suya en `info/5` con filete `info/40`, la de un grupo sin docente con borde punteado. El lugar es una cifra (`badge-neutral badge-soft`, «14 de 139» con las cifras en Mono, sin icono), en `badge-success` con `o-star` si cuenta en «Entre tus 3 primeros», o «Asignado a ti» (`info`, `o-check-circle`). Las marcas (`RankingMark`: Choque `o-x-circle` en `error`, Sin horas `o-clock` en `warning`, No disponible `o-no-symbol` en `neutral`, los mismos de la asignación) van como icono y texto de 12 px, sin insignia, para que no pesen más que el grupo.
 - **Oferta, panel:** `x-drawer` a la derecha (`w-full max-w-md`) con su botón de cerrar (`o-x-mark`, `btn-ghost btn-circle`, 44 px en celular), como el de Carga por docente. «Tu lugar» con sus marcas en insignia y, con la de choque, una caja `error/10` «Choca con tu horario» con cada grupo suyo que se empalma («A4 · Ingeniería Económica · C1 Lu 08:00–10:00»). «Tu desglose» como tabla con encabezados «Criterio · Tuyo · Puntos», en 14 px; «Horas base vigentes» dice que es el primer criterio del orden y no suma puntos.
 - **Mi carga:** la ecuación de horas en una franja (dos por renglón en celular, sin los signos); los días en columnas cuando su caja mide 56rem o más y uno debajo de otro antes, así ninguna insignia se sale de su día. Cada bloque con la materia en 14 px, sus horas, grupo y salón en Mono (o «Sin salón» con `o-exclamation-triangle` en `warning`, en texto normal) y el campus. Entre dos bloques, «Hueco de N h» o, si cambia el campus, «Traslado C2 → C1 · 3 h» con sus minutos libres: neutro, o en `warning` con `o-exclamation-triangle` si son menos de `staffing.min_campus_travel_minutes` (SC-09; nunca bloquea).
+
+### Publicación
+El componente de publicar la carga de un departamento (`academic-load::components.publish-load`, tarea 4.3). Lo eligió el usuario el 10 de noviembre de 2026: la maqueta B, «Línea de versiones» (maquetas en `.impeccable/mocks/publicar-carga/`, galería https://claude.ai/artifact/EnemqYXNDGXVG28i9YEsfR). Lo montan la pantalla de cierre del departamento y el tablero de Subdirección.
+- **La línea:** un punto por publicación, con su versión en Mono dentro del círculo, la fecha y cuántos grupos tenía. La vigente va rellena en `success` y dice «vigente»; las anteriores van con borde `success`. La siguiente aparece punteada en `primary` y es el botón: «Publicar» la primera vez, después «Publicar versión N» con «Reemplaza a la vN en la consulta». Si no se puede publicar, ese último punto va gris, con candado, «No se puede publicar» y el motivo escrito debajo: permiso, ya publicada, sin cerrar o falta el visto bueno. La línea decide por el ancho de su caja, no por la pantalla (container query `@2xl`, 672 px): con espacio va de lado y se desplaza dentro de su caja; angosta (celular, drawer o columna) va vertical. Se monta como bloque propio a todo el ancho, nunca dentro de una fila de botones.
+- **Detalle de una versión:** tocar un punto abre debajo quién publicó, cuándo («a las 10:31», en Mono), el comentario y unas pastillas neutras con los grupos, las sesiones y lo que cambió contra la anterior (grupos que entraron y salieron, cambios de docente y de salón). Tocarlo otra vez lo cierra.
+- **Confirmación** (`x-modal`):
+  - cuatro cifras (grupos, sesiones, docentes y salones), con la diferencia contra la versión vigente;
+  - los grupos sin docente, que salen como «Por asignar»;
+  - qué pasa con la consulta pública y con el historial docente;
+  - un comentario opcional y «Publicar versión N».
+  - Un veto (HC-15) aparece arriba, en un aviso de error con sus motivos, y la carga no se publica.
 
 ## Elevation & Depth
 

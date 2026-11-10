@@ -14,7 +14,8 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * Materias, especialidades y retícula (D8, D15, D16, D18; reglas-de-negocio.md "Reglas de datos"). Cada renglón de
  * `materias_carreras` es el lugar de una materia del SII en una retícula del SII; la retícula se lleva a su plan de
  * Nexus con `plan_for` (las excluidas del curado solo dejan un aviso por retícula) y la materia se une por su clave
- * oficial del TecNM (SubjectPlacements). Los renglones con estatus `N` no se migran (R13, supuesto por confirmar).
+ * oficial del TecNM (SubjectPlacements). Los renglones con estatus `N` (ya no se ofrecen) no entran a la retícula: van a
+ * «Por validar», para no perder el kárdex de quien los aprobó (supuesto por confirmar, 10 de noviembre de 2026).
  * El orden dentro del semestre (D21, confirmado el 5 de noviembre de 2026) sale de `renglon` de la variante que se
  * queda con el lugar (la presencial al fundir); 0 o vacío queda vacío y la materia va al final, por clave.
  *
@@ -32,7 +33,8 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * pendientes de Servicios Escolares, con la retícula del SII de la que salió en `sii_grid`) y `subject_aliases`, con cada clave del SII de cada lugar emitido o pendiente,
  * también las que se unieron en una clave TecNM. Recuerda `subject_for`: clave del SII →
  * clave de materia de Nexus, para los pasos de grupos y kárdex (las claves numéricas quedan como llaves int de
- * PHP: búscalas con `$map[$clave] ?? null`).
+ * PHP: búscalas con `$map[$clave] ?? null`), y `subject_for_plan`: plan de Nexus → clave del SII → materia de
+ * Nexus, para que el kárdex lleve la clave de cada alumno a la materia de su retícula.
  */
 final class SubjectsStep implements SiiStep
 {
@@ -61,8 +63,9 @@ final class SubjectsStep implements SiiStep
 
         $pending = $placements->pending();
         $rows = $this->subjectRows($migration, [...$grid, ...$pending], $catalog, $departmentForArea, $incidents);
-        [$subjectFor, $aliases, $aliasIncidents] = $placements->aliases($grid, $pending);
+        [$subjectFor, $aliases, $aliasIncidents, $subjectForPlan] = $placements->aliases($grid, $pending);
         $migration->remember('subject_for', fn (): array => $subjectFor);
+        $migration->remember('subject_for_plan', fn (): array => $subjectForPlan);
 
         yield new SiiBatch('subjects', 'materias.csv', array_values(array_diff_key($rows, $pending)), incidents: $incidents);
         yield new SiiBatch('pending_placements', 'materias_pendientes.csv', array_values(array_map(
@@ -105,14 +108,14 @@ final class SubjectsStep implements SiiStep
     }
 
     /**
-     * Los lugares de `materias_carreras` que se migran, con su plan de Nexus y su clave TecNM si la tiene. Avisa una
-     * vez por retícula excluida y una vez por renglón con estatus `N`; un renglón cuya materia no está en el catálogo
-     * es error.
+     * Los lugares de `materias_carreras` que se migran, con su plan de Nexus y su clave TecNM si la tiene; `retired`
+     * marca los de estatus `N`. Avisa una vez por retícula excluida; un renglón cuya materia no está en el catálogo es
+     * error.
      *
      * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
-     * @return list<array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}>
+     * @return list<array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}>
      */
     private function placements(SiiMigration $migration, array $planFor, array $catalog, array &$incidents): array
     {
@@ -131,12 +134,6 @@ final class SubjectsStep implements SiiStep
             }
 
             $plan = $planFor[$key]['plan'];
-
-            if (strtoupper(trim($row['estatus_materia_carrera'])) === 'N') {
-                $incidents[] = $this->warning("{$plan}/{$materia}", "La materia {$materia} de la retícula {$key} del SII tiene estatus N: no se migra (supuesto por confirmar).");
-
-                continue;
-            }
 
             if (! isset($catalog[$materia])) {
                 $incidents[] = ['level' => 'error', 'ref' => "{$plan}/{$materia}", 'message' => "La materia {$materia} de la retícula {$key} no está en el catálogo de materias del SII: no se migra."];
@@ -160,6 +157,7 @@ final class SubjectsStep implements SiiStep
                 'semester' => ctype_digit($semester) ? (int) $semester : 0,
                 'specialty' => trim($row['especialidad']),
                 'position' => ctype_digit($line) && (int) $line > 0 ? (int) $line : 0,
+                'retired' => strtoupper(trim($row['estatus_materia_carrera'])) === 'N',
             ];
         }
 
@@ -174,7 +172,8 @@ final class SubjectsStep implements SiiStep
 
     /**
      * La clave TecNM de cada lugar, por `"{carrera}/{retícula}/{materia}"`. Si el SII trae varias para el mismo lugar,
-     * queda la menor y se avisa.
+     * queda la menor y se avisa. Una «clave TecNM» igual a la clave del SII del lugar no es clave TecNM: el lugar queda
+     * sin ella y se avisa una vez por retícula (supuesto por confirmar).
      *
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
      * @return array<string, string>
@@ -182,13 +181,28 @@ final class SubjectsStep implements SiiStep
     private function tecnmKeys(SiiMigration $migration, array &$incidents): array
     {
         $found = [];
+        $selfKeyed = [];
 
         foreach ($migration->export()->reader(SiiFile::MateriasClavesTecnm)->rows() as $row) {
             $code = mb_strtoupper(trim($row['clave_tecnm']));
+            $grid = trim($row['carrera']).'/'.trim($row['reticula']);
+            $materia = trim($row['materia']);
 
-            if ($code !== '') {
-                $found[trim($row['carrera']).'/'.trim($row['reticula']).'/'.trim($row['materia'])][$code] = true;
+            if ($code !== '' && $code === mb_strtoupper($materia)) {
+                $selfKeyed[$grid][$materia] = true;
+            } elseif ($code !== '') {
+                $found["{$grid}/{$materia}"][$code] = true;
             }
+        }
+
+        ksort($selfKeyed, SORT_STRING);
+
+        foreach ($selfKeyed as $grid => $materias) {
+            $materias = array_map('strval', array_keys($materias));
+            sort($materias, SORT_STRING);
+            $count = count($materias);
+            $shown = implode(', ', array_slice($materias, 0, 5)).($count > 5 ? ' y '.($count - 5).' más' : '');
+            $incidents[] = $this->warning((string) $grid, "La retícula {$grid} del SII trae como clave TecNM su propia clave del SII en {$count} ".($count === 1 ? 'materia' : 'materias')." ({$shown}): no cuentan como clave TecNM (supuesto por confirmar).");
         }
 
         $keys = [];
