@@ -382,6 +382,8 @@ El estado de una carga (`academic_loads.status`) cambia en un solo lugar: `Acade
 - **Lo que deja una transición**: el nuevo estado, una fila inmutable en `load_transitions` (de, a, actor, comentario; HC-18), una entrada de bitácora de la carga (evento `transitioned`) y, después del commit, `LoadTransitioned`.
 - **Quién puede**: lo decide `AcademicLoadPolicy` (una ability por transición) antes de llamar a la Action.
 - **Desde otra Action**: una transición también se llama dentro de la transacción de otra Action, que bloquea la carga antes de leer su estado. `AcceptProposalReview` llama a `ProposeLoad` cuando el departamento acepta su primera parte con la carga en borrador; si la transición se bloquea, la parte no se acepta.
+- **Lo que se congela con la transición**: `CloseLoad` (tarea 4.1) despacha `LoadClosing` dentro de su transacción, después de `TransitionLoad`, para que Scheduling confirme los grupos activos en la misma operación; si un listener falla, la carga no se cierra. La publicación (tarea 4.3) arma el snapshot igual, con `LoadSnapshotRequested`. No sirve `LoadTransitioned`, que llega después del commit.
+- **Reabrir** (`ReopenLoad`): de cerrada, aprobada o publicada a ajustes, con motivo obligatorio. Asignación también pasa a ajustes, pero solo con una solicitud de cambio aprobada (`StartAdjusting`), así que su guarda rechaza reabrir desde ahí.
 
 Para agregar una transición: una Action `Transitions/<Verbo>Load` que llame a `TransitionLoad` con su estado destino y su guarda, la ability en la policy, y las pruebas con la regla que la bloquea. El diagrama ya la permite o se agrega a `LoadStatus::transitions()`.
 

@@ -19,6 +19,9 @@ enum AcademicLoadPermission: string implements Permission
     case LoadView = 'academic_load.load.view';
     case LoadPropose = 'academic_load.load.propose';
     case LoadStartStaffing = 'academic_load.load.start_staffing';
+    case LoadClose = 'academic_load.load.close';
+    case LoadReopen = 'academic_load.load.reopen';
+    case LoadApprove = 'academic_load.load.approve';
     case ProposalCreate = 'academic_load.proposal.create';
     case ProposalUpdate = 'academic_load.proposal.update';
     case ProposalSubmit = 'academic_load.proposal.submit';
@@ -35,6 +38,9 @@ enum AcademicLoadPermission: string implements Permission
             self::LoadView => 'Ver la carga académica de un departamento',
             self::LoadPropose => 'Proponer la carga de un departamento',
             self::LoadStartStaffing => 'Pasar la carga a asignación docente',
+            self::LoadClose => 'Cerrar la carga de un departamento',
+            self::LoadReopen => 'Reabrir una carga cerrada, aprobada o publicada',
+            self::LoadApprove => 'Dar el visto bueno a una carga cerrada',
             self::ProposalCreate => 'Armar la propuesta de una carrera',
             self::ProposalUpdate => 'Corregir la propuesta de una carrera',
             self::ProposalSubmit => 'Enviar la propuesta de una carrera',
@@ -47,7 +53,7 @@ enum AcademicLoadPermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
+            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
             default => [Dimension::Campus, Dimension::Career],
         };
     }
