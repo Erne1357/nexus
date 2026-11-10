@@ -37,7 +37,7 @@ Se escribió durante la fase 4, para que la fase 5 arranque con lo que hoy exist
   - «Alumnos posibles» queda congelado en `career_proposals.eligible_students`.
 - **Precedente de cálculo por departamento:** `StaffingSupplyDemoSeeder::demand()` ya hace la cadena elegibles → grupos sugeridos → horas por departamento para la demo.
 - **Lo publicado:** `load_snapshots`, payload v1, trae los grupos abiertos por materia con su `capacity` y sus `placements[].seats`, pero **no la ocupación**: en R1 la inscripción sigue en el SII.
-  - «La última versión de cada carga» ya existe: `LoadSnapshot::latestVersion()` y `SiiLoadExport::latestSnapshots()`.
+  - «La última versión de cada carga» ya existe: el scope `LoadSnapshot::query()->latestVersion()` y, con #366, `AcademicLoad\Exports\Sii\SiiLoadExport::latestSnapshots(Term, Campus)`. Los dos son de AcademicLoad.
 - **Mapa de módulos:** el diagrama ya tiene `Students --> Demand --> AcademicLoad`. El módulo `Demand` no existe todavía. Por el ADR-0022, sus tablas van en el esquema `demand`.
 
 ### Respuestas del usuario (10 de noviembre de 2026)
@@ -52,6 +52,7 @@ Se escribió durante la fase 4, para que la fase 5 arranque con lo que hoy exist
 
 ### Ajustes a las tareas
 
+- **Regla del mapa para toda la fase: Demand calcula; lo que compara con las propuestas o con lo publicado vive en AcademicLoad.** Demand está a la izquierda de AcademicLoad (`Students --> Demand --> AcademicLoad`), así que no lee `proposal_items`, `load_snapshots`, `LoadSnapshot` ni `SiiLoadExport`. Es lo mismo que pasa con `SuggestedGroups` en la 5.3.
 - **5.2, tasas históricas:** `student_progress` no guarda historia, así que la tasa de no inscripción de un periodo pasado necesita los elegibles **al inicio de ese periodo**. Hay que reconstruirlos del kárdex: lo aprobado antes del periodo, la seriación y el plan del alumno en ese momento.
   - Es la parte más cara y más delicada de la fase.
   - Conviene una consulta por periodo y campus que se pueda probar con un kárdex sintético, separada de la fórmula, como ya dice la tarea.
@@ -60,10 +61,13 @@ Se escribió durante la fase 4, para que la fase 5 arranque con lo que hoy exist
   - Muévelo a `Demand/Rules`, que AcademicLoad sí puede importar, o duplica la lectura del parámetro.
   - Los tamaños por tipo de materia siguen siendo dos, normal 35 y laboratorio 25, hasta que se decida otra cosa.
 - **5.5, precarga:** `proposal_items` necesita columnas para lo sugerido (esperados y grupos) aparte de lo capturado. Va en el mismo PR que `modelo-de-datos.md`. El aviso «la proyección cambió» compara lo sugerido nuevo contra lo sugerido guardado, nunca contra lo capturado.
-- **5.6, historial:** los grupos abiertos de periodos pasados salen de `load_snapshots` desde R1, y antes de eso no hay; la ocupación sale del kárdex del periodo.
-- **5.7, tablero:** de todo el Tec, con la forma de los tableros de cierre de la fase 4: un renglón por materia e insignias por campus.
+- **5.6, historial:** la pantalla es la de la propuesta, en AcademicLoad. Desde ahí lee la ocupación por periodo, que da Demand con el kárdex de Students, y los grupos abiertos, que salen de `load_snapshots` desde R1; antes de R1 no hay. Demand nunca lee la foto.
+- **5.7, tablero:** de todo el Tec, con la forma de los tableros de cierre de la fase 4: un renglón por materia e insignias por campus. Como compara lo proyectado contra lo pedido (`proposal_items`), vive en AcademicLoad y lee lo que calcula Demand.
 - **5.8, parámetros:** es la primera pantalla que edita `settings`. Va en Core, con permiso de Subdirección y admin y bitácora de cada cambio. Las claves son `demand.history_terms`, `demand.target_group_size`, `demand.min_group_size` y el umbral para resaltar diferencias.
-- **5.9, evaluación:** compara lo que la fórmula habría dicho «como si» se hubiera corrido antes de `20271` contra los grupos publicados de `20271` y el kárdex de `20271` reimportado al terminar el semestre. Hasta tener ese kárdex solo se puede medir contra periodos anteriores.
+- **5.9, evaluación:** compara lo que la fórmula habría dicho «como si» se hubiera corrido antes de `20271` contra los grupos publicados de `20271` y el kárdex de `20271` reimportado al terminar el semestre.
+  - Lo publicado es **la última versión de cada carga** (`latestVersion`): una carga reabierta y republicada tiene varias fotos, y no cuentan las que el público ya no ve.
+  - Como compara contra lo publicado, el comando vive en AcademicLoad y llama a la fórmula de Demand.
+  - Hasta tener ese kárdex solo se puede medir contra periodos anteriores.
 - **Demo por puntos:** la proyección se calcula al abrir el periodo, así que el punto `propuesta` es el que ya trae las propuestas en borrador precargadas. La demo tiene kárdex de varios periodos para las tasas.
 
 ### Preguntas abiertas para cuando se abra la fase
