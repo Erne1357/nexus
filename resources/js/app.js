@@ -735,27 +735,33 @@ document.addEventListener('alpine:init', () => {
              * (ADR-0023); Atrás y Adelante, no. Detiene la navegación y, si se confirma, la repite sin preguntar.
              */
             confirmLeave(event) {
-                if (this.pending === 0 || event.detail?.history || this.leaving) {
+                const url = event.detail?.url ? String(event.detail.url) : '';
+
+                if (this.pending === 0 || event.detail?.history || this.leaving || url === '') {
                     return;
                 }
 
                 event.preventDefault();
 
                 const blocks = this.pending === 1 ? '1 bloque sin guardar' : `${this.pending} bloques sin guardar`;
-                const url = String(event.detail?.url ?? '');
 
-                window.dispatchEvent(new CustomEvent('nexus-confirm', {
-                    detail: {
-                        title: '¿Salir sin guardar?',
-                        message: `Tienes ${blocks}; se pierden al salir.`,
-                        button: 'Salir sin guardar',
-                        tone: 'warning',
-                        run: () => {
-                            this.leaving = true;
+                window.nexusConfirm({
+                    title: '¿Salir sin guardar?',
+                    message: `Tienes ${blocks}; se pierden al salir.`,
+                    button: 'Salir sin guardar',
+                    tone: 'warning',
+                    run: () => {
+                        // livewire:navigate se dispara dentro de navigate(): mientras, `leaving` deja pasar esta
+                        // navegación; después vuelve a preguntar por si la navegación no se completó.
+                        this.leaving = true;
+
+                        try {
                             window.Livewire.navigate(url);
-                        },
+                        } finally {
+                            this.leaving = false;
+                        }
                     },
-                }));
+                });
             },
 
             /** Una sola cuenta tras cada cambio: las celdas, las cifras, las horas de cada día y los rangos. */
@@ -1320,18 +1326,16 @@ document.addEventListener('livewire:init', () => {
 
             asked = true;
 
-            window.dispatchEvent(new CustomEvent('nexus-confirm', {
-                detail: {
-                    title: 'Tu perfil cambió',
-                    message: 'Cambió en otra pestaña o por un cambio en tus puestos. Recarga la página para seguir con el perfil de ahora.',
-                    button: 'Recargar',
-                    tone: 'primary',
-                    run: () => window.location.reload(),
-                    onCancel: () => {
-                        asked = false;
-                    },
+            window.nexusConfirm({
+                title: 'Tu perfil cambió',
+                message: 'Cambió en otra pestaña o por un cambio en tus puestos. Recarga la página para seguir con el perfil de ahora.',
+                button: 'Recargar',
+                tone: 'primary',
+                run: () => window.location.reload(),
+                onCancel: () => {
+                    asked = false;
                 },
-            }));
+            });
         });
     });
 });
@@ -1340,8 +1344,11 @@ document.addEventListener('livewire:init', () => {
 | Confirmar sin diálogos del navegador (ADR-0023). `x-confirm="mensaje"` en un botón o enlace detiene su clic (en
 | captura, antes que su wire:click o su enlace) y abre el diálogo de Core (`x-core::confirm-dialog`, uno por layout);
 | al confirmar, vuelve a pulsar el mismo elemento y esta vez lo deja pasar. `data-confirm-title`, `data-confirm-button`
-| y `data-confirm-tone` (error, warning o primary) lo ajustan.
+| y `data-confirm-tone` (error, warning o primary) lo ajustan. Desde JS se abre con `window.nexusConfirm({title,
+| message, button, tone, run, onCancel})`.
 */
+window.nexusConfirm = (detail) => window.dispatchEvent(new CustomEvent('nexus-confirm', { detail }));
+
 document.addEventListener('alpine:init', () => {
     window.Alpine.directive('confirm', (el, _directive, { cleanup }) => {
         const intercept = (event) => {
@@ -1355,25 +1362,36 @@ document.addEventListener('alpine:init', () => {
             event.stopImmediatePropagation();
 
             const label = (el.dataset.confirmTitle || el.innerText || '').trim().split('\n')[0].trim();
+            const popover = el.closest('[popover]');
 
-            window.dispatchEvent(new CustomEvent('nexus-confirm', {
-                detail: {
-                    title: label || 'Confirmar',
-                    message: el.getAttribute('x-confirm') || '',
-                    button: el.dataset.confirmButton || label || 'Confirmar',
-                    tone: el.dataset.confirmTone || 'primary',
-                    run: () => {
-                        el.__nexusConfirmed = true;
-                        el.click();
-                    },
-                    origin: el,
+            window.nexusConfirm({
+                title: label || 'Confirmar',
+                message: el.getAttribute('x-confirm') || '',
+                button: el.dataset.confirmButton || label || 'Confirmar',
+                tone: el.dataset.confirmTone || 'primary',
+                // Dentro de un menú de renglón, el foco vuelve a su botón «Acciones», no al elemento del menú cerrado.
+                origin: popover?.id ? document.querySelector(`[popovertarget="${popover.id}"]`) ?? el : el,
+                run: () => {
+                    // Si Livewire volvió a pintar la lista mientras el diálogo estaba abierto, el botón ya no existe.
+                    if (!el.isConnected) {
+                        window.toast?.({ toast: { type: 'warning', title: 'La lista cambió mientras confirmabas. Vuelve a intentarlo.', position: 'toast-top toast-end', timeout: 4000 } });
+
+                        return;
+                    }
+
+                    el.__nexusConfirmed = true;
+                    el.click();
                 },
-            }));
+            });
         };
 
         el.addEventListener('click', intercept, { capture: true });
         cleanup(() => el.removeEventListener('click', intercept, { capture: true }));
     });
+
+    // El elemento al que vuelve el foco va fuera del estado de Alpine: un nodo del DOM dentro de un Proxy reactivo no
+    // se deja enfocar.
+    let origin = null;
 
     window.Alpine.data('nexusConfirm', () => ({
         open: false,
@@ -1382,7 +1400,6 @@ document.addEventListener('alpine:init', () => {
         button: '',
         tone: 'primary',
         run: null,
-        origin: null,
         onCancel: null,
 
         get toneClass() {
@@ -1390,9 +1407,31 @@ document.addEventListener('alpine:init', () => {
         },
 
         show(detail) {
-            Object.assign(this, { title: detail.title, message: detail.message, button: detail.button, tone: detail.tone, run: detail.run, origin: detail.origin ?? null, onCancel: detail.onCancel ?? null });
+            // Una confirmación nueva sobre otra abierta cancela la anterior (con su onCancel) en lugar de perderla.
+            if (this.open) {
+                const previous = this.onCancel;
+                this.onCancel = null;
+                previous?.();
+            }
+
+            Object.assign(this, {
+                title: detail.title,
+                message: detail.message,
+                button: detail.button,
+                tone: detail.tone ?? 'primary',
+                run: detail.run ?? null,
+                onCancel: detail.onCancel ?? null,
+            });
+            origin = detail.origin ?? null;
+
             this.open = true;
-            document.getElementById('nexus-confirm')?.showModal();
+
+            const dialog = document.getElementById('nexus-confirm');
+
+            if (dialog && !dialog.open) {
+                dialog.showModal();
+            }
+
             this.$nextTick(() => this.$refs.cancel?.focus());
         },
 
@@ -1406,17 +1445,19 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            const origin = this.origin;
+            const back = origin;
             const onCancel = this.onCancel;
+            origin = null;
             this.run = null;
             this.onCancel = null;
             this.close();
-            origin?.focus?.();
+            back?.focus?.();
             onCancel?.();
         },
 
         accept() {
             const run = this.run;
+            origin = null;
             this.run = null;
             this.onCancel = null;
             this.close();

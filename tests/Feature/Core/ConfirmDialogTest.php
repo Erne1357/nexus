@@ -20,10 +20,10 @@ it('el layout trae el diálogo de confirmar una sola vez y Campus lo usa en luga
         ->and($html)->not->toContain('wire:confirm');
 });
 
-it('ya no queda wire:confirm en las vistas de Core, Academic, Facilities, Faculty y Scheduling', function () {
+it('ya no queda wire:confirm en las vistas de Core, Academic, CatalogValidation, Facilities, Faculty y Scheduling', function () {
     $files = [];
 
-    foreach (['Academic', 'Core', 'Facilities', 'Faculty', 'Scheduling'] as $module) {
+    foreach (['Academic', 'CatalogValidation', 'Core', 'Facilities', 'Faculty', 'Scheduling'] as $module) {
         $dir = base_path("app/Modules/{$module}");
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
 
