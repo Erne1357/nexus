@@ -20,18 +20,23 @@ use Mary\Traits\Toast;
 /**
  * Mi carga (tareas 3.10 y 3.11), maqueta C «Columnas por día»: la cuenta de horas del docente como una ecuación y sus
  * grupos del periodo por día, de todos los campus, con huecos y traslados. Lo ve quien tiene el permiso personal
- * `staffing.my_load.view` y una ficha de docente con su usuario.
+ * `staffing.my_load.view` y una ficha de docente con su usuario. De cada carga con versión publicada ve esa versión,
+ * aunque se haya reabierto, y bajo el título «Publicado el … · vN» (P8; MyLoadQuery).
  *
  * Abajo, «Mis solicitudes» (tarea 3.11): un solo «Solicitar cambio» (con el permiso de pedir) abre un modal donde
  * elige el grupo, si es de horario o de salón, qué propone y el motivo, y llama a RequestChange. Un grupo se pide si
  * ChangeRequestPolicy::create lo deja, la carga de su departamento está en Asignación o Ajustes y no tiene ya una
  * solicitud abierta (una por docente y grupo, confirmado el 7 de noviembre de 2026); los demás quedan en el select
- * deshabilitados con su motivo, y si ninguno se puede, el botón queda deshabilitado con el suyo. Debajo, la lista de
+ * deshabilitados con su motivo, y si ninguno se puede, el botón queda deshabilitado con el suyo. La solicitud es sobre
+ * el grupo vivo: un grupo publicado que después se reasignó o se canceló sale deshabilitado. Debajo, la lista de
  * sus solicitudes del periodo con el comentario del jefe. Lo que lee sale de MyLoadQuery y MyChangeRequestsQuery.
  */
 new #[Title('Mi carga')] class extends Component
 {
     use Toast;
+
+    /** El motivo de un grupo publicado que en lo vivo ya no es suyo: se reasignó o se canceló después de publicar. */
+    private const string NOT_YOURS_ANYMORE = 'Reasignado o cancelado después de publicar';
 
     /** El grupo elegido en el modal «Solicitar cambio»; se revisa de nuevo al enviar (requestable()). */
     public string $requestGroupId = '';
@@ -52,9 +57,10 @@ new #[Title('Mi carga')] class extends Component
 
     /**
      * Abre el modal «Solicitar cambio». Con un grupo, ese (si ya tiene una solicitud abierta no lo abre); sin grupo, el
-     * único que se puede pedir, si es uno solo.
+     * único que se puede pedir de los que se ven, si es uno solo (con la carga publicada, un grupo vivo que no está en
+     * su versión publicada no se ve, así que no se elige).
      */
-    public function openRequest(Actor $context, MyChangeRequestsQuery $requests, ?string $groupId = null): void
+    public function openRequest(Actor $context, MyChangeRequestsQuery $requests, MyLoadQuery $query, ?string $groupId = null): void
     {
         if ($groupId !== null) {
             [$group, $state] = $this->requestable($groupId, $context, $requests);
@@ -65,7 +71,7 @@ new #[Title('Mi carga')] class extends Component
 
             $this->requestGroupId = $group->id;
         } else {
-            $available = array_keys(array_filter($this->states($context, $requests), fn (array $state): bool => $state['open'] === null && ChangeRequestRules::acceptsRequests($state['load'])));
+            $available = $this->available($context, $requests, $query);
             $this->requestGroupId = count($available) === 1 ? $available[0] : '';
         }
 
@@ -159,12 +165,12 @@ new #[Title('Mi carga')] class extends Component
     }
 
     /**
-     * Por cada grupo suyo del periodo activo, si tiene una solicitud abierta y el estado de su carga. Sin el permiso de
-     * pedir, 403.
+     * Los grupos que se ven en Mi carga y se pueden pedir: siguen a su nombre en lo vivo, no tienen una solicitud
+     * abierta y su carga está en Asignación o Ajustes. Sin el permiso de pedir, 403.
      *
-     * @return array<string, array{open: mixed, load: mixed}>
+     * @return list<string>
      */
-    private function states(Actor $context, MyChangeRequestsQuery $requests): array
+    private function available(Actor $context, MyChangeRequestsQuery $requests, MyLoadQuery $query): array
     {
         abort_unless($this->canRequest($context), 403);
 
@@ -174,12 +180,18 @@ new #[Title('Mi carga')] class extends Component
 
         abort_if($term === null || $teacher === null, 404);
 
-        return $requests->forTeacher($teacher, (string) $user->getKey(), $term)['groups'];
+        $states = $requests->forTeacher($teacher, (string) $user->getKey(), $term)['groups'];
+
+        return array_values(array_filter(
+            $query->groupIds($teacher, $term),
+            fn (string $id): bool => isset($states[$id]) && $states[$id]['open'] === null && ChangeRequestRules::acceptsRequests($states[$id]['load']),
+        ));
     }
 
     /**
      * Un grupo por opción del modal: clave, materia, «Lu Ju 7:00–9:00 · C1» y, si no se puede pedir, su motivo
-     * («Solicitud abierta», «Carga en Cierre»).
+     * («Solicitud abierta», «Carga en Cierre»). Un grupo publicado que en lo vivo ya no es suyo (se reasignó o se
+     * canceló después de publicar) no tiene estado y no se pide.
      *
      * @param  list<array{id: string, code: string, subject_name: string, campus_code: string, schedule: list<array{days: string, time: string}>}>  $groups
      * @param  array<string, array{open: mixed, load: mixed}>  $states
@@ -188,7 +200,7 @@ new #[Title('Mi carga')] class extends Component
     private static function optionsFor(array $groups, array $states): array
     {
         return array_map(function (array $group) use ($states): array {
-            $state = $states[$group['id']] ?? ['open' => null, 'load' => null];
+            $state = $states[$group['id']] ?? null;
 
             return [
                 'id' => $group['id'],
@@ -196,6 +208,7 @@ new #[Title('Mi carga')] class extends Component
                 'subject' => $group['subject_name'],
                 'detail' => implode(' · ', [...array_map(fn (array $line): string => $line['days'].' '.$line['time'], $group['schedule']), $group['campus_code']]),
                 'reason' => match (true) {
+                    $state === null => self::NOT_YOURS_ANYMORE,
                     ! ChangeRequestRules::acceptsRequests($state['load']) => 'Carga en '.($state['load']?->label() ?? 'sin abrir'),
                     $state['open'] !== null => 'Solicitud abierta',
                     default => null,
@@ -206,6 +219,7 @@ new #[Title('Mi carga')] class extends Component
 
     /**
      * Por qué el botón «Solicitar cambio» va deshabilitado: ningún grupo, o ninguno que se pueda pedir. Null si hay uno.
+     * Cuenta solo los grupos que se ven y siguen a su nombre.
      *
      * @param  list<array{id: string, code: string, subject: string, detail: string, reason: ?string}>  $options
      * @param  array<string, array{open: mixed, load: mixed}>  $states
@@ -220,11 +234,13 @@ new #[Title('Mi carga')] class extends Component
             return 'Todavía no tienes grupos asignados.';
         }
 
-        $accepting = array_filter($states, fn (array $state): bool => ChangeRequestRules::acceptsRequests($state['load']));
+        $shown = array_intersect_key($states, array_flip(array_column($options, 'id')));
+        $accepting = array_filter($shown, fn (array $state): bool => ChangeRequestRules::acceptsRequests($state['load']));
 
         return match (true) {
+            $shown === [] => 'Ninguno de tus grupos publicados sigue a tu nombre.',
             $accepting === [] => 'Los cambios se piden con la carga en Asignación o Ajustes.',
-            count($accepting) === count($states) => 'Ya tienes una solicitud abierta en cada uno de tus grupos.',
+            count($accepting) === count($options) => 'Ya tienes una solicitud abierta en cada uno de tus grupos.',
             default => 'Ya tienes una solicitud abierta en cada grupo cuya carga está en Asignación o Ajustes.',
         };
     }

@@ -1,6 +1,7 @@
 {{--
-    Oferta del departamento (HC-17, tarea 3.10), maqueta B «Fichas por semestre»: encabezado (departamento, periodo y
-    cuántos grupos tiene asignados), pestañas por departamento (si tiene varios), la barra (materia, semestre y el filtro
+    Oferta del departamento (HC-17, tarea 3.10), maqueta B «Fichas por semestre»: encabezado (departamento, periodo,
+    cuántos grupos tiene asignados y, con la carga publicada, «Publicado el … · vN»; P8), pestañas por departamento (si
+    tiene varios), la barra (materia, semestre y el filtro
     segmentado «Todos · Sin docente · Entre tus 3 primeros» con sus cifras) y cada semestre con una fila por materia:
     «tu mejor lugar» y las fichas de sus grupos. Las marcas de una ficha van como icono y texto, sin insignia, para que no
     pesen más que el grupo. Al tocar una ficha, el panel de la derecha muestra el grupo y SOLO el desglose del propio
@@ -20,6 +21,9 @@
                 <span>{{ $term->name }}</span>
                 @if ($teacher !== null && $departments !== [])
                     <span data-testid="offer-mine"><span class="font-mono font-semibold text-base-content">{{ $mine }}</span> {{ $mine === 1 ? 'grupo asignado' : 'grupos asignados' }} a ti</span>
+                @endif
+                @if ($published !== [])
+                    <span class="contents" data-testid="offer-published">@include('staffing::shared.published', ['stamps' => $published])</span>
                 @endif
             </p>
         @endif
