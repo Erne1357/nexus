@@ -5,67 +5,40 @@ namespace App\Modules\Scheduling\Queries;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
-use App\Modules\Scheduling\Enums\GroupStatus;
-use App\Modules\Scheduling\Enums\SessionKind;
-use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
+use Illuminate\Support\Collection;
 
 /**
  * Lo que le falta a la carga de un departamento en un campus para cerrarse o publicarse (HC-15; confirmado el 10 de
  * noviembre de 2026). Es la cuenta del veto (BlockClosingWithPendingGroups) y de la pantalla de cierre, que deshabilita
  * el botón con estos mismos motivos; el veto sigue decidiendo.
  *
- * Por cada grupo activo del departamento en el campus y el periodo:
- *
- * - **choque duro**: lo calcula el validador en ese momento, con la foto de todo el campus (HC-01 cruza departamentos y
- *   campus), no `schedule_conflicts`, que el job pudo no recalcular todavía. Olvida la foto antes, porque el validador
- *   es `scoped` y en el mismo request pudo haber leído una vieja (por ejemplo, justo después de asignar el último salón);
- * - **sin horario**: sin sesiones activas, si el campus usa bloques de tiempo;
- * - **sin docente** sin justificación;
- * - **sin salón**: alguna sesión activa presencial (no virtual) sin salón, si el campus usa salones, sin justificación;
- * - **docente dado de baja**: inactivo o borrado; no se justifica (P10).
+ * Cuenta las banderas de cada grupo activo (GroupClosingFlagsQuery) con la regla por grupo de GroupClosingFlags
+ * (ClosingBlockers::tally), la misma del tablero. El choque duro lo calcula el validador en ese momento, con la foto de
+ * todo el campus (HC-01 cruza departamentos y campus), no `schedule_conflicts`, que el job pudo no recalcular todavía.
+ * Olvida la foto antes, porque el validador es `scoped` y en el mismo request pudo haber leído una vieja (por ejemplo,
+ * justo después de asignar el último salón).
  */
 final class ClosingBlockersQuery
 {
-    public function __construct(private readonly ScheduleValidator $validator) {}
+    public function __construct(
+        private readonly ScheduleValidator $validator,
+        private readonly GroupClosingFlagsQuery $flags,
+    ) {}
 
-    public function of(AcademicLoad $load): ClosingBlockers
+    /**
+     * @param  Collection<string, GroupClosingFlags>|null  $flags  las de la carga, si quien llama ya las leyó
+     */
+    public function of(AcademicLoad $load, ?Collection $flags = null): ClosingBlockers
     {
-        $profile = $load->campus->profile;
-        $rows = Group::query()
-            ->where('term_id', $load->term_id)
-            ->where('campus_id', $load->campus_id)
-            ->where('department_id', $load->department_id)
-            ->where('status', '<>', GroupStatus::Cancelled->value)
-            ->select(['groups.id', 'groups.teacher_id', 'groups.close_justification'])
-            ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.is_active) as has_sessions')
-            ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.is_active and s.room_id is null and s.kind <> ?) as missing_room', [SessionKind::Virtual->value])
-            ->selectRaw('exists (select 1 from teachers t where t.id = groups.teacher_id and (not t.is_active or t.deleted_at is not null)) as inactive_teacher')
-            ->toBase()->get();
+        $flags ??= $this->flags->ofLoad($load);
 
-        if ($rows->isEmpty()) {
+        if ($flags->isEmpty()) {
             return new ClosingBlockers;
         }
 
-        $justified = fn (object $row): bool => $row->close_justification !== null && trim($row->close_justification) !== '';
-        $conflicted = $this->conflicted($load, $rows->pluck('id')->all());
-        $checks = [
-            'unscheduled' => fn (object $row): bool => $profile->usesTimeBlocks && ! $row->has_sessions,
-            'withoutTeacher' => fn (object $row): bool => $row->teacher_id === null && ! $justified($row),
-            'withoutRoom' => fn (object $row): bool => $profile->usesRooms && (bool) $row->missing_room && ! $justified($row),
-            'inactiveTeacher' => fn (object $row): bool => (bool) $row->inactive_teacher,
-        ];
-
-        return new ClosingBlockers(
-            conflicted: count($conflicted),
-            unscheduled: $rows->filter($checks['unscheduled'])->count(),
-            withoutTeacher: $rows->filter($checks['withoutTeacher'])->count(),
-            withoutRoom: $rows->filter($checks['withoutRoom'])->count(),
-            inactiveTeacher: $rows->filter($checks['inactiveTeacher'])->count(),
-            justified: $rows->filter(fn (object $row): bool => $justified($row) && ($row->teacher_id === null || ($profile->usesRooms && (bool) $row->missing_room)))->count(),
-            groups: $rows->filter(fn (object $row): bool => in_array($row->id, $conflicted, true) || array_any($checks, fn (callable $check): bool => $check($row)))->count(),
-        );
+        return ClosingBlockers::tally($flags, $load->campus->profile, $this->conflicted($load, $flags->keys()->all()));
     }
 
     /**

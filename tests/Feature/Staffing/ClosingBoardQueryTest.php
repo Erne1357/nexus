@@ -8,6 +8,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Models\ScheduleConflict;
+use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\ClosingBoardQuery;
 use App\Modules\Staffing\Queries\LoadProgress;
@@ -82,6 +83,23 @@ it('un renglón por departamento con una entrada por campus con grupos y lo que 
         ->and($loads['C2']->procedures())->toBe(1)
         ->and($loads['C2']->missing())->toBe(6)
         ->and($loads['C2']->bucket())->toBe('missing');
+});
+
+it('HC-15: cuenta por grupo lo mismo que el veto (ClosingBlockersQuery), con la misma regla', function () {
+    $jefe = $this->world->head();
+    $this->world->group();
+    $this->world->group(teacher: false, withRoom: false);
+    $this->world->justify($this->world->group(teacher: false), 'Contratación en trámite', $jefe);
+    $this->world->justify($this->world->group(withRoom: false), 'El laboratorio se entrega en enero', $jefe);
+    $this->world->group(scheduled: false);
+    $this->world->group(teacher: $this->world->teacher(active: false));
+
+    $veto = app(ClosingBlockersQuery::class)->of($this->world->load->fresh());
+    $board = closingBoardLoads(closingBoardOf(), 'SC')['C2'];
+
+    expect([$board->hard, $board->unscheduled, $board->withoutTeacher, $board->withoutRoom, $board->inactiveTeacher, $board->justified, $board->blockingGroups])
+        ->toBe([$veto->conflicted, $veto->unscheduled, $veto->withoutTeacher, $veto->withoutRoom, $veto->inactiveTeacher, $veto->justified, $veto->groups])
+        ->and($veto->groups)->toBe(3);
 });
 
 it('«C2 · N» cuenta grupos distintos: un grupo sin docente ni salón cuenta una vez', function () {
@@ -185,6 +203,24 @@ it('da el jefe de cada departamento: quien tiene vigente pasar la carga a asigna
         $ee->id => [],
         $this->world->department->id => ['Laura Ramos'],
     ]);
+});
+
+it('trae a los titulares una vez para todos los renglones, sin importar cuántos departamentos haya', function () {
+    $departments = collect(range(1, 4))->map(function (int $index): Department {
+        $department = Department::factory()->create(['code' => "D{$index}"]);
+        User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $department->id])->create(['name' => "Jefe {$index}"]);
+        $this->world->group(load: $this->world->loadIn($this->world->campus, department: $department));
+
+        return $department;
+    });
+    $rows = closingBoardOf()['rows'];
+
+    DB::enableQueryLog();
+    $heads = app(ClosingBoardQuery::class)->heads($rows);
+
+    expect(collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'from "users"'))->count())->toBe(1)
+        ->and($departments->mapWithKeys(fn (Department $department): array => [$department->id => $heads[$department->id]])->values()->all())
+        ->toBe([['Jefe 1'], ['Jefe 2'], ['Jefe 3'], ['Jefe 4']]);
 });
 
 it('lee todo el Tec en pocas consultas, sin importar cuántas cargas haya', function () {

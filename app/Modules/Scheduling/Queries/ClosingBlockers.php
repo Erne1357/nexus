@@ -2,10 +2,13 @@
 
 namespace App\Modules\Scheduling\Queries;
 
+use App\Modules\Core\Models\CampusProfile;
+
 /**
- * Lo que le falta a la carga de un departamento para cerrarse o publicarse (HC-15), contado por grupo activo
- * (ClosingBlockersQuery). `justified` no bloquea: son los grupos sin docente o sin salón que pasan con justificación.
- * `groups` son los grupos distintos que bloquean: uno sin docente ni salón cuenta en dos cifras y ahí una vez.
+ * Lo que le falta a la carga de un departamento para cerrarse o publicarse (HC-15), contado por grupo activo con la
+ * regla de GroupClosingFlags (tally()). `justified` no bloquea: son los grupos sin docente o sin salón que pasan con
+ * justificación. `groups` son los grupos distintos que bloquean: uno sin docente ni salón cuenta en dos cifras y ahí
+ * una vez.
  */
 final readonly class ClosingBlockers
 {
@@ -18,6 +21,33 @@ final readonly class ClosingBlockers
         public int $justified = 0,
         public int $groups = 0,
     ) {}
+
+    /**
+     * Las cifras de unos grupos con la regla por grupo de GroupClosingFlags. `$conflicted` son los ids con choque duro
+     * según el validador (el veto y la pantalla); sin ellos, cuenta los vigentes de `schedule_conflicts` (el tablero).
+     *
+     * @param  iterable<GroupClosingFlags>  $groups
+     * @param  list<string>|null  $conflicted
+     */
+    public static function tally(iterable $groups, CampusProfile $profile, ?array $conflicted = null): self
+    {
+        $hard = $conflicted === null ? null : array_flip($conflicted);
+        $counts = ['conflicted' => 0, 'unscheduled' => 0, 'withoutTeacher' => 0, 'withoutRoom' => 0, 'inactiveTeacher' => 0, 'justified' => 0, 'groups' => 0];
+
+        foreach ($groups as $group) {
+            $isConflicted = $hard === null ? $group->storedHardConflict : isset($hard[$group->id]);
+
+            $counts['conflicted'] += (int) $isConflicted;
+            $counts['unscheduled'] += (int) $group->unscheduled($profile);
+            $counts['withoutTeacher'] += (int) $group->withoutTeacher();
+            $counts['withoutRoom'] += (int) $group->withoutRoom($profile);
+            $counts['inactiveTeacher'] += (int) $group->inactiveTeacher;
+            $counts['justified'] += (int) $group->passesJustified($profile);
+            $counts['groups'] += (int) $group->blocks($profile, $isConflicted);
+        }
+
+        return new self(...$counts);
+    }
 
     public function isClear(): bool
     {

@@ -556,6 +556,17 @@ El tablero de Subdirección (`staffing::pages.closing-board`, `/staffing/closing
 - **Insignia de una carga:** el código del campus con el icono de su estado y la cifra que importa: «C2 · 21» con faltantes, en grupos distintos (`warning`, o `error` con `o-x-circle` si alguno es choque duro; sin cifra si solo faltan trámites, que el `aria-label` dice), «C1» con `o-check` lista para cerrar, con `o-lock-closed` cerrada, «C1 · v2» publicada (`success-solid`) y, en propuesta o ajustes sin faltantes, «C2» en `info`. El campus y el estado van en `aria-label` y `title`. Es un botón: abre el drawer de esa carga; tocar el renglón abre la primera.
 - **Drawer de la carga** (`max-w-2xl`): el departamento y «N grupos en 2 campus · periodo»; el selector de campus (un `join` con el código, el nombre y la insignia del estado; vertical en celular); la línea de estados; la línea del estado en una franja de su tono; las pestañas «Para cerrar» (con los grupos que faltan, o los trámites si solo faltan esos), «Justificaciones» («4/11», de solo lectura: se escriben en «Cierre de la carga») e «Historial», que cambian en el navegador; y al pie, fijo, «Abrir en Cierre de la carga» y las acciones de la carga, con el mismo modal de confirmación encima del drawer (Esc cierra solo el modal). Aquí lo que falta sí sale del validador, para esa carga.
 
+### Publicación
+El componente de publicar la carga de un departamento (`academic-load::components.publish-load`, tarea 4.3). Lo eligió el usuario el 10 de noviembre de 2026: la maqueta B, «Línea de versiones» (maquetas en `.impeccable/mocks/publicar-carga/`, galería https://claude.ai/artifact/EnemqYXNDGXVG28i9YEsfR). Lo montan la pantalla de cierre del departamento y el tablero de Subdirección.
+- **La línea:** un punto por publicación, con su versión en Mono dentro del círculo, la fecha y cuántos grupos tenía. La vigente va rellena en `success` y dice «vigente»; las anteriores van con borde `success`. La siguiente aparece punteada en `primary` y es el botón: «Publicar» la primera vez, después «Publicar versión N» con «Reemplaza a la vN en la consulta». Si no se puede publicar, ese último punto va gris, con candado, «No se puede publicar» y el motivo escrito debajo: permiso, ya publicada, sin cerrar o falta el visto bueno. La línea decide por el ancho de su caja, no por la pantalla (container query `@2xl`, 672 px): con espacio va de lado y se desplaza dentro de su caja; angosta (celular, drawer o columna) va vertical. Se monta como bloque propio a todo el ancho, nunca dentro de una fila de botones.
+- **Detalle de una versión:** tocar un punto abre debajo quién publicó, cuándo («a las 10:31», en Mono), el comentario y unas pastillas neutras con los grupos, las sesiones y lo que cambió contra la anterior (grupos que entraron y salieron, cambios de docente y de salón). Tocarlo otra vez lo cierra.
+- **Confirmación** (`x-modal`):
+  - cuatro cifras (grupos, sesiones, docentes y salones), con la diferencia contra la versión vigente;
+  - los grupos sin docente, que salen como «Por asignar»;
+  - qué pasa con la consulta pública y con el historial docente;
+  - un comentario opcional y «Publicar versión N».
+  - Un veto (HC-15) aparece arriba, en un aviso de error con sus motivos, y la carga no se publica.
+
 ## Elevation & Depth
 
 Plano. La profundidad la dan las superficies (blanco sobre platino) y los filetes, no las sombras.
