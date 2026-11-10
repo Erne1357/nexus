@@ -35,7 +35,7 @@ final class CloseLoad
             $load = $this->transition->handle($load, LoadStatus::Closed, $actor, $comment, $this->agreements->reasons(...));
             $load->update(['closed_by' => $actor->getKey(), 'closed_at' => now()]);
 
-            LoadClosing::dispatch($load);
+            LoadClosing::dispatch($load, $actor);
 
             return $load;
         });

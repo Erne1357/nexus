@@ -12,6 +12,7 @@ use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\CareerProposalReturned;
 use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
 use App\Modules\AcademicLoad\Events\LoadTransitioned;
+use App\Modules\AcademicLoad\Exports\PublishedExport;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
 use App\Modules\AcademicLoad\Listeners\BlockReviewReopeningAfterDraft;
 use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
@@ -22,6 +23,7 @@ use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\Core\Authorization\Actor;
@@ -51,6 +53,9 @@ use Illuminate\Support\Facades\Event;
  */
 final class AcademicLoadServiceProvider extends ModuleServiceProvider
 {
+    /** @var array<class-string, class-string> */
+    protected array $policies = [PublishedExport::class => PublishedExportPolicy::class];
+
     public function boot(): void
     {
         parent::boot();
@@ -84,8 +89,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
     /**
      * Subdirección y el jefe de proyecto docente ven la carga y la bandeja (Subdirección, además, la propuesta, y
-     * reabre y da el visto bueno a las cargas, tarea 4.1 y 4.2); el jefe de departamento, además, propone la carga, la
-     * pasa a asignación docente, la cierra, decide la parte de su departamento y pide, ve y decide acuerdos entre
+     * reabre, da el visto bueno y publica las cargas, tareas 4.1 a 4.3); el jefe de departamento, además, propone la
+     * carga, la pasa a asignación docente, la cierra, la publica si el campus no exige visto bueno, decide la parte de su departamento y pide, ve y decide acuerdos entre
      * departamentos (Subdirección y el jefe de proyecto docente solo los ven); el coordinador arma, corrige, envía y ve
      * la propuesta de su carrera.
      */
@@ -96,6 +101,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::LoadView,
                 AcademicLoadPermission::LoadReopen,
                 AcademicLoadPermission::LoadApprove,
+                AcademicLoadPermission::LoadPublish,
+                AcademicLoadPermission::LoadPublishApproved,
                 AcademicLoadPermission::ProposalView,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::AgreementView,
@@ -105,6 +112,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::LoadPropose,
                 AcademicLoadPermission::LoadStartStaffing,
                 AcademicLoadPermission::LoadClose,
+                AcademicLoadPermission::LoadPublish,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::ProposalReviewDecide,
                 AcademicLoadPermission::AgreementView,

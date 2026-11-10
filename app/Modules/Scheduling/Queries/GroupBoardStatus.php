@@ -28,6 +28,7 @@ final readonly class GroupBoardStatus
         public bool $withoutTeacher,
         public bool $withoutRoom,
         public array $placements = [],
+        public bool $inactiveTeacher = false,
     ) {}
 
     /**
