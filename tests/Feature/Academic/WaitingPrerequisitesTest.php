@@ -1,7 +1,9 @@
 <?php
 
 use App\Modules\Academic\Actions\ResolvePendingPlacement;
+use App\Modules\Academic\Actions\WaitingPrerequisiteResult;
 use App\Modules\Academic\Enums\PrerequisiteKind;
+use App\Modules\Academic\Enums\WaitingPrerequisiteOutcome;
 use App\Modules\Academic\Events\CurriculumChanged;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanPrerequisitePending;
@@ -147,41 +149,85 @@ describe('ResolvePendingPlacement', function () {
         Event::assertDispatched(CurriculumChanged::class, fn (CurriculumChanged $event): bool => $event->studyPlanId === $this->plan->id);
     });
 
-    it('si la seriación del plan ya tiene ese requisito, se queda como está y el que esperaba queda aplicado', function () {
+    it('si la seriación del plan ya tiene ese requisito, se queda con su tipo hasta la siguiente corrida y el que esperaba queda aplicado, sin nota', function () {
         Event::fake([CurriculumChanged::class]);
         placeInPlan($this->plan, $this->physics->subject, 4);
         seriate($this->plan, $this->physics->subject, $this->calculus, PrerequisiteKind::Correquisito);
         $waiting = waitingPrerequisite($this->plan, $this->physics->subject, $this->calculus);
+        $waiting->forceFill(['note' => 'Cierra un ciclo de seriación: de una vuelta anterior.'])->save();
 
-        app(ResolvePendingPlacement::class)->handle($this->physics, 2, $this->user);
+        $resolution = app(ResolvePendingPlacement::class)->handle($this->physics, 2, $this->user);
 
         expect(SubjectPrerequisite::query()->sole()->kind)->toBe(PrerequisiteKind::Correquisito)
-            ->and($waiting->fresh()->applied_at)->not->toBeNull();
+            ->and($waiting->fresh())->applied_at->not->toBeNull()->note->toBeNull()
+            ->and(array_map(fn (WaitingPrerequisiteResult $result): array => [$result->waiting->id, $result->outcome], $resolution->prerequisites))
+            ->toBe([[$waiting->id, WaitingPrerequisiteOutcome::AlreadyThere]]);
         Event::assertNotDispatched(CurriculumChanged::class);
     });
 
-    it('un requisito que se quitó de la seriación vuelve con el tipo del SII', function () {
+    it('un requisito que se quitó de la seriación en Nexus no se restaura: el que esperaba queda aplicado con una nota y bitácora (supuesto por confirmar)', function () {
         placeInPlan($this->plan, $this->physics->subject, 4);
         $removed = seriate($this->plan, $this->physics->subject, $this->calculus);
         $removed->delete();
-        waitingPrerequisite($this->plan, $this->physics->subject, $this->calculus, PrerequisiteKind::Correquisito);
+        $waiting = waitingPrerequisite($this->plan, $this->physics->subject, $this->calculus, PrerequisiteKind::Correquisito);
 
-        app(ResolvePendingPlacement::class)->handle($this->physics, 2, $this->user);
+        $resolution = app(ResolvePendingPlacement::class)->handle($this->physics, 2, $this->user);
 
-        expect($removed->fresh())->trashed()->toBeFalse()->kind->toBe(PrerequisiteKind::Correquisito)
-            ->and(SubjectPrerequisite::withTrashed()->count())->toBe(1);
+        expect($removed->fresh())->trashed()->toBeTrue()->kind->toBe(PrerequisiteKind::Seriacion)
+            ->and($waiting->fresh())->applied_at->not->toBeNull()->note->toBe('No entró: se quitó de la seriación en Nexus.')
+            ->and($resolution->prerequisites[0]->outcome)->toBe(WaitingPrerequisiteOutcome::RemovedInNexus)
+            ->and(Activity::query()->where('subject_type', $waiting->getMorphClass())->where('subject_id', $waiting->id)->sole()->description)
+            ->toBe('El requisito ACF-0901 de AE22 no entró a la seriación del plan IIND-2004: se quitó en Nexus');
     });
 
-    it('no toca los requisitos de otro plan ni los que ya entraron', function () {
-        $other = StudyPlan::factory()->create();
-        $elsewhere = waitingPrerequisite($other, $this->physics->subject, $this->calculus);
-        $applied = waitingPrerequisite($this->plan, $this->calculus, $this->drawing->subject);
-        $applied->forceFill(['applied_at' => now()->subDay()])->save();
+    it('devuelve, por cada requisito que tocó, si entró o por qué no', function () {
+        $entered = waitingPrerequisite($this->plan, $this->physics->subject, $this->calculus);
+        $cycle = waitingPrerequisite($this->plan, $this->calculus, $this->physics->subject);
+        $later = waitingPrerequisite($this->plan, $this->physics->subject, $this->drawing->subject);
+
+        $resolution = app(ResolvePendingPlacement::class)->handle($this->physics, 2, $this->user);
+
+        expect($resolution->placement->subject_id)->toBe($this->physics->subject_id)
+            ->and(array_map(fn (WaitingPrerequisiteResult $result): array => [$result->waiting->id, $result->outcome], $resolution->prerequisites))
+            ->toBe([[$entered->id, WaitingPrerequisiteOutcome::Entered], [$cycle->id, WaitingPrerequisiteOutcome::Cycle]])
+            ->and($later->fresh()->applied_at)->toBeNull();
+    });
+
+    it('al aplicar varios, primero los que respetan el orden de los semestres y luego por orden de alta: en un ciclo entra el que pide una materia de un semestre anterior', function () {
+        $backwards = waitingPrerequisite($this->plan, $this->calculus, $this->physics->subject);
+        $forward = waitingPrerequisite($this->plan, $this->physics->subject, $this->calculus);
 
         app(ResolvePendingPlacement::class)->handle($this->physics, 2, $this->user);
+
+        expect($forward->fresh()->applied_at)->not->toBeNull()
+            ->and($backwards->fresh())->applied_at->toBeNull()->note->toBe('Cierra un ciclo de seriación: AE22 ya pide, en cadena, a ACF-0901. Sigue esperando.')
+            ->and(SubjectPrerequisite::query()->sole()->subject_id)->toBe($this->physics->subject_id);
+    });
+
+    it('bloquea primero el plan para escribir, como al agregar una seriación, para que dos validaciones no se crucen', function () {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        app(ResolvePendingPlacement::class)->handle($this->physics, 2, $this->user);
+
+        $locks = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query): bool => preg_match('/ for (update|share)/', $query) === 1)->values();
+
+        expect($locks->first())->toContain('from "study_plans"')->toEndWith('for update');
+    });
+
+    it('no toca los requisitos de otro plan ni los que ya entraron, aunque sus dos materias estén en la retícula', function () {
+        $other = StudyPlan::factory()->create();
+        placeInPlan($other, $this->calculus, 1);
+        placeInPlan($other, $this->physics->subject, 2);
+        $elsewhere = waitingPrerequisite($other, $this->physics->subject, $this->calculus);
+        $applied = waitingPrerequisite($this->plan, $this->physics->subject, $this->calculus);
+        $applied->forceFill(['applied_at' => now()->subDay()])->save();
+
+        $resolution = app(ResolvePendingPlacement::class)->handle($this->physics, 2, $this->user);
 
         expect($elsewhere->fresh()->applied_at)->toBeNull()
             ->and($applied->fresh()->applied_at->isYesterday())->toBeTrue()
+            ->and($resolution->prerequisites)->toBe([])
             ->and(SubjectPrerequisite::query()->count())->toBe(0);
     });
 });

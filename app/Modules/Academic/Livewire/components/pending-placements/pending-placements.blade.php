@@ -17,8 +17,9 @@
       elegido (aria-haspopup); si todavía no se ofrece, lo dice. En una retícula histórica la sugerencia no se usa, y
       con pendientes, arriba de todo un aviso `alert-info` dice por qué no hay trabajo.
     - Requisitos que esperan (seriación del SII): en el panel, debajo de los datos, qué requisitos entran con la materia
-      al asignarle semestre (data-testid="pending-prerequisites") y cuáles esperan a que se valide la otra materia
-      (data-testid="pending-prerequisites-waiting"), con la clave en Mono y su tipo.
+      a la seriación al asignarle semestre (data-testid="pending-prerequisites"), con los que no entrarían por un ciclo
+      marcados en `text-warning`; cuáles esperan a que se valide la otra materia (data-testid="pending-prerequisites-waiting"),
+      con la clave en Mono y su tipo; y la nota de los que la tienen (data-testid="pending-prerequisites-notes").
 --}}
 <div class="space-y-4" data-testid="pending-placements">
     @if ($historical && $total > 0)
@@ -176,9 +177,9 @@
 
                     @if ($prerequisites['enters'] !== [])
                         <p class="text-sm leading-snug" data-testid="pending-prerequisites">
-                            Al asignarle semestre entran sus requisitos:
+                            Al asignarle semestre entran a la seriación:
                             @foreach ($prerequisites['enters'] as $item)
-                                <span wire:key="enters-{{ $item['id'] }}">{{ $item['requires'] ? 'pide ' : '' }}<span class="font-mono">{{ $item['code'] }}</span>{{ $item['requires'] ? '' : ' la pide' }} ({{ mb_strtolower($item['kind']->label()) }}){{ $loop->last ? '.' : ',' }}</span>
+                                <span wire:key="enters-{{ $item['id'] }}">{{ $item['requires'] ? 'pide ' : '' }}<span class="font-mono">{{ $item['code'] }}</span>{{ $item['requires'] ? '' : ' la pide' }} ({{ mb_strtolower($item['kind']->label()) }}@if ($item['cycle'])<span class="text-warning">; no entraría: cerraría un ciclo de seriación</span>@endif){{ $loop->last ? '.' : ',' }}</span>
                             @endforeach
                         </p>
                     @endif
@@ -190,6 +191,14 @@
                                 <span wire:key="waits-{{ $item['id'] }}">{{ $item['requires'] ? 'pide ' : '' }}<span class="font-mono">{{ $item['code'] }}</span>{{ $item['requires'] ? '' : ' la pide' }} ({{ mb_strtolower($item['kind']->label()) }}){{ $loop->last ? '.' : ',' }}</span>
                             @endforeach
                         </p>
+                    @endif
+
+                    @if ($prerequisites['notes'] !== [])
+                        <ul class="space-y-0.5 text-sm leading-snug text-warning" data-testid="pending-prerequisites-notes">
+                            @foreach ($prerequisites['notes'] as $item)
+                                <li wire:key="note-{{ $item['id'] }}"><span class="font-mono">{{ $item['code'] }}</span>: {{ $item['note'] }}</li>
+                            @endforeach
+                        </ul>
                     @endif
 
                     <x-select label="Semestre" name="semester" wire:model.live="semester" :options="$semesterOptions" data-testid="pending-semester"

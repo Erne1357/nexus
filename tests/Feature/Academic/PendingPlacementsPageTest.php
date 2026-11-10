@@ -296,23 +296,48 @@ describe('requisitos que esperan (seriación del SII, confirmado el 10 de noviem
         $this->waiting = fn (string $subject, string $prerequisite, PrerequisiteKind $kind = PrerequisiteKind::Seriacion): StudyPlanPrerequisitePending => StudyPlanPrerequisitePending::factory()->create([
             'study_plan_id' => $this->plan->id, 'subject_id' => $code($subject)->id, 'prerequisite_subject_id' => $code($prerequisite)->id, 'kind' => $kind,
         ]);
+        $this->drawer = fn (StudyPlanSubjectPending $pending, int $semester) => domOf(pendingTab($this->servicesHead, $this->plan)->call('pick', $pending->id)->call('openPlace', $semester))
+            ->querySelector('[data-testid="pending-drawer"]');
     });
 
-    it('al validar una materia, el panel dice qué requisitos entran con ella y cuáles esperan a la otra materia', function () {
+    it('al validar una materia, el panel dice qué requisitos entran con ella a la seriación y cuáles esperan a la otra materia', function () {
         ($this->waiting)('AE22', 'ACF-0901');
         ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
         ($this->waiting)('AE22', 'AE9');
 
-        $drawer = domOf(pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3))->querySelector('[data-testid="pending-drawer"]');
+        $drawer = ($this->drawer)($this->modern, 3);
 
-        expect(textOf($drawer->querySelector('[data-testid="pending-prerequisites"]')))->toBe('Al asignarle semestre entran sus requisitos: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).')
-            ->and(textOf($drawer->querySelector('[data-testid="pending-prerequisites-waiting"]')))->toBe('Esperan a que se valide la otra materia: pide AE9 (seriación).');
+        expect(textOf($drawer->querySelector('[data-testid="pending-prerequisites"]')))->toBe('Al asignarle semestre entran a la seriación: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).')
+            ->and(textOf($drawer->querySelector('[data-testid="pending-prerequisites-waiting"]')))->toBe('Esperan a que se valide la otra materia: pide AE9 (seriación).')
+            ->and($drawer->querySelector('[data-testid="pending-prerequisites-notes"]'))->toBeNull();
+    });
+
+    it('marca el que no entraría porque cerraría un ciclo, con el semestre elegido: primero entra el que respeta el orden de los semestres', function () {
+        ($this->waiting)('ACF-0901', 'AE22');
+        ($this->waiting)('AE22', 'ACF-0901');
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 4);
+
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-prerequisites"]')))
+            ->toBe('Al asignarle semestre entran a la seriación: pide ACF-0901 (seriación), ACF-0901 la pide (seriación; no entraría: cerraría un ciclo de seriación).');
+
+        $tab->set('semester', '2');
+
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-prerequisites"]')))
+            ->toBe('Al asignarle semestre entran a la seriación: pide ACF-0901 (seriación; no entraría: cerraría un ciclo de seriación), ACF-0901 la pide (seriación).');
+    });
+
+    it('pinta la nota de un requisito que siguió esperando', function () {
+        ($this->waiting)('AE22', 'ACF-0901')->forceFill(['note' => 'Cierra un ciclo de seriación: ACF-0901 ya pide, en cadena, a AE22. Sigue esperando.'])->save();
+
+        expect(textOf(($this->drawer)($this->modern, 3)->querySelector('[data-testid="pending-prerequisites-notes"]')))
+            ->toBe('ACF-0901: Cierra un ciclo de seriación: ACF-0901 ya pide, en cadena, a AE22. Sigue esperando.');
     });
 
     it('una materia sin requisitos que esperan no lleva esas líneas', function () {
         ($this->waiting)('AE22', 'ACF-0901');
 
-        $drawer = domOf(pendingTab($this->servicesHead, $this->plan)->call('pick', $this->seminar->id)->call('openPlace', 3))->querySelector('[data-testid="pending-drawer"]');
+        $drawer = ($this->drawer)($this->seminar, 3);
 
         expect($drawer->querySelector('[data-testid="pending-facts"]'))->not->toBeNull()
             ->and($drawer->querySelector('[data-testid="pending-prerequisites"]'))->toBeNull()
@@ -323,26 +348,42 @@ describe('requisitos que esperan (seriación del SII, confirmado el 10 de noviem
         ($this->waiting)('AE22', 'ACF-0901');
         ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
 
-        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3)->call('place');
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 4)->call('place');
 
         expect(lastToastOf($tab))->toMatchArray([
-            'type' => 'success', 'title' => '«Física Moderna» agregada al semestre 3', 'description' => 'Entraron sus requisitos: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).',
+            'type' => 'success', 'title' => '«Física Moderna» agregada al semestre 4', 'description' => 'Entraron a la seriación: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).',
         ])
             ->and(SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count())->toBe(2)
             ->and(StudyPlanPrerequisitePending::whereNull('applied_at')->count())->toBe(0);
     });
 
     it('un requisito que cerraría un ciclo de seriación no entra y la pantalla lo avisa', function () {
-        ($this->waiting)('AE22', 'ACF-0901');
         ($this->waiting)('ACF-0901', 'AE22');
+        ($this->waiting)('AE22', 'ACF-0901');
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 4)->call('place');
+
+        expect(lastToastOf($tab))->toMatchArray([
+            'type' => 'warning', 'title' => '«Física Moderna» agregada al semestre 4',
+            'description' => 'Entraron a la seriación: pide ACF-0901 (seriación). No entró, porque cerraría un ciclo de seriación, y sigue esperando: ACF-0901 la pide (seriación).',
+        ])
+            ->and(SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count())->toBe(1);
+    });
+
+    it('si la materia ya estaba en la retícula, dice qué requisito ya estaba y cuál no entró porque se quitó en Nexus', function () {
+        $physics = $this->modern->subject;
+        placeInPlan($this->plan, $physics, 2);
+        seriate($this->plan, $physics, Subject::query()->where('code', 'AEF-1024')->sole(), PrerequisiteKind::Correquisito);
+        seriate($this->plan, $physics, Subject::query()->where('code', 'ACF-0901')->sole())->delete();
+        ($this->waiting)('AE22', 'AEF-1024');
+        ($this->waiting)('AE22', 'ACF-0901');
 
         $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3)->call('place');
 
         expect(lastToastOf($tab))->toMatchArray([
-            'type' => 'warning', 'title' => '«Física Moderna» agregada al semestre 3',
-            'description' => 'Entraron sus requisitos: pide ACF-0901 (seriación). No entró, porque cerraría un ciclo de seriación, y sigue esperando: ACF-0901 la pide (seriación).',
-        ])
-            ->and(SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count())->toBe(1);
+            'type' => 'warning', 'title' => '«Física Moderna» ya estaba en el semestre 2',
+            'description' => 'Quedó validada sin moverla. Ya estaban en la seriación, con su tipo: pide AEF-1024 (correquisito). No entró, porque se quitó de la seriación en Nexus: pide ACF-0901 (seriación).',
+        ]);
     });
 
     it('el panel lee los requisitos que esperan con las mismas consultas, tenga uno o varios (la primera vuelta llena los cachés de permisos)', function () {
@@ -359,7 +400,8 @@ describe('requisitos que esperan (seriación del SII, confirmado el 10 de noviem
         $one = $queries();
         ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
         ($this->waiting)('IND-1010', 'AE22');
-        ($this->waiting)('AE22', 'AE9');
+        ($this->waiting)('ACF-0901', 'AE22');
+        ($this->waiting)('AE22', 'AE9')->forceFill(['note' => 'Una nota.'])->save();
 
         expect($queries())->toBe($one);
     });

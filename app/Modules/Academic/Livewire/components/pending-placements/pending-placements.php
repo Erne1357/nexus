@@ -1,7 +1,8 @@
 <?php
 
 use App\Modules\Academic\Actions\ResolvePendingPlacement;
-use App\Modules\Academic\Enums\PrerequisiteKind;
+use App\Modules\Academic\Actions\WaitingPrerequisiteResult;
+use App\Modules\Academic\Enums\WaitingPrerequisiteOutcome;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Queries\PendingPlacementsQuery;
@@ -37,10 +38,11 @@ use Mary\Traits\Toast;
  * solo hace falta asignarles semestre si vuelve un alumno.
  *
  * Requisitos que esperan (seriación del SII; decisión del usuario del 10 de noviembre de 2026, confirmada): el panel dice
- * qué requisitos entran con la materia a la seriación al asignarle semestre («Al asignarle semestre entran sus
- * requisitos: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).») y cuáles esperan todavía a que se valide la
- * otra materia (WaitingPrerequisitesQuery). Al agregarla, el aviso dice cuáles entraron y, si alguno no entró porque
- * cerraría un ciclo de seriación, lo dice como advertencia: sigue esperando con su nota.
+ * qué requisitos entran con la materia a la seriación al asignarle semestre («Al asignarle semestre entran a la
+ * seriación: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).»), marca los que no entrarían porque cerrarían un
+ * ciclo con el semestre elegido, dice cuáles esperan todavía a que se valide la otra materia y pinta la nota de los que
+ * la tienen (WaitingPrerequisitesQuery). Al agregarla, el aviso sale de lo que hizo la Action con cada uno: cuáles
+ * entraron, cuáles ya estaban y, como advertencia, los que no entraron por un ciclo o porque se quitaron en Nexus.
  *
  * El componente autoriza `view` del plan y `validatePlacements` (el jefe de Servicios Escolares y el admin) en
  * mount(), al pintar y en cada método; los ids del navegador se buscan entre los pendientes sin resolver del plan. Los
@@ -111,7 +113,9 @@ new class extends Component
             'offeredSemesters' => $offered,
             'semesterOptions' => array_map(fn (int $semester): array => ['id' => (string) $semester, 'name' => "Semestre {$semester}"], range(1, max(1, $offered))),
             'load' => $picked !== null && $this->showDrawer ? $this->load($grid['semesters'], $picked) : null,
-            'prerequisites' => $picked !== null && $this->showDrawer ? $prerequisites->forSubject($plan, $picked->subject_id) : ['enters' => [], 'waits' => []],
+            'prerequisites' => $picked !== null && $this->showDrawer
+                ? $prerequisites->forSubject($plan, $picked->subject_id, ctype_digit($this->semester) ? (int) $this->semester : null)
+                : ['enters' => [], 'waits' => [], 'notes' => []],
         ];
     }
 
@@ -175,10 +179,11 @@ new class extends Component
     }
 
     /**
-     * «Agregar a la retícula»: resuelve el pendiente elegido en el semestre del panel. El aviso dice qué requisitos que
-     * esperaban entraron con ella y, como advertencia, los que siguen esperando porque cerrarían un ciclo.
+     * «Agregar a la retícula»: resuelve el pendiente elegido en el semestre del panel. El aviso sale de lo que la Action
+     * hizo con cada requisito que esperaba (ResolvedPlacement): cuáles entraron a la seriación, cuáles ya estaban y,
+     * como advertencia, los que no entraron porque cerrarían un ciclo o porque se quitaron de la seriación en Nexus.
      */
-    public function place(StudyPlanQuery $plans, PendingPlacementsQuery $pendings, ResolvePendingPlacement $resolve, WaitingPrerequisitesQuery $prerequisites): void
+    public function place(StudyPlanQuery $plans, PendingPlacementsQuery $pendings, ResolvePendingPlacement $resolve): void
     {
         $plan = $this->plan($plans);
 
@@ -187,10 +192,9 @@ new class extends Component
         }
 
         $data = $this->validate(['semester' => ['required', 'integer']]);
-        $expected = $prerequisites->forSubject($plan, $pending->subject_id)['enters'];
 
         try {
-            $placement = $resolve->handle($pending, (int) $data['semester'], auth()->user());
+            $resolution = $resolve->handle($pending, (int) $data['semester'], auth()->user());
         } catch (ValidationException $exception) {
             $errors = [];
 
@@ -202,47 +206,61 @@ new class extends Component
             throw ValidationException::withMessages($errors);
         }
 
+        $placement = $resolution->placement;
         $name = $pending->subject->name;
-        $still = array_column($prerequisites->forSubject($plan, $pending->subject_id)['enters'], 'id', 'id');
-        $blocked = array_values(array_filter($expected, fn (array $item): bool => isset($still[$item['id']])));
-        $entered = array_values(array_filter($expected, fn (array $item): bool => ! isset($still[$item['id']])));
-        $detail = trim(($entered === [] ? '' : 'Entraron sus requisitos: '.$this->prerequisiteLabels($entered).'.')
-            .match (count($blocked)) {
-                0 => '',
-                1 => ' No entró, porque cerraría un ciclo de seriación, y sigue esperando: '.$this->prerequisiteLabels($blocked).'.',
-                default => ' No entraron, porque cerrarían un ciclo de seriación, y siguen esperando: '.$this->prerequisiteLabels($blocked).'.',
-            });
+        $byOutcome = fn (WaitingPrerequisiteOutcome $outcome): array => array_values(array_filter($resolution->prerequisites, fn (WaitingPrerequisiteResult $result): bool => $result->outcome === $outcome));
+        $phrases = [
+            WaitingPrerequisiteOutcome::Entered->value => ['Entraron a la seriación: ', 'Entraron a la seriación: '],
+            WaitingPrerequisiteOutcome::AlreadyThere->value => ['Ya estaban en la seriación, con su tipo: ', 'Ya estaban en la seriación, con su tipo: '],
+            WaitingPrerequisiteOutcome::Cycle->value => ['No entró, porque cerraría un ciclo de seriación, y sigue esperando: ', 'No entraron, porque cerrarían un ciclo de seriación, y siguen esperando: '],
+            WaitingPrerequisiteOutcome::RemovedInNexus->value => ['No entró, porque se quitó de la seriación en Nexus: ', 'No entraron, porque se quitaron de la seriación en Nexus: '],
+        ];
+        $detail = [];
+
+        foreach (WaitingPrerequisiteOutcome::cases() as $outcome) {
+            $results = $byOutcome($outcome);
+
+            if ($results !== []) {
+                $detail[] = $phrases[$outcome->value][count($results) === 1 ? 0 : 1].$this->prerequisiteLabels($results, $pending->subject_id).'.';
+            }
+        }
+
+        $detail = implode(' ', $detail);
+        $warns = $byOutcome(WaitingPrerequisiteOutcome::Cycle) !== [] || $byOutcome(WaitingPrerequisiteOutcome::RemovedInNexus) !== [];
+        $unchanged = ! $placement->wasRecentlyCreated && ! $placement->wasChanged();
+        $title = e($unchanged ? "«{$name}» ya estaba en el semestre {$placement->semester}" : "«{$name}» agregada al semestre {$placement->semester}");
+        $description = trim(($unchanged ? 'Quedó validada sin moverla. ' : '').$detail);
 
         $this->reset('pickedId', 'showDrawer', 'semester');
         $this->placedId = $placement->id;
         $this->dispatch('pending-placed');
 
-        if (! $placement->wasRecentlyCreated && ! $placement->wasChanged()) {
-            $this->info(e("«{$name}» ya estaba en el semestre {$placement->semester}"), e(trim('Quedó validada sin moverla. '.$detail)));
-
-            return;
-        }
-
-        if ($blocked !== []) {
-            $this->warning(e("«{$name}» agregada al semestre {$placement->semester}"), e($detail));
-
-            return;
-        }
-
-        $this->success(e("«{$name}» agregada al semestre {$placement->semester}"), $detail === '' ? null : e($detail));
+        match (true) {
+            $warns => $this->warning($title, e($description)),
+            $unchanged => $this->info($title, e($description)),
+            default => $this->success($title, $description === '' ? null : e($description)),
+        };
     }
 
     /**
-     * Los requisitos como en el panel: «pide ACF-0901 (seriación), AEF-1024 la pide (correquisito)».
+     * Los requisitos como en el panel, desde la materia `$subjectId`: «pide ACF-0901 (seriación), AEF-1024 la pide
+     * (correquisito)»; uno que no la nombra (otro del plan que entró en la misma pasada), «X pide Y (seriación)». El tipo
+     * es el que quedó en la seriación si entró o ya estaba.
      *
-     * @param  list<array{code: string, requires: bool, kind: PrerequisiteKind}>  $items
+     * @param  list<WaitingPrerequisiteResult>  $results
      */
-    private function prerequisiteLabels(array $items): string
+    private function prerequisiteLabels(array $results, string $subjectId): string
     {
-        return implode(', ', array_map(
-            fn (array $item): string => ($item['requires'] ? "pide {$item['code']}" : "{$item['code']} la pide").' ('.mb_strtolower($item['kind']->label()).')',
-            $items,
-        ));
+        return implode(', ', array_map(function (WaitingPrerequisiteResult $result) use ($subjectId): string {
+            $waiting = $result->waiting;
+            $who = match ($subjectId) {
+                $waiting->subject_id => "pide {$waiting->prerequisite->code}",
+                $waiting->prerequisite_subject_id => "{$waiting->subject->code} la pide",
+                default => "{$waiting->subject->code} pide {$waiting->prerequisite->code}",
+            };
+
+            return "{$who} (".mb_strtolower($result->kind->label()).')';
+        }, $results));
     }
 
     /**

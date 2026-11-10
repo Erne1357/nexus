@@ -5,6 +5,7 @@ namespace App\Modules\Imports\Sii\Steps;
 use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
+use App\Modules\Academic\Rules\SeriationRules;
 use App\Modules\Imports\Sii\SiiBatch;
 use App\Modules\Imports\Sii\SiiExport;
 use App\Modules\Imports\Sii\SiiFile;
@@ -29,8 +30,9 @@ use Illuminate\Support\Str;
  * - El mismo requisito (plan, materia y requisito de Nexus) desde varios renglones es uno solo; si unos dicen P y otros
  *   C, queda seriación, lo más estricto, y avisa (supuesto por confirmar).
  * - Las dos materias en la retícula del plan: lote `prerequisites`, cuya plantilla revisa los ciclos (el renglón que
- *   cierra uno queda como error del lote). Primero van los que respetan el orden de los semestres, así en un ciclo
- *   entra el que pide una materia de un semestre anterior (supuesto por confirmar). Avisa sin dejar de migrarlo un P
+ *   cierra uno queda como error del lote). Primero van los que respetan el orden de los semestres
+ *   (SeriationRules::goesBackwards(), la misma regla que al aplicar los que esperan), así en un ciclo entra el que pide
+ *   una materia de un semestre anterior (supuesto por confirmar). Avisa sin dejar de migrarlo un P
  *   cuyo requisito no va en un semestre anterior y un C entre semestres distintos: es dato del SII.
  * - Alguna en «Por validar» del plan y la otra en la retícula o también en «Por validar»: lote `pending_prerequisites`
  *   (requisitos que esperan, con la retícula del SII de la que salieron), sin revisar ciclos: se revisan al aplicarse,
@@ -199,7 +201,7 @@ final class SeriationStep implements SiiStep
 
                     $semester = $grid[$plan][$subject];
                     $required = $grid[$plan][$prerequisite];
-                    $backwards = $kind === PrerequisiteKind::Seriacion && $required >= $semester;
+                    $backwards = SeriationRules::goesBackwards($kind, $semester, $required);
 
                     if ($backwards) {
                         $incidents[] = $this->incident('warning', "{$plan}/{$subject}", "En el plan {$plan}, {$subject} (semestre {$semester}) pide en seriación a {$prerequisite} (semestre {$required}), que no va en un semestre anterior: es dato del SII y se migra igual.");
