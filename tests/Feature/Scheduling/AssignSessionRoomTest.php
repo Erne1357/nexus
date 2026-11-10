@@ -76,6 +76,7 @@ it('asigna un salón libre a la sesión y la devuelve con la validación del gru
 it('deja la bitácora en el grupo con el salón de antes y de después y avisa con GroupScheduleChanged después del commit', function () {
     $heard = [];
     Event::listen(GroupScheduleChanged::class, function (GroupScheduleChanged $event) use (&$heard): void {
+        expect($event->timesChanged)->toBeFalse();
         $heard[] = $event->group->id;
     });
 

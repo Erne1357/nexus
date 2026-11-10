@@ -58,7 +58,7 @@ final class ClearLoanRoom
             $this->loans->releaseUntouched($group, $room, (int) $agreement->day, $actor);
         }
 
-        GroupScheduleChanged::dispatch($group);
+        GroupScheduleChanged::dispatch($group, timesChanged: false);
 
         return $sessions->count();
     }

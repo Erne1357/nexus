@@ -158,6 +158,18 @@ El jefe cierra la carga de su departamento en un campus cuando ya no le falta na
 - **Publicar revisa HC-15 otra vez:** si algo cambió después del cierre (por ejemplo, Facilities bloqueó o desactivó un salón), la publicación se veta con su motivo y hay que reabrir.
 - **Carga sin grupos:** la de un departamento sin partes aceptadas en un campus se queda en borrador, no se cierra ni se publica, y los tableros la muestran como «Sin grupos». No cuenta como pendiente del campus.
 
+## Consulta publicada
+
+Páginas públicas de lo publicado (tarea 4.4, `/horarios`). El qué se publica, la última versión de cada carga y la reapertura están en «Cierre y reapertura de la carga» y en fase-4 «Respuestas de la planeación»; aquí solo lo que decide la consulta.
+
+- Sin sesión, cualquiera ve lo publicado de un campus y periodo: por carrera y semestre, por docente y por salón (confirmado, 10 de noviembre de 2026).
+- El público nunca ve cupos, lugares, versiones, estados, justificaciones, RFC ni avisos de «falta publicar» o «semestre incompleto». Un grupo sin docente, o una sesión presencial sin salón, dice «Por asignar»; la virtual, «Virtual» (confirmado, 10 de noviembre de 2026).
+- Solo quien tiene sesión y `academic_load.load.view` sobre el campus y el departamento ve «Sin publicar» con las cargas que faltan (confirmado, 10 de noviembre de 2026).
+- Cada vista dice «Actualizado el…» con la publicación más reciente de los grupos que muestra: una sola fecha por vista (supuesto por confirmar).
+- La vista de docente y la de salón son por campus: solo sus grupos y sesiones de ese campus (supuesto por confirmar).
+- La consulta limita a 240 peticiones por minuto por IP, porque los alumnos de un campus comparten IP (supuesto por confirmar).
+- El público no ve la capacidad de los grupos (supuesto por confirmar).
+
 ## Exportes de lo publicado
 
 Los archivos que salen de una carga publicada (tareas 4.5 y 4.6) se arman solo desde sus versiones publicadas (`load_snapshots`), nunca desde las tablas vivas, así que dicen lo mismo que la consulta pública (ver [fase-4](../plan/fase-4-cierre-publicacion-piloto.md), «Respuestas de la planeación»).
@@ -343,8 +355,8 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Solicitar cambio | `docente` asignado al grupo, `coordinador` | carga en `staffing` o posterior |
 | Aprobar o rechazar cambio | `jefe_departamento` | |
 | Quitar el docente de un grupo | `jefe_departamento` del departamento, `jefe_proyecto_docente` del departamento y campus | Con motivo; queda en el historial de asignaciones (supuesto por confirmar) |
-| Ver la oferta de mis departamentos (HC-17) | `docente` (personal: `staffing.offer.view`) | Desde que la carga del departamento entra a staffing, y en cualquier estado posterior; incluye todos los campus (supuesto por confirmar). Ve todos los grupos no cancelados de los departamentos donde está adscrito, con su propio lugar y desglose en el ranking, nunca el de los demás. Sin una ficha de docente con su usuario, no hay nada que ver. El filtro «Entre tus 3 primeros» cuenta y muestra los grupos que no son suyos donde ocupa del lugar 1 al 3 sin una marca que lo baje al bloque final (sin horas, choque o no disponible) (supuesto por confirmar) |
-| Ver mi carga | `docente` (personal: `staffing.my_load.view`) | Desde que la carga del departamento entra a staffing; incluye todos los campus (supuesto por confirmar). Sus grupos del periodo, por día, y la cuenta de sus horas (base, externas, asignadas y restantes) |
+| Ver la oferta de mis departamentos (HC-17) | `docente` (personal: `staffing.offer.view`) | Desde que la carga del departamento entra a staffing, y en cualquier estado posterior; incluye todos los campus (supuesto por confirmar). Ve todos los grupos no cancelados de los departamentos donde está adscrito, con su propio lugar y desglose en el ranking, nunca el de los demás. Sin una ficha de docente con su usuario, no hay nada que ver. El filtro «Entre tus 3 primeros» cuenta y muestra los grupos que no son suyos donde ocupa del lugar 1 al 3 sin una marca que lo baje al bloque final (sin horas, choque o no disponible) (supuesto por confirmar). Con la carga del departamento publicada, las fichas son las de su última versión publicada; antes, las vivas (confirmado el 10 de noviembre de 2026). Ver "Lo que ve el docente con la carga publicada" |
+| Ver mi carga | `docente` (personal: `staffing.my_load.view`) | Desde que la carga del departamento entra a staffing; incluye todos los campus (supuesto por confirmar). Sus grupos del periodo, por día, y la cuenta de sus horas (base, externas, asignadas y restantes). De cada carga publicada ve su última versión publicada; de las demás, lo vivo (confirmado el 10 de noviembre de 2026). Ver "Lo que ve el docente con la carga publicada" |
 | Solicitar cambio | `docente` asignado al grupo (permiso personal `staffing.change_request.request_own`), `coordinador` de la carrera dueña y campus (`staffing.change_request.request`) | carga del departamento en `staffing` o `adjusting`; grupo no cancelado. El docente, una solicitud abierta por grupo (confirmado el 7 de noviembre de 2026). Ver "Solicitudes de cambio" |
 | Ver las solicitudes de cambio | quien la pidió, `jefe_departamento`, `jefe_proyecto_docente`, `subdireccion` | Alcance de campus y departamento del grupo (`staffing.change_request.view`; supuesto por confirmar para `jefe_proyecto_docente` y `subdireccion`, solo lectura) |
 | Aprobar o rechazar cambio | `jefe_departamento` del departamento del grupo | Solo una solicitud pendiente, con la carga en `staffing` o `adjusting`. Rechazar lleva comentario (supuesto por confirmar) |
@@ -418,6 +430,19 @@ Supuestos por confirmar:
 - Quién ve qué en la pantalla «Solicitudes de cambio» (tarea 3.11): la lista es de un departamento en el periodo y el campus de la credencial; los jefes, el jefe de proyecto docente y la Subdirección ven todas las del departamento; el coordinador, las de horario de los grupos de su carrera en su campus (las que aplica), en cualquier estado, y quien pidió, las suyas. Las de salón no las ve el coordinador.
 - Lo que se propone, el motivo y el comentario del jefe llevan hasta 500 caracteres.
 - «Mi carga» solo ofrece «Solicitar cambio» en los grupos cuya carga está en Asignación o Ajustes; en los demás dice en qué estado está la carga.
+
+## Lo que ve el docente con la carga publicada (P8)
+
+Con la carga de un departamento publicada, el docente ve lo publicado en «Mi carga» y en la «Oferta del departamento»; antes de publicar, lo vivo (confirmado el 10 de noviembre de 2026). Se decide carga por carga (periodo, campus y departamento), así que un docente puede ver a la vez una carga publicada y otra viva, en dos campus o en dos departamentos. Lo publicado es la última versión de la carga (`load_snapshots`), la misma que lee la consulta pública.
+
+Supuestos por confirmar:
+
+- Si la carga se reabre, el docente sigue viendo la última versión publicada, igual que el público (acordado con el riel de la consulta pública).
+- En «Mi carga», un grupo que se le asignó después de publicar no aparece hasta la siguiente versión, y uno publicado que después se reasignó o se canceló sigue apareciendo como se publicó. Ese grupo no se puede pedir: en «Solicitar cambio» sale deshabilitado con «Reasignado o cancelado después de publicar». Lo demás de «Solicitar cambio» no cambia: la solicitud es sobre el grupo vivo y depende del estado de su carga.
+- Las horas asignadas de «Mi carga» suman los grupos que se ven, publicados y vivos, para que la cuenta cuadre con la pantalla. Las horas base, las externas y el límite son las de ahora.
+- La marca de traslado justo (SC-09) de «Mi carga» se calcula sobre lo que se ve, publicado o vivo, con la misma regla y el mismo mínimo (`staffing.min_campus_travel_minutes`) que el validador, que solo conoce lo vivo.
+- En la oferta, las fichas de una carga publicada son sus grupos de esa versión, con el docente, la carrera dueña, el semestre, el horario y los salones que se congelaron. El ranking sigue vivo («tu lugar», «tu mejor lugar» y el desglose) y se une por el id del grupo; si el grupo publicado ya no tiene ranking, no hay lugar. «Choca con tu horario» del panel explica la marca del ranking, así que sigue calculándose con los grupos vivos.
+- Las dos pantallas dicen «Publicado el 8 dic. 2026 · v2» en una línea discreta, una por carga publicada de las que se ven. Si se ven varias cargas, cada línea dice de cuál: el departamento si se ven varios y el campus si se ven varios («C2: publicado el …»).
 
 ## Pantalla de acceso
 

@@ -4,6 +4,9 @@ namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Queries\PublishedGroup;
+use App\Modules\AcademicLoad\Queries\PublishedSession;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Models\Teacher;
@@ -22,9 +25,17 @@ use Illuminate\Support\Facades\DB;
  * departamento) entra a `staffing` y en cualquier estado posterior. No se esconde ningún grupo. De cada uno trae su
  * lugar y su desglose, nunca el de los demás: el ranking se lee solo con el id de ese docente, y de los demás solo se
  * cuenta cuántos hay. Un número constante de consultas, sin importar los grupos.
+ *
+ * Con la carga publicada, sus fichas salen de la última versión publicada (P8, confirmado el 10 de noviembre de 2026),
+ * también si se reabrió (supuesto por confirmar): los grupos que congeló, con su docente, carrera dueña, semestre,
+ * sesiones y salones de ese momento. Las cargas sin versión publicada siguen leyendo las tablas vivas. El ranking
+ * («tu lugar», «tu mejor lugar» y el desglose) sigue vivo y se une por el id del grupo, que el snapshot conserva: si
+ * el grupo publicado ya no tiene ranking, no hay lugar.
  */
 final class TeacherOfferQuery
 {
+    public function __construct(private readonly PublishedLoadsQuery $published) {}
+
     /**
      * @return array{departments: list<array{id: string, code: string, name: string}>, groups: list<array<string, mixed>>}
      */
@@ -41,21 +52,30 @@ final class TeacherOfferQuery
             return ['departments' => [], 'groups' => []];
         }
 
-        $groups = Group::query()
+        $departmentIds = array_column($departments, 'id');
+        $published = $this->published->forTerm($term);
+
+        $live = Group::query()
             ->active()
             ->where('groups.term_id', $term->id)
-            ->whereIn('groups.department_id', array_column($departments, 'id'))
+            ->whereIn('groups.department_id', $departmentIds)
             ->whereExists(fn (QueryBuilder $load) => $load->select(DB::raw(1))->from('academic_loads')
                 ->whereColumn('academic_loads.term_id', 'groups.term_id')
                 ->whereColumn('academic_loads.campus_id', 'groups.campus_id')
                 ->whereColumn('academic_loads.department_id', 'groups.department_id')
-                ->whereIn('academic_loads.status', self::visibleStatuses()))
+                ->whereIn('academic_loads.status', self::visibleStatuses())
+                ->whereNotIn('academic_loads.id', $published->loadIds()))
             ->with(['subject:id,code,name', 'ownerCareer:id,code', 'campus:id,code,name', 'teacher:id,name', 'sessions' => fn ($sessions) => $sessions->with('room:id,code')])
-            ->orderBy('groups.semester')
-            ->orderBy('groups.code')
             ->get();
 
-        $ids = $groups->pluck('id')->all();
+        $groups = [
+            ...$live->map(fn (Group $group): array => self::fromLive($group, $teacher))->all(),
+            ...array_map(fn (array $entry): array => self::fromPublished($entry['group'], $entry['campus'], $teacher), $published->departments($departmentIds)),
+        ];
+
+        usort($groups, fn (array $a, array $b): int => $a['semester'] <=> $b['semester'] ?: strnatcmp($a['code'], $b['code']) ?: strcmp($a['subject_code'], $b['subject_code']));
+
+        $ids = array_column($groups, 'id');
 
         $mine = StaffingRanking::query()->whereIn('group_id', $ids)->where('teacher_id', $teacher->id)->get()->keyBy('group_id');
         $totals = StaffingRanking::query()->whereIn('group_id', $ids)->groupBy('group_id')
@@ -64,25 +84,12 @@ final class TeacherOfferQuery
 
         return [
             'departments' => $departments,
-            'groups' => $groups->map(fn (Group $group): array => [
-                'id' => $group->id,
-                'department_id' => $group->department_id,
-                'code' => $group->code,
-                'semester' => $group->semester,
-                'subject_code' => $group->subject->code,
-                'subject_name' => $group->subject->name,
-                'career' => $group->ownerCareer->code,
-                'campus_code' => $group->campus->code,
-                'campus_name' => $group->campus->name,
-                'schedule' => SessionLabels::schedule($group->sessions),
-                'rooms' => $group->sessions->map(fn ($session): ?string => $session->room?->code)->filter()->unique()->values()->all(),
-                'teacher_name' => $group->teacher?->name,
-                'is_mine' => $group->teacher_id === $teacher->id,
-                'rank' => ($ranking = $mine->get($group->id))?->rank,
-                'total' => (int) ($totals[$group->id] ?? 0),
+            'groups' => array_map(fn (array $group): array => $group + [
+                'rank' => ($ranking = $mine->get($group['id']))?->rank,
+                'total' => (int) ($totals[$group['id']] ?? 0),
                 'flags' => $ranking?->breakdown['flags'] ?? [],
                 'breakdown' => $ranking === null ? null : self::breakdown($ranking, $weights),
-            ])->all(),
+            ], $groups),
         ];
     }
 
@@ -136,6 +143,58 @@ final class TeacherOfferQuery
             fn (LoadStatus $status): string => $status->value,
             array_filter(LoadStatus::cases(), fn (LoadStatus $status): bool => ! in_array($status, [LoadStatus::Draft, LoadStatus::Proposed], true)),
         );
+    }
+
+    /**
+     * La ficha de un grupo vivo, sin el ranking.
+     *
+     * @return array<string, mixed>
+     */
+    private static function fromLive(Group $group, Teacher $teacher): array
+    {
+        return [
+            'id' => $group->id,
+            'department_id' => $group->department_id,
+            'code' => $group->code,
+            'semester' => $group->semester,
+            'subject_code' => $group->subject->code,
+            'subject_name' => $group->subject->name,
+            'career' => $group->ownerCareer->code,
+            'campus_code' => $group->campus->code,
+            'campus_name' => $group->campus->name,
+            'schedule' => SessionLabels::schedule($group->sessions),
+            'rooms' => $group->sessions->map(fn (GroupSession $session): ?string => $session->room?->code)->filter()->unique()->values()->all(),
+            'teacher_name' => $group->teacher?->name,
+            'is_mine' => $group->teacher_id === $teacher->id,
+            'published' => null,
+        ];
+    }
+
+    /**
+     * La ficha de un grupo publicado, sin el ranking: la carrera dueña y su semestre son la primera colocación.
+     *
+     * @return array<string, mixed>
+     */
+    private static function fromPublished(PublishedGroup $group, Campus $campus, Teacher $teacher): array
+    {
+        $owner = $group->placements[0];
+
+        return [
+            'id' => $group->id,
+            'department_id' => $group->departmentId,
+            'code' => $group->code,
+            'semester' => $owner['semester'],
+            'subject_code' => $group->subject['code'],
+            'subject_name' => $group->subject['name'],
+            'career' => $owner['career']['code'],
+            'campus_code' => $campus->code,
+            'campus_name' => $campus->name,
+            'schedule' => SessionLabels::published($group->sessions),
+            'rooms' => array_values(array_unique(array_filter(array_map(fn (PublishedSession $session): ?string => $session->room['code'] ?? null, $group->sessions)))),
+            'teacher_name' => $group->teacher['name'] ?? null,
+            'is_mine' => ($group->teacher['id'] ?? null) === $teacher->id,
+            'published' => ['version' => $group->version, 'at' => $group->publishedAt],
+        ];
     }
 
     /**
