@@ -48,8 +48,8 @@
         @if ($opened !== null)
             <p class="text-[12.5px] text-neutral">
                 <span class="font-mono font-semibold text-base-content">v{{ $opened['version'] }}</span>
-                · Publicó {{ $opened['publisher'] }} el {{ $day($opened['publishedAt']) }} a las <span class="font-mono">{{ $clock($opened['publishedAt']) }}</span>
-                @if ($opened['comment'] !== null) · <q class="text-base-content">{{ $opened['comment'] }}</q> @endif
+                · Publicó {{ $opened['publisher'] }} el {{ $day($opened['publishedAt']) }} a las {{ $clock($opened['publishedAt']) }}
+                @if ($opened['comment'] !== null) · <span class="text-base-content">«{{ $opened['comment'] }}»</span> @endif
             </p>
             <ul class="flex flex-wrap gap-1.5" aria-label="Contenido y cambios de la versión {{ $opened['version'] }}">
                 <li class="badge badge-neutral badge-soft"><span class="font-mono font-semibold">{{ number_format($opened['groups']) }}</span> grupos</li>
@@ -90,7 +90,7 @@
                                 <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</dt>
                                 <dd class="font-mono font-semibold text-xl tabular-nums">{{ number_format($preview[$key]) }}</dd>
                                 @if (($delta = $deltas($key)) !== null)
-                                    <dd class="text-[12.5px] text-neutral">{{ $delta === 0 ? 'igual' : ($delta > 0 ? '+' : '−').abs($delta) }}@if ($loop->first) desde v{{ $current }}@endif</dd>
+                                    <dd class="text-[12.5px] text-neutral">{{ $delta === 0 ? 'igual' : ($delta > 0 ? '+' : '−').abs($delta) }}@if ($loop->first) {{ $delta === 0 ? 'que la' : 'desde la' }} v{{ $current }}@endif</dd>
                                 @endif
                             </div>
                         @endforeach
