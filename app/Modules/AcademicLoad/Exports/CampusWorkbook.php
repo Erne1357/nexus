@@ -10,6 +10,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekTime;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Writer\XLSX\Writer;
@@ -34,13 +35,15 @@ final class CampusWorkbook implements StaffExport
         public readonly string $termCode,
         public readonly string $campusCode,
         public readonly array $snapshotIds,
+        /** @var list<string> los departamentos que publicaron, para el permiso */
+        public readonly array $departmentIds,
     ) {}
 
     public static function fromRequest(PublishedScheduleQuery $query, Term $term, Campus $campus, Request $request): ?static
     {
         $ids = $query->snapshotIds($term, $campus);
 
-        return $ids === [] ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids);
+        return $ids === [] ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, array_keys($query->scheduleOf($term, $campus, $ids)->loads));
     }
 
     public static function label(): string
@@ -70,7 +73,7 @@ final class CampusWorkbook implements StaffExport
 
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId);
+        return Target::of(campus: $this->campusId, unit: StaffExports::units($this->departmentIds));
     }
 
     public function build(): string
@@ -78,7 +81,7 @@ final class CampusWorkbook implements StaffExport
         $term = Term::query()->findOrFail($this->termId);
         $campus = Campus::query()->findOrFail($this->campusId);
         $schedule = app(PublishedScheduleQuery::class)->scheduleOf($term, $campus, $this->snapshotIds);
-        $path = tempnam(sys_get_temp_dir(), 'nexus-xlsx-');
+        $path = sys_get_temp_dir().'/nexus-'.Str::uuid7().'.xlsx';
 
         try {
             $writer = new Writer;

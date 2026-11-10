@@ -30,6 +30,27 @@
             </div>
         @endif
 
+        @if ($staffExports !== null && $staffExports['departments'] !== [])
+            <section class="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-box border border-base-300 bg-base-100 px-4 py-3" aria-labelledby="staff-exports" data-testid="published-staff-exports">
+                <div class="grid gap-0.5 md:me-auto">
+                    <h2 id="staff-exports" class="font-semibold">Exportes del personal</h2>
+                    <p class="text-sm text-neutral">Todo lo publicado de {{ $context->campus->name }} en {{ $context->term->name }}.</p>
+                </div>
+                <a href="{{ $staffExports['excel'] }}" class="btn btn-outline btn-sm max-md:h-11 max-md:w-full" data-testid="published-export-excel"><x-icon name="o-table-cells" class="h-4 w-4" aria-hidden="true" />Excel del campus</a>
+                <form method="get" action="{{ $staffExports['department'] }}" class="flex flex-wrap items-end gap-2 max-md:w-full">
+                    <label class="grid gap-1 max-md:w-full">
+                        <span class="text-xs font-medium uppercase tracking-wider text-neutral">Departamento</span>
+                        <select name="departamento" class="select select-sm max-md:h-11 max-md:w-full" data-testid="published-export-department">
+                            @foreach ($staffExports['departments'] as $department)
+                                <option value="{{ $department['id'] }}">{{ $department['code'] }} · {{ $department['name'] }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <button type="submit" class="btn btn-outline btn-sm max-md:h-11 max-md:w-full"><x-icon name="o-arrow-down-tray" class="h-4 w-4" aria-hidden="true" />PDF del departamento</button>
+                </form>
+            </section>
+        @endif
+
         @if ($careers === [])
             <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="published-empty">Todavía no hay horarios publicados para {{ $context->campus->name }} en {{ $context->term->name }}.</div>
         @else

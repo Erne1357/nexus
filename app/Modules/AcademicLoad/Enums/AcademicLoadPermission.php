@@ -57,8 +57,7 @@ enum AcademicLoadPermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::LoadExport => [Dimension::Campus],
-            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
+            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadExport, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
             default => [Dimension::Campus, Dimension::Career],
         };
     }

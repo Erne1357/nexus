@@ -107,7 +107,8 @@ final class SemesterPdf extends PublishedPdf
      * Las materias del semestre en orden de clave, cada una con su color y sus grupos.
      *
      * @param  list<PublishedGroup>  $groups
-     * @return list<array{code: string, name: string, credits: int, color: string, groups: list<array{code: string, teacher: string, cells: array<int, list<array{hours: string, place: string, kind: ?string}>>}>}>
+     *                                        La capacidad y la marca de préstamo solo las pinta el PDF del personal (DepartmentPdf).
+     * @return list<array{code: string, name: string, credits: int, color: string, groups: list<array{code: string, teacher: string, capacity: int, cells: array<int, list<array{hours: string, place: string, kind: ?string, loan: bool}>>}>}>
      */
     public static function subjects(array $groups, PublishedSchedule $schedule): array
     {
@@ -129,10 +130,11 @@ final class SemesterPdf extends PublishedPdf
 
             foreach ($usesTimeBlocks ? $group->sessions : [] as $session) {
                 /** @var PublishedSession $session */
-                $cells[$session->day][] = self::session($session);
+                $owner = $session->room['owner_department_id'] ?? null;
+                $cells[$session->day][] = [...self::session($session), 'loan' => $owner !== null && $owner !== $group->departmentId];
             }
 
-            $subjects[$code]['groups'][] = ['code' => $group->code, 'teacher' => self::teacherOf($group), 'cells' => $cells];
+            $subjects[$code]['groups'][] = ['code' => $group->code, 'teacher' => self::teacherOf($group), 'capacity' => $group->capacity, 'cells' => $cells];
         }
 
         return array_values($subjects);

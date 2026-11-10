@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\AcademicLoad\Http\Controllers\DownloadPublishedPdf;
+use App\Modules\AcademicLoad\Http\Controllers\DownloadStaffExport;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -32,3 +33,9 @@ Route::middleware('throttle:published-schedule')->prefix('horarios/{periodo}/{ca
     Route::get('/docente/{docente}/pdf', [DownloadPublishedPdf::class, 'teacher'])->name('teacher.pdf');
     Route::get('/salon/{salon}/pdf', [DownloadPublishedPdf::class, 'room'])->name('room.pdf');
 });
+
+/*
+| Exportes del personal de lo publicado (tareas 4.5 y 4.6): PDF por departamento, Excel del campus y SII. Con sesión; el
+| permiso de cada uno lo revisa PublishedExportPolicy antes de encolar.
+*/
+Route::middleware(['auth', 'throttle:published-schedule'])->get('horarios/{periodo}/{campus}/exportes/{tipo}', DownloadStaffExport::class)->name('published.export');

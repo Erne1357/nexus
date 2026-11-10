@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Exports\StaffExports;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
@@ -81,6 +82,11 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'teachers' => $teacherNeedle === '' ? [] : array_slice(array_values(array_filter($schedule->teachers(), fn (array $teacher): bool => str_contains(PublishedWeek::fold($teacher['name']), $teacherNeedle))), 0, 8),
             'rooms' => ! $profile->usesRooms || $roomNeedle === '' ? [] : array_slice(array_values(array_filter($schedule->rooms(), fn (array $room): bool => str_contains(PublishedWeek::fold($room['code'].' '.$room['name'].' '.$room['building']), $roomNeedle))), 0, 8),
             'unpublished' => $unpublished,
+            'staffExports' => $actor->user() !== null && $actor->allows(AcademicLoadPermission::LoadExport, Target::of(campus: $campusId, unit: StaffExports::units(array_keys($schedule->loads)))) ? [
+                'excel' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'excel']),
+                'department' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'departamento']),
+                'departments' => collect($schedule->loads)->map(fn (array $load): array => $load['department'])->sortBy('code')->values()->all(),
+            ] : null,
         ];
     }
 };

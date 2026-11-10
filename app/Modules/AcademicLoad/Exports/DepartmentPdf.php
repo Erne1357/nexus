@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Exports;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekGrid;
@@ -53,6 +54,11 @@ final class DepartmentPdf extends PublishedPdf implements StaffExport
     public function permission(): AcademicLoadPermission
     {
         return AcademicLoadPermission::LoadExport;
+    }
+
+    public function scope(): Target
+    {
+        return Target::of(campus: $this->campusId, unit: StaffExports::units([$this->departmentId]));
     }
 
     public function filename(): string

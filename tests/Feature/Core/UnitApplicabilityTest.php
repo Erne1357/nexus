@@ -76,8 +76,8 @@ function managementKeys(array $keys): array
 }
 
 describe('AZ-02: lo que cada puesto ejerce', function () {
-    it('AZ-02: el jefe de Servicios Escolares solo ejerce academic.placement.validate', function () {
-        expect(effectivePermissions($this->servicesHead))->toBe(['academic.placement.validate']);
+    it('AZ-02: el jefe de Servicios Escolares solo ejerce academic.placement.validate y los exportes del personal de lo publicado', function () {
+        expect(effectivePermissions($this->servicesHead))->toBe(['academic.placement.validate', 'academic_load.load.export']);
     });
 
     it('AZ-S16: el jefe de un departamento académico conserva todo lo de su puesto salvo academic.placement.validate, que nunca ejercía', function () {
