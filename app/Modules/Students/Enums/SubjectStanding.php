@@ -25,7 +25,7 @@ enum SubjectStanding: string
      * periodo en curso, cursando; si es de uno anterior, sin calificar; si la reprobó, según la oportunidad: la 1
      * es ordinaria, la 2 repetición y la 3 curso especial.
      *
-     * @param  list<array{result: KardexResult, attempt: int, term: string}>  $attempts
+     * @param  list<array{result: KardexResult, attempt: int, term: string|null}>  $attempts
      * @param  bool  $available  si ya puede cursarla según su avance
      * @param  string|null  $termInProgress  el periodo en curso de su campus (TermInProgressQuery), si lo hay
      */

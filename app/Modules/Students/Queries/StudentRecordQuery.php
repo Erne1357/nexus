@@ -166,14 +166,17 @@ final class StudentRecordQuery
     }
 
     /**
+     * Por periodo, del más antiguo al más reciente, y al final lo que no tiene periodo (la historia del SII trae
+     * periodos que no existen), como «Sin periodo».
+     *
      * @param  Collection<int, KardexRecord>  $records
-     * @return list<array{term: string, label: string, records: list<KardexRecord>}>
+     * @return list<array{term: string|null, label: string, records: list<KardexRecord>}>
      */
     private function kardex(Collection $records): array
     {
-        return $records->sortBy([['term_code', 'asc'], fn (KardexRecord $a, KardexRecord $b): int => strcmp($a->subject->code, $b->subject->code)])
-            ->groupBy('term_code')
-            ->map(fn (Collection $rows, string $term): array => ['term' => $term, 'label' => self::termLabel($term), 'records' => $rows->values()->all()])
+        return $records->sortBy([fn (KardexRecord $a, KardexRecord $b): int => [$a->term_code === null, $a->term_code] <=> [$b->term_code === null, $b->term_code], fn (KardexRecord $a, KardexRecord $b): int => strcmp($a->subject->code, $b->subject->code)])
+            ->groupBy(fn (KardexRecord $row): string => $row->term_code ?? '')
+            ->map(fn (Collection $rows, string $term): array => ['term' => $term === '' ? null : $term, 'label' => $term === '' ? 'Sin periodo' : self::termLabel($term), 'records' => $rows->values()->all()])
             ->values()
             ->all();
     }

@@ -142,14 +142,21 @@ it('avisa por línea, sin número de control, el periodo, el estatus y la califi
 
     $run = kardexStepRun($this->dir);
 
-    expect($run['rows'])->toBe([kardexStepRow('S1', 'ACF-0901', '20253', '', 'aprobada', 1)])
+    expect($run['rows'])->toBe([kardexStepRow('S1', 'ACF-0901', '', 85, 'aprobada', 1), kardexStepRow('S1', 'ACF-0901', '20253', '', 'aprobada', 1)])
         ->and(kardexMessages($run['incidents']))->toBe([
-            'historia_alumno.csv:2 El periodo de esta línea no es un periodo del SII (año de 1964 al próximo y 1, 2 o 3): no pasa al kárdex.',
+            'historia_alumno.csv:2 El periodo de esta línea no es un periodo del SII (año de 1964 al próximo y 1, 2 o 3): pasa al kárdex sin periodo, para que Servicios Escolares capture el bueno.',
             'historia_alumno.csv:3 El estatus de la materia de esta línea no es A, R ni P: no pasa al kárdex.',
             'historia_alumno.csv:4 La calificación de esta línea no se entiende: pasa al kárdex sin calificación.',
             'historia_alumno.csv:5 Esta línea no trae número de control: no pasa al kárdex.',
         ])
         ->and(json_encode($run))->not->toContain('secreto');
+});
+
+it('dos renglones de la misma materia con periodos que no existen quedan en uno sin periodo: el aprobado', function () {
+    writeSiiHistory($this->dir, [['0', 'S1', 'CD1', '85', 'O1', 'A'], ['19001', 'S1', 'CD1', '50', 'O1', 'R']]);
+    writeSiiSelection($this->dir, []);
+
+    expect(kardexStepRun($this->dir)['rows'])->toBe([kardexStepRow('S1', 'ACF-0901', '', 85, 'aprobada', 1)]);
 });
 
 it('un tipo de evaluación que no conoce cuenta como oportunidad 1 y avisa por código', function () {

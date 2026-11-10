@@ -219,3 +219,14 @@ it('lo aprobado en una materia que espera semestre en «Por validar» suma a sus
         ->subjectsInGrid->toBe(9)
         ->and(collect($record->semesters)->flatten()->pluck('code'))->not->toContain('P-0');
 });
+
+it('el kárdex deja al final, como «Sin periodo», lo que el SII trae con un periodo que no existe', function () {
+    recordKardex($this->student, $this->subjects['A'], 'aprobada', '20253', grade: 90);
+    KardexRecord::factory()->for($this->student)->for($this->subjects['F'])->create(['result' => 'aprobada', 'term_code' => null, 'grade' => 80]);
+
+    $kardex = recordOf($this->student)->kardex;
+
+    expect(array_column($kardex, 'term'))->toBe(['20253', null])
+        ->and(array_column($kardex, 'label'))->toBe(['Ago-Dic 2025', 'Sin periodo'])
+        ->and(cellOf(recordOf($this->student), 'F')->standing)->toBe(SubjectStanding::Acreditada);
+});
