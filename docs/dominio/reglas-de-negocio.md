@@ -336,7 +336,7 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 | Ver mi carga | `docente` (personal: `staffing.my_load.view`) | Desde que la carga del departamento entra a staffing; incluye todos los campus (supuesto por confirmar). Sus grupos del periodo, por día, y la cuenta de sus horas (base, externas, asignadas y restantes) |
 | Solicitar cambio | `docente` asignado al grupo (permiso personal `staffing.change_request.request_own`), `coordinador` de la carrera dueña y campus (`staffing.change_request.request`) | carga del departamento en `staffing` o `adjusting`; grupo no cancelado. El docente, una solicitud abierta por grupo (confirmado el 7 de noviembre de 2026). Ver "Solicitudes de cambio" |
 | Ver las solicitudes de cambio | quien la pidió, `jefe_departamento`, `jefe_proyecto_docente`, `subdireccion` | Alcance de campus y departamento del grupo (`staffing.change_request.view`; supuesto por confirmar para `jefe_proyecto_docente` y `subdireccion`, solo lectura) |
-| Aprobar o rechazar cambio | `jefe_departamento` del departamento del grupo | Solo una solicitud pendiente. Rechazar lleva comentario (supuesto por confirmar) |
+| Aprobar o rechazar cambio | `jefe_departamento` del departamento del grupo | Solo una solicitud pendiente, con la carga en `staffing` o `adjusting`. Rechazar lleva comentario (supuesto por confirmar) |
 | Aplicar un cambio aprobado | `coordinador` de la carrera dueña y campus si es de horario; `jefe_departamento` si es de salón | Confirmado el 7 de noviembre de 2026 (`staffing.change_request.apply_schedule` y `apply_room`) |
 | Asignar salón | `jefe_departamento` | HC-02, HC-05, HC-06, HC-10, HC-11 |
 | Ver acuerdos entre departamentos | `admin`, `subdireccion`, `jefe_departamento` y `jefe_proyecto_docente` de cualquiera de los dos departamentos | Préstamos de salón y grupos compartidos (`academic_load.agreement.view`; supuesto por confirmar para `subdireccion` y `jefe_proyecto_docente`, solo lectura) |
@@ -395,12 +395,14 @@ Con la carga del departamento en `staffing` o `adjusting`, el docente asignado a
 - **Una abierta por docente y grupo (confirmado el 7 de noviembre de 2026).** Abierta es pendiente, o aprobada sin aplicar. El docente puede pedir en sus otros grupos, y de nuevo en el mismo cuando la anterior se rechazó o se aplicó. La base lo garantiza con un índice único parcial.
 - **El coordinador pide desde «Solicitudes de cambio» (confirmado el 7 de noviembre de 2026).** Con «Nueva solicitud» elige un grupo de su carrera dueña en el campus y el periodo de su credencial, no cancelado y con la carga de su departamento en Asignación o Ajustes, si es de horario o de salón, qué propone y el motivo. Su solicitud no lleva docente, así que no la limita la de una abierta por docente y grupo.
 
+- **Decidir exige la carga en asignación o ajustes, y las abiertas bloquean el cierre (P5, confirmado el 10 de noviembre de 2026).** Aprobar o rechazar una solicitud exige la carga del departamento en `staffing` o `adjusting`; en cualquier otro estado, o sin carga, la Action lo rechaza. Cerrar la carga se bloquea mientras haya solicitudes pendientes (HC-15); las aprobadas sin aplicar también la bloquean (supuesto por confirmar).
+
 Supuestos por confirmar:
 
 - La solicitud trae una descripción en texto libre de la propuesta (`proposed.description`), sin horario o salón estructurado.
 - Una solicitud rechazada exige un comentario con texto.
 - Si Scheduling veta el regreso a `staffing` al aplicar la última solicitud, la solicitud queda aplicada y la carga se queda en `adjusting` hasta la siguiente solicitud aplicada (o el reintento que traiga la pantalla); los motivos del veto se le muestran a quien aplicó.
-- Aprobar con la carga en otro estado distinto de `staffing` no la toca.
+- Aprobar con la carga en `adjusting` no la toca.
 - Quién ve qué en la pantalla «Solicitudes de cambio» (tarea 3.11): la lista es de un departamento en el periodo y el campus de la credencial; los jefes, el jefe de proyecto docente y la Subdirección ven todas las del departamento; el coordinador, las de horario de los grupos de su carrera en su campus (las que aplica), en cualquier estado, y quien pidió, las suyas. Las de salón no las ve el coordinador.
 - Lo que se propone, el motivo y el comentario del jefe llevan hasta 500 caracteres.
 - «Mi carga» solo ofrece «Solicitar cambio» en los grupos cuya carga está en Asignación o Ajustes; en los demás dice en qué estado está la carga.
