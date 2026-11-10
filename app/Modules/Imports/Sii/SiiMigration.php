@@ -14,11 +14,23 @@ final class SiiMigration
     /** @var array<string, mixed> */
     private array $remembered = [];
 
-    public function __construct(private readonly SiiExport $export, private readonly string $curatedDir) {}
+    public function __construct(
+        private readonly SiiExport $export,
+        private readonly string $curatedDir,
+        private readonly bool $dryRun = false,
+    ) {}
 
     public function export(): SiiExport
     {
         return $this->export;
+    }
+
+    /**
+     * Si la corrida es un ensayo: un paso que escribe por su cuenta, sin el motor de importación, no debe escribir.
+     */
+    public function dryRun(): bool
+    {
+        return $this->dryRun;
     }
 
     /**

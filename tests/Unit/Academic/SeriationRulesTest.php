@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Rules\SeriationRules;
 
 /*
@@ -61,3 +62,13 @@ it('con varios caminos da el más corto, y termina aunque la seriación ya tenga
     expect(SeriationRules::cyclePath($edges, 'A', 'E'))->toBe(['E', 'A'])
         ->and(SeriationRules::closesCycle($edges, 'A', 'X'))->toBeFalse();
 });
+
+it('una seriación va contra el orden de los semestres si su requisito no va en un semestre anterior; un correquisito o un semestre desconocido, nunca', function (PrerequisiteKind $kind, ?int $subject, ?int $prerequisite, bool $backwards) {
+    expect(SeriationRules::goesBackwards($kind, $subject, $prerequisite))->toBe($backwards);
+})->with([
+    'requisito anterior' => [PrerequisiteKind::Seriacion, 3, 2, false],
+    'mismo semestre' => [PrerequisiteKind::Seriacion, 3, 3, true],
+    'requisito posterior' => [PrerequisiteKind::Seriacion, 2, 3, true],
+    'correquisito' => [PrerequisiteKind::Correquisito, 2, 3, false],
+    'sin semestre' => [PrerequisiteKind::Seriacion, null, 3, false],
+]);
