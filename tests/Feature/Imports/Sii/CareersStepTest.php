@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Imports\Sii\SiiBatch;
 use App\Modules\Imports\Sii\SiiCuratedMismatch;
 use App\Modules\Imports\Sii\SiiExport;
 use App\Modules\Imports\Sii\SiiFile;
@@ -249,23 +250,74 @@ it('lleva al plan los créditos totales de su retícula del SII; si sus retícul
         ]);
 });
 
-it('D18: un plan sin alumnos inscritos en el periodo más reciente de la selección es una retícula histórica; uno con dos retículas del SII es vivo si una tiene inscritos', function () {
-    // S0 (A/1), S2 (A/3) y S4 (C/1) solo en un periodo anterior; S1 (A2/2) y S5 (D/1) en el actual; S6 (D/2) con un periodo que no es del SII.
-    writeSiiCareersSelection($this->dir, [['20253', 'S0'], ['20253', 'S2'], ['20261', 'S1'], ['20253', 'S4'], ['20261', 'S5'], ['20264', 'S6'], ['20261', 'S1']]);
-    $migration = new SiiMigration(SiiExport::open($this->dir), $this->curated);
+/**
+ * Corre el paso y devuelve la migración y sus lotes por plantilla.
+ *
+ * @return array{migration: SiiMigration, batches: array<string, SiiBatch>}
+ */
+function careersStepRun(string $dir, string $curated): array
+{
+    $migration = new SiiMigration(SiiExport::open($dir), $curated);
     $batches = [];
     foreach ((new CareersStep)->batches($migration) as $batch) {
         $batches[$batch->template] = $batch;
     }
-    $plans = array_column([...$batches['study_plans']->rows], 'historical', 'code');
+
+    return ['migration' => $migration, 'batches' => $batches];
+}
+
+/**
+ * @param  array{migration: SiiMigration, batches: array<string, SiiBatch>}  $run
+ * @return list<string>
+ */
+function careersStepPeriodWarnings(array $run): array
+{
+    return collect($run['batches']['study_plans']->incidents)->where('ref', 'seleccion_materias')->pluck('message')->values()->all();
+}
+
+it('D18: un plan sin alumnos inscritos en el periodo regular más reciente y que no es vigente es una retícula histórica; el verano no cuenta, y un plan con dos retículas del SII es vivo si una tiene inscritos', function () {
+    // 20253: S0 (A/1), S2 (A/3) y S4 (C/1); 20261: S1 (A2/2) y S5 (D/1); S2 también en el verano 20262; S6 (D/2) con un periodo que no es del SII.
+    writeSiiCareersSelection($this->dir, [['20253', 'S0'], ['20253', 'S2'], ['20261', 'S1'], ['20253', 'S4'], ['20261', 'S5'], ['20264', 'S6'], ['20261', 'S1'], ['20262', 'S2']]);
+    $run = careersStepRun($this->dir, $this->curated);
+    $plans = array_column([...$run['batches']['study_plans']->rows], 'historical', 'code');
 
     expect($plans)->toBe([
-        'AAA-2004-100' => 'Sí', 'AAA-2010-224' => 'No', 'BBB-2010-300' => 'Sí', 'CCC-2005-200' => 'Sí', 'DDD-2010-1' => 'No', 'DDD-IS-80-160' => 'Sí',
+        'AAA-2004-100' => 'Sí', 'AAA-2010-224' => 'No', 'BBB-2010-300' => 'Sí', 'CCC-2005-200' => 'Sí', 'DDD-2010-1' => 'No', 'DDD-IS-80-160' => 'No',
     ])
-        ->and($migration->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))
-        ->toBe(['AAA-2004-100' => true, 'BBB-2010-300' => true, 'CCC-2005-200' => true, 'DDD-IS-80-160' => true])
-        ->and(collect($batches['study_plans']->incidents)->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'histórica'))->values()->all())
-        ->toBe(['El periodo actual es el 20261, el mayor de seleccion_materias: 4 de 6 planes no tienen alumnos inscritos en él y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).']);
+        ->and($run['migration']->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))
+        ->toBe(['AAA-2004-100' => true, 'BBB-2010-300' => true, 'CCC-2005-200' => true])
+        ->and(careersStepPeriodWarnings($run))
+        ->toBe(['El periodo actual es el 20261 (2 alumnos inscritos en seleccion_materias): 3 de 6 planes no tienen alumnos inscritos en él ni son vigentes, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).']);
+});
+
+it('D18: un periodo regular con menos de la mitad de alumnos que el anterior todavía se está abriendo: cuentan los inscritos en los dos', function () {
+    writeSiiCareersSelection($this->dir, [['20253', 'S2'], ['20253', 'S4'], ['20253', 'S0'], ['20271', 'S1'], ['20262', 'S6']]);
+    $run = careersStepRun($this->dir, $this->curated);
+
+    expect($run['migration']->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))->toBe(['BBB-2010-300' => true])
+        ->and(careersStepPeriodWarnings($run))
+        ->toBe(['El periodo 20271 (1 alumno inscrito en seleccion_materias) todavía se está abriendo, con menos de la mitad que el 20253 (3 alumnos): cuentan los inscritos en los dos (umbral de la mitad, supuesto por confirmar). 1 de 6 planes no tienen alumnos inscritos ni son vigentes, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).']);
+
+    writeSiiCareersSelection($this->dir, [['20253', 'S2'], ['20253', 'S4'], ['20253', 'S0'], ['20271', 'S1'], ['20271', 'S5']]);
+
+    expect(careersStepRun($this->dir, $this->curated)['migration']->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))
+        ->toBe(['AAA-2004-100' => true, 'BBB-2010-300' => true, 'CCC-2005-200' => true]);
+});
+
+it('D18: un plan vigente o de nuevo ingreso nunca es una retícula histórica, aunque nadie esté inscrito todavía', function () {
+    // S0: egresado de B/1 que entró en 20253, así que BBB-2010-300 es el de nuevo ingreso sin alumnos activos; S1: activo de D/2.
+    writeSiiCareers($this->dir, [
+        ['A', '1', '15/08/2010'], ['A2', '2', '15/08/2010'], ['A', '3', '15/08/2004'], ['B', '1', '15/08/2010'],
+        ['C', '1', '15/08/2005'], ['D', '1', '15/08/2010'], ['D', '2', '15/08/1980'], ['X', '9', '15/08/2010'],
+    ], [['B', '1', 'EGR', '20253', '1'], ['D', '2', 'ACT', '20231', '1']]);
+    writeSiiCareersSelection($this->dir, [['20261', 'S9']]);
+    $run = careersStepRun($this->dir, $this->curated);
+    $plans = collect([...$run['batches']['study_plans']->rows])->keyBy('code');
+
+    expect($plans['BBB-2010-300'])->toMatchArray(['current' => 'Sí', 'intake' => 'Sí', 'historical' => 'No'])
+        ->and($plans['DDD-IS-80-160'])->toMatchArray(['current' => 'Sí', 'intake' => 'No', 'historical' => 'No'])
+        ->and($run['migration']->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))
+        ->toBe(['AAA-2004-100' => true, 'AAA-2010-224' => true, 'CCC-2005-200' => true, 'DDD-2010-1' => true]);
 });
 
 it('D18: sin seleccion_materias ningún plan es histórico, y lo avisa una vez', function () {
@@ -278,5 +330,9 @@ it('D18: sin seleccion_materias ningún plan es histórico, y lo avisa una vez',
 
     expect(array_unique(array_column([...$batches['study_plans']->rows], 'historical')))->toBe(['No'])
         ->and($migration->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))->toBe([])
-        ->and($messages->values()->all())->toBe(['La exportación no trae seleccion_materias con periodos válidos: no se sabe quién está inscrito en el periodo actual, así que ningún plan se trata como retícula histórica (D18).']);
+        ->and($messages->values()->all())->toBe(['La exportación no trae seleccion_materias con periodos regulares válidos: no se sabe quién está inscrito en el periodo actual, así que ningún plan se trata como retícula histórica (D18).']);
+
+    writeSiiCareersSelection($this->dir, [['20262', 'S1'], ['2026', 'S5']]);
+
+    expect(careersStepRun($this->dir, $this->curated)['migration']->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))->toBe([]);
 });

@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Retícula histórica (D18, confirmado el 10 de noviembre de 2026): un plan en el que ningún alumno está inscrito en el
- * periodo actual. La migración del SII lo marca y lo deja tal cual viene del SII: lo que el SII trae sin semestre
+ * periodo actual y que no es vigente ni de nuevo ingreso. La migración del SII lo marca y lo deja tal cual viene del SII: lo que el SII trae sin semestre
  * espera en «Por validar» sin semestre sugerido y sin contar como trabajo pendiente de Servicios Escolares. Deja de
  * serlo solo, en la siguiente corrida, si un alumno vuelve a inscribirse.
  */

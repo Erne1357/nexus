@@ -42,8 +42,8 @@ namespace App\Modules\Imports\Sii;
  *    entre los lugares con semestre de la misma carrera con el mismo nombre normalizado (de cualquiera de sus claves
  *    del SII), nunca de otra carrera; sin ninguno, sin sugerencia. Avisa por lugar que va a «Por validar» con qué
  *    sugerencia y de dónde, y que lo aprobado cuenta (D19). En una retícula histórica (`$historical`: ningún alumno
- *    inscrito en el periodo actual) queda como en el SII, sin sugerencia, y avisa una sola vez por plan cuántas
- *    materias quedaron sin semestre.
+ *    inscrito en el periodo actual y no es vigente) queda como en el SII, sin sugerencia, y avisa una sola vez por
+ *    plan cuántas materias quedaron sin semestre.
  *
  * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
  * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}

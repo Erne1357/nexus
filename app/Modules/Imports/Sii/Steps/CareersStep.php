@@ -28,12 +28,16 @@ use App\Modules\Imports\Sii\SiiStep;
  * retículas de un plan traen créditos distintos, quedan los de la presencial y, si no la hay o también difieren, los
  * mayores, con aviso (supuesto por confirmar).
  *
- * Retícula histórica (D18, confirmado el 10 de noviembre de 2026): un plan de Nexus en el que ningún alumno está
- * inscrito en el periodo actual, el mayor periodo válido de `seleccion_materias` (KardexCodes::term()). Un alumno está
- * inscrito si tiene un renglón de la selección en ese periodo; su retícula es la de `alumnos_todos`, y un plan que junta
- * varias retículas del SII es vivo si cualquiera tiene un inscrito. La selección se lee una sola vez y solo guarda los
- * números de control del periodo mayor. Sin `seleccion_materias` (es opcional) o sin un periodo válido, ningún plan es
- * histórico y se avisa una vez.
+ * Retícula histórica (D18, confirmado el 10 de noviembre de 2026): un plan de Nexus que no es vigente ni de nuevo
+ * ingreso (`current` e `intake` de este lote) y en el que ningún alumno está inscrito en el periodo actual. El periodo
+ * actual sale de `seleccion_materias`, sin los veranos (terminan en 2): el periodo regular válido más reciente
+ * (KardexCodes::term(), termina en 1 o 3); si tiene menos de la mitad de alumnos distintos que el regular anterior,
+ * todavía se está abriendo y cuentan los inscritos en los dos (el umbral de la mitad, supuesto por confirmar). Un
+ * alumno está inscrito si tiene un renglón de la selección en ese periodo; su retícula es la de `alumnos_todos`, y un
+ * plan que junta varias retículas del SII es vivo si cualquiera tiene un inscrito. La selección se lee una sola vez y
+ * solo guarda los números de control de los dos periodos regulares más recientes vistos hasta ahí. Sin
+ * `seleccion_materias` (es opcional) o sin un periodo regular válido, ningún plan es histórico y se avisa una vez; si
+ * no, un aviso dice qué periodo o periodos tomó y con cuántos alumnos.
  *
  * Recuerda `plan_for`: `"{carrera}/{retícula}"` del SII → plan, carrera y modalidad de Nexus, solo de lo incluido;
  * `plan_version`: clave del plan de Nexus → su versión (texto vacío si no se sabe); y `historical_plans`: clave del
@@ -70,10 +74,11 @@ final class CareersStep implements SiiStep
         $versions = $migration->remember('plan_version', fn (): array => $this->versions($planFor, $siiRows));
         $enrolled = $this->enrolledNow($migration);
         $facts = $this->studentFacts($migration, $planFor, $enrolled['students'] ?? []);
-        $historical = $migration->remember('historical_plans', fn (): array => $enrolled === null ? [] : $this->historicalPlans($planFor, $facts['enrolled']));
+        [$plansBatch, $historical] = $this->plansBatch($planFor, $versions, $facts, $credits, $enrolled['terms'] ?? null);
+        $migration->remember('historical_plans', fn (): array => $historical);
 
         yield $this->careersBatch($plans, $careers, $planFor, $facts);
-        yield $this->plansBatch($planFor, $versions, $facts, $credits, $historical, $enrolled['term'] ?? null);
+        yield $plansBatch;
     }
 
     /**
@@ -231,11 +236,12 @@ final class CareersStep implements SiiStep
     }
 
     /**
-     * Los números de control inscritos en el periodo actual, el mayor periodo válido de `seleccion_materias`: una sola
-     * pasada que solo guarda los del periodo mayor visto hasta ahí. Null si la exportación no trae el archivo o ningún
-     * renglón trae un periodo válido.
+     * Los números de control inscritos en el periodo actual, de `seleccion_materias`: una sola pasada que solo guarda los
+     * de los dos periodos regulares más recientes vistos hasta ahí. El más reciente, y también el anterior si el más
+     * reciente tiene menos de la mitad de alumnos distintos (todavía se está abriendo). Null si la exportación no trae el
+     * archivo o ningún renglón trae un periodo regular válido.
      *
-     * @return array{term: string, students: array<string|int, true>}|null
+     * @return array{terms: list<array{term: string, students: int}>, students: array<string|int, true>}|null
      */
     private function enrolledNow(SiiMigration $migration): ?array
     {
@@ -245,50 +251,46 @@ final class CareersStep implements SiiStep
             return null;
         }
 
-        $term = null;
-        $students = [];
+        /** @var array<int, array<string|int, true>> $byTerm */
+        $byTerm = [];
 
         foreach ($export->reader(SiiFile::SeleccionMaterias)->rows(self::SELECTION_COLUMNS) as $row) {
             $period = $row['periodo'];
 
-            if ($row['no_de_control'] === '' || ! KardexCodes::term($period) || ($term !== null && strcmp($period, $term) < 0)) {
+            if ($row['no_de_control'] === '' || ! KardexCodes::term($period) || ! in_array(substr($period, -1), ['1', '3'], true)) {
                 continue;
             }
 
-            if ($term === null || strcmp($period, $term) > 0) {
-                $term = $period;
-                $students = [];
+            $term = (int) $period;
+
+            if (! isset($byTerm[$term])) {
+                if (count($byTerm) === 2 && $term < min(array_keys($byTerm))) {
+                    continue;
+                }
+
+                $byTerm[$term] = [];
+
+                if (count($byTerm) > 2) {
+                    unset($byTerm[min(array_keys($byTerm))]);
+                }
             }
 
-            $students[$row['no_de_control']] = true;
+            $byTerm[$term][$row['no_de_control']] = true;
         }
 
-        return $term === null ? null : ['term' => $term, 'students' => $students];
-    }
-
-    /**
-     * Las retículas históricas: los planes de Nexus sin ninguna retícula del SII con un alumno inscrito.
-     *
-     * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
-     * @param  array<string, true>  $enrolled  retículas del SII con algún inscrito en el periodo actual
-     * @return array<string, true>
-     */
-    private function historicalPlans(array $planFor, array $enrolled): array
-    {
-        $live = [];
-        foreach (array_intersect_key($planFor, $enrolled) as $info) {
-            $live[$info['plan']] = true;
+        if ($byTerm === []) {
+            return null;
         }
 
-        $historical = [];
-        foreach ($planFor as $info) {
-            if (! isset($live[$info['plan']])) {
-                $historical[$info['plan']] = true;
-            }
-        }
-        ksort($historical, SORT_STRING);
+        krsort($byTerm);
+        $terms = array_keys($byTerm);
+        $opening = isset($terms[1]) && count($byTerm[$terms[0]]) * 2 < count($byTerm[$terms[1]]);
+        $used = $opening ? $terms : [$terms[0]];
 
-        return $historical;
+        return [
+            'terms' => array_map(fn (int $term): array => ['term' => (string) $term, 'students' => count($byTerm[$term])], $used),
+            'students' => $opening ? $byTerm[$terms[0]] + $byTerm[$terms[1]] : $byTerm[$terms[0]],
+        ];
     }
 
     /**
@@ -388,10 +390,10 @@ final class CareersStep implements SiiStep
      * @param  array<string, string>  $versions
      * @param  array{campuses: array<string, array<string, true>>, unknownCampuses: array<string, int>, active: array<string, true>, enrolled: array<string, true>, entrants: array<string, array<string, int>>}  $facts
      * @param  array<string, list<int>>  $credits  créditos totales distintos por (carrera, retícula) del SII
-     * @param  array<string, true>  $historical  las retículas históricas
-     * @param  string|null  $term  el periodo actual de la selección; null si no se sabe
+     * @param  list<array{term: string, students: int}>|null  $terms  los periodos actuales de la selección y sus alumnos; null si no se sabe
+     * @return array{SiiBatch, array<string, true>} el lote y las retículas históricas
      */
-    private function plansBatch(array $planFor, array $versions, array $facts, array $credits, array $historical, ?string $term): SiiBatch
+    private function plansBatch(array $planFor, array $versions, array $facts, array $credits, ?array $terms): array
     {
         $period = $facts['entrants'] === [] ? null : (string) max(array_map('strval', array_keys($facts['entrants'])));
         $entrants = $period === null ? [] : $facts['entrants'][$period];
@@ -427,26 +429,54 @@ final class CareersStep implements SiiStep
         }
 
         $rows = [];
+        $historical = [];
         foreach ($plans as $code => $plan) {
-            $hasActive = array_filter($plan['keys'], fn (string $key): bool => isset($facts['active'][$key])) !== [];
+            $current = isset($intake[$code]) || array_filter($plan['keys'], fn (string $key): bool => isset($facts['active'][$key])) !== [];
+
+            if ($terms !== null && ! $current && array_filter($plan['keys'], fn (string $key): bool => isset($facts['enrolled'][$key])) === []) {
+                $historical[(string) $code] = true;
+            }
 
             $rows[] = [
                 'code' => (string) $code,
                 'career' => $plan['career'],
                 'name' => '',
                 'version' => $versions[(string) $code],
-                'current' => $hasActive || isset($intake[$code]) ? 'Sí' : 'No',
+                'current' => $current ? 'Sí' : 'No',
                 'intake' => isset($intake[$code]) ? 'Sí' : 'No',
                 'credits' => $this->planCredits((string) $code, $plan['keys'], $planFor, $credits, $incidents),
                 'historical' => isset($historical[$code]) ? 'Sí' : 'No',
             ];
         }
 
-        $incidents[] = ['level' => 'warning', 'ref' => 'seleccion_materias', 'message' => $term === null
-            ? 'La exportación no trae seleccion_materias con periodos válidos: no se sabe quién está inscrito en el periodo actual, así que ningún plan se trata como retícula histórica (D18).'
-            : "El periodo actual es el {$term}, el mayor de seleccion_materias: ".count($historical).' de '.count($plans).' planes no tienen alumnos inscritos en él y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).'];
+        $incidents[] = ['level' => 'warning', 'ref' => 'seleccion_materias', 'message' => $this->periodMessage($terms, count($historical), count($plans))];
 
-        return new SiiBatch('study_plans', 'planes.csv', $rows, incidents: $incidents);
+        return [new SiiBatch('study_plans', 'planes.csv', $rows, incidents: $incidents), $historical];
+    }
+
+    /**
+     * El aviso de qué periodo o periodos de la selección se tomaron como actuales, con cuántos alumnos, y cuántos planes
+     * quedaron como retículas históricas.
+     *
+     * @param  list<array{term: string, students: int}>|null  $terms
+     */
+    private function periodMessage(?array $terms, int $historical, int $plans): string
+    {
+        if ($terms === null) {
+            return 'La exportación no trae seleccion_materias con periodos regulares válidos: no se sabe quién está inscrito en el periodo actual, así que ningún plan se trata como retícula histórica (D18).';
+        }
+
+        $enrolled = fn (int $count): string => $count === 1 ? '1 alumno inscrito' : "{$count} alumnos inscritos";
+        $outcome = "{$historical} de {$plans} planes no tienen alumnos inscritos";
+        $closing = 'ni son vigentes, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).';
+
+        if (count($terms) === 1) {
+            return "El periodo actual es el {$terms[0]['term']} ({$enrolled($terms[0]['students'])} en seleccion_materias): {$outcome} en él {$closing}";
+        }
+
+        $previous = $terms[1]['students'] === 1 ? '1 alumno' : "{$terms[1]['students']} alumnos";
+
+        return "El periodo {$terms[0]['term']} ({$enrolled($terms[0]['students'])} en seleccion_materias) todavía se está abriendo, con menos de la mitad que el {$terms[1]['term']} ({$previous}): cuentan los inscritos en los dos (umbral de la mitad, supuesto por confirmar). {$outcome} {$closing}";
     }
 
     /**
