@@ -24,7 +24,7 @@ Si las cuentas cuadran, la corrida real es la misma línea sin `--dry-run`.
 | Opción | Qué hace |
 |---|---|
 | `--dry-run` | Corre todo dentro de una transacción que se revierte, sin cola, y borra los archivos subidos. Sí deja `_incidencias.csv` y `_nexus/`. La tabla de la consola dice cuántas altas y cambios haría cada lote |
-| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente`, `alumnos` y `kardex`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras; `kardex`, materias (y los alumnos ya migrados, de esta corrida o de una anterior) |
+| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `archivo`, `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente`, `alumnos` y `kardex`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras; `kardex`, materias (y los alumnos ya migrados, de esta corrida o de una anterior) |
 | `--user=<username>` | Quién aplica los lotes; debe tener permiso de aplicar importaciones |
 | `--force` | Obligatorio en producción |
 
@@ -37,6 +37,31 @@ Si la exportación ya no cumple el contrato de encabezados (falta un archivo, ca
 - `<carpeta>/_incidencias.csv` (`paso,archivo,fila,campo,nivel,mensaje`): lo que validó cada plantilla, lo que descartó o corrigió cada paso y, una vez por archivo del SII, los renglones que no se pudieron leer (`malformados`, error: no se migran), los reparados por coma decimal y la anotación al final. Una fila se señala por su número en el lote, por una clave de catálogo (materia, aula, carrera, retícula) o por `<archivo>:<línea>` del SII, nunca por el nombre de una persona, su RFC o su número de control; los mensajes de algunas plantillas sí pueden traer un valor del renglón. Se reescribe en cada corrida.
 - `<carpeta>/_nexus/`: un CSV intermedio por lote, con los encabezados de su plantilla. Trae datos personales: vive junto a la exportación y nunca sale de `storage/`.
 - En una corrida real, cada lote queda en el disco `imports` (`storage/app/imports/`) como evidencia, con su bitácora y sus `import_rows`, igual que uno del asistente.
+
+## Archivo del SII original (`sii_archivo`)
+
+El usuario decidió el 10 de noviembre de 2026 (confirmado) guardar dentro de Nexus la exportación original, renglón por renglón, para rastrear cualquier dato hasta su origen sin abrir los CSV. Lo hace el paso `archivo` (`ArchiveStep`, que escribe con la Action `ArchiveSiiExport`), el primero de la corrida, para que el original quede guardado aunque un paso posterior se detenga. No pasa por el motor de importación porque no transforma nada.
+
+- **Qué guarda.** En el esquema de PostgreSQL `sii_archivo`, una tabla por archivo de la exportación, con el nombre normalizado del archivo (`alumnos_todos`, `historia_alumno`, …). Cada tabla tiene `_linea` (el número de línea en el CSV, donde el encabezado es la 1; es la llave primaria) y las columnas del contrato como `text`, en su orden. Los valores son los que entrega el lector del SII: en UTF-8, recortados y con la coma decimal reparada, sin otra conversión. Un campo vacío es `''`, nunca null.
+- **Qué no guarda, y por qué.** El `nip` de `alumnos_todos`, porque es la contraseña del alumno en el SII, y la `foto` y la `firma` de `alumnos_todos` y `docentes`, porque son la imagen de la persona y no sirven para rastrear un dato. El lector las descarta en cuanto lee el renglón; la lista está en un solo lugar, `ArchiveSiiExport::EXCLUDED`. Tampoco están los renglones que el lector no pudo leer: su cuenta queda en `_cargas.ilegibles`, sus líneas en `_incidencias.csv` («malformados») y el hueco en `_linea` dice dónde estaban.
+- **`sii_archivo._cargas`.** Una fila por archivo de la última carga: `archivo` (el nombre de su tabla), `nombre_en_carpeta`, `renglones`, `ilegibles`, `columnas_excluidas`, `carpeta` de la exportación y `cargado_en`.
+- **Cada corrida lo reemplaza completo**, en una sola transacción: borra todas las tablas del esquema (también la de un archivo que esta vez no vino, para que refleje solo esta exportación) y las vuelve a llenar con `COPY`, por bloques y sin leer el archivo entero a memoria. Si algo falla, queda el archivo anterior y la corrida se detiene en el paso `archivo`, antes de migrar nada. Las tablas se borran sin `CASCADE`: si alguien crea una vista sobre ellas, la carga falla en lugar de borrarla. Con datos sintéticos, dos millones de renglones de la historia entran en unos 32 segundos.
+- **En seco** no escribe: lee cada archivo y dice cuántos renglones guardaría. `--only=archivo` corre solo este paso.
+- **En la consola** sale una fila por archivo con la plantilla `sii_archivo`: filas, válidas y altas son los renglones guardados (o los que guardaría en seco). Como el paso lee completo cada archivo, las incidencias de lectura (malformados, reparados y anotación al final) quedan a su nombre en `_incidencias.csv`.
+- **No se edita.** Solo lo consulta el administrador directo en la base: no tiene pantalla y no lo lee ninguna Query. Vive fuera de las migraciones: el paso crea el esquema si no existe y `migrate:fresh` no lo toca, porque solo borra las tablas de los esquemas del `search_path`.
+
+Para consultarlo:
+
+```sql
+-- Qué trajo la última carga.
+select * from sii_archivo._cargas order by archivo;
+
+-- La historia de un alumno tal como venía en el SII, con su línea en el CSV.
+select _linea, periodo, materia, grupo, calificacion, tipo_evaluacion, estatus_materia
+from sii_archivo.historia_alumno
+where no_de_control = '<número de control>'
+order by periodo, materia;
+```
 
 ## Qué escribe cada paso en una segunda corrida
 

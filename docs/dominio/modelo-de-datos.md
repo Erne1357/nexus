@@ -142,6 +142,8 @@ erDiagram
 
 Las **plantillas** (columnas esperadas, reglas de validación, lógica de aplicación) viven en código, una clase por plantilla.
 
+El esquema de PostgreSQL **`sii_archivo`** es de Imports pero no es parte del modelo: es el archivo de solo lectura de la exportación original del SII (una tabla por archivo con `_linea` y sus columnas como texto, más `_cargas`), sin NIP, fotos ni firmas, que `imports:migrate-sii` reemplaza completo en cada corrida para rastrear un dato hasta su origen. No se edita, vive fuera de las migraciones y ninguna pantalla lo lee ([migracion-sii.md](../arquitectura/migracion-sii.md), «Archivo del SII original»).
+
 ## CatalogValidation
 
 | Tabla | Campos clave | Notas |
