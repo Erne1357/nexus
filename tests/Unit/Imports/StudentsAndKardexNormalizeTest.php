@@ -70,6 +70,7 @@ describe('kardex', function () {
             'grade' => 85.5,
             'result' => 'aprobada',
             'attempt' => 2,
+            'sii_subject_code' => null,
         ]);
     });
 
