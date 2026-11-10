@@ -53,9 +53,14 @@ final class DepartmentPdf extends PublishedPdf implements StaffExport
         return 'PDF del departamento';
     }
 
-    public function permission(): AcademicLoadPermission
+    public static function requiredPermission(): AcademicLoadPermission
     {
         return AcademicLoadPermission::LoadExport;
+    }
+
+    public function permission(): AcademicLoadPermission
+    {
+        return self::requiredPermission();
     }
 
     public function scope(): Target

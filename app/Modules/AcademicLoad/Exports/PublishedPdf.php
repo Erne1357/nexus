@@ -80,16 +80,28 @@ abstract class PublishedPdf implements PublishedExport
         $campus = Campus::query()->findOrFail($this->campusId);
         [$view, $data, $orientation] = $this->document(app(PublishedScheduleQuery::class)->scheduleOf($term, $campus, $this->snapshotIds), $term, $campus);
 
-        $options = new Options;
-        $options->setIsRemoteEnabled(false);
-        $options->setDefaultFont('DejaVu Sans');
-
-        $pdf = new Dompdf($options);
+        $pdf = new Dompdf(self::options());
         $pdf->loadHtml(view($view, [...$data, 'term' => $term, 'campus' => $campus])->render(), 'UTF-8');
         $pdf->setPaper('letter', $orientation);
         $pdf->render();
 
         return (string) $pdf->output();
+    }
+
+    /**
+     * La configuración de DomPDF, explícita aunque los valores por omisión de la versión 3 ya sean seguros: sin acceso
+     * remoto, sin PHP ni JavaScript incrustados y solo con lectura local de `resources/images` (ADR-0021).
+     */
+    public static function options(): Options
+    {
+        $options = new Options;
+        $options->setIsRemoteEnabled(false);
+        $options->setIsPhpEnabled(false);
+        $options->setIsJavascriptEnabled(false);
+        $options->setChroot([resource_path('images')]);
+        $options->setDefaultFont('DejaVu Sans');
+
+        return $options;
     }
 
     /**

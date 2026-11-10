@@ -79,9 +79,14 @@ final class SiiFilesExport implements StaffExport
         return 'application/zip';
     }
 
-    public function permission(): AcademicLoadPermission
+    public static function requiredPermission(): AcademicLoadPermission
     {
         return AcademicLoadPermission::LoadExportSii;
+    }
+
+    public function permission(): AcademicLoadPermission
+    {
+        return self::requiredPermission();
     }
 
     /**

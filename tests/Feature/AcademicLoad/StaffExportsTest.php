@@ -166,3 +166,33 @@ it('el tope de exportes nuevos es por usuario con sesión, aparte del de la IP',
     RateLimiter::increment('published-exports:'.$head->getKey(), 60, 30);
     $this->actingAs($head)->get($this->pdfUrl)->assertStatus(429);
 });
+
+it('sin el permiso en ningún alcance responde 403 antes de buscar, también para un tipo o departamento que no existen', function () {
+    $this->actingAs(User::factory()->withRole(Role::Docente)->create());
+
+    $this->get(route('published.export', ['periodo' => '20271', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => (string) Str::uuid7()]))->assertForbidden();
+    $this->get(route('published.export', ['periodo' => '20999', 'campus' => 'C2', 'tipo' => 'excel']))->assertForbidden();
+});
+
+it('el jefe con alcance en otro campus no descarga el exporte de este', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $this->actingAs(staffExportsHead($this->department, $c1));
+
+    $this->get($this->excelUrl)->assertForbidden();
+    $this->get($this->pdfUrl)->assertForbidden();
+});
+
+it('otro periodo sin nada publicado es 404 para el personal con permiso', function () {
+    Term::factory()->create(['code' => '20263']);
+    $this->actingAs(staffExportsHead($this->department, $this->campus));
+
+    $this->get(route('published.export', ['periodo' => '20263', 'campus' => 'C2', 'tipo' => 'excel']))->assertNotFound();
+});
+
+it('el jefe de otro departamento que publicó descarga también el PDF de este (supuesto por confirmar)', function () {
+    $other = Department::factory()->create(['code' => 'II', 'name' => 'Industrial']);
+    $otherLoad = AcademicLoad::factory()->for($this->term)->for($this->campus)->for($other)->inStatus(LoadStatus::Published)->create();
+    LoadSnapshot::factory()->for($otherLoad)->withGroups([LoadSnapshotFactory::group(['subject' => ['id' => (string) Str::uuid7(), 'code' => 'IND-1001', 'name' => 'Ergonomía', 'credits' => 4, 'theory_hours' => 2, 'practice_hours' => 2, 'department_id' => $other->id]])])->create();
+
+    $this->actingAs(staffExportsHead($other, $this->campus))->get($this->pdfUrl)->assertOk()->assertHeader('Content-Type', 'application/pdf');
+});
