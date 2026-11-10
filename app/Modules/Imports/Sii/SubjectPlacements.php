@@ -34,8 +34,9 @@ namespace App\Modules\Imports\Sii;
  * 6. Estatus N: un lugar cuyas variantes del SII traen todas estatus `N` (ya no se ofrece) no entra a la retícula: pasa
  *    a pending() con aviso, para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar, 10
  *    de noviembre de 2026; antes no se migraba y se perdía el kárdex de quien lo aprobó). Si otra variante sigue
- *    vigente, se funde con ella como cualquier variante. En una retícula histórica pasa igual, sin aviso propio: cuenta
- *    en el aviso del plan (punto 7).
+ *    vigente, se funde con ella como cualquier variante. En una retícula viva sugiere su semestre del SII si lo trae
+ *    (es dato del SII, no una decisión de Nexus) y si no, el de su misma carrera, como en el punto 7. En una retícula
+ *    histórica pasa sin sugerencia ni aviso propio: cuenta aparte, como «ya no se ofrece», en el aviso del plan.
  * 7. Sin semestre (D18, R10; confirmado, 10 de noviembre de 2026): Nexus nunca decide un semestre; ningún lugar entra a
  *    la retícula con un semestre que no venga del SII. Un lugar con semestre 0 no entra a la retícula: queda en
  *    pending(). En una retícula viva lleva un semestre sugerido (`suggested`): el más frecuente, y en empate el menor,
@@ -677,36 +678,61 @@ final class SubjectPlacements
 
             unset($grid[$ref]);
             $ref = (string) $ref;
-            $historical = isset($this->historical[$placement['plan']]);
-            $sources = $historical || $placement['retired'] ? [] : ($byName[$placement['career']][SubjectName::key($placement['name'])] ?? []);
+
+            if (isset($this->historical[$placement['plan']])) {
+                $this->pending[$ref] = [...$placement, 'suggested' => null];
+                $kind = $placement['retired'] ? 'retired' : 'undated';
+                $shelved[$placement['plan']][$kind] = ($shelved[$placement['plan']][$kind] ?? 0) + 1;
+
+                continue;
+            }
+
+            if ($placement['retired'] && $placement['semester'] > 0) {
+                $this->pending[$ref] = [...$placement, 'suggested' => $placement['semester']];
+                $this->warn($ref, "Lugar {$ref}: el SII lo trae con estatus N (ya no se ofrece): no entra a la retícula; pasa a «Por validar» para que Servicios Escolares decida, con el {$placement['semester']} sugerido, su semestre en el SII. Lo aprobado en él cuenta (supuesto por confirmar).");
+
+                continue;
+            }
+
+            $sources = $byName[$placement['career']][SubjectName::key($placement['name'])] ?? [];
             $counts = array_count_values(array_column($sources, 'semester'));
             $suggested = $sources === [] ? null : min(array_keys($counts, max($counts), true));
             $this->pending[$ref] = [...$placement, 'suggested' => $suggested];
+            $suggestion = $suggested === null
+                ? 'sin sugerencia: ninguna materia con el mismo nombre de la misma carrera tiene semestre'
+                : "con el {$suggested} sugerido por la materia con el mismo nombre de la misma carrera en {$this->listed(array_column($sources, 'ref'))}";
 
-            if ($historical) {
-                $kind = $placement['retired'] ? 'retired' : 'undated';
-                $shelved[$placement['plan']][$kind] = ($shelved[$placement['plan']][$kind] ?? 0) + 1;
-            } elseif ($placement['retired']) {
-                $this->warn($ref, "Lugar {$ref}: el SII lo trae con estatus N (ya no se ofrece): no entra a la retícula; pasa a la lista de pendientes para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar).");
-            } else {
-                $suggestion = $suggested === null
-                    ? 'sin sugerencia: ninguna materia con el mismo nombre de la misma carrera tiene semestre'
-                    : "con el {$suggested} sugerido por la materia con el mismo nombre de la misma carrera en {$this->listed(array_column($sources, 'ref'))}";
-                $this->warn($ref, "Lugar {$ref} sin semestre en el SII: no entra a la retícula; pasa a «Por validar», donde Servicios Escolares le asigna semestre, {$suggestion}. Lo aprobado en ella cuenta (D18 y D19; confirmado, 10 de noviembre de 2026).");
-            }
+            $this->warn($ref, $placement['retired']
+                ? "Lugar {$ref}: el SII lo trae con estatus N (ya no se ofrece) y sin semestre: no entra a la retícula; pasa a «Por validar» para que Servicios Escolares decida, {$suggestion}. Lo aprobado en él cuenta (supuesto por confirmar)."
+                : "Lugar {$ref} sin semestre en el SII: no entra a la retícula; pasa a «Por validar», donde Servicios Escolares le asigna semestre, {$suggestion}. Lo aprobado en ella cuenta (D18 y D19; confirmado, 10 de noviembre de 2026).");
         }
 
         ksort($shelved, SORT_STRING);
 
         foreach ($shelved as $plan => $counts) {
-            $undated = $counts['undated'] ?? 0;
-            $retired = $counts['retired'] ?? 0;
-            $total = $undated + $retired;
-            $detail = $retired === 0 ? '' : " ({$undated} sin semestre y {$retired} con estatus N)";
-            $this->warn((string) $plan, "Retícula histórica {$plan} (ningún alumno inscrito en el periodo actual): {$total} ".($total === 1 ? 'materia queda' : 'materias quedan')." sin semestre, como en el SII{$detail}; esperan en «Por validar» y Servicios Escolares solo se lo asigna si vuelve un alumno (confirmado, 10 de noviembre de 2026).");
+            $this->warn((string) $plan, "Retícula histórica {$plan} (ningún alumno inscrito en el periodo actual): {$this->shelvedSummary($counts['undated'] ?? 0, $counts['retired'] ?? 0)}; esperan en «Por validar» y Servicios Escolares solo les asigna semestre si vuelve un alumno (confirmado, 10 de noviembre de 2026).");
         }
 
         return $grid;
+    }
+
+    /**
+     * Cuántas materias de una retícula histórica quedan sin semestre, como en el SII, y cuántas ya no se ofrecen
+     * (estatus `N`, traigan o no semestre).
+     */
+    private function shelvedSummary(int $undated, int $retired): string
+    {
+        $parts = [];
+
+        if ($undated > 0) {
+            $parts[] = $undated.($undated === 1 ? ' materia queda' : ' materias quedan').' sin semestre, como en el SII';
+        }
+
+        if ($retired > 0) {
+            $parts[] = ($undated > 0 ? (string) $retired : $retired.($retired === 1 ? ' materia' : ' materias')).($retired === 1 ? ' ya no se ofrece' : ' ya no se ofrecen').' (estatus N)';
+        }
+
+        return implode(', y ', $parts);
     }
 
     /**

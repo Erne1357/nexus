@@ -356,7 +356,7 @@ it('D18: una retícula histórica se migra como en el SII: conserva sus semestre
         ->and($pending->pluck('code')->sort()->values()->all())->toBe(['NNO', 'OLD', 'OLDP', 'ZZZ'])
         ->and($pending->pluck('suggested_semester')->unique()->values()->all())->toBe([''])
         ->and($perPlace->filter(fn (string $m): bool => str_contains($m, 'semestre') || str_contains($m, 'estatus N'))->all())->toBe([])
-        ->and($perPlan->pluck('message')->all())->toBe(['Retícula histórica AAA-2004-100 (ningún alumno inscrito en el periodo actual): 4 materias quedan sin semestre, como en el SII (3 sin semestre y 1 con estatus N); esperan en «Por validar» y Servicios Escolares solo se lo asigna si vuelve un alumno (confirmado, 10 de noviembre de 2026).'])
+        ->and($perPlan->pluck('message')->all())->toBe(['Retícula histórica AAA-2004-100 (ningún alumno inscrito en el periodo actual): 3 materias quedan sin semestre, como en el SII, y 1 ya no se ofrece (estatus N); esperan en «Por validar» y Servicios Escolares solo les asigna semestre si vuelve un alumno (confirmado, 10 de noviembre de 2026).'])
         ->and(subjectsStepRow($run['pending_placements'], 'AAA-2010-224', 'NNN'))->not->toBeNull()
         ->and(subjectsStepMessages($run['subjects']))->toContain('warning|AAA-2010-224/NNN|');
 });
@@ -634,7 +634,23 @@ it('un lugar con estatus N no entra a la retícula: pasa a «Por validar», para
 
     expect(collect($run['subjects']['rows'])->pluck('code'))->not->toContain('NNN')
         ->and(subjectsStepRow($run['pending_placements'], 'AAA-2010-224', 'NNN'))->not->toBeNull()
-        ->and($warning['message'])->toContain('estatus N')->toContain('pendientes')->toContain('supuesto por confirmar');
+        ->and($warning['message'])->toContain('estatus N')->toContain('«Por validar»')->toContain('supuesto por confirmar');
+});
+
+it('D18: en una retícula viva, un lugar con estatus N sugiere su semestre del SII y, si no lo trae, el de su misma carrera', function () {
+    writeSiiSubjects($this->dir, [...SUBJECTS_STEP_CATALOG, ['PRW', '3', '110100', 'PROGRAMACION WEB']], [
+        ...SUBJECTS_STEP_PLACEMENTS,
+        ['A', '3', 'PRW', '5', '2', '3', '0', '', 'N'],
+    ], SUBJECTS_STEP_TECNM, SUBJECTS_STEP_SPECIALTIES);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+
+    expect(subjectsStepRow($run['pending_placements'], 'AAA-2010-224', 'NNN')['suggested_semester'])->toBe('3')
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'PRW')['suggested_semester'])->toBe('5')
+        ->and(collect($run['subjects']['incidents'])->firstWhere('ref', 'AAA-2010-224/NNN')['message'])
+        ->toBe('Lugar AAA-2010-224/NNN: el SII lo trae con estatus N (ya no se ofrece): no entra a la retícula; pasa a «Por validar» para que Servicios Escolares decida, con el 3 sugerido, su semestre en el SII. Lo aprobado en él cuenta (supuesto por confirmar).')
+        ->and(collect($run['subjects']['incidents'])->firstWhere('ref', 'AAA-2004-100/PRW')['message'])
+        ->toContain('con el 5 sugerido por la materia con el mismo nombre de la misma carrera en AAA-2010-224/AEB-1055');
 });
 
 it('un lugar con estatus N que es la variante de otro vigente se funde con él', function () {
@@ -692,10 +708,20 @@ function subjectsStepEndToEnd(object $test, ?array $selection = null): void
     app()->when(RunSiiMigration::class)->needs('$curatedDir')->give($test->curated);
 
     if ($selection !== null) {
-        SiiFixtures::write($test->dir.'/seleccion_materias.csv', SiiFile::SeleccionMaterias, array_map(fn (array $r): string => SiiFixtures::line(SiiFile::SeleccionMaterias, [
-            'periodo' => "'{$r[0]}'", 'no_de_control' => "'{$r[1]}'", 'calificacion' => '', 'tipo_evaluacion' => "''",
-        ]), $selection));
+        subjectsStepSelection($test->dir, $selection);
     }
+}
+
+/**
+ * Escribe `seleccion_materias` con solo el periodo y el número de control de cada renglón.
+ *
+ * @param  list<array{string, string}>  $selection
+ */
+function subjectsStepSelection(string $dir, array $selection): void
+{
+    SiiFixtures::write($dir.'/seleccion_materias.csv', SiiFile::SeleccionMaterias, array_map(fn (array $r): string => SiiFixtures::line(SiiFile::SeleccionMaterias, [
+        'periodo' => "'{$r[0]}'", 'no_de_control' => "'{$r[1]}'", 'calificacion' => '', 'tipo_evaluacion' => "''",
+    ]), $selection));
 }
 
 it('migra las materias de punta a punta después del organigrama y las carreras', function () {
@@ -729,6 +755,24 @@ it('migra las materias de punta a punta después del organigrama y las carreras'
         ->and(ImportBatch::query()->whereIn('template', ['subjects', 'pending_placements', 'subject_aliases'])->orderBy('template')->pluck('error_rows', 'template')->all())
         ->toBe(['pending_placements' => 0, 'subject_aliases' => 0, 'subjects' => 0])
         ->and(file_get_contents($this->dir.'/_incidencias.csv'))->toContain('AAA-2004-100/ZZZ')->toContain('Servicios Escolares');
+});
+
+it('D18: una segunda corrida pone o borra el semestre sugerido según la retícula sea viva o histórica', function () {
+    subjectsStepEndToEnd($this);
+    $suggested = fn (): ?int => StudyPlanSubjectPending::query()->where('subject_id', Subject::query()->where('code', 'OLD')->value('id'))->sole()->suggested_semester;
+
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
+    expect($suggested())->toBe(1);
+
+    subjectsStepSelection($this->dir, [['20261', 'NADIE']]);
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
+    expect($suggested())->toBeNull()
+        ->and(StudyPlan::query()->where('code', 'AAA-2004-100')->value('is_historical'))->toBeTrue();
+
+    File::delete($this->dir.'/seleccion_materias.csv');
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
+    expect($suggested())->toBe(1)
+        ->and(StudyPlan::query()->where('code', 'AAA-2004-100')->value('is_historical'))->toBeFalse();
 });
 
 it('D18: de punta a punta, un plan sin inscritos en el periodo actual queda como retícula histórica y sus materias sin semestre esperan sin sugerencia', function () {

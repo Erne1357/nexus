@@ -23,7 +23,8 @@ use Illuminate\Database\Eloquent\Model;
  * `position` (renglón del SII, de 1 a 99, opcional; D21) se guarda en el pendiente para no perder el dato; al
  * resolverlo, la materia queda al final del semestre que se le asigne (supuesto por confirmar). `suggested_semester`
  * (opcional, de 1 en adelante) es el semestre que la migración sugiere en una retícula viva (D18, confirmado el 10 de
- * noviembre de 2026); como la especialidad, se escribe en un pendiente sin resolver y vacío no borra el que tiene.
+ * noviembre de 2026). Solo la migración lo calcula, así que en un pendiente sin resolver se escribe tal cual: vacío lo
+ * borra (la retícula pasó a histórica o ya no hay de dónde sugerirlo).
  */
 class PendingPlacementsTemplate extends ImportTemplate
 {
@@ -119,7 +120,7 @@ class PendingPlacementsTemplate extends ImportTemplate
                 'specialty_id' => $specialty?->getKey() ?? $target->specialty_id,
                 'sii_grid' => $row['sii_grid'] ?? $target->sii_grid,
                 'position' => $row['position'] ?? $target->position,
-                'suggested_semester' => $row['suggested_semester'] ?? $target->suggested_semester,
+                'suggested_semester' => $row['suggested_semester'],
             ])->save();
         }
 

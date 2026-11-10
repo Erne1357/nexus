@@ -320,6 +320,25 @@ it('D18: un plan vigente o de nuevo ingreso nunca es una retícula histórica, a
         ->toBe(['AAA-2004-100' => true, 'AAA-2010-224' => true, 'CCC-2005-200' => true, 'DDD-2010-1' => true]);
 });
 
+it('D18: un plan que junta dos retículas del SII es vivo si una de ellas tiene un inscrito, aunque no sea vigente ni de nuevo ingreso', function () {
+    // S0 (A/1) y S1 (A2/2), los dos de AAA-2010-224, egresados y sin periodo de ingreso: el plan no es vigente ni de nuevo ingreso.
+    writeSiiCareers($this->dir, [
+        ['A', '1', '15/08/2010'], ['A2', '2', '15/08/2010'], ['A', '3', '15/08/2004'], ['B', '1', '15/08/2010'],
+        ['C', '1', '15/08/2005'], ['D', '1', '15/08/2010'], ['D', '2', '15/08/1980'], ['X', '9', '15/08/2010'],
+    ], [['A', '1', 'EGR', '', '1'], ['A2', '2', 'EGR', '', '1']]);
+    $plan = fn (): array => collect([...careersStepRun($this->dir, $this->curated)['batches']['study_plans']->rows])->firstWhere('code', 'AAA-2010-224');
+
+    writeSiiCareersSelection($this->dir, [['20261', 'S1']]);
+    expect($plan())->toMatchArray(['current' => 'No', 'intake' => 'No', 'historical' => 'No']);
+
+    writeSiiCareersSelection($this->dir, [['20261', 'S9']]);
+    expect($plan())->toMatchArray(['current' => 'No', 'intake' => 'No', 'historical' => 'Sí']);
+});
+
+it('solo lee de la selección el periodo y el número de control', function () {
+    expect(CareersStep::SELECTION_COLUMNS)->toEqualCanonicalizing(['periodo', 'no_de_control']);
+});
+
 it('D18: sin seleccion_materias ningún plan es histórico, y lo avisa una vez', function () {
     $migration = new SiiMigration(SiiExport::open($this->dir), $this->curated);
     $batches = [];
