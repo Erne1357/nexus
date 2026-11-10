@@ -83,7 +83,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'teachers' => $teacherNeedle === '' ? [] : array_slice(array_values(array_filter($schedule->teachers(), fn (array $teacher): bool => str_contains(PublishedWeek::fold($teacher['name']), $teacherNeedle))), 0, 8),
             'rooms' => ! $profile->usesRooms || $roomNeedle === '' ? [] : array_slice(array_values(array_filter($schedule->rooms(), fn (array $room): bool => str_contains(PublishedWeek::fold($room['code'].' '.$room['name'].' '.$room['building']), $roomNeedle))), 0, 8),
             'unpublished' => $unpublished,
-            'staffExports' => ($workbook = CampusWorkbook::fromRequest($published, $context->term, $context->campus, request())) !== null && Gate::allows('download', $workbook) ? [
+            'staffExports' => $actor->user() !== null && $actor->allowsAny(CampusWorkbook::requiredPermission()) && ($workbook = CampusWorkbook::fromRequest($published, $context->term, $context->campus, request())) !== null && Gate::allows('download', $workbook) ? [
                 'excel' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'excel']),
                 'department' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'departamento']),
                 'departments' => collect($schedule->loads)->map(fn (array $load): array => $load['department'])->sortBy('code')->values()->all(),

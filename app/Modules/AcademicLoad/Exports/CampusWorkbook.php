@@ -66,9 +66,14 @@ final class CampusWorkbook implements StaffExport
         return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     }
 
-    public function permission(): AcademicLoadPermission
+    public static function requiredPermission(): AcademicLoadPermission
     {
         return AcademicLoadPermission::LoadExport;
+    }
+
+    public function permission(): AcademicLoadPermission
+    {
+        return self::requiredPermission();
     }
 
     public function scope(): Target

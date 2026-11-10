@@ -2,6 +2,7 @@
 
 namespace App\Modules\AcademicLoad\Exports;
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -24,4 +25,10 @@ interface StaffExport extends PublishedExport
      * Cómo se ofrece en la consulta: «Excel del campus», «PDF del departamento».
      */
     public static function label(): string;
+
+    /**
+     * El permiso de este tipo de exporte, para responder 403 a quien no lo tiene en ningún alcance antes de buscar el
+     * exporte (así no se distingue lo publicado de lo que no). Es el mismo que regresa `permission()`.
+     */
+    public static function requiredPermission(): AcademicLoadPermission;
 }
