@@ -18,7 +18,9 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  *   (supuesto por confirmar).
  * - Reabre y da el visto bueno la Subdirección (tareas 4.1 y 4.2).
  *
- * El admin pasa por la concesión implícita del registro. Publicar llega con la tarea 4.3.
+ * - Publica la Subdirección, o el jefe de departamento si el campus no exige visto bueno (tarea 4.3).
+ *
+ * El admin pasa por la concesión implícita del registro.
  */
 final class AcademicLoadPolicy
 {
@@ -52,6 +54,17 @@ final class AcademicLoadPolicy
     public function approve(User $user, AcademicLoad $load): bool
     {
         return $this->can($user, AcademicLoadPermission::LoadApprove, $load);
+    }
+
+    /**
+     * Publicar: Subdirección, o el jefe del departamento si el campus no exige visto bueno (reglas-de-negocio.md,
+     * tabla de permisos). Con visto bueno, la carga aprobada solo la publica quien tiene `LoadPublishApproved`.
+     */
+    public function publish(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, $load->campus->profile->requiresSubdireccionApproval
+            ? AcademicLoadPermission::LoadPublishApproved
+            : AcademicLoadPermission::LoadPublish, $load);
     }
 
     private function can(User $user, AcademicLoadPermission $permission, AcademicLoad $load): bool

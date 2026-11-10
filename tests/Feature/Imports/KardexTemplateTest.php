@@ -87,6 +87,13 @@ it('escribe la fila con el alumno y la materia de la base, y al reaplicarla la a
         ->attempt->toBe(1);
 });
 
+it('guarda la clave del SII con la que el alumno cursó la materia, que es opcional', function () {
+    $this->template->apply(kardexRow(['sii_subject_code' => ' 3eb ']), $this->context);
+    $this->template->apply(kardexRow(['term_code' => '20261']), $this->context);
+
+    expect(KardexRecord::query()->orderBy('term_code')->pluck('sii_subject_code')->all())->toBe(['3EB', null]);
+});
+
 it('busca al alumno y la materia una sola vez por corrida, aunque se repitan en muchas filas', function () {
     DB::enableQueryLog();
 
