@@ -20,7 +20,8 @@ use InvalidArgumentException;
  * No usa el validador de Laravel porque la foto de un departamento lleva cientos de grupos y miles de sesiones.
  *
  * Una forma nueva sube `SCHEMA_VERSION`; las fotos guardadas no se reescriben (HC-18), así que quien lee atiende
- * todas las versiones que existan.
+ * todas las versiones que existan: en el mismo PR se actualizan sus lectores (`PublishedSchedule::SCHEMA_VERSIONS` de la
+ * consulta publicada y `SiiLoadExport`).
  */
 final class SnapshotPayload
 {
