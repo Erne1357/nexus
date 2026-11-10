@@ -92,9 +92,16 @@ it('el admin agrega una materia del catálogo a un semestre, la mueve y la quita
         ->assertSeeIn('[data-semester="9"]', $subject->code)
         ->assertNoJavaScriptErrors();
 
+    // El select del panel se llena con la respuesta de Livewire: se espera su valor (el semestre 9 donde se agregó)
+    // antes de elegir y se confirma la elección antes de guardar, o un morph tardío la pisa y «Guardar lugar»
+    // guarda el semestre de antes.
+    $semesterSelect = "document.querySelector('[data-testid=\"subject-panel\"] select[name=\"semester\"]').value";
+
     $page->click('[data-subject="'.$subject->code.'"]')
         ->waitForText('Lugar en la retícula')
+        ->assertScript($semesterSelect, '9')
         ->select('semester', '8')
+        ->assertScript($semesterSelect, '8')
         ->press('Guardar lugar')
         ->assertSeeIn('[data-semester="8"]', $subject->code)
         ->click('@remove-placement')
