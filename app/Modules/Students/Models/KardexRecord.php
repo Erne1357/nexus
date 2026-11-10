@@ -15,10 +15,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Una materia en el historial de un alumno, en un periodo (`term_code`, el código del SII). Una por
- * alumno, materia y periodo; la oportunidad (`attempt`) dice si es la primera vez que la cursa.
+ * Una materia en el historial de un alumno, en un periodo (`term_code`, el código del SII; vacío si la historia del
+ * SII trae un periodo que no existe). Una por alumno, materia y periodo, también sin periodo; la oportunidad
+ * (`attempt`) dice si es la primera vez que la cursa.
  */
-#[Fillable(['student_id', 'subject_id', 'term_code', 'grade', 'result', 'attempt'])]
+#[Fillable(['student_id', 'subject_id', 'sii_subject_code', 'term_code', 'grade', 'result', 'attempt'])]
 #[UseFactory(KardexRecordFactory::class)]
 class KardexRecord extends Model
 {

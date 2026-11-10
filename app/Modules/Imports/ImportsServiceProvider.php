@@ -11,6 +11,7 @@ use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
+use App\Modules\Imports\Sii\Steps\KardexStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\PositionsStep;
 use App\Modules\Imports\Sii\Steps\RoomsStep;
@@ -78,6 +79,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         PositionsStep::class,
         TeacherHistoryStep::class,
         StudentsStep::class,
+        KardexStep::class,
     ];
 
     public function register(): void
