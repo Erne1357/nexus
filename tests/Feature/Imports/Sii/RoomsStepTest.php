@@ -57,9 +57,9 @@ function roomsStepRun(string $dir, string $curated): array
 }
 
 beforeEach(function () {
-    $this->dir = sys_get_temp_dir().'/sii-'.uniqid();
+    $this->dir = sys_get_temp_dir().'/sii-'.bin2hex(random_bytes(6));
     File::copyDirectory(base_path('tests/Fixtures/imports/sii/minimo'), $this->dir);
-    $this->curated = sys_get_temp_dir().'/sii-curated-'.uniqid();
+    $this->curated = sys_get_temp_dir().'/sii-curated-'.bin2hex(random_bytes(6));
     File::makeDirectory($this->curated, 0775, true);
 
     writeSiiRooms($this->dir, [['A1'], ['A2'], ['L1', 'S'], ['B1', 'N', 'I'], ['X1'], ['X2', 'N', 'I'], ['EAD1'], [' 910'], ['910']]);

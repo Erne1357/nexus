@@ -76,7 +76,7 @@ function studentsStepRun(string $dir): array
 }
 
 beforeEach(function () {
-    $this->dir = sys_get_temp_dir().'/sii-'.uniqid();
+    $this->dir = sys_get_temp_dir().'/sii-'.bin2hex(random_bytes(6));
     File::copyDirectory(base_path('tests/Fixtures/imports/sii/minimo'), $this->dir);
 });
 
@@ -211,7 +211,7 @@ it('nunca lee el NIP ni la CURP', function () {
 
 it('migra a los alumnos de punta a punta sin errores', function () {
     Storage::fake('imports');
-    $curated = sys_get_temp_dir().'/sii-curated-'.uniqid();
+    $curated = sys_get_temp_dir().'/sii-curated-'.bin2hex(random_bytes(6));
     File::makeDirectory($curated, 0775, true);
     File::put($curated.'/planes.csv', STUDENTS_CURATED_PLANS);
     File::put($curated.'/carreras.csv', STUDENTS_CURATED_CAREERS);

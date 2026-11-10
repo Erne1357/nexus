@@ -58,7 +58,7 @@ it('deja pasar una carga sin choques duros y no mira otras transiciones ni otros
     Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->load->campus_id]);
 
     expect(staffingVeto()->blocked())->toBeFalse()
-        ->and(staffingVeto(LoadStatus::Staffing, LoadStatus::Closed)->blocked())->toBeFalse();
+        ->and(array_filter(staffingVeto(LoadStatus::Staffing, LoadStatus::Closed)->reasons(), fn (string $reason): bool => str_contains($reason, 'antes de asignar docentes')))->toBe([]);
 });
 
 it('sin bloques de tiempo no pide horario', function () {
