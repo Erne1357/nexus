@@ -2,7 +2,7 @@
 
 Runbook del servidor on-premise del ITCJ. La decisión y sus alternativas están en [ADR-0013](../decisiones/0013-despliegue-on-premise-itcj.md).
 
-**Estado:** el stack se validó en una máquina de desarrollo el 2026-10-27 (construcción de la imagen, HTTPS con CA interna, migraciones al arrancar, actualización de versión, respaldo y restauración). **Falta ensayarlo en el servidor real** y confirmar con el ITCJ los puntos de la sección [Por confirmar](#por-confirmar-con-el-itcj). Mientras tanto, los comandos de abajo son los que se probaron; las rutas del servidor (`/opt/nexus`, `/var/backups/nexus`) son una sugerencia.
+**Estado:** el stack se validó en una máquina de desarrollo el 2026-10-27 y se **ensayó completo, desde cero y siguiendo este runbook, el 2026-11-10** (ver [Ensayo local](#ensayo-local-2026-11-10)). **Falta ejecutarlo en el servidor real** y confirmar con el ITCJ los puntos de la sección [Por confirmar](#por-confirmar-con-el-itcj). Mientras tanto, los comandos de abajo son los que se probaron; las rutas del servidor (`/opt/nexus`, `/var/backups/nexus`) son una sugerencia.
 
 ## Qué corre
 
@@ -16,6 +16,8 @@ Runbook del servidor on-premise del ITCJ. La decisión y sus alternativas están
 | `postgres` | Base de datos (volumen `postgres-data`) | No |
 | `valkey` | Caché, sesiones y colas (volumen `valkey-data`) | No |
 | `backup` | `pg_dump` diario hacia `BACKUP_DIR` con retención | No |
+
+No hay un servicio `scheduler` (`schedule:run`): el código no programa ninguna tarea (`routes/console.php` no define horarios). Los recálculos pesados (`scheduling:recompute-conflicts`, `staffing:refresh-teacher-loads`) corren por eventos y colas, o a mano. Si una tarea futura usa `Schedule::`, hay que agregar el servicio en el mismo PR.
 
 Volúmenes de Docker: `postgres-data`, `valkey-data`, `app-storage` (archivos compartidos entre `app` y `queue`), `caddy-data` (certificados) y `caddy-config`. **Nunca ejecutes `docker compose down -v` en producción**: borra la base de datos y los certificados.
 
@@ -89,7 +91,15 @@ Volúmenes de Docker: `postgres-data`, `valkey-data`, `app-storage` (archivos co
    ls -l /var/backups/nexus/daily
    ```
 
-6. **Primer usuario administrador:** pendiente. Lo definen las tareas de usuarios y roles del módulo `Core` (0.5 a 0.7) y la importación de la fase 1; cuando exista el comando o seeder, se documenta aquí. Por ahora la verificación termina en `/up` y en que la página de inicio cargue.
+   El primer respaldo se hace al arrancar, **antes** de que terminen las migraciones, así que sale casi vacío (menos de 1 KB). Es normal; haz uno manual (`backup.sh run`) después del paso 6.
+
+6. **Datos base y primer administrador.** Con `ADMIN_INITIAL_PASSWORD` ya definida en `.env`, el seeder crea los campus, el organigrama y el usuario `admin` (sin esa variable falla a propósito: producción nunca tiene una contraseña conocida):
+
+   ```bash
+   docker compose exec app php artisan db:seed --force
+   ```
+
+   Es idempotente y no toca la contraseña de un `admin` existente. El primer acceso en `https://<APP_DOMAIN>/login` (usuario `admin`) obliga a cambiarla. Después ya no hace falta conservar la variable en `.env`.
 
 ## Actualizar a una versión nueva
 
@@ -234,6 +244,27 @@ Cambiar una variable del `.env` y ejecutar `docker compose up -d` recrea los ser
 | Disco lleno | `docker system df`; `docker rmi` de versiones viejas; revisa el tamaño de `BACKUP_DIR` |
 | Sesiones cerradas de repente | Cambió `APP_KEY` o se perdió el volumen `valkey-data` |
 
+## Mostrar la prueba de concepto
+
+Mientras no haya servidor, el stack de producción corre en una máquina del equipo y se muestra por un túnel (Cloudflare Tunnel, ngrok, etc.). Un túnel público sin contraseña expone la aplicación a cualquiera con el enlace, así que Caddy ofrece una contraseña previa al sitio (`basic_auth`), apagada por defecto:
+
+```bash
+# Hash bcrypt de la contraseña (pide la contraseña dos veces; no queda en el historial)
+docker compose exec caddy caddy hash-password
+```
+
+En `.env` agrega el usuario y el hash **entre comillas simples** (el hash lleva `$`, que compose interpretaría en otro caso) y recrea Caddy:
+
+```bash
+BASIC_AUTH_USER=demo
+BASIC_AUTH_HASH='$2a$14$...'
+```
+```bash
+docker compose up -d caddy
+```
+
+Sin credenciales todas las rutas responden 401; con ellas, la aplicación (que además pide su propio inicio de sesión). Para apagarla, comenta las dos líneas y repite `up -d caddy`. El túnel debe apuntar a `https://127.0.0.1:<HTTPS_PORT>` con la verificación del certificado desactivada (CA interna con `local_certs`) y enviando el nombre `APP_DOMAIN` como Host/SNI. Comparte la contraseña por un canal distinto al del enlace y baja el túnel al terminar. En el servidor real déjala apagada.
+
 ## Probar el stack de producción en una máquina de desarrollo
 
 Sirve para validar cambios al overlay sin servidor. **No toca el stack de desarrollo** si se usa otro nombre de proyecto (`-p`) y otros puertos. Hazlo desde un worktree o una copia del repositorio con su propio `.env`, porque `env_file: .env` apunta a esa carpeta.
@@ -242,17 +273,39 @@ Sirve para validar cambios al overlay sin servidor. **No toca el stack de desarr
 cp .env.production.example .env          # y completa: APP_KEY, contraseñas, APP_DOMAIN=nexus-prodcheck.test
 #   APP_IMAGE_TAG=prodcheck  HTTP_PORT=18080  HTTPS_PORT=18443
 #   CADDY_GLOBAL_OPTIONS=local_certs     (CA interna: no sale a internet)
-#   BACKUP_DIR=/ruta/de/prueba
+#   BACKUP_DIR=/ruta/de/prueba  BACKUP_UID=$(id -u)  BACKUP_GID=$(id -g)
+#   ADMIN_INITIAL_PASSWORD=...
 
 P="docker compose -p nexus-prodcheck"    # siempre con -p: sin él, compose usaría el proyecto "nexus" de desarrollo
 $P build app
 $P up -d --wait --wait-timeout 300
+$P exec app php artisan db:seed --force
 curl -sk --resolve nexus-prodcheck.test:18443:127.0.0.1 https://nexus-prodcheck.test:18443/up
 $P exec backup sh /opt/backup/backup.sh run
 $P down -v                               # borra solo este proyecto de prueba
 ```
 
-La CA interna de Caddy no es de confianza en el navegador, de ahí el `-k`. Las pruebas automáticas de la configuración están en `tests/Unit/Deploy/ProductionStackTest.php`.
+El `.env` de una prueba no debe ser el del desarrollo (`env_file: .env`): usa el de la copia donde corres esto. La CA interna de Caddy no es de confianza en el navegador, de ahí el `-k`; la redirección 308 de HTTP no conserva el puerto de prueba, así que en local pide HTTPS directamente. Las pruebas automáticas de la configuración están en `tests/Unit/Deploy/ProductionStackTest.php`.
+
+## Ensayo local (2026-11-10)
+
+Despliegue limpio con el overlay de producción en un proyecto aparte (`-p nexus-prodtest`, Caddy en 18080/18443, `local_certs`, `.env` generado con secretos aleatorios, imagen construida desde el árbol de trabajo). Tiempos medidos en la máquina de desarrollo (la imagen ya tenía caché de capas):
+
+| Paso | Resultado | Tiempo |
+|---|---|---|
+| `docker compose build app` | imagen `prod` | 22 s |
+| `up -d --wait` desde cero | 6 servicios sanos; 89 migraciones aplicadas al arrancar; primer respaldo (vacío) | 19 s |
+| `db:seed --force` | campus, organigrama y `admin` | 1 s |
+| `GET /login` por HTTPS | 200, HTTP/2, `Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`, sin `Server`; HTTP responde 308 | 0,12 s |
+| Cola | un job encolado lo procesó `queue` (DONE en 2 ms); `queue:failed` vacía | 3 s |
+| `backup.sh run` | `.dump` de 252 KB validado con `pg_restore --list` | 0,4 s |
+| Restauración A (base nueva) | `users`, `migrations` y `campuses` iguales a producción (1, 89, 5) | 1 s |
+| Restauración B (sobre producción) | se alteró un dato, se restauró: volvió el original; `/up` 200 | 9 s |
+| `basic_auth` del túnel | apagada: 200; encendida: 401 sin credenciales o con contraseña errónea, 200 con la correcta | — |
+
+Con la base casi vacía los tiempos de respaldo y restauración son mínimos; con los datos reales de R1 se medirán de nuevo en el servidor. Hallazgos corregidos en este ensayo: faltaba documentar el primer administrador (`ADMIN_INITIAL_PASSWORD` no estaba en la plantilla del `.env` y el seeder falla sin ella), el primer respaldo sale vacío por salir antes de las migraciones, y se añadió la contraseña opt-in para el túnel.
+
+**Sigue esperando al servidor real:** el dominio y su DNS, los puertos 80 y 443 abiertos (el certificado de Let's Encrypt no se pudo ensayar, solo la CA interna), quién copia `BACKUP_DIR` fuera del servidor, y el primer PR `develop` → `main` con el tag `v1.0.0` (tarea 4.10).
 
 ## Por confirmar con el ITCJ
 

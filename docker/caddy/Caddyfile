@@ -13,6 +13,15 @@
 {$APP_DOMAIN} {
 	encode zstd gzip
 
+	# Opt-in: contraseña previa al sitio para mostrarlo por un túnel (ver
+	# docs/operacion/despliegue.md, «Mostrar la prueba de concepto»). Sin
+	# BASIC_AUTH_USER el matcher es falso y no se pide nada. Los valores "off" solo
+	# evitan que la directiva quede vacía cuando está apagada.
+	@gate expression `"{$BASIC_AUTH_USER:}" != ""`
+	basic_auth @gate {
+		{$BASIC_AUTH_USER:off} {$BASIC_AUTH_HASH:off}
+	}
+
 	request_body {
 		max_size 20MB
 	}

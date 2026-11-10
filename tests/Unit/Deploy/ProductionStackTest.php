@@ -96,6 +96,21 @@ it('entrega una plantilla de .env de producción sin secretos reales', function 
         ->and($env['APP_KEY'])->toBe('')
         ->and($env['DB_PASSWORD'])->toStartWith('CAMBIAR')
         ->and($env['REDIS_PASSWORD'])->toStartWith('CAMBIAR')
+        ->and($env['ADMIN_INITIAL_PASSWORD'])->toStartWith('CAMBIAR')
         ->and($env['APP_DOMAIN'])->not->toBeEmpty()
         ->and($env['ACME_EMAIL'])->not->toBeEmpty();
+});
+
+it('deja apagada por defecto la contraseña previa al sitio del túnel de demostración', function () {
+    $caddy = deployServices('compose.prod.yaml')['caddy']['environment'];
+    $caddyfile = file_get_contents(dirname(__DIR__, 3).'/docker/caddy/Caddyfile');
+    $template = file_get_contents(dirname(__DIR__, 3).'/.env.production.example');
+
+    // Vacías por defecto y con un matcher que sin usuario nunca coincide.
+    expect($caddy['BASIC_AUTH_USER'])->toBe('${BASIC_AUTH_USER:-}')
+        ->and($caddy['BASIC_AUTH_HASH'])->toBe('${BASIC_AUTH_HASH:-}')
+        ->and($caddyfile)->toContain('@gate expression `"{$BASIC_AUTH_USER:}" != ""`')
+        ->and($caddyfile)->toContain('basic_auth @gate')
+        ->and($template)->toMatch('/^# BASIC_AUTH_USER=/m')
+        ->and($template)->not->toMatch('/^BASIC_AUTH_/m');
 });
