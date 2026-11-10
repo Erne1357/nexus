@@ -4,6 +4,7 @@ namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
@@ -35,9 +36,12 @@ use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * Módulo AcademicLoad, el orquestador: la carga académica de cada departamento en un campus y un periodo
@@ -64,6 +68,14 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(LoadStatusesRequested::class, ReportLoadStatuses::class);
         Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
+
+        // Un invitado puede encolar un PDF: 30 por minuto por IP alcanzan para quien consulta y frenan a quien abusa.
+        // La recarga de «Preparando el PDF» (cada 3 s) cabe de sobra.
+        RateLimiter::for('published-exports', fn (Request $request): Limit => Limit::perMinute(30)->by($request->ip()));
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([PruneExports::class]);
+        }
     }
 
     /**

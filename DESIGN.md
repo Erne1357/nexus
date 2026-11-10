@@ -127,7 +127,7 @@ Nexus apunta a sustituir todo el SII (académico, servicios escolares, recursos 
 
 **Base técnica.** MaryUI sobre daisyUI y Tailwind 4. Los componentes se usan tal cual y la identidad entra por tokens; no hay CSS por pantalla (CLAUDE.md, "Convenciones"). Iconos: Heroicons de MaryUI, contorno de 1.5. Su tamaño va con `w-*` y `h-*`, nunca con `size-*`: MaryUI les pone `w-5 h-5` si la clase no trae un `w-` o un `h-`, y eso le gana a `size-*` (lo revisa `tests/Arch/BladeIconsTest.php`). El movimiento del menú usa Alpine, que ya viene con Livewire.
 
-**Pendientes:** códigos oficiales de color (los de aquí son aproximaciones de los institucionales), inicios por rol con la palabra gigante y los mosaicos vivos, formato de los PDF publicados y guía de textos (tono, mayúsculas, nombres de botones).
+**Pendientes:** códigos oficiales de color (los de aquí son aproximaciones de los institucionales), inicios por rol con la palabra gigante y los mosaicos vivos y guía de textos (tono, mayúsculas, nombres de botones).
 
 ## Colors
 
@@ -531,6 +531,23 @@ Las vistas del docente (tarea 3.10, Mi espacio › Oferta y Mi carga), ajustadas
 - **Oferta, fichas:** sin franja de color: la suya en `info/5` con filete `info/40`, la de un grupo sin docente con borde punteado. El lugar es una cifra (`badge-neutral badge-soft`, «14 de 139» con las cifras en Mono, sin icono), en `badge-success` con `o-star` si cuenta en «Entre tus 3 primeros», o «Asignado a ti» (`info`, `o-check-circle`). Las marcas (`RankingMark`: Choque `o-x-circle` en `error`, Sin horas `o-clock` en `warning`, No disponible `o-no-symbol` en `neutral`, los mismos de la asignación) van como icono y texto de 12 px, sin insignia, para que no pesen más que el grupo.
 - **Oferta, panel:** `x-drawer` a la derecha (`w-full max-w-md`) con su botón de cerrar (`o-x-mark`, `btn-ghost btn-circle`, 44 px en celular), como el de Carga por docente. «Tu lugar» con sus marcas en insignia y, con la de choque, una caja `error/10` «Choca con tu horario» con cada grupo suyo que se empalma («A4 · Ingeniería Económica · C1 Lu 08:00–10:00»). «Tu desglose» como tabla con encabezados «Criterio · Tuyo · Puntos», en 14 px; «Horas base vigentes» dice que es el primer criterio del orden y no suma puntos.
 - **Mi carga:** la ecuación de horas en una franja (dos por renglón en celular, sin los signos); los días en columnas cuando su caja mide 56rem o más y uno debajo de otro antes, así ninguna insignia se sale de su día. Cada bloque con la materia en 14 px, sus horas, grupo y salón en Mono (o «Sin salón» con `o-exclamation-triangle` en `warning`, en texto normal) y el campus. Entre dos bloques, «Hueco de N h» o, si cambia el campus, «Traslado C2 → C1 · 3 h» con sus minutos libres: neutro, o en `warning` con `o-exclamation-triangle` si son menos de `staffing.min_campus_travel_minutes` (SC-09; nunca bloquea).
+
+### PDF publicados
+Los PDF de lo publicado (tarea 4.5; [ADR-0021](docs/decisiones/0021-dompdf-para-los-pdf-publicados.md)), con el formato que eligió el usuario el 10 de noviembre de 2026: tabla tipo SII para el semestre y el departamento, y semana para el docente y el salón. Van en carta horizontal y los arma DomPDF desde `app/Modules/AcademicLoad/Views/pdf/`. Usan DejaVu Sans y DejaVu Sans Mono, que vienen con DomPDF, en lugar de Atkinson, y los colores de este documento escritos en la plantilla, porque el PDF no carga `app.css`.
+
+- **Marco:**
+  - Arriba, «Nexus · Horarios» y «Instituto Tecnológico de Ciudad Juárez» a la izquierda, y el campus y el periodo a la derecha, sobre la franja roja de 2 pt.
+  - Abajo, «Horarios oficiales del Instituto Tecnológico de Ciudad Juárez · Actualizado el …» y el número de página.
+  - El título es el nombre de la carrera, del docente o del salón, y debajo va su dato (semestre y retícula, número de grupos o edificio).
+- **Semestre (y departamento):**
+  - Columnas Grupo, Docente y una por día del perfil del campus.
+  - Un renglón por materia, con fondo `#f6f3f2` y una franja de 4 pt con su color `chain-N`: la clave en Mono negrita, el nombre en negrita y luego «5 créditos · 3 grupos».
+  - Debajo, un renglón por grupo con la misma franja: «CLAVE · grupo» en Mono y el docente o «Por asignar» en tenue. En cada día, las horas en Mono negrita y debajo el salón, «Virtual» o «Por asignar». La práctica lleva la marca «PRÁCTICA» en azul información. Un día sin clase lleva una raya tenue.
+  - Ningún renglón se parte entre páginas.
+- **Semana (docente y salón):**
+  - «N horas a la semana» y una tabla con la hora en Mono y una columna por día.
+  - Cada sesión es una caja con la franja de 3 pt de su materia sobre `#f6f3f2`, que abarca sus bloques. Lleva «CLAVE · grupo», la materia y, en tenue, las horas con el salón (docente) o el docente (salón).
+- **Lo que nunca sale:** cupos, capacidad, versiones, estados, justificaciones ni el RFC, igual que en la consulta pública.
 
 ## Elevation & Depth
 
