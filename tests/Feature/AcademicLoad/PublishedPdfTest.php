@@ -142,3 +142,13 @@ it('la semana de un docente acomoda cada sesión en sus bloques y suma sus horas
         ->and($week['cells'][3][2])->toBe('covered')
         ->and($week['blocks'][0]['label'])->toBe('7:00');
 });
+
+it('las páginas de semestre, docente y salón ofrecen «Descargar PDF» con su liga', function () {
+    $this->get(route('published.semester', ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => 3]))
+        ->assertOk()->assertSee('Descargar PDF')
+        ->assertSee(e(publishedPdfUrl('published.semester.pdf', ['carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => 3])), false);
+    $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->teacher['id']]))
+        ->assertOk()->assertSee(publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]), false);
+    $this->get(route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => $this->room['id']]))
+        ->assertOk()->assertSee(publishedPdfUrl('published.room.pdf', ['salon' => $this->room['id']]), false);
+});

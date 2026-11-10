@@ -23,6 +23,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
+use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\Core\Authorization\Actor;
@@ -69,6 +70,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
 
+        RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by($request->ip()));
+
         // Un invitado puede encolar un PDF: 30 por minuto por IP alcanzan para quien consulta y frenan a quien abusa.
         // La recarga de «Preparando el PDF» (cada 3 s) cabe de sobra.
         RateLimiter::for('published-exports', fn (Request $request): Limit => Limit::perMinute(30)->by($request->ip()));
@@ -88,6 +91,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalView)),
             new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalReviewView)),
+            new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];
     }
 
