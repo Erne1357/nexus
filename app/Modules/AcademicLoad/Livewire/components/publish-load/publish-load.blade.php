@@ -5,17 +5,17 @@
     $sameDay = collect($versions)->countBy(fn (array $version): string => $day($version['publishedAt']));
 @endphp
 
-<section class="bg-base-100 border border-base-300 rounded-box p-4 md:p-5 grid gap-4 min-w-0" aria-labelledby="{{ $titleId }}" data-testid="publish-load">
+<section class="@container bg-base-100 border border-base-300 rounded-box p-4 md:p-5 grid gap-4 min-w-0" aria-labelledby="{{ $titleId }}" data-testid="publish-load">
     <h2 id="{{ $titleId }}" class="sr-only">Publicación de la carga</h2>
 
-    <ol class="flex flex-col gap-3.5 md:flex-row md:gap-0 md:overflow-x-auto md:pb-1" aria-label="Versiones publicadas">
+    <ol class="flex flex-col gap-3.5 @2xl:flex-row @2xl:gap-0 @2xl:overflow-x-auto @2xl:pb-1" aria-label="Versiones publicadas">
         @foreach ($versions as $version)
             @php($isCurrent = $version['version'] === $current)
-            <li class="relative md:min-w-48 md:pe-4.5" wire:key="version-{{ $version['version'] }}">
-                <span class="absolute bg-base-300 left-3.25 top-7 -bottom-3.5 w-0.5 md:left-3.5 md:right-0 md:top-3.25 md:bottom-auto md:w-auto md:h-0.5" aria-hidden="true"></span>
+            <li class="relative @2xl:min-w-48 @2xl:pe-4.5" wire:key="version-{{ $version['version'] }}">
+                <span class="absolute bg-base-300 left-3.25 top-7 -bottom-3.5 w-0.5 @2xl:left-3.5 @2xl:right-0 @2xl:top-3.25 @2xl:bottom-auto @2xl:w-auto @2xl:h-0.5" aria-hidden="true"></span>
                 <button type="button" wire:click="toggleVersion({{ $version['version'] }})"
                     aria-expanded="{{ $openVersion === $version['version'] ? 'true' : 'false' }}" aria-controls="{{ $titleId }}-detail"
-                    class="relative grid grid-cols-[1.75rem_1fr] md:grid-cols-1 gap-x-3 gap-y-1 md:gap-y-1.5 items-center md:justify-items-start text-left cursor-pointer rounded-field focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary group"
+                    class="relative grid grid-cols-[1.75rem_1fr] @2xl:grid-cols-1 gap-x-3 gap-y-1 @2xl:gap-y-1.5 items-center @2xl:justify-items-start text-left cursor-pointer rounded-field focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary group"
                     data-testid="version-{{ $version['version'] }}">
                     <span @class([
                         'size-7 rounded-full grid place-items-center font-mono text-xs font-semibold border-2 border-success',
@@ -23,23 +23,23 @@
                         'bg-base-100 text-success' => ! $isCurrent,
                     ])>v{{ $version['version'] }}</span>
                     <span class="font-semibold group-aria-expanded:underline underline-offset-3">{{ $day($version['publishedAt']).($sameDay[$day($version['publishedAt'])] > 1 ? ', '.$clock($version['publishedAt']) : '').($isCurrent ? ' · vigente' : '') }}</span>
-                    <span class="col-start-2 md:col-start-1 text-[12.5px] text-neutral"><span class="font-mono">{{ number_format($version['groups']) }}</span> grupos</span>
+                    <span class="col-start-2 @2xl:col-start-1 text-[12.5px] text-neutral"><span class="font-mono">{{ number_format($version['groups']) }}</span> grupos</span>
                 </button>
             </li>
         @endforeach
 
-        <li class="relative md:min-w-48">
+        <li class="relative @2xl:min-w-48">
             @if ($blocked === null)
-                <button type="button" wire:click="confirm" class="grid grid-cols-[1.75rem_1fr] md:grid-cols-1 gap-x-3 gap-y-1 md:gap-y-1.5 items-center md:justify-items-start text-left cursor-pointer rounded-field focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" data-testid="publish-next">
+                <button type="button" wire:click="confirm" class="grid grid-cols-[1.75rem_1fr] @2xl:grid-cols-1 gap-x-3 gap-y-1 @2xl:gap-y-1.5 items-center @2xl:justify-items-start text-left cursor-pointer rounded-field focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" data-testid="publish-next">
                     <span class="size-7 rounded-full grid place-items-center font-mono text-xs font-semibold border-2 border-dashed border-primary text-primary bg-base-100">v{{ $nextVersion }}</span>
                     <span class="font-semibold text-primary">{{ $nextVersion === 1 ? 'Publicar' : "Publicar versión {$nextVersion}" }}</span>
-                    <span class="col-start-2 md:col-start-1 text-[12.5px] text-neutral">{{ $nextVersion === 1 ? 'La primera versión pública' : 'Reemplaza a la v'.($nextVersion - 1).' en la consulta' }}</span>
+                    <span class="col-start-2 @2xl:col-start-1 text-[12.5px] text-neutral">{{ $nextVersion === 1 ? 'La primera versión pública' : 'Reemplaza a la v'.($nextVersion - 1).' en la consulta' }}</span>
                 </button>
             @else
-                <div class="grid grid-cols-[1.75rem_1fr] md:grid-cols-1 gap-x-3 gap-y-1 md:gap-y-1.5 items-center md:justify-items-start" data-testid="publish-blocked">
+                <div class="grid grid-cols-[1.75rem_1fr] @2xl:grid-cols-1 gap-x-3 gap-y-1 @2xl:gap-y-1.5 items-center @2xl:justify-items-start" data-testid="publish-blocked">
                     <span class="size-7 rounded-full grid place-items-center border-2 border-dashed border-base-300 bg-base-100" aria-hidden="true"><x-icon name="o-lock-closed" class="w-3.5 h-3.5 text-neutral" /></span>
                     <span class="font-semibold text-neutral">No se puede publicar</span>
-                    <span class="col-start-2 md:col-start-1 text-[12.5px] text-neutral max-w-72">{{ $blocked }}</span>
+                    <span class="col-start-2 @2xl:col-start-1 text-[12.5px] text-neutral max-w-72">{{ $blocked }}</span>
                 </div>
             @endif
         </li>
