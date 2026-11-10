@@ -74,7 +74,7 @@ final class TransitionLoad
                 ->withProperties(['comment' => $comment])
                 ->log("Pasó la carga de {$load->department->code} en {$load->campus->code} de {$from->label()} a {$to->label()}");
 
-            LoadTransitioned::dispatch($load, $from, $to);
+            LoadTransitioned::dispatch($load, $from, $to, $comment);
 
             return $load;
         });

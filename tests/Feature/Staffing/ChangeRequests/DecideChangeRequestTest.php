@@ -91,12 +91,21 @@ it('rechazar exige comentario, deja la carga como estaba y avisa al solicitante'
     Notification::assertSentTo($s['teacherUser'], ChangeRequestRejected::class);
 });
 
-it('con la carga en otro estado solo aprueba, sin tocarla', function () {
-    $s = changeScenario(LoadStatus::Closed);
+it('aprobar y rechazar exigen la carga en asignación o ajustes (P5)', function (LoadStatus $status) {
+    $s = changeScenario($status);
     $request = requestFor($s['group']);
 
-    app(ApproveChangeRequest::class)->handle($request, $s['jefe']);
+    expect(fn () => app(ApproveChangeRequest::class)->handle($request, $s['jefe']))->toThrow(ValidationException::class, 'solo se deciden solicitudes con la carga en asignación o en ajustes')
+        ->and(fn () => app(RejectChangeRequest::class)->handle($request, $s['jefe'], 'No'))->toThrow(ValidationException::class, 'solo se deciden solicitudes')
+        ->and($request->fresh()->status)->toBe(ChangeRequestStatus::Pending)
+        ->and($s['load']->fresh()->status)->toBe($status);
+})->with([LoadStatus::Closed, LoadStatus::Published]);
 
-    expect($request->fresh()->status)->toBe(ChangeRequestStatus::Approved)
-        ->and($s['load']->fresh()->status)->toBe(LoadStatus::Closed);
+it('aprobar y rechazar sin carga del departamento tampoco procede', function () {
+    $s = changeScenario();
+    $request = requestFor($s['group']);
+    $s['load']->delete();
+
+    expect(fn () => app(ApproveChangeRequest::class)->handle($request, $s['jefe']))->toThrow(ValidationException::class, 'solo se deciden solicitudes')
+        ->and(fn () => app(RejectChangeRequest::class)->handle($request, $s['jefe'], 'No'))->toThrow(ValidationException::class, 'solo se deciden solicitudes');
 });

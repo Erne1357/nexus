@@ -122,7 +122,7 @@ Nexus apunta a sustituir todo el SII (académico, servicios escolares, recursos 
 1. **Primero la tarea, después el adorno.** Tablas densas, filtros visibles, acciones claras.
 2. **El estado siempre a la vista.** Choques, pendientes y bloqueos se ven donde ocurren, con la misma insignia en toda la aplicación.
 3. **Nada oculto por permiso.** Lo que el rol o el estado no permite se muestra deshabilitado con su motivo en un tooltip; solo lo de otro alcance (otro campus u otro departamento) no se muestra.
-4. **Una sola forma de hacer cada cosa.** Un tipo de tabla, de formulario, de modal y de insignia, tomados de MaryUI con los tokens de este archivo.
+4. **Una sola forma de hacer cada cosa.** Un tipo de tabla, de formulario, de modal y de insignia, tomados de MaryUI con los tokens de este archivo. Nunca los diálogos del navegador (`confirm()`, `alert()`, `wire:confirm`): para una pregunta o un aviso corto, un `x-modal`; para lo que lleva mucha información, un `x-drawer`, que es el preferido (ADR-0023, decisión del usuario del 10 de noviembre de 2026).
 5. **Sirve en cualquier pantalla,** del celular al proyector.
 
 **Base técnica.** MaryUI sobre daisyUI y Tailwind 4. Los componentes se usan tal cual y la identidad entra por tokens; no hay CSS por pantalla (CLAUDE.md, "Convenciones"). Iconos: Heroicons de MaryUI, contorno de 1.5. Su tamaño va con `w-*` y `h-*`, nunca con `size-*`: MaryUI les pone `w-5 h-5` si la clase no trae un `w-` o un `h-`, y eso le gana a `size-*` (lo revisa `tests/Arch/BladeIconsTest.php`). El movimiento del menú usa Alpine, que ya viene con Livewire.
@@ -241,7 +241,7 @@ La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php
 #### Acciones de fila
 El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados del celular:
 - **Visible, solo lo frecuente:** «Editar» (y «Retícula» en Planes), en `btn-ghost btn-sm`. Lo demás se pliega en un botón **«Acciones»** (`btn-ghost btn-sm`, con `o-chevron-down`) que abre `<x-core::row-menu>`; entre 768 y 1199 px, en la tabla, los botones quedan solo con su icono (`o-ellipsis-horizontal` en «Acciones») y su nombre accesible (`aria-label="Acciones de <CLAVE>"`).
-- **Dentro del menú**, un `<x-core::row-menu-item>` por acción: Desactivar o Activar, Ofrecer en el campus, Borrar (en `text-error`). Conservan su `wire:confirm`, su `spinner` y su `data-testid`.
+- **Dentro del menú**, un `<x-core::row-menu-item>` por acción: Desactivar o Activar, Ofrecer en el campus, Borrar (en `text-error`). Conservan su `spinner` y su `data-testid`. La confirmación de Desactivar o Borrar va en un modal, nunca en el diálogo del navegador (ADR-0023). Los que todavía usan `wire:confirm` se reemplazan en #374.
 - **Lo deshabilitado se queda en el menú, deshabilitado, con su motivo escrito en un segundo renglón** del elemento («Borrar — Solo se borra una carrera sin planes de estudio.»). Nada se oculta por permiso y un tooltip no lo ve quien usa teclado o pantalla táctil.
 - **El menú no se corta:** es un `popover` del navegador, en la capa superior, así que la caja con `overflow` de la tabla ni el pie de la página lo cortan. Se abre debajo del botón y, si no cabe, arriba. Esc o un clic fuera lo cierran y el foco vuelve al botón; las flechas, Inicio y Fin recorren los elementos.
 
