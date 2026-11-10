@@ -4,6 +4,10 @@ use App\Modules\Core\Demo\DemoPlan;
 use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Models\User;
+use Database\Seeders\DemoSeeder;
+use Illuminate\Console\Command;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Artisan;
 
 /*
 | `php artisan demo:seed`: borra la base y siembra la demo hasta un punto del proceso. Aquí, lo que pasa antes de borrar
@@ -67,4 +71,28 @@ it('todo usa la semilla de DemoSeeder y MassiveSeeder y rechaza otra', function 
     $this->artisan('demo:seed', ['--hasta' => 'todo', '--semilla' => '7', '--force' => true])
         ->expectsOutputToContain('«todo» siembra DemoSeeder o MassiveSeeder con su propia semilla (2027): --semilla no aplica.')
         ->assertExitCode(2);
+});
+
+it('todo prende demo.showcase antes de sembrar DemoSeeder, para que publique su carga en varias versiones', function () {
+    // migrate:fresh rompería la transacción de la prueba; aquí no hace nada.
+    Artisan::registerCommand(new class extends Command
+    {
+        protected $signature = 'migrate:fresh {--force}';
+
+        public function handle(): int
+        {
+            return self::SUCCESS;
+        }
+    });
+    app()->instance(DemoSeeder::class, new class extends Seeder
+    {
+        public function run(): void
+        {
+            config(['demo.showcase_seen' => config('demo.showcase')]);
+        }
+    });
+
+    $this->artisan('demo:seed', ['--hasta' => 'todo', '--force' => true])->assertExitCode(0);
+
+    expect(config('demo.showcase_seen'))->toBeTrue();
 });

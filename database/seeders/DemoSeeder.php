@@ -69,12 +69,18 @@ class DemoSeeder extends Seeder
         // Cargas cerradas con justificaciones y una reabierta (tarea 4.1); SC no se toca (en la demo no cierra: tiene
         // solicitudes aprobadas sin aplicar). La que queda cerrada (CEA) la publica con sus versiones la tarea 4.3.
         $this->callWith(LoadClosingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'keepOpen' => ['SC']]);
-        // CEA, la que deja cerrada el paso anterior, publicada en tres versiones (tarea 4.3). Solo con `demo:seed
-        // --hasta=todo`, que prende `demo.showcase`: tarda cerca de un minuto y las pruebas que siembran la demo no lo
-        // necesitan.
+        $this->showcase();
+        $this->call(LoginScreenDemoSeeder::class);
+    }
+
+    /**
+     * CEA, la que deja cerrada el paso anterior, publicada en tres versiones (tarea 4.3). Solo con `demo:seed
+     * --hasta=todo`, que prende `demo.showcase`: las pruebas que siembran la demo no lo necesitan.
+     */
+    public function showcase(): void
+    {
         if (config('demo.showcase', false)) {
             $this->callWith(PublicationShowcaseDemoSeeder::class, ['campus' => 'C2', 'department' => 'CEA', 'versions' => 3]);
         }
-        $this->call(LoginScreenDemoSeeder::class);
     }
 }

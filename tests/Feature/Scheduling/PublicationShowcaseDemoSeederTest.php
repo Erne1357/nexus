@@ -15,6 +15,9 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Database\Seeders\PublicationShowcaseDemoSeeder;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use Database\Seeders\DemoSeeder;
+use Database\Seeders\MassiveSeeder;
+use Illuminate\Database\Seeder;
 
 /*
 | La carga publicada en varias versiones de la demo mezclada (`todo`, tarea 4.3): pasa por el proceso real (justificar,
@@ -86,3 +89,45 @@ it('se niega con una carga que no está en asignación ni cerrada', function () 
 
     app(PublicationShowcaseDemoSeeder::class)->run('C2', 'CEA', '20271', 3);
 })->throws(RuntimeException::class, 'la demo de versiones empieza en asignación o cerrada');
+
+/**
+ * Un seeder que solo anota con qué parámetros lo llamaron, en lugar del showcase.
+ */
+function fakeShowcase(): Seeder
+{
+    $fake = new class extends Seeder
+    {
+        /** @var list<array<string, mixed>> */
+        public array $calls = [];
+
+        public function run(string $campus, string $department, int $versions, bool $reopenAtEnd = false): void
+        {
+            $this->calls[] = compact('campus', 'department', 'versions', 'reopenAtEnd');
+        }
+    };
+    app()->instance(PublicationShowcaseDemoSeeder::class, $fake);
+
+    return $fake;
+}
+
+it('DemoSeeder y MassiveSeeder no corren el showcase con demo.showcase apagada', function () {
+    $fake = fakeShowcase();
+
+    app(DemoSeeder::class)->setContainer(app())->showcase();
+    app(MassiveSeeder::class)->setContainer(app())->showcase();
+
+    expect($fake->calls)->toBe([]);
+});
+
+it('con demo.showcase prendida, DemoSeeder publica CEA en tres versiones y MassiveSeeder CB en dos y reabierta', function () {
+    $fake = fakeShowcase();
+    config(['demo.showcase' => true]);
+
+    app(DemoSeeder::class)->setContainer(app())->showcase();
+    app(MassiveSeeder::class)->setContainer(app())->showcase();
+
+    expect($fake->calls)->toBe([
+        ['campus' => 'C2', 'department' => 'CEA', 'versions' => 3, 'reopenAtEnd' => false],
+        ['campus' => 'C2', 'department' => 'CB', 'versions' => 2, 'reopenAtEnd' => true],
+    ]);
+});

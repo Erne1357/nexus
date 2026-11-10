@@ -39,7 +39,9 @@ use RuntimeException;
  * paso deja cerrada: con el volumen demo, CEA de Campus II en tres versiones; con el masivo, CB de Campus II en dos
  * versiones y reabierta al final (`reopenAtEnd`), el caso «reabierta después de publicar»: el público sigue viendo la
  * versión 2 y la pantalla de cierre la ve en ajustes con su historial. Una carga en asignación también sirve (la
- * justifica y la cierra antes). Si un veto lo detiene, la demo se detiene con su motivo.
+ * justifica y la cierra antes). Si un veto lo detiene, la demo se detiene con su motivo. Corre una vez sobre la base
+ * recién sembrada (`demo:seed` hace `migrate:fresh`): una segunda corrida se niega, porque la carga ya no está en
+ * asignación ni cerrada.
  */
 final class PublicationShowcaseDemoSeeder extends Seeder
 {
