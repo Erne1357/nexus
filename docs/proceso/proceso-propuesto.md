@@ -79,8 +79,9 @@ flowchart LR
 
 ### 7. Cierre y aprobación (jefe de departamento, Subdirección opcional)
 
-- Condiciones para cerrar: cero choques duros, todos los grupos con docente y salón (o justificados), cupos consistentes, catálogos validados.
-- Acción: el jefe cierra su carga (`closed`). Si el campus tiene `requires_subdireccion_approval`, Subdirección revisa el tablero del campus y aprueba (`approved`) o regresa con comentarios (`adjusting`).
+- Condiciones para cerrar: cero choques duros, todos los grupos con docente activo y salón (o justificados), sin solicitudes de cambio pendientes ni acuerdos sin respuesta (HC-15; reglas-de-negocio.md, "Cierre y reapertura de la carga").
+- Acción: el jefe cierra su carga (`closed`) y sus grupos activos quedan confirmados. Si el campus tiene `requires_subdireccion_approval`, Subdirección revisa el tablero del campus y aprueba (`approved`) o regresa con comentarios (`adjusting`).
+- Subdirección o el admin reabren, con motivo, una carga cerrada, aprobada o publicada: vuelve a ajustes, el jefe la corrige, la regresa a asignación y la cierra otra vez.
 - Salida: carga aprobada por departamento y campus.
 
 ### 8. Publicación (Subdirección o jefe según perfil)
@@ -107,11 +108,13 @@ stateDiagram-v2
     proposed --> staffing : grupos y sesiones sin choques duros
     staffing --> adjusting : solicitud de cambio aprobada
     adjusting --> staffing : cambios aplicados y validados
-    staffing --> closed : todos los grupos con docente y salón
+    staffing --> closed : todos los grupos con docente y salón (HC-15)
     closed --> approved : visto bueno de Subdirección (si el campus lo exige)
     closed --> published : publicar (si el campus no exige visto bueno)
+    closed --> adjusting : regresada o reabierta, con motivo
     approved --> published : publicar
-    approved --> adjusting : regresado con comentarios
+    approved --> adjusting : reabierta, con motivo
+    published --> adjusting : reabierta, con motivo (nueva versión al republicar)
     published --> reanalysis : nueva importación de kardex (R2)
     reanalysis --> published : ajustes validados, nueva versión
     published --> [*] : periodo cerrado
