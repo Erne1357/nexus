@@ -11,7 +11,11 @@ namespace App\Modules\Imports\Sii;
  * 1. Clave (D8): la clave TecNM del lugar si la tiene; si no, su clave del SII. Los lugares de una clave TecNM votan
  *    por su combinación de créditos y horas, un voto por plan: la más votada se queda la clave TecNM y los lugares
  *    con otra conservan su clave del SII, con advertencia. En un empate gana la combinación del plan de versión más
- *    reciente, con advertencia (supuestos por confirmar).
+ *    reciente, con advertencia (supuestos por confirmar). Dos materias distintas de una misma retícula del SII nunca
+ *    quedan con la misma clave (supuesto por confirmar, con aviso): si el SII les da la misma clave TecNM, antes del
+ *    voto la conserva la única que se llama como esa clave en las retículas donde nadie se la disputa (hasta dos
+ *    letras de diferencia) y las otras se quedan sin ella; si la clave TecNM de una es la clave del SII de otra, la
+ *    conserva esta y la primera vuelve a su clave del SII.
  * 2. Variantes (D15, R14): dentro de un plan, las materias de retículas distintas del SII con el mismo nombre
  *    normalizado (sin importar singular o plural), los mismos créditos y la misma especialidad (o ninguna) son una
  *    sola, aunque repartan distinto las horas de teoría y práctica. Si las horas coinciden, se queda la clave TecNM si
@@ -27,15 +31,19 @@ namespace App\Modules\Imports\Sii;
  *    sus lugares toman la de más planes; en empate, la del plan de versión más reciente. Avisa (supuesto por confirmar).
  * 5. Nombre: el de la clave de Nexus es el más frecuente entre sus renglones del SII (SubjectName::key()); en empate,
  *    el del plan de versión más reciente y luego el primero en orden alfabético. Si el SII trae otros, avisa.
- * 6. Sin semestre (D18, R10): un lugar con semestre 0 toma el semestre más frecuente (en empate, el menor) de los
+ * 6. Estatus N: un lugar cuyas variantes del SII traen todas estatus `N` (ya no se ofrece) no entra a la retícula: pasa
+ *    a pending() con aviso, para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar, 10
+ *    de noviembre de 2026; antes no se migraba y se perdía el kárdex de quien lo aprobó). Si otra variante sigue
+ *    vigente, se funde con ella como cualquier variante.
+ * 7. Sin semestre (D18, R10): un lugar con semestre 0 toma el semestre más frecuente (en empate, el menor) de los
  *    lugares con semestre con el mismo nombre normalizado (de cualquiera de sus claves del SII), primero en planes de
  *    la misma carrera y si no hay, de cualquiera, con advertencia que nombra de dónde lo tomó. Si nada empata, no
  *    entra a la retícula: queda en pending() y avisa que va a la lista de pendientes de Servicios Escolares, que le
  *    asigna semestre (D19; detalles del empate, supuestos por confirmar).
  *
- * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}
- * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}
- * @phpstan-type GridPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, materias: list<string>, sources: list<string>}
+ * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
+ * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
+ * @phpstan-type GridPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool, materias: list<string>, sources: list<string>}
  */
 final class SubjectPlacements
 {
@@ -164,6 +172,7 @@ final class SubjectPlacements
      */
     private function coded(array $placements): array
     {
+        $placements = $this->withoutSharedTecnm($placements);
         $votes = [];
         foreach ($placements as $placement) {
             if ($placement['tecnm'] !== null) {
@@ -194,7 +203,144 @@ final class SubjectPlacements
             }
         }
 
+        return $this->distinctWithinGrid($placements);
+    }
+
+    /**
+     * Regla 1, antes del voto: si el SII da la misma clave TecNM a dos materias distintas de una retícula, la conserva
+     * la única que se llama como esa clave en las retículas donde nadie se la disputa (hasta dos letras de diferencia);
+     * las otras se quedan sin clave TecNM, así que no votan por sus horas.
+     *
+     * @param  list<Placement>  $placements
+     * @return list<Placement>
+     */
+    private function withoutSharedTecnm(array $placements): array
+    {
+        $claims = [];
+        foreach ($placements as $index => $placement) {
+            if ($placement['tecnm'] !== null) {
+                $claims[$placement['key']][$placement['tecnm']][$placement['materia']][] = $index;
+            }
+        }
+
+        $disputed = [];
+        foreach ($claims as $key => $byTecnm) {
+            foreach ($byTecnm as $tecnm => $materias) {
+                if (count($materias) > 1) {
+                    $disputed["{$key}|{$tecnm}"] = true;
+                }
+            }
+        }
+
+        ksort($disputed, SORT_STRING);
+
+        foreach (array_keys($disputed) as $dispute) {
+            [$key, $tecnm] = explode('|', (string) $dispute, 2);
+            $materias = $claims[$key][$tecnm];
+            $names = array_map('strval', array_keys($materias));
+            sort($names, SORT_STRING);
+            $winner = $this->namedAfter($tecnm, $names, $key, $placements, $disputed);
+
+            foreach ($materias as $materia => $indexes) {
+                if ((string) $materia !== $winner) {
+                    foreach ($indexes as $index) {
+                        $placements[$index]['tecnm'] = null;
+                    }
+                }
+            }
+
+            $outcome = $winner === null
+                ? 'ninguna la conserva y cada una se queda con su clave del SII'
+                : "la conserva {$winner} y las demás se quedan con su clave del SII";
+            $this->warn($key, "En la retícula {$key} del SII, {$this->withNames($names)} traen la misma clave TecNM {$tecnm} y son materias distintas: {$outcome} (supuesto por confirmar).");
+        }
+
         return $placements;
+    }
+
+    /**
+     * Regla 1, después del voto: dos materias distintas de una retícula no quedan con la misma clave. Pasa cuando la
+     * clave TecNM de una es la clave del SII de otra: la conserva la que es esa clave del SII y las demás vuelven a la
+     * suya. Se repite hasta que no cambia nada, porque la que vuelve a su clave puede chocar con otra.
+     *
+     * @param  list<CodedPlacement>  $placements
+     * @return list<CodedPlacement>
+     */
+    private function distinctWithinGrid(array $placements): array
+    {
+        do {
+            $changed = false;
+            $claims = [];
+            foreach ($placements as $index => $placement) {
+                $claims[$placement['key']][$placement['code']][$placement['materia']][] = $index;
+            }
+            ksort($claims, SORT_STRING);
+
+            foreach ($claims as $key => $codes) {
+                ksort($codes, SORT_STRING);
+
+                foreach ($codes as $code => $materias) {
+                    if (count($materias) < 2) {
+                        continue;
+                    }
+
+                    $code = (string) $code;
+                    $names = array_map('strval', array_keys($materias));
+                    sort($names, SORT_STRING);
+                    $own = array_find($names, fn (string $materia): bool => mb_strtoupper($materia) === $code);
+
+                    foreach ($materias as $materia => $indexes) {
+                        foreach ((string) $materia === $own ? [] : $indexes as $index) {
+                            $placements[$index]['code'] = $placements[$index]['origin'] = mb_strtoupper((string) $materia);
+                            $placements[$index]['unified'] = false;
+                            $changed = $changed || mb_strtoupper((string) $materia) !== $code;
+                        }
+                    }
+
+                    $outcome = $own === null
+                        ? 'ninguna la conserva y cada una se queda con su clave del SII'
+                        : "la conserva {$own}, que es su clave del SII, y las demás se quedan con la suya";
+                    $this->warn((string) $key, "En la retícula {$key} del SII, {$this->withNames($names)} quedaban con la misma clave {$code} y son materias distintas: {$outcome} (supuesto por confirmar).");
+                }
+            }
+        } while ($changed);
+
+        return $placements;
+    }
+
+    /**
+     * De las materias de una retícula que se disputan una clave TecNM, la única cuyo nombre es el que esa clave tiene
+     * en las retículas donde nadie se la disputa, con hasta dos letras de diferencia; null si no hay una sola.
+     *
+     * @param  list<string>  $materias
+     * @param  list<Placement>  $placements
+     * @param  array<string, true>  $disputed  `"{retícula}|{clave TecNM}"` de las disputas
+     */
+    private function namedAfter(string $tecnm, array $materias, string $key, array $placements, array $disputed): ?string
+    {
+        $elsewhere = [];
+        foreach ($placements as $placement) {
+            if ($placement['tecnm'] === $tecnm && $placement['key'] !== $key && ! isset($disputed["{$placement['key']}|{$tecnm}"])) {
+                $elsewhere[] = $this->nameKey($placement['materia']);
+            }
+        }
+
+        if ($elsewhere === []) {
+            return null;
+        }
+
+        $name = $this->majorityKey($elsewhere);
+        $close = array_values(array_filter($materias, fn (string $materia): bool => levenshtein($this->nameKey($materia), $name) <= 2));
+
+        return count($close) === 1 ? $close[0] : null;
+    }
+
+    /**
+     * @param  list<string>  $materias
+     */
+    private function withNames(array $materias): string
+    {
+        return implode(', ', array_map(fn (string $materia): string => "{$materia} ({$this->catalog[$materia]['name']})", $materias));
     }
 
     /**
@@ -391,6 +537,7 @@ final class SubjectPlacements
                 'practice' => $hours['practice'],
                 'name' => '',
                 'specialty' => $specialty,
+                'retired' => array_all($variants, fn (array $variant): bool => $variant['retired']),
                 'materias' => array_values(array_unique([$chosen['materia'], ...array_column($variants, 'materia')])),
                 'sources' => array_column($variants, 'materia'),
             ];
@@ -504,7 +651,7 @@ final class SubjectPlacements
         $this->pending = [];
         $byName = [];
         foreach ($grid as $ref => $placement) {
-            if ($placement['semester'] > 0) {
+            if ($placement['semester'] > 0 && ! $placement['retired']) {
                 foreach (array_unique(array_map($this->nameKey(...), $placement['materias'])) as $name) {
                     $byName[$name][] = ['ref' => (string) $ref, 'career' => $placement['career'], 'semester' => $placement['semester']];
                 }
@@ -512,6 +659,14 @@ final class SubjectPlacements
         }
 
         foreach ($grid as $ref => $placement) {
+            if ($placement['retired']) {
+                $this->pending[(string) $ref] = $placement;
+                unset($grid[$ref]);
+                $this->warn((string) $ref, "Lugar {$ref}: el SII lo trae con estatus N (ya no se ofrece): no entra a la retícula; pasa a la lista de pendientes para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar).");
+
+                continue;
+            }
+
             if ($placement['semester'] > 0) {
                 continue;
             }

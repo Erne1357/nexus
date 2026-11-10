@@ -5,7 +5,8 @@ namespace App\Modules\Students\Queries;
 /**
  * La retícula de un plan para calcular el avance de sus alumnos: los créditos de cada materia del plan, en el
  * orden de la retícula, su seriación, la especialidad de las materias de especialidad, su semestre y el
- * porcentaje de créditos que piden algunas (Servicio Social y Residencia). Solo seriaciones: un correquisito no
+ * porcentaje de créditos que piden algunas (Servicio Social y Residencia), y aparte las materias del plan que esperan
+ * semestre en «Por validar» (D19), que no están en la retícula. Solo seriaciones: un correquisito no
  * impide cursar una materia (reglas-de-negocio.md, "Elegibilidad y demanda"). Una materia inactiva del catálogo
  * cuenta igual, porque el plan se ata al alumno al inscribirse. La arma PlanGridQuery; aquí solo se calcula,
  * sin base.
@@ -19,6 +20,7 @@ final readonly class PlanGrid
      * @param  array<string, int>  $semesterOf  id de materia → su semestre en la retícula
      * @param  array<string, int>  $creditShare  id de materia → porcentaje de los créditos del plan que pide
      * @param  int|null  $totalCredits  créditos totales del plan, si están capturados
+     * @param  array<string, int>  $unplaced  id de materia → créditos, de las que esperan semestre en «Por validar»
      */
     public function __construct(
         public array $credits,
@@ -27,12 +29,15 @@ final readonly class PlanGrid
         public array $semesterOf = [],
         public array $creditShare = [],
         public ?int $totalCredits = null,
+        public array $unplaced = [],
     ) {}
 
     /**
      * El avance de un alumno que aprobó `$approved` y está cursando `$taking`: créditos y materias aprobadas
      * del plan, las que le faltan y, de esas, las que ya puede cursar porque aprobó toda su seriación. Lo
-     * aprobado fuera del plan no cuenta, y una materia de seriación que ya no está en la retícula no bloquea.
+     * aprobado fuera del plan no cuenta, y una materia de seriación que ya no está en la retícula no bloquea. Lo
+     * aprobado en una materia que espera semestre en «Por validar» cuenta en créditos y materias, pero esas nunca
+     * faltan ni se ofrecen, porque no están en la retícula (decidido el 10 de noviembre de 2026).
      *
      * La especialidad del alumno sale de su kardex: si aprobó o está cursando materias de una especialidad,
      * las de las otras ya no le faltan. Mientras no toma ninguna, le faltan las de todas, porque puede elegir
@@ -68,6 +73,11 @@ final readonly class PlanGrid
             }
 
             $pending[] = $subject;
+        }
+
+        foreach (array_intersect_key($this->unplaced, $passed) as $subjectCredits) {
+            $credits += $subjectCredits;
+            $count++;
         }
 
         $total = $this->creditShare === [] ? 0 : $this->totalCredits ?? $this->gridCredits($chosen);
@@ -113,13 +123,14 @@ final readonly class PlanGrid
 
     /**
      * Los créditos de la retícula con una sola especialidad: la que eligió el alumno o, si todavía no elige, la
-     * de más créditos, para no dar por cumplido un porcentaje antes de tiempo.
+     * de más créditos, para no dar por cumplido un porcentaje antes de tiempo. Suma las materias que esperan
+     * semestre, que también son del plan y cuentan en lo aprobado.
      *
      * @param  array<string, true>  $chosen
      */
     private function gridCredits(array $chosen): int
     {
-        $common = 0;
+        $common = array_sum($this->unplaced);
         $bySpecialty = [];
 
         foreach ($this->credits as $subject => $subjectCredits) {
