@@ -35,9 +35,11 @@ use RuntimeException;
  * (RoomSuggestionQuery y AssignSessionRoom), la cierra y la publica de nuevo. Con el cambio de salones, cada versión
  * muestra «N grupos cambiaron de salón» contra la anterior.
  *
- * Corre después del cierre de la demo mezclada (LoadClosingDemoSeeder en modo `mixed`, Riel C): con el volumen demo, la
- * carga de CEA en Campus II, que ese paso deja cerrada; una carga en asignación también sirve (la justifica y la
- * cierra antes). Si un veto lo detiene, la demo se detiene con su motivo.
+ * Corre después del cierre de la demo mezclada (LoadClosingDemoSeeder en modo `mixed`, Riel C), sobre la carga que ese
+ * paso deja cerrada: con el volumen demo, CEA de Campus II en tres versiones; con el masivo, CB de Campus II en dos
+ * versiones y reabierta al final (`reopenAtEnd`), el caso «reabierta después de publicar»: el público sigue viendo la
+ * versión 2 y la pantalla de cierre la ve en ajustes con su historial. Una carga en asignación también sirve (la
+ * justifica y la cierra antes). Si un veto lo detiene, la demo se detiene con su motivo.
  */
 final class PublicationShowcaseDemoSeeder extends Seeder
 {
@@ -46,13 +48,16 @@ final class PublicationShowcaseDemoSeeder extends Seeder
     /** Las sesiones que cambian de salón en cada versión nueva. */
     private const int MOVES_PER_VERSION = 4;
 
+    /** El motivo de la reapertura que deja la carga en ajustes con su última versión publicada. */
+    private const string LAST_REOPENING = 'Revisión de grupos compartidos con otra carrera';
+
     /** @var list<string> los motivos de cada reapertura, en orden */
     private const array REOPENINGS = [
         'Ajuste de salones de laboratorio tras la revisión de Subdirección',
         'Cambio de salones por el mantenimiento del edificio',
     ];
 
-    public function run(string $campus = 'C2', string $department = 'CEA', string $term = '20271', int $versions = 3): void
+    public function run(string $campus = 'C2', string $department = 'CEA', string $term = '20271', int $versions = 3, bool $reopenAtEnd = false): void
     {
         $this->refuseProduction();
 
@@ -85,7 +90,11 @@ final class PublicationShowcaseDemoSeeder extends Seeder
             $this->closeAndPublish($load, $head, null, $reason);
         }
 
-        $this->command?->info("Carga de {$department} en {$campus} publicada en ".$load->fresh()->current_version.' versiones.');
+        if ($reopenAtEnd) {
+            app(ReopenLoad::class)->handle($load->fresh(), $subdireccion, self::LAST_REOPENING);
+        }
+
+        $this->command?->info("Carga de {$department} en {$campus} publicada en ".$load->fresh()->current_version.' versiones'.($reopenAtEnd ? ' y reabierta.' : '.'));
     }
 
     private function closeAndPublish(AcademicLoad $load, User $head, ?string $closing, string $publishing): void
