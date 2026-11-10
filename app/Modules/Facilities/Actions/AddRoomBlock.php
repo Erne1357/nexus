@@ -2,6 +2,7 @@
 
 namespace App\Modules\Facilities\Actions;
 
+use App\Modules\Core\Support\WeekTime;
 use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
@@ -50,7 +51,7 @@ final class AddRoomBlock
                 ->performedOn($block)
                 ->event(ActivityEvent::Created)
                 ->withChanges(['attributes' => $block->only(['room_id', 'term_id', 'day', 'starts_at', 'ends_at', 'reason'])])
-                ->log("Bloqueó el salón {$room->code} el ".RoomRules::DAYS[$block->day]." de {$startsAt} a {$endsAt}");
+                ->log("Bloqueó el salón {$room->code} el ".RoomRules::DAYS[$block->day].' de '.WeekTime::clock($startsAt).' a '.WeekTime::clock($endsAt));
 
             RoomBlockAdded::dispatch($block);
 

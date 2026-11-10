@@ -58,6 +58,7 @@ final class RoomLoan implements Constraint
                     $room->id,
                     $groupId,
                     [
+                        'session_id' => $session->id,
                         'room_id' => $room->id,
                         'owner_department_id' => $room->departmentId,
                         'loan' => $pending ? 'pending' : 'none',

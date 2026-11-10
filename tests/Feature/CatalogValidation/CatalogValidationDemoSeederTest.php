@@ -16,6 +16,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
@@ -69,9 +70,9 @@ function seedCatalogScenario(array $campuses = ['C1', 'C2'], bool $previous = tr
     }
 }
 
-function runCatalogDemoSeeder(string $profile = 'demo'): void
+function runCatalogDemoSeeder(string $profile = 'demo', string $mode = 'mixed'): void
 {
-    (new DatabaseSeeder)->setContainer(app())->callWith(CatalogValidationDemoSeeder::class, ['profile' => $profile]);
+    (new DatabaseSeeder)->setContainer(app())->callWith(CatalogValidationDemoSeeder::class, ['profile' => $profile, 'mode' => $mode]);
 }
 
 function cvReview(string $term, string $department, Catalog $catalog, ?string $campus = null): CatalogReview
@@ -110,19 +111,39 @@ it('deja el periodo actual con los estados fijos por departamento (HC-14)', func
 
     runCatalogDemoSeeder('massive');
 
-    foreach (['CB', 'SC', 'II'] as $code) {
+    foreach (['CB', 'SC', 'II', 'EE', 'MM'] as $code) {
         expect($pending($code, 'C2'))->toBe([])->and($pending($code, 'C1'))->toBe([]);
     }
 
-    expect($pending('EE', 'C2'))->toBe(['rooms'])
-        ->and($pending('EE', 'C1'))->toBe([])
-        ->and($pending('CEA', 'C2'))->toBe(['rooms', 'study_plans', 'careers'])
-        ->and($pending('MM', 'C2'))->toBe(['teachers', 'rooms', 'study_plans', 'careers'])
-        ->and(cvReview('20271', 'EE', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::InReview)
+    expect($pending('CEA', 'C2'))->toBe(['rooms', 'study_plans', 'careers'])
+        ->and(cvReview('20271', 'CEA', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::InReview)
+        ->and(cvReview('20271', 'EE', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::InReview)
+        ->and(cvReview('20271', 'CEA', Catalog::Careers)->validated_by)->toBeNull()
+        ->and(cvReview('20271', 'CEA', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'CEA', Catalog::StudyPlans)->status)->toBe(ReviewStatus::Pending)
+        ->and(Activity::query()->where('event', 'reopened')->count())->toBe(1);
+});
+
+it('con el perfil demo deja CEA y EE validados y MM reabierto con salones en revisión (HC-14)', function () {
+    seedCatalogScenario();
+    $query = app(CatalogReviewQuery::class);
+    $term = Term::query()->where('code', '20271')->firstOrFail();
+    $pending = fn (string $department): array => $query->pendingFor($term, Campus::query()->where('code', 'C2')->firstOrFail(), Department::query()->where('code', $department)->firstOrFail());
+
+    runCatalogDemoSeeder('demo');
+
+    expect($pending('EE'))->toBe([])
+        ->and($pending('CEA'))->toBe([])
+        ->and(cvReview('20271', 'CEA', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'MM', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::InReview)
+        ->and(CatalogReviewFlag::query()->whereRelation('review', 'catalog', Catalog::Rooms)->whereRelation('review.department', 'code', 'MM')->exists())->toBeTrue()
+        ->and($pending('MM'))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::InReview)
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->validated_by)->toBeNull()
         ->and(cvReview('20271', 'MM', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
-        ->and(cvReview('20271', 'CEA', Catalog::StudyPlans)->status)->toBe(ReviewStatus::Pending)
+        ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::Validated)
         ->and(Activity::query()->where('event', 'reopened')->count())->toBe(2);
 });
 
@@ -136,7 +157,8 @@ it('con el perfil demo en un solo campus deja los mismos estados en C2', functio
     $term = Term::query()->where('code', '20271')->firstOrFail();
 
     expect($query->pendingFor($term, $campus, Department::query()->where('code', 'CB')->firstOrFail()))->toBe([])
-        ->and($query->pendingFor($term, $campus, Department::query()->where('code', 'EE')->firstOrFail()))->toBe([Catalog::Rooms])
+        ->and($query->pendingFor($term, $campus, Department::query()->where('code', 'EE')->firstOrFail()))->toBe([])
+        ->and($query->pendingFor($term, $campus, Department::query()->where('code', 'MM')->firstOrFail()))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
         ->and(CatalogReview::query()->whereNotNull('snapshot')->count())->toBe(CatalogReview::query()->where('status', ReviewStatus::Validated)->count() + Activity::query()->where('event', 'reopened')->count());
 });
 
@@ -178,7 +200,7 @@ it('pone observaciones de todos los tipos que admite cada catálogo, algunas res
         ->and(CatalogReviewFlag::whereNotNull('resolved_at')->count())->toBeGreaterThan(0)
         ->and(CatalogReviewFlag::whereNull('resolved_at')->count())->toBeGreaterThan(20)
         ->and(CatalogReviewFlag::query()->whereRelation('review.department', 'code', 'CB')->whereNotNull('resolved_at')->exists())->toBeTrue()
-        ->and($reminded)->toBe(['CEA', 'EE', 'MM']);
+        ->and($reminded)->toBe(['CEA']);
 });
 
 it('es idempotente: correrlo dos veces no duplica observaciones, recordatorios ni altas', function () {
@@ -253,4 +275,40 @@ it('reparte las observaciones en registros distintos', function () {
     $flags = CatalogReviewFlag::query()->get();
 
     expect($flags->groupBy(fn (CatalogReviewFlag $flag): string => $flag->review_id.'/'.$flag->flaggable_id)->filter(fn ($same) => $same->count() > 1)->count())->toBe(0);
+});
+
+it('en modo previous valida el periodo anterior y simula los cambios sin dar de baja más que aulas, y deja todo el actual pendiente (demo por puntos, punto 2)', function () {
+    seedCatalogScenario();
+    Room::query()->orderBy('code')->limit(10)->update(['type' => RoomType::Laboratorio->value]);
+    $labs = Room::query()->where('type', RoomType::Laboratorio->value)->where('is_active', true)->count();
+
+    runCatalogDemoSeeder('massive', 'previous');
+
+    $current = CatalogReview::query()->whereRelation('term', 'code', '20271');
+
+    expect(CatalogReview::query()->whereRelation('term', 'code', '20263')->where('status', '!=', ReviewStatus::Validated)->count())->toBe(0)
+        ->and((clone $current)->count())->toBeGreaterThan(0)
+        ->and((clone $current)->where('status', '!=', ReviewStatus::Pending)->count())->toBe(0)
+        ->and(app(CatalogReviewQuery::class)->summary(cvReview('20271', 'CB', Catalog::Teachers))['added'])->not->toBeEmpty()
+        ->and(CatalogReviewFlag::count())->toBe(0)
+        ->and(Activity::query()->where('event', 'reminded')->count())->toBe(0)
+        ->and(Room::query()->where('is_active', false)->count())->toBeGreaterThan(0)
+        ->and(Room::query()->where('type', RoomType::Laboratorio->value)->where('is_active', true)->count())->toBe($labs);
+});
+
+it('en modo validated empieza y valida cada revisión del periodo actual con el jefe de su departamento, sin observaciones (demo por puntos, punto 3)', function () {
+    seedCatalogScenario(previous: false);
+
+    runCatalogDemoSeeder('demo', 'validated');
+
+    $reviews = CatalogReview::query()->whereRelation('term', 'code', '20271')->with(['department', 'validator'])->get();
+
+    expect($reviews)->not->toBeEmpty()
+        ->and($reviews->every(fn (CatalogReview $review): bool => $review->status === ReviewStatus::Validated && $review->validator->name === "Jefe {$review->department->code}"))->toBeTrue()
+        ->and(Activity::query()->where('description', 'like', 'Empezó la revisión de %')->count())->toBe($reviews->count())
+        ->and(CatalogReviewFlag::count())->toBe(0);
+});
+
+it('rechaza un modo que no existe', function () {
+    expect(fn () => runCatalogDemoSeeder('demo', 'todo'))->toThrow(RuntimeException::class, 'Modo desconocido');
 });

@@ -36,7 +36,7 @@ it('HC-11: una sesión que empalma un bloqueo del salón es un choque duro con e
         ->subjectType->toBe('room')
         ->subjectId->toBe('LC-1')
         ->groupId->toBe('A')
-        ->message->toBe('El salón LC-1 está bloqueado el martes de 10:00 a 12:00 (Mantenimiento) y Redes, grupo A lo usa el martes de 09:00 a 11:00.')
+        ->message->toBe('El salón LC-1 está bloqueado el martes de 10:00 a 12:00 (Mantenimiento) y Redes, grupo A lo usa el martes de 9:00 a 11:00.')
         ->and($violations[0]->related)->toMatchArray(['room_id' => 'LC-1', 'day' => 2, 'starts_at' => '10:00', 'ends_at' => '12:00', 'reason' => 'Mantenimiento']);
 });
 

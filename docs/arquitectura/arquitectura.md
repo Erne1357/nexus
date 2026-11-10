@@ -67,6 +67,8 @@ Un provider que sobrescriba `boot()` debe llamar a `parent::boot()`. La base no 
 
 Las entradas del menú del módulo se declaran en el método `navigation()` de su provider (ver "Navegación").
 
+La demo por puntos del proceso (`php artisan demo:seed --hasta=`) también se declara en el provider: `demoSteps()` da los pasos con los que el módulo siembra la demo (`DemoStep`, cada uno **lleva a** un `DemoCheckpoint` terminando la etapa anterior), `demoChecks()` lo que esos pasos garantizan al llegar a cada punto (`DemoCheck`) y `demoQuietEvents()` los eventos del módulo que se descartan mientras siembra. Core los junta en `DemoPlan`, como el menú, sin conocer a ningún módulo (ver `docs/arquitectura/testing.md`, "Demo por puntos del proceso").
+
 Reglas:
 
 - **Actions** son la única puerta de escritura. Reciben datos ya validados, abren la transacción, escriben, registran bitácora y disparan eventos. Los componentes Livewire nunca escriben en modelos directamente.
@@ -372,7 +374,7 @@ Hay operaciones de un módulo que solo tienen sentido completas junto con lo que
 
 ### Transiciones de la carga
 
-El estado de una carga (`academic_loads.status`) cambia en un solo lugar: `AcademicLoad\Actions\Transitions\TransitionLoad`. Cada transición es una Action propia y delgada (hoy `ProposeLoad`; las demás llegan en las fases 3 y 4) que la llama con el estado destino y una guarda:
+El estado de una carga (`academic_loads.status`) cambia en un solo lugar: `AcademicLoad\Actions\Transitions\TransitionLoad`. Cada transición es una Action propia y delgada (hoy `ProposeLoad` y `StartStaffing`, esta sin guarda propia porque la veta Scheduling; las demás llegan en las fases 3 y 4) que la llama con el estado destino y una guarda:
 
 - **El diagrama son datos**: `LoadStatus::transitions(CampusProfile)` y `canTransitionTo($to, CampusProfile)` listan los destinos permitidos desde cada estado (el diagrama de `docs/proceso/proceso-propuesto.md`). Dependen del perfil del campus: desde Cerrada, un campus con `requires_subdireccion_approval` pasa a Aprobada y uno sin él publica directo. `TransitionLoad` (que recibe al actor como parámetro, para que también la llame un job o un comando) relee la carga con bloqueo dentro de la transacción y rechaza con una `ValidationException` sobre `status` si el estado de la base no permite el destino.
 - **Guarda para las reglas de la izquierda**: la Action de la transición pasa un `Closure(AcademicLoad): list<string>` con los motivos que bloquean, que salen de clases de `Rules/Constraints` (`ProposeLoad` junta `CatalogsValidated`, HC-14, y `ProposalPartAccepted`, HC-20). Lo que depende de un módulo a la derecha del mapa (Scheduling, Staffing) no se importa: lo veta un listener de `LoadTransitioning`.
@@ -380,6 +382,8 @@ El estado de una carga (`academic_loads.status`) cambia en un solo lugar: `Acade
 - **Lo que deja una transición**: el nuevo estado, una fila inmutable en `load_transitions` (de, a, actor, comentario; HC-18), una entrada de bitácora de la carga (evento `transitioned`) y, después del commit, `LoadTransitioned`.
 - **Quién puede**: lo decide `AcademicLoadPolicy` (una ability por transición) antes de llamar a la Action.
 - **Desde otra Action**: una transición también se llama dentro de la transacción de otra Action, que bloquea la carga antes de leer su estado. `AcceptProposalReview` llama a `ProposeLoad` cuando el departamento acepta su primera parte con la carga en borrador; si la transición se bloquea, la parte no se acepta.
+- **Lo que se congela con la transición**: `CloseLoad` (tarea 4.1) despacha `LoadClosing` dentro de su transacción, después de `TransitionLoad`, para que Scheduling confirme los grupos activos en la misma operación; si un listener falla, la carga no se cierra. La publicación (tarea 4.3) arma el snapshot igual, con `LoadSnapshotRequested`. No sirve `LoadTransitioned`, que llega después del commit.
+- **Reabrir** (`ReopenLoad`): de cerrada, aprobada o publicada a ajustes, con motivo obligatorio. Asignación también pasa a ajustes, pero solo con una solicitud de cambio aprobada (`StartAdjusting`), así que su guarda rechaza reabrir desde ahí.
 
 Para agregar una transición: una Action `Transitions/<Verbo>Load` que llame a `TransitionLoad` con su estado destino y su guarda, la ability en la policy, y las pruebas con la regla que la bloquea. El diagrama ya la permite o se agrega a `LoadStatus::transitions()`.
 
@@ -414,6 +418,8 @@ El validador de Scheduling (tarea 3.2) lo usan el editor de horarios, la asignac
 ## Colas y trabajos en segundo plano
 
 Todo lo que tarde más de un segundo va a la cola `redis` (servicio `queue`): validar y aplicar lotes de importación, recalcular `student_progress`, `staffing_rankings`, `teacher_term_loads` y `schedule_conflicts`, generar snapshots y exportes, y correr el motor. Las pantallas muestran progreso con polling de Livewire (`wire:poll`) y notificaciones en base de datos.
+
+`staffing_rankings` lo recalcula `Staffing\Jobs\ComputeRankings` por periodo, campus y departamento: llama a `Actions\RankGroups`, que lee los insumos con `RankingInputsQuery`, marca choque, horas y disponibilidad con una instancia nueva de `ScheduleValidator` (`checkTeachers()` una vez por grupo), ordena con `RankingScorer` y reescribe las filas del departamento en una transacción, sin bitácora, y avisa con `RankingsComputed` después del commit. Lo encolan los listeners de Staffing con `Actions\QueueRankings`: `GroupsCreated` (cada departamento de los grupos nuevos), `GroupScheduleChanged`, `GroupCancelled` y `GroupTeacherChanged` (el departamento del grupo y los alcances de su docente, el anterior y el nuevo), y los eventos de Faculty de plaza, horas externas, disponibilidad, perfil, adscripción, datos y acceso del docente (sus alcances). Los alcances de un docente son los departamentos donde es candidato, en cada campus con grupos de ellos, más donde todavía aparece en el ranking; sin periodo en el evento, los periodos con alguna carga en `proposed`, `staffing` o `adjusting`. Para que una ráfaga de cambios espere un solo recálculo, el job se encola con 5 segundos de retraso y es único por alcance hasta que empieza a correr (`ShouldBeUniqueUntilProcessing`); dos corridas del mismo alcance no se enciman (`WithoutOverlapping`). El comando `staffing:rank {periodo} {--campus=} {--department=}` corre lo mismo sin la cola para los seeders y los operadores.
 
 El `timeout` de un job tiene que quedar por debajo del `retry_after` de la conexión (`config/queue.php`, 31 minutos): si un job dura más, la cola lo entrega otra vez mientras el primero sigue corriendo. Los más largos son los de importación (30 minutos); un job que necesite más sube los dos. En desarrollo, `queue:listen` mata al proceso que pasa de su `--timeout` (`compose.override.yaml`), que también va por encima. Con un solo worker, un lote largo hace esperar a los demás jobs; y al apagar el contenedor (`stop_grace_period` de 60 s) un job que no termina a tiempo muere, y su lote queda fallido cuando vence el `retry_after`.
 

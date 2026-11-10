@@ -48,6 +48,35 @@ La base es ancha en unit: las reglas de negocio son lo que más cambia y lo más
   ```bash
   docker compose exec app php artisan migrate:fresh --seed --seeder='Database\Seeders\MassiveSeeder'
   ```
+- **Demo por puntos del proceso** (`php artisan demo:seed`, `app/Modules/Core/Console/SeedDemo.php`): borra la base de la conexión y siembra la demo hasta el **inicio** de una etapa, con todo lo anterior terminado en todos los departamentos y esa etapa recién abierta, sin nada capturado (decisión del usuario, 9 de noviembre de 2026). Así se prueba la app de ese punto en adelante. Sin `--force` pide confirmación; nunca corre en producción. Imprime cada paso con su tiempo, las revisiones del punto (✓ o ✗) y los usuarios para entrar. Un paso que lanza o un punto con una revisión fallida detienen la corrida: el comando lo muestra en la tabla («punto, paso o revisión, motivo») y sale con error.
+
+  ```bash
+  docker compose exec -e DB_DATABASE=nexus_massive_a app php artisan demo:seed --hasta=asignacion --volumen=masivo --force
+  ```
+
+  | `--hasta` | Punto | Queda listo para probar |
+  |---|---|---|
+  | `catalogos` | 1. Catálogos importados | Abrir el periodo: 20271 sin abrir, sin cargas ni revisiones |
+  | `validacion` | 2. Empezando la validación de catálogos | Que los jefes validen: 20271 abierto (en el masivo, 20263 abierto y validado como foto anterior), revisiones pendientes, cargas en borrador |
+  | `propuesta` | 3. Empezando la propuesta por carrera | Que los coordinadores armen la carga: todo validado, sin propuestas |
+  | `horarios` | 4. Empezando horarios y cupos | El editor y los cupos: propuestas aceptadas, grupos creados sin sesiones |
+  | `asignacion` | 5. Empezando la asignación docente | Asignar con ranking: horarios completos sin choques duros, cupos decididos, cargas en `staffing`, sin docentes ni salones |
+  | `salones` | 6. Empezando salones y acuerdos | Salones y préstamos: todo grupo con docente |
+  | `cierre` | 7. Empezando el cierre | Cerrar: toda sesión presencial con salón, préstamos aceptados, cero choques duros |
+  | `todo` | Todos los casos | La demo mezclada de siempre: `DemoSeeder` o `MassiveSeeder`, sin cambios |
+
+  - `--volumen=demo` (por omisión) siembra Campus II en pequeño y `--volumen=masivo` Campus I y Campus II, con los mismos números que `DemoSeeder` y `MassiveSeeder`. `--semilla` (por omisión 2027, la de esos seeders) da los mismos datos; no aplica a `todo`. Además de lo de esos seeders, los puntos del masivo traen un «Edificio N» por campus con aulas de 40 a 45 lugares y laboratorios de 35 a 40 (70 y 12 en Campus I, más 6 laboratorios generales; 50 y 6 en Campus II), sin dueño (`FacilitiesDemoSeeder` con `withProcessRooms`): con unos 2 500 y 1 100 grupos, casi todos de 35 lugares o más, los salones de los archivos no alcanzan para un horario sin choques ni para un salón por sesión (HC-05, HC-06). 20263 queda sin calendario.
+  - Los docentes de los puntos salen en **modo proceso** (`FacultyDemoSeeder` con `forProcess`): 1.4 veces los del volumen (masivo 490 y 350, demo 168), con la adscripción principal repartida por las horas que cada departamento da en los planes del campus y la disponibilidad más holgada (bloques con 15 % por hora, 40 % de ellos «no disponible»: unos 10 % de la semana), para que en `salones` todo grupo tenga un docente que pase HC-01, HC-08 y HC-09. Con la plantilla de `todo` la capacidad de horas apenas iguala la demanda y CB, EE y MM quedan cortos (medido en el masivo el 9 de noviembre de 2026). En `validacion` la captura docente trae la variedad de siempre (`TeacherCaptureDemoSeeder`) y, en el masivo, 20263 queda validado con las altas y bajas de siempre hacia 20271, sin dar de baja más que aulas (`CatalogValidationDemoSeeder` en modo `previous`); en `propuesta` la captura queda completa (`complete`: a quien le falta disponibilidad o perfil se le devuelve lo que la variedad quitó) y cada revisión de 20271, empezada y validada por el jefe de su departamento, sin observaciones (modo `validated`).
+  - **Plantilla suficiente (Staffing, lleva a `validacion`):** antes de validar 20271, `StaffingSupplyDemoSeeder` calcula la demanda esperada de cada departamento como la pedirán las propuestas (alumnos elegibles y grupos sugeridos de cada materia de las carreras ofertadas, por sus horas) y, donde la capacidad de sus docentes activos de adscripción principal (horas base, o 20 si es de honorarios, menos las externas) no llega a 1.35 veces esa demanda, da de alta docentes de asignatura de 20 horas con `CreateTeacher` y `AddPosition`, como las altas que registra el jefe durante la validación. En el masivo da de alta unos 110 (EE, II, MM y SC); su estimación (17 036 horas) coincide con la demanda real de los grupos que crean las propuestas.
+  - **Asignación (Staffing):** a `asignacion`, cada carga en propuesta pasa a asignación con su jefe (un veto de HC-15 detiene la demo con su motivo) y se calcula el ranking de todos los grupos. A `salones`, todo grupo activo recibe docente (`StaffingDemoSeeder` en modo `staffed`): campus por campus, los grupos de las horas más saturadas de su departamento van primero y cada uno toma al primero de su ranking que pasa HC-01, HC-08 y HC-09; al que se queda sin nadie se le libera un candidato moviendo uno de sus grupos a otro docente que pasa. Una muestra por departamento pasa por `AssignTeacher`, el resto se escribe en bloque; al final se recalculan `teacher_term_loads` y los choques.
+  - En cada punto, el calendario general de 20271 pone «En curso» hoy la etapa que empieza; las anteriores quedan terminadas y las siguientes próximas, una tras otra (`DemoCalendar`). El admin entra con `password`, como los usuarios de prueba, en todos los puntos y también en `todo` (`DemoAdminPasswordSeeder`).
+  - Cada módulo declara en su provider los pasos que **llevan a** un punto terminando la etapa anterior (`demoSteps()`), lo que debe ser cierto al llegar (`demoChecks()`) y los eventos caros que se descartan mientras siembra (`demoQuietEvents()`); `DemoRunner` (Core) los corre por punto en el orden de `bootstrap/providers.php`, sin eventos de modelo, como `MassiveSeeder`. Una fase nueva agrega su punto en `DemoCheckpoint` antes de `todo` y sus pasos y revisiones en su provider. `DemoCheckpointsTest` corre los pasos reales hasta el cierre con el volumen demo y revisa cada punto al llegar.
+  - En `horarios`, cada carrera ofrecida de cada campus propuso y envió, y el jefe de cada departamento aceptó todas sus partes (`AcademicLoadDemoSeeder` con `complete`); así nacen los grupos, sin sesiones, sin cupos de otras carreras y sin acuerdos, y las cargas con partes quedan en `proposed` (un departamento sin partes en ese campus, en `draft`). Mientras se siembra se descarta `GroupsCreated`, que recalcularía los choques del campus en cada aceptación, y Scheduling los recalcula una vez por campus al llegar (con el volumen demo, 4 s en vez de 22). Si una carrera no tiene coordinador, una parte no tiene jefe o HC-14 la detiene, el paso se detiene con el motivo.
+  - En `asignacion`, antes del horario limpio, los cupos quedan decididos: grupos compartidos propuestos por el jefe del departamento que imparte y aceptados por el de la otra carrera, y cupos directos con carreras del mismo departamento (`SchedulingAgreementsDemoSeeder` en modo `quotas`: 24 y 4 con el volumen demo, 120 y 25 con el masivo), sin acuerdos pendientes, préstamos ni salones.
+  - **Horario limpio** (lleva a `asignacion`, `CleanScheduleDemoSeeder` con `CleanSchedulePlanner`, #346): todo grupo activo con sus horas exactas en sesiones de dos horas, en días distintos y de preferencia a la misma hora; sin que los grupos de un plan y semestre dejen al alumno tipo sin combinación (HC-03); con un salón posible para cada sesión presencial (`RoomSupply`; el salón no se guarda, lo asigna el paso de `cierre`), y sin pasar de 70 % de los docentes activos de adscripción primaria de cada departamento a la misma hora, contado entre campus, para que la asignación del punto siguiente no choque (HC-01). Sin docente ni salón. Con el masivo coloca unos 3 600 grupos y 9 700 sesiones en unos 27 s. Si un grupo no cabe, se detiene con el grupo y lo que lo impidió (semestre, departamento, salón, ventana).
+  - En `cierre`, toda sesión presencial de un grupo activo tiene salón y las virtuales no (`SchedulingAgreementsDemoSeeder` en modo `rooms`): un reparto con `RoomSupply` sin HC-02, HC-05, HC-06 ni HC-11, primero las prácticas con laboratorio, con el salón por defecto de la materia y los propios o sin dueño antes que los de otro departamento; si así no alcanza, reparte otra vez solo por el salón más justo, y si aun así falta, se detiene antes de escribir con cuántas sesiones y ejemplos (no repara el horario). La primera sesión de cada departamento pasa por `AssignSessionRoom` con su jefe y las demás se escriben en bloque; los salones de otro departamento piden su préstamo y el jefe dueño lo acepta (HC-10). En el punto 5 la revisión «la oferta de salones alcanza para el horario» corre ese mismo reparto sin escribir. Masivo: unas 9 700 sesiones y 850 préstamos en cerca de 1 min.
+  - Un punto queda completo cuando entran todos sus pasos, y hoy lo están los siete (9 de noviembre de 2026): el armazón y los puntos 1 y 2 (#341); la captura docente y la foto anterior del 2 y todo el 3 (#345); `RoomSupply` (#336); el 4 (#342), los cupos del 5 (#343) y el 7 (#344); el horario limpio del 5 (#346); las altas del 2 y los pasos de Staffing del 5 y el 6 (#347, #350). El comando no deja pedir un punto cuyo camino tiene puntos sin pasos, y lo dice antes de borrar la base.
+  - Tiempos medidos el 9 de noviembre de 2026: con el volumen demo, hasta `cierre` en unos 26 s (`DemoCheckpointsTest` tarda unos 31 s); con el masivo, hasta `cierre` en unos 9 min (536 s) con todas las revisiones en ✓. El comando sube `memory_limit` a 1 GB: el masivo no cabe en los 128 MB de la imagen.
 - **Archivos de importación del demo** (`php artisan imports:export-demo --dir=demo`, `app/Modules/Imports/Console/ExportDemoFiles.php`): escribe lo sembrado (`DemoSeeder` o `MassiveSeeder`) como un CSV por plantilla (`departments`, `careers`, `study_plans`, `subjects`, `prerequisites`, `students`, `kardex`, `teacher_history`, `evaluations`, `teachers`, `positions`) y un `rooms-<CAMPUS>.csv` por cada campus que tenga salones (la plantilla `rooms` es de un campus; sin borrados, con los inactivos) en `storage/app/imports/<dir>/`, ignorado por git. Los encabezados son las etiquetas de cada plantilla, así que el asistente los reconoce sin mapeo; `careers` trae un renglón por carrera y campus, `teachers` uno por adscripción (departamento) con la principal primero (la primera de un docente es la principal al importar), el generador de docentes no repite tipo y «desde» entre las plazas de un docente (es la clave de `positions`), no se exporta lo borrado y lo inactivo sí. Alumnos y kárdex salen por bloques, sin cargarlos en memoria: con el masivo escribe unos 355 mil renglones de kárdex (13 MB) en unos 30 s con 128 MB de memoria. Sirve para probar el asistente con archivos grandes; se suben en el orden de las reglas de datos.
 - **Fixtures de importación** en `tests/Fixtures/imports/`: archivos pequeños con la estructura real de las exportaciones del SII, **anonimizados** (nombres, números de control y números de empleado inventados, claves de materia reales). Sirven para probar plantillas y el asistente de importación de principio a fin.
 - **Ids de registros que la prueba no crea:** `fakeKey(10)` (`tests/Pest.php`) da un uuid fijo y válido. Lo usan los departamentos y carreras de los alcances mientras Academic no tenga sus tablas; un id que no es uuid lo rechaza PostgreSQL ([ADR-0014](../decisiones/0014-uuidv7-como-llave-primaria.md)).
@@ -108,24 +137,61 @@ El `MassiveSeeder` siembra unos 12 000 alumnos y 600 docentes, más los datos de
 
 - **Periodos:** desde 2014, con el calendario de 20263 y ventanas propias de C1 en 20271. 20263 y 20271 están abiertos en C1 y C2.
 - **Validación de catálogos:** en 20263 todo validado, así que hay foto y 20271 muestra altas y bajas contra ella. En 20271, por departamento:
-  - CB, SC e II: todo validado;
-  - EE: salones de C2 en revisión, o sea que HC-14 bloquea en C2;
-  - CEA: la mitad;
-  - MM: validado y reabierto.
+  - CB, SC, II y EE: todo validado, para que sus jefes puedan aceptar su parte de cada propuesta (HC-14);
+  - CEA: en el `DemoSeeder`, todo validado; en el masivo, la mitad (docentes y materias validados, salones en revisión, carreras validadas y reabiertas, lo demás pendiente);
+  - MM: en el masivo, todo validado; en el `DemoSeeder`, validado en parte, reabierto (docentes y carreras) y con los salones en revisión.
 
-  Hay observaciones de todos los tipos y recordatorios a CEA, EE y MM.
+  Hay observaciones de todos los tipos y recordatorio a los departamentos con algo pendiente (CEA en el masivo, MM en el `DemoSeeder`).
 - **Captura docente en 20271:** alrededor de 25 % sin disponibilidad, 15 % sin perfil y 30 % con horas fuera del ITCJ.
-- **Propuestas, bandejas y avisos** de las carreras de C1 y C2, en distintos estados.
+- **Propuestas, bandejas y avisos** de las carreras de C1 y C2, en distintos estados. Con los catálogos de CB, SC, II, EE y MM validados, el masivo acepta más partes (regresa una de cada 6 y deja pendiente una de cada 5; el `DemoSeeder`, una de cada 4 y una de cada 3).
 
 Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes trabajan en todo el Tec y eligen el campus en la credencial:
 
 | Pantalla | Usuario y caso |
 |---|---|
-| Validación de catálogos (`/catalog-validation`) | `jefe.ee` (HC-14 bloqueado en C2), `jefe.mm` (reabierto), `jefe.cea` (a medias), `jefe.sc` (todo validado). `admin` o `subdir` con `?department=` la ven en lectura |
+| Validación de catálogos (`/catalog-validation`) | `jefe.cea` (a medias y con carreras reabiertas en el masivo), `jefe.mm` (reabierto y con salones en revisión solo en el `DemoSeeder`), `jefe.ee` y `jefe.sc` (todo validado). `admin` o `subdir` con `?department=` la ven en lectura |
 | Avance de validación (`/catalog-validation/progress`) | `admin` o `subdir` |
 | Propuesta de carrera | `coord.isc.c2` (enviada, unas 53 materias), `coord.ige.c2` (regresada), `coord.cp.c2` (borrador), `coord.isc.c1` |
-| Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (HC-14 a medias, LADM con 45 materias), `jefe.ee` (HC-14 bloqueado en C2) |
+| Bandeja del departamento | `jefe.cb` (catálogos validados; en C1 ve 12 carreras), `jefe.cea` (en el masivo, HC-14 a medias; LADM con 45 materias), `jefe.ee` (catálogos validados) |
 | Campana y `/notifications` | `jefe.cea` (unos 24 avisos) o `jefe.sc` |
+
+### Qué trae el seeder de acuerdos (fase 3, riel B)
+
+`SchedulingAgreementsDemoSeeder` corre después de `SchedulingDemoSeeder` (en `DemoSeeder` y en el masivo) y usa las Actions reales con el jefe que corresponde, así que la bitácora y la campana dicen quién pidió y quién decidió. Solo toca grupos editables (carga en proposed, staffing o adjusting) y no ensucia los departamentos limpios de `SchedulingDemoSeeder`: no les pone salones ajenos ni choques, aunque sí les llegan cupos que respetan HC-07. Si el periodo y el campus ya tienen acuerdos, no hace nada.
+
+| Caso | Demo (C2) | Masivo (por campus) |
+|---|---|---|
+| Préstamos de salón (HC-10) | 16: 40 % aceptados, 30 % pendientes («préstamo pendiente»), 15 % rechazados con motivo (la sesión queda sin salón) y 15 % cancelados por quien pidió | alrededor de 60 o más (los del 3 % de salones ajenos de `SchedulingDemoSeeder` más los que falten), con la misma proporción |
+| Grupos compartidos (HC-07) | 24 acuerdos: 40 % aceptados (crean su cupo), 30 % pendientes, 20 % rechazados con motivo, 10 % retirados | 120 con la misma proporción |
+| Cupos directos de la misma área | 4 grupos | 25 grupos |
+| Salones sugeridos | hasta 10 sesiones sin salón con el primer salón libre de `RoomSuggestionQuery` | hasta 40 |
+
+Con el demo solo el departamento CB queda con la carga abierta fuera de los limpios, así que todos los préstamos salen de CB hacia CEA, EE, II, MM y SC; los grupos compartidos salen de los departamentos que imparten y los reciben las carreras de CEA, II y SC. Con qué usuario verlos (contraseña `password`):
+
+| Pantalla | Usuario y caso |
+|---|---|
+| Acuerdos (`/scheduling/agreements`) | `jefe.cea` (préstamos y cupos «Por decidir» y decididos), `jefe.cb` (préstamos «Enviados» pendientes, rechazados y cancelados), `jefe.ii` (cupos «Por decidir» y «Enviados») |
+| Cajón de cupos y salones en el editor de horarios | `jefe.cb` en un grupo con acuerdo propuesto o aceptado; salones sugeridos en las sesiones que el seeder llenó |
+| Campana (`/notifications`) | `jefe.cea` (unos 26 avisos), `jefe.ii`, `jefe.cb` |
+| Coordinador con un grupo compartido | `coord.ige.c2`, `coord.la.c2` o `coord.ii.c2`: su carrera tiene cupo aceptado en grupos compartidos de otro departamento (cajón de cupos de esos grupos) |
+
+### Qué trae la asignación docente (fase 3)
+
+`StaffingDemoSeeder` corre al final de los dos, después de `SchedulingDemoSeeder` y de `SchedulingAgreementsDemoSeeder` (así sus rankings y asignaciones ya ven los cupos aceptados y los préstamos decididos). En el `DemoSeeder` agrega unos 7 s; en el masivo, unos 2 minutos (los rankings se calculan en paralelo, un `staffing:rank` por departamento y campus, de seis en seis). Al terminar imprime cuántos rankings, asignaciones, solicitudes y docentes por categoría dejó y con qué usuarios revisar. Con la misma semilla y los mismos datos deja lo mismo: ordena por claves de materia y de grupo, RFC y códigos, no por los UUIDv7. En 20271, por campus:
+
+- **Cargas:** los departamentos limpios de `SchedulingDemoSeeder` pasan a asignación; los que Scheduling veta (choques duros, grupos sin horario) se quedan en propuesta con su motivo. Entre los que entran, de más a menos grupos: el primero termina en ajustes (solicitudes aprobadas sin aplicar), el segundo aplica sus solicitudes y regresa a asignación, los de en medio siguen en asignación con solicitudes pendientes y, con tres o más, el último queda sin ningún docente.
+- **Rankings** de todos los departamentos con grupos, recalculados después de asignar (las horas restantes ya cuentan lo asignado).
+- **Asignaciones** en los departamentos con papel: el 75 % de sus grupos (65 % en el masivo), casi todos al primer lugar y uno de cada siete, más o menos, fuera de él con motivo (HC-16), con hasta dos docentes de honorarios por departamento; además reemplazos y docentes quitados con motivo, así que el historial tiene asignaciones vigentes, reemplazadas y quitadas. Siempre quedan grupos «Sin docente». Las primeras de cada departamento pasan por `AssignTeacher` y dejan bitácora; las demás se escriben en bloque, validadas contra una foto del campus.
+- **Traslado justo entre campus (SC-09, aviso)** en el masivo: al asignar C2 después de C1, hasta 10 grupos van a un docente que cabe y con quien el grupo queda a menos de 60 minutos de su sesión en el otro campus (buscado entre los primeros 20 del ranking; fuera del primer lugar, con motivo). El resumen los cuenta como «con traslado justo» y prefiere a uno de esos docentes para revisar «Mi carga». El `DemoSeeder` solo siembra C2, así que no los trae.
+- **Solicitudes de cambio** de horario y de salón pedidas por los docentes de los grupos: pendientes, aprobadas, rechazadas con comentario y aplicadas (unas 13 en el `DemoSeeder`, unas 50 en el masivo).
+- **Carga por docente:** crea `staffing.honorarios_max_hours` = 20 si no existe, agrega horas fuera del ITCJ a unos docentes ya cargados para que excedan su tope (HC-08) o queden justos y recalcula `teacher_term_loads`; hay docentes que exceden, honorarios con carga, sin carga, con carga completa y con horas libres.
+
+| Pantalla | Usuario y caso |
+|---|---|
+| Asignación docente (`/staffing/assign`) | En C2 del `DemoSeeder`: `jefe.ii` (ajustes), `jefe.cea` (asignación, de vuelta tras aplicar sus solicitudes), `jefe.sc` (asignación sin docentes), `jefe.cb` (propuesta vetada). En el masivo: `jefe.ee` (ajustes en C1), `jefe.ii` (aplicadas en C1, ajustes en C2), `jefe.sc` (pendientes en C1), `jefe.cb` (sin docentes en C1, aplicadas en C2), `jefe.mm` (vetada en C1) |
+| Carga por docente (`/carga-por-docente`) | Los mismos jefes; los que exceden su tope están adscritos a departamentos en asignación |
+| Solicitudes de cambio (`/staffing/change-requests`) | El jefe de la carga en ajustes (aprueba o rechaza las pendientes); el coordinador que imprime el resumen, que aplica una solicitud de horario aprobada (por ejemplo `coord.ii.c2` en el `DemoSeeder`; puede cambiar de una siembra a otra porque los ids de los grupos cambian) |
+| Oferta del departamento y Mi carga (`/mi-espacio/oferta`, `/mi-espacio/mi-carga`) | El docente que imprime el resumen (su RFC, distinto en cada siembra): varios grupos y solicitudes; en el masivo, con grupos en C1 y C2 y un traslado justo entre campus (SC-09) |
 
 ## Pruebas de rendimiento
 
@@ -160,11 +226,19 @@ Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su ram
 | Job | Contenido | Bloquea el merge |
 |---|---|---|
 | `lint` | Pint en modo verificación (`./vendor/bin/pint --test`) | Sí |
-| `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey; reporte de cobertura por módulo | Sí |
+| `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey; reporte de cobertura por módulo; las 20 pruebas y los 10 archivos más lentos de la corrida en el resumen del job (`--log-junit` y `.github/scripts/slowest-tests.py`, informativo) | Sí |
 | `browser` | Browser tests de Pest 5 en el contenedor `dev` con Chromium | Sí |
 | `rendimiento` | Presupuestos de rendimiento (aún no existe) | No (informa; ver arriba) |
 
 Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protección de `develop` y `main` (tarea 0.12): no se renombran sin actualizar la protección.
+
+### Qué trae el masivo de la fase 3 (horarios)
+
+`SchedulingDemoSeeder` corre después de `AcademicLoadDemoSeeder`, que acepta partes y con eso crea los grupos (3.3); en Massive tarda unos 2.5 minutos. Para revisar el tablero «Choques y avance» (`/scheduling/conflicts`, con un campus elegido en la credencial):
+
+- **Departamentos limpios** (`SchedulingDemoSeeder::cleanDepartments()`, lo imprime al sembrar): todos sus grupos con sesiones de horas exactas, salones sin dueño o de su departamento, sin choques duros y sin docente, para que Staffing los pase a asignación (`StartStaffing`) y los asigne.
+- **Los demás departamentos**, con casos a propósito de cada tipo: grupos sin horario, horas que no cuadran (HC-12), dos materias de grupo único empalmadas en el mismo semestre (HC-03; solo en semestres sin grupos de los departamentos limpios, porque HC-03 se revisa por semestre y vetaría también su paso a asignación), salón más chico que el grupo (HC-05), práctica de laboratorio en aula (HC-06), salón de otro departamento sin préstamo (HC-10), docente que se pasa de horas o no está disponible (HC-08, HC-09), grupos sin docente, sin salón, cancelados y confirmados. Los choques que no son a propósito quedan cerca de cero, para que la cuadrícula muestre celdas listas, con pendientes y con choques.
+- Al final recalcula `schedule_conflicts` de cada campus. Después de cambiar datos a mano: `php artisan scheduling:recompute-conflicts 20271`.
 
 ### Cómo corre
 
@@ -196,6 +270,8 @@ La imagen `dev` trae `pcov`. El job `tests` corre con `--coverage-clover` y `--c
 ### Duración
 
 Meta: menos de **10 minutos** en total para `lint` + `tests` + `browser`. Los tres jobs corren en paralelo, así que el tiempo de reloj es el del más lento. Medido en el PR #77 (los tres jobs en paralelo): unos **5 minutos** con la caché de la imagen vacía (la primera corrida, o tras cambiar el `Dockerfile`; casi todo es construir la imagen con Chromium) y **menos de 2 minutos** con la caché caliente. Si se excede, primero se paraleliza por módulo, después se revisa qué browser tests se pueden bajar a feature.
+
+Con unas 6 300 pruebas (9 de noviembre de 2026), el job `tests` es el más lento y su tiempo depende de la máquina que asigna GitHub: la misma suite con 4 procesos tardó 607 s en #349 y 1 193 s en #350. Por eso su límite es de 45 minutos (#349). Para saber qué se lleva el tiempo, el resumen del job muestra las pruebas y los archivos más lentos. Si pasa de 30 minutos de forma constante, el siguiente paso es partir `tests` en dos jobs en paralelo, por ejemplo con `--shard`. Antes hay que actualizar los checks requeridos de la protección de `develop` y `main`.
 
 ### Cuando falla
 

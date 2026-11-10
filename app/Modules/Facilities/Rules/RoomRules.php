@@ -7,6 +7,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Support\WeekTime;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -235,7 +236,7 @@ final class RoomRules
             throw ValidationException::withMessages(['ends_at' => 'La hora de fin debe ser posterior a la de inicio.']);
         }
 
-        $window = "El bloqueo debe quedar dentro del horario del campus ({$profile->dayStart} a {$profile->dayEnd}).";
+        $window = 'El bloqueo debe quedar dentro del horario del campus ('.WeekTime::clock($profile->dayStart).' a '.WeekTime::clock($profile->dayEnd).').';
 
         if ($startsAt < $profile->dayStart) {
             throw ValidationException::withMessages(['starts_at' => $window]);

@@ -20,7 +20,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | AcceptSharedGroup (tarea 3.6, HC-07): Scheduling orquesta la aceptación de un acuerdo de grupo compartido: revisa
-| que los lugares quepan, acepta el acuerdo y crea el cupo de la carrera, todo en una transacción.
+| que los lugares quepan, acepta el acuerdo y crea el cupo de la carrera, todo en una transacción. La propuesta ya
+| apartaba sus lugares (confirmado el 8 de noviembre de 2026): la revisión al aceptar es una red de seguridad.
 */
 
 beforeEach(function () {
@@ -32,6 +33,7 @@ beforeEach(function () {
         'capacity' => 40,
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
 });
 
 function proposedFor(int $seats = 8, AgreementStatus $status = AgreementStatus::Proposed): InterdepartmentalAgreement
@@ -55,7 +57,7 @@ it('acepta el acuerdo y crea el cupo de la carrera con los lugares acordados', f
         ->and($agreement->fresh()->decided_by)->toBe($this->actor->id);
 });
 
-it('HC-07: no acepta si los lugares ya no caben, sin dejar nada a medias', function () {
+it('HC-07 (red de seguridad): no acepta si los lugares ya no caben, sin dejar nada a medias', function () {
     $agreement = proposedFor(11);
 
     try {
@@ -65,7 +67,27 @@ it('HC-07: no acepta si los lugares ya no caben, sin dejar nada a medias', funct
         $errors = $e->errors();
     }
 
-    expect($errors)->toBe(['max_seats' => ['HC-07: el grupo ya tiene 30 de 40 lugares repartidos; caben 10.']])
+    expect($errors)->toBe(['max_seats' => ['HC-07: el grupo ya tiene 30 de 40 lugares repartidos; caben 10. Baja 1 lugar de los cupos para poder aceptarlo.']])
+        ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed)
+        ->and(GroupQuota::query()->count())->toBe(1);
+});
+
+it('HC-07 (red de seguridad): al aceptar cuenta también lo que apartan las demás propuestas del grupo', function () {
+    InterdepartmentalAgreement::factory()->sharedGroup(5)->create([
+        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id,
+        'career_id' => Career::factory()->create(['department_id' => $this->otro->id])->id,
+    ]);
+    $agreement = proposedFor(8);
+
+    try {
+        app(AcceptSharedGroup::class)->handle($agreement, $this->actor);
+        $errors = null;
+    } catch (ValidationException $e) {
+        $errors = $e->errors();
+    }
+
+    expect($errors)->toBe(['max_seats' => ['HC-07: el grupo ya tiene 35 de 40 lugares repartidos o apartados; caben 5. Rechaza o retira 3 lugares de otras propuestas (o baja cupos) para poder aceptarlo.']])
         ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed)
         ->and(GroupQuota::query()->count())->toBe(1);
 });
@@ -144,7 +166,7 @@ it('no acepta en un grupo cancelado ni con la carga fuera de proposed, staffing 
         ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed);
 
     $this->group->update(['status' => GroupStatus::Planned]);
-    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load->update(['status' => LoadStatus::Closed]);
 
     expect(fn () => app(AcceptSharedGroup::class)->handle($agreement, $this->actor))->toThrow(ValidationException::class, 'no se editan cupos.');
 });

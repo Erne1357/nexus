@@ -6,7 +6,8 @@ use App\Modules\Core\Models\CampusProfile;
 /*
 | El diagrama de "Máquina de estados de la carga académica" (docs/proceso/proceso-propuesto.md) como datos:
 | cada par permitido y todos los demás, la matriz completa de 8 x 8, para un campus sin visto bueno de
-| Subdirección (cerrada publica directo) y para uno con él (cerrada pasa a aprobada).
+| Subdirección (cerrada publica directo) y para uno con él (cerrada pasa a aprobada). Cerrada, aprobada y
+| publicada se reabren a ajustes (confirmado el 10 de noviembre de 2026).
 */
 
 const COMMON_LOAD_TRANSITIONS = [
@@ -15,13 +16,13 @@ const COMMON_LOAD_TRANSITIONS = [
     'staffing' => ['adjusting', 'closed'],
     'adjusting' => ['staffing'],
     'approved' => ['published', 'adjusting'],
-    'published' => ['reanalysis'],
+    'published' => ['reanalysis', 'adjusting'],
     'reanalysis' => ['published'],
 ];
 
 function allowedLoadTransitions(bool $requiresApproval): array
 {
-    return [...COMMON_LOAD_TRANSITIONS, 'closed' => [$requiresApproval ? 'approved' : 'published']];
+    return [...COMMON_LOAD_TRANSITIONS, 'closed' => [$requiresApproval ? 'approved' : 'published', 'adjusting']];
 }
 
 function loadProfile(bool $requiresApproval): CampusProfile

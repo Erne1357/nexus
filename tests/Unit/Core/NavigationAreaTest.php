@@ -8,6 +8,7 @@ use App\Modules\Core\Enums\NavigationArea;
 
 it('declara las áreas en el orden del menú', function () {
     expect(array_map(fn (NavigationArea $area): string => $area->value, NavigationArea::cases()))->toBe([
+        'mi_espacio',
         'academico',
         'servicios_escolares',
         'recursos_humanos',

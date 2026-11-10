@@ -12,6 +12,7 @@ use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Students\Enums\StudentsPermission;
 use Illuminate\Support\Facades\Schema;
 use Tests\Fixtures\Authorization\FakePermission;
@@ -66,6 +67,10 @@ function dimensionTables(): array
         'scheduling.session' => 'group_sessions',
         'scheduling.room' => 'group_sessions',
         'scheduling.quota' => 'group_quotas',
+        'staffing.ranking' => 'staffing_rankings',
+        'staffing.teacher' => 'group_teacher_assignments',
+        'staffing.teacher_load' => 'teacher_term_loads',
+        'staffing.change_request' => 'change_requests',
     ];
 }
 
@@ -156,6 +161,7 @@ $enums = [
     CatalogValidationPermission::class,
     AcademicLoadPermission::class,
     SchedulingPermission::class,
+    StaffingPermission::class,
 ];
 
 it('la prueba revisa los enums de permisos de todos los módulos', function () use ($enums) {
@@ -174,6 +180,10 @@ it('spec §7.1: ningún permiso del módulo sobre un recurso con campus_id omite
     $problems = [];
 
     foreach ($enum::cases() as $permission) {
+        if ($permission->isPersonal()) {
+            continue;
+        }
+
         $table = dimensionTableFor($permission);
 
         if ($table === null || ! Schema::hasTable($table)) {

@@ -41,7 +41,7 @@ final class RoomBlocked implements Constraint
                         continue;
                     }
 
-                    $when = Minutes::dayName($block->day).' de '.Minutes::format($block->start).' a '.Minutes::format($block->end);
+                    $when = Minutes::dayName($block->day).' de '.Minutes::label($block->start).' a '.Minutes::label($block->end);
                     $reason = $block->reason === '' ? '' : " ({$block->reason})";
 
                     yield Violation::hard(

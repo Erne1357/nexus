@@ -2,6 +2,7 @@
 
 namespace App\Modules\Faculty\Database\Seeders;
 
+use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
@@ -31,6 +32,11 @@ use RuntimeException;
  * tener varios; los jefes ya los puso DemoStaffSeeder). Requiere el catálogo (AcademicDemoSeeder) y los periodos.
  * Sin NEXUS_DEFAULT_PASSWORD, la provisión falla.
  *
+ * Con `$forProcess` (modo proceso de la demo por puntos, docs/arquitectura/testing.md) siembra `PROCESS_ROSTER_FACTOR`
+ * veces los docentes pedidos, reparte la adscripción principal por las horas que cada departamento da en los planes
+ * del campus y deja la disponibilidad más holgada (TeacherRosterGenerator::forProcess), para que en el punto 6 todo
+ * grupo tenga un docente que pase HC-01, HC-08 y HC-09. Sin él, todo queda como siempre.
+ *
  * Inserta con `DB::table()` en bloques de 1 000, todo un campus en una transacción. Cada campus usa su propia semilla (`$seed` más una constante del
  * campus): los docentes de Campus II son los mismos solo o junto con Campus I. Volver a sembrar no duplica: un
  * docente cuyo RFC ya existe, incluso borrado, no se toca. No corre en producción.
@@ -45,12 +51,19 @@ class FacultyDemoSeeder extends Seeder
     private const int HEADS_PER_DEPARTMENT = 2;
 
     /**
+     * En modo proceso, cuántas veces los docentes pedidos: la capacidad de horas de la plantilla de siempre apenas
+     * iguala la demanda, y con HC-01 y HC-09 hace falta holgura (medido en el masivo el 9 de noviembre de 2026).
+     */
+    public const float PROCESS_ROSTER_FACTOR = 1.4;
+
+    /**
      * @param  array<string, int>  $teachersPerCampus  docentes por clave de campus
      * @param  int  $seed  semilla: la misma da los mismos docentes
+     * @param  bool  $forProcess  modo proceso de la demo por puntos (ver la docblock de la clase)
      *
      * @throws RuntimeException en producción, si falta un campus o el usuario administrador, o la contraseña por defecto
      */
-    public function run(array $teachersPerCampus = ['C2' => 120], int $seed = 2027): void
+    public function run(array $teachersPerCampus = ['C2' => 120], int $seed = 2027, bool $forProcess = false): void
     {
         $this->refuseProduction();
 
@@ -71,10 +84,15 @@ class FacultyDemoSeeder extends Seeder
 
         foreach ($teachersPerCampus as $code => $count) {
             $catalog = $this->catalog($campuses[$code]);
-            $roster = (new TeacherRosterGenerator(new Randomizer(new Mt19937($seed + crc32($code)))))
-                ->generate($code, $count, array_map(fn (array $subjects): int => count($subjects), array_column($catalog, 'subjects')));
+            $random = new Randomizer(new Mt19937($seed + crc32($code)));
+            $subjectCounts = array_map(fn (array $subjects): int => count($subjects), array_column($catalog, 'subjects'));
+            $roster = $forProcess
+                ? TeacherRosterGenerator::forProcess($random)->generate($code, (int) round($count * self::PROCESS_ROSTER_FACTOR), $subjectCounts, array_column($catalog, 'hours'))
+                : (new TeacherRosterGenerator($random))->generate($code, $count, $subjectCounts);
 
-            $heads[$code] = DB::transaction(fn (): array => $this->insert($roster, $catalog, $campuses[$code], $terms, $admin, $totals));
+            $heads[$code] = DB::transaction(function () use ($roster, $catalog, $campuses, $code, $terms, $admin, &$totals): array {
+                return $this->insert($roster, $catalog, $campuses[$code], $terms, $admin, $totals);
+            });
         }
 
         $inserted = (hrtime(true) - $started) / 1e9;
@@ -94,9 +112,12 @@ class FacultyDemoSeeder extends Seeder
 
     /**
      * Los departamentos activos que coordinan una carrera del campus o dan una materia de sus planes, por código,
-     * cada uno con las materias activas que da en esos planes, por código.
+     * cada uno con las materias activas que da en esos planes, por código, y sus horas: las semanales (teoría más
+     * práctica) de sus materias en la retícula de cada plan activo de las carreras del campus, sin las que no entran a
+     * la propuesta (residencia, servicio social y complementarias), como mínimo 1. Las horas aproximan cuánto pedirán
+     * las carreras al departamento.
      *
-     * @return list<array{id: string, subjects: list<string>}>
+     * @return list<array{id: string, subjects: list<string>, hours: int}>
      */
     private function catalog(string $campusId): array
     {
@@ -115,6 +136,20 @@ class FacultyDemoSeeder extends Seeder
             ->groupBy('department_id')
             ->map(fn ($rows): array => $rows->pluck('id')->all());
 
+        $hours = DB::table('study_plan_subjects')
+            ->join('study_plans', 'study_plans.id', '=', 'study_plan_subjects.study_plan_id')
+            ->join('subjects', 'subjects.id', '=', 'study_plan_subjects.subject_id')
+            ->whereIn('study_plans.career_id', $careers)
+            ->where('study_plans.is_active', true)
+            ->whereNull('study_plans.deleted_at')
+            ->whereNull('study_plan_subjects.deleted_at')
+            ->where('subjects.is_active', true)
+            ->whereNull('subjects.deleted_at')
+            ->where(fn ($query) => $query->whereNull('subjects.kind')->orWhereNotIn('subjects.kind', [SubjectKind::Residencia->value, SubjectKind::ServicioSocial->value, SubjectKind::Complementaria->value]))
+            ->groupBy('subjects.department_id')
+            ->selectRaw('subjects.department_id, sum(subjects.theory_hours + subjects.practice_hours) as hours')
+            ->pluck('hours', 'department_id');
+
         $coordinating = DB::table('careers')->whereIn('id', $careers)->pluck('department_id');
 
         return DB::table('departments')
@@ -123,7 +158,7 @@ class FacultyDemoSeeder extends Seeder
             ->where(fn ($query) => $query->whereIn('id', $subjects->keys())->orWhereIn('id', $coordinating))
             ->orderBy('code')
             ->pluck('id')
-            ->map(fn (string $id): array => ['id' => $id, 'subjects' => $subjects->get($id, [])])
+            ->map(fn (string $id): array => ['id' => $id, 'subjects' => $subjects->get($id, []), 'hours' => max(1, (int) $hours->get($id, 0))])
             ->all();
     }
 

@@ -4,13 +4,17 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Actions\Agreements\CancelAgreement;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
+use App\Modules\Scheduling\Actions\Agreements\RejectSharedGroup;
+use App\Modules\Scheduling\Actions\Quotas\AcceptSharedGroup;
 use App\Modules\Scheduling\Actions\Quotas\ProposeGroupQuota;
 use App\Modules\Scheduling\Actions\Quotas\SetGroupQuotas;
+use App\Modules\Scheduling\Actions\Quotas\WithdrawGroupQuotaProposal;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupQuotasChanged;
 use App\Modules\Scheduling\Models\Group;
@@ -23,8 +27,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | SetGroupQuotas (tarea 3.6, HC-07): el departamento que imparte reparte los lugares del grupo entre carreras. Las de
-| su departamento y la dueña se escriben directo; la de otro departamento se propone (acuerdo) y no cuenta hasta que
-| su jefe lo acepta. La suma de los cupos no pasa la capacidad.
+| su departamento y la dueña se escriben directo; la de otro departamento se propone (acuerdo) y aparta sus lugares
+| desde la propuesta (confirmado el 8 de noviembre de 2026). La suma de los cupos y lo apartado no pasa la capacidad.
 */
 
 beforeEach(function () {
@@ -40,6 +44,7 @@ beforeEach(function () {
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
     CareerCampus::factory()->create(['career_id' => $this->sameDept->id, 'campus_id' => $this->group->campus_id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
 });
 
 /**
@@ -70,7 +75,7 @@ function setQuotasErrors(array $seats): array
  */
 function seatsOf(Group $group): array
 {
-    return GroupQuota::query()->where('group_id', $group->id)->pluck('max_seats', 'career_id')->all();
+    return GroupQuota::query()->where('group_id', $group->id)->orderByDesc('is_owner')->orderBy('id')->pluck('max_seats', 'career_id')->all();
 }
 
 it('crea, cambia y quita directo el cupo de una carrera del mismo departamento', function () {
@@ -89,6 +94,7 @@ it('cambia lugares de la dueña aunque sea de otro departamento', function () {
     $foreignOwner = Career::factory()->create(['department_id' => $this->otro->id]);
     $group = Group::factory()->withQuota(20)->create([
         'capacity' => 40, 'owner_career_id' => $foreignOwner->id,
+        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id,
         'subject_id' => $this->group->subject_id,
     ]);
 
@@ -144,7 +150,7 @@ it('una carrera nueva debe estar activa, sin borrar y ofrecida en el campus del 
 
 it('no edita cupos de un grupo cancelado ni con la carga fuera de proposed, staffing o adjusting', function (?LoadStatus $status, string $message) {
     if ($status !== null) {
-        AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+        $this->load->update(['status' => $status]);
     } else {
         $this->group->update(['status' => GroupStatus::Cancelled]);
     }
@@ -154,13 +160,21 @@ it('no edita cupos de un grupo cancelado ni con la carga fuera de proposed, staf
         ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
 })->with([
     'cancelado' => [null, 'cancelado'],
-    'borrador' => [LoadStatus::Draft, 'Borrador'],
+    'borrador' => [LoadStatus::Draft, 'borrador'],
     'cerrada' => [LoadStatus::Closed, 'no se editan cupos.'],
     'publicada' => [LoadStatus::Published, 'no se editan cupos.'],
 ]);
 
+it('no edita cupos si el departamento no tiene carga en el campus y el periodo (supuesto por confirmar)', function () {
+    $this->load->delete();
+
+    expect(setQuotasErrors([$this->owner->id => 25])['quotas'][0])
+        ->toBe("{$this->imparte->name} no tiene carga en {$this->group->campus->name} en este periodo: no se editan cupos.")
+        ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
+});
+
 it('edita cupos con la carga en proposed, staffing o adjusting', function (LoadStatus $status) {
-    AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load->update(['status' => $status]);
 
     setQuotas([$this->owner->id => 25]);
 
@@ -189,14 +203,62 @@ it('HC-07: no deja que los cupos pasen la capacidad, sin escribir', function () 
         ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
 });
 
-it('HC-07: los propuestos no cuentan para la suma', function () {
+it('HC-07: los lugares propuestos quedan apartados desde la propuesta: los cupos no los toman (confirmado el 8 de noviembre de 2026)', function () {
     CareerCampus::factory()->create(['career_id' => $this->foreign->id, 'campus_id' => $this->group->campus_id]);
-    app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 30, $this->actor);
+    app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 15, $this->actor);
 
+    expect(setQuotasErrors([$this->owner->id => 20, $this->sameDept->id => 6]))
+        ->toBe(['quotas' => ['HC-07: los cupos suman 26 y las propuestas apartan 15; el grupo es de 40 lugares. Quita 1 lugar.']])
+        ->and(setQuotasErrors([$this->owner->id => 40]))
+        ->toBe(['quotas' => ['HC-07: los cupos suman 40 y las propuestas apartan 15; el grupo es de 40 lugares. Quita 15 lugares.']])
+        ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
+
+    setQuotas([$this->owner->id => 20, $this->sameDept->id => 5]);
+
+    expect(seatsOf($this->group))->toBe([$this->owner->id => 20, $this->sameDept->id => 5])
+        ->and(InterdepartmentalAgreement::query()->live()->count())->toBe(1);
+});
+
+it('HC-07: al retirar, rechazar o cancelar la propuesta, sus lugares quedan libres otra vez', function (Closure $release) {
+    CareerCampus::factory()->create(['career_id' => $this->foreign->id, 'campus_id' => $this->group->campus_id]);
+    $agreement = app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 15, $this->actor);
+    expect(setQuotasErrors([$this->owner->id => 40]))->toHaveKey('quotas');
+
+    $release($agreement, $this->actor);
     setQuotas([$this->owner->id => 40]);
 
     expect(seatsOf($this->group))->toBe([$this->owner->id => 40])
-        ->and(InterdepartmentalAgreement::query()->live()->count())->toBe(1);
+        ->and(InterdepartmentalAgreement::query()->live()->count())->toBe(0);
+})->with([
+    'retirada' => [fn (InterdepartmentalAgreement $agreement, User $actor) => app(WithdrawGroupQuotaProposal::class)->handle($agreement, $actor)],
+    'rechazada' => [fn (InterdepartmentalAgreement $agreement, User $actor) => app(RejectSharedGroup::class)->handle($agreement, 'Sin lugares.', $actor)],
+    'cancelada' => [fn (InterdepartmentalAgreement $agreement, User $actor) => app(CancelAgreement::class)->handle($agreement, $actor)],
+]);
+
+it('HC-07: una propuesta aceptada deja de apartar y cuenta como su cupo, sin contarse dos veces', function () {
+    CareerCampus::factory()->create(['career_id' => $this->foreign->id, 'campus_id' => $this->group->campus_id]);
+    $agreement = app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 15, $this->actor);
+    app(AcceptSharedGroup::class)->handle($agreement, $this->actor);
+
+    setQuotas([$this->owner->id => 25, $this->foreign->id => 15]);
+
+    expect(seatsOf($this->group))->toBe([$this->owner->id => 25, $this->foreign->id => 15]);
+});
+
+it('HC-07: si datos de antes ya se pasan de la capacidad, deja guardar lo que no sube el total y rechaza lo que lo sube (supuesto por confirmar)', function () {
+    InterdepartmentalAgreement::factory()->sharedGroup(25)->create([
+        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $this->foreign->id,
+    ]);
+
+    setQuotas([$this->owner->id => 18]);
+    expect(seatsOf($this->group))->toBe([$this->owner->id => 18]);
+
+    setQuotas([$this->owner->id => 10, $this->sameDept->id => 8]);
+    expect(seatsOf($this->group))->toBe([$this->owner->id => 10, $this->sameDept->id => 8])
+        ->and(setQuotasErrors([$this->owner->id => 11, $this->sameDept->id => 8]))
+        ->toBe(['quotas' => ['HC-07: los cupos suman 19 y las propuestas apartan 25; el grupo es de 40 lugares. Quita 4 lugares.']])
+        ->and(seatsOf($this->group))->toBe([$this->owner->id => 10, $this->sameDept->id => 8]);
 });
 
 it('HC-07: traduce el rechazo de la base al mismo mensaje', function () {

@@ -2,21 +2,19 @@
 
 namespace App\Modules\Scheduling\Validation;
 
+use App\Modules\Core\Support\WeekTime;
+
 /**
  * Horas del día como minutos desde la medianoche, para comparar rangos rápido, y su forma para los mensajes.
  */
 final class Minutes
 {
-    private const array DAY_NAMES = [1 => 'lunes', 2 => 'martes', 3 => 'miércoles', 4 => 'jueves', 5 => 'viernes', 6 => 'sábado'];
-
     /**
      * Los minutos de `HH:MM` o `HH:MM:SS`.
      */
     public static function of(string $time): int
     {
-        [$hours, $minutes] = array_map('intval', explode(':', $time));
-
-        return $hours * 60 + $minutes;
+        return WeekTime::minutes($time);
     }
 
     /**
@@ -24,7 +22,33 @@ final class Minutes
      */
     public static function format(int $minutes): string
     {
-        return sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
+        return WeekTime::hhmm($minutes);
+    }
+
+    /**
+     * La hora para leerla, sin cero a la izquierda: 420 → «7:00». Es la forma de todo texto que ve una persona
+     * (mensajes del validador, de las Actions y de la bitácora, y la semana del editor); `format()` queda para los
+     * datos (`related`, campos de formularios, llaves).
+     */
+    public static function label(int $minutes): string
+    {
+        return WeekTime::clock($minutes);
+    }
+
+    /**
+     * label() de una hora guardada (`HH:MM:SS` o `HH:MM`): «07:30:00» → «7:30».
+     */
+    public static function labelOf(string $time): string
+    {
+        return WeekTime::clock($time);
+    }
+
+    /**
+     * Una hora guardada (`HH:MM:SS` o `HH:MM`) como `HH:MM`, para datos (para leerla, labelOf()).
+     */
+    public static function clock(string $time): string
+    {
+        return self::format(self::of($time));
     }
 
     /**
@@ -32,7 +56,17 @@ final class Minutes
      */
     public static function dayName(int $day): string
     {
-        return self::DAY_NAMES[$day] ?? (string) $day;
+        return WeekTime::day($day);
+    }
+
+    /**
+     * El nombre del día para mostrarlo solo: «Lunes»; corto, «Lun» (la única capitalización de los días).
+     */
+    public static function dayLabel(int $day, bool $short = false): string
+    {
+        $name = mb_convert_case(self::dayName($day), MB_CASE_TITLE);
+
+        return $short ? mb_substr($name, 0, 3) : $name;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Facilities\Actions;
 
+use App\Modules\Core\Support\WeekTime;
 use App\Modules\Facilities\Events\RoomBlockRemoved;
 use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Facilities\Rules\RoomRules;
@@ -25,8 +26,8 @@ final class RemoveRoomBlock
 
             $locked->delete();
 
-            $starts = substr($locked->starts_at, 0, 5);
-            $ends = substr($locked->ends_at, 0, 5);
+            $starts = WeekTime::clock($locked->starts_at);
+            $ends = WeekTime::clock($locked->ends_at);
 
             activity()
                 ->performedOn($locked)

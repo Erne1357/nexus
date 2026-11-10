@@ -40,7 +40,7 @@ it('HC-01: dos sesiones del mismo docente que se empalman dan un choque duro en 
         ->severity->toBe(ConflictSeverity::Hard)
         ->subjectType->toBe('teacher')
         ->subjectId->toBe('T1')
-        ->message->toBe('Ana Pérez ya da Química, grupo C el lunes de 09:00 a 11:00.')
+        ->message->toBe('Ana Pérez ya da Química, grupo C el lunes de 9:00 a 11:00.')
         ->and($violations[0]->related['other_group_id'])->toBe('B');
 });
 
