@@ -67,7 +67,7 @@ final readonly class PublishedSchedule
             }
         }
 
-        usort($groups, fn (PublishedGroup $a, PublishedGroup $b): int => strcmp($a->subject['code'], $b->subject['code']) ?: strnatcmp($a->code, $b->code));
+        usort($groups, PublishedGroup::compare(...));
 
         return new self($loads, $groups, $latest['profile'] ?? null);
     }

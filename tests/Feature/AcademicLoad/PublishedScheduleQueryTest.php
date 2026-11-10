@@ -56,8 +56,8 @@ function publishedQueryLabels(array $groups): array
 }
 
 beforeEach(function () {
-    $this->term = Term::factory()->create(['code' => '20271']);
-    $this->previousTerm = Term::factory()->create(['code' => '20263']);
+    $this->term = Term::factory()->create(['code' => '20271', 'starts_on' => '2027-01-25']);
+    $this->previousTerm = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-17']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->laura = ['id' => (string) Str::uuid7(), 'rfc' => 'RIML800101AB1', 'name' => 'Laura Ríos Medina'];
@@ -92,6 +92,7 @@ it('sin versiones publicadas en el campus y periodo da una vista vacía', functi
 });
 
 it('guarda lo publicado en caché y una versión nueva lo reemplaza', function () {
+    config(['cache.stores.array.serialize' => true]);
     $query = app(PublishedScheduleQuery::class);
     $query->schedule($this->term, $this->c2);
 

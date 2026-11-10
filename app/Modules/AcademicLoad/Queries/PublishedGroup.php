@@ -54,6 +54,15 @@ final readonly class PublishedGroup
     }
 
     /**
+     * El orden de los grupos en toda vista de lo publicado: por clave de materia y luego por clave de grupo, con los
+     * números en su orden natural (D2 antes que D10).
+     */
+    public static function compare(self $a, self $b): int
+    {
+        return strcmp($a->subject['code'], $b->subject['code']) ?: strnatcmp($a->code, $b->code);
+    }
+
+    /**
      * «ACF-0904 · B»: la clave de la materia y la del grupo, como en toda la aplicación.
      */
     public function label(): string
