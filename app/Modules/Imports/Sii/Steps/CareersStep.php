@@ -2,6 +2,7 @@
 
 namespace App\Modules\Imports\Sii\Steps;
 
+use App\Modules\Imports\Sii\GridTotalCredits;
 use App\Modules\Imports\Sii\KardexCodes;
 use App\Modules\Imports\Sii\SiiBatch;
 use App\Modules\Imports\Sii\SiiCuratedMismatch;
@@ -113,33 +114,23 @@ final class CareersStep implements SiiStep
 
     /**
      * Las fechas de inicio de cada (carrera, retícula) del SII y, de las que los traen como un entero mayor que cero,
-     * todos sus créditos totales distintos, de menor a mayor (una retícula puede venir en varios renglones).
+     * todos sus créditos totales distintos, de menor a mayor (una retícula puede venir en varios renglones;
+     * GridTotalCredits, la misma regla que usa la verificación).
      *
      * @return array{array<string, list<string>>, array<string, list<int>>}
      */
     private function siiCareerRows(SiiMigration $migration): array
     {
         $rows = [];
-        $credits = [];
+        $totals = [];
 
         foreach ($migration->export()->reader(SiiFile::Carreras)->rows() as $row) {
             $key = trim($row['carrera']).'/'.trim($row['reticula']);
             $rows[$key][] = $row['fecha_inicio'] ?? '';
-            $value = trim($row['creditos_totales'] ?? '');
-
-            if (is_numeric($value) && (int) $value > 0) {
-                $credits[$key][(int) $value] = true;
-            }
+            $totals[] = ['carrera' => $row['carrera'], 'reticula' => $row['reticula'], 'creditos_totales' => $row['creditos_totales'] ?? ''];
         }
 
-        $credits = array_map(function (array $values): array {
-            $values = array_keys($values);
-            sort($values);
-
-            return $values;
-        }, $credits);
-
-        return [$rows, $credits];
+        return [$rows, GridTotalCredits::byGrid($totals)];
     }
 
     /**
@@ -497,7 +488,7 @@ final class CareersStep implements SiiStep
 
         foreach ($keys as $key) {
             if (isset($credits[$key])) {
-                $known[$key] = max($credits[$key]);
+                $known[$key] = GridTotalCredits::kept($credits[$key]);
 
                 if (count($credits[$key]) > 1) {
                     $incidents[] = ['level' => 'warning', 'ref' => $key, 'message' => "La retícula {$key} del SII viene varias veces en carreras con créditos totales distintos (".implode(', ', $credits[$key])."): quedan {$known[$key]}, los mayores (supuesto por confirmar)."];

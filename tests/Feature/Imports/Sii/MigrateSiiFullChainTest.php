@@ -1,7 +1,9 @@
 <?php
 
+use App\Modules\Academic\Models\StudyPlanPrerequisitePending;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
@@ -20,9 +22,9 @@ use Illuminate\Support\Facades\Storage;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| `imports:migrate-sii` con los diez pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
-| una exportación sintética pequeña que toca cada paso: corre sin filas con error y repetirla no da ni altas ni
-| cambios en ningún lote.
+| `imports:migrate-sii` con los doce pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
+| una exportación sintética pequeña que toca cada paso: corre sin filas con error, la verificación contra el SII no
+| encuentra diferencias y repetirla no da ni altas ni cambios en ningún lote.
 */
 
 beforeEach(function () {
@@ -60,12 +62,17 @@ beforeEach(function () {
     SiiFixtures::write($this->dir.'/materias.csv', SiiFile::Materias, [
         SiiFixtures::line(SiiFile::Materias, ['materia' => "'CD1'", 'tipo_materia' => '1', 'clave_area' => "'110100'", 'nombre_completo_materia' => "'CALCULO DIFERENCIAL'"]),
         SiiFixtures::line(SiiFile::Materias, ['materia' => "'ZZZ'", 'tipo_materia' => '1', 'clave_area' => "'110100'", 'nombre_completo_materia' => "'MATERIA SIN PAR'"]),
+        SiiFixtures::line(SiiFile::Materias, ['materia' => "'QU1'", 'tipo_materia' => '1', 'clave_area' => "'110100'", 'nombre_completo_materia' => "'QUIMICA'"]),
     ]);
     $placement = fn (string $grid, string $materia, string $semester): string => SiiFixtures::line(SiiFile::MateriasCarreras, [
         'carrera' => "'A'", 'reticula' => $grid, 'materia' => "'{$materia}'", 'creditos_materia' => '5', 'horas_teoricas' => '3', 'horas_practicas' => '2',
         'semestre_reticula' => $semester, 'especialidad' => "''", 'estatus_materia_carrera' => "'A'", 'renglon' => '1',
     ]);
-    SiiFixtures::write($this->dir.'/materias_carreras.csv', SiiFile::MateriasCarreras, [$placement('1', 'CD1', '1'), $placement('3', 'CD1', '1'), $placement('3', 'ZZZ', '0')]);
+    SiiFixtures::write($this->dir.'/materias_carreras.csv', SiiFile::MateriasCarreras, [$placement('1', 'CD1', '1'), $placement('3', 'CD1', '1'), $placement('3', 'QU1', '2'), $placement('3', 'ZZZ', '0')]);
+    SiiFixtures::write($this->dir.'/requisitos_materia.csv', SiiFile::RequisitosMateria, [
+        SiiFixtures::line(SiiFile::RequisitosMateria, ['carrera' => "'A'", 'reticula' => '3', 'materia' => "'QU1'", 'materia_relacion' => "'CD1'", 'tipo_requisito' => "'P'"]),
+        SiiFixtures::line(SiiFile::RequisitosMateria, ['carrera' => "'A'", 'reticula' => '3', 'materia' => "'ZZZ'", 'materia_relacion' => "'QU1'", 'tipo_requisito' => "'C'"]),
+    ]);
     SiiFixtures::write($this->dir.'/materias_claves_tecnm.csv', SiiFile::MateriasClavesTecnm, [
         SiiFixtures::line(SiiFile::MateriasClavesTecnm, ['carrera' => "'A'", 'reticula' => '1', 'materia' => "'CD1'", 'clave_tecnm' => "'ACF-0901'"]),
     ]);
@@ -104,22 +111,28 @@ afterEach(function () {
     File::deleteDirectory($this->curated);
 });
 
-it('corre los diez pasos de producción sin errores y repetirla no da altas ni cambios', function () {
+it('corre los doce pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
     expect(app()->bound('sii.steps'))->toBeFalse()
-        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(10);
+        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(12);
 
-    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful()
+        ->doesntExpectOutputToContain('con diferencias');
 
     $first = ImportBatch::query()->get();
+
+    expect(DB::table('sii_verificacion.materias')->orderBy('_linea')->pluck('diagnostico')->all())->toBe(['igual', 'pendiente del plan: cuenta'])
+        ->and(DB::table('sii_verificacion.alumnos')->count())->toBe(2);
 
     expect(DB::table('sii_archivo._cargas')->pluck('archivo')->sort()->values()->all())->toBe(collect(SiiFile::cases())->map->value->sort()->values()->all());
 
     expect($first->pluck('template')->unique()->sort()->values()->all())->toBe([
-        'careers', 'departments', 'kardex', 'org_units', 'pending_placements', 'positions', 'rooms', 'students', 'study_plans', 'subject_aliases', 'subjects', 'teacher_history', 'teachers',
+        'careers', 'departments', 'kardex', 'org_units', 'pending_placements', 'pending_prerequisites', 'positions', 'prerequisites', 'rooms', 'students', 'study_plans', 'subject_aliases', 'subjects', 'teacher_history', 'teachers',
     ])
         ->and($first->sum('error_rows'))->toBe(0)
         ->and(Subject::query()->where('code', 'ACF-0901')->exists())->toBeTrue()
         ->and(StudyPlanSubjectPending::query()->count())->toBe(1)
+        ->and(SubjectPrerequisite::query()->count())->toBe(1)
+        ->and(StudyPlanPrerequisitePending::query()->count())->toBe(1)
         ->and(Room::query()->count())->toBe(2)
         ->and(Teacher::query()->sole()->history()->count())->toBe(2)
         ->and(Teacher::query()->sole()->positions()->orderBy('kind')->pluck('base_hours', 'kind')->map(fn ($hours): int => (int) $hours)->all())->toBe(['asignatura' => 4, 'tres_cuartos' => 30])
@@ -137,5 +150,7 @@ it('corre los diez pasos de producción sin errores y repetirla no da altas ni c
     expect($second)->toHaveCount($first->count())
         ->and($second->map(fn (ImportBatch $batch): array => [$batch->template, $batch->created_rows, $batch->updated_rows])->filter(fn (array $counts): bool => $counts[1] !== 0 || $counts[2] !== 0)->values()->all())->toBe([])
         ->and($second->sum('error_rows'))->toBe(0)
-        ->and(StudyPlanSubjectPending::query()->count())->toBe(1);
+        ->and(StudyPlanSubjectPending::query()->count())->toBe(1)
+        ->and(SubjectPrerequisite::query()->count())->toBe(1)
+        ->and(StudyPlanPrerequisitePending::query()->count())->toBe(1);
 });

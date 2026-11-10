@@ -15,7 +15,9 @@ use Throwable;
 
 /**
  * Migra la exportación del SII a Nexus por el motor de importación. Antes guarda el original en el esquema
- * `sii_archivo` (paso `archivo`, ArchiveSiiExport). Con `--dry-run` corre todo y lo revierte.
+ * `sii_archivo` (paso `archivo`, ArchiveSiiExport) y al final lo compara con Nexus (paso `verificacion`,
+ * VerifySiiMigration): si algo no cuadra, la corrida termina «con diferencias», sin revertir nada y con salida 0.
+ * Con `--dry-run` corre todo y lo revierte, sin verificar.
  * Imprime solo cuentas por lote, nunca valores; el detalle por fila está en `<dir>/_incidencias.csv`. Sube el límite
  * de memoria a 1 GB si era menor, porque el paso `kardex` guarda una llave por cada uno de los dos millones de
  * renglones de la historia; uno mayor o sin límite se respeta.
@@ -85,10 +87,22 @@ final class MigrateSii extends Command
             ['Plantilla', 'Archivo', 'Filas', 'Válidas', 'Advertencias', 'Errores', 'Altas', 'Cambios'],
             array_map(fn ($batch): array => [$batch->template, $batch->file, $batch->rows, $batch->valid, $batch->warnings, $batch->errors, $batch->created, $batch->changed], $report->batches),
         );
+        if ($report->notes() !== []) {
+            $this->components->bulletList($report->notes());
+        }
         if ($report->unreadable > 0) {
             $this->components->warn("{$report->unreadable} renglones del SII no se pudieron leer y no se migran (ver «malformados» en _incidencias.csv).");
         }
-        $this->components->info(($this->option('dry-run') ? 'Ensayo terminado, sin cambios. ' : 'Migración terminada. ')."Incidencias: {$report->incidents} (ver _incidencias.csv).");
+
+        $incidents = "Incidencias: {$report->incidents} (ver _incidencias.csv).";
+
+        if ($this->option('dry-run')) {
+            $this->components->info("Ensayo terminado, sin cambios. {$incidents}");
+        } elseif ($report->differences() > 0) {
+            $this->components->warn("Migración terminada con diferencias: la verificación contra el SII encontró {$report->differences()} renglones o alumnos que no cuadran (errores del paso verificacion en _incidencias.csv; detalle en el esquema sii_verificacion). Nada se revirtió. {$incidents}");
+        } else {
+            $this->components->info("Migración terminada. {$incidents}");
+        }
 
         return self::SUCCESS;
     }
