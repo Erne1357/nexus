@@ -1311,3 +1311,87 @@ document.addEventListener('livewire:init', () => {
         });
     });
 });
+
+/*
+| Confirmar sin diálogos del navegador (ADR-0023). `x-confirm="mensaje"` en un botón o enlace detiene su clic (en
+| captura, antes que su wire:click o su enlace) y abre el diálogo de Core (`x-core::confirm-dialog`, uno por layout);
+| al confirmar, vuelve a pulsar el mismo elemento y esta vez lo deja pasar. `data-confirm-title`, `data-confirm-button`
+| y `data-confirm-tone` (error, warning o primary) lo ajustan.
+*/
+document.addEventListener('alpine:init', () => {
+    window.Alpine.directive('confirm', (el, _directive, { cleanup }) => {
+        const intercept = (event) => {
+            if (el.__nexusConfirmed) {
+                el.__nexusConfirmed = false;
+
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+
+            const label = (el.dataset.confirmTitle || el.innerText || '').trim().split('\n')[0].trim();
+
+            window.dispatchEvent(new CustomEvent('nexus-confirm', {
+                detail: {
+                    title: label || 'Confirmar',
+                    message: el.getAttribute('x-confirm') || '',
+                    button: el.dataset.confirmButton || label || 'Confirmar',
+                    tone: el.dataset.confirmTone || 'primary',
+                    run: () => {
+                        el.__nexusConfirmed = true;
+                        el.click();
+                    },
+                    origin: el,
+                },
+            }));
+        };
+
+        el.addEventListener('click', intercept, { capture: true });
+        cleanup(() => el.removeEventListener('click', intercept, { capture: true }));
+    });
+
+    window.Alpine.data('nexusConfirm', () => ({
+        open: false,
+        title: '',
+        message: '',
+        button: '',
+        tone: 'primary',
+        run: null,
+        origin: null,
+
+        get toneClass() {
+            return { error: 'btn-error', warning: 'btn-warning', primary: 'btn-primary' }[this.tone] ?? 'btn-primary';
+        },
+
+        show(detail) {
+            Object.assign(this, { title: detail.title, message: detail.message, button: detail.button, tone: detail.tone, run: detail.run, origin: detail.origin ?? null });
+            this.open = true;
+            document.getElementById('nexus-confirm')?.showModal();
+            this.$nextTick(() => this.$refs.cancel?.focus());
+        },
+
+        close() {
+            this.open = false;
+            document.getElementById('nexus-confirm')?.close();
+        },
+
+        cancel() {
+            if (!this.open) {
+                return;
+            }
+
+            const origin = this.origin;
+            this.run = null;
+            this.close();
+            origin?.focus?.();
+        },
+
+        accept() {
+            const run = this.run;
+            this.run = null;
+            this.close();
+            run?.();
+        },
+    }));
+});

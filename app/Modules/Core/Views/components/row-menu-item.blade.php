@@ -2,7 +2,7 @@
     Elemento de <x-core::row-menu>. Lo deshabilitado se queda en el menú con su motivo escrito en un
     segundo renglón (`reason`): nada se oculta por permiso y un tooltip no lo ve quien usa teclado o
     pantalla táctil. Solo el elemento habilitado lleva los atributos de acción (wire:click,
-    wire:confirm, data-testid); con `href` es un enlace (wire:navigate) en lugar de un botón; `spinner` es el objetivo de wire:target; `danger` lo pinta en text-error.
+    x-confirm y sus data-confirm-*, data-testid; nunca wire:confirm, ADR-0023); con `href` es un enlace (wire:navigate) en lugar de un botón; `spinner` es el objetivo de wire:target; `danger` lo pinta en text-error.
 --}}
 @props(['label', 'reason' => null, 'disabled' => false, 'danger' => false, 'spinner' => null, 'href' => null])
 
