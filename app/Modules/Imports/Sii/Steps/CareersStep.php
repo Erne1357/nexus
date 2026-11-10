@@ -28,8 +28,10 @@ use App\Modules\Imports\Sii\SiiStep;
  * retículas de un plan traen créditos distintos, quedan los de la presencial y, si no la hay o también difieren, los
  * mayores, con aviso (supuesto por confirmar).
  *
- * Retícula histórica (D18, confirmado el 10 de noviembre de 2026): un plan de Nexus que no es vigente ni de nuevo
- * ingreso (`current` e `intake` de este lote) y en el que ningún alumno está inscrito en el periodo actual. El periodo
+ * Retícula histórica (D18, confirmado el 10 de noviembre de 2026): un plan de Nexus que no es el de nuevo ingreso
+ * (`intake` de este lote) y en el que ningún alumno está inscrito en el periodo actual. Tener alumnos activos (ACT, INS,
+ * BT, la columna `current`) no lo hace vivo: muchos ACT ya no se inscriben, y el usuario eligió «sin inscritos hoy» y no
+ * «sin alumnos vigentes» (10 de noviembre de 2026). El periodo
  * actual sale de `seleccion_materias`, sin los veranos (terminan en 2): el periodo regular válido más reciente
  * (KardexCodes::term(), termina en 1 o 3); si tiene menos de la mitad de alumnos distintos que el regular anterior,
  * todavía se está abriendo y cuentan los inscritos en los dos (el umbral de la mitad, supuesto por confirmar). Un
@@ -433,7 +435,7 @@ final class CareersStep implements SiiStep
         foreach ($plans as $code => $plan) {
             $current = isset($intake[$code]) || array_filter($plan['keys'], fn (string $key): bool => isset($facts['active'][$key])) !== [];
 
-            if ($terms !== null && ! $current && array_filter($plan['keys'], fn (string $key): bool => isset($facts['enrolled'][$key])) === []) {
+            if ($terms !== null && ! isset($intake[$code]) && array_filter($plan['keys'], fn (string $key): bool => isset($facts['enrolled'][$key])) === []) {
                 $historical[(string) $code] = true;
             }
 
@@ -468,7 +470,7 @@ final class CareersStep implements SiiStep
 
         $enrolled = fn (int $count): string => $count === 1 ? '1 alumno inscrito' : "{$count} alumnos inscritos";
         $outcome = "{$historical} de {$plans} planes no tienen alumnos inscritos";
-        $closing = 'ni son vigentes, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).';
+        $closing = 'ni son de nuevo ingreso, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).';
 
         if (count($terms) === 1) {
             return "El periodo actual es el {$terms[0]['term']} ({$enrolled($terms[0]['students'])} en seleccion_materias): {$outcome} en él {$closing}";
