@@ -51,6 +51,18 @@ function writeSiiCareers(string $dir, array $careers, array $students): void
 }
 
 /**
+ * `seleccion_materias` con solo el periodo y el número de control de cada renglón.
+ *
+ * @param  list<array{string, string}>  $rows  periodo, número de control
+ */
+function writeSiiCareersSelection(string $dir, array $rows): void
+{
+    SiiFixtures::write($dir.'/seleccion_materias.csv', SiiFile::SeleccionMaterias, array_map(fn (array $r): string => SiiFixtures::line(SiiFile::SeleccionMaterias, [
+        'periodo' => "'{$r[0]}'", 'no_de_control' => "'{$r[1]}'", 'calificacion' => '', 'tipo_evaluacion' => "''",
+    ]), $rows));
+}
+
+/**
  * @return array<string, list<array<string, scalar|null>>>
  */
 function careersStepBatches(string $dir, string $curated): array
@@ -235,4 +247,36 @@ it('lleva al plan los créditos totales de su retícula del SII; si sus retícul
             'El plan AAA-2010-224 junta retículas del SII con créditos totales distintos (A/1 260, A2/2 250): quedan 260, de la presencial (supuesto por confirmar).',
             'La retícula D/1 del SII viene varias veces en carreras con créditos totales distintos (250, 260): quedan 260, los mayores (supuesto por confirmar).',
         ]);
+});
+
+it('D18: un plan sin alumnos inscritos en el periodo más reciente de la selección es una retícula histórica; uno con dos retículas del SII es vivo si una tiene inscritos', function () {
+    // S0 (A/1), S2 (A/3) y S4 (C/1) solo en un periodo anterior; S1 (A2/2) y S5 (D/1) en el actual; S6 (D/2) con un periodo que no es del SII.
+    writeSiiCareersSelection($this->dir, [['20253', 'S0'], ['20253', 'S2'], ['20261', 'S1'], ['20253', 'S4'], ['20261', 'S5'], ['20264', 'S6'], ['20261', 'S1']]);
+    $migration = new SiiMigration(SiiExport::open($this->dir), $this->curated);
+    $batches = [];
+    foreach ((new CareersStep)->batches($migration) as $batch) {
+        $batches[$batch->template] = $batch;
+    }
+    $plans = array_column([...$batches['study_plans']->rows], 'historical', 'code');
+
+    expect($plans)->toBe([
+        'AAA-2004-100' => 'Sí', 'AAA-2010-224' => 'No', 'BBB-2010-300' => 'Sí', 'CCC-2005-200' => 'Sí', 'DDD-2010-1' => 'No', 'DDD-IS-80-160' => 'Sí',
+    ])
+        ->and($migration->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))
+        ->toBe(['AAA-2004-100' => true, 'BBB-2010-300' => true, 'CCC-2005-200' => true, 'DDD-IS-80-160' => true])
+        ->and(collect($batches['study_plans']->incidents)->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'histórica'))->values()->all())
+        ->toBe(['El periodo actual es el 20261, el mayor de seleccion_materias: 4 de 6 planes no tienen alumnos inscritos en él y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).']);
+});
+
+it('D18: sin seleccion_materias ningún plan es histórico, y lo avisa una vez', function () {
+    $migration = new SiiMigration(SiiExport::open($this->dir), $this->curated);
+    $batches = [];
+    foreach ((new CareersStep)->batches($migration) as $batch) {
+        $batches[$batch->template] = $batch;
+    }
+    $messages = collect([...$batches['careers']->incidents, ...$batches['study_plans']->incidents])->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'seleccion_materias'));
+
+    expect(array_unique(array_column([...$batches['study_plans']->rows], 'historical')))->toBe(['No'])
+        ->and($migration->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))->toBe([])
+        ->and($messages->values()->all())->toBe(['La exportación no trae seleccion_materias con periodos válidos: no se sabe quién está inscrito en el periodo actual, así que ningún plan se trata como retícula histórica (D18).']);
 });

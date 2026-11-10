@@ -26,7 +26,8 @@ use Tests\Unit\Imports\Sii\SiiFixtures;
 /*
 | Paso `materias` de imports:migrate-sii (D8, D15, D16, D18): las claves del SII se unen por la clave oficial del
 | TecNM, cada plan fundido tiene un solo lugar por materia, el nombre se normaliza, el tipo y el departamento se
-| derivan, y una materia sin semestre toma el de una materia con el mismo nombre. Todo con datos sintéticos:
+| derivan, y una materia sin semestre nunca recibe un semestre que no venga del SII: en una retícula viva va a «Por
+| validar» con el semestre sugerido de su misma carrera, y en una histórica queda como en el SII. Todo con datos sintéticos:
 | materias, retículas y claves inventadas, y los mapas de los pasos anteriores armados a mano.
 */
 
@@ -151,13 +152,15 @@ function writeSiiSubjects(string $dir, array $catalog, array $placements, array 
  * como lo deja el paso del organigrama).
  *
  * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
+ * @param  array<string, true>  $historical  los planes de Nexus que son retículas históricas
  * @return array{migration: SiiMigration, subjects: array{rows: list<array<string, scalar|null>>, incidents: list<array{level: string, ref: string, message: string}>}, subject_aliases: array{rows: list<array<string, scalar|null>>, incidents: list<array{level: string, ref: string, message: string}>}}
  */
-function subjectsStepRun(string $dir, string $curated, array $planFor = SUBJECTS_STEP_PLAN_FOR): array
+function subjectsStepRun(string $dir, string $curated, array $planFor = SUBJECTS_STEP_PLAN_FOR, array $historical = []): array
 {
     $migration = new SiiMigration(SiiExport::open($dir), $curated);
     $migration->remember('plan_for', fn (): array => $planFor);
     $migration->remember('plan_version', fn (): array => SUBJECTS_STEP_VERSIONS);
+    $migration->remember('historical_plans', fn (): array => $historical);
     $migration->remember('department_for_area', fn (): array => [110100 => '110100', 110600 => '110600', 999999 => null]);
     $out = ['migration' => $migration];
 
@@ -280,11 +283,12 @@ it('emite un solo lugar por plan aunque venga de dos variantes', function () {
 });
 
 it('normaliza el nombre de la materia', function () {
-    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $subjects = $run['subjects'];
 
     expect(subjectsStepRow($subjects, 'AAA-2010-224', 'AEB-1055')['name'])->toBe('Programación Web')
         ->and(subjectsStepRow($subjects, 'AAA-2010-224', 'ACA-0907')['name'])->toBe('Taller de Ética')
-        ->and(subjectsStepRow($subjects, 'AAA-2004-100', 'OLD')['name'])->toBe('Taller de Ética')
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'OLD')['name'])->toBe('Taller de Ética')
         ->and(subjectsStepRow($subjects, 'AAA-2010-224', 'OPT')['name'])->toBe('Topicos de Administración');
 });
 
@@ -308,16 +312,53 @@ it('trae la especialidad con su nombre; una que no está en el SII queda con su 
         ->and(subjectsStepMessages($subjects))->toContain('ESP-99');
 });
 
-it('toma el semestre de una materia actual parecida', function () {
-    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
-    $sameCareer = collect($subjects['incidents'])->first(fn (array $i): bool => $i['ref'] === 'AAA-2004-100/OLD');
-    $anyCareer = collect($subjects['incidents'])->first(fn (array $i): bool => $i['ref'] === 'AAA-2004-100/OLDP');
+it('D18: en una retícula viva, una materia sin semestre va a «Por validar» con el semestre sugerido de su misma carrera, nunca de otra', function () {
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $warning = fn (string $ref): string => collect($run['subjects']['incidents'])->first(fn (array $i): bool => $i['ref'] === $ref)['message'];
 
-    expect(subjectsStepRow($subjects, 'AAA-2004-100', 'OLD')['semester'])->toBe('1')
-        ->and($sameCareer['level'])->toBe('warning')
-        ->and($sameCareer['message'])->toContain('AAA-2010-224/ACA-0907')
-        ->and(subjectsStepRow($subjects, 'AAA-2004-100', 'OLDP')['semester'])->toBe('3')
-        ->and($anyCareer['message'])->toContain('BBB-2010-300/AEF-1052')->toContain('CCC-2009-201/AEF-1052');
+    expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2004-100')->pluck('code')->all())->toBe([])
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'OLD')['suggested_semester'])->toBe('1')
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'OLDP')['suggested_semester'])->toBe('')
+        ->and($warning('AAA-2004-100/OLD'))->toBe('Lugar AAA-2004-100/OLD sin semestre en el SII: no entra a la retícula; pasa a «Por validar», donde Servicios Escolares le asigna semestre, con el 1 sugerido por la materia con el mismo nombre de la misma carrera en AAA-2010-224/ACA-0907. Lo aprobado en ella cuenta (D18 y D19; confirmado, 10 de noviembre de 2026).')
+        ->and($warning('AAA-2004-100/OLDP'))->toBe('Lugar AAA-2004-100/OLDP sin semestre en el SII: no entra a la retícula; pasa a «Por validar», donde Servicios Escolares le asigna semestre, sin sugerencia: ninguna materia con el mismo nombre de la misma carrera tiene semestre. Lo aprobado en ella cuenta (D18 y D19; confirmado, 10 de noviembre de 2026).');
+});
+
+it('D18: el semestre de «Circuitos Digitales» de un plan de otra carrera nunca llega a una retícula sin semestres, viva o histórica', function () {
+    writeSiiSubjects($this->dir, [['CDA', '1', '110100', 'CIRCUITOS DIGITALES'], ['CDB', '1', '110100', 'CIRCUITOS DIGITALES'], ['QA', '1', '110100', 'QUIMICA']], [
+        ['A', '3', 'CDA', '5', '3', '2', '0', '', 'A'],
+        ['A', '3', 'QA', '4', '2', '2', '0', '', 'A'],
+        ['B', '1', 'CDB', '5', '3', '2', '10', '', 'A'],
+    ]);
+
+    foreach ([[], ['AAA-2004-100' => true]] as $historical) {
+        $run = subjectsStepRun($this->dir, $this->curated, historical: $historical);
+
+        expect(subjectsStepRow($run['subjects'], 'AAA-2004-100', 'CDA'))->toBeNull()
+            ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'CDA')['suggested_semester'])->toBe('')
+            ->and(subjectsStepRow($run['subjects'], 'BBB-2010-300', 'CDB')['semester'])->toBe('10')
+            ->and(subjectsStepMessages($run['subjects']))->not->toContain('el 10 sugerido');
+    }
+});
+
+it('D18: una retícula histórica se migra como en el SII: conserva sus semestres y deja sin semestre, sin sugerencia, lo que el SII trae sin él o con estatus N, con un solo aviso', function () {
+    writeSiiSubjects($this->dir, [...SUBJECTS_STEP_CATALOG, ['HID', '1', '110100', 'HIDRAULICA'], ['NNO', '1', '110100', 'MATERIA RETIRADA']], [
+        ...SUBJECTS_STEP_PLACEMENTS,
+        ['A', '3', 'HID', '4', '2', '2', '4', '', 'A'],
+        ['A', '3', 'NNO', '4', '2', '2', '2', '', 'N'],
+    ], SUBJECTS_STEP_TECNM, SUBJECTS_STEP_SPECIALTIES);
+
+    $run = subjectsStepRun($this->dir, $this->curated, historical: ['AAA-2004-100' => true]);
+    $pending = collect($run['pending_placements']['rows'])->where('plan', 'AAA-2004-100');
+    $perPlace = collect($run['subjects']['incidents'])->filter(fn (array $i): bool => str_starts_with($i['ref'], 'AAA-2004-100/'))->pluck('message');
+    $perPlan = collect($run['subjects']['incidents'])->filter(fn (array $i): bool => $i['ref'] === 'AAA-2004-100');
+
+    expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2004-100')->map(fn (array $row): string => "{$row['code']}:{$row['semester']}")->values()->all())->toBe(['HID:4'])
+        ->and($pending->pluck('code')->sort()->values()->all())->toBe(['NNO', 'OLD', 'OLDP', 'ZZZ'])
+        ->and($pending->pluck('suggested_semester')->unique()->values()->all())->toBe([''])
+        ->and($perPlace->filter(fn (string $m): bool => str_contains($m, 'semestre') || str_contains($m, 'estatus N'))->all())->toBe([])
+        ->and($perPlan->pluck('message')->all())->toBe(['Retícula histórica AAA-2004-100 (ningún alumno inscrito en el periodo actual): 4 materias quedan sin semestre, como en el SII (3 sin semestre y 1 con estatus N); esperan en «Por validar» y Servicios Escolares solo se lo asigna si vuelve un alumno (confirmado, 10 de noviembre de 2026).'])
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2010-224', 'NNN'))->not->toBeNull()
+        ->and(subjectsStepMessages($run['subjects']))->toContain('warning|AAA-2010-224/NNN|');
 });
 
 it('empata el nombre de cualquiera de las claves del SII que se unieron en una materia', function () {
@@ -333,13 +374,14 @@ it('empata el nombre de cualquiera de las claves del SII que se unieron en una m
         ['A', '3', 'OLDF', '4', '2', '2', '0', '', 'A'],
     ], [['A', '1', 'K1', 'ACC-0906'], ['A2', '2', 'K2', 'ACC-0906'], ['B', '1', 'K3', 'ACC-0906']]);
 
-    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $subjects = $run['subjects'];
     $warning = collect($subjects['incidents'])->first(fn (array $i): bool => $i['ref'] === 'ACC-0906');
 
     expect(subjectsStepRow($subjects, 'AAA-2010-224', 'ACC-0906')['name'])->toBe('Fundamentos de Investigación')
         ->and(subjectsStepRow($subjects, 'BBB-2010-300', 'ACC-0906')['name'])->toBe('Fundamentos de Investigación')
         ->and($warning['message'])->toContain('Fundamentos de Invesdtigacion')
-        ->and(subjectsStepRow($subjects, 'AAA-2004-100', 'OLDF')['semester'])->toBe('1');
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'OLDF')['suggested_semester'])->toBe('1');
 });
 
 it('en un empate de nombres toma el del plan más reciente', function () {
@@ -572,9 +614,10 @@ it('deja pendiente la materia sin semestre que no empata', function () {
             'sii_grid' => 'A/3',
         ])
         ->and($run['pending_placements']['rows'][0])->not->toHaveKey('semester')
+        ->and(subjectsStepRow($run['pending_placements'], 'AAA-2004-100', 'ZZZ')['suggested_semester'])->toBe('')
         ->and($pending)->toHaveCount(1)
         ->and($pending->first()['level'])->toBe('warning')
-        ->and($pending->first()['message'])->toContain('lista de pendientes')->toContain('Servicios Escolares');
+        ->and($pending->first()['message'])->toContain('«Por validar»')->toContain('Servicios Escolares')->toContain('sin sugerencia');
 });
 
 it('las claves del SII de los pendientes quedan como alias y en subject_for', function () {
@@ -617,29 +660,46 @@ it('una retícula excluida no migra sus materias y avisa una sola vez', function
         ->and($excluded->first()['message'])->toContain('2 lugares');
 });
 
-it('migra las materias de punta a punta después del organigrama y las carreras', function () {
+/**
+ * Prepara la exportación y el curado para correr organigrama, carreras y materias de punta a punta con
+ * imports:migrate-sii; con `$selection` escribe también `seleccion_materias` (periodo, número de control).
+ *
+ * @param  list<array{string, string}>|null  $selection
+ */
+function subjectsStepEndToEnd(object $test, ?array $selection = null): void
+{
     Storage::fake('imports');
     Campus::factory()->create(['code' => 'C1']);
     User::factory()->admin()->create(['username' => 'migrador']);
 
     $organigrama = base_path('app/Modules/Imports/Sii/Curated/organigrama.csv');
-    File::copy($organigrama, $this->curated.'/organigrama.csv');
-    File::put($this->curated.'/planes.csv', implode("\n", [
+    File::copy($organigrama, $test->curated.'/organigrama.csv');
+    File::put($test->curated.'/planes.csv', implode("\n", [
         'sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota',
         'A,1,AAA-2010-224,AAA,presencial,si,0,', 'A2,2,AAA-2010-224,AAA,distancia,si,0,', 'A,3,AAA-2004-100,AAA,presencial,si,0,',
         'B,1,BBB-2010-300,BBB,presencial,si,0,', 'C,1,CCC-2009-201,CCC,presencial,si,0,', 'X,9,XXX-2010-999,XXX,presencial,no,0,sin alumnos',
     ])."\n");
 
-    $areas = array_column((new SiiMigration(SiiExport::open($this->dir), $this->curated))->curated('organigrama'), 'clave_sii');
-    File::put($this->dir.'/organigrama.csv', "clave_area,descripcion_area,area_depende,nivel,tipo_area,p_sustantivos,pro_sus,p_sus,p_s\n"
+    $areas = array_column((new SiiMigration(SiiExport::open($test->dir), $test->curated))->curated('organigrama'), 'clave_sii');
+    File::put($test->dir.'/organigrama.csv', "clave_area,descripcion_area,area_depende,nivel,tipo_area,p_sustantivos,pro_sus,p_sus,p_s\n"
         .implode("\n", array_map(fn (string $area): string => "{$area},AREA {$area},100000,1,X,,,,", $areas))."\n");
-    SiiFixtures::write($this->dir.'/carreras.csv', SiiFile::Carreras, array_map(fn (array $c): string => SiiFixtures::line(SiiFile::Carreras, [
+    SiiFixtures::write($test->dir.'/carreras.csv', SiiFile::Carreras, array_map(fn (array $c): string => SiiFixtures::line(SiiFile::Carreras, [
         'carrera' => "'{$c[0]}'", 'reticula' => "'{$c[1]}'", 'fecha_inicio' => "'15/08/{$c[2]}'",
     ]), [['A', '1', '2010'], ['A2', '2', '2010'], ['A', '3', '2004'], ['B', '1', '2010'], ['C', '1', '2009'], ['X', '9', '2010']]));
-    SiiFixtures::write($this->dir.'/alumnos_todos.csv', SiiFile::Alumnos, []);
+    SiiFixtures::write($test->dir.'/alumnos_todos.csv', SiiFile::Alumnos, []);
 
     app()->instance('sii.steps', [OrgChartStep::class, CareersStep::class, SubjectsStep::class]);
-    app()->when(RunSiiMigration::class)->needs('$curatedDir')->give($this->curated);
+    app()->when(RunSiiMigration::class)->needs('$curatedDir')->give($test->curated);
+
+    if ($selection !== null) {
+        SiiFixtures::write($test->dir.'/seleccion_materias.csv', SiiFile::SeleccionMaterias, array_map(fn (array $r): string => SiiFixtures::line(SiiFile::SeleccionMaterias, [
+            'periodo' => "'{$r[0]}'", 'no_de_control' => "'{$r[1]}'", 'calificacion' => '', 'tipo_evaluacion' => "''",
+        ]), $selection));
+    }
+}
+
+it('migra las materias de punta a punta después del organigrama y las carreras', function () {
+    subjectsStepEndToEnd($this);
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
 
@@ -654,12 +714,14 @@ it('migra las materias de punta a punta después del organigrama y las carreras'
         ->and($calculus->department->code)->toBe('110100')
         ->and($calculus->kind)->toBe(SubjectKind::Basica)
         ->and($semester('AAA-2010-224', 'ACF-0901'))->toBe(1)
-        ->and($semester('AAA-2004-100', 'OLD'))->toBe(1)
+        ->and($semester('AAA-2004-100', 'OLD'))->toBeNull()
         ->and($semester('CCC-2009-201', 'CD3'))->toBe(1)
         ->and(Subject::query()->where('code', 'AEB-1055')->sole()->department->code)->toBe('110700')
         ->and(Subject::query()->where('code', 'ZZZ')->exists())->toBeTrue()
         ->and(StudyPlanSubject::query()->where('subject_id', Subject::query()->where('code', 'ZZZ')->value('id'))->exists())->toBeFalse()
-        ->and(StudyPlanSubjectPending::query()->where('study_plan_id', $plan('AAA-2004-100'))->whereNull('resolved_at')->count())->toBe(1)
+        ->and(StudyPlanSubjectPending::query()->where('study_plan_id', $plan('AAA-2004-100'))->whereNull('resolved_at')->count())->toBe(3)
+        ->and(StudyPlanSubjectPending::query()->where('subject_id', Subject::query()->where('code', 'OLD')->value('id'))->sole()->suggested_semester)->toBe(1)
+        ->and(StudyPlan::query()->where('is_historical', true)->exists())->toBeFalse()
         ->and(SubjectAlias::query()->where('code', 'ZZZ')->sole()->subject->code)->toBe('ZZZ')
         ->and(SubjectAlias::query()->where('code', 'CD1D')->sole()->subject_id)->toBe($calculus->id)
         ->and(SubjectAlias::query()->where('code', 'CD3')->sole()->subject->code)->toBe('CD3')
@@ -667,6 +729,20 @@ it('migra las materias de punta a punta después del organigrama y las carreras'
         ->and(ImportBatch::query()->whereIn('template', ['subjects', 'pending_placements', 'subject_aliases'])->orderBy('template')->pluck('error_rows', 'template')->all())
         ->toBe(['pending_placements' => 0, 'subject_aliases' => 0, 'subjects' => 0])
         ->and(file_get_contents($this->dir.'/_incidencias.csv'))->toContain('AAA-2004-100/ZZZ')->toContain('Servicios Escolares');
+});
+
+it('D18: de punta a punta, un plan sin inscritos en el periodo actual queda como retícula histórica y sus materias sin semestre esperan sin sugerencia', function () {
+    subjectsStepEndToEnd($this, [['20261', 'NADIE']]);
+
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
+
+    $old = StudyPlan::query()->where('code', 'AAA-2004-100')->sole();
+
+    expect(StudyPlan::query()->where('is_historical', false)->pluck('code')->all())->toBe([])
+        ->and($old->placements()->count())->toBe(0)
+        ->and($old->pendingPlacements()->whereNull('resolved_at')->count())->toBe(3)
+        ->and($old->pendingPlacements()->whereNotNull('suggested_semester')->exists())->toBeFalse()
+        ->and(file_get_contents($this->dir.'/_incidencias.csv'))->toContain('Retícula histórica AAA-2004-100')->not->toContain('AAA-2004-100/OLD');
 });
 
 it('toma el orden en el semestre (D21) del renglón del SII, de la variante presencial al fundir; 0 queda vacío', function () {

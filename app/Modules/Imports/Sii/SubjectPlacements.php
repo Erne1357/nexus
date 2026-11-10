@@ -34,16 +34,21 @@ namespace App\Modules\Imports\Sii;
  * 6. Estatus N: un lugar cuyas variantes del SII traen todas estatus `N` (ya no se ofrece) no entra a la retícula: pasa
  *    a pending() con aviso, para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar, 10
  *    de noviembre de 2026; antes no se migraba y se perdía el kárdex de quien lo aprobó). Si otra variante sigue
- *    vigente, se funde con ella como cualquier variante.
- * 7. Sin semestre (D18, R10): un lugar con semestre 0 toma el semestre más frecuente (en empate, el menor) de los
- *    lugares con semestre con el mismo nombre normalizado (de cualquiera de sus claves del SII), primero en planes de
- *    la misma carrera y si no hay, de cualquiera, con advertencia que nombra de dónde lo tomó. Si nada empata, no
- *    entra a la retícula: queda en pending() y avisa que va a la lista de pendientes de Servicios Escolares, que le
- *    asigna semestre (D19; detalles del empate, supuestos por confirmar).
+ *    vigente, se funde con ella como cualquier variante. En una retícula histórica pasa igual, sin aviso propio: cuenta
+ *    en el aviso del plan (punto 7).
+ * 7. Sin semestre (D18, R10; confirmado, 10 de noviembre de 2026): Nexus nunca decide un semestre; ningún lugar entra a
+ *    la retícula con un semestre que no venga del SII. Un lugar con semestre 0 no entra a la retícula: queda en
+ *    pending(). En una retícula viva lleva un semestre sugerido (`suggested`): el más frecuente, y en empate el menor,
+ *    entre los lugares con semestre de la misma carrera con el mismo nombre normalizado (de cualquiera de sus claves
+ *    del SII), nunca de otra carrera; sin ninguno, sin sugerencia. Avisa por lugar que va a «Por validar» con qué
+ *    sugerencia y de dónde, y que lo aprobado cuenta (D19). En una retícula histórica (`$historical`: ningún alumno
+ *    inscrito en el periodo actual) queda como en el SII, sin sugerencia, y avisa una sola vez por plan cuántas
+ *    materias quedaron sin semestre.
  *
  * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
  * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
  * @phpstan-type GridPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool, materias: list<string>, sources: list<string>}
+ * @phpstan-type PendingPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool, materias: list<string>, sources: list<string>, suggested: int|null}
  */
 final class SubjectPlacements
 {
@@ -52,14 +57,15 @@ final class SubjectPlacements
     /** @var list<array{level: 'warning', ref: string, message: string}> */
     private array $incidents = [];
 
-    /** @var array<string, GridPlacement> */
+    /** @var array<string, PendingPlacement> */
     private array $pending = [];
 
     /**
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog  materias del SII por clave
      * @param  array<string, string>  $versions  versión de cada plan de Nexus por clave
+     * @param  array<string, true>  $historical  las retículas históricas, por clave del plan de Nexus
      */
-    public function __construct(private readonly array $catalog, private readonly array $versions) {}
+    public function __construct(private readonly array $catalog, private readonly array $versions, private readonly array $historical = []) {}
 
     /**
      * Un lugar por plan y clave de Nexus, por `"{plan}/{clave}"` en orden; `materia` es la clave del SII de la variante
@@ -77,10 +83,11 @@ final class SubjectPlacements
     }
 
     /**
-     * Los lugares sin semestre que no empataron con ninguna materia (D18 y D19), por `"{plan}/{clave}"`, con la forma
-     * de grid(): no entran a la retícula y pasan a la lista de pendientes. Vacío hasta llamar a grid().
+     * Los lugares que no entran a la retícula (D18 y D19): los sin semestre y los de estatus `N`, por
+     * `"{plan}/{clave}"`, con la forma de grid() y su semestre sugerido en `suggested` (null sin sugerencia). Pasan a
+     * «Por validar». Vacío hasta llamar a grid().
      *
-     * @return array<string, GridPlacement>
+     * @return array<string, PendingPlacement>
      */
     public function pending(): array
     {
@@ -643,6 +650,9 @@ final class SubjectPlacements
     }
 
     /**
+     * Reglas 6 y 7: saca de la retícula lo que no trae semestre o tiene estatus `N` y, en una retícula viva, le pone a
+     * lo que no trae semestre el sugerido de su misma carrera.
+     *
      * @param  array<string, GridPlacement>  $grid
      * @return array<string, GridPlacement>
      */
@@ -653,41 +663,47 @@ final class SubjectPlacements
         foreach ($grid as $ref => $placement) {
             if ($placement['semester'] > 0 && ! $placement['retired']) {
                 foreach (array_unique(array_map($this->nameKey(...), $placement['materias'])) as $name) {
-                    $byName[$name][] = ['ref' => (string) $ref, 'career' => $placement['career'], 'semester' => $placement['semester']];
+                    $byName[$placement['career']][$name][] = ['ref' => (string) $ref, 'semester' => $placement['semester']];
                 }
             }
         }
 
+        $shelved = [];
+
         foreach ($grid as $ref => $placement) {
-            if ($placement['retired']) {
-                $this->pending[(string) $ref] = $placement;
-                unset($grid[$ref]);
-                $this->warn((string) $ref, "Lugar {$ref}: el SII lo trae con estatus N (ya no se ofrece): no entra a la retícula; pasa a la lista de pendientes para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar).");
-
+            if ($placement['semester'] > 0 && ! $placement['retired']) {
                 continue;
             }
 
-            if ($placement['semester'] > 0) {
-                continue;
-            }
-
-            $matches = $byName[SubjectName::key($placement['name'])] ?? [];
-            $sameCareer = array_values(array_filter($matches, fn (array $match): bool => $match['career'] === $placement['career']));
-            $sources = $sameCareer === [] ? $matches : $sameCareer;
-
-            if ($sources === []) {
-                $this->pending[(string) $ref] = $placement;
-                unset($grid[$ref]);
-                $this->warn((string) $ref, "Lugar {$ref} sin semestre en el SII y sin materia con el mismo nombre que lo tenga: no entra a la retícula; pasa a la lista de pendientes para que Servicios Escolares le asigne semestre (D18 y D19).");
-
-                continue;
-            }
-
+            unset($grid[$ref]);
+            $ref = (string) $ref;
+            $historical = isset($this->historical[$placement['plan']]);
+            $sources = $historical || $placement['retired'] ? [] : ($byName[$placement['career']][SubjectName::key($placement['name'])] ?? []);
             $counts = array_count_values(array_column($sources, 'semester'));
-            $semester = min(array_keys($counts, max($counts), true));
-            $grid[$ref]['semester'] = $semester;
-            $where = $sameCareer === [] ? 'de otra carrera' : 'de la misma carrera';
-            $this->warn((string) $ref, "Lugar {$ref} sin semestre en el SII: toma el semestre {$semester} de la materia con el mismo nombre {$where} en {$this->listed(array_column($sources, 'ref'))} (D18; supuesto por confirmar).");
+            $suggested = $sources === [] ? null : min(array_keys($counts, max($counts), true));
+            $this->pending[$ref] = [...$placement, 'suggested' => $suggested];
+
+            if ($historical) {
+                $kind = $placement['retired'] ? 'retired' : 'undated';
+                $shelved[$placement['plan']][$kind] = ($shelved[$placement['plan']][$kind] ?? 0) + 1;
+            } elseif ($placement['retired']) {
+                $this->warn($ref, "Lugar {$ref}: el SII lo trae con estatus N (ya no se ofrece): no entra a la retícula; pasa a la lista de pendientes para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar).");
+            } else {
+                $suggestion = $suggested === null
+                    ? 'sin sugerencia: ninguna materia con el mismo nombre de la misma carrera tiene semestre'
+                    : "con el {$suggested} sugerido por la materia con el mismo nombre de la misma carrera en {$this->listed(array_column($sources, 'ref'))}";
+                $this->warn($ref, "Lugar {$ref} sin semestre en el SII: no entra a la retícula; pasa a «Por validar», donde Servicios Escolares le asigna semestre, {$suggestion}. Lo aprobado en ella cuenta (D18 y D19; confirmado, 10 de noviembre de 2026).");
+            }
+        }
+
+        ksort($shelved, SORT_STRING);
+
+        foreach ($shelved as $plan => $counts) {
+            $undated = $counts['undated'] ?? 0;
+            $retired = $counts['retired'] ?? 0;
+            $total = $undated + $retired;
+            $detail = $retired === 0 ? '' : " ({$undated} sin semestre y {$retired} con estatus N)";
+            $this->warn((string) $plan, "Retícula histórica {$plan} (ningún alumno inscrito en el periodo actual): {$total} ".($total === 1 ? 'materia queda' : 'materias quedan')." sin semestre, como en el SII{$detail}; esperan en «Por validar» y Servicios Escolares solo se lo asigna si vuelve un alumno (confirmado, 10 de noviembre de 2026).");
         }
 
         return $grid;
