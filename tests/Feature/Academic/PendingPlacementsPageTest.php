@@ -239,11 +239,28 @@ describe('pantalla del plan', function () {
         expect(StudyPlanSubject::where('study_plan_id', $this->plan->id)->where('subject_id', $this->drawing->subject_id)->value('semester'))->toBe(4);
     });
 
-    it('D18: una sugerencia fuera de los semestres que se ofrecen no abre el panel', function () {
+    it('D18: una sugerencia fuera de los semestres que se ofrecen no abre el panel y lo dice', function () {
         $this->modern->update(['suggested_semester' => 7]);
+        $tab = pendingTab($this->servicesHead, $this->plan);
 
-        pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)
-            ->assertSet('pickedId', $this->modern->id)->assertSet('showDrawer', false);
+        expect(textOf(domOf($tab)->querySelector('[data-pending="AE22"]')))->toEndWith('Sugerido: 7 (aún no se ofrece en esta retícula)');
+
+        $tab->call('pick', $this->modern->id)->assertSet('pickedId', $this->modern->id)->assertSet('showDrawer', false)
+            ->call('openPlace', 3);
+
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-drawer"]')))->toContain('Sugerido: 7 (aún no se ofrece en esta retícula)');
+    });
+
+    it('D18: en una retícula histórica no se usa la sugerencia que haya quedado', function () {
+        $this->plan->update(['is_historical' => true]);
+        $this->drawing->update(['suggested_semester' => 2]);
+        $tab = pendingTab($this->servicesHead, $this->plan);
+
+        expect(textOf(domOf($tab)->querySelector('[data-pending="AE9"]')))->toBe('Dibujo Electrónico AE9 · 2-2-4 Retícula del SII 5/5');
+
+        $tab->call('pick', $this->drawing->id)->assertSet('showDrawer', false)->call('openPlace', 3);
+
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-drawer"]')))->not->toContain('Sugerido');
     });
 
     it('D18: en una retícula histórica, un aviso arriba dice que solo hace falta asignar semestre si vuelve un alumno', function () {

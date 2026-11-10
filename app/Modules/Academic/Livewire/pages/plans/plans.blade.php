@@ -87,7 +87,7 @@
 
             @scope('cell_name', $plan)
                 {{ $plan->name }}
-                @if (($plan->pending_placements_count ?? 0) > 0 && ! $plan->is_historical)
+                @if (($plan->pending_placements_count ?? 0) > 0)
                     <div class="mt-1">@include('academic::plans.pending-badge', ['plan' => $plan])</div>
                 @endif
             @endscope
@@ -123,7 +123,7 @@
                         {{ trans_choice('{0} Sin materias|{1} 1 materia|[2,*] :count materias', $plan->placements_count) }}
                     </div>
 
-                    @if (($plan->pending_placements_count ?? 0) > 0 && ! $plan->is_historical)
+                    @if (($plan->pending_placements_count ?? 0) > 0)
                         <div>@include('academic::plans.pending-badge', ['plan' => $plan])</div>
                     @endif
 

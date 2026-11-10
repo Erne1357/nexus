@@ -20,15 +20,15 @@ final class StudyPlanQuery
      * y cuántas materias tiene en su retícula (`placements_count`, sin las quitadas). Busca `$search`
      * en la clave o el nombre con TextSearch; `$careerId` filtra por carrera (un id que no es uuid no
      * trae nada) y `$active` por estado; `null` no filtra. Con `$withPending` trae también cuántas materias de la
-     * migración del SII esperan semestre (`pending_placements_count`, las sin resolver) y, con `$pendingOnly`,
-     * solo los planes que tienen alguna y no son retículas históricas (D18 y D19). Quién la ve lo decide
+     * migración del SII esperan semestre como trabajo pendiente (`pending_placements_count`, las sin resolver; 0 en una
+     * retícula histórica, D18) y, con `$pendingOnly`, solo los planes que tienen alguna (D19). Quién la ve lo decide
      * StudyPlanPolicy en el componente.
      *
      * @return LengthAwarePaginator<int, StudyPlan>
      */
     public function forTable(string $search = '', ?string $careerId = null, ?bool $active = null, int $perPage = 15, bool $withPending = false, bool $pendingOnly = false): LengthAwarePaginator
     {
-        $unresolved = fn (Builder $query) => $query->whereNull('resolved_at');
+        $unresolved = fn (Builder $query) => $query->whereNull('resolved_at')->whereHas('studyPlan', fn (Builder $plan) => $plan->where('is_historical', false));
 
         return StudyPlan::query()
             ->with(['career' => fn ($query) => $query->withTrashed()->select(['id', 'code', 'name'])])
@@ -37,7 +37,7 @@ final class StudyPlanQuery
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->when($careerId !== null, fn (Builder $query) => $query->whereIn('career_id', Str::isUuid($careerId) ? [$careerId] : []))
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
-            ->when($withPending && $pendingOnly, fn (Builder $query) => $query->where('is_historical', false)->whereHas('pendingPlacements', $unresolved))
+            ->when($withPending && $pendingOnly, fn (Builder $query) => $query->whereHas('pendingPlacements', $unresolved))
             ->orderBy('code')
             ->paginate($perPage);
     }

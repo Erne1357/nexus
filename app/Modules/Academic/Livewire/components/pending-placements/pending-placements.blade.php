@@ -14,7 +14,8 @@
       «Sugerido: N» debajo si la migración lo sugiere; la carga del semestre antes y después; y al pie «Cancelar» y
       «Agregar a la retícula».
     - Semestre sugerido (D18): la ficha dice «Sugerido: N» y, si ese semestre se ofrece, elegirla abre el panel con él
-      elegido (aria-haspopup). En una retícula histórica con pendientes, arriba de todo un aviso `alert-info` lo dice.
+      elegido (aria-haspopup); si todavía no se ofrece, lo dice. En una retícula histórica la sugerencia no se usa, y
+      con pendientes, arriba de todo un aviso `alert-info` dice por qué no hay trabajo.
 --}}
 <div class="space-y-4" data-testid="pending-placements">
     @if ($historical && $total > 0)
@@ -45,7 +46,7 @@
                     @forelse ($pendings as $pending)
                         <button type="button" wire:key="pending-{{ $pending->id }}" wire:click="pick('{{ $pending->id }}')"
                             data-pending="{{ $pending->subject->code }}" aria-pressed="{{ $picked?->id === $pending->id ? 'true' : 'false' }}"
-                            @if ($pending->suggested_semester !== null && $pending->suggested_semester <= $offeredSemesters) aria-haspopup="dialog" @endif
+                            @if ($suggests && $pending->suggested_semester !== null && $pending->suggested_semester <= $offeredSemesters) aria-haspopup="dialog" @endif
                             class="relative flex w-52 shrink-0 cursor-pointer flex-col gap-0.5 rounded-field border border-dashed border-warning/60 bg-base-100 px-2.5 py-2 text-left hover:border-warning aria-pressed:border-solid aria-pressed:border-primary aria-pressed:ring-2 aria-pressed:ring-primary/30 lg:w-auto">
                             <span class="text-[13.5px] font-medium leading-tight">{{ $pending->subject->name }}</span>
                             <span class="flex items-baseline justify-between gap-2 font-mono text-xs text-neutral">
@@ -54,8 +55,13 @@
                                     <span title="Retícula del SII"><span class="sr-only">Retícula del SII</span> {{ $pending->sii_grid }}</span>
                                 @endif
                             </span>
-                            @if ($pending->suggested_semester !== null)
-                                <span class="text-xs text-neutral">Sugerido: <span class="font-mono font-medium text-base-content">{{ $pending->suggested_semester }}</span></span>
+                            @if ($suggests && $pending->suggested_semester !== null)
+                                <span class="text-xs text-neutral">
+                                    Sugerido: <span class="font-mono font-medium text-base-content">{{ $pending->suggested_semester }}</span>
+                                    @if ($pending->suggested_semester > $offeredSemesters)
+                                        (aún no se ofrece en esta retícula)
+                                    @endif
+                                </span>
                             @endif
                         </button>
                     @empty
@@ -166,7 +172,7 @@
                     </dl>
 
                     <x-select label="Semestre" name="semester" wire:model.live="semester" :options="$semesterOptions" data-testid="pending-semester"
-                        :hint="$picked->suggested_semester === null ? null : 'Sugerido: '.$picked->suggested_semester" />
+                        :hint="! $suggests || $picked->suggested_semester === null ? null : 'Sugerido: '.$picked->suggested_semester.($picked->suggested_semester > $offeredSemesters ? ' (aún no se ofrece en esta retícula)' : '')" />
 
                     @if ($load !== null)
                         <p class="rounded-field bg-base-200 px-3 py-2.5 text-neutral" data-testid="pending-load" aria-live="polite">

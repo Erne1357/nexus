@@ -28,10 +28,11 @@ use Mary\Traits\Toast;
  * de esa especialidad (supuesto por confirmar).
  *
  * Nexus nunca decide un semestre (D18, confirmado el 10 de noviembre de 2026): en una retícula viva, la migración deja
- * un semestre sugerido (el de las materias con el mismo nombre de la misma carrera). La ficha lo dice («Sugerido: N»)
- * y elegirla abre el panel con ese semestre elegido, si se ofrece; Escolares lo confirma con «Agregar a la retícula» o
- * lo cambia. En una retícula histórica (ningún alumno inscrito) un aviso arriba dice que solo hace falta asignarles
- * semestre si vuelve un alumno.
+ * un semestre sugerido (el de las materias con el mismo nombre de la misma carrera, o el del SII de una materia que ya
+ * no se ofrece). La ficha lo dice («Sugerido: N», y si ese semestre todavía no se ofrece, también eso) y elegirla abre
+ * el panel con ese semestre elegido, si se ofrece; Escolares lo confirma con «Agregar a la retícula» o lo cambia. En una
+ * retícula histórica (ningún alumno inscrito) la sugerencia que haya quedado no se usa, y un aviso arriba dice que
+ * solo hace falta asignarles semestre si vuelve un alumno.
  *
  * El componente autoriza `view` del plan y `validatePlacements` (el jefe de Servicios Escolares y el admin) en
  * mount(), al pintar y en cada método; los ids del navegador se buscan entre los pendientes sin resolver del plan. Los
@@ -87,6 +88,7 @@ new class extends Component
 
         return [
             'historical' => $plan->is_historical,
+            'suggests' => ! $plan->is_historical,
             'grid' => $grid,
             'layout' => SemesterGrid::place(
                 array_map(fn (array $semester): array => array_column($semester, 'specialty_id', 'placement_id'), $grid['semesters']),
@@ -106,8 +108,8 @@ new class extends Component
 
     /**
      * Elige el pendiente `$id` de la bandeja; elegirlo otra vez lo suelta. Uno de otro plan, ya resuelto o con un id
-     * que no es uuid no existe (404). Si trae semestre sugerido y ese semestre se ofrece, abre el panel con él elegido;
-     * nada se guarda sin «Agregar a la retícula».
+     * que no es uuid no existe (404). Si trae semestre sugerido, el plan no es una retícula histórica y ese semestre se
+     * ofrece, abre el panel con él elegido; nada se guarda sin «Agregar a la retícula».
      */
     public function pick(string $id, StudyPlanQuery $plans, PendingPlacementsQuery $pendings, PlanGridEditorQuery $grids): void
     {
@@ -117,9 +119,9 @@ new class extends Component
         $this->resetValidation();
         $this->reset('showDrawer', 'semester', 'placedId');
         $this->pickedId = $this->pickedId === $pending->id ? null : $pending->id;
-        $suggested = $pending->suggested_semester;
+        $suggested = $plan->is_historical ? null : $pending->suggested_semester;
 
-        if ($this->pickedId !== null && $suggested !== null && $suggested <= PlacementRules::offeredSemesters($plan->semesters_count, $grids->forPlan($plan)['semesters_count'])) {
+        if ($this->pickedId !== null && $suggested !== null && $suggested <= PlacementRules::offeredSemesters($plan->semesters_count, $grids->semestersCount($plan))) {
             $this->semester = (string) $suggested;
             $this->showDrawer = true;
         }
@@ -147,7 +149,8 @@ new class extends Component
     }
 
     /**
-     * El navegador solo cierra el panel (Esc, el velo, la X o «Cancelar»); abrirlo es de openPlace().
+     * El navegador solo cierra el panel (Esc, el velo, la X o «Cancelar»); abrirlo es de openPlace() y de pick() con un
+     * semestre sugerido.
      */
     public function updatedShowDrawer(bool $open): void
     {
