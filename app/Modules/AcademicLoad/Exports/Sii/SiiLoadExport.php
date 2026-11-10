@@ -71,7 +71,7 @@ final class SiiLoadExport
     }
 
     /**
-     * Los dos archivos de estas versiones: las que leyó `SiiExport` al pedirse, para que el archivo diga exactamente
+     * Los dos archivos de estas versiones: las que leyó `SiiFilesExport` al pedirse, para que el archivo diga exactamente
      * lo que nombra su llave aunque se publique otra versión mientras espera en la cola.
      *
      * @param  iterable<LoadSnapshot>  $snapshots
