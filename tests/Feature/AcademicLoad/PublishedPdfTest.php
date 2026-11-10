@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Database\Factories\LoadSnapshotFactory;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Exports\PublishedExports;
+use App\Modules\AcademicLoad\Exports\PublishedPdf;
 use App\Modules\AcademicLoad\Exports\SemesterPdf;
 use App\Modules\AcademicLoad\Exports\TeacherPdf;
 use App\Modules\AcademicLoad\Exports\WeekPdf;
@@ -214,4 +215,17 @@ it('las páginas de semestre, docente y salón ofrecen «Descargar PDF» con su 
         ->assertOk()->assertSee(publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]), false);
     $this->get(route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => $this->room['id']]))
         ->assertOk()->assertSee(publishedPdfUrl('published.room.pdf', ['salon' => $this->room['id']]), false);
+});
+
+it('DomPDF corre sin acceso remoto, sin PHP ni JavaScript y solo lee resources/images', function () {
+    $options = PublishedPdf::options();
+
+    expect($options->getIsRemoteEnabled())->toBeFalse()
+        ->and($options->getIsPhpEnabled())->toBeFalse()
+        ->and($options->getIsJavascriptEnabled())->toBeFalse()
+        ->and($options->getChroot())->toBe([resource_path('images')]);
+});
+
+it('un periodo o campus con caracteres raros es 404 en la descarga, sin llegar a la base', function () {
+    $this->get('/horarios/20271%27/C2/docente/'.$this->teacher['id'].'/pdf')->assertNotFound();
 });

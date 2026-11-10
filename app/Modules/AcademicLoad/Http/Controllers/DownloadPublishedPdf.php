@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Exports\PublishedExports;
 use App\Modules\AcademicLoad\Exports\RoomPdf;
 use App\Modules\AcademicLoad\Exports\SemesterPdf;
 use App\Modules\AcademicLoad\Exports\TeacherPdf;
+use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -65,6 +66,8 @@ final class DownloadPublishedPdf
      */
     private function context(string $termCode, string $campusCode): array
     {
+        abort_unless(PublishedContextQuery::isCode($termCode) && PublishedContextQuery::isCode($campusCode), 404);
+
         return [
             Term::query()->where('code', $termCode)->firstOrFail(),
             Campus::query()->where('code', $campusCode)->where('is_active', true)->firstOrFail(),
