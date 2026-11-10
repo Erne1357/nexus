@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\AcademicLoad\Queries\PublishedSession;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Support\WeekGrid;
 
 /**
  * El PDF de una carrera, retícula y semestre (tarea 4.5): la tabla tipo SII que eligió el usuario el 10 de noviembre de
@@ -21,14 +22,14 @@ final class SemesterPdf extends PublishedPdf
         string $campusId,
         string $termCode,
         string $campusCode,
-        string $version,
+        array $snapshotIds,
         public readonly string $careerId,
         public readonly string $careerCode,
         public readonly string $planId,
         public readonly string $planCode,
         public readonly int $semester,
     ) {
-        parent::__construct($termId, $campusId, $termCode, $campusCode, $version);
+        parent::__construct($termId, $campusId, $termCode, $campusCode, $snapshotIds);
     }
 
     /**
@@ -37,20 +38,16 @@ final class SemesterPdf extends PublishedPdf
      */
     public static function find(PublishedScheduleQuery $query, Term $term, Campus $campus, string $careerCode, string $planCode, int $semester): ?self
     {
-        $version = $query->version($term, $campus);
+        $ids = $query->snapshotIds($term, $campus);
 
-        if ($version === null) {
-            return null;
-        }
-
-        foreach ($query->schedule($term, $campus)->careers() as $career) {
+        foreach ($ids === [] ? [] : $query->scheduleOf($term, $campus, $ids)->careers() as $career) {
             if ($career['career']['code'] !== $careerCode) {
                 continue;
             }
 
             foreach ($career['plans'] as $plan) {
                 if ($plan['plan']['code'] === $planCode && in_array($semester, $plan['semesters'], true)) {
-                    return new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $version, $career['career']['id'], $careerCode, $plan['plan']['id'], $planCode, $semester);
+                    return new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, $career['career']['id'], $careerCode, $plan['plan']['id'], $planCode, $semester);
                 }
             }
         }
@@ -82,19 +79,28 @@ final class SemesterPdf extends PublishedPdf
             'title' => $career['name'],
             'subtitle' => "Semestre {$this->semester} · Retícula {$this->planCode}",
             'updated' => self::updated($schedule->updatedAt($groups)),
-            'days' => self::days($schedule),
+            'days' => self::days($groups, $schedule),
             'subjects' => self::subjects($groups, $schedule),
         ], 'landscape'];
     }
 
     /**
+     * Los días del perfil del campus más los de las sesiones que caen fuera (un sábado), como las páginas.
+     *
+     * @param  list<PublishedGroup>  $groups
      * @return list<array{day: int, name: string}>
      */
-    private static function days(PublishedSchedule $schedule): array
+    private static function days(array $groups, PublishedSchedule $schedule): array
     {
-        $names = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado'];
+        $ranges = [];
 
-        return array_map(fn (int $day): array => ['day' => $day, 'name' => $names[$day] ?? (string) $day], $schedule->profile()->days);
+        foreach ($groups as $group) {
+            foreach ($group->sessions as $session) {
+                $ranges[] = ['day' => $session->day, 'starts_at' => $session->startsAt, 'ends_at' => $session->endsAt];
+            }
+        }
+
+        return array_map(fn (array $day): array => ['day' => $day['day'], 'name' => $day['name']], WeekGrid::of($schedule->profile())->covering($ranges)->days);
     }
 
     /**
@@ -106,6 +112,7 @@ final class SemesterPdf extends PublishedPdf
     public static function subjects(array $groups, PublishedSchedule $schedule): array
     {
         $usesTimeBlocks = $schedule->profile()->usesTimeBlocks;
+        $colors = self::colors($groups);
         $subjects = [];
 
         foreach ($groups as $group) {
@@ -114,7 +121,7 @@ final class SemesterPdf extends PublishedPdf
                 'code' => $code,
                 'name' => $group->subject['name'],
                 'credits' => $group->subject['credits'],
-                'color' => self::CHAINS[count($subjects) % count(self::CHAINS)],
+                'color' => $colors[$code],
                 'groups' => [],
             ];
 

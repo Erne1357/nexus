@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\AcademicLoad\Queries\PublishedSession;
+use App\Modules\AcademicLoad\Queries\PublishedWeek;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -17,8 +18,9 @@ use Dompdf\Options;
 
 /**
  * Lo común de los PDF públicos de lo publicado (tarea 4.5; ADR-0021): uno por carrera y semestre, docente o salón,
- * descargable sin sesión desde la consulta. Guarda solo ids, claves y la huella de lo publicado
- * (PublishedScheduleQuery::version()), así que la cola lo serializa ligero y su llave cambia con cada versión nueva.
+ * descargable sin sesión desde la consulta. Guarda solo ids, claves y los ids de las versiones publicadas que lee
+ * (PublishedScheduleQuery::snapshotIds()): la cola lo serializa ligero, su llave cambia con cada versión nueva y el
+ * archivo se arma con esas versiones exactas aunque otra se publique mientras espera en la cola.
  * Arma el HTML con una vista Blade de `academic-load::pdf` y lo pasa por DomPDF en carta, sin acceso remoto y con
  * DejaVu Sans.
  */
@@ -32,7 +34,8 @@ abstract class PublishedPdf implements PublishedExport
         public readonly string $campusId,
         public readonly string $termCode,
         public readonly string $campusCode,
-        public readonly string $version,
+        /** @var list<string> */
+        public readonly array $snapshotIds,
     ) {}
 
     /**
@@ -53,7 +56,7 @@ abstract class PublishedPdf implements PublishedExport
 
     public function key(): string
     {
-        return $this->kind().'-'.hash('xxh128', implode('|', [$this->termId, $this->campusId, ...$this->subject(), $this->version]));
+        return $this->kind().'-'.hash('xxh128', implode('|', [$this->termId, $this->campusId, ...$this->subject(), ...$this->snapshotIds]));
     }
 
     public function mimeType(): string
@@ -75,7 +78,7 @@ abstract class PublishedPdf implements PublishedExport
     {
         $term = Term::query()->findOrFail($this->termId);
         $campus = Campus::query()->findOrFail($this->campusId);
-        [$view, $data, $orientation] = $this->document(app(PublishedScheduleQuery::class)->schedule($term, $campus), $term, $campus);
+        [$view, $data, $orientation] = $this->document(app(PublishedScheduleQuery::class)->scheduleOf($term, $campus, $this->snapshotIds), $term, $campus);
 
         $options = new Options;
         $options->setIsRemoteEnabled(false);
@@ -90,11 +93,23 @@ abstract class PublishedPdf implements PublishedExport
     }
 
     /**
-     * «12 de diciembre de 2026», o null sin grupos.
+     * «12 de diciembre de 2026» en la zona de la aplicación, como las páginas (PublishedWeek::updatedOn()); vacío sin
+     * grupos.
      */
-    protected static function updated(?CarbonImmutable $at): ?string
+    protected static function updated(?CarbonImmutable $at): string
     {
-        return $at?->locale('es')->translatedFormat('j \d\e F \d\e Y');
+        return PublishedWeek::updatedOn($at);
+    }
+
+    /**
+     * El color de cada materia de estos grupos, por orden de clave, como en las páginas (PublishedWeek::chains()).
+     *
+     * @param  list<PublishedGroup>  $groups
+     * @return array<string, string> clave de materia → color
+     */
+    protected static function colors(array $groups): array
+    {
+        return array_map(fn (int $index): string => self::CHAINS[$index % count(self::CHAINS)], PublishedWeek::chains($groups));
     }
 
     /**

@@ -19,11 +19,11 @@ final class TeacherPdf extends WeekPdf
         string $campusId,
         string $termCode,
         string $campusCode,
-        string $version,
+        array $snapshotIds,
         public readonly string $teacherId,
         public readonly string $teacherName,
     ) {
-        parent::__construct($termId, $campusId, $termCode, $campusCode, $version);
+        parent::__construct($termId, $campusId, $termCode, $campusCode, $snapshotIds);
     }
 
     /**
@@ -31,10 +31,10 @@ final class TeacherPdf extends WeekPdf
      */
     public static function find(PublishedScheduleQuery $query, Term $term, Campus $campus, string $teacherId): ?self
     {
-        $version = $query->version($term, $campus);
-        $teacher = $version === null ? null : collect($query->schedule($term, $campus)->teachers())->firstWhere('id', $teacherId);
+        $ids = $query->snapshotIds($term, $campus);
+        $teacher = $ids === [] ? null : collect($query->scheduleOf($term, $campus, $ids)->teachers())->firstWhere('id', $teacherId);
 
-        return $teacher === null ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $version, $teacher['id'], $teacher['name']);
+        return $teacher === null ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, $teacher['id'], $teacher['name']);
     }
 
     public function filename(): string

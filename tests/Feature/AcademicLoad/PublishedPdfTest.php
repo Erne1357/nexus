@@ -5,16 +5,20 @@ use App\Modules\AcademicLoad\Database\Factories\LoadSnapshotFactory;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Exports\PublishedExports;
 use App\Modules\AcademicLoad\Exports\SemesterPdf;
+use App\Modules\AcademicLoad\Exports\TeacherPdf;
 use App\Modules\AcademicLoad\Exports\WeekPdf;
+use App\Modules\AcademicLoad\Http\Controllers\DownloadPublishedPdf;
 use App\Modules\AcademicLoad\Jobs\GeneratePublishedExport;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
+use App\Modules\AcademicLoad\Queries\PublishedSession;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -103,10 +107,69 @@ it('responde 404 a otro periodo o campus', function () {
     $this->get(route('published.teacher.pdf', ['periodo' => '20271', 'campus' => 'C1', 'docente' => $this->teacher['id']]))->assertNotFound();
 });
 
-it('las descargas públicas llevan su limitador', function () {
+it('las descargas públicas llevan el límite de la consulta', function () {
     foreach (['published.semester.pdf', 'published.teacher.pdf', 'published.room.pdf'] as $name) {
-        expect(Route::getRoutes()->getByName($name)->gatherMiddleware())->toContain('throttle:published-exports');
+        expect(Route::getRoutes()->getByName($name)->gatherMiddleware())->toContain('throttle:published-schedule');
     }
+});
+
+it('topa cuántos PDF nuevos encola una IP por minuto, pero no las recargas de uno que ya se prepara', function () {
+    Queue::fake();
+    RateLimiter::increment('published-exports:127.0.0.1', 60, DownloadPublishedPdf::ENQUEUES_PER_MINUTE);
+
+    $this->get(publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]))->assertStatus(429);
+    Queue::assertNothingPushed();
+
+    RateLimiter::clear('published-exports:127.0.0.1');
+    $this->get(publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]))->assertStatus(202);
+    RateLimiter::increment('published-exports:127.0.0.1', 60, DownloadPublishedPdf::ENQUEUES_PER_MINUTE);
+    $this->get(publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]))->assertStatus(202);
+});
+
+it('responde 404 en un campus inactivo y a una retícula que no es texto', function () {
+    $this->get(publishedPdfUrl('published.semester.pdf', ['carrera' => 'ISC', 'reticula' => ['a'], 'semestre' => 3]))->assertNotFound();
+
+    $this->campus->update(['is_active' => false]);
+    $this->get(publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]))->assertNotFound();
+});
+
+it('arma el PDF con las versiones de su llave aunque después se publique otra', function () {
+    $export = TeacherPdf::find(app(PublishedScheduleQuery::class), $this->term, $this->campus, $this->teacher['id']);
+    $load = AcademicLoad::query()->firstOrFail();
+    LoadSnapshot::factory()->for($load)->withGroups([])->create(['version' => 2]);
+
+    $schedule = app(PublishedScheduleQuery::class)->scheduleOf($this->term, $this->campus, $export->snapshotIds);
+
+    expect($schedule->teacher($this->teacher['id']))->toHaveCount(1)
+        ->and(app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus)->teacher($this->teacher['id']))->toBe([])
+        ->and(TeacherPdf::find(app(PublishedScheduleQuery::class), $this->term, $this->campus, $this->teacher['id']))->toBeNull();
+});
+
+it('la semana lista en una celda las sesiones que se empalman aunque empiecen en bloques distintos', function () {
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus);
+    $group = $schedule->teacher($this->teacher['id'])[0];
+    $overlapping = $group->withSessions([
+        new PublishedSession(2, '08:00', '10:00', 'teoria', 'Teoría', $this->room),
+        new PublishedSession(2, '09:00', '11:00', 'teoria', 'Teoría', $this->room),
+    ]);
+
+    $week = WeekPdf::week([$overlapping], $schedule, fn (PublishedGroup $group, array $session): array => $session);
+
+    expect($week['cells'][2][1]['span'])->toBe(3)
+        ->and($week['cells'][2][1]['items'])->toHaveCount(2)
+        ->and($week['cells'][2][2])->toBe('covered')
+        ->and($week['cells'][2][3])->toBe('covered');
+});
+
+it('el PDF del semestre agrega la columna de un día fuera del perfil', function () {
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus);
+    $export = SemesterPdf::find(app(PublishedScheduleQuery::class), $this->term, $this->campus, 'ISC', 'ISIC-2010-224', 3);
+    $group = $schedule->semester($this->career['id'], $this->plan['id'], 3)[0];
+    $saturday = $group->withSessions([new PublishedSession(6, '08:00', '09:00', 'teoria', 'Teoría', $this->room)]);
+
+    $days = (fn (array $groups, $schedule): array => self::days($groups, $schedule))->call($export, [$saturday], $schedule);
+
+    expect(array_column($days, 'name'))->toContain('Sábado');
 });
 
 it('el PDF del semestre lista materias y grupos por día, con «Por asignar» y sin el RFC ni la justificación', function () {

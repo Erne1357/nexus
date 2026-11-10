@@ -72,10 +72,6 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by($request->ip()));
 
-        // Un invitado puede encolar un PDF: 30 por minuto por IP alcanzan para quien consulta y frenan a quien abusa.
-        // La recarga de «Preparando el PDF» (cada 3 s) cabe de sobra.
-        RateLimiter::for('published-exports', fn (Request $request): Limit => Limit::perMinute(30)->by($request->ip()));
-
         if ($this->app->runningInConsole()) {
             $this->commands([PruneExports::class]);
         }

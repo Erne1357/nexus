@@ -25,9 +25,9 @@ Route::middleware('throttle:published-schedule')->prefix('horarios')->name('publ
 
 /*
 | Descargas públicas de los PDF de lo publicado (tarea 4.5), sin sesión: el controlador busca el sujeto en lo publicado
-| antes de encolar nada. El limitador `published-exports` (AcademicLoadServiceProvider) frena a quien encola de más.
+| antes de encolar nada y tiene su propio tope para encolar (DownloadPublishedPdf::ENQUEUES_PER_MINUTE).
 */
-Route::middleware('throttle:published-exports')->prefix('horarios/{periodo}/{campus}')->name('published.')->group(function () {
+Route::middleware('throttle:published-schedule')->prefix('horarios/{periodo}/{campus}')->name('published.')->group(function () {
     Route::get('/carrera/{carrera}/pdf', [DownloadPublishedPdf::class, 'semester'])->name('semester.pdf');
     Route::get('/docente/{docente}/pdf', [DownloadPublishedPdf::class, 'teacher'])->name('teacher.pdf');
     Route::get('/salon/{salon}/pdf', [DownloadPublishedPdf::class, 'room'])->name('room.pdf');

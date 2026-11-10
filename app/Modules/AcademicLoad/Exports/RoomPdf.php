@@ -19,13 +19,13 @@ final class RoomPdf extends WeekPdf
         string $campusId,
         string $termCode,
         string $campusCode,
-        string $version,
+        array $snapshotIds,
         public readonly string $roomId,
         public readonly string $roomCode,
         public readonly string $roomName,
         public readonly string $building,
     ) {
-        parent::__construct($termId, $campusId, $termCode, $campusCode, $version);
+        parent::__construct($termId, $campusId, $termCode, $campusCode, $snapshotIds);
     }
 
     /**
@@ -33,16 +33,16 @@ final class RoomPdf extends WeekPdf
      */
     public static function find(PublishedScheduleQuery $query, Term $term, Campus $campus, string $roomId): ?self
     {
-        $version = $query->version($term, $campus);
+        $ids = $query->snapshotIds($term, $campus);
 
-        if ($version === null) {
+        if ($ids === []) {
             return null;
         }
 
-        $schedule = $query->schedule($term, $campus);
+        $schedule = $query->scheduleOf($term, $campus, $ids);
         $room = $schedule->profile()->usesRooms ? collect($schedule->rooms())->firstWhere('id', $roomId) : null;
 
-        return $room === null ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $version, $room['id'], $room['code'], $room['name'], $room['building']);
+        return $room === null ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, $room['id'], $room['code'], $room['name'], $room['building']);
     }
 
     public function filename(): string
