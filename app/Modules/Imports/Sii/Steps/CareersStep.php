@@ -22,6 +22,11 @@ use App\Modules\Imports\Sii\SiiStep;
  * valores personales): la oferta por campus, el plan vigente y el plan de nuevo ingreso (el que más nuevo
  * ingreso recibió en el último periodo de admisión regular, supuesto por confirmar).
  *
+ * Los créditos totales de cada plan son los `creditos_totales` de su retícula del SII, contra los que se mide el avance
+ * del alumno, como en el SII (decidido el 10 de noviembre de 2026); vacíos o en cero, el plan queda sin ellos. Si las
+ * retículas de un plan traen créditos distintos, quedan los de la presencial y, si no la hay o también difieren, los
+ * mayores, con aviso (supuesto por confirmar).
+ *
  * Recuerda `plan_for`: `"{carrera}/{retícula}"` del SII → plan, carrera y modalidad de Nexus, solo de lo incluido; y
  * `plan_version`: clave del plan de Nexus → su versión (texto vacío si no se sabe). Entrega dos lotes, en este orden:
  * `careers` y `study_plans`.
@@ -55,7 +60,7 @@ final class CareersStep implements SiiStep
         $facts = $this->studentFacts($migration, $planFor);
 
         yield $this->careersBatch($plans, $careers, $planFor, $facts);
-        yield $this->plansBatch($planFor, $versions, $facts);
+        yield $this->plansBatch($planFor, $versions, $facts, $this->credits($migration));
     }
 
     /**
@@ -100,6 +105,26 @@ final class CareersStep implements SiiStep
         }
 
         return $rows;
+    }
+
+    /**
+     * Los créditos totales de cada (carrera, retícula) del SII que los trae como un entero mayor que cero.
+     *
+     * @return array<string, int>
+     */
+    private function credits(SiiMigration $migration): array
+    {
+        $credits = [];
+
+        foreach ($migration->export()->reader(SiiFile::Carreras)->rows() as $row) {
+            $value = trim($row['creditos_totales'] ?? '');
+
+            if (is_numeric($value) && (int) $value > 0) {
+                $credits[trim($row['carrera']).'/'.trim($row['reticula'])] ??= (int) $value;
+            }
+        }
+
+        return $credits;
     }
 
     /**
@@ -287,8 +312,9 @@ final class CareersStep implements SiiStep
      * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
      * @param  array<string, string>  $versions
      * @param  array{campuses: array<string, array<string, true>>, unknownCampuses: array<string, int>, active: array<string, true>, entrants: array<string, array<string, int>>}  $facts
+     * @param  array<string, int>  $credits  créditos totales por (carrera, retícula) del SII
      */
-    private function plansBatch(array $planFor, array $versions, array $facts): SiiBatch
+    private function plansBatch(array $planFor, array $versions, array $facts, array $credits): SiiBatch
     {
         $period = $facts['entrants'] === [] ? null : (string) max(array_map('strval', array_keys($facts['entrants'])));
         $entrants = $period === null ? [] : $facts['entrants'][$period];
@@ -334,10 +360,41 @@ final class CareersStep implements SiiStep
                 'version' => $versions[(string) $code],
                 'current' => $hasActive || isset($intake[$code]) ? 'Sí' : 'No',
                 'intake' => isset($intake[$code]) ? 'Sí' : 'No',
+                'credits' => $this->planCredits((string) $code, $plan['keys'], $planFor, $credits, $incidents),
             ];
         }
 
         return new SiiBatch('study_plans', 'planes.csv', $rows, incidents: $incidents);
+    }
+
+    /**
+     * Los créditos totales de un plan desde los de sus retículas del SII: si difieren, los de la presencial y, si no
+     * la hay o también difieren, los mayores, con aviso.
+     *
+     * @param  list<string>  $keys
+     * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
+     * @param  array<string, int>  $credits
+     * @param  list<array{level: string, ref: string, message: string}>  $incidents
+     */
+    private function planCredits(string $code, array $keys, array $planFor, array $credits, array &$incidents): ?string
+    {
+        sort($keys, SORT_STRING);
+        $known = array_intersect_key($credits, array_flip($keys));
+
+        if ($known === []) {
+            return null;
+        }
+
+        if (count(array_unique($known)) === 1) {
+            return (string) reset($known);
+        }
+
+        $presencial = array_unique(array_intersect_key($known, array_filter($planFor, fn (array $info): bool => $info['modality'] === 'presencial')));
+        [$kept, $from] = count($presencial) === 1 ? [reset($presencial), 'de la presencial'] : [max($known), 'los mayores'];
+        $listed = implode(', ', array_map(fn (string $key): string => "{$key} {$known[$key]}", array_map('strval', array_keys($known))));
+        $incidents[] = ['level' => 'warning', 'ref' => $code, 'message' => "El plan {$code} junta retículas del SII con créditos totales distintos ({$listed}): quedan {$kept}, {$from} (supuesto por confirmar)."];
+
+        return (string) $kept;
     }
 
     /**

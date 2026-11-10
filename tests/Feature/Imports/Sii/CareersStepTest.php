@@ -35,13 +35,13 @@ DDD,Carrera De,110500,Eléctrica,
 CSV;
 
 /**
- * @param  list<array{string, string, string}>  $careers  carrera, retícula, fecha de inicio
+ * @param  list<array{0: string, 1: string, 2: string, 3?: string}>  $careers  carrera, retícula, fecha de inicio y créditos totales
  * @param  list<array{string, string, string, string, string}>  $students  carrera, retícula, estatus, periodo de ingreso, campus
  */
 function writeSiiCareers(string $dir, array $careers, array $students): void
 {
     SiiFixtures::write($dir.'/carreras.csv', SiiFile::Carreras, array_map(fn (array $c): string => SiiFixtures::line(SiiFile::Carreras, [
-        'carrera' => "'{$c[0]}'", 'reticula' => "'{$c[1]}'", 'fecha_inicio' => "'{$c[2]}'",
+        'carrera' => "'{$c[0]}'", 'reticula' => "'{$c[1]}'", 'fecha_inicio' => "'{$c[2]}'", 'creditos_totales' => "'".($c[3] ?? '')."'",
     ]), $careers));
 
     SiiFixtures::write($dir.'/alumnos_todos.csv', SiiFile::Alumnos, array_map(fn (array $s, int $i): string => SiiFixtures::line(SiiFile::Alumnos, [
@@ -212,4 +212,23 @@ it('el curado real cubre cada carrera incluida', function () {
     $included = array_unique(array_column(array_filter($migration->curated('planes'), fn (array $r): bool => $r['incluir'] === 'si'), 'carrera'));
 
     expect(array_diff($included, $careers))->toBe([]);
+});
+
+it('lleva al plan los créditos totales de su retícula del SII; si sus retículas difieren, quedan los de la presencial, con aviso', function () {
+    writeSiiCareers($this->dir, [
+        ['A', '1', '15/08/2010', '260'], ['A2', '2', '15/08/2010', '250'], ['A', '3', '15/08/2004', '440.00'],
+        ['B', '1', '15/08/2010', ''], ['C', '1', '15/08/2005', '0'], ['D', '1', '15/08/2010', '260'],
+        ['D', '2', '15/08/1980', '380'], ['X', '9', '15/08/2010', '260'],
+    ], [['A', '1', 'ACT', '20253', '2']]);
+
+    $batch = careersStepBatches($this->dir, $this->curated)['study_plans'];
+    $plans = array_column($batch['rows'], null, 'code');
+
+    expect($plans['AAA-2010-224']['credits'])->toBe('260')
+        ->and($plans['AAA-2004-100']['credits'])->toBe('440')
+        ->and($plans['BBB-2010-300']['credits'])->toBeNull()
+        ->and($plans['CCC-2005-200']['credits'])->toBeNull()
+        ->and($plans['DDD-IS-80-160']['credits'])->toBe('380')
+        ->and(collect($batch['incidents'])->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'créditos'))->values()->all())
+        ->toBe(['El plan AAA-2010-224 junta retículas del SII con créditos totales distintos (A/1 260, A2/2 250): quedan 260, de la presencial (supuesto por confirmar).']);
 });
