@@ -147,6 +147,14 @@ El jefe cierra la carga de su departamento en un campus cuando ya no le falta na
 - **Publicar revisa HC-15 otra vez:** si algo cambió después del cierre (por ejemplo, Facilities bloqueó o desactivó un salón), la publicación se veta con su motivo y hay que reabrir.
 - **Carga sin grupos:** la de un departamento sin partes aceptadas en un campus se queda en borrador, no se cierra ni se publica, y los tableros la muestran como «Sin grupos». No cuenta como pendiente del campus.
 
+## Exportes de lo publicado
+
+Los archivos que salen de una carga publicada (tareas 4.5 y 4.6) se arman solo desde sus versiones publicadas (`load_snapshots`), nunca desde las tablas vivas, así que dicen lo mismo que la consulta pública (ver [fase-4](../plan/fase-4-cierre-publicacion-piloto.md), «Respuestas de la planeación»).
+
+- **Quién descarga** (confirmado el 10 de noviembre de 2026): los PDF por carrera y semestre, por docente y por salón son públicos, desde la consulta y sin sesión; el PDF por departamento y el Excel con todos los grupos y sesiones, solo el personal con sesión y su permiso en el campus y el departamento (`PublishedExportPolicy`). Los archivos para el SII también piden su permiso (tarea 4.6).
+- **Cuándo se arman:** en la cola, la primera vez que alguien los pide, y se guardan mientras no se publique otra versión de las cargas que leen; una versión nueva arma otro archivo (supuesto por confirmar).
+- **Si falla:** quien lo pidió ve «No se pudo generar el archivo. Vuelve a intentarlo en unos minutos.» y se puede volver a pedir pasados 10 minutos; el error queda en el registro, no en la pantalla (supuesto por confirmar).
+
 ## Elegibilidad y demanda
 
 - Un alumno es **elegible** para una materia de su plan si aprobó todas sus seriaciones y no la ha aprobado. Solo el resultado `aprobada` aprueba: quien está cursando la materia o su seriación todavía no la tiene aprobada (la proyección de quienes están cursando es de R2). Los correquisitos no bloquean; las seriaciones de otro plan no cuentan (confirmado el 29 de octubre de 2026).
