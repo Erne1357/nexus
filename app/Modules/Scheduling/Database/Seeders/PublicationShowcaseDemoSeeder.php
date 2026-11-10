@@ -119,16 +119,18 @@ final class PublicationShowcaseDemoSeeder extends Seeder
 
     /**
      * Cambia de salón unas sesiones presenciales, distintas en cada vuelta, al primer salón sugerido libre, del propio
-     * departamento o sin dueño, donde cabe el grupo.
+     * departamento o sin dueño, donde cabe el grupo. Cada vuelta empieza más adelante en la lista y da la vuelta al
+     * final, así que una carga con pocas sesiones también cambia.
      */
     private function moveRooms(AcademicLoad $load, User $head, int $round): void
     {
-        $sessions = $this->groups($load)
+        $placed = $this->groups($load)
             ->flatMap(fn (Group $group) => $group->sessions)
             ->filter(fn (GroupSession $session): bool => $session->room_id !== null)
             ->sortBy('id')
-            ->values()
-            ->slice($round * self::MOVES_PER_VERSION * 3);
+            ->values();
+        $offset = ($round * self::MOVES_PER_VERSION * 3) % max(1, $placed->count());
+        $sessions = $placed->slice($offset)->concat($placed->take($offset));
 
         $moved = 0;
         foreach ($sessions as $session) {

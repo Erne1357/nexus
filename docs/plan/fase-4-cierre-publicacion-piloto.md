@@ -141,8 +141,11 @@ La fase extiende `demo:seed` como dice [testing.md](../arquitectura/testing.md):
   - Al llegar, toda carga con grupos en su campus está `closed`; el visto bueno está apagado en todos los campus (decisión del usuario, 10 de noviembre de 2026), así que ninguna queda `approved`. Las cargas sin grupos se quedan en `draft`.
   - Los pasos son de Staffing (`LoadClosingDemoSeeder`): terreno limpio (solicitudes pendientes rechazadas, acuerdos propuestos respondidos), grupos sin docente o sin salón con la justificación del jefe, y el cierre de cada carga con su jefe, que confirma sus grupos.
   - Sus revisiones confirman que cada carga cerrada pasa HC-15 (`ClosingBlockersQuery`), que todo grupo activo está `confirmed`, que hay grupos justificados y que las cargas sin grupos siguen en `draft`.
-  - En `todo`, el modo `mixed` cierra unas cargas con justificaciones y reabre una (con el volumen demo solo CEA se puede cerrar); SC se queda en asignación para la publicación. Detalle en [testing.md](../arquitectura/testing.md).
-- **La demo mezclada (`todo`):** agrega cargas cerradas, aprobadas, regresadas por Subdirección y publicadas, con más de una versión de snapshot. Así la 4.2, la 4.4 y la 4.5 tienen pantallas llenas con volumen.
+  - En `todo`, el modo `mixed` cierra unas cargas con justificaciones y reabre una (con el volumen demo solo CEA se puede cerrar; SC no, porque tiene solicitudes aprobadas sin aplicar). Detalle en [testing.md](../arquitectura/testing.md).
+- ✅ **Punto 9, `reanalisis` («Empezando el re-análisis»)** (rama `feature/56-demo-publication`):
+  - Al llegar, toda carga que salió de borrador está `published` con su versión 1, publicada por su jefe (`PublicationDemoSeeder`, AcademicLoad); las cargas sin grupos siguen en `draft` (P9).
+  - Sus revisiones confirman que cada foto cumple la forma del snapshot (`SnapshotPayload`), que el historial docente la sigue y que cada foto tiene los grupos no cancelados de su carga.
+- **La demo mezclada (`todo`):** con el cierre de la 4.1 (cargas cerradas, una reabierta) y una carga publicada en varias versiones (`PublicationShowcaseDemoSeeder`, Scheduling): con el volumen demo, CEA de Campus II en tres versiones; con el masivo, CB de Campus II en dos versiones y reabierta al final, y II de Campus I cerrada sin publicar. Cada versión nueva pasa por el proceso real (Subdirección reabre, el jefe regresa a asignación, cambia salones, cierra y publica). Así la 4.2, la 4.4 y la 4.5 tienen pantallas llenas. No hay cargas `approved`: el visto bueno está apagado en todos los campus.
 - `DemoCheckpointsTest` (hasta el último punto con el volumen demo) debe seguir debajo de un minuto.
 
 ### Reparto sugerido

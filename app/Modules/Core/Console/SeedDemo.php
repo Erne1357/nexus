@@ -98,6 +98,8 @@ final class SeedDemo extends Command
         $report = null;
 
         if ($target === DemoCheckpoint::All) {
+            // La carga publicada en varias versiones (tarea 4.3) solo va en la demo que se ve, no en las pruebas.
+            config(['demo.showcase' => true]);
             $this->call('db:seed', [
                 '--class' => $volume === DemoVolume::Massive ? 'Database\Seeders\MassiveSeeder' : 'Database\Seeders\DemoSeeder',
                 '--force' => true,
