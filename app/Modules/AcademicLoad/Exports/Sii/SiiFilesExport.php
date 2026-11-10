@@ -46,24 +46,17 @@ final class SiiFilesExport implements StaffExport
      */
     public static function fromRequest(PublishedScheduleQuery $query, Term $term, Campus $campus, Request $request): ?static
     {
-        return self::for($term, $campus);
+        $ids = $query->snapshotIds($term, $campus);
+
+        return $ids === [] ? null : new self($campus->getKey(), $term->code, $campus->code, $ids, array_keys($query->departmentsOf($ids)));
     }
 
+    /**
+     * El exporte de las versiones vigentes del campus y periodo; null si no hay nada publicado.
+     */
     public static function for(Term $term, Campus $campus): ?self
     {
-        $snapshots = app(SiiLoadExport::class)->latestSnapshots($term, $campus);
-
-        if ($snapshots->isEmpty()) {
-            return null;
-        }
-
-        return new self(
-            $campus->getKey(),
-            $term->code,
-            $campus->code,
-            $snapshots->modelKeys(),
-            $snapshots->map(fn (LoadSnapshot $snapshot): string => $snapshot->payload['department']['id'])->unique()->values()->all(),
-        );
+        return self::fromRequest(app(PublishedScheduleQuery::class), $term, $campus, request());
     }
 
     public static function label(): string
