@@ -2,6 +2,7 @@
 
 namespace App\Modules\AcademicLoad\Exports;
 
+use App\Modules\AcademicLoad\Exports\Sii\SiiFilesExport;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Models\Campus;
@@ -18,6 +19,7 @@ final class StaffExports
     public const array TYPES = [
         'excel' => CampusWorkbook::class,
         'departamento' => DepartmentPdf::class,
+        'sii' => SiiFilesExport::class,
     ];
 
     /**

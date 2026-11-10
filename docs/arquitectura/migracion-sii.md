@@ -85,3 +85,21 @@ De la revisión de la rama (5 de noviembre de 2026), para hacer antes de la corr
 - **Fallas secundarias del motor:** `ValidateImportBatch` y `ApplyImportBatch` todavía mandan al log con `report()` las fallas al marcar un lote fallido (la original sí llega limpia a la migración), y `ApplyImportBatch` guarda el mensaje de la excepción en el lote.
 - **Plazas** (paso del 6 de noviembre de 2026): confirmar con Recursos Humanos que E35 es asignatura con sus horas en la clave y que la jornada de apoyo es de 36 horas (E36, E37 y E38, medio tiempo, tres cuartos y tiempo completo con 20, 30 y 40 horas, quedaron confirmadas el 6 de noviembre de 2026) y qué significan los códigos 10, 20 y 95 de `tipo_nombramiento`; averiguar por qué 117 docentes con grupos en 20263 no están en `docentes2` (se quedan sin plaza y sin horas base).
 - **Lo demás** (seguimientos de la revisión): el lector abre cada archivo tres veces; `ext-intl` no está en `composer.json`; dos lotes con el mismo nombre en `_nexus/`; la fusión de materias que ignora el semestre (T7 M1) y el mapa de alias por plan para el kárdex van al plan de la parte 2.
+
+## Exporte al SII (tarea 4.6)
+
+`App\Modules\AcademicLoad\Exports\Sii\SiiLoadExport::files(Term, Campus)` devuelve `grupos.csv` y `horarios.csv` con la forma exacta de las tablas del SII (los encabezados de `SiiFile::Grupos` y `SiiFile::Horarios`): Latin-1, fin de línea LF, texto entre comillas simples con relleno al ancho del CHAR, números y fecha-hora sin comillas, nulo como campo vacío. Lee solo los payloads de los snapshots y `subject_aliases`; no escribe. Los archivos se leen de vuelta con `SiiCsvReader`.
+
+Qué se exporta: la última versión publicada de cada carga del periodo y el campus que tenga alguna, aunque después se haya reabierto, igual que la consulta pública (supuesto por confirmar). Sin versiones publicadas, solo los encabezados.
+
+| Campo | Regla |
+|---|---|
+| `materia` (10) | Alias de la materia con el plan del lugar; si no, alias sin plan; si no, el `code` de Nexus |
+| `grupos`, padre | Una fila por grupo: materia según el plan de la carrera dueña, `grupo` (3), `capacidad_grupo` = lugares de la dueña (o la capacidad del grupo si solo tiene la dueña), `rfc` (13) del docente o vacío, `alumnos_inscritos` 0 |
+| `grupos`, paralelos | Una fila por lugar no dueño con plan cuya clave SII difiere de la del padre y de las ya emitidas; mismo grupo y docente, `capacidad_grupo` = sus lugares, `paralelo_de` = materia del padre + 4 espacios + grupo del padre, a 17. Un lugar sin plan no genera paralelo |
+| `horarios` | Padre y cada paralelo, una fila por sesión: `tipo_horario` `D`, `dia_semana` = día + 1 (lunes 2 … sábado 7), horas `1900-01-01 HH:MM:00.0`, `aula` a 6 (`EAD` sin salón) |
+| Vacíos | `estatus_grupo`, `folio_acta`, `seleccionado_en_bloque`, `tipo_personal`, `alumnos_preinscritos`, `actividad`, `consecutivo`, `vigencia_*`, `consecutivo_admvo` |
+
+Orden: clave del departamento, materia, grupo; cada paralelo después de su padre.
+
+Supuestos por confirmar: `exclusivo_carrera` y `exclusivo_reticula` van vacíos (necesitan la clave de carrera del SII, que Nexus no guarda); no se emiten los códigos de día 1 ni 8 a 14 del SII (su significado es inferido); `rfc` de `horarios` repite el del grupo; el padre es la carrera dueña; los alias por plan pueden repetirse y se toma el de menor `code`. El SII trae una sola fila por grupo y día con rango continuo; el exporte conserva las sesiones del payload (ya son bloques continuos).
