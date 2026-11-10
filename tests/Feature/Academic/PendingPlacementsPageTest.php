@@ -1,9 +1,11 @@
 <?php
 
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanPrerequisitePending;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
@@ -17,6 +19,7 @@ use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use Illuminate\Support\Facades\DB;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -284,6 +287,81 @@ describe('pantalla del plan', function () {
 
         $page->call('clearFocus')->assertSet('selectedId', null);
         $page->call('openSpecialties')->assertForbidden();
+    });
+});
+
+describe('requisitos que esperan (seriación del SII, confirmado el 10 de noviembre de 2026)', function () {
+    beforeEach(function () {
+        $code = fn (string $code): Subject => Subject::query()->where('code', $code)->sole();
+        $this->waiting = fn (string $subject, string $prerequisite, PrerequisiteKind $kind = PrerequisiteKind::Seriacion): StudyPlanPrerequisitePending => StudyPlanPrerequisitePending::factory()->create([
+            'study_plan_id' => $this->plan->id, 'subject_id' => $code($subject)->id, 'prerequisite_subject_id' => $code($prerequisite)->id, 'kind' => $kind,
+        ]);
+    });
+
+    it('al validar una materia, el panel dice qué requisitos entran con ella y cuáles esperan a la otra materia', function () {
+        ($this->waiting)('AE22', 'ACF-0901');
+        ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
+        ($this->waiting)('AE22', 'AE9');
+
+        $drawer = domOf(pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3))->querySelector('[data-testid="pending-drawer"]');
+
+        expect(textOf($drawer->querySelector('[data-testid="pending-prerequisites"]')))->toBe('Al asignarle semestre entran sus requisitos: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).')
+            ->and(textOf($drawer->querySelector('[data-testid="pending-prerequisites-waiting"]')))->toBe('Esperan a que se valide la otra materia: pide AE9 (seriación).');
+    });
+
+    it('una materia sin requisitos que esperan no lleva esas líneas', function () {
+        ($this->waiting)('AE22', 'ACF-0901');
+
+        $drawer = domOf(pendingTab($this->servicesHead, $this->plan)->call('pick', $this->seminar->id)->call('openPlace', 3))->querySelector('[data-testid="pending-drawer"]');
+
+        expect($drawer->querySelector('[data-testid="pending-facts"]'))->not->toBeNull()
+            ->and($drawer->querySelector('[data-testid="pending-prerequisites"]'))->toBeNull()
+            ->and($drawer->querySelector('[data-testid="pending-prerequisites-waiting"]'))->toBeNull();
+    });
+
+    it('al agregarla a la retícula entran sus requisitos y lo dice', function () {
+        ($this->waiting)('AE22', 'ACF-0901');
+        ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3)->call('place');
+
+        expect(lastToastOf($tab))->toMatchArray([
+            'type' => 'success', 'title' => '«Física Moderna» agregada al semestre 3', 'description' => 'Entraron sus requisitos: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).',
+        ])
+            ->and(SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count())->toBe(2)
+            ->and(StudyPlanPrerequisitePending::whereNull('applied_at')->count())->toBe(0);
+    });
+
+    it('un requisito que cerraría un ciclo de seriación no entra y la pantalla lo avisa', function () {
+        ($this->waiting)('AE22', 'ACF-0901');
+        ($this->waiting)('ACF-0901', 'AE22');
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3)->call('place');
+
+        expect(lastToastOf($tab))->toMatchArray([
+            'type' => 'warning', 'title' => '«Física Moderna» agregada al semestre 3',
+            'description' => 'Entraron sus requisitos: pide ACF-0901 (seriación). No entró, porque cerraría un ciclo de seriación, y sigue esperando: ACF-0901 la pide (seriación).',
+        ])
+            ->and(SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count())->toBe(1);
+    });
+
+    it('el panel lee los requisitos que esperan con las mismas consultas, tenga uno o varios (la primera vuelta llena los cachés de permisos)', function () {
+        $queries = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3);
+
+            return count(DB::getQueryLog());
+        };
+
+        ($this->waiting)('AE22', 'ACF-0901');
+        $queries();
+        $one = $queries();
+        ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
+        ($this->waiting)('IND-1010', 'AE22');
+        ($this->waiting)('AE22', 'AE9');
+
+        expect($queries())->toBe($one);
     });
 });
 

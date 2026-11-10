@@ -16,6 +16,9 @@
     - Semestre sugerido (D18): la ficha dice «Sugerido: N» y, si ese semestre se ofrece, elegirla abre el panel con él
       elegido (aria-haspopup); si todavía no se ofrece, lo dice. En una retícula histórica la sugerencia no se usa, y
       con pendientes, arriba de todo un aviso `alert-info` dice por qué no hay trabajo.
+    - Requisitos que esperan (seriación del SII): en el panel, debajo de los datos, qué requisitos entran con la materia
+      al asignarle semestre (data-testid="pending-prerequisites") y cuáles esperan a que se valide la otra materia
+      (data-testid="pending-prerequisites-waiting"), con la clave en Mono y su tipo.
 --}}
 <div class="space-y-4" data-testid="pending-placements">
     @if ($historical && $total > 0)
@@ -170,6 +173,24 @@
                             <dd class="font-mono text-[15px] font-medium">{{ $picked->sii_grid ?? '—' }}</dd>
                         </div>
                     </dl>
+
+                    @if ($prerequisites['enters'] !== [])
+                        <p class="text-sm leading-snug" data-testid="pending-prerequisites">
+                            Al asignarle semestre entran sus requisitos:
+                            @foreach ($prerequisites['enters'] as $item)
+                                <span wire:key="enters-{{ $item['id'] }}">{{ $item['requires'] ? 'pide ' : '' }}<span class="font-mono">{{ $item['code'] }}</span>{{ $item['requires'] ? '' : ' la pide' }} ({{ mb_strtolower($item['kind']->label()) }}){{ $loop->last ? '.' : ',' }}</span>
+                            @endforeach
+                        </p>
+                    @endif
+
+                    @if ($prerequisites['waits'] !== [])
+                        <p class="text-sm leading-snug text-neutral" data-testid="pending-prerequisites-waiting">
+                            Esperan a que se valide la otra materia:
+                            @foreach ($prerequisites['waits'] as $item)
+                                <span wire:key="waits-{{ $item['id'] }}">{{ $item['requires'] ? 'pide ' : '' }}<span class="font-mono">{{ $item['code'] }}</span>{{ $item['requires'] ? '' : ' la pide' }} ({{ mb_strtolower($item['kind']->label()) }}){{ $loop->last ? '.' : ',' }}</span>
+                            @endforeach
+                        </p>
+                    @endif
 
                     <x-select label="Semestre" name="semester" wire:model.live="semester" :options="$semesterOptions" data-testid="pending-semester"
                         :hint="! $suggests || $picked->suggested_semester === null ? null : 'Sugerido: '.$picked->suggested_semester.($picked->suggested_semester > $offeredSemesters ? ' (aún no se ofrece en esta retícula)' : '')" />

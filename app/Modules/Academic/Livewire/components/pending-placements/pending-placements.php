@@ -1,11 +1,13 @@
 <?php
 
 use App\Modules\Academic\Actions\ResolvePendingPlacement;
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Queries\PendingPlacementsQuery;
 use App\Modules\Academic\Queries\PlanGridEditorQuery;
 use App\Modules\Academic\Queries\StudyPlanQuery;
+use App\Modules\Academic\Queries\WaitingPrerequisitesQuery;
 use App\Modules\Academic\Rules\PlacementRules;
 use App\Modules\Core\Support\SemesterGrid;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -33,6 +35,12 @@ use Mary\Traits\Toast;
  * el panel con ese semestre elegido, si se ofrece; Escolares lo confirma con «Agregar a la retícula» o lo cambia. En una
  * retícula histórica (ningún alumno inscrito) la sugerencia que haya quedado no se usa, y un aviso arriba dice que
  * solo hace falta asignarles semestre si vuelve un alumno.
+ *
+ * Requisitos que esperan (seriación del SII; decisión del usuario del 10 de noviembre de 2026, confirmada): el panel dice
+ * qué requisitos entran con la materia a la seriación al asignarle semestre («Al asignarle semestre entran sus
+ * requisitos: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).») y cuáles esperan todavía a que se valide la
+ * otra materia (WaitingPrerequisitesQuery). Al agregarla, el aviso dice cuáles entraron y, si alguno no entró porque
+ * cerraría un ciclo de seriación, lo dice como advertencia: sigue esperando con su nota.
  *
  * El componente autoriza `view` del plan y `validatePlacements` (el jefe de Servicios Escolares y el admin) en
  * mount(), al pintar y en cada método; los ids del navegador se buscan entre los pendientes sin resolver del plan. Los
@@ -72,7 +80,7 @@ new class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(StudyPlanQuery $plans, PlanGridEditorQuery $grids, PendingPlacementsQuery $pendings): array
+    public function with(StudyPlanQuery $plans, PlanGridEditorQuery $grids, PendingPlacementsQuery $pendings, WaitingPrerequisitesQuery $prerequisites): array
     {
         $plan = $this->plan($plans);
         $grid = $grids->forPlan($plan);
@@ -103,6 +111,7 @@ new class extends Component
             'offeredSemesters' => $offered,
             'semesterOptions' => array_map(fn (int $semester): array => ['id' => (string) $semester, 'name' => "Semestre {$semester}"], range(1, max(1, $offered))),
             'load' => $picked !== null && $this->showDrawer ? $this->load($grid['semesters'], $picked) : null,
+            'prerequisites' => $picked !== null && $this->showDrawer ? $prerequisites->forSubject($plan, $picked->subject_id) : ['enters' => [], 'waits' => []],
         ];
     }
 
@@ -166,9 +175,10 @@ new class extends Component
     }
 
     /**
-     * «Agregar a la retícula»: resuelve el pendiente elegido en el semestre del panel.
+     * «Agregar a la retícula»: resuelve el pendiente elegido en el semestre del panel. El aviso dice qué requisitos que
+     * esperaban entraron con ella y, como advertencia, los que siguen esperando porque cerrarían un ciclo.
      */
-    public function place(StudyPlanQuery $plans, PendingPlacementsQuery $pendings, ResolvePendingPlacement $resolve): void
+    public function place(StudyPlanQuery $plans, PendingPlacementsQuery $pendings, ResolvePendingPlacement $resolve, WaitingPrerequisitesQuery $prerequisites): void
     {
         $plan = $this->plan($plans);
 
@@ -177,6 +187,7 @@ new class extends Component
         }
 
         $data = $this->validate(['semester' => ['required', 'integer']]);
+        $expected = $prerequisites->forSubject($plan, $pending->subject_id)['enters'];
 
         try {
             $placement = $resolve->handle($pending, (int) $data['semester'], auth()->user());
@@ -192,18 +203,46 @@ new class extends Component
         }
 
         $name = $pending->subject->name;
+        $still = array_column($prerequisites->forSubject($plan, $pending->subject_id)['enters'], 'id', 'id');
+        $blocked = array_values(array_filter($expected, fn (array $item): bool => isset($still[$item['id']])));
+        $entered = array_values(array_filter($expected, fn (array $item): bool => ! isset($still[$item['id']])));
+        $detail = trim(($entered === [] ? '' : 'Entraron sus requisitos: '.$this->prerequisiteLabels($entered).'.')
+            .match (count($blocked)) {
+                0 => '',
+                1 => ' No entró, porque cerraría un ciclo de seriación, y sigue esperando: '.$this->prerequisiteLabels($blocked).'.',
+                default => ' No entraron, porque cerrarían un ciclo de seriación, y siguen esperando: '.$this->prerequisiteLabels($blocked).'.',
+            });
 
         $this->reset('pickedId', 'showDrawer', 'semester');
         $this->placedId = $placement->id;
         $this->dispatch('pending-placed');
 
         if (! $placement->wasRecentlyCreated && ! $placement->wasChanged()) {
-            $this->info(e("«{$name}» ya estaba en el semestre {$placement->semester}"), 'Quedó validada sin moverla.');
+            $this->info(e("«{$name}» ya estaba en el semestre {$placement->semester}"), e(trim('Quedó validada sin moverla. '.$detail)));
 
             return;
         }
 
-        $this->success(e("«{$name}» agregada al semestre {$placement->semester}"));
+        if ($blocked !== []) {
+            $this->warning(e("«{$name}» agregada al semestre {$placement->semester}"), e($detail));
+
+            return;
+        }
+
+        $this->success(e("«{$name}» agregada al semestre {$placement->semester}"), $detail === '' ? null : e($detail));
+    }
+
+    /**
+     * Los requisitos como en el panel: «pide ACF-0901 (seriación), AEF-1024 la pide (correquisito)».
+     *
+     * @param  list<array{code: string, requires: bool, kind: PrerequisiteKind}>  $items
+     */
+    private function prerequisiteLabels(array $items): string
+    {
+        return implode(', ', array_map(
+            fn (array $item): string => ($item['requires'] ? "pide {$item['code']}" : "{$item['code']} la pide").' ('.mb_strtolower($item['kind']->label()).')',
+            $items,
+        ));
     }
 
     /**

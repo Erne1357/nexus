@@ -2,6 +2,7 @@
 
 namespace App\Modules\Academic\Actions;
 
+use App\Modules\Academic\Events\CurriculumChanged;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
@@ -25,10 +26,13 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   migración), el pendiente queda resuelto sin crear otro lugar ni moverla, y la bitácora dice en qué semestre estaba;
  *   devuelve ese lugar sin cambios (ni `wasRecentlyCreated` ni `wasChanged()`). Una materia que se quitó de la
  *   retícula vuelve con el semestre del pendiente, como en PlaceSubject.
+ * - Al final, en la misma transacción, pasa a la seriación los requisitos del SII que esperaban y ya tienen sus dos
+ *   materias en la retícula (ApplyWaitingPrerequisites; decisión del usuario del 10 de noviembre de 2026, confirmada).
+ *   PlaceSubject ya avisa con CurriculumChanged; si la materia ya estaba en la retícula y entró alguno, avisa aquí.
  */
 final class ResolvePendingPlacement
 {
-    public function __construct(private readonly PlaceSubject $place) {}
+    public function __construct(private readonly PlaceSubject $place, private readonly ApplyWaitingPrerequisites $prerequisites) {}
 
     /**
      * @throws ValidationException sobre `semester`, `subject_id`, `specialty_id` o `pending`
@@ -52,12 +56,17 @@ final class ResolvePendingPlacement
             if ($placed !== null) {
                 $this->resolve($pending, $user, ['semester' => $placed->semester], "Resolvió el pendiente de la materia {$pending->subject->code}: ya estaba en el semestre {$placed->semester} del plan {$plan->code}");
 
+                if ($this->prerequisites->handle($plan, $user) > 0) {
+                    CurriculumChanged::dispatch(studyPlanId: $plan->getKey());
+                }
+
                 return $placed->setRelation('subject', $pending->subject);
             }
 
             $placement = $this->place->handle($plan, $pending->subject, $semester, $pending->specialty);
 
             $this->resolve($pending, $user, ['semester' => $semester], "Resolvió el pendiente de la materia {$pending->subject->code}: semestre {$semester} del plan {$plan->code}");
+            $this->prerequisites->handle($plan, $user);
 
             return $placement;
         });
