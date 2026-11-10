@@ -17,9 +17,11 @@ use Illuminate\Validation\Rule;
  * tiene `is_active`, así que no ofrece "desactivar faltantes".
  *
  * El periodo se guarda con el código del SII (`20251` Ene-Jun, `20252` verano, `20253` Ago-Dic); se aceptan
- * también `2025-1` y `2025/1`. Todavía no hay una exportación real: el resultado se reconoce con sus variantes
- * comunes (aprobado, AC, acreditada, NA, no acreditada, en curso) y se ajusta en la integración 1.16
- * (confirmado el 29 de octubre de 2026). Busca cada alumno y cada materia una vez por corrida: un kardex trae
+ * también `2025-1` y `2025/1`. Una fila sin periodo pasa con advertencia y se guarda sin él, una sola por alumno y
+ * materia (la historia del SII trae periodos que no existen; decidido el 10 de noviembre de 2026). El resultado se reconoce con sus variantes comunes (aprobado, AC, acreditada, NA,
+ * no acreditada, en curso; confirmado el 29 de octubre de 2026); el paso `kardex` de la migración del SII ya le
+ * entrega los valores de Nexus. `sii_subject_code` (opcional) guarda la clave del SII con la que el alumno cursó la
+ * materia. Busca cada alumno y cada materia una vez por corrida: un kardex trae
  * cientos de miles de filas con los mismos alumnos y materias. Al terminar el lote despacha el recálculo del
  * progreso.
  */
@@ -65,6 +67,7 @@ class KardexTemplate extends ImportTemplate
             'grade' => 'calificación',
             'result' => 'resultado',
             'attempt' => 'oportunidad',
+            'sii_subject_code' => 'clave del SII',
         ];
     }
 
@@ -83,10 +86,11 @@ class KardexTemplate extends ImportTemplate
         return [
             'control_number' => ['required', 'string', 'max:20'],
             'subject_code' => ['required', 'string'],
-            'term_code' => ['required', 'string', 'regex:/^[0-9]{4}[123]$/'],
+            'term_code' => ['nullable', 'string', 'regex:/^[0-9]{4}[123]$/'],
             'grade' => ['nullable', 'numeric', 'between:0,100'],
             'result' => ['required', Rule::enum(KardexResult::class)],
             'attempt' => ['required', 'integer', 'min:1'],
+            'sii_subject_code' => ['nullable', 'string', 'max:20'],
         ];
     }
 
@@ -99,6 +103,8 @@ class KardexTemplate extends ImportTemplate
         }
 
         $row['subject_code'] = is_string($row['subject_code']) ? Str::upper($row['subject_code']) : $row['subject_code'];
+        $code = self::asText($row['sii_subject_code'] ?? null);
+        $row['sii_subject_code'] = is_string($code) && trim($code) !== '' ? Str::upper(trim($code)) : null;
 
         if (is_string($row['term_code']) && preg_match('/^([0-9]{4})\D?([123])$/', $row['term_code'], $term)) {
             $row['term_code'] = $term[1].$term[2];
@@ -135,6 +141,10 @@ class KardexTemplate extends ImportTemplate
             $issues = $issues->withError('subject_code', "No hay una materia con la clave {$row['subject_code']}.");
         }
 
+        if ($row['term_code'] === null) {
+            $issues = $issues->withWarning('term_code', 'Sin periodo: pasa al kárdex sin periodo hasta que se capture el bueno.');
+        }
+
         return $issues->hasErrors() ? $issues : parent::check($row, $context, $issues);
     }
 
@@ -154,6 +164,7 @@ class KardexTemplate extends ImportTemplate
             'grade' => $row['grade'],
             'result' => $row['result'],
             'attempt' => $row['attempt'],
+            'sii_subject_code' => $row['sii_subject_code'],
         ];
     }
 

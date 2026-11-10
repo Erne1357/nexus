@@ -119,6 +119,12 @@ return [
 
     // El limitador `login` (5 intentos por minuto por username e IP) se define en
     // App\Modules\Core\Providers\FortifyServiceProvider. Sin 2FA ni passkeys no hacen falta otros.
+    /*
+    | Tope de intentos de acceso por minuto desde una sola IP, sin importar el usuario (tarea 4.8). Se suma al límite
+    | por usuario e IP del limitador `login` (FortifyServiceProvider). Holgado porque una red del Tec sale por una IP.
+    */
+    'ip_attempts_per_minute' => (int) env('LOGIN_IP_ATTEMPTS_PER_MINUTE', 60),
+
     'limiters' => [
         'login' => 'login',
     ],
