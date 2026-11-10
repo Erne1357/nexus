@@ -52,7 +52,7 @@ it('al reabrir, avisa al jefe del departamento con el motivo', function (LoadSta
 
         return $message->title === 'Subdirección reabrió la carga de Sistemas y Computación'
             && $message->body === 'Falta el grupo vespertino de Cálculo'
-            && $message->route === 'scheduling.closing'
+            && $message->route === 'staffing.closing'
             && $message->parameters === ['departamento' => $s['department']->id]
             && $message->campusId === $s['load']->campus_id
             && $message->termId === $s['load']->term_id;

@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 /**
  * Base de los avisos del cierre de una carga (tarea 4.2): todos llevan a la pantalla de cierre del departamento
- * (`scheduling.closing`, que llega con la tarea 4.4; mientras no exista, abrir el aviso dice que esa pantalla no está
+ * (`staffing.closing`, la pantalla de cierre de la tarea 4.1; mientras no exista, abrir el aviso dice que esa pantalla no está
  * disponible, NexusNotification::unavailableReason), en el periodo y el campus de la carga. Cada aviso define su
  * título, ícono y tono.
  */
@@ -37,7 +37,7 @@ abstract class LoadClosingNotification extends NexusNotification
             title: $this->title(),
             body: Str::limit($this->comment ?? '', 160),
             icon: $this->icon(),
-            route: 'scheduling.closing',
+            route: 'staffing.closing',
             parameters: ['departamento' => $this->department->getKey()],
             termId: $this->load->term_id,
             campusId: $this->load->campus_id,
