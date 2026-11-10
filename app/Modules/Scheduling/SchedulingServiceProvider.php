@@ -13,6 +13,7 @@ use App\Modules\AcademicLoad\Events\LoadSnapshotRequested;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -222,6 +223,21 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
             ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
 
         return [
+            new DemoCheck([DemoCheckpoint::Reanalysis], 'Cada foto publicada tiene los grupos no cancelados de su carga', function (DemoContext $demo) use ($groups): true|string {
+                $live = $groups($demo)->where('status', '!=', GroupStatus::Cancelled->value)
+                    ->get(['id', 'campus_id', 'department_id'])
+                    ->groupBy(fn (Group $group): string => "{$group->campus_id}|{$group->department_id}")
+                    ->map(fn ($rows) => $rows->pluck('id')->sort()->values()->all());
+                $snapshots = LoadSnapshot::query()->latestVersion()->with('academicLoad')
+                    ->whereHas('academicLoad', fn (Builder $load) => $load->where('term_id', $demo->term()->getKey()))
+                    ->get()
+                    ->filter(fn (LoadSnapshot $snapshot): bool => in_array($snapshot->payload['campus']['code'], $demo->campuses, true));
+                $wrong = $snapshots->filter(fn (LoadSnapshot $snapshot): bool => collect($snapshot->payload['groups'])->pluck('id')->sort()->values()->all()
+                    !== ($live["{$snapshot->academicLoad->campus_id}|{$snapshot->academicLoad->department_id}"] ?? []))->count();
+                $missing = $live->keys()->diff($snapshots->map(fn (LoadSnapshot $snapshot): string => "{$snapshot->academicLoad->campus_id}|{$snapshot->academicLoad->department_id}"))->count();
+
+                return $wrong === 0 && $missing === 0 ? true : "{$wrong} fotos no coinciden con sus grupos y {$missing} cargas con grupos no tienen foto.";
+            }),
             new DemoCheck([DemoCheckpoint::Scheduling], 'Hay grupos, sin sesiones, sin cupos de otras carreras y sin acuerdos', function (DemoContext $demo) use ($groups): true|string {
                 $total = $groups($demo)->count();
                 $sessions = GroupSession::query()->whereIn('group_id', $groups($demo)->select('id'))->count();

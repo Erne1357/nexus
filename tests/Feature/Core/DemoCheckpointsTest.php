@@ -30,6 +30,6 @@ it('llega a cada punto con todas sus revisiones en verde', function () {
     );
 
     expect($failures)->toBe([])
-        ->and($reached)->toBe(DemoCheckpoint::staged())
+        ->and($reached)->toBe(DemoCheckpoint::upTo(DemoCheckpoint::Closing))
         ->and($report->checks)->not->toBeEmpty();
 });

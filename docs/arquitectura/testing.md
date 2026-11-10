@@ -63,6 +63,8 @@ La base es ancha en unit: las reglas de negocio son lo que más cambia y lo más
   | `asignacion` | 5. Empezando la asignación docente | Asignar con ranking: horarios completos sin choques duros, cupos decididos, cargas en `staffing`, sin docentes ni salones |
   | `salones` | 6. Empezando salones y acuerdos | Salones y préstamos: todo grupo con docente |
   | `cierre` | 7. Empezando el cierre | Cerrar: toda sesión presencial con salón, préstamos aceptados, cero choques duros |
+  | `publicacion` | 8. Empezando la publicación | Publicar: toda carga con grupos cerrada (sus pasos los agrega el Riel C con la tarea 4.1) |
+  | `reanalisis` | 9. Empezando el re-análisis | Consultar y exportar lo publicado: toda carga con grupos publicada con su versión 1, como la publica su jefe (`PublicationDemoSeeder`), con el historial docente al día |
   | `todo` | Todos los casos | La demo mezclada de siempre: `DemoSeeder` o `MassiveSeeder`, sin cambios |
 
   - `--volumen=demo` (por omisión) siembra Campus II en pequeño y `--volumen=masivo` Campus I y Campus II, con los mismos números que `DemoSeeder` y `MassiveSeeder`. `--semilla` (por omisión 2027, la de esos seeders) da los mismos datos; no aplica a `todo`. Además de lo de esos seeders, los puntos del masivo traen un «Edificio N» por campus con aulas de 40 a 45 lugares y laboratorios de 35 a 40 (70 y 12 en Campus I, más 6 laboratorios generales; 50 y 6 en Campus II), sin dueño (`FacilitiesDemoSeeder` con `withProcessRooms`): con unos 2 500 y 1 100 grupos, casi todos de 35 lugares o más, los salones de los archivos no alcanzan para un horario sin choques ni para un salón por sesión (HC-05, HC-06). 20263 queda sin calendario.

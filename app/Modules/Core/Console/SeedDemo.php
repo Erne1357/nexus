@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 final class SeedDemo extends Command
 {
     protected $signature = 'demo:seed
-        {--hasta=todo : Punto del proceso: catalogos, validacion, propuesta, horarios, asignacion, salones, cierre o todo}
+        {--hasta=todo : Punto del proceso: catalogos, validacion, propuesta, horarios, asignacion, salones, cierre, publicacion, reanalisis o todo}
         {--volumen=demo : demo (Campus II en pequeño) o masivo (Campus I y Campus II con volumen)}
         {--semilla=2027 : La misma semilla da los mismos datos (2027, la de DemoSeeder y MassiveSeeder)}
         {--force : Sin pedir confirmación}';
