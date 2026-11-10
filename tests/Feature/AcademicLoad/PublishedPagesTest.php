@@ -6,6 +6,7 @@ use App\Modules\AcademicLoad\Database\Factories\LoadSnapshotFactory;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
@@ -183,6 +184,23 @@ describe('semestre', function () {
             ->assertSee('Sin icono: teoría');
     });
 
+    it('pinta en la mini-semana una sesión en un día fuera del perfil, como el sábado', function () {
+        publishedPagesSnapshot($this->term, $this->c2, 'EE', [publishedPagesGroup('EEX-0001', 'Circuitos', 'A', ['placements' => [($this->placement)(5)], 'sessions' => [LoadSnapshotFactory::session(['day' => 6, 'starts_at' => '09:00', 'ends_at' => '11:00'])]])], '2026-12-13 10:00');
+
+        $this->get(($this->semesterUrl)(['reticula' => 'ISIC-2010-224', 'semestre' => 5]))->assertOk()->assertSeeHtml('title="Sábado"')->assertSeeInOrder(['9:00', '11:00', 'A-101']);
+    });
+
+    it('pone el icono por sesión: un día con teoría y práctica muestra los dos', function () {
+        publishedPagesSnapshot($this->term, $this->c2, 'EE', [publishedPagesGroup('EEX-0001', 'Circuitos', 'A', ['placements' => [($this->placement)(5)], 'sessions' => [
+            LoadSnapshotFactory::session(['day' => 2, 'starts_at' => '07:00', 'ends_at' => '08:00', 'kind' => 'practica', 'kind_label' => 'Práctica']),
+            LoadSnapshotFactory::session(['day' => 2, 'starts_at' => '09:00', 'ends_at' => '10:00', 'kind' => 'virtual', 'kind_label' => 'Virtual', 'room' => null]),
+        ]])], '2026-12-13 10:00');
+
+        $html = $this->get(($this->semesterUrl)(['reticula' => 'ISIC-2010-224', 'semestre' => 5]))->assertOk()->getContent();
+
+        expect($html)->toContain('aria-label="Práctica"')->toContain('aria-label="Virtual"');
+    });
+
     it('un semestre sin grupos lo dice y una carrera no publicada es 404', function () {
         $this->get(($this->semesterUrl)(['semestre' => 9]))->assertOk()->assertSee('No hay grupos publicados para este semestre.');
         $this->get(route('published.semester', ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'XXX']))->assertNotFound();
@@ -337,6 +355,42 @@ describe('banda y límite', function () {
             ->set('periodo', '20263')
             ->assertSet('campus', 'C1')
             ->assertRedirect(route('published.index', ['periodo' => '20263', 'campus' => 'C1']));
+    });
+
+    it('un campus desactivado da 404 y no sale en la banda', function () {
+        $this->c1->update(['is_active' => false]);
+
+        $this->get(route('published.index', ['periodo' => '20271', 'campus' => 'C1']))->assertNotFound();
+        $this->get(route('published.semester', ['periodo' => '20271', 'campus' => 'C1', 'carrera' => 'ISC']))->assertNotFound();
+        $this->get($this->indexUrl)->assertOk()->assertDontSeeHtml('value="C1"');
+    });
+
+    it('la banda usa el contexto de la página aunque no esté publicado y lo incluye elegido', function () {
+        Campus::factory()->create(['code' => 'EAD', 'name' => 'Campus Virtual']);
+
+        $this->get(route('published.index', ['periodo' => '20271', 'campus' => 'EAD']))->assertOk()->assertSeeHtml('<option value="EAD" selected>Campus Virtual</option>');
+    });
+
+    it('con solo el campus abre su periodo más reciente publicado', function () {
+        $old = Term::factory()->create(['code' => '20263', 'name' => 'Agosto–Diciembre 2026', 'starts_on' => '2026-08-17']);
+        $only = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
+        publishedPagesSnapshot($old, $only, 'CB', [publishedPagesGroup('OLD-0001', 'Materia vieja', 'A', ['placements' => [($this->placement)(1)]])], '2026-06-01 08:00');
+
+        $this->get(route('published.index', ['campus' => 'C3']))->assertOk()->assertSee('Agosto–Diciembre 2026')->assertSee('Campus III');
+        $this->get(route('published.index', ['campus' => 'XX']))->assertNotFound();
+    });
+
+    it('las actualizaciones de Livewire también pasan por el límite de 240 por minuto', function () {
+        $key = PublishedThrottle::key();
+        RateLimiter::clear($key);
+
+        $test = publishedPagesIndex();
+        for ($i = 0; $i < PublishedThrottle::PER_MINUTE; $i++) {
+            RateLimiter::hit($key);
+        }
+
+        $test->set('teacherSearch', 'rios')->assertStatus(429);
+        RateLimiter::clear($key);
     });
 
     it('la ruta pública lleva el limitador published-schedule de 240 por minuto', function () {

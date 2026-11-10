@@ -5,6 +5,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\AcademicLoad\Queries\PublishedWeek;
+use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use Livewire\Attributes\Layout;
@@ -33,6 +34,11 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     public string $teacherSearch = '';
 
     public string $roomSearch = '';
+
+    public function hydrate(): void
+    {
+        PublishedThrottle::hit();
+    }
 
     /**
      * @return array<string, mixed>

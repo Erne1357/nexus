@@ -1,7 +1,9 @@
 <?php
 
+use App\Modules\AcademicLoad\Queries\PublishedContext;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Queries\PublishedWeek;
+use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
@@ -27,6 +29,8 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     #[Locked]
     public string $docente = '';
 
+    private ?PublishedContext $context = null;
+
     #[Url(as: 'dia')]
     public int $day = 0;
 
@@ -37,7 +41,21 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
         $this->periodo = $periodo;
         $this->campus = $campus;
         $this->docente = $docente;
+        $this->context($contexts);
         $this->with($contexts);
+    }
+
+    public function hydrate(): void
+    {
+        PublishedThrottle::hit();
+    }
+
+    /**
+     * El contexto resuelto una sola vez por petición (privado: Livewire no lo serializa).
+     */
+    private function context(PublishedContextQuery $contexts): PublishedContext
+    {
+        return $this->context ??= $contexts->resolve($this->periodo, $this->campus);
     }
 
     /**
@@ -45,7 +63,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
      */
     public function with(PublishedContextQuery $contexts): array
     {
-        $context = $contexts->resolve($this->periodo, $this->campus);
+        $context = $this->context($contexts);
         $schedule = $context->schedule;
         $teacher = array_find($schedule->teachers(), fn (array $row): bool => $row['id'] === $this->docente);
         abort_if($teacher === null, 404);

@@ -35,12 +35,12 @@
             <div class="flex min-w-0 items-center gap-2 max-md:gap-1.5">
                 <select wire:model.live="campus" aria-label="Campus" data-testid="published-campus" class="{{ $selectClasses }}">
                     @foreach ($campuses as $option)
-                        <option value="{{ $option['id'] }}">{{ $option['name'] }}</option>
+                        <option value="{{ $option['id'] }}" @selected($option['id'] === $campus)>{{ $option['name'] }}</option>
                     @endforeach
                 </select>
                 <select wire:model.live="periodo" aria-label="Periodo" data-testid="published-term" class="{{ $selectClasses }}">
                     @foreach ($terms as $option)
-                        <option value="{{ $option['id'] }}">{{ $option['name'] }}</option>
+                        <option value="{{ $option['id'] }}" @selected($option['id'] === $periodo)>{{ $option['name'] }}</option>
                     @endforeach
                 </select>
             </div>

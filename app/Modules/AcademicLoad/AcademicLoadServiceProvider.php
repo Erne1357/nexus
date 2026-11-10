@@ -20,6 +20,7 @@ use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\Core\Authorization\Actor;
@@ -63,7 +64,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
 
-        RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(240)->by($request->ip()));
+        RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by($request->ip()));
     }
 
     /**

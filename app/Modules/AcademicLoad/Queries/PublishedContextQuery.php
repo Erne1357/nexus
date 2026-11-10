@@ -19,7 +19,7 @@ final class PublishedContextQuery
     public function resolve(string $termCode, string $campusCode): PublishedContext
     {
         $term = Term::query()->where('code', $termCode)->first();
-        $campus = Campus::query()->where('code', $campusCode)->first();
+        $campus = Campus::query()->where('code', $campusCode)->where('is_active', true)->first();
 
         abort_if($term === null || $campus === null, 404);
 
@@ -29,7 +29,7 @@ final class PublishedContextQuery
     /**
      * El contexto que abre `/horarios`: con códigos, ese (404 si no existe); sin ellos, el primer campus del primer
      * periodo con algo publicado, o null si no hay nada publicado todavía. Con solo el periodo, el primer campus que
-     * publicó en él.
+     * publicó en él; con solo el campus, su periodo más reciente con algo publicado.
      */
     public function initial(?string $termCode, ?string $campusCode): ?PublishedContext
     {
@@ -41,15 +41,23 @@ final class PublishedContextQuery
         }
 
         $contexts = $this->published->contexts();
-        $context = $termCode === null ? ($contexts[0] ?? null) : (array_find($contexts, fn (array $entry): bool => $entry['term']->code === $termCode));
+        $campus = null;
 
-        if ($context === null) {
-            abort_if($termCode !== null, 404);
+        if ($termCode === null && $campusCode !== null) {
+            $context = array_find($contexts, fn (array $entry): bool => array_any($entry['campuses'], fn (Campus $item): bool => $item->code === $campusCode));
+            $campus = $context === null ? null : array_find($context['campuses'], fn (Campus $item): bool => $item->code === $campusCode);
+        } else {
+            $context = $termCode === null ? ($contexts[0] ?? null) : array_find($contexts, fn (array $entry): bool => $entry['term']->code === $termCode);
 
-            return null;
+            if ($context === null) {
+                abort_if($termCode !== null, 404);
+
+                return null;
+            }
+
+            $campus = $campusCode === null ? ($context['campuses'][0] ?? null) : array_find($context['campuses'], fn (Campus $item): bool => $item->code === $campusCode);
         }
 
-        $campus = $campusCode === null ? ($context['campuses'][0] ?? null) : array_find($context['campuses'], fn (Campus $campus): bool => $campus->code === $campusCode);
         abort_if($campus === null, 404);
 
         return new PublishedContext($context['term'], $campus, $this->published->schedule($context['term'], $campus));

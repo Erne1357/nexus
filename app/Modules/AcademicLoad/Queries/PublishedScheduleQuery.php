@@ -93,12 +93,14 @@ final class PublishedScheduleQuery
     {
         $published = $this->publishedLoads()->distinct()->get(['term_id', 'campus_id']);
         $terms = Term::query()->whereIn('id', $published->pluck('term_id'))->orderByDesc('starts_on')->get();
-        $campuses = Campus::query()->whereIn('id', $published->pluck('campus_id'))->orderBy('code')->get();
+        $campuses = Campus::query()->where('is_active', true)->whereIn('id', $published->pluck('campus_id'))->orderBy('code')->get();
 
-        return $terms->map(fn (Term $term): array => [
+        $contexts = $terms->map(fn (Term $term): array => [
             'term' => $term,
             'campuses' => $campuses->filter(fn (Campus $campus): bool => $published->contains(fn (AcademicLoad $load): bool => $load->term_id === $term->getKey() && $load->campus_id === $campus->getKey()))->values()->all(),
-        ])->all();
+        ])->filter(fn (array $context): bool => $context['campuses'] !== [])->values()->all();
+
+        return $contexts;
     }
 
     /**

@@ -8,6 +8,7 @@
     vacío y tenue. La ficha no es un enlace; el docente y cada salón sí.
 --}}
 @use('App\Modules\Core\Support\WeekGrid')
+@use('App\Modules\AcademicLoad\Queries\PublishedWeek')
 @php
     $tint = 'bg-[color-mix(in_oklab,var(--chain)_5%,var(--color-base-100))] shadow-[inset_4px_0_0_var(--chain)]';
     $dayHead = 'bg-[color-mix(in_oklab,var(--color-secondary)_40%,var(--color-base-100))]';
@@ -56,7 +57,7 @@
             @foreach ($subjects as $entry)
                 @php
                     $subject = $entry['subject'];
-                    $chain = WeekGrid::CHAINS[$chains[$subject['code']] % count(WeekGrid::CHAINS)];
+                    $chain = PublishedWeek::chainClass($chains, $subject['code']);
                 @endphp
                 <section class="{{ $chain }} grid gap-3" aria-labelledby="subject-{{ $subject['code'] }}" data-subject="{{ $subject['code'] }}" wire:key="subject-{{ $subject['code'] }}">
                     <div class="grid grid-cols-[6px_minmax(0,1fr)] items-center gap-x-3 md:flex md:flex-wrap md:gap-x-3.5 md:gap-y-1">
@@ -102,14 +103,11 @@
                                                 <div class="grid min-h-[72px] grid-rows-[auto_1fr] overflow-hidden rounded-xs border border-base-300 bg-base-100">
                                                     <div class="{{ $dayHead }} flex h-5 items-center justify-between px-1.5 text-[11.5px] font-semibold text-neutral">
                                                         <span title="{{ $day['name'] }}">{{ $day['short'] }}</span>
-                                                        @if ($sessions[0]->kind !== 'teoria')
-                                                            <x-academic-load::published.kind-icon :kind="$sessions[0]->kind" :label="$sessions[0]->kindLabel" />
-                                                        @endif
                                                     </div>
                                                     <div class="grid content-start gap-1 px-1.5 pt-[3px] pb-1 font-mono text-[11.5px]/[1.3] tabular-nums">
                                                         @foreach ($sessions as $session)
                                                             <div class="grid min-w-0" title="{{ $day['name'] }} · {{ $session->kindLabel }}">
-                                                                <span>{{ WeekGrid::clock($session->startsAt) }}</span>
+                                                                <span class="flex items-center justify-between gap-0.5">{{ WeekGrid::clock($session->startsAt) }}@if ($session->kind !== 'teoria')<x-academic-load::published.kind-icon :kind="$session->kind" :label="$session->kindLabel" />@endif</span>
                                                                 <span>{{ WeekGrid::clock($session->endsAt) }}</span>
                                                                 @if ($session->room !== null)
                                                                     <a href="{{ route('published.room', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'salon' => $session->room['id']]) }}" wire:navigate class="mt-0.5 font-semibold break-words hover:underline focus-visible:outline-2 focus-visible:outline-primary">{{ $session->room['code'] }}</a>

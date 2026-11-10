@@ -1,7 +1,9 @@
 <?php
 
+use App\Modules\AcademicLoad\Queries\PublishedContext;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Queries\PublishedWeek;
+use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\Core\Support\WeekGrid;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
@@ -33,6 +35,13 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     #[Url(as: 'semestre')]
     public int $semester = 0;
 
+    /**
+     * El contexto, la carrera y la retícula resueltos una sola vez por petición (privado: Livewire no lo serializa).
+     *
+     * @var array{context: PublishedContext, entry: array<string, mixed>, plan: array<string, mixed>}|null
+     */
+    private ?array $resolved = null;
+
     public function mount(string $periodo, string $campus, string $carrera, PublishedContextQuery $contexts): void
     {
         $this->periodo = $periodo;
@@ -41,12 +50,18 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
         $this->resolve($contexts, coerce: false);
     }
 
+    public function hydrate(): void
+    {
+        PublishedThrottle::hit();
+    }
+
     /**
      * Otra carrera: su retícula vigente y el mismo semestre si lo tiene, si no el primero.
      */
     public function updatedCarrera(PublishedContextQuery $contexts): void
     {
         $this->plan = '';
+        $this->resolved = null;
         $this->resolve($contexts, coerce: true);
         $this->redirect($this->url(), navigate: true);
     }
@@ -56,6 +71,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
      */
     public function updatedPlan(PublishedContextQuery $contexts): void
     {
+        $this->resolved = null;
         $this->resolve($contexts, coerce: true);
     }
 
@@ -66,8 +82,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
      */
     private function resolve(PublishedContextQuery $contexts, bool $coerce): void
     {
-        $entry = $this->entry($contexts);
-        $plan = array_find($entry['plans'], fn (array $row): bool => $row['plan']['code'] === $this->plan) ?? $entry['plans'][array_key_last($entry['plans'])];
+        $plan = $this->resolution($contexts)['plan'];
         $this->plan = $plan['plan']['code'];
 
         if ($this->semester === 0 || ($coerce && ! in_array($this->semester, $plan['semesters'], true))) {
@@ -76,15 +91,21 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     }
 
     /**
-     * @return array{career: array{id: string, code: string, name: string}, plans: list<array{plan: array{id: string, code: string}, semesters: list<int>}>}
+     * @return array{context: PublishedContext, entry: array{career: array{id: string, code: string, name: string}, plans: list<array{plan: array{id: string, code: string}, semesters: list<int>}>}, plan: array{plan: array{id: string, code: string}, semesters: list<int>}}
      */
-    private function entry(PublishedContextQuery $contexts): array
+    private function resolution(PublishedContextQuery $contexts): array
     {
+        if ($this->resolved !== null) {
+            return $this->resolved;
+        }
+
         $context = $contexts->resolve($this->periodo, $this->campus);
         $entry = array_find($context->schedule->careers(), fn (array $row): bool => $row['career']['code'] === $this->carrera);
         abort_if($entry === null, 404);
 
-        return $entry;
+        $plan = array_find($entry['plans'], fn (array $row): bool => $row['plan']['code'] === $this->plan) ?? $entry['plans'][array_key_last($entry['plans'])];
+
+        return $this->resolved = ['context' => $context, 'entry' => $entry, 'plan' => $plan];
     }
 
     private function url(): string
@@ -97,13 +118,8 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
      */
     public function with(PublishedContextQuery $contexts): array
     {
-        $context = $contexts->resolve($this->periodo, $this->campus);
+        ['context' => $context, 'entry' => $entry, 'plan' => $plan] = $this->resolution($contexts);
         $schedule = $context->schedule;
-        $careers = $schedule->careers();
-        $entry = array_find($careers, fn (array $row): bool => $row['career']['code'] === $this->carrera);
-        abort_if($entry === null, 404);
-
-        $plan = array_find($entry['plans'], fn (array $row): bool => $row['plan']['code'] === $this->plan) ?? $entry['plans'][array_key_last($entry['plans'])];
         $groups = $schedule->semester($entry['career']['id'], $plan['plan']['id'], $this->semester);
         $profile = $schedule->profile();
 
@@ -115,9 +131,6 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
         }
 
         ksort($subjects);
-        $chains = array_flip(array_keys($subjects));
-
-        $route = fn (array $parameters): string => route('published.semester', ['periodo' => $this->periodo, 'campus' => $this->campus, ...$parameters]);
 
         return [
             'context' => $context,
@@ -125,12 +138,12 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'plans' => $entry['plans'],
             'currentPlan' => $plan,
             'subjects' => array_values($subjects),
-            'chains' => $chains,
+            'chains' => PublishedWeek::chains($groups),
             'groupCount' => count($groups),
             'profile' => $profile,
-            'days' => WeekGrid::of($profile)->days,
+            'days' => WeekGrid::of($profile)->covering(PublishedWeek::sessions($groups))->days,
             'updated' => PublishedWeek::updatedOn($schedule->updatedAt($groups)),
-            'careerOptions' => array_map(fn (array $row): array => ['id' => $row['career']['code'], 'name' => $row['career']['name']], $careers),
+            'careerOptions' => array_map(fn (array $row): array => ['id' => $row['career']['code'], 'name' => $row['career']['name']], $schedule->careers()),
             'planOptions' => array_map(fn (array $row): array => ['id' => $row['plan']['code'], 'name' => $row['plan']['code']], array_reverse($entry['plans'])),
             'semesterOptions' => array_map(fn (int $semester): array => ['id' => $semester, 'name' => 'Semestre '.$semester], $plan['semesters']),
             'backUrl' => route('published.index', ['periodo' => $this->periodo, 'campus' => $this->campus]),
