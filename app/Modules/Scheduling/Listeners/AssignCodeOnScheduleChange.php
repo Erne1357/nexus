@@ -14,6 +14,10 @@ final class AssignCodeOnScheduleChange
 
     public function handle(GroupScheduleChanged $event): void
     {
+        if (! $event->timesChanged) {
+            return;
+        }
+
         $this->assignCode->handle($event->group);
     }
 }
