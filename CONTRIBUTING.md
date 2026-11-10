@@ -141,6 +141,7 @@ La tarea 4.8 revisó todas las pantallas el 10 de noviembre de 2026. No encontr�
   - `mount` autoriza (`$this->authorize(...)` o `abort_unless($context->allowsAny(...), 403)`);
   - **cada método público** que escribe, o que lee por un id que llega del cliente, vuelve a autorizar. Directo o con un helper que lo haga, como `groupOrFail` o `decidable`;
   - un botón deshabilitado no protege nada.
+- **Lo que viaja al cliente:** toda propiedad pública de un componente Livewire se manda al navegador, y todo método público se puede llamar desde ahí. No guardes en una propiedad pública lo que el usuario no debe ver, y no pongas en un método público lógica que no sea una acción. `with()` se puede llamar desde el cliente y devolvería todo lo que arma; `Core\Livewire\BlockViewDataCalls` lo bloquea en todo componente.
 - **Ids del cliente** (`#[Url]`, parámetros, `selected[]`): se buscan con `KeyLookup` o con una Query que recibe al `Actor` y aplica `constrain()`, nunca con `find()` del modelo (lo revisa `tests/Arch/ModulesTest.php`). Un id ajeno da 403 o 404 sin decir si existe.
 - **Prueba negativa de alcance** en el archivo de la pantalla:
   - un invitado va al login;
