@@ -127,7 +127,7 @@ Nexus apunta a sustituir todo el SII (académico, servicios escolares, recursos 
 
 **Base técnica.** MaryUI sobre daisyUI y Tailwind 4. Los componentes se usan tal cual y la identidad entra por tokens; no hay CSS por pantalla (CLAUDE.md, "Convenciones"). Iconos: Heroicons de MaryUI, contorno de 1.5. Su tamaño va con `w-*` y `h-*`, nunca con `size-*`: MaryUI les pone `w-5 h-5` si la clase no trae un `w-` o un `h-`, y eso le gana a `size-*` (lo revisa `tests/Arch/BladeIconsTest.php`). El movimiento del menú usa Alpine, que ya viene con Livewire.
 
-**Pendientes:** códigos oficiales de color (los de aquí son aproximaciones de los institucionales), inicios por rol con la palabra gigante y los mosaicos vivos, formato de los PDF publicados y guía de textos (tono, mayúsculas, nombres de botones).
+**Pendientes:** códigos oficiales de color (los de aquí son aproximaciones de los institucionales), inicios por rol con la palabra gigante y los mosaicos vivos y guía de textos (tono, mayúsculas, nombres de botones).
 
 ## Colors
 
@@ -273,7 +273,16 @@ El mismo patrón en las cinco pantallas, en la tabla y en los renglones apilados
 | Cuadrícula día x hora | Disponibilidad docente; editor de horarios, vista por docente y por salón (fase 3) | **Decidido por el usuario el 30 de octubre de 2026 (tarea 1.12) para la disponibilidad:** variante A, herramienta y pintar; ver "Cuadrícula día x hora", abajo. **Editor de horarios, decidido por el usuario el 7 de noviembre de 2026 (tarea 3.5):** maqueta A «Semana con bandeja»; cada sesión lleva el color de su materia (los tokens `chain-N`, como franja) y el choque duro va con borde `error` e insignia con su regla; ver "Editor de horarios", abajo |
 | Ranking con desglose | Asignación docente | **Decidido por el usuario el 7 de noviembre de 2026 (tarea 3.9):** maqueta C «Por materia» de entrada, con un selector para pasar a la A «Dos paneles»; ver "Asignación docente", abajo. Quién ve las evaluaciones lo decide el permiso de ver el ranking |
 | Tablero de estado | Choques, avance de validación, carga por docente | **Avance de validación, decidido por el usuario el 2 de noviembre de 2026:** variante A, matriz: tres indicadores (avance global, ventana de la etapa, observaciones abiertas) y una tabla de departamentos por catálogo con insignias de estado, totales por columna, «Recordar» por fila y un drawer de detalle; renglones apilados debajo de 1024 px. **Salones va en una sola columna con una insignia por campus** (código y icono de estado, nombre del campus en `aria-label`), decidido por el usuario el 2 de noviembre de 2026 con datos masivos: la matriz tiene siempre cinco columnas, se desplaza de lado dentro de su caja con el departamento fijo y trae una leyenda de símbolos debajo; el total de Salones cuenta por campus. En [`progress.blade.php`](app/Modules/CatalogValidation/Livewire/pages/progress/progress.blade.php). Choques y carga por docente siguen pendientes: jerarquía visual de duro vs blando |
-| Consulta pública | Horarios publicados | Impresión y PDF |
+| Consulta pública | Horarios publicados | **Decidido por el usuario el 10 de noviembre de 2026 (tarea 4.4):** variante A «Fichas por materia» (`.impeccable/mocks/publicados/a.html`); ver «Consulta publicada», abajo. Impresión y PDF siguen pendientes (4.5) |
+
+### Consulta publicada
+Fuera de la sesión, `/horarios` (`academic-load::pages.published.*`, layout `layouts::public`), decidido el 10 de noviembre de 2026: variante A «Fichas por materia». Solo lee `PublishedScheduleQuery`.
+
+- **Banda pública:** la del shell sin buscador ni menú. La liebre (cuadro rojo de 72 px; 56 px bajo 768 px) lleva a `/horarios`; «Nexus» y la ruta «Horarios» (sin ruta en celular); a la derecha los selectores Campus y Periodo (los periodos publicados y sus campus; cambiar uno va a `/horarios?periodo=&campus=`) y «Iniciar sesión» (o el nombre y «Ir a Nexus»). Franja roja de 3 px debajo. Pie: «Horarios oficiales del Instituto Tecnológico de Ciudad Juárez». El tema es el del sistema.
+- **Inicio:** «Horarios», periodo, campus y «Actualizado el…»; «Tu carrera y semestre» (una fila por carrera: clave en Mono, retícula con select si hay varias, botones de semestre de 44 px en celular); desde 1200 px a la derecha «Por docente» y «Por salón» con buscador sin acentos. Estado vacío: «Todavía no hay horarios publicados para Campus II en Enero–Junio 2027.» Solo con sesión y permiso, la franja «Sin publicar».
+- **Semestre:** «← Horarios», carrera, «Semestre N · N materias · N grupos» y la retícula en Mono, selectores de carrera, retícula y semestre (el estado vive en la URL) y la leyenda de iconos. Una sección por materia en orden de clave, con su franja `--chain-N` (cíclica), clave en Mono, nombre, créditos e insignia «N grupos»; debajo, fichas en cuadrícula `auto-fill` de 330 px mínimo (todo el ancho en celular) con tinte de la materia al 5 % y franja de 4 px a la izquierda (como el editor). La ficha: «CLAVE · grupo», el docente (o «Por asignar») y la mini-semana con una celda por día del perfil (horas y salón en Mono; «Virtual»; `o-beaker` práctica, `o-computer-desktop` virtual, teoría sin icono; día sin sesión vacío con borde punteado).
+- **Docente y salón:** desde 768 px la semana de Cuadrícula día x hora (carriles para lo que se empalma, renglón de 3.5rem, bloques con el tinte de su materia); desde 1200 px la lista de grupos a la derecha; en celular, botones de día (`?dia=`) y la lista de horas del día.
+- **Nunca** cupos, capacidad, versiones, estados, justificaciones ni RFC, ni avisos de lo que falta o de semestre incompleto: «Por asignar» va en texto neutro, sin alarma.
 
 ### Ficha del docente
 Forma de la ficha del alumno, decidida el 30 de octubre de 2026 (variante A, pestañas), en [`teacher.blade.php`](app/Modules/Faculty/Livewire/pages/teacher/teacher.blade.php):
@@ -531,6 +540,7 @@ Las vistas del docente (tarea 3.10, Mi espacio › Oferta y Mi carga), ajustadas
 - **Oferta, fichas:** sin franja de color: la suya en `info/5` con filete `info/40`, la de un grupo sin docente con borde punteado. El lugar es una cifra (`badge-neutral badge-soft`, «14 de 139» con las cifras en Mono, sin icono), en `badge-success` con `o-star` si cuenta en «Entre tus 3 primeros», o «Asignado a ti» (`info`, `o-check-circle`). Las marcas (`RankingMark`: Choque `o-x-circle` en `error`, Sin horas `o-clock` en `warning`, No disponible `o-no-symbol` en `neutral`, los mismos de la asignación) van como icono y texto de 12 px, sin insignia, para que no pesen más que el grupo.
 - **Oferta, panel:** `x-drawer` a la derecha (`w-full max-w-md`) con su botón de cerrar (`o-x-mark`, `btn-ghost btn-circle`, 44 px en celular), como el de Carga por docente. «Tu lugar» con sus marcas en insignia y, con la de choque, una caja `error/10` «Choca con tu horario» con cada grupo suyo que se empalma («A4 · Ingeniería Económica · C1 Lu 08:00–10:00»). «Tu desglose» como tabla con encabezados «Criterio · Tuyo · Puntos», en 14 px; «Horas base vigentes» dice que es el primer criterio del orden y no suma puntos.
 - **Mi carga:** la ecuación de horas en una franja (dos por renglón en celular, sin los signos); los días en columnas cuando su caja mide 56rem o más y uno debajo de otro antes, así ninguna insignia se sale de su día. Cada bloque con la materia en 14 px, sus horas, grupo y salón en Mono (o «Sin salón» con `o-exclamation-triangle` en `warning`, en texto normal) y el campus. Entre dos bloques, «Hueco de N h» o, si cambia el campus, «Traslado C2 → C1 · 3 h» con sus minutos libres: neutro, o en `warning` con `o-exclamation-triangle` si son menos de `staffing.min_campus_travel_minutes` (SC-09; nunca bloquea).
+- **Lo publicado (P8):** con la carga publicada, las dos pantallas muestran su última versión y lo dicen en una línea discreta, «Publicado el 8 dic. 2026 · v2», en `text-neutral` y sin icono ni insignia: en Mi carga, en 14 px bajo la línea del periodo; en la oferta, como un dato más del renglón del encabezado. Una por carga publicada de las que se ven; si se ven varias, cada una lleva delante su departamento o su campus («C2: publicado el …»), y en un renglón con `flex-wrap` se acomodan solas. Sin carga publicada a la vista no hay línea. En el partial [`shared/published.blade.php`](app/Modules/Staffing/Views/shared/published.blade.php).
 
 ### Publicación
 El componente de publicar la carga de un departamento (`academic-load::components.publish-load`, tarea 4.3). Lo eligió el usuario el 10 de noviembre de 2026: la maqueta B, «Línea de versiones» (maquetas en `.impeccable/mocks/publicar-carga/`, galería https://claude.ai/artifact/EnemqYXNDGXVG28i9YEsfR). Lo montan la pantalla de cierre del departamento y el tablero de Subdirección.
@@ -542,6 +552,23 @@ El componente de publicar la carga de un departamento (`academic-load::component
   - qué pasa con la consulta pública y con el historial docente;
   - un comentario opcional y «Publicar versión N».
   - Un veto (HC-15) aparece arriba, en un aviso de error con sus motivos, y la carga no se publica.
+
+### PDF publicados
+Los PDF de lo publicado (tarea 4.5; [ADR-0021](docs/decisiones/0021-dompdf-para-los-pdf-publicados.md)), con el formato que eligió el usuario el 10 de noviembre de 2026: tabla tipo SII para el semestre y el departamento, y semana para el docente y el salón. Van en carta horizontal y los arma DomPDF desde `app/Modules/AcademicLoad/Views/pdf/`. Usan DejaVu Sans y DejaVu Sans Mono, que vienen con DomPDF, en lugar de Atkinson, y los colores de este documento escritos en la plantilla, porque el PDF no carga `app.css`.
+
+- **Marco:**
+  - Arriba, «Nexus · Horarios» y «Instituto Tecnológico de Ciudad Juárez» a la izquierda, y el campus y el periodo a la derecha, sobre la franja roja de 2 pt.
+  - Abajo, «Horarios oficiales del Instituto Tecnológico de Ciudad Juárez · Actualizado el …» y el número de página.
+  - El título es el nombre de la carrera, del docente o del salón, y debajo va su dato (semestre y retícula, número de grupos o edificio).
+- **Semestre (y departamento):**
+  - Columnas Grupo, Docente y una por día del perfil del campus.
+  - Un renglón por materia, con fondo `#f6f3f2` y una franja de 4 pt con su color `chain-N`: la clave en Mono negrita, el nombre en negrita y luego «5 créditos · 3 grupos».
+  - Debajo, un renglón por grupo con la misma franja: «CLAVE · grupo» en Mono y el docente o «Por asignar» en tenue. En cada día, las horas en Mono negrita y debajo el salón, «Virtual» o «Por asignar». La práctica lleva la marca «PRÁCTICA» en azul información. Un día sin clase lleva una raya tenue.
+  - Ningún renglón se parte entre páginas.
+- **Semana (docente y salón):**
+  - «N horas a la semana» y una tabla con la hora en Mono y una columna por día.
+  - Cada sesión es una caja con la franja de 3 pt de su materia sobre `#f6f3f2`, que abarca sus bloques. Lleva «CLAVE · grupo», la materia y, en tenue, las horas con el salón (docente) o el docente (salón).
+- **Lo que nunca sale:** cupos, capacidad, versiones, estados, justificaciones ni el RFC, igual que en la consulta pública.
 
 ## Elevation & Depth
 

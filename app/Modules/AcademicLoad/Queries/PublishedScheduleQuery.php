@@ -29,8 +29,17 @@ final class PublishedScheduleQuery
      */
     public function schedule(Term $term, Campus $campus): PublishedSchedule
     {
-        $ids = $this->latestIds($term, $campus);
+        return $this->scheduleOf($term, $campus, $this->snapshotIds($term, $campus));
+    }
 
+    /**
+     * Lo publicado formado por esas versiones exactas (las de snapshotIds()), aunque después se publique otra: un
+     * exporte arma su archivo con las versiones de su llave, no con lo que haya cuando corre la cola.
+     *
+     * @param  list<string>  $ids
+     */
+    public function scheduleOf(Term $term, Campus $campus, array $ids): PublishedSchedule
+    {
         if ($ids === []) {
             return PublishedSchedule::fromPayloads([]);
         }
@@ -51,7 +60,7 @@ final class PublishedScheduleQuery
      */
     public function version(Term $term, Campus $campus): ?string
     {
-        $ids = $this->latestIds($term, $campus);
+        $ids = $this->snapshotIds($term, $campus);
 
         return $ids === [] ? null : $this->hashOf($ids);
     }
@@ -106,18 +115,22 @@ final class PublishedScheduleQuery
     {
         $published = $this->publishedLoads()->distinct()->get(['term_id', 'campus_id']);
         $terms = Term::query()->whereIn('id', $published->pluck('term_id'))->orderByDesc('starts_on')->get();
-        $campuses = Campus::query()->whereIn('id', $published->pluck('campus_id'))->orderBy('code')->get();
+        $campuses = Campus::query()->where('is_active', true)->whereIn('id', $published->pluck('campus_id'))->orderBy('code')->get();
 
-        return $terms->map(fn (Term $term): array => [
+        $contexts = $terms->map(fn (Term $term): array => [
             'term' => $term,
             'campuses' => $campuses->filter(fn (Campus $campus): bool => $published->contains(fn (AcademicLoad $load): bool => $load->term_id === $term->getKey() && $load->campus_id === $campus->getKey()))->values()->all(),
-        ])->all();
+        ])->filter(fn (array $context): bool => $context['campuses'] !== [])->values()->all();
+
+        return $contexts;
     }
 
     /**
-     * @return list<string> los ids de la última versión de cada carga del campus y periodo, en orden
+     * Los ids de la última versión de cada carga del campus y periodo, en orden: lo que hoy está publicado.
+     *
+     * @return list<string>
      */
-    private function latestIds(Term $term, Campus $campus): array
+    public function snapshotIds(Term $term, Campus $campus): array
     {
         return LoadSnapshot::query()
             ->latestVersion()
@@ -130,7 +143,7 @@ final class PublishedScheduleQuery
     /**
      * @param  list<string>  $ids
      */
-    private function hashOf(array $ids): string
+    public function hashOf(array $ids): string
     {
         return hash('xxh128', implode(',', $ids));
     }

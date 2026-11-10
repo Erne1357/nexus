@@ -2,12 +2,14 @@
 
 namespace App\Modules\Staffing\Support;
 
+use App\Modules\AcademicLoad\Queries\PublishedSession;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Support\Collection;
 
 /**
- * Cómo se escribe el horario de un grupo para el docente: «Ma Vi 11:00–13:00» (los días que comparten horas van juntos).
+ * Cómo se escribe el horario de un grupo para el docente: «Ma Vi 11:00–13:00» (los días que comparten horas van juntos),
+ * de sus sesiones vivas o de las que congeló la versión publicada de su carga.
  */
 final class SessionLabels
 {
@@ -23,19 +25,26 @@ final class SessionLabels
      */
     public static function schedule(Collection $sessions): array
     {
-        $byTime = [];
+        return self::lines($sessions->map(fn (GroupSession $session): array => [$session->day, (string) $session->starts_at, (string) $session->ends_at])->values()->all());
+    }
 
-        foreach ($sessions->sortBy([['day', 'asc'], ['starts_at', 'asc']]) as $session) {
-            $byTime[self::time($session)][] = self::DAYS[$session->day] ?? (string) $session->day;
-        }
+    /**
+     * schedule() de las sesiones de un grupo publicado, tal como las congeló el snapshot.
+     *
+     * @param  list<PublishedSession>  $sessions
+     * @return list<array{days: string, time: string}>
+     */
+    public static function published(array $sessions): array
+    {
+        return self::lines(array_map(fn (PublishedSession $session): array => [$session->day, $session->startsAt, $session->endsAt], $sessions));
+    }
 
-        $labels = [];
-
-        foreach ($byTime as $time => $days) {
-            $labels[] = ['days' => implode(' ', $days), 'time' => $time];
-        }
-
-        return $labels;
+    /**
+     * «7:00–9:00» de dos horas guardadas (`HH:MM` o `HH:MM:SS`).
+     */
+    public static function span(string $startsAt, string $endsAt): string
+    {
+        return Minutes::labelOf($startsAt).'–'.Minutes::labelOf($endsAt);
     }
 
     /**
@@ -63,16 +72,36 @@ final class SessionLabels
         return array_values(array_map(fn (array $line): array => ['days' => implode(' ', $line['days']), 'time' => $line['time'], 'room' => $line['room']], $lines));
     }
 
-    public static function time(GroupSession $session): string
-    {
-        return Minutes::labelOf($session->starts_at).'–'.Minutes::labelOf($session->ends_at);
-    }
-
     /**
      * Una hora de la foto para leerla («07:00» → «7:00»); vacía si la foto no la trae.
      */
     private static function clock(string $time): string
     {
         return $time === '' ? '' : Minutes::labelOf($time);
+    }
+
+    /**
+     * Las sesiones agrupadas por horas, por día y hora de inicio: los días que comparten horas van juntos.
+     *
+     * @param  list<array{0: int, 1: string, 2: string}>  $sessions  día, inicio y fin
+     * @return list<array{days: string, time: string}>
+     */
+    private static function lines(array $sessions): array
+    {
+        usort($sessions, fn (array $a, array $b): int => [$a[0], Minutes::of($a[1])] <=> [$b[0], Minutes::of($b[1])]);
+
+        $byTime = [];
+
+        foreach ($sessions as [$day, $startsAt, $endsAt]) {
+            $byTime[self::span($startsAt, $endsAt)][] = self::DAYS[$day] ?? (string) $day;
+        }
+
+        $labels = [];
+
+        foreach ($byTime as $time => $days) {
+            $labels[] = ['days' => implode(' ', $days), 'time' => $time];
+        }
+
+        return $labels;
     }
 }
