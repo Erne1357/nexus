@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Students\Actions\RefreshStudentProgress;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
@@ -133,6 +134,21 @@ it('un alumno cuyo plan todavía no tiene retícula no tiene avance, en lugar de
 
     expect(StudentProgress::where('student_id', $student->id)->exists())->toBeFalse()
         ->and(StudentProgress::where('student_id', $this->student->id)->exists())->toBeTrue();
+});
+
+it('un alumno de una retícula sin ningún semestre, toda en «Por validar» (una histórica del SII), sí tiene avance: cuenta lo aprobado en ella', function () {
+    $historical = StudyPlan::factory()->for($this->plan->career)->historical()->create(['total_credits' => 9]);
+    StudyPlanSubjectPending::factory()->for($historical)->for($this->a)->create();
+    StudyPlanSubjectPending::factory()->for($historical)->for($this->f)->create();
+    $student = Student::factory()->for($historical)->create(['career_id' => $this->plan->career_id]);
+    kardexOf($student, $this->a);
+    kardexOf($student, $this->f);
+
+    app(RefreshStudentProgress::class)->handle();
+
+    expect(StudentProgress::where('student_id', $student->id)->sole())
+        ->credits_approved->toBe(9)
+        ->subjects_approved->toBe(2);
 });
 
 it('la especialidad del alumno sale de lo que está cursando', function () {
