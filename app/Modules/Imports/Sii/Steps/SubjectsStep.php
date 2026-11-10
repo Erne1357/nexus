@@ -176,7 +176,8 @@ final class SubjectsStep implements SiiStep
 
     /**
      * La clave TecNM de cada lugar, por `"{carrera}/{retícula}/{materia}"`. Si el SII trae varias para el mismo lugar,
-     * queda la menor y se avisa.
+     * queda la menor y se avisa. Una «clave TecNM» igual a la clave del SII del lugar no es clave TecNM: el lugar queda
+     * sin ella y se avisa una vez por retícula (supuesto por confirmar).
      *
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
      * @return array<string, string>
@@ -184,13 +185,28 @@ final class SubjectsStep implements SiiStep
     private function tecnmKeys(SiiMigration $migration, array &$incidents): array
     {
         $found = [];
+        $selfKeyed = [];
 
         foreach ($migration->export()->reader(SiiFile::MateriasClavesTecnm)->rows() as $row) {
             $code = mb_strtoupper(trim($row['clave_tecnm']));
+            $grid = trim($row['carrera']).'/'.trim($row['reticula']);
+            $materia = trim($row['materia']);
 
-            if ($code !== '') {
-                $found[trim($row['carrera']).'/'.trim($row['reticula']).'/'.trim($row['materia'])][$code] = true;
+            if ($code !== '' && $code === mb_strtoupper($materia)) {
+                $selfKeyed[$grid][$materia] = true;
+            } elseif ($code !== '') {
+                $found["{$grid}/{$materia}"][$code] = true;
             }
+        }
+
+        ksort($selfKeyed, SORT_STRING);
+
+        foreach ($selfKeyed as $grid => $materias) {
+            $materias = array_map('strval', array_keys($materias));
+            sort($materias, SORT_STRING);
+            $count = count($materias);
+            $shown = implode(', ', array_slice($materias, 0, 5)).($count > 5 ? ' y '.($count - 5).' más' : '');
+            $incidents[] = $this->warning((string) $grid, "La retícula {$grid} del SII trae como clave TecNM su propia clave del SII en {$count} ".($count === 1 ? 'materia' : 'materias')." ({$shown}): no cuentan como clave TecNM (supuesto por confirmar).");
         }
 
         $keys = [];

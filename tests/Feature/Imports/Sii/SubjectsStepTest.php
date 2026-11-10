@@ -520,6 +520,20 @@ it('no depende del orden de los renglones del SII', function () {
         ->and($second['subject_aliases'])->toBe($first['subject_aliases']);
 });
 
+it('una clave TecNM igual a la clave del SII del lugar no cuenta como clave TecNM, y la variante se funde', function () {
+    writeSiiSubjects($this->dir, [['TL1', '1', '110100', 'TALLER DE LIDERAZGO'], ['TL2', '1', '110100', 'TALLER DE LIDERAZGO']], [
+        ['A', '1', 'TL1', '4', '2', '2', '2', '', 'A'],
+        ['A2', '2', 'TL2', '4', '2', '2', '2', '', 'A'],
+    ], [['A', '1', 'TL1', 'INC-1030'], ['A2', '2', 'TL2', 'TL2']]);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+    $warning = collect($subjects['incidents'])->first(fn (array $i): bool => $i['ref'] === 'A2/2');
+
+    expect(collect($subjects['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->all())->toBe(['INC-1030'])
+        ->and($warning)->not->toBeNull()
+        ->and($warning['message'])->toContain('TL2')->toContain('su propia clave del SII')->toContain('supuesto por confirmar');
+});
+
 it('avisa si el SII trae dos claves TecNM para el mismo lugar y se queda con la menor', function () {
     writeSiiSubjects($this->dir, SUBJECTS_STEP_CATALOG, SUBJECTS_STEP_PLACEMENTS, [['A', '1', 'CD1', 'ACF-0999'], ...SUBJECTS_STEP_TECNM], SUBJECTS_STEP_SPECIALTIES);
 
