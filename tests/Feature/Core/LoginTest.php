@@ -224,3 +224,39 @@ it('al iniciar sesión olvida el perfil activo de una sesión anterior', functio
 
     expect(session()->has(Actor::ACTIVE_ROLE))->toBeFalse();
 });
+
+it('frena muchos usuarios distintos desde la misma IP, sin bloquear otra IP (tarea 4.8)', function () {
+    config(['fortify.ip_attempts_per_minute' => 3]);
+    $user = User::factory()->create(['username' => '19110009']);
+
+    foreach (['19110010', '19110011', '19110012'] as $username) {
+        $this->from('/login')->post('/login', ['username' => $username, 'password' => 'incorrecta']);
+    }
+
+    $this->from('/login')
+        ->post('/login', ['username' => '19110009', 'password' => 'password'])
+        ->assertRedirect('/login')
+        ->assertSessionHasErrors('username');
+    expect(session()->get('errors')->getBag('default')->first('username'))->toStartWith('Demasiados intentos de acceso');
+    $this->assertGuest();
+
+    $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.77'])
+        ->from('/login')
+        ->post('/login', ['username' => '19110009', 'password' => 'password'])
+        ->assertRedirect('/');
+    $this->assertAuthenticatedAs($user);
+});
+
+it('el mismo usuario desde otra IP no hereda el bloqueo', function () {
+    $user = User::factory()->create(['username' => '19110013']);
+
+    foreach (range(1, 5) as $attempt) {
+        $this->from('/login')->post('/login', ['username' => '19110013', 'password' => 'incorrecta']);
+    }
+
+    $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.78'])
+        ->from('/login')
+        ->post('/login', ['username' => '19110013', 'password' => 'password'])
+        ->assertRedirect('/');
+    $this->assertAuthenticatedAs($user);
+});

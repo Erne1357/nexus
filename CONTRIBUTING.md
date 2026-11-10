@@ -122,7 +122,7 @@ Una tarea está hecha cuando:
 
 - [ ] Tiene pruebas en los niveles que aplican (unit, feature, browser) y todas pasan en CI.
 - [ ] Cada regla de negocio que toca tiene su prueba nombrada con el id de la regla.
-- [ ] Cada pantalla nueva tiene prueba negativa de alcance (otro rol u otro campus).
+- [ ] Cada pantalla nueva tiene prueba negativa de alcance (otro rol u otro campus) y cumple el "Checklist de seguridad".
 - [ ] Las escrituras pasan por Actions con bitácora.
 - [ ] Pint sin cambios.
 - [ ] Documentación actualizada: archivo de la fase (tarea marcada con el PR), modelo de datos o decisiones si aplica.
@@ -131,6 +131,31 @@ Una tarea está hecha cuando:
 ## Revisión de código
 
 Qué buscar primero: reglas de negocio mal interpretadas, alcance por rol, transacciones y bitácora, pruebas que no prueban lo que dicen, estado compartido bajo Octane, consultas N+1 en listados. Después: nombres, duplicación, consistencia con el módulo de referencia. No se aprueba "por confianza": si no se entiende, se pregunta en el PR.
+
+## Checklist de seguridad
+
+La tarea 4.8 revisó todas las pantallas el 10 de noviembre de 2026. No encontró ninguna sin `auth`, ni una lectura por id del cliente que se salte el alcance, ni una descarga sin permiso. Toda pantalla nueva y todo PR que toque autorización cumplen esto:
+
+- **Ruta:** dentro del grupo `auth` de su módulo. Una ruta pública es una decisión escrita en `docs/dominio/reglas-de-negocio.md` y lleva `throttle`. Hoy son públicos el acceso (`/login`) y la consulta publicada de la tarea 4.4.
+- **Autorización en el servidor, no en la vista:**
+  - `mount` autoriza (`$this->authorize(...)` o `abort_unless($context->allowsAny(...), 403)`);
+  - **cada método público** que escribe, o que lee por un id que llega del cliente, vuelve a autorizar. Directo o con un helper que lo haga, como `groupOrFail` o `decidable`;
+  - un botón deshabilitado no protege nada.
+- **Ids del cliente** (`#[Url]`, parámetros, `selected[]`): se buscan con `KeyLookup` o con una Query que recibe al `Actor` y aplica `constrain()`, nunca con `find()` del modelo (lo revisa `tests/Arch/ModulesTest.php`). Un id ajeno da 403 o 404 sin decir si existe.
+- **Prueba negativa de alcance** en el archivo de la pantalla:
+  - un invitado va al login;
+  - otro rol recibe 403;
+  - otro campus o departamento no ve ni edita;
+  - y, para los métodos que escriben, la llamada directa da 403.
+- **Descargas y archivos:** autorizar con `Gate` antes de buscar el archivo, servirlo desde un disco privado y no decir si existe a quien no puede verlo (`DownloadBatchErrors`). Los exportes del SII viven en `storage/app/imports/` y nunca se sirven tal cual.
+- **Lo personal cruza campus a propósito:** la oferta y «Mi carga» del docente muestran sus grupos en todos los campus (supuesto por confirmar en reglas-de-negocio.md). No es una fuga; no lo «corrijas» sin decidirlo.
+- **Cabeceras:** `Core\Http\Middleware\SetSecurityHeaders` las pone en toda respuesta: `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` y una CSP con `frame-ancestors`, `base-uri`, `form-action` y `object-src`. No limita scripts, porque Livewire y Alpine los necesitan. HSTS lo pone Caddy. Una pantalla no se embebe en iframes.
+- **Acceso:**
+  - cinco intentos por minuto por usuario e IP, y un tope por IP sola (`fortify.ip_attempts_per_minute`, 60 por omisión, supuesto por confirmar), en `FortifyServiceProvider`;
+  - sin registro público ni recuperación de contraseña por correo; el admin la restablece;
+  - en producción, `compose.prod.yaml` fuerza `APP_DEBUG=false` y cookies seguras.
+- **Recálculos a demanda:** un botón que encola trabajo pesado (por ejemplo «Calcular» en «Carga por docente») usa un job único (`ShouldBeUniqueUntilProcessing`), para que repetir el clic no apile trabajos.
+- **Revisión:** antes de abrir el PR, `/security-review` sobre la rama cuando el cambio toca rutas, policies, descargas o datos personales.
 
 ## Pruebas
 
