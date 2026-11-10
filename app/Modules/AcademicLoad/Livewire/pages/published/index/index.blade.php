@@ -79,7 +79,7 @@
                         <h2 id="by-teacher" class="text-xl font-bold leading-tight">Por docente</h2>
                         <label class="relative block">
                             <span class="sr-only">Buscar docente</span>
-                            <x-icon name="o-magnifying-glass" class="pointer-events-none absolute start-3 top-3 h-5 w-5 text-neutral" aria-hidden="true" />
+                            <x-icon name="o-magnifying-glass" class="pointer-events-none absolute start-3 top-3 z-10 h-5 w-5 text-neutral" aria-hidden="true" />
                             <input type="search" wire:model.live.debounce.250ms="teacherSearch" placeholder="Nombre del docente" autocomplete="off" data-testid="published-teacher-search" class="input w-full ps-10 max-md:h-11">
                         </label>
                         @if (trim($teacherSearch) !== '')
@@ -102,7 +102,7 @@
                             <h2 id="by-room" class="text-xl font-bold leading-tight">Por salón</h2>
                             <label class="relative block">
                                 <span class="sr-only">Buscar salón</span>
-                                <x-icon name="o-map-pin" class="pointer-events-none absolute start-3 top-3 h-5 w-5 text-neutral" aria-hidden="true" />
+                                <x-icon name="o-map-pin" class="pointer-events-none absolute start-3 top-3 z-10 h-5 w-5 text-neutral" aria-hidden="true" />
                                 <input type="search" wire:model.live.debounce.250ms="roomSearch" placeholder="Clave del salón" autocomplete="off" data-testid="published-room-search" class="input w-full ps-10 max-md:h-11">
                             </label>
                             @if (trim($roomSearch) !== '')
