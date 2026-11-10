@@ -13,13 +13,14 @@ final readonly class StudentRecord
 {
     /**
      * @param  int  $totalCredits  créditos del plan, o de su retícula con una sola especialidad si no están capturados
+     * @param  int  $subjectsInGrid  materias de su retícula que ve, más las que aprobó y esperan semestre en «Por validar»
      * @param  int  $selectable  materias que ya puede seleccionar: las que puede cursar y no está cursando
      * @param  int|null  $reachSemester  hasta qué semestre puede seleccionar; sin semestre, sin límite
      * @param  array<int, int>  $approvedBySemester  semestre → cuántas de sus materias acreditó
      * @param  array<int, list<GridCell>>  $semesters  semestre → sus materias: primero las del tronco común y luego las de cada especialidad, en el orden de `$specialties`; cada grupo por clave
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la retícula, por su clave, y cuántas tiene cada una
      * @param  list<array{index: int, name: string, size: int}>  $chains  cadenas de seriación, por su primera materia
-     * @param  list<array{term: string, label: string, records: list<KardexRecord>}>  $kardex  del periodo más antiguo al más reciente
+     * @param  list<array{term: string|null, label: string, records: list<KardexRecord>}>  $kardex  primero lo que no tiene periodo y luego del periodo más antiguo al más reciente
      */
     public function __construct(
         public Student $student,
