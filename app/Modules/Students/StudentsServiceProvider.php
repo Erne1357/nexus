@@ -5,14 +5,21 @@ namespace App\Modules\Students;
 use App\Modules\Academic\Events\CurriculumChanged;
 use App\Modules\Academic\Events\PlanCareerChanging;
 use App\Modules\Academic\Events\SubjectDeactivating;
+use App\Modules\Core\Demo\DemoCheck;
+use App\Modules\Core\Demo\DemoContext;
+use App\Modules\Core\Demo\DemoStep;
+use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use App\Modules\Students\Enums\StudentsPermission;
 use App\Modules\Students\Listeners\BlockPlanCareerChangeWithStudents;
 use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
+use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use Illuminate\Support\Facades\Event;
 
@@ -53,6 +60,29 @@ final class StudentsServiceProvider extends ModuleServiceProvider
             Role::Subdireccion->value => [StudentsPermission::StudentView],
             Role::JefeDepartamento->value => [StudentsPermission::StudentView],
             Role::Coordinador->value => [StudentsPermission::StudentView],
+        ];
+    }
+
+    /**
+     * Demo por puntos: los alumnos de cada oferta de carrera, su kárdex y su avance llevan a «catálogos», con los
+     * mismos números que DemoSeeder y MassiveSeeder.
+     */
+    public function demoSteps(): array
+    {
+        return [
+            new DemoStep(DemoCheckpoint::Catalogs, 'Alumnos, kárdex y avance', fn (DemoContext $demo) => $demo->runSeeder(StudentsDemoSeeder::class, [
+                'studentsPerOffering' => $demo->volume === DemoVolume::Massive ? ['C1' => 670, 'C2' => 660] : ['C2' => 35],
+                'seed' => $demo->seed,
+            ])),
+        ];
+    }
+
+    public function demoChecks(): array
+    {
+        return [
+            new DemoCheck(DemoCheckpoint::staged(), 'Hay alumnos con kárdex', fn (): true|string => KardexRecord::query()->exists()
+                ? true
+                : 'No hay renglones de kárdex.'),
         ];
     }
 }

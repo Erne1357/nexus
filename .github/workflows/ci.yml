@@ -41,7 +41,9 @@ jobs:
   tests:
     name: tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # La suite pasó de 20 minutos en la corrida de #336 (cancelada sin pruebas fallidas) y llegó a 23 con la demo por
+    # puntos (#348), con mucha variación entre corridas; el paso «Pruebas más lentas» dice qué pesa.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -62,7 +64,13 @@ jobs:
             --testsuite=Unit,Feature,Arch --compact \
             --parallel --processes="$(nproc)" \
             --coverage-clover=storage/logs/clover.xml \
-            --coverage-text=storage/logs/coverage.txt
+            --coverage-text=storage/logs/coverage.txt \
+            --log-junit=storage/logs/junit.xml
+
+      # Informativo: las 20 pruebas y los 10 archivos más lentos de esta corrida, en el resumen del job.
+      - name: Pruebas más lentas
+        if: ${{ !cancelled() && github.event_name != 'push' }}
+        run: python3 .github/scripts/slowest-tests.py storage/logs/junit.xml 20 >> "$GITHUB_STEP_SUMMARY"
 
       # Bloqueante desde la fase 1: falla si un módulo de app/Modules/ queda debajo de 80 %.
       # `shell: bash` activa pipefail, para que el código de salida del script no se pierda en el tee.

@@ -1025,6 +1025,262 @@ document.addEventListener('alpine:init', () => {
 });
 
 /*
+| scheduleEditor: el editor de horarios (DESIGN.md, "Editor de horarios"; maqueta A «Semana con bandeja»). Livewire
+| pinta la semana; aquí va lo que es del navegador, sin ir al servidor:
+| - El día de la lista del celular (`day`, enlazado a `?dia=`): cambiarlo solo muestra otra lista.
+| - Las flechas recorren las celdas y las sesiones de la semana por su lugar (data-x: el día y el carril; data-r0 y
+|   data-r1: los renglones que ocupa), Inicio y Fin van a la primera y la última del día. La semana es una sola parada
+|   de tabulación: la que tiene el foco se queda con tabindex 0 (rove). Enter o Espacio la tocan (son botones).
+| - Esc quita el grupo elegido, salvo con un cajón, el menú o un diálogo abiertos.
+| - «Ver» de un choque (found) lleva la vista a la sesión, le da el foco y la marca un momento (data-found); en celular
+|   cambia antes al día de la sesión. Colocar (editor-placed) deja el foco en la sesión que quedó, porque la celda
+|   tocada ya no existe.
+| - Al cerrar el último cajón abierto, el foco regresa a lo que lo abrió (data-opener). Pasar de un cajón al otro
+|   (data-drawer-switch) no lo regresa.
+| - La bandeja también es una sola parada (trayRove, trayKey) y «Ir a la semana» (toWeek) salta a la semana sin
+|   recorrer la bandeja ni los choques.
+| - El motivo de una celda que choca o no se puede (data-why) se ve junto a ella con el foco o bajo el puntero (tip,
+|   `position: fixed` para que la caja de la semana no lo recorte), se mueve con ella al desplazar y, cuando Livewire
+|   vuelve a pintar, se acomoda o se esconde si la celda ya no está (MutationObserver).
+| - Las flechas no se tocan con Alt, Ctrl o Cmd (Alt+← es «atrás»).
+*/
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('scheduleEditor', (day) => ({
+        day,
+        opener: null,
+        switching: false,
+        tipFor: null,
+        tip: { text: '', left: 0, top: 0, above: false },
+        tipObserver: null,
+        tipQueued: false,
+
+        /**
+         * Livewire puede cambiar o quitar la celda del aviso al volver a pintar (colocar, elegir otro grupo): después
+         * de cada cambio del DOM el aviso se vuelve a poner junto a ella o se esconde si ya no está o no tiene motivo.
+         */
+        init() {
+            this.tipObserver = new MutationObserver(() => {
+                if (!this.tipFor || this.tipQueued) {
+                    return;
+                }
+
+                this.tipQueued = true;
+                requestAnimationFrame(() => {
+                    this.tipQueued = false;
+                    this.placeTip();
+                });
+            });
+            this.tipObserver.observe(this.$el, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-why'] });
+        },
+
+        destroy() {
+            this.tipObserver?.disconnect();
+        },
+
+        /** El motivo de la celda (data-why) con el foco o bajo el puntero; cualquier otro destino lo esconde. */
+        explain(event) {
+            this.tipFor = event.target?.closest?.('[data-why]') ?? null;
+            this.placeTip();
+        },
+
+        /** Pone el aviso junto a su celda (abajo, o arriba si no cabe); se vuelve a poner al desplazar. */
+        placeTip() {
+            const cell = this.tipFor;
+
+            if (!cell?.isConnected || !cell.dataset.why) {
+                this.tipFor = null;
+                this.tip.text = '';
+
+                return;
+            }
+
+            const rect = cell.getBoundingClientRect();
+            const above = rect.bottom + 112 > window.innerHeight;
+
+            this.tip = {
+                text: cell.dataset.why,
+                left: Math.max(8, Math.min(rect.left, window.innerWidth - 328)),
+                top: above ? rect.top - 4 : rect.bottom + 4,
+                above,
+            };
+        },
+
+        remember(event) {
+            if (event.target.closest('[data-drawer-switch]')) {
+                this.switching = true;
+                setTimeout(() => (this.switching = false), 3000);
+
+                return;
+            }
+
+            this.opener = event.target.closest('[data-opener]') ?? this.opener;
+        },
+
+        drawerOpen() {
+            return document.querySelector('.drawer-toggle:checked') !== null;
+        },
+
+        drawerOpened() {
+            this.switching = false;
+        },
+
+        drawerClosed() {
+            this.$nextTick(() => {
+                if (!this.switching && !this.drawerOpen() && this.opener?.isConnected) {
+                    this.opener.focus();
+                }
+            });
+        },
+
+        escape() {
+            if (this.$wire.groupId !== '' && this.$wire.view === 'semestre' && !this.drawerOpen()
+                && document.body.dataset.menu !== 'open' && !document.querySelector('dialog[open]')) {
+                this.$wire.clearSelection();
+            }
+        },
+
+        /** La copia visible de una sesión (la de la semana o la de la lista del celular). */
+        visible(id) {
+            return [...document.querySelectorAll(`[data-session="${CSS.escape(id)}"]`)].find((element) => element.offsetParent !== null);
+        },
+
+        found(id) {
+            const hidden = this.visible(id) ? null : document.querySelector(`[data-day-list] [data-session="${CSS.escape(id)}"]`);
+
+            if (hidden) {
+                this.day = hidden.dataset.day;
+            }
+
+            this.$nextTick(() => {
+                const element = this.visible(id);
+
+                if (!element) {
+                    return;
+                }
+
+                element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+                element.focus({ preventScroll: true });
+                element.setAttribute('data-found', '');
+                setTimeout(() => element.removeAttribute('data-found'), 2500);
+            });
+        },
+
+        keep(id) {
+            if (document.activeElement && document.activeElement !== document.body) {
+                return;
+            }
+
+            this.visible(id)?.focus({ preventScroll: true });
+        },
+
+        /** «Ir a la semana»: el foco a la parada de la semana (o al día elegido de la lista en celular). */
+        toWeek() {
+            const week = [...document.querySelectorAll('[data-testid=week], [data-testid=day-list]')].find((element) => element.offsetParent !== null);
+            const target = week?.querySelector('[data-nav][tabindex="0"], [data-day-button][aria-pressed=true]') ?? week;
+
+            target?.focus({ preventScroll: true });
+            target?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+        },
+
+        trayRove(event) {
+            const current = event.target.closest('[data-tray-item]');
+
+            if (!current) {
+                return;
+            }
+
+            for (const element of event.currentTarget.querySelectorAll('[data-tray-item]')) {
+                element.tabIndex = element === current ? 0 : -1;
+            }
+        },
+
+        /**
+         * La bandeja es una sola parada. Desde 768 px las piezas van en columna: arriba y abajo cambian de grupo (en la
+         * misma columna: la pieza o el botón de su cajón), la derecha va al botón del cajón y la izquierda regresa.
+         * En celular cada materia es una tira de lado: izquierda y derecha cambian de grupo, abajo va al botón del
+         * cajón y arriba regresa. Inicio y Fin van al primero y al último. Con Alt, Ctrl o Cmd no se toca la tecla
+         * (Alt+← es «atrás» del navegador).
+         */
+        trayKey(event) {
+            const current = event.target.closest('[data-tray-item]');
+
+            if (event.altKey || event.ctrlKey || event.metaKey || !current
+                || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) {
+                return;
+            }
+
+            const strip = !matchMedia('(min-width: 48rem)').matches;
+            const pieces = [...event.currentTarget.querySelectorAll('[data-piece]')];
+            const piece = current.closest('[data-piece]');
+            const index = pieces.indexOf(piece);
+            const onDrawer = current.hasAttribute('data-group-drawer');
+            const column = (element) => element?.querySelector(onDrawer ? '[data-group-drawer]' : '[data-group]');
+            const moves = {
+                next: () => column(pieces[index + 1]),
+                previous: () => column(pieces[index - 1]),
+                first: () => column(pieces[0]),
+                last: () => column(pieces.at(-1)),
+                drawer: () => (onDrawer ? null : piece.querySelector('[data-group-drawer]')),
+                piece: () => (onDrawer ? piece.querySelector('[data-group]') : null),
+            };
+            const keys = strip
+                ? { ArrowRight: 'next', ArrowLeft: 'previous', ArrowDown: 'drawer', ArrowUp: 'piece', Home: 'first', End: 'last' }
+                : { ArrowDown: 'next', ArrowUp: 'previous', ArrowRight: 'drawer', ArrowLeft: 'piece', Home: 'first', End: 'last' };
+            const next = moves[keys[event.key]]();
+
+            event.preventDefault();
+            next?.focus();
+            next?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        },
+
+        rove(event) {
+            const current = event.target.closest('[data-nav]');
+
+            if (!current) {
+                return;
+            }
+
+            for (const element of event.currentTarget.querySelectorAll('[data-nav]')) {
+                element.tabIndex = element === current ? 0 : -1;
+            }
+        },
+
+        key(event) {
+            const current = event.target.closest('[data-nav]');
+
+            if (event.altKey || event.ctrlKey || event.metaKey || !current
+                || !['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                return;
+            }
+
+            const items = [...event.currentTarget.querySelectorAll('[data-nav]')].map((element) => ({
+                element,
+                x: Number(element.dataset.x),
+                r0: Number(element.dataset.r0),
+                r1: Number(element.dataset.r1),
+                day: Math.floor(Number(element.dataset.x)),
+            }));
+            const me = items.find((item) => item.element === current);
+            const middle = (me.r0 + me.r1) / 2;
+            const away = (item) => (item.r0 <= middle && middle < item.r1 ? 0 : Math.min(Math.abs(item.r0 - middle), Math.abs(item.r1 - middle)));
+            const sameDay = items.filter((item) => item.day === me.day);
+            const pick = {
+                ArrowDown: () => sameDay.filter((item) => item.r0 >= me.r1 - 0.01).sort((a, b) => a.r0 - b.r0 || Math.abs(a.x - me.x) - Math.abs(b.x - me.x)),
+                ArrowUp: () => sameDay.filter((item) => item.r1 <= me.r0 + 0.01).sort((a, b) => b.r1 - a.r1 || Math.abs(a.x - me.x) - Math.abs(b.x - me.x)),
+                ArrowRight: () => items.filter((item) => item.x > me.x + 0.01).sort((a, b) => a.day - b.day || away(a) - away(b) || a.x - b.x),
+                ArrowLeft: () => items.filter((item) => item.x < me.x - 0.01).sort((a, b) => b.day - a.day || away(a) - away(b) || b.x - a.x),
+                Home: () => [...sameDay].sort((a, b) => a.r0 - b.r0),
+                End: () => [...sameDay].sort((a, b) => b.r1 - a.r1),
+            }[event.key]();
+
+            event.preventDefault();
+            pick[0]?.element.focus();
+            pick[0]?.element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        },
+    }));
+});
+
+/*
 | AZ-S5: si el perfil activo de la sesión ya no es con el que se pintó la página (cambió en otra pestaña, o cambiaron
 | sus puestos: perdió el activo, se desactivó su campus o recibió el primero), el servidor responde 419 con
 | X-Nexus-Role-Changed (Core\Livewire\ActiveRoleHook). Aquí se ofrece recargar en español; cualquier otro 419 (sesión

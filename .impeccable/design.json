@@ -14,6 +14,7 @@
     "typographyMeta": {
       "titulo": { "displayName": "Título de pantalla", "purpose": "El título de x-header en cada pantalla." },
       "cuerpo": { "displayName": "Cuerpo", "purpose": "Texto de tablas y de la aplicación." },
+      "compacto": { "displayName": "Compacto", "purpose": "El dato secundario bajo un nombre, las cifras de una ficha densa y el filtro segmentado compacto." },
       "etiqueta": { "displayName": "Etiqueta", "purpose": "Encabezados de tabla y campos de la credencial, en mayúsculas." },
       "clave": { "displayName": "Clave", "purpose": "Claves, cifras y horarios en Mono con cifras tabulares." },
       "palabra-de-inicio": { "displayName": "Palabra de inicio", "purpose": "Solo en los inicios por rol; nunca en pantallas de captura." }

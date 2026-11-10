@@ -55,7 +55,8 @@ enum LoadStatus: string
      * carga académica" de docs/proceso/proceso-propuesto.md y el perfil del campus. Es la única fuente:
      * TransitionLoad la consulta. Desde Cerrada, un campus que exige el visto bueno de Subdirección
      * (`requires_subdireccion_approval`) pasa a Aprobada y de ahí a Publicada; uno que no lo exige publica
-     * directo. Aprobada solo existe en los campus que lo exigen.
+     * directo. Aprobada solo existe en los campus que lo exigen. Cerrada, Aprobada y Publicada se reabren a Ajustes,
+     * con motivo (ReopenLoad; P3, confirmado el 10 de noviembre de 2026).
      *
      * @return list<self>
      */
@@ -66,9 +67,9 @@ enum LoadStatus: string
             self::Proposed => [self::Staffing],
             self::Staffing => [self::Adjusting, self::Closed],
             self::Adjusting => [self::Staffing],
-            self::Closed => $profile->requiresSubdireccionApproval ? [self::Approved] : [self::Published],
+            self::Closed => [$profile->requiresSubdireccionApproval ? self::Approved : self::Published, self::Adjusting],
             self::Approved => [self::Published, self::Adjusting],
-            self::Published => [self::Reanalysis],
+            self::Published => [self::Reanalysis, self::Adjusting],
             self::Reanalysis => [self::Published],
         };
     }

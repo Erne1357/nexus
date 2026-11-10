@@ -142,6 +142,7 @@ it('siembra las 6 carreras de Campus II con un plan vigente cada una', function 
 
     expect($offered->pluck('career.code')->all())->toEqualCanonicalizing(['LADM', 'COPU', 'ISIC', 'IIND', 'ILOG', 'IGEM'])
         ->and($offered->every(fn (CareerCampus $offering): bool => $offering->career->studyPlans()->where('is_active', true)->count() === 1))->toBeTrue()
+        ->and($offered->every(fn (CareerCampus $offering): bool => $offering->career->studyPlans()->where('is_current', true)->count() === 1))->toBeTrue()
         ->and(CareerCampus::query()->whereRelation('campus', 'code', 'C1')->exists())->toBeFalse();
 });
 
@@ -396,4 +397,17 @@ it('no corre en producción', function () {
     expect(Department::withTrashed()->count())->toBe(0)
         ->and(User::query()->count())->toBe(0)
         ->and(Term::query()->count())->toBe(0);
+});
+
+it('con todos los departamentos nombra jefe también a los que no tienen carreras ni materias en el campus (demo por puntos, CV-S1)', function () {
+    seedDemoCatalog(['C2']);
+
+    (new DatabaseSeeder)->setContainer(app())->callWith(DemoStaffSeeder::class, ['campuses' => ['C2'], 'allDepartments' => true]);
+
+    $heads = RoleAssignment::query()->current()->where('role', Role::JefeDepartamento)->pluck('org_unit_id');
+
+    expect(Department::query()->where('is_active', true)->pluck('id')->diff($heads)->all())->toBe([])
+        ->and(demoStaff()->pluck('username')->all())->toContain('jefe.ee', 'jefe.mm')
+        ->and(demoStaff()->pluck('username')->filter(fn (string $username): bool => str_starts_with($username, 'jpd.'))->sort()->values()->all())
+        ->toBe(['jpd.cb.c2', 'jpd.cea.c2', 'jpd.ii.c2', 'jpd.sc.c2']);
 });

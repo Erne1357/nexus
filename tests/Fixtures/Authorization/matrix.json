@@ -5,11 +5,26 @@
             "academic_load.proposal.submit",
             "academic_load.proposal.update",
             "academic_load.proposal.view",
+            "scheduling.group.manage",
+            "scheduling.schedule.view",
+            "scheduling.session.edit",
+            "staffing.change_request.apply_schedule",
+            "staffing.change_request.request",
             "students.student.view"
+        ],
+        "docente": [
+            "staffing.change_request.request_own",
+            "staffing.my_load.view",
+            "staffing.offer.view"
         ],
         "jefe_departamento": [
             "academic.placement.validate",
+            "academic_load.agreement.decide",
+            "academic_load.agreement.request",
+            "academic_load.agreement.view",
+            "academic_load.load.close",
             "academic_load.load.propose",
+            "academic_load.load.start_staffing",
             "academic_load.load.view",
             "academic_load.proposal_review.decide",
             "academic_load.proposal_review.view",
@@ -28,9 +43,21 @@
             "faculty.teacher_department.remove",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
+            "scheduling.group.manage",
+            "scheduling.quota.manage",
+            "scheduling.room.assign",
+            "scheduling.schedule.view",
+            "scheduling.session.edit",
+            "staffing.change_request.apply_room",
+            "staffing.change_request.decide",
+            "staffing.change_request.view",
+            "staffing.ranking.view",
+            "staffing.teacher.assign",
+            "staffing.teacher_load.view",
             "students.student.view"
         ],
         "jefe_proyecto_docente": [
+            "academic_load.agreement.view",
             "academic_load.load.view",
             "academic_load.proposal_review.view",
             "faculty.teacher.create",
@@ -41,9 +68,17 @@
             "faculty.teacher.view",
             "faculty.teacher_department.remove",
             "faculty.teacher_department.set_primary",
-            "faculty.teacher_qualification.manage"
+            "faculty.teacher_qualification.manage",
+            "scheduling.schedule.view",
+            "staffing.change_request.view",
+            "staffing.ranking.view",
+            "staffing.teacher.assign",
+            "staffing.teacher_load.view"
         ],
         "subdireccion": [
+            "academic_load.agreement.view",
+            "academic_load.load.approve",
+            "academic_load.load.reopen",
             "academic_load.load.view",
             "academic_load.proposal.view",
             "academic_load.proposal_review.view",
@@ -77,6 +112,10 @@
             "faculty.teacher_department.remove",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
+            "scheduling.schedule.view",
+            "staffing.change_request.view",
+            "staffing.ranking.view",
+            "staffing.teacher_load.view",
             "students.student.view"
         ]
     },
@@ -84,7 +123,9 @@
         "catalog_validation.review.correct",
         "catalog_validation.review.flag",
         "catalog_validation.review.reopen",
-        "catalog_validation.review.validate"
+        "catalog_validation.review.validate",
+        "staffing.my_load.view",
+        "staffing.offer.view"
     ],
     "applies_to": {
         "codes=SERVICIOS-ESCOLARES": [
@@ -106,7 +147,14 @@
             "academic.subject.create",
             "academic.subject.update",
             "academic.subject.view",
+            "academic_load.agreement.decide",
+            "academic_load.agreement.request",
+            "academic_load.agreement.view",
+            "academic_load.load.approve",
+            "academic_load.load.close",
             "academic_load.load.propose",
+            "academic_load.load.reopen",
+            "academic_load.load.start_staffing",
             "academic_load.load.view",
             "academic_load.proposal.create",
             "academic_load.proposal.submit",
@@ -136,6 +184,19 @@
             "faculty.teacher_qualification.manage",
             "faculty.teacher_user.provision",
             "faculty.teacher_user.reset_password",
+            "scheduling.group.manage",
+            "scheduling.quota.manage",
+            "scheduling.room.assign",
+            "scheduling.schedule.view",
+            "scheduling.session.edit",
+            "staffing.change_request.apply_room",
+            "staffing.change_request.apply_schedule",
+            "staffing.change_request.decide",
+            "staffing.change_request.request",
+            "staffing.change_request.view",
+            "staffing.ranking.view",
+            "staffing.teacher.assign",
+            "staffing.teacher_load.view",
             "students.student.view"
         ]
     }

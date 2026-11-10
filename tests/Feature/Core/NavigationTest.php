@@ -9,6 +9,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Navigation\RecentPages;
+use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Students\Models\Student;
 use Dom\Element;
 use Dom\HTMLDocument;
@@ -260,7 +261,7 @@ describe('menú', function () {
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuAreasIn($page))->toBe(['Académico' => ['Inicio', 'Propuesta de carrera'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
+        expect(menuAreasIn($page))->toBe(['Académico' => ['Inicio', 'Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
             ->and($page->querySelector('a[data-menu-entry][href="'.route('demo-catalog.greeting').'"]')?->hasAttribute('wire:navigate'))->toBeTrue()
             ->and($page->querySelector('a[href="'.route('demo-catalog.ping').'"]'))->toBeNull();
     });
@@ -276,11 +277,13 @@ describe('menú', function () {
             ->{'Datos'}->toContain('Importaciones');
     });
 
-    it('muestra al docente solo Inicio', function () {
+    it('muestra al docente Inicio y su «Mi espacio»', function () {
         withDemoCatalogNavigation();
-        $this->actingAs(User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create());
+        $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
+        Teacher::factory()->create(['user_id' => $docente->id]);
+        $this->actingAs($docente);
 
-        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Académico' => ['Inicio']]);
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Mi carga', 'Oferta'], 'Académico' => ['Inicio']]);
     });
 
     it('en la página, el coordinador no ve las entradas de Campus ni de Importaciones', function () {
@@ -366,7 +369,7 @@ describe('menú', function () {
     ]);
 
     it('si el área de la pantalla no es visible para el usuario, el área actual es la primera que ve', function () {
-        $this->actingAs(User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create());
+        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
 
         $current = domOf(Livewire::test('core::components.navigation', ['route' => 'imports.wizard']))
             ->querySelectorAll('#nexus-menu [data-menu-area][data-current]');

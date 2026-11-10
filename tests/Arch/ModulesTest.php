@@ -22,8 +22,8 @@ $leftOf = [
     'CatalogValidation' => ['Imports'],
     'Demand' => ['Students'],
     'AcademicLoad' => ['Academic', 'CatalogValidation', 'Demand'],
-    'Staffing' => ['Faculty'],
-    'Scheduling' => ['AcademicLoad', 'Facilities', 'Staffing'],
+    'Scheduling' => ['AcademicLoad', 'Facilities', 'Faculty'],
+    'Staffing' => ['Scheduling'],
     'Solver' => ['Scheduling'],
     'Enrollment' => ['Scheduling', 'Students'],
 ];
