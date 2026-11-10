@@ -151,7 +151,8 @@ La tarea 4.8 revisó todas las pantallas el 10 de noviembre de 2026. No encontr�
 - **Lo personal cruza campus a propósito:** la oferta y «Mi carga» del docente muestran sus grupos en todos los campus (supuesto por confirmar en reglas-de-negocio.md). No es una fuga; no lo «corrijas» sin decidirlo.
 - **Cabeceras:** `Core\Http\Middleware\SetSecurityHeaders` las pone en toda respuesta: `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` y una CSP con `frame-ancestors`, `base-uri`, `form-action` y `object-src`. No limita scripts, porque Livewire y Alpine los necesitan. HSTS lo pone Caddy. Una pantalla no se embebe en iframes.
 - **Acceso:**
-  - cinco intentos por minuto por usuario e IP, y un tope por IP sola (`fortify.ip_attempts_per_minute`, 60 por omisión, supuesto por confirmar), en `FortifyServiceProvider`;
+  - cinco intentos por minuto por usuario e IP, y un tope por IP sola (`fortify.ip_attempts_per_minute`, 60 por omisión, supuesto por confirmar), en `FortifyServiceProvider`. El tope cuenta todo intento, también los que entran: antes de abrir el acceso a muchos usuarios detrás de una misma IP (los alumnos, R3) súbelo con `LOGIN_IP_ATTEMPTS_PER_MINUTE`;
+  - la cookie de sesión es `SameSite=Lax` y sin cifrar: `Strict` rompería los enlaces que llegan de fuera;
   - sin registro público ni recuperación de contraseña por correo; el admin la restablece;
   - en producción, `compose.prod.yaml` fuerza `APP_DEBUG=false` y cookies seguras.
 - **Recálculos a demanda:** un botón que encola trabajo pesado (por ejemplo «Calcular» en «Carga por docente») usa un job único (`ShouldBeUniqueUntilProcessing`), para que repetir el clic no apile trabajos.
