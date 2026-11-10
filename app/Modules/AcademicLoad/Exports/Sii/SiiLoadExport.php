@@ -3,7 +3,6 @@
 namespace App\Modules\AcademicLoad\Exports\Sii;
 
 use App\Modules\Academic\Models\SubjectAlias;
-use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\Core\Models\Campus;
@@ -19,8 +18,9 @@ use App\Modules\Imports\Sii\SiiFile;
  * comillas simples con relleno de espacios al ancho del CHAR (`'3KB       '`), números y fecha-hora sin comillas, nulo
  * como campo vacío.
  *
- * Qué se exporta: la última versión de cada carga del periodo y el campus cuyo estado es `publicada` (supuesto por
- * confirmar: una carga reabierta no se exporta). Sin cargas publicadas salen los dos archivos solo con el encabezado.
+ * Qué se exporta: la última versión publicada de cada carga del periodo y el campus que tenga alguna, aunque después se
+ * haya reabierto, igual que la consulta pública (supuesto por confirmar). Sin versiones publicadas salen los dos archivos
+ * solo con el encabezado.
  *
  * Mapeo (cada elección propia es un supuesto por confirmar):
  * - Clave SII de la materia (`materia`, ancho 10) para (materia, plan): el alias con esa materia y ese plan; si no, el
@@ -74,7 +74,7 @@ final class SiiLoadExport
     }
 
     /**
-     * Los grupos de la última versión de cada carga publicada, ordenados por departamento, materia y grupo.
+     * Los grupos de la última versión publicada de cada carga, ordenados por departamento, materia y grupo.
      *
      * @return list<array{department: string, group: array<string, mixed>}>
      */
@@ -83,7 +83,7 @@ final class SiiLoadExport
         $loads = AcademicLoad::query()
             ->where('term_id', $term->getKey())
             ->where('campus_id', $campus->getKey())
-            ->where('status', LoadStatus::Published)
+            ->where('current_version', '>', 0)
             ->select('id');
 
         $entries = [];

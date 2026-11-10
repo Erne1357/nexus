@@ -179,16 +179,17 @@ it('solo usa la última versión de cada carga', function () {
     expect($grupos)->toHaveCount(2)->and($grupos[1])->toContain("'B  '");
 });
 
-it('ignora las cargas no publicadas y las de otro campus u otro periodo', function () {
+it('exporta la última versión publicada aunque la carga se haya reabierto, e ignora otro campus u otro periodo', function () {
     publishLoad([Snap::group(['code' => 'A'])]);
     $reopened = publishLoad([Snap::group(['code' => 'R'])]);
-    $reopened->academicLoad->update(['status' => LoadStatus::Reanalysis]);
+    $reopened->academicLoad->update(['status' => LoadStatus::Adjusting]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $reopened->academicLoad->term_id, 'campus_id' => $reopened->academicLoad->campus_id]);
     publishLoad([Snap::group(['code' => 'K'])], ['campus_id' => Campus::factory()->create()->id]);
     publishLoad([Snap::group(['code' => 'T'])], ['term_id' => Term::factory()->create(['code' => '20272'])->id]);
 
-    $grupos = lines(exportFiles()['grupos.csv']);
+    $codes = array_map(fn (string $l): string => explode(',', $l)[2], array_slice(lines(exportFiles()['grupos.csv']), 1));
 
-    expect($grupos)->toHaveCount(2)->and($grupos[1])->toContain("'A  '");
+    expect($codes)->toEqualCanonicalizing(["'A  '", "'R  '"]);
 });
 
 it('ordena por departamento, materia y grupo', function () {

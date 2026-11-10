@@ -90,7 +90,7 @@ De la revisión de la rama (5 de noviembre de 2026), para hacer antes de la corr
 
 `App\Modules\AcademicLoad\Exports\Sii\SiiLoadExport::files(Term, Campus)` devuelve `grupos.csv` y `horarios.csv` con la forma exacta de las tablas del SII (los encabezados de `SiiFile::Grupos` y `SiiFile::Horarios`): Latin-1, fin de línea LF, texto entre comillas simples con relleno al ancho del CHAR, números y fecha-hora sin comillas, nulo como campo vacío. Lee solo los payloads de los snapshots y `subject_aliases`; no escribe. Los archivos se leen de vuelta con `SiiCsvReader`.
 
-Qué se exporta: la última versión de cada carga **publicada** del periodo y el campus (supuesto por confirmar: una carga reabierta no se exporta). Sin cargas publicadas, solo los encabezados.
+Qué se exporta: la última versión publicada de cada carga del periodo y el campus que tenga alguna, aunque después se haya reabierto, igual que la consulta pública (supuesto por confirmar). Sin versiones publicadas, solo los encabezados.
 
 | Campo | Regla |
 |---|---|
