@@ -14,9 +14,7 @@ final class Minutes
      */
     public static function of(string $time): int
     {
-        [$hours, $minutes] = array_map('intval', explode(':', $time));
-
-        return $hours * 60 + $minutes;
+        return WeekTime::minutes($time);
     }
 
     /**
@@ -24,7 +22,7 @@ final class Minutes
      */
     public static function format(int $minutes): string
     {
-        return sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
+        return WeekTime::hhmm($minutes);
     }
 
     /**
