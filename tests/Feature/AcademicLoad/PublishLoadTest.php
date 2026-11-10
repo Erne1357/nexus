@@ -35,7 +35,7 @@ beforeEach(function () {
 
     $this->taught = publishGroup(['code' => 'A', 'teacher_id' => $this->teacher->id]);
     GroupSession::factory()->for($this->taught)->inRoom($room)->on(1, '07:00', '09:00')->create();
-    $this->untaught = publishGroup(['code' => 'B']);
+    $this->untaught = publishGroup(['code' => 'B', 'close_justification' => 'Docente en contratación.']);
     GroupSession::factory()->for($this->untaught)->inRoom($room)->on(2, '07:00', '09:00')->create();
     publishGroup(['code' => 'C', 'status' => 'cancelled']);
 });
@@ -96,6 +96,7 @@ it('publica una carga cerrada: la versión 1 con la foto de sus grupos no cancel
         ->and($snapshot->payload['version'])->toBe(1)
         ->and($snapshot->payload['published_by'])->toBe(['id' => $this->publisher->id, 'name' => 'Laura Méndez'])
         ->and(collect($snapshot->payload['groups'])->pluck('code')->sort()->values()->all())->toBe(['A', 'B'])
+        ->and(collect($snapshot->payload['groups'])->pluck('justification', 'code')->all())->toEqual(['A' => null, 'B' => 'Docente en contratación.'])
         ->and($load->transitions()->sole()->only(['from_status', 'to_status', 'comment']))->toBe(['from_status' => LoadStatus::Closed, 'to_status' => LoadStatus::Published, 'comment' => 'Carga lista']);
 });
 
@@ -132,7 +133,7 @@ it('HC-18: republicar crea la versión 2, conserva la 1 y lleva el historial a l
     expect($second->version)->toBe(2)
         ->and($this->load->fresh()->current_version)->toBe(2)
         ->and($first->fresh()->payload)->toEqual($first->payload)
-        ->and($first->payload['groups'][0]['teacher']['id'])->toBe($this->teacher->id)
+        ->and(collect($first->payload['groups'])->firstWhere('code', 'A')['teacher']['id'])->toBe($this->teacher->id)
         ->and(collect($second->payload['groups'])->firstWhere('code', 'A')['teacher']['id'])->toBe($replacement->id)
         ->and(TeacherSubjectHistory::query()->pluck('teacher_id')->all())->toBe([$replacement->id])
         ->and(TeacherSubjectHistory::onlyTrashed()->pluck('teacher_id')->all())->toBe([$this->teacher->id]);

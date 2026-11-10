@@ -3,6 +3,7 @@
 use App\Modules\Core\Http\Middleware\EnsurePasswordIsChanged;
 use App\Modules\Core\Http\Middleware\EnsureUserIsActive;
 use App\Modules\Core\Http\Middleware\NormalizeSidebarState;
+use App\Modules\Core\Http\Middleware\SetSecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // La app solo es accesible a través de nginx dentro de la red de Docker.
         $middleware->trustProxies(at: '*');
+
+        // Cabeceras de seguridad en toda respuesta, también sin sesión y en errores (tarea 4.8).
+        $middleware->append(SetSecurityHeaders::class);
 
         // Para toda ruta web (Core): cierra las demás sesiones cuando cambia la contraseña, la de
         // un usuario desactivado, obliga a cambiar la contraseña en el primer acceso y deja el
