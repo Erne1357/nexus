@@ -438,6 +438,43 @@ it('funde variantes con horas distintas: queda la materia de la variante presenc
         ->and($warning['message'])->toContain('P1')->toContain('P2')->toContain('presencial')->toContain('supuesto por confirmar');
 });
 
+it('una clave del SII con horas distintas en dos planes queda con las del plan más reciente en los dos, y avisa', function () {
+    writeSiiSubjects($this->dir, [['Q1', '1', '110100', 'QUIMICA']], [
+        ['A', '3', 'Q1', '10', '4', '2', '1', '', 'A'],
+        ['C', '1', 'Q1', '8', '3', '2', '1', '', 'A'],
+    ]);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+    $hours = ['credits' => '8', 'theory_hours' => '3', 'practice_hours' => '2'];
+
+    expect(subjectsStepRow($subjects, 'AAA-2004-100', 'Q1'))->toMatchArray($hours)
+        ->and(subjectsStepRow($subjects, 'CCC-2009-201', 'Q1'))->toMatchArray($hours)
+        ->and(subjectsStepMessages($subjects))->toContain('warning|Q1|')->toContain('AAA-2004-100 (10/4/2)')->toContain('queda 8/3/2')->toContain('supuesto por confirmar');
+});
+
+it('una clave del SII igual a una clave TecNM es la misma materia y toma las horas de la mayoría', function () {
+    writeSiiSubjects($this->dir, [
+        ['TI1', '1', '110100', 'TALLER DE INVESTIGACION I'], ['TI2', '1', '110100', 'TALLER DE INVESTIGACION I'], ['ACA-0909', '1', '110100', 'TALLER DE INVESTIGACION I'],
+    ], [
+        ['A', '1', 'TI1', '4', '0', '4', '6', '', 'A'],
+        ['B', '1', 'TI2', '4', '0', '4', '6', '', 'A'],
+        ['C', '1', 'ACA-0909', '4', '2', '2', '6', '', 'A'],
+    ], [['A', '1', 'TI1', 'ACA-0909'], ['B', '1', 'TI2', 'ACA-0909']]);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+    $rows = collect($subjects['rows'])->where('code', 'ACA-0909');
+
+    expect($rows->pluck('plan')->sort()->values()->all())->toBe(['AAA-2010-224', 'BBB-2010-300', 'CCC-2009-201'])
+        ->and($rows->map(fn (array $row): string => "{$row['credits']}/{$row['theory_hours']}/{$row['practice_hours']}")->unique()->values()->all())->toBe(['4/0/4'])
+        ->and(subjectsStepMessages($subjects))->toContain('CCC-2009-201 (4/2/2)');
+});
+
+it('todas las filas de una misma clave traen las mismas horas y créditos', function () {
+    $rows = collect(subjectsStepRun($this->dir, $this->curated)['subjects']['rows']);
+
+    $rows->groupBy('code')->each(fn ($group, string $code) => expect($group->map(fn (array $row): string => "{$row['credits']}/{$row['theory_hours']}/{$row['practice_hours']}")->unique())->toHaveCount(1, $code));
+});
+
 it('funde variantes cuyo nombre solo cambia de singular a plural', function () {
     writeSiiSubjects($this->dir, [['T1', '1', '110100', 'TUTORIA'], ['T2', '1', '110100', 'TUTORIAS']], [
         ['A', '1', 'T2', '1', '1', '0', '1', '', 'A'],

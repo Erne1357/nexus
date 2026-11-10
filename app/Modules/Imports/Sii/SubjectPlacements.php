@@ -22,9 +22,12 @@ namespace App\Modules\Imports\Sii;
  *    empareja con la primera libre, en orden de clave (supuestos por confirmar).
  * 3. Lugar: los renglones que caen en el mismo plan y clave son un solo lugar. El semestre es el de la variante
  *    presencial, o el de la primera, entre las que traen semestre; si traen semestres distintos, avisa.
- * 4. Nombre: el de la clave de Nexus es el más frecuente entre sus renglones del SII (SubjectName::key()); en empate,
+ * 4. Horas: una materia de Nexus tiene unas solas horas y créditos. Si una clave queda en planes con combinaciones
+ *    distintas (una clave del SII que el SII repite en retículas con otras horas, o igual a una clave TecNM), todos
+ *    sus lugares toman la de más planes; en empate, la del plan de versión más reciente. Avisa (supuesto por confirmar).
+ * 5. Nombre: el de la clave de Nexus es el más frecuente entre sus renglones del SII (SubjectName::key()); en empate,
  *    el del plan de versión más reciente y luego el primero en orden alfabético. Si el SII trae otros, avisa.
- * 5. Sin semestre (D18, R10): un lugar con semestre 0 toma el semestre más frecuente (en empate, el menor) de los
+ * 6. Sin semestre (D18, R10): un lugar con semestre 0 toma el semestre más frecuente (en empate, el menor) de los
  *    lugares con semestre con el mismo nombre normalizado (de cualquiera de sus claves del SII), primero en planes de
  *    la misma carrera y si no hay, de cualquiera, con advertencia que nombra de dónde lo tomó. Si nada empata, no
  *    entra a la retícula: queda en pending() y avisa que va a la lista de pendientes de Servicios Escolares, que le
@@ -62,7 +65,7 @@ final class SubjectPlacements
         usort($placements, fn (array $a, array $b): int => strcmp($a['key'], $b['key']) ?: strcmp($a['materia'], $b['materia']));
         $this->warnRepeatedNames($placements);
 
-        return $this->withSemesters($this->named($this->merged($this->fused($this->coded($placements)))));
+        return $this->withSemesters($this->named($this->sharedHours($this->merged($this->fused($this->coded($placements))))));
     }
 
     /**
@@ -391,6 +394,50 @@ final class SubjectPlacements
                 'materias' => array_values(array_unique([$chosen['materia'], ...array_column($variants, 'materia')])),
                 'sources' => array_column($variants, 'materia'),
             ];
+        }
+
+        return $grid;
+    }
+
+    /**
+     * Regla 4: una materia de Nexus tiene unas solas horas y créditos. Si una clave quedó en planes con combinaciones
+     * distintas (una clave del SII que el SII repite en retículas con otras horas, o que es igual a una clave TecNM),
+     * todos sus lugares toman la de más planes; en empate, la del plan de versión más reciente, y luego la menor.
+     *
+     * @param  array<string, GridPlacement>  $grid
+     * @return array<string, GridPlacement>
+     */
+    private function sharedHours(array $grid): array
+    {
+        $byCode = [];
+        foreach ($grid as $ref => $placement) {
+            $byCode[$placement['code']][$this->combination($placement)][$placement['plan']] = (string) $ref;
+        }
+        ksort($byCode, SORT_STRING);
+
+        foreach ($byCode as $code => $combinations) {
+            if (count($combinations) === 1) {
+                continue;
+            }
+
+            $ranked = array_map('strval', array_keys($combinations));
+            usort($ranked, fn (string $a, string $b): int => count($combinations[$b]) <=> count($combinations[$a])
+                ?: $this->newest($combinations[$b]) <=> $this->newest($combinations[$a])
+                ?: strcmp($a, $b));
+            $winner = $ranked[0];
+            [$credits, $theory, $practice] = explode('/', $winner);
+            $changed = [];
+
+            foreach (array_slice($ranked, 1) as $combination) {
+                foreach ($combinations[$combination] as $plan => $ref) {
+                    $grid[$ref] = [...$grid[$ref], 'credits' => $credits, 'theory' => $theory, 'practice' => $practice];
+                    $changed[] = "{$plan} ({$combination})";
+                }
+            }
+
+            sort($changed, SORT_STRING);
+            $count = count($combinations[$winner]);
+            $this->warn((string) $code, "La materia {$code} trae créditos/teoría/práctica distintos según el plan: {$winner} en {$count} ".($count === 1 ? 'plan' : 'planes').' y otros en '.implode(', ', $changed).". En Nexus una materia tiene unas solas horas: queda {$winner} en todos sus planes; revisar (supuesto por confirmar).");
         }
 
         return $grid;
