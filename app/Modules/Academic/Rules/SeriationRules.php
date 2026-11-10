@@ -42,6 +42,18 @@ final class SeriationRules
     }
 
     /**
+     * Si un requisito va contra el orden de los semestres: una seriación cuyo requisito no va en un semestre anterior al
+     * de la materia. Un correquisito, o uno sin semestre conocido, nunca. Al aplicar varios (la migración del SII y los
+     * requisitos que esperan), primero van los que respetan el orden, así en un ciclo entra el que pide una materia de
+     * un semestre anterior (supuesto por confirmar).
+     */
+    public static function goesBackwards(PrerequisiteKind $kind, ?int $subjectSemester, ?int $prerequisiteSemester): bool
+    {
+        return $kind === PrerequisiteKind::Seriacion && $subjectSemester !== null && $prerequisiteSemester !== null
+            && $prerequisiteSemester >= $subjectSemester;
+    }
+
+    /**
      * Si `$subjectId` pidiendo `$prerequisiteId` en seriación cierra un ciclo: el requisito ya pide, en cadena, a
      * la materia, o son la misma. Pura: solo mira `$edges`.
      *

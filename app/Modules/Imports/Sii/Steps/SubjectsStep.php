@@ -38,7 +38,8 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * también las que se unieron en una clave TecNM. Recuerda `subject_for`: clave del SII →
  * clave de materia de Nexus, para los pasos de grupos y kárdex (las claves numéricas quedan como llaves int de
  * PHP: búscalas con `$map[$clave] ?? null`), y `subject_for_plan`: plan de Nexus → clave del SII → materia de
- * Nexus, para que el kárdex lleve la clave de cada alumno a la materia de su retícula.
+ * Nexus, para que el kárdex lleve la clave de cada alumno a la materia de su retícula y la seriación (SeriationStep), las
+ * claves de cada requisito a las materias del plan.
  */
 final class SubjectsStep implements SiiStep
 {
