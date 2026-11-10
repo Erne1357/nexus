@@ -20,6 +20,8 @@ enum SiiFile: string
     case Alumnos = 'alumnos_todos';
     case Grupos = 'grupos';
     case Horarios = 'horarios';
+    case HistoriaAlumno = 'historia_alumno';
+    case SeleccionMaterias = 'seleccion_materias';
 
     /**
      * Encabezados exactos (normalizados) que trae la exportación real. Si cambian, la migración se detiene.
@@ -277,6 +279,36 @@ enum SiiFile: string
                 'vigencia_fin',
                 'consecutivo_admvo',
             ],
+            self::HistoriaAlumno => [
+                'periodo',
+                'no_de_control',
+                'materia',
+                'grupo',
+                'calificacion',
+                'tipo_evaluacion',
+                'fecha_calificacion',
+                'plan_de_estudios',
+                'estatus_materia',
+                'nopresento',
+                'checksum',
+                'usuario',
+                'fecha_actualizacion',
+                'periodo_acredita_materia',
+            ],
+            self::SeleccionMaterias => [
+                'periodo',
+                'no_de_control',
+                'materia',
+                'grupo',
+                'calificacion',
+                'tipo_evaluacion',
+                'repeticion',
+                'nopresento',
+                'status_seleccion',
+                'fecha_hora_seleccion',
+                'cuantas_curso',
+                'creditos_materia_sm',
+            ],
         };
     }
 
@@ -299,11 +331,12 @@ enum SiiFile: string
     }
 
     /**
-     * Si la exportación debe traer el archivo. En la parte 1 de la migración todos son obligatorios.
+     * Si la exportación debe traer el archivo. Los de la parte 1 son obligatorios; los del kárdex (historia y
+     * selección), que llegaron después, no: sin ellos el paso `kardex` avisa y no los migra.
      */
     public function required(): bool
     {
-        return true;
+        return ! in_array($this, [self::HistoriaAlumno, self::SeleccionMaterias], true);
     }
 
     /**
