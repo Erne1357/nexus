@@ -19,6 +19,8 @@ enum AcademicLoadPermission: string implements Permission
     case LoadView = 'academic_load.load.view';
     case LoadPropose = 'academic_load.load.propose';
     case LoadStartStaffing = 'academic_load.load.start_staffing';
+    case LoadPublish = 'academic_load.load.publish';
+    case LoadPublishApproved = 'academic_load.load.publish_approved';
     case ProposalCreate = 'academic_load.proposal.create';
     case ProposalUpdate = 'academic_load.proposal.update';
     case ProposalSubmit = 'academic_load.proposal.submit';
@@ -35,6 +37,8 @@ enum AcademicLoadPermission: string implements Permission
             self::LoadView => 'Ver la carga académica de un departamento',
             self::LoadPropose => 'Proponer la carga de un departamento',
             self::LoadStartStaffing => 'Pasar la carga a asignación docente',
+            self::LoadPublish => 'Publicar la carga cerrada de un campus sin visto bueno',
+            self::LoadPublishApproved => 'Publicar la carga que aprobó Subdirección',
             self::ProposalCreate => 'Armar la propuesta de una carrera',
             self::ProposalUpdate => 'Corregir la propuesta de una carrera',
             self::ProposalSubmit => 'Enviar la propuesta de una carrera',
@@ -47,7 +51,7 @@ enum AcademicLoadPermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
+            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadPublish, self::LoadPublishApproved, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
             default => [Dimension::Campus, Dimension::Career],
         };
     }

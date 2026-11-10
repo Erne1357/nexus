@@ -89,6 +89,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return [
             Role::Subdireccion->value => [
                 AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::LoadPublish,
+                AcademicLoadPermission::LoadPublishApproved,
                 AcademicLoadPermission::ProposalView,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::AgreementView,
@@ -97,6 +99,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::LoadView,
                 AcademicLoadPermission::LoadPropose,
                 AcademicLoadPermission::LoadStartStaffing,
+                AcademicLoadPermission::LoadPublish,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::ProposalReviewDecide,
                 AcademicLoadPermission::AgreementView,

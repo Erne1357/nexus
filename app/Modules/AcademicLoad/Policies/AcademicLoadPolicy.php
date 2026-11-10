@@ -39,6 +39,17 @@ final class AcademicLoadPolicy
         return $this->can($user, AcademicLoadPermission::LoadStartStaffing, $load);
     }
 
+    /**
+     * Publicar: Subdirección, o el jefe del departamento si el campus no exige visto bueno (reglas-de-negocio.md,
+     * tabla de permisos). Con visto bueno, la carga aprobada solo la publica quien tiene `LoadPublishApproved`.
+     */
+    public function publish(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, $load->campus->profile->requiresSubdireccionApproval
+            ? AcademicLoadPermission::LoadPublishApproved
+            : AcademicLoadPermission::LoadPublish, $load);
+    }
+
     private function can(User $user, AcademicLoadPermission $permission, AcademicLoad $load): bool
     {
         return $this->actor($user)->allows($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
