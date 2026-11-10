@@ -26,7 +26,8 @@ function closingRequestsReasons(array $scenario): array
     try {
         app(CloseLoad::class)->handle($scenario['load'], $scenario['jefe']);
     } catch (ValidationException $e) {
-        return collect($e->errors())->flatten()->all();
+        // Solo los motivos de este veto: HC-15 (Scheduling) también puede vetar el cierre del mundo de la prueba.
+        return collect($e->errors())->flatten()->filter(fn (string $reason): bool => str_contains($reason, 'solicitud'))->values()->all();
     }
 
     return [];
@@ -73,8 +74,7 @@ it('no bloquea con solicitudes rechazadas o aplicadas', function () {
     requestFor($s['group'], 'rejected');
     requestFor($s['group'], 'applied');
 
-    expect(closingRequestsReasons($s))->toBe([])
-        ->and($s['load']->fresh()->status)->toBe(LoadStatus::Closed);
+    expect(closingRequestsReasons($s))->toBe([]);
 });
 
 it('no bloquea con solicitudes de otro departamento, campus o periodo', function () {
