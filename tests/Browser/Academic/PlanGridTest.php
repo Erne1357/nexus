@@ -20,11 +20,16 @@ use Database\Seeders\DemoSeeder;
 | semestres a 1366 px sin desplazarse, las cadenas debajo y la barra de selección al resaltar una cadena.
 */
 
+// En CI cada ida y vuelta de Livewire puede pasar de los 5 s que el plugin reintenta una aserción: este archivo
+// espera hasta 20 s y lo devuelve al valor por defecto al terminar.
 beforeEach(function () {
+    pest()->browser()->timeout(20_000);
     $this->seed(DemoSeeder::class);
     $this->plan = StudyPlan::where('code', 'ISIC-2010-224')->sole();
     User::factory()->admin()->create(['username' => 'ana.admin', 'name' => 'Ana Admin']);
 });
+
+afterEach(fn () => pest()->browser()->timeout(5_000));
 
 it('el admin abre la retícula de un plan, ve una materia en el panel y gestiona sus especialidades', function () {
     $onChain = fn (string $code): string => "document.querySelector('[data-subject=\"{$code}\"]').hasAttribute('data-on-chain')";
@@ -89,6 +94,7 @@ it('el admin agrega una materia del catálogo a un semestre, la mueve y la quita
         ->click('[data-catalog="'.$subject->code.'"]')
         ->waitForText('Agregar '.$subject->code)
         ->click('@add-submit')
+        ->waitForText('Materia agregada')
         ->assertSeeIn('[data-semester="9"]', $subject->code)
         ->assertNoJavaScriptErrors();
 
@@ -103,6 +109,7 @@ it('el admin agrega una materia del catálogo a un semestre, la mueve y la quita
         ->select('semester', '8')
         ->assertScript($semesterSelect, '8')
         ->press('Guardar lugar')
+        ->waitForText('Lugar guardado')
         ->assertSeeIn('[data-semester="8"]', $subject->code)
         ->click('@remove-placement')
         ->waitForText('No tiene seriación')
@@ -111,6 +118,7 @@ it('el admin agrega una materia del catálogo a un semestre, la mueve y la quita
         ->click('@remove-placement')
         ->waitForText('No tiene seriación')
         ->click('@confirm-remove')
+        ->waitForText('ya no está en la retícula')
         ->assertNotPresent('[data-subject="'.$subject->code.'"]')
         ->assertDontSee('Lugar en la retícula')
         ->assertNoJavaScriptErrors();
