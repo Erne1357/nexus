@@ -28,7 +28,7 @@ final class ConfirmGroupsOnLoadClosing
 
         activity()
             ->performedOn($load)
-            ->causedBy(auth()->user())
+            ->causedBy($event->actor)
             ->event('groups_confirmed')
             ->withProperties(['groups' => $confirmed])
             ->log("Confirmó {$confirmed} ".($confirmed === 1 ? 'grupo' : 'grupos').' al cerrar la carga');

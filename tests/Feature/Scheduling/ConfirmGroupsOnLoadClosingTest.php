@@ -36,7 +36,8 @@ it('confirma los grupos planeados del departamento y deja bitácora en la carga'
     $cancelled = confirmingGroup(['status' => GroupStatus::Cancelled]);
     $other = Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->load->campus_id]);
 
-    LoadClosing::dispatch($this->load);
+    $actor = User::factory()->admin()->create();
+    LoadClosing::dispatch($this->load, $actor);
 
     expect(array_map(fn (Group $group): GroupStatus => $group->fresh()->status, $planned))->toBe([GroupStatus::Confirmed, GroupStatus::Confirmed])
         ->and($cancelled->fresh()->status)->toBe(GroupStatus::Cancelled)
@@ -44,6 +45,7 @@ it('confirma los grupos planeados del departamento y deja bitácora en la carga'
 
     $activity = Activity::query()->where('event', 'groups_confirmed')->sole();
     expect($activity->subject_id)->toBe($this->load->id)
+        ->and($activity->causer_id)->toBe($actor->id)
         ->and($activity->properties['groups'])->toBe(2);
 });
 
