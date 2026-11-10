@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Events\AgreementCancelled;
 use App\Modules\AcademicLoad\Events\AgreementRejected;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Events\LoadClosing;
+use App\Modules\AcademicLoad\Events\LoadSnapshotRequested;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
@@ -50,6 +51,7 @@ use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
 use App\Modules\Scheduling\Listeners\NotifyDeciderOnAgreementRequested;
 use App\Modules\Scheduling\Listeners\NotifyOwnerOnLoanCancelled;
 use App\Modules\Scheduling\Listeners\NotifyRequesterOnAgreementDecided;
+use App\Modules\Scheduling\Listeners\ProvideLoadSnapshot;
 use App\Modules\Scheduling\Listeners\QueueConflictRecompute;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
@@ -111,6 +113,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         Event::listen(LoadTransitioning::class, BlockStaffingWithHardConflicts::class);
         Event::listen(LoadTransitioning::class, BlockClosingWithPendingGroups::class);
         Event::listen(LoadClosing::class, ConfirmGroupsOnLoadClosing::class);
+        Event::listen(LoadSnapshotRequested::class, ProvideLoadSnapshot::class);
 
         Event::listen(AgreementRequested::class, NotifyDeciderOnAgreementRequested::class);
         Event::listen(AgreementAccepted::class, NotifyRequesterOnAgreementDecided::class);
