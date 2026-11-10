@@ -671,3 +671,35 @@ it('toma el orden en el semestre (D21) del renglón del SII, de la variante pres
         ->and(subjectsStepRow($subjects, 'BBB-2010-300', 'ACF-0901')['position'])->toBe('7')
         ->and(subjectsStepRow($subjects, 'AAA-2010-224', 'ACA-0907')['position'])->toBe('');
 });
+
+it('dos materias distintas de una retícula con la misma clave TecNM no se juntan: la conserva la que se llama como esa clave en otras retículas, y avisa', function () {
+    writeSiiSubjects($this->dir, [
+        ['PF1', '1', '110100', 'PROCESOS DE FABRICACION'],
+        ['PF2', '1', '110100', 'PROCESOS DE FRABRICACION'],
+        ['FI2', '1', '110100', 'FISICA'],
+    ], [
+        ['A', '1', 'PF1', '4', '2', '2', '4', '', 'A'],
+        ['A2', '2', 'PF2', '4', '2', '2', '4', '', 'A'],
+        ['A2', '2', 'FI2', '4', '2', '2', '4', '', 'A'],
+    ], [['A', '1', 'PF1', 'INC-1023'], ['A2', '2', 'PF2', 'INC-1023'], ['A2', '2', 'FI2', 'INC-1023']]);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $forPlan = $run['migration']->remember('subject_for_plan', fn () => throw new LogicException('debía estar armado'));
+    $warning = collect($run['subjects']['incidents'])->first(fn (array $i): bool => $i['ref'] === 'A2/2');
+
+    expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['FI2', 'INC-1023'])
+        ->and($forPlan['AAA-2010-224'])->toMatchArray(['PF1' => 'INC-1023', 'PF2' => 'INC-1023', 'FI2' => 'FI2'])
+        ->and($warning['message'])->toContain('INC-1023')->toContain('FI2 (FISICA)')->toContain('la conserva PF2')->toContain('supuesto por confirmar');
+});
+
+it('una clave TecNM que en la misma retícula es la clave del SII de otra materia no se junta con ella: cada una conserva la suya', function () {
+    writeSiiSubjects($this->dir, [['ECO', '1', '110100', 'ECONOMIA'], ['TFC-0001', '1', '110100', 'TALLER DE FABRICACION DE CIRCUITOS']], [
+        ['A', '1', 'ECO', '3', '0', '3', '4', '', 'A'],
+        ['A', '1', 'TFC-0001', '3', '0', '3', '5', '', 'A'],
+    ], [['A', '1', 'ECO', 'TFC-0001']]);
+
+    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
+
+    expect(collect($subjects['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['ECO', 'TFC-0001'])
+        ->and(subjectsStepMessages($subjects))->toContain('warning|A/1|')->toContain('la conserva TFC-0001');
+});

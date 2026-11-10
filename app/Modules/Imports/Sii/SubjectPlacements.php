@@ -11,7 +11,10 @@ namespace App\Modules\Imports\Sii;
  * 1. Clave (D8): la clave TecNM del lugar si la tiene; si no, su clave del SII. Los lugares de una clave TecNM votan
  *    por su combinación de créditos y horas, un voto por plan: la más votada se queda la clave TecNM y los lugares
  *    con otra conservan su clave del SII, con advertencia. En un empate gana la combinación del plan de versión más
- *    reciente, con advertencia (supuestos por confirmar).
+ *    reciente, con advertencia (supuestos por confirmar). Dos materias distintas de una misma retícula del SII nunca
+ *    quedan con la misma clave: si el SII les da la misma clave TecNM, o una es la clave del SII de la otra, la
+ *    conserva la que es esa clave del SII o, si no, la única que se llama como la clave en las demás retículas
+ *    (hasta dos letras de diferencia); las otras se quedan con su clave del SII y se avisa (supuesto por confirmar).
  * 2. Variantes (D15, R14): dentro de un plan, las materias de retículas distintas del SII con el mismo nombre
  *    normalizado (sin importar singular o plural), los mismos créditos y la misma especialidad (o ninguna) son una
  *    sola, aunque repartan distinto las horas de teoría y práctica. Si las horas coinciden, se queda la clave TecNM si
@@ -194,7 +197,83 @@ final class SubjectPlacements
             }
         }
 
+        return $this->distinctWithinGrid($placements);
+    }
+
+    /**
+     * Regla 1: dos materias distintas de una misma retícula del SII no quedan con la misma clave. La conserva la que
+     * es esa clave del SII o, si no, la única que se llama como ella en las demás retículas; las otras vuelven a su
+     * clave del SII.
+     *
+     * @param  list<CodedPlacement>  $placements
+     * @return list<CodedPlacement>
+     */
+    private function distinctWithinGrid(array $placements): array
+    {
+        $claims = [];
+        foreach ($placements as $index => $placement) {
+            $claims[$placement['key']][$placement['code']][$placement['materia']][] = $index;
+        }
+        ksort($claims, SORT_STRING);
+
+        foreach ($claims as $key => $codes) {
+            foreach ($codes as $code => $materias) {
+                if (count($materias) < 2) {
+                    continue;
+                }
+
+                $code = (string) $code;
+                $names = array_map('strval', array_keys($materias));
+                sort($names, SORT_STRING);
+                $own = array_find($names, fn (string $materia): bool => mb_strtoupper($materia) === $code);
+                $winner = $own ?? $this->namedAfter($code, $names, (string) $key, $placements);
+
+                foreach ($materias as $materia => $indexes) {
+                    if ((string) $materia === $winner) {
+                        continue;
+                    }
+
+                    foreach ($indexes as $index) {
+                        $placements[$index]['code'] = $placements[$index]['origin'] = mb_strtoupper((string) $materia);
+                        $placements[$index]['unified'] = false;
+                    }
+                }
+
+                $listed = implode(', ', array_map(fn (string $materia): string => "{$materia} ({$this->catalog[$materia]['name']})", $names));
+                $outcome = $winner === null
+                    ? 'ninguna la conserva y cada una se queda con su clave del SII'
+                    : "la conserva {$winner} y las demás se quedan con su clave del SII";
+                $this->warn((string) $key, "En la retícula {$key} del SII, {$listed} quedaban con la misma clave {$code} y son materias distintas: {$outcome} (supuesto por confirmar).");
+            }
+        }
+
         return $placements;
+    }
+
+    /**
+     * De las materias de una retícula que se disputan una clave TecNM, la única cuyo nombre es el que esa clave
+     * tiene en las demás retículas, con hasta dos letras de diferencia; null si no hay una sola.
+     *
+     * @param  list<string>  $materias
+     * @param  list<CodedPlacement>  $placements
+     */
+    private function namedAfter(string $code, array $materias, string $key, array $placements): ?string
+    {
+        $elsewhere = [];
+        foreach ($placements as $placement) {
+            if ($placement['tecnm'] === $code && $placement['key'] !== $key) {
+                $elsewhere[] = $this->nameKey($placement['materia']);
+            }
+        }
+
+        if ($elsewhere === []) {
+            return null;
+        }
+
+        $name = $this->majorityKey($elsewhere);
+        $close = array_values(array_filter($materias, fn (string $materia): bool => levenshtein($this->nameKey($materia), $name) <= 2));
+
+        return count($close) === 1 ? $close[0] : null;
     }
 
     /**
