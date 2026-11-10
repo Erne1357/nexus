@@ -18,6 +18,7 @@ use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\PublicationShowcaseDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Scheduling\Events\GroupsCreated;
@@ -108,6 +109,23 @@ class MassiveSeeder extends Seeder
 
         $this->command?->info(sprintf('Cargas cerradas y reabiertas: %.1f s.', (hrtime(true) - $started) / 1e9));
 
+        $this->showcase();
+
         $this->call(LoginScreenDemoSeeder::class);
+    }
+
+    /**
+     * CB de C2, cerrada por el paso anterior, publicada en dos versiones y reabierta al final (tarea 4.3); II de C1 se
+     * queda cerrada sin publicar. Solo con `demo:seed --hasta=todo`, que prende `demo.showcase`.
+     */
+    public function showcase(): void
+    {
+        if (! config('demo.showcase', false)) {
+            return;
+        }
+
+        $started = hrtime(true);
+        $this->callWith(PublicationShowcaseDemoSeeder::class, ['campus' => 'C2', 'department' => 'CB', 'versions' => 2, 'reopenAtEnd' => true]);
+        $this->command?->info(sprintf('Carga publicada en varias versiones: %.1f s.', (hrtime(true) - $started) / 1e9));
     }
 }

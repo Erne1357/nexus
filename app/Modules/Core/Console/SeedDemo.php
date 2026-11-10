@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 final class SeedDemo extends Command
 {
     protected $signature = 'demo:seed
-        {--hasta=todo : Punto del proceso: catalogos, validacion, propuesta, horarios, asignacion, salones, cierre, publicacion o todo}
+        {--hasta=todo : Punto del proceso: catalogos, validacion, propuesta, horarios, asignacion, salones, cierre, publicacion, reanalisis o todo}
         {--volumen=demo : demo (Campus II en pequeño) o masivo (Campus I y Campus II con volumen)}
         {--semilla=2027 : La misma semilla da los mismos datos (2027, la de DemoSeeder y MassiveSeeder)}
         {--force : Sin pedir confirmación}';
@@ -98,6 +98,8 @@ final class SeedDemo extends Command
         $report = null;
 
         if ($target === DemoCheckpoint::All) {
+            // La carga publicada en varias versiones (tarea 4.3) solo va en la demo que se ve, no en las pruebas.
+            config(['demo.showcase' => true]);
             $this->call('db:seed', [
                 '--class' => $volume === DemoVolume::Massive ? 'Database\Seeders\MassiveSeeder' : 'Database\Seeders\DemoSeeder',
                 '--force' => true,
