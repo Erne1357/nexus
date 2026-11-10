@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Notifications\LoadApproved;
 use App\Modules\AcademicLoad\Notifications\LoadAwaitingApproval;
 use App\Modules\AcademicLoad\Notifications\LoadReopened;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
@@ -110,8 +111,8 @@ it('guarda el puesto y lleva a «Cierre de la carga» con el departamento', func
     $message = NotificationMessage::fromArray($stored->data);
 
     expect($stored->data['role'])->toBe('jefe_departamento')
-        ->and($message->route)->toBe('staffing.closing')
-        ->and($message->parameters)->toBe(['departamento' => $s['department']->id]);
+        ->and(LoadReopened::unavailableReason(app(Actor::class)->forUser($s['jefe']), $message))->toBeNull()
+        ->and(route($message->route, $message->parameters))->toBe(route('staffing.closing', ['departamento' => $s['department']->id]));
 });
 
 it('Subdirección cierra también, pero los avisos al jefe no le llegan', function () {
