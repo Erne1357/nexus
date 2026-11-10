@@ -10,6 +10,7 @@ use App\Modules\Imports\Console\MigrateSii;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Sii\SiiStep;
+use App\Modules\Imports\Sii\Steps\ArchiveStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\KardexStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
@@ -66,11 +67,13 @@ final class ImportsServiceProvider extends ModuleServiceProvider
 
     /**
      * Pasos de la migración del SII, en el orden en que corren. Cada tarea que escribe un paso lo agrega aquí;
-     * las pruebas los sustituyen ligando `sii.steps`.
+     * las pruebas los sustituyen ligando `sii.steps`. El archivo del SII original va primero, para que quede guardado
+     * aunque un paso posterior se detenga.
      *
      * @var list<class-string<SiiStep>>
      */
     public const array SII_STEPS = [
+        ArchiveStep::class,
         OrgChartStep::class,
         CareersStep::class,
         SubjectsStep::class,

@@ -14,12 +14,13 @@ use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| `imports:migrate-sii` con los nueve pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
+| `imports:migrate-sii` con los diez pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
 | una exportación sintética pequeña que toca cada paso: corre sin filas con error y repetirla no da ni altas ni
 | cambios en ningún lote.
 */
@@ -103,13 +104,15 @@ afterEach(function () {
     File::deleteDirectory($this->curated);
 });
 
-it('corre los nueve pasos de producción sin errores y repetirla no da altas ni cambios', function () {
+it('corre los diez pasos de producción sin errores y repetirla no da altas ni cambios', function () {
     expect(app()->bound('sii.steps'))->toBeFalse()
-        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(9);
+        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(10);
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
 
     $first = ImportBatch::query()->get();
+
+    expect(DB::table('sii_archivo._cargas')->pluck('archivo')->sort()->values()->all())->toBe(collect(SiiFile::cases())->map->value->sort()->values()->all());
 
     expect($first->pluck('template')->unique()->sort()->values()->all())->toBe([
         'careers', 'departments', 'kardex', 'org_units', 'pending_placements', 'positions', 'rooms', 'students', 'study_plans', 'subject_aliases', 'subjects', 'teacher_history', 'teachers',

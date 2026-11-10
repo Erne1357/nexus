@@ -14,7 +14,8 @@ use InvalidArgumentException;
 use Throwable;
 
 /**
- * Migra la exportación del SII a Nexus por el motor de importación. Con `--dry-run` corre todo y lo revierte.
+ * Migra la exportación del SII a Nexus por el motor de importación. Antes guarda el original en el esquema
+ * `sii_archivo` (paso `archivo`, ArchiveSiiExport). Con `--dry-run` corre todo y lo revierte.
  * Imprime solo cuentas por lote, nunca valores; el detalle por fila está en `<dir>/_incidencias.csv`. Sube el límite
  * de memoria a 1 GB si era menor, porque el paso `kardex` guarda una llave por cada uno de los dos millones de
  * renglones de la historia; uno mayor o sin límite se respeta.

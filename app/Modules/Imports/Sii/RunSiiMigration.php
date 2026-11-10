@@ -28,6 +28,10 @@ use Throwable;
  * queda en `<dir>/_incidencias.csv`, sin filas crudas; también, una vez por archivo del SII, los renglones que no se
  * pudieron leer (error: no se migran), los reparados por coma decimal y la anotación al final (`SiiFileRead`).
  *
+ * El primer paso, `archivo` (ArchiveStep), no pasa por el motor: guarda la exportación original en el esquema
+ * `sii_archivo` y entrega directamente su reporte por archivo (SiiStep). Como lee completo cada archivo, las
+ * incidencias de lectura de toda la exportación quedan a su nombre cuando corre.
+ *
  * Con `$dryRun` todo corre dentro de una transacción que se revierte, sin cola, y se borran los archivos
  * subidos; las incidencias se leen antes de revertir. Sin `$dryRun` los archivos subidos se conservan como
  * evidencia de cada lote.
@@ -70,7 +74,7 @@ final class RunSiiMigration
             throw new InvalidArgumentException('Paso desconocido: '.implode(', ', $unknown).'. Pasos válidos: '.implode(', ', $names).'.');
         }
 
-        $migration = new SiiMigration($export, $this->curatedDir);
+        $migration = new SiiMigration($export, $this->curatedDir, $dryRun);
         $incidents = new Incidents;
         $unreadable = 0;
         $reports = [];
@@ -96,7 +100,7 @@ final class RunSiiMigration
 
                 foreach ($step->batches($migration) as $batch) {
                     $current[1] = $batch->file;
-                    $reports[] = $this->run($dir, $user, $step, $batch, $incidents, $stored);
+                    $reports[] = $batch instanceof SiiBatchReport ? $batch : $this->run($dir, $user, $step, $batch, $incidents, $stored);
                 }
 
                 $unreadable += $this->collectReads($step->name(), $export, $incidents);
