@@ -72,6 +72,28 @@ final readonly class PublishedSchedule
         return new self($loads, $groups, $latest['profile'] ?? null);
     }
 
+    /**
+     * El payload sin lo que no se muestra fuera del personal (el RFC del docente, la justificación de HC-15 y quién
+     * publicó), para guardarlo en caché: lo demás de la consulta no lo necesita.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public static function withoutPrivate(array $payload): array
+    {
+        unset($payload['published_by']);
+
+        foreach ($payload['groups'] as $index => $group) {
+            unset($payload['groups'][$index]['justification']);
+
+            if ($group['teacher'] !== null) {
+                unset($payload['groups'][$index]['teacher']['rfc']);
+            }
+        }
+
+        return $payload;
+    }
+
     public function isEmpty(): bool
     {
         return $this->groups === [];

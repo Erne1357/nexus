@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Cache;
  *
  * Los payloads de un campus y periodo se guardan en caché con una llave que lleva los ids de las versiones que lo
  * forman: una versión nueva cambia la llave, así que nunca hay que invalidar, y cada consulta cuesta una lectura de
- * ids. Se guardan arreglos, no objetos: la caché no deserializa clases (`cache.serializable_classes`), y así un cambio
+ * ids. Se guarda solo lo que se puede mostrar (PublishedSchedule::withoutPrivate: sin RFC, justificación ni quién
+ * publicó), en arreglos y no objetos: la caché no deserializa clases (`cache.serializable_classes`), y así un cambio
  * de forma de PublishedSchedule no deja entradas viejas. Sin estado propio, para Octane.
  */
 final class PublishedScheduleQuery
@@ -28,25 +29,37 @@ final class PublishedScheduleQuery
      */
     public function schedule(Term $term, Campus $campus): PublishedSchedule
     {
-        $ids = LoadSnapshot::query()
-            ->latestVersion()
-            ->whereIn('academic_load_id', AcademicLoad::query()->select('id')->where('term_id', $term->getKey())->where('campus_id', $campus->getKey()))
-            ->orderBy('id')
-            ->pluck('id')
-            ->all();
+        $ids = $this->latestIds($term, $campus);
 
         if ($ids === []) {
             return PublishedSchedule::fromPayloads([]);
         }
 
-        $key = 'published-schedule:v1:'.$term->getKey().':'.$campus->getKey().':'.hash('xxh128', implode(',', $ids));
+        $key = 'published-schedule:v1:'.$term->getKey().':'.$campus->getKey().':'.$this->hashOf($ids);
 
-        return PublishedSchedule::fromPayloads(Cache::remember($key, now()->addDays(7), fn (): array => LoadSnapshot::query()->whereIn('id', $ids)->orderBy('id')->pluck('payload')->all()));
+        return PublishedSchedule::fromPayloads(Cache::remember($key, now()->addDays(7), fn (): array => LoadSnapshot::query()
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->pluck('payload')
+            ->map(PublishedSchedule::withoutPrivate(...))
+            ->all()));
+    }
+
+    /**
+     * La huella de lo publicado del campus y periodo: cambia con cada versión nueva de cualquiera de sus cargas. Los
+     * exportes la llevan en su llave (PublishedExport::key()); null si no hay nada publicado.
+     */
+    public function version(Term $term, Campus $campus): ?string
+    {
+        $ids = $this->latestIds($term, $campus);
+
+        return $ids === [] ? null : $this->hashOf($ids);
     }
 
     /**
      * Los grupos publicados de un docente en todos los campus del periodo («Mi carga» cruza campus), por materia y
-     * grupo.
+     * grupo. Arma lo publicado completo de cada campus y se queda con lo del docente: con dos campus cuesta poco, y lo
+     * completo casi siempre ya está en caché; si crecen los campus, conviene una lectura por docente.
      *
      * @return list<PublishedGroup>
      */
@@ -101,6 +114,27 @@ final class PublishedScheduleQuery
         ])->filter(fn (array $context): bool => $context['campuses'] !== [])->values()->all();
 
         return $contexts;
+    }
+
+    /**
+     * @return list<string> los ids de la última versión de cada carga del campus y periodo, en orden
+     */
+    private function latestIds(Term $term, Campus $campus): array
+    {
+        return LoadSnapshot::query()
+            ->latestVersion()
+            ->whereIn('academic_load_id', AcademicLoad::query()->select('id')->where('term_id', $term->getKey())->where('campus_id', $campus->getKey()))
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
+     * @param  list<string>  $ids
+     */
+    private function hashOf(array $ids): string
+    {
+        return hash('xxh128', implode(',', $ids));
     }
 
     /**

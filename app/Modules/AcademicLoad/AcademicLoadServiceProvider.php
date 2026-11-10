@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\CareerProposalReturned;
 use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
+use App\Modules\AcademicLoad\Exports\PublishedExport;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
 use App\Modules\AcademicLoad\Listeners\BlockReviewReopeningAfterDraft;
 use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
@@ -20,6 +21,7 @@ use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
@@ -53,6 +55,9 @@ use Illuminate\Support\Facades\RateLimiter;
  */
 final class AcademicLoadServiceProvider extends ModuleServiceProvider
 {
+    /** @var array<class-string, class-string> */
+    protected array $policies = [PublishedExport::class => PublishedExportPolicy::class];
+
     public function boot(): void
     {
         parent::boot();
