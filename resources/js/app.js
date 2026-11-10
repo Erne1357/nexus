@@ -649,6 +649,8 @@ document.addEventListener('alpine:init', () => {
         return {
             tool: 'unavailable',
             pending: 0,
+            /** Ya se confirmó salir sin guardar: la navegación que sigue no vuelve a preguntar. */
+            leaving: false,
             saving: false,
             copying: false,
             syncing: false,
@@ -728,17 +730,32 @@ document.addEventListener('alpine:init', () => {
                 }
             },
 
-            /** Al ir a otra pantalla con wire:navigate con bloques sin guardar, pide confirmar; Atrás y Adelante, no. */
+            /**
+             * Al ir a otra pantalla con wire:navigate con bloques sin guardar, pide confirmar en el diálogo de Nexus
+             * (ADR-0023); Atrás y Adelante, no. Detiene la navegación y, si se confirma, la repite sin preguntar.
+             */
             confirmLeave(event) {
-                if (this.pending === 0 || event.detail?.history) {
+                if (this.pending === 0 || event.detail?.history || this.leaving) {
                     return;
                 }
 
-                const blocks = this.pending === 1 ? '1 bloque sin guardar' : `${this.pending} bloques sin guardar`;
+                event.preventDefault();
 
-                if (!window.confirm(`Tienes ${blocks}. ¿Salir sin guardar?`)) {
-                    event.preventDefault();
-                }
+                const blocks = this.pending === 1 ? '1 bloque sin guardar' : `${this.pending} bloques sin guardar`;
+                const url = String(event.detail?.url ?? '');
+
+                window.dispatchEvent(new CustomEvent('nexus-confirm', {
+                    detail: {
+                        title: '¿Salir sin guardar?',
+                        message: `Tienes ${blocks}; se pierden al salir.`,
+                        button: 'Salir sin guardar',
+                        tone: 'warning',
+                        run: () => {
+                            this.leaving = true;
+                            window.Livewire.navigate(url);
+                        },
+                    },
+                }));
             },
 
             /** Una sola cuenta tras cada cambio: las celdas, las cifras, las horas de cada día y los rangos. */
@@ -1303,11 +1320,18 @@ document.addEventListener('livewire:init', () => {
 
             asked = true;
 
-            if (confirm('Tu perfil cambió (en otra pestaña o por un cambio en tus puestos). ¿Recargar la página?')) {
-                window.location.reload();
-            } else {
-                asked = false;
-            }
+            window.dispatchEvent(new CustomEvent('nexus-confirm', {
+                detail: {
+                    title: 'Tu perfil cambió',
+                    message: 'Cambió en otra pestaña o por un cambio en tus puestos. Recarga la página para seguir con el perfil de ahora.',
+                    button: 'Recargar',
+                    tone: 'primary',
+                    run: () => window.location.reload(),
+                    onCancel: () => {
+                        asked = false;
+                    },
+                },
+            }));
         });
     });
 });
@@ -1359,13 +1383,14 @@ document.addEventListener('alpine:init', () => {
         tone: 'primary',
         run: null,
         origin: null,
+        onCancel: null,
 
         get toneClass() {
             return { error: 'btn-error', warning: 'btn-warning', primary: 'btn-primary' }[this.tone] ?? 'btn-primary';
         },
 
         show(detail) {
-            Object.assign(this, { title: detail.title, message: detail.message, button: detail.button, tone: detail.tone, run: detail.run, origin: detail.origin ?? null });
+            Object.assign(this, { title: detail.title, message: detail.message, button: detail.button, tone: detail.tone, run: detail.run, origin: detail.origin ?? null, onCancel: detail.onCancel ?? null });
             this.open = true;
             document.getElementById('nexus-confirm')?.showModal();
             this.$nextTick(() => this.$refs.cancel?.focus());
@@ -1382,14 +1407,18 @@ document.addEventListener('alpine:init', () => {
             }
 
             const origin = this.origin;
+            const onCancel = this.onCancel;
             this.run = null;
+            this.onCancel = null;
             this.close();
             origin?.focus?.();
+            onCancel?.();
         },
 
         accept() {
             const run = this.run;
             this.run = null;
+            this.onCancel = null;
             this.close();
             run?.();
         },

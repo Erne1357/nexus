@@ -64,7 +64,7 @@
                     <span class="grid size-10 place-items-center text-base-content/30"><x-icon name="o-lock-closed" class="h-4 w-4" aria-hidden="true" /><span class="sr-only">La carrera dueña no se quita</span></span>
                 @else
                     <button type="button" wire:click="removeCareer('{{ $row['career_id'] }}')" @disabled(! $canManage)
-                        @if ($proposedRow) wire:confirm="¿Retirar la propuesta de {{ $row['code'] }}? Se retira en este momento y el jefe de {{ $row['decides']['name'] }} ya no la verá." @endif
+                        @if ($proposedRow) x-confirm="Se retira en este momento y el jefe de {{ $row['decides']['name'] }} ya no la verá." data-confirm-title="¿Retirar la propuesta de {{ $row['code'] }}?" data-confirm-button="Retirar" data-confirm-tone="warning" @endif
                         class="btn btn-ghost btn-sm size-10 p-0 text-base-content/60" aria-label="{{ $proposedRow ? 'Retirar la propuesta de' : 'Quitar' }} {{ $row['code'] }}">
                         <x-icon name="o-x-mark" class="h-4 w-4" aria-hidden="true" />
                     </button>

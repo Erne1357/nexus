@@ -105,15 +105,21 @@
 @if ($groups['decide'] !== [])
     <div class="flex flex-wrap items-center gap-2 border-t border-base-300 bg-base-100 px-3 py-2.5 max-lg:sticky max-lg:bottom-0 max-lg:z-10" data-testid="bulk-bar"
         x-data="{
-            confirmText() {
+            confirmAccept() {
                 const n = $wire.selected.length
-                return `¿Aceptar ${n} ${n === 1 ? 'acuerdo' : 'acuerdos'}? Cada uno se acepta por separado, con su bitácora y su aviso; si alguno no se puede, los demás sí se aceptan.`
+                $dispatch('nexus-confirm', {
+                    title: `¿Aceptar ${n} ${n === 1 ? 'acuerdo' : 'acuerdos'}?`,
+                    message: 'Cada uno se acepta por separado, con su bitácora y su aviso; si alguno no se puede, los demás sí se aceptan.',
+                    button: 'Aceptar',
+                    tone: 'primary',
+                    run: () => $wire.acceptMany(),
+                })
             },
         }"
         x-show="$wire.selected.length > 0" @if ($selected === []) x-cloak @endif>
         <span class="me-auto text-sm"><span class="font-mono font-semibold" x-text="$wire.selected.length">{{ count($selected) }}</span> <span x-text="$wire.selected.length === 1 ? 'elegido' : 'elegidos'">{{ count($selected) === 1 ? 'elegido' : 'elegidos' }}</span></span>
         <button type="button" class="btn btn-ghost max-md:h-11 max-md:min-h-11" x-on:click="$wire.selected = []" data-testid="bulk-clear">Quitar</button>
-        <button type="button" class="btn btn-primary max-md:h-11 max-md:min-h-11" x-on:click="if (confirm(confirmText())) $wire.acceptMany()" x-bind:disabled="$wire.selected.length > {{ $maxBulk }}"
+        <button type="button" class="btn btn-primary max-md:h-11 max-md:min-h-11" x-on:click="confirmAccept()" x-bind:disabled="$wire.selected.length > {{ $maxBulk }}"
             aria-describedby="bulk-limit" wire:loading.attr="disabled" wire:target="acceptMany" data-testid="bulk-accept">
             <span class="loading loading-spinner loading-sm" wire:loading wire:target="acceptMany"></span>
             <x-icon name="o-check" class="h-4 w-4" wire:loading.remove wire:target="acceptMany" />

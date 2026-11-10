@@ -20,10 +20,10 @@ it('el layout trae el diálogo de confirmar una sola vez y Campus lo usa en luga
         ->and($html)->not->toContain('wire:confirm');
 });
 
-it('ya no queda wire:confirm en las vistas de Core, Academic, Facilities y Faculty', function () {
+it('ya no queda wire:confirm en las vistas de Core, Academic, Facilities, Faculty y Scheduling', function () {
     $files = [];
 
-    foreach (['Academic', 'Core', 'Facilities', 'Faculty'] as $module) {
+    foreach (['Academic', 'Core', 'Facilities', 'Faculty', 'Scheduling'] as $module) {
         $dir = base_path("app/Modules/{$module}");
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
 
@@ -45,4 +45,10 @@ it('ya no queda wire:confirm en las vistas de Core, Academic, Facilities y Facul
     }
 
     expect($files)->toBe([]);
+});
+
+it('el JS de la aplicación ya no abre diálogos del navegador (salvo el aviso de beforeunload)', function () {
+    $js = file_get_contents(resource_path('js/app.js'));
+
+    expect($js)->not->toMatch('/(?<![\w.$-])(window\.)?(confirm|alert|prompt)\(/');
 });
