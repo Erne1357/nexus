@@ -310,7 +310,7 @@ it('migra docentes e historial de punta a punta sin filas con error', function (
     Campus::factory()->create(['code' => 'C1']);
     User::factory()->admin()->create(['username' => 'migrador']);
 
-    $curated = sys_get_temp_dir().'/sii-curated-'.uniqid();
+    $curated = sys_get_temp_dir().'/sii-curated-'.bin2hex(random_bytes(6));
     File::makeDirectory($curated, 0775, true);
     File::copy(base_path('app/Modules/Imports/Sii/Curated/organigrama.csv'), $curated.'/organigrama.csv');
     File::put($curated.'/carreras.csv', "carrera,nombre,departamento,departamento_nombre,nota\nAAA,Carrera Triple A,110700,Económico Administrativas,\n");
