@@ -4,6 +4,7 @@ namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
@@ -73,6 +74,10 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(LoadTransitioned::class, NotifyOnLoadClosingTransition::class);
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([PruneExports::class]);
+        }
     }
 
     /**

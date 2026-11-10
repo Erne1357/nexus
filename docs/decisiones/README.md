@@ -24,6 +24,7 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0018](0018-permisos-por-puesto-y-perfil-activo.md) | Permisos por módulo, puestos en código, nombramientos, árbol de unidades y perfil activo; sale spatie/permission | Aceptada | 2026-11-02 |
 | [0019](0019-pandas-para-perfilar-exportaciones-del-sii.md) | pandas en un contenedor sin red para perfilar las exportaciones del SII; solo herramienta de análisis, no dependencia de la app | Aceptada | 2026-11-05 |
 | [0020](0020-staffing-a-la-derecha-de-scheduling.md) | Staffing a la derecha de Scheduling (`Faculty --> Scheduling --> Staffing`): ranking, asignación, vista docente y solicitudes de cambio leen grupos y el validador; `change_requests` pasa a Staffing | Aceptada | 2026-11-07 |
+| [0021](0021-dompdf-para-los-pdf-publicados.md) | DomPDF directo (sin el envoltorio de Laravel) para los PDF de lo publicado: plantillas Blade con tablas, DejaVu Sans, sin acceso remoto, generados en la cola | Aceptada | 2026-11-10 |
 | [0023](0023-sin-dialogos-nativos-del-navegador.md) | Sin diálogos nativos del navegador (`confirm()`, `alert()`, `prompt()`, `wire:confirm`): modal de MaryUI para lo corto, drawer para lo largo (el preferido); solo queda el aviso de `beforeunload`; el reemplazo va en #374 | Aceptada | 2026-11-10 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.
