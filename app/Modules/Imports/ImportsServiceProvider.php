@@ -16,6 +16,7 @@ use App\Modules\Imports\Sii\Steps\KardexStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\PositionsStep;
 use App\Modules\Imports\Sii\Steps\RoomsStep;
+use App\Modules\Imports\Sii\Steps\SeriationStep;
 use App\Modules\Imports\Sii\Steps\StudentsStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
 use App\Modules\Imports\Sii\Steps\TeacherHistoryStep;
@@ -28,6 +29,7 @@ use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\KardexTemplate;
 use App\Modules\Imports\Templates\OrgUnitsTemplate;
 use App\Modules\Imports\Templates\PendingPlacementsTemplate;
+use App\Modules\Imports\Templates\PendingPrerequisitesTemplate;
 use App\Modules\Imports\Templates\PositionsTemplate;
 use App\Modules\Imports\Templates\PrerequisitesTemplate;
 use App\Modules\Imports\Templates\RoomsTemplate;
@@ -57,6 +59,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         PendingPlacementsTemplate::class,
         SubjectAliasesTemplate::class,
         PrerequisitesTemplate::class,
+        PendingPrerequisitesTemplate::class,
         StudentsTemplate::class,
         KardexTemplate::class,
         TeachersTemplate::class,
@@ -78,6 +81,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         OrgChartStep::class,
         CareersStep::class,
         SubjectsStep::class,
+        SeriationStep::class,
         RoomsStep::class,
         TeachersStep::class,
         PositionsStep::class,
