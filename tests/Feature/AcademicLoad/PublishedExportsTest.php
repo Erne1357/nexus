@@ -71,13 +71,17 @@ it('si falla queda fallido unos minutos con un mensaje sin el error interno, y d
 
     $this->travel(11)->minutes();
 
-    expect($this->exports->request(new FakePublishedExport))->toBe(ExportState::Ready)
+    expect($this->exports->request(new FakePublishedExport(key: $failing->key)))->toBe(ExportState::Ready)
         ->and($this->exports->failure($failing))->toBeNull();
 });
 
 it('no entrega un exporte que no está listo', function () {
     $this->exports->download(new FakePublishedExport);
 })->throws(NotFoundHttpException::class);
+
+it('a un invitado le niega un exporte que pide permiso antes de ver si está listo', function () {
+    $this->exports->download(new FakePublishedExport(permission: AcademicLoadPermission::LoadView, campusId: Campus::factory()->create()->id));
+})->throws(AuthorizationException::class);
 
 it('no entrega a un invitado un exporte que pide permiso, aunque esté listo', function () {
     $staffOnly = new FakePublishedExport(permission: AcademicLoadPermission::LoadView, campusId: Campus::factory()->create()->id);
@@ -89,6 +93,10 @@ it('no entrega a un invitado un exporte que pide permiso, aunque esté listo', f
 it('rechaza una llave que no sirve como nombre de archivo', function () {
     $this->exports->path(new FakePublishedExport(key: '../otro'));
 })->throws(InvalidArgumentException::class);
+
+it('rechaza un nombre sin una extensión corta de letras y dígitos', function (string $filename) {
+    $this->exports->path(new FakePublishedExport(filename: $filename));
+})->throws(InvalidArgumentException::class)->with(['sin extensión' => ['Horario'], 'extensión larga' => ['Horario.exportado'], 'con símbolos' => ['Horario.p$f']]);
 
 it('deja descargar a cualquiera lo público y lo demás solo con el permiso en su campus y unidad', function () {
     $c2 = Campus::factory()->create(['code' => 'C2']);

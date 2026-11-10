@@ -115,19 +115,23 @@ final class PublishedExports
     /**
      * `published/<key>.<extensión del nombre>`.
      *
-     * @throws InvalidArgumentException si la llave trae algo más que letras, dígitos, guion o guion bajo
+     * @throws InvalidArgumentException si la llave trae algo más que letras, dígitos, guion o guion bajo, o el nombre no
+     *                                  termina en una extensión corta de letras y dígitos
      */
     public function path(PublishedExport $export): string
     {
         $key = $export->key();
+        $extension = strtolower(pathinfo($export->filename(), PATHINFO_EXTENSION));
 
         if (preg_match('/^[A-Za-z0-9_-]+$/', $key) !== 1) {
             throw new InvalidArgumentException("Llave de exporte no válida: {$key}");
         }
 
-        $extension = strtolower(pathinfo($export->filename(), PATHINFO_EXTENSION));
+        if (preg_match('/^[a-z0-9]{1,5}$/', $extension) !== 1) {
+            throw new InvalidArgumentException("Extensión de exporte no válida: {$extension}");
+        }
 
-        return 'published/'.$key.($extension === '' ? '' : '.'.$extension);
+        return 'published/'.$key.'.'.$extension;
     }
 
     private function disk(): Filesystem
