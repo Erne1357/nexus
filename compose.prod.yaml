@@ -39,6 +39,9 @@ services:
       APP_DOMAIN: ${APP_DOMAIN:?Define APP_DOMAIN en .env (nombre público del servidor)}
       ACME_EMAIL: ${ACME_EMAIL:?Define ACME_EMAIL en .env (aviso de vencimiento de Let's Encrypt)}
       CADDY_GLOBAL_OPTIONS: ${CADDY_GLOBAL_OPTIONS:-}
+      # Opt-in, vacíos en producción: contraseña previa al sitio (túnel de demostración).
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:-}
     volumes:
       # Carpeta, no archivo: un archivo montado solo se queda con la versión anterior
       # cuando `git checkout` lo reemplaza al actualizar.
@@ -73,6 +76,19 @@ services:
     logging: *logging
 
   queue:
+    environment:
+      <<: *app-environment
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - app-storage:/app/storage/app
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
+  # Corre lo programado (schedule:work); compose.yaml lo deja fuera del desarrollo con un perfil.
+  scheduler:
+    profiles: !reset []
     environment:
       <<: *app-environment
       RUN_MIGRATIONS: "false"

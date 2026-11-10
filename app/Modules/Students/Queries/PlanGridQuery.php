@@ -6,12 +6,14 @@ use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 
 /**
  * La retícula de un plan para calcular el avance de sus alumnos (PlanGrid): sus materias con sus créditos y su
  * semestre, por semestre y clave, su seriación, la especialidad de las materias de especialidad y los créditos
- * totales del plan. Deja fuera lo que se quitó de la retícula, las materias borradas del catálogo y los
+ * totales del plan, y aparte las materias que esperan semestre en «Por validar» (sin las ya resueltas), cuyo
+ * aprobado también cuenta. Deja fuera lo que se quitó de la retícula, las materias borradas del catálogo y los
  * correquisitos, que no impiden cursar una materia; una materia inactiva sigue, porque el plan se ata al alumno
  * al inscribirse.
  *
@@ -63,6 +65,18 @@ final class PlanGridQuery
 
         $totalCredits = StudyPlan::withTrashed()->whereKey($studyPlanId)->value('total_credits');
 
-        return new PlanGrid($credits, $seriation, $specialtyOf, $semesterOf, $creditShare, $totalCredits === null ? null : (int) $totalCredits);
+        $unplaced = StudyPlanSubjectPending::query()
+            ->join('subjects', 'subjects.id', '=', 'study_plan_subject_pendings.subject_id')
+            ->whereNull('subjects.deleted_at')
+            ->whereNull('study_plan_subject_pendings.resolved_at')
+            ->where('study_plan_subject_pendings.study_plan_id', $studyPlanId)
+            ->whereNotIn('study_plan_subject_pendings.subject_id', array_keys($credits))
+            ->orderBy('subjects.code')
+            ->toBase()
+            ->pluck('subjects.credits', 'study_plan_subject_pendings.subject_id')
+            ->map(fn (mixed $subjectCredits): int => (int) $subjectCredits)
+            ->all();
+
+        return new PlanGrid($credits, $seriation, $specialtyOf, $semesterOf, $creditShare, $totalCredits === null ? null : (int) $totalCredits, $unplaced);
     }
 }

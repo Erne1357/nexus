@@ -3,6 +3,7 @@
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Students\Actions\RefreshStudentProgress;
@@ -202,4 +203,30 @@ it('muestra la calificación sin ceros de más, sin redondearla, y la oportunida
         ->and($passed->fresh())->grade_label->toBe('69.6')->attempt_label->toBe('2 · repetición')
         ->and($first->fresh())->grade_label->toBe('88')->attempt_label->toBe('1 · ordinaria')
         ->and($special->fresh()->attempt_label)->toBe('3 · curso especial');
+});
+
+it('lo aprobado en una materia que espera semestre en «Por validar» suma a sus cifras, aunque no salga en la retícula', function () {
+    $waiting = Subject::factory()->create(['code' => 'P-0', 'credits' => 10]);
+    StudyPlanSubjectPending::factory()->for($this->plan)->for($waiting)->create();
+    recordKardex($this->student, $this->subjects['A'], 'aprobada', '20253', grade: 90);
+    recordKardex($this->student, $waiting, 'aprobada', '20253', grade: 80);
+
+    $record = recordOf($this->student);
+
+    expect($record)
+        ->creditsApproved->toBe(15)
+        ->subjectsApproved->toBe(2)
+        ->subjectsInGrid->toBe(9)
+        ->and(collect($record->semesters)->flatten()->pluck('code'))->not->toContain('P-0');
+});
+
+it('el kárdex pone primero, como «Sin periodo», lo que el SII trae con un periodo que no existe, igual que al decidir el estado', function () {
+    recordKardex($this->student, $this->subjects['A'], 'aprobada', '20253', grade: 90);
+    KardexRecord::factory()->for($this->student)->for($this->subjects['F'])->create(['result' => 'aprobada', 'term_code' => null, 'grade' => 80]);
+
+    $kardex = recordOf($this->student)->kardex;
+
+    expect(array_column($kardex, 'term'))->toBe([null, '20253'])
+        ->and(array_column($kardex, 'label'))->toBe(['Sin periodo', 'Ago-Dic 2025'])
+        ->and(cellOf(recordOf($this->student), 'F')->standing)->toBe(SubjectStanding::Acreditada);
 });

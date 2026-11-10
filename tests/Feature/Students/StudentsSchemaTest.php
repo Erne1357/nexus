@@ -81,6 +81,13 @@ describe('kardex', function () {
         expect(fn () => KardexRecord::factory()->create(['term_code' => $term]))->toThrow(QueryException::class, 'kardex_records_term_code_check');
     })->with(['2025-1', '20254', '2025', '202531']);
 
+    it('una fila puede no tener periodo (la historia del SII trae periodos que no existen), pero una sola por materia', function () {
+        $record = KardexRecord::factory()->create(['term_code' => null]);
+
+        expect($record->fresh()->term_code)->toBeNull()
+            ->and(fn () => KardexRecord::factory()->for($record->student)->for($record->subject)->create(['term_code' => null]))->toThrow(UniqueConstraintViolationException::class);
+    });
+
     it('acepta los tres periodos del año, también el verano', function (string $term) {
         expect(KardexRecord::factory()->create(['term_code' => $term])->term_code)->toBe($term);
     })->with(['20251', '20252', '20253']);

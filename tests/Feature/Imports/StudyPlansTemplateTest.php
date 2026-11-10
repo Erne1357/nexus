@@ -160,3 +160,14 @@ it('un plan inactivo marcado como nuevo ingreso se importa, con advertencia', fu
     expect($issues->errors)->toBe([])
         ->and($issues->warnings['intake'])->toContain('El plan ISIC-2010-224 queda inactivo y se marca como el actual de la carrera ISIC.');
 });
+
+it('guarda los créditos totales del plan, y un archivo que no los trae no borra los capturados', function () {
+    $this->template->apply(studyPlanRow(['credits' => '440']), $this->context);
+    $kept = $this->template->apply(studyPlanRow(), $this->context);
+
+    expect($kept->fresh()->total_credits)->toBe(440);
+});
+
+it('unos créditos que no son un entero de 0 a 32767 son error', function (mixed $credits) {
+    expect($this->template->validate(studyPlanRow(['credits' => $credits]), $this->context)->errors)->toHaveKey('credits');
+})->with(['negativo' => ['-5'], 'texto' => ['muchos'], 'enorme' => ['40000']]);
