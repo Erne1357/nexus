@@ -158,3 +158,19 @@ it('arma la foto con un número fijo de consultas', function () {
 
     expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(12);
 });
+
+it('lleva la justificación de HC-15 solo del grupo al que le falta docente o salón', function () {
+    $room = Room::factory()->create(['building_id' => $this->building->id]);
+    $withoutTeacher = snapshotGroup(['code' => 'A', 'close_justification' => 'Docente en contratación.']);
+    GroupSession::factory()->for($withoutTeacher)->inRoom($room)->create();
+    $withoutRoom = snapshotGroup(['code' => 'B', 'teacher_id' => Teacher::factory()->create()->id, 'close_justification' => 'Laboratorio en remodelación.']);
+    GroupSession::factory()->for($withoutRoom)->on(2, '07:00', '09:00')->create();
+    $complete = snapshotGroup(['code' => 'C', 'teacher_id' => Teacher::factory()->create()->id, 'close_justification' => 'Quedó de antes.']);
+    GroupSession::factory()->for($complete)->inRoom($room)->on(3, '07:00', '09:00')->create();
+
+    expect(collect(snapshotGroups())->pluck('justification', 'code')->all())->toEqual([
+        'A' => 'Docente en contratación.',
+        'B' => 'Laboratorio en remodelación.',
+        'C' => null,
+    ]);
+});

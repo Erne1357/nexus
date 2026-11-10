@@ -71,9 +71,17 @@ final class FortifyServiceProvider extends ServiceProvider
         Fortify::authenticateUsing($this->authenticate(...));
         Fortify::updateUserPasswordsUsing(UpdateUserPassword::class);
 
-        RateLimiter::for('login', fn (Request $request): Limit => Limit::perMinute(self::LOGIN_ATTEMPTS_PER_MINUTE)
-            ->by(Str::transliterate(Str::lower($request->string(Fortify::username())->value()).'|'.$request->ip()))
-            ->response($this->lockedOut(...)));
+        // Dos límites (tarea 4.8): cinco intentos por minuto por usuario e IP, contra adivinar una contraseña, y un tope
+        // por IP sola, contra probar una contraseña con muchos usuarios. El tope es holgado porque una red del Tec sale a
+        // internet por una sola IP (supuesto por confirmar: `fortify.ip_attempts_per_minute`, 60 por omisión).
+        RateLimiter::for('login', fn (Request $request): array => [
+            Limit::perMinute(self::LOGIN_ATTEMPTS_PER_MINUTE)
+                ->by(Str::transliterate(Str::lower($request->string(Fortify::username())->value()).'|'.$request->ip()))
+                ->response($this->lockedOut(...)),
+            Limit::perMinute((int) config('fortify.ip_attempts_per_minute', 60))
+                ->by('ip|'.$request->ip())
+                ->response($this->lockedOut(...)),
+        ]);
 
         Event::listen(function (Login $event): void {
             if ($event->user instanceof User) {

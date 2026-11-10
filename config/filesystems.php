@@ -47,6 +47,15 @@ return [
             'report' => false,
         ],
 
+        // Exportes de lo publicado (AcademicLoad, tareas 4.5 y 4.6): PDF, Excel y archivos para el SII que arma la
+        // cola. Fuera de git y sin URL pública: se descargan por una ruta que revisa el permiso de cada exporte.
+        'exports' => [
+            'driver' => 'local',
+            'root' => storage_path('app/exports'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

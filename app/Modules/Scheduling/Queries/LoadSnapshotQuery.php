@@ -4,6 +4,7 @@ namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Scheduling\Enums\GroupStatus;
+use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -12,8 +13,8 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 /**
  * Los grupos de la foto de una carga al publicarla (tarea 4.3), con la forma de `groups` en
  * `AcademicLoad\Rules\SnapshotPayload` (docs/dominio/modelo-de-datos.md, «Contenido del snapshot»): los grupos no
- * cancelados del departamento en el campus y el periodo, con su materia, su docente, dónde cuentan en cada carrera y
- * sus sesiones con salón y edificio. Congela lo que hoy se calcula y cambiaría después: la colocación de cada carrera
+ * cancelados del departamento en el campus y el periodo, con su materia, su docente, dónde cuentan en cada carrera,
+ * sus sesiones con salón y edificio y, si les falta docente o salón, la justificación con que se cerraron (HC-15). Congela lo que hoy se calcula y cambiaría después: la colocación de cada carrera
  * con cupo (desde la retícula del momento), la clave final y los nombres.
  *
  * Lee también lo borrado (materia, docente, carreras, retículas, salones y edificios): la carga ya pasó la guarda de
@@ -55,7 +56,7 @@ final class LoadSnapshotQuery
                 'code' => $group->code,
                 'status' => $group->status->value,
                 'capacity' => $group->capacity,
-                'justification' => null,
+                'justification' => $this->lacksTeacherOrRoom($group, $load->campus->profile->usesRooms) ? $group->close_justification : null,
                 'subject' => [
                     'id' => $group->subject->id,
                     'code' => $group->subject->code,
@@ -84,6 +85,17 @@ final class LoadSnapshotQuery
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Si al grupo le falta docente o, en un campus con salones, salón en alguna sesión presencial: lo que permite cerrar
+     * con justificación (HC-15, JustifyGroup). Solo entonces la foto lleva la justificación.
+     */
+    private function lacksTeacherOrRoom(Group $group, bool $usesRooms): bool
+    {
+        return $group->teacher_id === null || ($usesRooms && $group->sessions->contains(
+            fn (GroupSession $session): bool => $session->room_id === null && $session->kind !== SessionKind::Virtual,
+        ));
     }
 
     /**
