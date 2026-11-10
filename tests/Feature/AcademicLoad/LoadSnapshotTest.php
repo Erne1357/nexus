@@ -5,6 +5,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
@@ -78,4 +79,13 @@ it('withGroups reemplaza los grupos de ejemplo', function () {
 
     expect($snapshot->payload['groups'])->toBe([])
         ->and(SnapshotPayload::errors($snapshot->payload))->toBe([]);
+});
+
+it('publishedAt fecha igual la fila, el payload y la carga', function () {
+    $at = CarbonImmutable::parse('2026-12-11 09:15', 'America/Ciudad_Juarez');
+    $snapshot = LoadSnapshot::factory()->publishedAt($at)->withGroups([])->create()->fresh();
+
+    expect($snapshot->created_at->equalTo($at))->toBeTrue()
+        ->and($snapshot->payload['published_at'])->toBe('2026-12-11T09:15:00-07:00')
+        ->and($snapshot->academicLoad->published_at->equalTo($at))->toBeTrue();
 });

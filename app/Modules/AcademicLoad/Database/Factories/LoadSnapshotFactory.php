@@ -21,7 +21,8 @@ use Illuminate\Support\Str;
  * Al crearla, la carga queda con esta versión como la última (`current_version`, `published_by`, `published_at`) si es
  * más nueva que la que tenía; su estado no se toca (la carga nace publicada por omisión).
  *
- * Para armar otros casos: `withGroups([...])` con grupos hechos con `group()`, `placement()` y `session()`.
+ * Para armar otros casos: `withGroups([...])` con grupos hechos con `group()`, `placement()` y `session()`, y
+ * `publishedAt()` para fechar cada versión.
  *
  * @extends Factory<LoadSnapshot>
  */
@@ -37,12 +38,24 @@ class LoadSnapshotFactory extends Factory
             'academic_load_id' => AcademicLoad::factory()->inStatus(LoadStatus::Published),
             'version' => 1,
             'created_by' => User::factory(),
+            'created_at' => fn (): CarbonImmutable => CarbonImmutable::now()->startOfSecond(),
             'payload' => fn (array $attributes): array => self::payload(
                 AcademicLoad::query()->findOrFail($attributes['academic_load_id']),
                 $attributes['version'],
                 User::query()->findOrFail($attributes['created_by']),
+                null,
+                CarbonImmutable::parse($attributes['created_at']),
             ),
         ];
+    }
+
+    /**
+     * La versión publicada en ese momento: lo dicen igual la fila (`created_at`), el payload (`published_at`) y la
+     * carga si es su última versión.
+     */
+    public function publishedAt(CarbonImmutable $at): static
+    {
+        return $this->state(['created_at' => $at]);
     }
 
     public function configure(): static
@@ -69,6 +82,7 @@ class LoadSnapshotFactory extends Factory
                 $attributes['version'],
                 User::query()->findOrFail($attributes['created_by']),
                 $groups,
+                CarbonImmutable::parse($attributes['created_at']),
             ),
         ]);
     }
