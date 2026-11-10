@@ -21,3 +21,11 @@ it('nombra el día de la semana en minúsculas, y el número tal cual si no es d
         ->and(WeekTime::day(6))->toBe('sábado')
         ->and(WeekTime::day(7))->toBe('7');
 });
+
+it('pasa una hora guardada a minutos desde la medianoche y unos minutos a HH:MM para datos', function () {
+    expect(WeekTime::minutes('07:30'))->toBe(450)
+        ->and(WeekTime::minutes('21:15:00'))->toBe(1275)
+        ->and(WeekTime::hhmm(450))->toBe('07:30')
+        ->and(WeekTime::hhmm(5))->toBe('00:05')
+        ->and(WeekTime::hhmm(WeekTime::minutes('13:45:00')))->toBe('13:45');
+});

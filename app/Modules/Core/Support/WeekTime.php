@@ -12,13 +12,30 @@ final class WeekTime
     private const array DAY_NAMES = [1 => 'lunes', 2 => 'martes', 3 => 'miércoles', 4 => 'jueves', 5 => 'viernes', 6 => 'sábado'];
 
     /**
+     * Los minutos desde la medianoche de una hora guardada (`HH:MM` o `HH:MM:SS`), para comparar rangos rápido.
+     */
+    public static function minutes(string $time): int
+    {
+        [$hours, $minutes] = array_map('intval', explode(':', $time));
+
+        return $hours * 60 + $minutes;
+    }
+
+    /**
+     * `HH:MM` de unos minutos desde la medianoche, para datos (llaves, formularios, `related`); para leerla, clock().
+     */
+    public static function hhmm(int $minutes): string
+    {
+        return sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
+    }
+
+    /**
      * La hora de unos minutos desde la medianoche o de una hora guardada (`HH:MM` o `HH:MM:SS`): 420 o «07:00» → «7:00».
      */
     public static function clock(int|string $time): string
     {
         if (is_string($time)) {
-            [$hours, $minutes] = array_map('intval', explode(':', $time));
-            $time = $hours * 60 + $minutes;
+            $time = self::minutes($time);
         }
 
         return sprintf('%d:%02d', intdiv($time, 60), $time % 60);

@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Modules\Scheduling\Support;
+namespace App\Modules\Core\Support;
 
 use App\Modules\Core\Models\CampusProfile;
-use App\Modules\Scheduling\Validation\Minutes;
 
 /**
- * La semana del editor de horarios (tarea 3.5; DESIGN.md, "Editor de horarios"): una columna por día del perfil del
- * campus y un renglón por bloque, de `day_start` a `day_end`. Acomoda cada sesión en su día: desde qué renglón empieza
+ * La semana de un horario con el perfil del campus: la del editor de horarios (tarea 3.5; DESIGN.md, "Editor de
+ * horarios") y la de la consulta publicada (tarea 4.4). Vive en Core para que la use cualquier módulo del mapa: una
+ * columna por día del perfil del campus y un renglón por bloque, de `day_start` a `day_end`. Acomoda cada sesión en su día: desde qué renglón empieza
  * (`top`) y cuántos abarca (`span`), en bloques del perfil, y en qué carril va (`lane` de `lanes`) cuando otras del
  * mismo día coinciden con ella, para que se vean lado a lado. Es puro: no lee la base.
  */
@@ -50,8 +50,8 @@ final readonly class WeekGrid
 
     public static function of(CampusProfile $profile): self
     {
-        $start = Minutes::of($profile->dayStart);
-        $end = Minutes::of($profile->dayEnd);
+        $start = WeekTime::minutes($profile->dayStart);
+        $end = WeekTime::minutes($profile->dayEnd);
 
         return self::build($profile->days, $start, $start + intdiv($end - $start, $profile->blockMinutes) * $profile->blockMinutes, $profile->blockMinutes);
     }
@@ -69,11 +69,11 @@ final readonly class WeekGrid
         $days = array_column($this->days, 'day');
 
         foreach ($ranges as $range) {
-            while ($start > 0 && Minutes::of($range['starts_at']) < $start) {
+            while ($start > 0 && WeekTime::minutes($range['starts_at']) < $start) {
                 $start -= $this->blockMinutes;
             }
 
-            while ($end < 24 * 60 && Minutes::of($range['ends_at']) > $end) {
+            while ($end < 24 * 60 && WeekTime::minutes($range['ends_at']) > $end) {
                 $end += $this->blockMinutes;
             }
 
@@ -95,9 +95,9 @@ final readonly class WeekGrid
 
         for ($minutes = $start; $minutes + $blockMinutes <= $end; $minutes += $blockMinutes) {
             $blocks[] = [
-                'starts_at' => Minutes::format($minutes),
-                'ends_at' => Minutes::format($minutes + $blockMinutes),
-                'label' => Minutes::label($minutes),
+                'starts_at' => WeekTime::hhmm($minutes),
+                'ends_at' => WeekTime::hhmm($minutes + $blockMinutes),
+                'label' => WeekTime::clock($minutes),
             ];
         }
 
@@ -107,11 +107,11 @@ final readonly class WeekGrid
     }
 
     /**
-     * «7:00» de «07:00» (Minutes::labelOf()).
+     * «7:00» de «07:00» (WeekTime::clock()).
      */
     public static function clock(string $time): string
     {
-        return Minutes::labelOf($time);
+        return WeekTime::clock($time);
     }
 
     /**
@@ -163,7 +163,7 @@ final readonly class WeekGrid
      */
     public function busyHours(array $items, int $day): int|float
     {
-        $ranges = array_map(fn (array $item): array => [Minutes::of($item['starts_at']), Minutes::of($item['ends_at'])], array_values(array_filter($items, fn (array $item): bool => $item['day'] === $day)));
+        $ranges = array_map(fn (array $item): array => [WeekTime::minutes($item['starts_at']), WeekTime::minutes($item['ends_at'])], array_values(array_filter($items, fn (array $item): bool => $item['day'] === $day)));
         sort($ranges);
         $minutes = 0;
         $reach = null;
@@ -193,8 +193,8 @@ final readonly class WeekGrid
     public function position(string $startsAt, string $endsAt): array
     {
         $rows = (float) count($this->blocks);
-        $top = min($rows, max(0.0, (Minutes::of($startsAt) - $this->start) / $this->blockMinutes));
-        $bottom = min($rows, max($top, (Minutes::of($endsAt) - $this->start) / $this->blockMinutes));
+        $top = min($rows, max(0.0, (WeekTime::minutes($startsAt) - $this->start) / $this->blockMinutes));
+        $bottom = min($rows, max($top, (WeekTime::minutes($endsAt) - $this->start) / $this->blockMinutes));
 
         return ['top' => $top, 'span' => $bottom - $top];
     }
@@ -292,12 +292,12 @@ final readonly class WeekGrid
                 continue;
             }
 
-            $minutes = Minutes::of($block['starts_at']);
+            $minutes = WeekTime::minutes($block['starts_at']);
             $rows[] = [
                 'block' => $block,
                 'items' => $starting,
                 'cell' => $placeable ? $cell : null,
-                'band' => array_find($bands, fn (array $band): bool => Minutes::of($band['starts_at']) <= $minutes && $minutes < Minutes::of($band['ends_at'])),
+                'band' => array_find($bands, fn (array $band): bool => WeekTime::minutes($band['starts_at']) <= $minutes && $minutes < WeekTime::minutes($band['ends_at'])),
             ];
         }
 
@@ -317,8 +317,8 @@ final readonly class WeekGrid
         $clusterEnd = 0;
 
         foreach ($items as $item) {
-            $start = Minutes::of($item['starts_at']);
-            $end = Minutes::of($item['ends_at']);
+            $start = WeekTime::minutes($item['starts_at']);
+            $end = WeekTime::minutes($item['ends_at']);
 
             if ($cluster !== [] && $start >= $clusterEnd) {
                 array_push($laid, ...$this->close($cluster));
