@@ -54,7 +54,7 @@
                     @else
                         @php
                             $why = $cell['why'];
-                            $where = $dayVerb($day).' de '.$block['label'].' a '.\App\Modules\Scheduling\Support\WeekGrid::clock($block['ends_at']);
+                            $where = $dayVerb($day).' de '.$block['label'].' a '.\App\Modules\Core\Support\WeekGrid::clock($block['ends_at']);
                             $reason = match ($cell['state']) { 'clash' => 'Choca: '.$why, 'blocked' => 'No se puede: '.$why, default => null };
                             $classes = [
                                 'relative z-[3] mx-px my-px flex h-[calc(3.25rem-2px)] items-end justify-end gap-1 rounded-selector p-1 font-mono text-[11.5px] font-semibold',

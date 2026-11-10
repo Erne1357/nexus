@@ -9,7 +9,7 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\KeyLookup;
-use App\Modules\Scheduling\Support\WeekGrid;
+use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Scheduling\Validation\Minutes;
 
 /**

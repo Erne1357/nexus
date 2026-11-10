@@ -3,10 +3,10 @@
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Scheduling\Actions\Sessions\PlaceGroupSession;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
-use App\Modules\Scheduling\Support\WeekGrid;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
