@@ -2,6 +2,7 @@
     $day = fn (\Carbon\CarbonInterface $at): string => str_replace('.', '', $at->timezone(config('app.timezone'))->locale('es')->translatedFormat('j M Y'));
     $clock = fn (\Carbon\CarbonInterface $at): string => $at->timezone(config('app.timezone'))->format('G:i');
     $titleId = "publish-{$loadId}-title";
+    $sameDay = collect($versions)->countBy(fn (array $version): string => $day($version['publishedAt']));
 @endphp
 
 <section class="bg-base-100 border border-base-300 rounded-box p-4 md:p-5 grid gap-4 min-w-0" aria-labelledby="{{ $titleId }}" data-testid="publish-load">
@@ -21,7 +22,7 @@
                         'bg-success text-success-content' => $isCurrent,
                         'bg-base-100 text-success' => ! $isCurrent,
                     ])>v{{ $version['version'] }}</span>
-                    <span class="font-semibold group-aria-expanded:underline underline-offset-3">{{ $day($version['publishedAt']) }}@if ($isCurrent) · vigente @endif</span>
+                    <span class="font-semibold group-aria-expanded:underline underline-offset-3">{{ $day($version['publishedAt']) }}@if ($sameDay[$day($version['publishedAt'])] > 1), {{ $clock($version['publishedAt']) }}@endif @if ($isCurrent) · vigente @endif</span>
                     <span class="col-start-2 md:col-start-1 text-[12.5px] text-neutral"><span class="font-mono">{{ number_format($version['groups']) }}</span> grupos</span>
                 </button>
             </li>

@@ -182,3 +182,11 @@ it('no lo ve otro departamento, otro campus ni otro rol', function (Closure $use
     'coordinador' => [fn () => User::factory()->withRole(Role::Coordinador, ['campus_id' => test()->campus->id, 'career_id' => careerKey(20)])->create()],
     'docente' => [fn () => User::factory()->withRole(Role::Docente)->create()],
 ]);
+
+it('si dos versiones son del mismo día, el punto también dice la hora', function () {
+    publishedVersion(1, '2026-12-10 08:05');
+    publishedVersion(2, '2026-12-10 16:40');
+
+    Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load->fresh()])
+        ->assertSeeInOrder(['10 dic 2026, 8:05', '10 dic 2026, 16:40']);
+});
