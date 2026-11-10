@@ -50,7 +50,7 @@ beforeEach(function () {
     FakeDepartmentsStep::$extraRows = [];
     app()->instance('sii.steps', [FakeDepartmentsStep::class]);
 
-    $this->dir = sys_get_temp_dir().'/sii-'.uniqid();
+    $this->dir = sys_get_temp_dir().'/sii-'.bin2hex(random_bytes(6));
     File::copyDirectory(base_path('tests/Fixtures/imports/sii/minimo'), $this->dir);
     $this->admin = User::factory()->admin()->create(['username' => 'migrador']);
 });

@@ -79,9 +79,9 @@ function careersStepBatches(string $dir, string $curated): array
 }
 
 beforeEach(function () {
-    $this->dir = sys_get_temp_dir().'/sii-'.uniqid();
+    $this->dir = sys_get_temp_dir().'/sii-'.bin2hex(random_bytes(6));
     File::copyDirectory(base_path('tests/Fixtures/imports/sii/minimo'), $this->dir);
-    $this->curated = sys_get_temp_dir().'/sii-curated-'.uniqid();
+    $this->curated = sys_get_temp_dir().'/sii-curated-'.bin2hex(random_bytes(6));
     File::makeDirectory($this->curated, 0775, true);
     File::put($this->curated.'/planes.csv', SII_CURATED_PLANS);
     File::put($this->curated.'/carreras.csv', SII_CURATED_CAREERS);

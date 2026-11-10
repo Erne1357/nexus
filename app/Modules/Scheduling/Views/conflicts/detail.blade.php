@@ -45,6 +45,9 @@
                         <li wire:key="{{ $prefix }}-{{ $key }}-{{ $g['id'] }}" class="flex min-w-0 items-center gap-3 border-b border-base-300/60 py-1.5 last:border-b-0">
                             <span class="font-mono text-sm font-semibold whitespace-nowrap">{{ $group($g) }}</span>
                             <span class="min-w-0 flex-1 truncate" title="{{ $g['subject_name'] }}">{{ $g['subject_name'] }}</span>
+                            @if ($g['inactive_teacher'] ?? false)
+                                <span class="badge badge-error badge-soft badge-sm shrink-0 whitespace-nowrap" data-testid="inactive-teacher"><x-icon name="o-user-minus" class="h-3.5 w-3.5" aria-hidden="true" />Docente dado de baja</span>
+                            @endif
                             <span class="shrink-0">@include('scheduling::conflicts.fix', ['to' => $to, 'group' => $g['id'], 'label' => $label])</span>
                         </li>
                     @endforeach
