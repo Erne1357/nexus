@@ -13,6 +13,7 @@ use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
@@ -399,5 +400,50 @@ describe('banda y límite', function () {
         }
 
         expect(RateLimiter::limiter('published-schedule')(request())->maxAttempts)->toBe(240);
+    });
+});
+
+describe('entradas raras de la URL', function () {
+    it('un semestre o un día que no son número no truenan: toman el primero', function () {
+        $this->get(($this->semesterUrl)(['reticula' => 'ISIC-2010-224', 'semestre' => 'abc']))->assertOk()->assertSee('ACF-0904');
+        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id'], 'dia' => 'abc']))->assertOk();
+    });
+
+    it('un periodo o campus con caracteres raros es 404 sin llegar a la base, nunca un error', function (string $periodo, string $campus) {
+        $this->get('/horarios/'.$periodo.'/'.$campus.'/docente/'.$this->laura['id'])->assertNotFound();
+        // En la consulta, TrimStrings ya le quita el byte nulo a la orilla: o se lee como «20271» o es 404, nunca 500.
+        expect($this->get('/horarios?periodo='.$periodo.'&campus='.$campus)->status())->toBeIn([200, 404]);
+    })->with([
+        'byte nulo' => ['20271%00', 'C2'],
+        'comilla' => ['20271', "C2'"],
+        'muy largo' => [str_repeat('9', 20), 'C2'],
+    ]);
+
+    it('un campus inactivo es 404 también en la vista de docente', function () {
+        $this->c2->update(['is_active' => false]);
+
+        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]))->assertNotFound();
+    });
+});
+
+describe('personal con sesión', function () {
+    it('ve la página pública de un docente y de un semestre igual que el público', function () {
+        $this->actingAs(User::factory()->withRole(Role::Subdireccion)->create());
+
+        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]))
+            ->assertOk()->assertSee('Laura Ríos Medina')->assertDontSee('RIML800101AB1')->assertSee('Ir a Nexus');
+        $this->get(($this->semesterUrl)(['reticula' => 'ISIC-2010-224', 'semestre' => 3]))
+            ->assertOk()->assertSee('ACF-0904')->assertDontSee('Sin salón por causa de fuerza mayor');
+    });
+
+    it('gasta el límite de la consulta en su propio cubo, no en el de la IP', function () {
+        $user = User::factory()->withRole(Role::Subdireccion)->create();
+
+        expect(PublishedThrottle::who(Request::create('/')))->toBe('127.0.0.1');
+
+        $request = Request::create('/');
+        $request->setUserResolver(fn () => $user);
+
+        expect(PublishedThrottle::who($request))->toBe((string) $user->getKey());
     });
 });

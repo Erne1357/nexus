@@ -33,7 +33,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     public string $plan = '';
 
     #[Url(as: 'semestre')]
-    public int $semester = 0;
+    public string $semester = '';
 
     /**
      * El contexto, la carrera y la retícula resueltos una sola vez por petición (privado: Livewire no lo serializa).
@@ -85,8 +85,8 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
         $plan = $this->resolution($contexts)['plan'];
         $this->plan = $plan['plan']['code'];
 
-        if ($this->semester === 0 || ($coerce && ! in_array($this->semester, $plan['semesters'], true))) {
-            $this->semester = $plan['semesters'][0];
+        if ($this->semesterNumber() === 0 || ($coerce && ! in_array($this->semesterNumber(), $plan['semesters'], true))) {
+            $this->semester = (string) $plan['semesters'][0];
         }
     }
 
@@ -108,6 +108,14 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
         return $this->resolved = ['context' => $context, 'entry' => $entry, 'plan' => $plan];
     }
 
+    /**
+     * El semestre de la URL como número; 0 si no es un número (`?semestre=abc`), y entonces se toma el primero.
+     */
+    private function semesterNumber(): int
+    {
+        return ctype_digit($this->semester) ? (int) $this->semester : 0;
+    }
+
     private function url(): string
     {
         return route('published.semester', ['periodo' => $this->periodo, 'campus' => $this->campus, 'carrera' => $this->carrera, 'reticula' => $this->plan, 'semestre' => $this->semester]);
@@ -120,7 +128,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     {
         ['context' => $context, 'entry' => $entry, 'plan' => $plan] = $this->resolution($contexts);
         $schedule = $context->schedule;
-        $groups = $schedule->semester($entry['career']['id'], $plan['plan']['id'], $this->semester);
+        $groups = $schedule->semester($entry['career']['id'], $plan['plan']['id'], $this->semesterNumber());
         $profile = $schedule->profile();
 
         $subjects = [];

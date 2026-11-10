@@ -70,7 +70,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
 
-        RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by($request->ip()));
+        RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
 
         if ($this->app->runningInConsole()) {
             $this->commands([PruneExports::class]);

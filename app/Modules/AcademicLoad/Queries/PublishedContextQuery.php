@@ -18,6 +18,8 @@ final class PublishedContextQuery
      */
     public function resolve(string $termCode, string $campusCode): PublishedContext
     {
+        abort_unless(self::isCode($termCode) && self::isCode($campusCode), 404);
+
         $term = Term::query()->where('code', $termCode)->first();
         $campus = Campus::query()->where('code', $campusCode)->where('is_active', true)->first();
 
@@ -35,6 +37,7 @@ final class PublishedContextQuery
     {
         $termCode = $termCode === '' ? null : $termCode;
         $campusCode = $campusCode === '' ? null : $campusCode;
+        abort_if(($termCode !== null && ! self::isCode($termCode)) || ($campusCode !== null && ! self::isCode($campusCode)), 404);
 
         if ($termCode !== null && $campusCode !== null) {
             return $this->resolve($termCode, $campusCode);
@@ -61,5 +64,14 @@ final class PublishedContextQuery
         abort_if($campus === null, 404);
 
         return new PublishedContext($context['term'], $campus, $this->published->schedule($context['term'], $campus));
+    }
+
+    /**
+     * Si un texto puede ser la clave de un periodo o de un campus (`20271`, `C2`): letras, dígitos, guion y guion bajo,
+     * hasta 16. Lo demás es 404 antes de llegar a la base (un `%00` daría error de PostgreSQL).
+     */
+    public static function isCode(?string $value): bool
+    {
+        return $value !== null && preg_match('/^[A-Za-z0-9_-]{1,16}$/', $value) === 1;
     }
 }

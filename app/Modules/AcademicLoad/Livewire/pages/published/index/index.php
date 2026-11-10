@@ -29,6 +29,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     public string $campus = '';
 
     /** La retícula elegida de cada carrera, por código de carrera; sin elegir, la de código mayor. */
+    /** @var array<string, string> la retícula elegida de cada carrera (código de carrera → código de retícula) */
     public array $plans = [];
 
     public string $teacherSearch = '';
