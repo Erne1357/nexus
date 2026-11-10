@@ -24,17 +24,18 @@ Si las cuentas cuadran, la corrida real es la misma línea sin `--dry-run`.
 | Opción | Qué hace |
 |---|---|
 | `--dry-run` | Corre todo dentro de una transacción que se revierte, sin cola, y borra los archivos subidos. Sí deja `_incidencias.csv` y `_nexus/`. La tabla de la consola dice cuántas altas y cambios haría cada lote |
-| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `archivo`, `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente`, `alumnos` y `kardex`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras; `kardex`, materias (y los alumnos ya migrados, de esta corrida o de una anterior) |
+| `--only=<paso>` | Corre solo ese paso; se repite para varios (`--only=organigrama --only=carreras`). Los pasos son `archivo`, `organigrama`, `carreras`, `materias`, `aulas`, `docentes`, `plazas`, `historial_docente`, `alumnos`, `kardex` y `verificacion`, en ese orden. Un paso que necesita un mapa de otro se detiene diciendo cuál correr antes en la misma corrida: `materias` necesita organigrama y carreras; `docentes`, organigrama; `plazas`, docentes; `historial_docente`, docentes y materias; `alumnos`, carreras; `kardex`, materias (y los alumnos ya migrados, de esta corrida o de una anterior). `verificacion` no se detiene: si en la corrida no corrieron `archivo` y `kardex`, avisa que no verificó (ver «Verificación contra el SII original») |
 | `--user=<username>` | Quién aplica los lotes; debe tener permiso de aplicar importaciones |
 | `--force` | Obligatorio en producción |
 
-La consola imprime solo cuentas: una fila por lote (filas, válidas, advertencias, errores, altas y cambios), cuántos renglones del SII no se pudieron leer y el total de incidencias. Nunca imprime valores.
+La consola imprime solo cuentas: una fila por lote (filas, válidas, advertencias, errores, altas y cambios), el resumen de la verificación, cuántos renglones del SII no se pudieron leer y el total de incidencias. Nunca imprime valores. La última línea dice cómo terminó: «Migración terminada», «Migración terminada con diferencias» si la verificación encontró algo que no cuadra (la salida sigue siendo 0 y nada se revierte) o «Ensayo terminado, sin cambios».
 
 Si la exportación ya no cumple el contrato de encabezados (falta un archivo, cambian sus columnas o un archivo viene vacío o ilegible), se detiene antes de escribir nada. Si un paso falla a la mitad de una corrida real, los lotes anteriores ya quedaron aplicados; repetir la migración no los cambia. Al log va solo la clase de la excepción, dónde se lanzó y el SQLSTATE, nunca el mensaje ni los valores.
 
 ## Qué deja
 
-- `<carpeta>/_incidencias.csv` (`paso,archivo,fila,campo,nivel,mensaje`): lo que validó cada plantilla, lo que descartó o corrigió cada paso y, una vez por archivo del SII, los renglones que no se pudieron leer (`malformados`, error: no se migran), los reparados por coma decimal y la anotación al final. Una fila se señala por su número en el lote, por una clave de catálogo (materia, aula, carrera, retícula) o por `<archivo>:<línea>` del SII, nunca por el nombre de una persona, su RFC o su número de control; los mensajes de algunas plantillas sí pueden traer un valor del renglón. Se reescribe en cada corrida.
+- `<carpeta>/_incidencias.csv` (`paso,archivo,fila,campo,nivel,mensaje`): lo que validó cada plantilla, lo que descartó o corrigió cada paso y, una vez por archivo del SII, los renglones que no se pudieron leer (`malformados`, error: no se migran), los reparados por coma decimal y la anotación al final. Una fila se señala por su número en el lote, por una clave de catálogo (materia, aula, carrera, retícula) o por `<archivo>:<línea>` del SII, nunca por el nombre de una persona o su RFC; solo los errores de la verificación señalan al alumno por su número de control. Los mensajes de algunas plantillas sí pueden traer un valor del renglón. El nivel es `error`, `warning` o `info` (el resumen de la verificación). Se reescribe en cada corrida.
+- El esquema `sii_verificacion` con el resultado de la verificación (ver abajo).
 - `<carpeta>/_nexus/`: un CSV intermedio por lote, con los encabezados de su plantilla. Trae datos personales: vive junto a la exportación y nunca sale de `storage/`.
 - En una corrida real, cada lote queda en el disco `imports` (`storage/app/imports/`) como evidencia, con su bitácora y sus `import_rows`, igual que uno del asistente.
 
@@ -63,6 +64,53 @@ where no_de_control = '<número de control>'
 order by periodo, materia;
 ```
 
+## Verificación contra el SII original (`sii_verificacion`)
+
+El usuario decidió el 10 de noviembre de 2026 (confirmado) que **cada corrida compara el original con Nexus y avisa si algo no cuadra**, por el temor a perder datos al migrar. Lo hace el paso `verificacion` (`VerificationStep`, que escribe con la Action `VerifySiiMigration`), el último de la corrida, cuando ya se aplicó todo. Como el paso `archivo`, no pasa por el motor de importación. Nunca revierte nada de lo aplicado.
+
+- **Qué necesita.** El archivo de esta misma corrida (que haya corrido `archivo`), la historia del SII en la exportación y el kárdex aplicado en esta corrida (que haya corrido `kardex`, que además deja los mapas de claves con que se explica lo que no pasó; que sea de esta corrida y no de una anterior es supuesto por confirmar). Si falta algo, no se detiene: deja en `_incidencias.csv` y en la consola «No se verificó la migración contra el SII» con la razón, y en la tabla de la consola una fila `sii_verificacion | sin verificar`. **En seco no verifica**: nada se escribió.
+- **El avance al día.** Antes de comparar recalcula el avance de todos los alumnos ahí mismo, sin esperar al job `RecomputeStudentProgress` que encolaron las plantillas (la cola puede no haberlo corrido aún). Llama directo a `RefreshStudentProgress`, lo mismo que hace el job; no usa `dispatchSync()`, porque con el candado del job el recálculo se saltaría si la cola ya está recalculando. Cuánto tardó queda en `_incidencias.csv` (`info`, fila `avance`) y en la consola.
+- **Qué compara, renglón por renglón (`sii_verificacion.materias`).** Un renglón por renglón de `sii_archivo.historia_alumno`, con la misma `_linea`. Se une con el kárdex de Nexus por alumno, periodo y clave del SII (`upper(kardex_records.sii_subject_code) = upper(historia.materia)`); el periodo es el que guarda Nexus: el del SII si es un periodo (año de 1964 al próximo y 1, 2 o 3), si no, ninguno, así que un renglón con un periodo que no existe se une con la fila sin periodo y no sale como «no pasó». Columnas: `no_de_control`, `periodo` (el del SII), `periodo_nexus`, `clave_sii`, `estatus_sii`, `reticula_sii` y `creditos_sii` (la retícula del alumno en el SII y los créditos de la clave en ella), `plan_nexus`, `clave_nexus`, `creditos_nexus` y `resultado_nexus` (a qué llegó en Nexus), `clave_nexus_esperada` (la materia de Nexus que le toca a la clave del SII con el plan del alumno, como la traduce el kárdex) y `diagnostico`.
+- **Qué compara, alumno por alumno (`sii_verificacion.alumnos`).** Un renglón por alumno de `sii_archivo.alumnos_todos`. Según el SII (regla confirmada), un alumno está completo cuando los créditos de sus materias aprobadas (`estatus_materia` A) que están en su propia retícula (`materias_carreras` de su carrera y retícula) llegan a los `creditos_totales` de esa retícula; una materia aprobada dos veces cuenta una vez. Según Nexus, cuando `student_progress.credits_approved` llega a `study_plans.total_credits` (el avance ya cuenta lo aprobado en materias pendientes del plan, «Por validar»). Columnas: `reticula_sii`, `estatus_sii`, `creditos_requeridos_sii`, `creditos_campo_sii` (el campo `creditos_aprobados` del SII, para comparar), `creditos_sii`, `materias_sii`, `completo_sii`, `en_nexus`, `plan_nexus`, `estatus_nexus`, `creditos_requeridos_nexus`, `creditos_nexus`, `materias_nexus`, `completo_nexus` (vacío si no está en Nexus) y `creditos_perdidos` (los del SII menos los de Nexus). Un plan sin créditos totales, o un alumno sin avance, no está completo.
+- **Repetidos en el archivo.** Un alumno o una retícula que el SII trae dos veces cuentan una vez, el primero por línea; una clave repetida en una retícula, con sus créditos mayores.
+
+Cada renglón de la historia lleva uno de estos diagnósticos; se evalúan en este orden y gana el primero que aplica:
+
+| Diagnóstico | Qué significa | Aviso |
+|---|---|---|
+| `alumno no está en Nexus` | El número de control no está en Nexus (su retícula no se migra, por ejemplo) | No |
+| `no pasó: el mismo alumno tiene la misma materia de Nexus en el mismo periodo (se queda uno)` | No llegó al kárdex, pero el alumno ya tiene en ese periodo la materia de Nexus que le tocaba: dos claves del SII son la misma materia y el kárdex guarda una fila por alumno, materia y periodo | No |
+| `no pasó: la clave del SII no está en ninguna retícula` | No llegó y su clave no está en `materias_carreras`, así que no tiene materia de Nexus | No |
+| `no pasó: sin explicar` | No llegó y nada de lo anterior lo explica | **Error**, uno por clave del SII con cuántos renglones y sus primeras líneas |
+| `pendiente del plan: cuenta` | Llegó a una materia pendiente del plan del alumno («Por validar»): cuenta en el avance | No |
+| `fuera de la retícula del plan: no cuenta` | Llegó a una materia que no está en la retícula ni en los pendientes del plan del alumno: no cuenta en el avance | No |
+| `otra clave del SII es la misma materia: cuenta una vez` | El alumno aprobó esa materia de Nexus con dos claves del SII: en Nexus cuenta una vez | No |
+| `créditos distintos` | Los créditos de la clave en la retícula del alumno en el SII no son los de la materia de Nexus (o la clave no está en su retícula) | Advertencia, una por clave del SII, materia de Nexus y créditos |
+| `igual` | Llegó a una materia de la retícula del plan del alumno, con los mismos créditos | No |
+
+Además, un **error por cada alumno completo en el SII e incompleto en Nexus**, con su número de control como fila (`_incidencias.csv` vive en `storage/`, fuera de git) y sus créditos en cada lado. Un alumno que no está en Nexus no da error: se cuenta en el resumen (supuesto por confirmar: la mayoría son de retículas que no se migran, y el paso `alumnos` ya avisa por retícula). Si hay algún error, la corrida termina «con diferencias», con salida 0 (supuesto por confirmar: todo se aplicó).
+
+**El resumen** va a `_incidencias.csv` (nivel `info`, fila `resumen`) y a la consola, debajo de la tabla: cuántos renglones y alumnos se compararon, cuántos renglones hay de cada diagnóstico y, por estatus del SII, cuántos alumnos hay, cuántos están completos en el SII, cuántos en Nexus y cuántos no están en Nexus. La tabla de la consola trae dos filas con la plantilla `sii_verificacion`: `materias` (filas = renglones comparados, advertencias = créditos distintos, errores = sin explicar) y `alumnos` (filas = alumnos, errores = completos en el SII e incompletos en Nexus); las altas son los renglones escritos.
+
+**Dónde queda.** En el esquema de PostgreSQL `sii_verificacion`, con las reglas de `sii_archivo`: cada corrida lo reemplaza completo en una sola transacción (si algo falla, queda la verificación anterior), borra sus tablas sin `CASCADE` (una vista sobre ellas hace fallar el paso en lugar de borrarse), vive fuera de las migraciones, no se edita y no lo lee ninguna pantalla ni Query. `materias` tiene llave primaria `_linea` e índices por número de control y por diagnóstico y clave; `alumnos`, llave primaria `no_de_control`. Antes de comparar, el paso actualiza las estadísticas (`analyze`) de las tablas que lee, recién cargadas, para que PostgreSQL las una por hash; no hacen falta índices sobre `sii_archivo`. Con datos sintéticos del tamaño de la exportación real (68 000 alumnos, 2 040 000 renglones de historia y de kárdex), la verificación tardó 62 segundos: 42 de recálculo del avance y 20 de comparación. Sin estadísticas al día de alumnos, materias y planes, la misma comparación pasaba de 7 minutos.
+
+Para consultarla:
+
+```sql
+-- Cuántos renglones de la historia hay de cada diagnóstico.
+select diagnostico, count(*) from sii_verificacion.materias group by diagnostico order by count(*) desc;
+
+-- Los que no pasaron sin explicación, con su línea en el CSV para buscarla en sii_archivo.historia_alumno.
+select _linea, no_de_control, periodo, clave_sii, estatus_sii, clave_nexus_esperada
+from sii_verificacion.materias
+where diagnostico = 'no pasó: sin explicar'
+order by clave_sii, _linea;
+
+-- Los alumnos completos en el SII e incompletos en Nexus, y lo que pasó con su historia.
+select * from sii_verificacion.alumnos where completo_sii and en_nexus and not completo_nexus order by creditos_perdidos desc;
+select * from sii_verificacion.materias where no_de_control = '<número de control>' order by periodo, clave_sii;
+```
+
 ## Qué escribe cada paso en una segunda corrida
 
 Toda plantilla da de alta lo que falta por su clave natural y, en lo que ya existe, escribe los campos de esta tabla. En ningún paso cambia `is_active` (si el SII dice otra cosa, avisa), no pisa con vacío lo que el archivo trae vacío y no restaura lo borrado (es error).
@@ -82,6 +130,7 @@ Toda plantilla da de alta lo que falta por su clave natural y, en lo que ya exis
 | `historial_docente` | `teacher_history` | Nada: solo agrega los grupos que faltan | Lo que ya existe |
 | `alumnos` | `students` | Nombre, carrera, plan, campus, semestre (si es válido), estatus (si el código del SII es uno de los conocidos), modalidad y motivo del SII | Estado activo y número de control |
 | `kardex` | `kardex` | Calificación, resultado y oportunidad de cada alumno, materia y periodo (o sin periodo, si el SII trae uno que no existe); una materia «cursando» pasa a su resultado cuando llega a la historia | Nunca borra una fila que ya no venga, ni la sin periodo cuando el SII ya trae el bueno: esa se borra a mano |
+| `verificacion` | — | Reemplaza completo el esquema `sii_verificacion` | Nada de lo aplicado |
 
 Lo más delicado: una segunda corrida devuelve al semestre y al orden del SII las materias que alguien acomodó en el editor de la retícula (D21). También devuelve los nombres de materias y aulas al del SII o del curado. Los pendientes resueltos en «Por validar» sobreviven.
 
