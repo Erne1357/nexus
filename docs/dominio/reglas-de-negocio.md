@@ -150,6 +150,18 @@ El jefe cierra la carga de su departamento en un campus cuando ya no le falta na
 - **Publicar revisa HC-15 otra vez:** si algo cambió después del cierre (por ejemplo, Facilities bloqueó o desactivó un salón), la publicación se veta con su motivo y hay que reabrir.
 - **Carga sin grupos:** la de un departamento sin partes aceptadas en un campus se queda en borrador, no se cierra ni se publica, y los tableros la muestran como «Sin grupos». No cuenta como pendiente del campus.
 
+## Consulta publicada
+
+Páginas públicas de lo publicado (tarea 4.4, `/horarios`). El qué se publica, la última versión de cada carga y la reapertura están en «Cierre y reapertura de la carga» y en fase-4 «Respuestas de la planeación»; aquí solo lo que decide la consulta.
+
+- Sin sesión, cualquiera ve lo publicado de un campus y periodo: por carrera y semestre, por docente y por salón (confirmado, 10 de noviembre de 2026).
+- El público nunca ve cupos, lugares, versiones, estados, justificaciones, RFC ni avisos de «falta publicar» o «semestre incompleto». Un grupo sin docente, o una sesión presencial sin salón, dice «Por asignar»; la virtual, «Virtual» (confirmado, 10 de noviembre de 2026).
+- Solo quien tiene sesión y `academic_load.load.view` sobre el campus y el departamento ve «Sin publicar» con las cargas que faltan (confirmado, 10 de noviembre de 2026).
+- Cada vista dice «Actualizado el…» con la publicación más reciente de los grupos que muestra: una sola fecha por vista (supuesto por confirmar).
+- La vista de docente y la de salón son por campus: solo sus grupos y sesiones de ese campus (supuesto por confirmar).
+- La consulta limita a 240 peticiones por minuto por IP, porque los alumnos de un campus comparten IP (supuesto por confirmar).
+- El público no ve la capacidad de los grupos (supuesto por confirmar).
+
 ## Exportes de lo publicado
 
 Los archivos que salen de una carga publicada (tareas 4.5 y 4.6) se arman solo desde sus versiones publicadas (`load_snapshots`), nunca desde las tablas vivas, así que dicen lo mismo que la consulta pública (ver [fase-4](../plan/fase-4-cierre-publicacion-piloto.md), «Respuestas de la planeación»).
