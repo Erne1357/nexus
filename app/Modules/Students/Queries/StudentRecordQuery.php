@@ -100,7 +100,7 @@ final class StudentRecordQuery
             creditsApproved: $progress['credits_approved'],
             totalCredits: $grid->totalFor([...$approved, ...$taking]),
             subjectsApproved: $progress['subjects_approved'],
-            subjectsInGrid: count($shown),
+            subjectsInGrid: count($shown) + count(array_intersect_key($grid->unplaced, $passed)),
             taking: count(array_filter($cells, fn (GridCell $cell): bool => $cell->standing === SubjectStanding::Cursando)),
             selectable: count(array_filter($cells, fn (GridCell $cell): bool => $cell->standing->countsAsSelectable() && isset($available[$cell->subjectId]))),
             reachSemester: $reach,

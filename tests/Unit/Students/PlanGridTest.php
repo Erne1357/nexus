@@ -173,3 +173,14 @@ it('el total de créditos es el del plan o, sin capturar, el de la retícula con
         ->and($grid->totalFor(['A', 'W1']))->toBe(70)
         ->and((new PlanGrid(credits: ['A' => 60], totalCredits: 260))->totalFor([]))->toBe(260);
 });
+
+it('lo aprobado en un lugar por validar (sin semestre) cuenta en créditos y materias, pero nunca falta ni se ofrece', function () {
+    $grid = new PlanGrid(credits: ['A' => 5, 'B' => 4], unplaced: ['P' => 10, 'Q' => 8]);
+
+    expect($grid->progressFor(['A', 'P']))->toBe([
+        'credits_approved' => 15,
+        'subjects_approved' => 2,
+        'subjects_pending' => ['B'],
+        'subjects_available' => ['B'],
+    ]);
+});

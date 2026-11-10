@@ -13,6 +13,7 @@ final readonly class StudentRecord
 {
     /**
      * @param  int  $totalCredits  créditos del plan, o de su retícula con una sola especialidad si no están capturados
+     * @param  int  $subjectsInGrid  materias de su retícula que ve, más las que aprobó y esperan semestre en «Por validar»
      * @param  int  $selectable  materias que ya puede seleccionar: las que puede cursar y no está cursando
      * @param  int|null  $reachSemester  hasta qué semestre puede seleccionar; sin semestre, sin límite
      * @param  array<int, int>  $approvedBySemester  semestre → cuántas de sus materias acreditó
