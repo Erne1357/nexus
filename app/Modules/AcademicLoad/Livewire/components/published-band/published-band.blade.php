@@ -5,7 +5,7 @@
     sin la ruta, y los selectores compactos. Debajo, la franja roja de 3 px.
 --}}
 @php
-    $selectClasses = 'select h-10 w-auto min-w-0 max-w-full border-band-content/25 bg-band-content/8 text-band-content text-sm [&>option]:bg-base-100 [&>option]:text-base-content max-md:h-11 max-md:max-w-35 max-md:truncate max-md:ps-2 max-md:pe-6 max-md:text-[13px]';
+    $selectClasses = 'select h-10 w-auto min-w-0 max-w-full border-band-content/25 bg-band-content/8 text-band-content text-sm [&>option]:bg-base-100 [&>option]:text-base-content max-md:h-11 max-md:max-w-36 max-md:truncate max-md:ps-2 max-md:pe-8 max-md:text-[13px]';
 @endphp
 <div class="sticky top-0 z-30 text-sm/[1.45]">
     <header class="flex h-16 items-center gap-[18px] bg-band pe-5 text-band-content max-desktop:gap-3.5 max-md:h-14 max-md:gap-2 max-md:pe-2">

@@ -15,7 +15,7 @@
 @endphp
 <div class="grid gap-5">
     <div class="grid gap-3">
-        <a href="{{ $backUrl }}" wire:navigate class="btn btn-ghost btn-sm -ms-2.5 self-start max-md:h-11"><x-icon name="o-arrow-left" class="h-4 w-4" aria-hidden="true" />Horarios</a>
+        <a href="{{ $backUrl }}" wire:navigate class="btn btn-ghost btn-sm -ms-2.5 justify-self-start max-md:h-11"><x-icon name="o-arrow-left" class="h-4 w-4" aria-hidden="true" />Horarios</a>
 
         <div class="grid min-w-0 gap-1.5">
             <h1 class="text-2xl font-bold leading-tight md:text-3xl" data-testid="published-career-name">{{ $career['name'] }}</h1>
