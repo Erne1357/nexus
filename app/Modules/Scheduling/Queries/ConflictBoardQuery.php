@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Cache;
  * el 7 de noviembre de 2026) y por departamento o carrera (la vista de matriz).
  *
  * A un grupo le falta algo si tiene un choque duro vigente en `schedule_conflicts`, si no tiene sesiones (solo en un
- * campus con bloques de tiempo), si no tiene docente, o si alguna sesión presencial no tiene salón (solo en un campus
+ * campus con bloques de tiempo), si no tiene docente o su docente está dado de baja (P10), o si alguna sesión presencial no tiene salón (solo en un campus
  * que usa salones). Solo cuenta lo que el usuario puede ver (`scheduling.schedule.view` con su alcance: el jefe, su
  * departamento; el coordinador, su carrera en su campus), filtrado en SQL con `Actor::constrain()`. Lee el estado de
  * todos los grupos del alcance en una consulta y cuenta en memoria: una carga de un campus son cientos de grupos.
@@ -53,6 +53,7 @@ final class ConflictBoardQuery
             ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.is_active) as has_sessions')
             ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.room_id is null and s.kind <> ?) as missing_room', [SessionKind::Virtual->value])
             ->selectRaw('exists (select 1 from schedule_conflicts c where c.group_id = groups.id and c.resolved_at is null and c.severity = ?) as has_hard', [ConflictSeverity::Hard->value])
+            ->selectRaw('exists (select 1 from teachers t where t.id = groups.teacher_id and (not t.is_active or t.deleted_at is not null)) as inactive_teacher')
             ->orderBy('groups.semester')->orderBy('groups.code')
             ->toBase()->get()
             ->map(fn (object $row): GroupBoardStatus => new GroupBoardStatus(
@@ -65,12 +66,13 @@ final class ConflictBoardQuery
                 semester: (int) $row->semester,
                 hard: (bool) $row->has_hard,
                 unscheduled: $profile->usesTimeBlocks && ! $row->has_sessions,
-                withoutTeacher: $row->teacher_id === null,
+                withoutTeacher: $row->teacher_id === null || (bool) $row->inactive_teacher,
                 withoutRoom: $profile->usesRooms && (bool) $row->missing_room,
                 placements: [
                     ['career' => $row->owner_career_id, 'plan' => $row->study_plan_id, 'semester' => (int) $row->semester],
                     ...$shared[$row->id] ?? [],
                 ],
+                inactiveTeacher: (bool) $row->inactive_teacher,
             ));
     }
 
@@ -178,6 +180,7 @@ final class ConflictBoardQuery
             'subject_code' => $groups[$status->id]->subject_code ?? '',
             'subject_name' => $groups[$status->id]->subject_name ?? '',
             'career_code' => $groups[$status->id]->career_code ?? '',
+            'inactive_teacher' => $status->inactiveTeacher,
         ];
 
         $conflicts = ScheduleConflict::query()->open()
