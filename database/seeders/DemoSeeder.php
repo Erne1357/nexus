@@ -65,8 +65,8 @@ class DemoSeeder extends Seeder
         $scheduling->__invoke(['profile' => 'demo', 'campuses' => ['C2']]);
         $this->callWith(SchedulingAgreementsDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'cleanDepartments' => $scheduling->cleanDepartments()]);
         $this->callWith(StaffingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2']]);
-        // Cargas cerradas con justificaciones y una reabierta (tarea 4.1). SC se queda en asignación: la publica, con sus
-        // versiones, el paso de la publicación (tarea 4.3).
+        // Cargas cerradas con justificaciones y una reabierta (tarea 4.1); SC no se toca (en la demo no cierra: tiene
+        // solicitudes aprobadas sin aplicar). La que queda cerrada (CEA) la publica con sus versiones la tarea 4.3.
         $this->callWith(LoadClosingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'keepOpen' => ['SC']]);
         $this->call(LoginScreenDemoSeeder::class);
     }
