@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * recarga sola hasta que esté, o que dice que falló.
  *
  * Las rutas llevan el límite de la consulta (`published-schedule`), que alcanza para las recargas de muchos alumnos
- * con la misma IP. Encolar un PDF nuevo tiene además su propio tope por IP (`ENQUEUES_PER_MINUTE`), porque eso sí
+ * con la misma IP. Encolar un PDF nuevo tiene además su propio tope por usuario con sesión o por IP (`ENQUEUES_PER_MINUTE`), porque eso sí
  * cuesta trabajo de la cola (supuesto por confirmar).
  */
 final class DownloadPublishedPdf

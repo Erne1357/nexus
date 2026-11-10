@@ -16,6 +16,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use OpenSpout\Reader\XLSX\Reader;
@@ -146,4 +147,22 @@ it('la consulta ofrece los exportes del personal solo a quien tiene el permiso',
     $this->actingAs(User::factory()->withRole(Role::Docente)->create())->get($index)->assertOk()->assertDontSee('Exportes del personal');
     $this->actingAs(staffExportsHead($this->department, $this->campus))->get($index)
         ->assertOk()->assertSee('Exportes del personal')->assertSee('Excel del campus')->assertSee('SC · Sistemas y Computación');
+});
+
+it('en un campus sin salones el Excel deja vacías las columnas de salón, y sin bloques de tiempo da un renglón por grupo', function () {
+    $group = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus)->groups()[0];
+
+    expect(array_slice(CampusWorkbook::rows($group, 'SC', usesRooms: false)[1], 14))->toBe([null, null, null])
+        ->and(CampusWorkbook::rows($group, 'SC', usesTimeBlocks: false))->toHaveCount(1);
+});
+
+it('el tope de exportes nuevos es por usuario con sesión, aparte del de la IP', function () {
+    Queue::fake();
+    $head = staffExportsHead($this->department, $this->campus);
+    RateLimiter::increment('published-exports:127.0.0.1', 60, 30);
+
+    $this->actingAs($head)->get($this->excelUrl)->assertStatus(202);
+
+    RateLimiter::increment('published-exports:'.$head->getKey(), 60, 30);
+    $this->actingAs($head)->get($this->pdfUrl)->assertStatus(429);
 });

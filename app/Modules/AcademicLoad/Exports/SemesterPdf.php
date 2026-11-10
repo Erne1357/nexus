@@ -90,7 +90,7 @@ final class SemesterPdf extends PublishedPdf
      * @param  list<PublishedGroup>  $groups
      * @return list<array{day: int, name: string}>
      */
-    private static function days(array $groups, PublishedSchedule $schedule): array
+    public static function days(array $groups, PublishedSchedule $schedule): array
     {
         $ranges = [];
 
@@ -130,8 +130,7 @@ final class SemesterPdf extends PublishedPdf
 
             foreach ($usesTimeBlocks ? $group->sessions : [] as $session) {
                 /** @var PublishedSession $session */
-                $owner = $session->room['owner_department_id'] ?? null;
-                $cells[$session->day][] = [...self::session($session), 'loan' => $owner !== null && $owner !== $group->departmentId];
+                $cells[$session->day][] = [...self::session($session), 'loan' => $session->isLoanedTo($group->departmentId)];
             }
 
             $subjects[$code]['groups'][] = ['code' => $group->code, 'teacher' => self::teacherOf($group), 'capacity' => $group->capacity, 'cells' => $cells];

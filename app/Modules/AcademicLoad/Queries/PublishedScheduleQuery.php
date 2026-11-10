@@ -141,6 +141,30 @@ final class PublishedScheduleQuery
     }
 
     /**
+     * Los departamentos de esas versiones, sin leer sus payloads: lo que necesitan los exportes del personal para armar
+     * su llave y su permiso en cada recarga de la página de espera. Por clave del departamento.
+     *
+     * @param  list<string>  $ids
+     * @return array<string, array{id: string, code: string, name: string, snapshot_id: string}> por id de departamento
+     */
+    public function departmentsOf(array $ids): array
+    {
+        return LoadSnapshot::query()
+            ->whereIn('load_snapshots.id', $ids)
+            ->join('academic_loads', 'academic_loads.id', '=', 'load_snapshots.academic_load_id')
+            ->join('departments', 'departments.id', '=', 'academic_loads.department_id')
+            ->orderBy('departments.code')
+            ->get(['departments.id', 'departments.code', 'departments.name', 'load_snapshots.id as snapshot_id'])
+            ->mapWithKeys(fn (LoadSnapshot $row): array => [(string) $row->getAttribute('id') => [
+                'id' => (string) $row->getAttribute('id'),
+                'code' => (string) $row->getAttribute('code'),
+                'name' => (string) $row->getAttribute('name'),
+                'snapshot_id' => (string) $row->getAttribute('snapshot_id'),
+            ]])
+            ->all();
+    }
+
+    /**
      * @param  list<string>  $ids
      */
     public function hashOf(array $ids): string

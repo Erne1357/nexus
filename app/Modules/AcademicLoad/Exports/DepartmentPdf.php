@@ -8,14 +8,15 @@ use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Support\WeekGrid;
 use Illuminate\Http\Request;
 
 /**
  * El PDF de la carga publicada de un departamento en un campus (tarea 4.5): la tabla tipo SII del semestre con todos
  * los grupos del departamento, más su capacidad y la marca «préstamo» en la sesión que usa un salón de otro
  * departamento. Solo para el personal con sesión (`academic_load.load.export`; decisión del usuario del 10 de noviembre
- * de 2026).
+ * de 2026): como el Excel del campus, lo descarga quien cubre alguno de los departamentos que publicaron, porque lo
+ * publicado no es secreto entre el personal. Se arma solo con la versión del departamento, así que otro departamento
+ * que republica no lo invalida.
  */
 final class DepartmentPdf extends PublishedPdf implements StaffExport
 {
@@ -28,6 +29,8 @@ final class DepartmentPdf extends PublishedPdf implements StaffExport
         public readonly string $departmentId,
         public readonly string $departmentCode,
         public readonly string $departmentName,
+        /** @var list<string> los departamentos que publicaron en el campus, para el permiso */
+        public readonly array $departmentIds,
     ) {
         parent::__construct($termId, $campusId, $termCode, $campusCode, $snapshotIds);
     }
@@ -35,15 +38,14 @@ final class DepartmentPdf extends PublishedPdf implements StaffExport
     public static function fromRequest(PublishedScheduleQuery $query, Term $term, Campus $campus, Request $request): ?static
     {
         $departmentId = $request->query('departamento');
-        $ids = $query->snapshotIds($term, $campus);
-
-        if (! is_string($departmentId) || $ids === []) {
+        if (! is_string($departmentId)) {
             return null;
         }
 
-        $department = $query->scheduleOf($term, $campus, $ids)->loads[$departmentId]['department'] ?? null;
+        $departments = $query->departmentsOf($query->snapshotIds($term, $campus));
+        $department = $departments[$departmentId] ?? null;
 
-        return $department === null ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, $departmentId, $department['code'], $department['name']);
+        return $department === null ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, [$department['snapshot_id']], $department['id'], $department['code'], $department['name'], array_keys($departments));
     }
 
     public static function label(): string
@@ -58,7 +60,7 @@ final class DepartmentPdf extends PublishedPdf implements StaffExport
 
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId, unit: StaffExports::units([$this->departmentId]));
+        return Target::of(campus: $this->campusId, unit: StaffExports::units($this->departmentIds));
     }
 
     public function filename(): string
@@ -79,19 +81,12 @@ final class DepartmentPdf extends PublishedPdf implements StaffExport
     protected function document(PublishedSchedule $schedule, Term $term, Campus $campus): array
     {
         $groups = $schedule->department($this->departmentId);
-        $ranges = [];
-
-        foreach ($groups as $group) {
-            foreach ($group->sessions as $session) {
-                $ranges[] = ['day' => $session->day, 'starts_at' => $session->startsAt, 'ends_at' => $session->endsAt];
-            }
-        }
 
         return ['academic-load::pdf.semester', [
             'title' => $this->departmentName,
             'subtitle' => count($groups) === 1 ? '1 grupo' : count($groups).' grupos',
             'updated' => self::updated($schedule->updatedAt($groups)),
-            'days' => array_map(fn (array $day): array => ['day' => $day['day'], 'name' => $day['name']], WeekGrid::of($schedule->profile())->covering($ranges)->days),
+            'days' => SemesterPdf::days($groups, $schedule),
             'subjects' => SemesterPdf::subjects($groups, $schedule),
             'staff' => true,
         ], 'landscape'];
