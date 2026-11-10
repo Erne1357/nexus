@@ -17,7 +17,8 @@ use Illuminate\Validation\Rule;
  * tiene `is_active`, así que no ofrece "desactivar faltantes".
  *
  * El periodo se guarda con el código del SII (`20251` Ene-Jun, `20252` verano, `20253` Ago-Dic); se aceptan
- * también `2025-1` y `2025/1`. El resultado se reconoce con sus variantes comunes (aprobado, AC, acreditada, NA,
+ * también `2025-1` y `2025/1`. Una fila sin periodo pasa con advertencia y se guarda sin él, una sola por alumno y
+ * materia (la historia del SII trae periodos que no existen; decidido el 10 de noviembre de 2026). El resultado se reconoce con sus variantes comunes (aprobado, AC, acreditada, NA,
  * no acreditada, en curso; confirmado el 29 de octubre de 2026); el paso `kardex` de la migración del SII ya le
  * entrega los valores de Nexus. `sii_subject_code` (opcional) guarda la clave del SII con la que el alumno cursó la
  * materia. Busca cada alumno y cada materia una vez por corrida: un kardex trae
@@ -85,7 +86,7 @@ class KardexTemplate extends ImportTemplate
         return [
             'control_number' => ['required', 'string', 'max:20'],
             'subject_code' => ['required', 'string'],
-            'term_code' => ['required', 'string', 'regex:/^[0-9]{4}[123]$/'],
+            'term_code' => ['nullable', 'string', 'regex:/^[0-9]{4}[123]$/'],
             'grade' => ['nullable', 'numeric', 'between:0,100'],
             'result' => ['required', Rule::enum(KardexResult::class)],
             'attempt' => ['required', 'integer', 'min:1'],
@@ -138,6 +139,10 @@ class KardexTemplate extends ImportTemplate
 
         if ($this->subjectId($row['subject_code']) === null) {
             $issues = $issues->withError('subject_code', "No hay una materia con la clave {$row['subject_code']}.");
+        }
+
+        if ($row['term_code'] === null) {
+            $issues = $issues->withWarning('term_code', 'Sin periodo: pasa al kárdex sin periodo hasta que se capture el bueno.');
         }
 
         return $issues->hasErrors() ? $issues : parent::check($row, $context, $issues);

@@ -87,6 +87,19 @@ it('escribe la fila con el alumno y la materia de la base, y al reaplicarla la a
         ->attempt->toBe(1);
 });
 
+it('una fila sin periodo pasa con advertencia, y al reaplicarla la actualiza sin duplicar', function () {
+    $row = kardexRow(['term_code' => '']);
+
+    expect($this->template->validate($row, $this->context))
+        ->errors->toBe([])
+        ->warnings->toBe(['term_code' => ['Sin periodo: pasa al kárdex sin periodo hasta que se capture el bueno.']]);
+
+    $this->template->apply($row, $this->context);
+    $this->template->apply(kardexRow(['term_code' => null, 'grade' => 90]), $this->context);
+
+    expect(KardexRecord::sole())->term_code->toBeNull()->grade->toBe('90.00');
+});
+
 it('guarda la clave del SII con la que el alumno cursó la materia, que es opcional', function () {
     $this->template->apply(kardexRow(['sii_subject_code' => ' 3eb ']), $this->context);
     $this->template->apply(kardexRow(['term_code' => '20261']), $this->context);

@@ -14,7 +14,8 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * Materias, especialidades y retícula (D8, D15, D16, D18; reglas-de-negocio.md "Reglas de datos"). Cada renglón de
  * `materias_carreras` es el lugar de una materia del SII en una retícula del SII; la retícula se lleva a su plan de
  * Nexus con `plan_for` (las excluidas del curado solo dejan un aviso por retícula) y la materia se une por su clave
- * oficial del TecNM (SubjectPlacements). Los renglones con estatus `N` no se migran (R13, supuesto por confirmar).
+ * oficial del TecNM (SubjectPlacements). Los renglones con estatus `N` (ya no se ofrecen) no entran a la retícula: van a
+ * «Por validar», para no perder el kárdex de quien los aprobó (supuesto por confirmar, 10 de noviembre de 2026).
  * El orden dentro del semestre (D21, confirmado el 5 de noviembre de 2026) sale de `renglon` de la variante que se
  * queda con el lugar (la presencial al fundir); 0 o vacío queda vacío y la materia va al final, por clave.
  *
@@ -107,14 +108,14 @@ final class SubjectsStep implements SiiStep
     }
 
     /**
-     * Los lugares de `materias_carreras` que se migran, con su plan de Nexus y su clave TecNM si la tiene. Avisa una
-     * vez por retícula excluida y una vez por renglón con estatus `N`; un renglón cuya materia no está en el catálogo
-     * es error.
+     * Los lugares de `materias_carreras` que se migran, con su plan de Nexus y su clave TecNM si la tiene; `retired`
+     * marca los de estatus `N`. Avisa una vez por retícula excluida; un renglón cuya materia no está en el catálogo es
+     * error.
      *
      * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog
      * @param  list<array{level: 'error'|'warning', ref: string, message: string}>  $incidents
-     * @return list<array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int}>
+     * @return list<array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}>
      */
     private function placements(SiiMigration $migration, array $planFor, array $catalog, array &$incidents): array
     {
@@ -133,12 +134,6 @@ final class SubjectsStep implements SiiStep
             }
 
             $plan = $planFor[$key]['plan'];
-
-            if (strtoupper(trim($row['estatus_materia_carrera'])) === 'N') {
-                $incidents[] = $this->warning("{$plan}/{$materia}", "La materia {$materia} de la retícula {$key} del SII tiene estatus N: no se migra (supuesto por confirmar).");
-
-                continue;
-            }
 
             if (! isset($catalog[$materia])) {
                 $incidents[] = ['level' => 'error', 'ref' => "{$plan}/{$materia}", 'message' => "La materia {$materia} de la retícula {$key} no está en el catálogo de materias del SII: no se migra."];
@@ -162,6 +157,7 @@ final class SubjectsStep implements SiiStep
                 'semester' => ctype_digit($semester) ? (int) $semester : 0,
                 'specialty' => trim($row['especialidad']),
                 'position' => ctype_digit($line) && (int) $line > 0 ? (int) $line : 0,
+                'retired' => strtoupper(trim($row['estatus_materia_carrera'])) === 'N',
             ];
         }
 

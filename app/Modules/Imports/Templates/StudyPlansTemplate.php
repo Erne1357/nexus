@@ -23,6 +23,9 @@ use Illuminate\Support\Str;
  * una carrera vienen marcados en el archivo, el posterior es error; si en la base el actual es otro, el importado
  * pasa a serlo y el otro deja de serlo, con advertencia que dice cuál (supuesto por confirmar). Un archivo que no lo
  * marca no cambia cuál es el actual.
+ *
+ * «Créditos» (`credits`, opcional) son los créditos totales del plan (`total_credits`), contra los que se mide el
+ * avance del alumno, como en el SII (decidido el 10 de noviembre de 2026). Vacíos no borran los capturados.
  */
 class StudyPlansTemplate extends ImportTemplate
 {
@@ -57,6 +60,7 @@ class StudyPlansTemplate extends ImportTemplate
             'version' => 'versión',
             'current' => 'vigente',
             'intake' => 'nuevo ingreso',
+            'credits' => 'créditos',
         ];
     }
 
@@ -84,6 +88,7 @@ class StudyPlansTemplate extends ImportTemplate
             'version' => ['required', 'string', 'max:20'],
             'current' => ['nullable', 'boolean'],
             'intake' => ['nullable', 'boolean'],
+            'credits' => ['nullable', 'integer', 'min:0', 'max:32767'],
         ];
     }
 
@@ -91,7 +96,7 @@ class StudyPlansTemplate extends ImportTemplate
     {
         $row = parent::normalize($row);
 
-        foreach (['code', 'career', 'version'] as $field) {
+        foreach (['code', 'career', 'version', 'credits'] as $field) {
             $row[$field] = self::asText($row[$field]);
         }
 
@@ -190,6 +195,7 @@ class StudyPlansTemplate extends ImportTemplate
             'career_id' => $this->career($row['career'])?->id,
             'name' => $row['name'],
             'version' => $row['version'],
+            'total_credits' => is_numeric($row['credits']) ? (int) $row['credits'] : null,
             'is_active' => ($row['current'] ?? true) && (bool) $this->career($row['career'])?->is_active,
             ...($row['intake'] === true ? ['is_current' => true] : []),
         ];
