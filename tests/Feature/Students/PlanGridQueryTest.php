@@ -4,6 +4,7 @@ use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Students\Queries\PlanGridQuery;
 
@@ -83,4 +84,19 @@ it('un plan sin créditos totales capturados deja el total vacío', function () 
     placeInPlan($plan, Subject::factory()->create());
 
     expect(app(PlanGridQuery::class)->forPlan($plan->id)->totalCredits)->toBeNull();
+});
+
+it('trae aparte, con sus créditos, las materias del plan que esperan semestre en «Por validar», sin las ya resueltas', function () {
+    $plan = StudyPlan::factory()->create();
+    $placed = Subject::factory()->create(['credits' => 5]);
+    $waiting = Subject::factory()->create(['credits' => 10]);
+    $resolved = Subject::factory()->create(['credits' => 8]);
+    placeInPlan($plan, $placed);
+    StudyPlanSubjectPending::factory()->for($plan)->for($waiting)->create();
+    StudyPlanSubjectPending::factory()->for($plan)->for($resolved)->create(['resolved_at' => now()]);
+
+    $grid = app(PlanGridQuery::class)->forPlan($plan->id);
+
+    expect($grid->credits)->toBe([$placed->id => 5])
+        ->and($grid->unplaced)->toBe([$waiting->id => 10]);
 });

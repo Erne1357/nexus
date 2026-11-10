@@ -4,13 +4,17 @@
     si el grupo tiene una solicitud abierta, su estado), el hueco entre dos sesiones y el traslado cuando el campus
     cambia, con sus minutos libres (SC-09: con menos del mínimo, en aviso). Los días van en columnas cuando su caja mide
     56rem o más; antes, uno debajo de otro. Al final «Mis solicitudes» con el modal «Solicitar cambio» (tarea 3.11).
-    Todo viene de MyLoadQuery y MyChangeRequestsQuery.
+    Con una carga publicada, bajo el título, «Publicado el … · vN» (P8). Todo viene de MyLoadQuery y
+    MyChangeRequestsQuery.
 --}}
 <div class="space-y-4">
     <div>
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Mi carga</h1>
         @if ($term)
             <p class="mt-1.5 text-sm text-neutral">Tus grupos de {{ $term->name }}, día por día.</p>
+        @endif
+        @if (($load['published'] ?? []) !== [])
+            <p class="mt-0.5 flex flex-wrap gap-x-4 text-sm text-neutral" data-testid="my-load-published">@include('staffing::shared.published', ['stamps' => $load['published']])</p>
         @endif
     </div>
 

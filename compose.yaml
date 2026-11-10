@@ -43,6 +43,17 @@ services:
     healthcheck:
       disable: true
 
+  # Tareas programadas (`Schedule::` en routes/console.php; la primera, la limpieza diaria de exportes de lo
+  # publicado). Solo en producción: compose.prod.yaml le quita el perfil. En desarrollo no arranca; se corre a
+  # mano con `php artisan schedule:run`.
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    profiles: [scheduler]
+    stop_grace_period: 60s
+    healthcheck:
+      disable: true
+
   postgres:
     image: postgres:18.6-alpine3.24@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
     restart: unless-stopped

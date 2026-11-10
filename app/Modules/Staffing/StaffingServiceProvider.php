@@ -3,6 +3,7 @@
 namespace App\Modules\Staffing;
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
@@ -32,6 +33,8 @@ use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Listeners\BlockClosingWithPendingChangeRequests;
+use App\Modules\Staffing\Listeners\BlockReturnWithApprovedChangeRequests;
 use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
@@ -87,6 +90,8 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             $this->commands([RankTerm::class, RefreshTeacherLoadsCommand::class]);
         }
 
+        Event::listen(LoadTransitioning::class, BlockClosingWithPendingChangeRequests::class);
+        Event::listen(LoadTransitioning::class, BlockReturnWithApprovedChangeRequests::class);
         Event::listen(GroupsCreated::class, RerankOnGroupsCreated::class);
         Event::listen([GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class], RerankOnGroupChange::class);
         Event::listen([
