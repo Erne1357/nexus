@@ -25,7 +25,8 @@ final class GeneratePublishedExport implements ShouldBeUnique, ShouldQueue
 
     public int $timeout = 600;
 
-    public int $uniqueFor = 900;
+    /** Como la marca «en camino» de PublishedExports: más que el `retry_after` de la cola. */
+    public int $uniqueFor = 2100;
 
     public function __construct(public PublishedExport $export) {}
 

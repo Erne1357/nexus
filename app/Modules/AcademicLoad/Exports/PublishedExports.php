@@ -4,10 +4,9 @@ namespace App\Modules\AcademicLoad\Exports;
 
 use App\Modules\AcademicLoad\Enums\ExportState;
 use App\Modules\AcademicLoad\Jobs\GeneratePublishedExport;
-use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Models\User;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -26,7 +25,8 @@ final class PublishedExports
 {
     public const string DISK = 'exports';
 
-    private const int PENDING_MINUTES = 15;
+    /** Más que el `retry_after` de la cola (31 minutos): un job atorado vuelve a la cola antes de que esto expire. */
+    private const int PENDING_MINUTES = 35;
 
     private const int FAILED_MINUTES = 10;
 
@@ -41,24 +41,25 @@ final class PublishedExports
     }
 
     /**
-     * Lo manda a la cola si no está listo ni en camino; uno fallido se vuelve a pedir. Devuelve en qué quedó (con la
-     * cola síncrona, ya listo o fallido).
+     * Lo manda a la cola si no está listo, en camino ni fallido hace poco (el fallido espera unos minutos para no llenar
+     * la cola con un error que se repite). Devuelve en qué quedó (con la cola síncrona, ya listo o fallido).
      */
     public function request(PublishedExport $export): ExportState
     {
         $state = $this->state($export);
 
-        if ($state === ExportState::Ready || $state === ExportState::Pending) {
+        if ($state !== ExportState::Missing) {
             return $state;
         }
 
-        Cache::forget($this->failedKey($export));
         Cache::put($this->pendingKey($export), true, now()->addMinutes(self::PENDING_MINUTES));
 
         try {
             GeneratePublishedExport::dispatch($export);
-        } catch (Throwable) {
-            // Con la cola síncrona el error del job llega hasta aquí; su failed() ya lo dejó fallido y lo reportó.
+        } catch (Throwable $exception) {
+            if (config('queue.default') !== 'sync') {
+                $this->fail($export, $exception);
+            }
         }
 
         return $this->state($export);
@@ -73,9 +74,15 @@ final class PublishedExports
         $path = $this->path($export);
         $temporary = $path.'.'.bin2hex(random_bytes(6)).'.part';
 
-        $this->disk()->put($temporary, $export->build());
-        $this->disk()->move($temporary, $path);
+        try {
+            $this->disk()->put($temporary, $export->build());
+            $this->disk()->move($temporary, $path);
+        } finally {
+            $this->disk()->delete($temporary);
+        }
+
         Cache::forget($this->pendingKey($export));
+        Cache::forget($this->failedKey($export));
     }
 
     /**
@@ -94,25 +101,12 @@ final class PublishedExports
     }
 
     /**
-     * Si quien lo pide (nadie, en la consulta pública) puede descargarlo: lo público sí; lo demás, con su permiso en el
-     * campus y la unidad del exporte.
-     */
-    public function allows(?User $user, PublishedExport $export): bool
-    {
-        $permission = $export->permission();
-
-        if ($permission === null) {
-            return true;
-        }
-
-        return $user !== null && app(Actor::class)->forUser($user)->allows($permission, $export->scope());
-    }
-
-    /**
-     * La descarga de un exporte listo; 404 si no lo está.
+     * La descarga de un exporte listo para quien lo puede descargar (PublishedExportPolicy): 403 sin el permiso, 404 si
+     * no está listo.
      */
     public function download(PublishedExport $export): StreamedResponse
     {
+        Gate::authorize('download', $export);
         abort_unless($this->state($export) === ExportState::Ready, 404);
 
         return $this->disk()->download($this->path($export), $export->filename(), ['Content-Type' => $export->mimeType()]);

@@ -7,6 +7,8 @@ use App\Modules\AcademicLoad\Jobs\GeneratePublishedExport;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -59,18 +61,30 @@ it('mientras espera en la cola dice que se está preparando y no lo encola dos v
     Queue::assertPushed(fn (GeneratePublishedExport $job): bool => $job->uniqueId() === 'fake-20271-C2-abc');
 });
 
-it('si falla queda fallido con un mensaje sin el error interno, y se puede volver a pedir', function () {
-    $failing = new FakePublishedExport(fails: true);
+it('si falla queda fallido unos minutos con un mensaje sin el error interno, y después se puede volver a pedir', function () {
+    $failing = new FakePublishedExport(fails: true, counter: $this->counter);
 
     expect($this->exports->request($failing))->toBe(ExportState::Failed)
         ->and($this->exports->failure($failing))->toBe('No se pudo generar el archivo. Vuelve a intentarlo en unos minutos.')
-        ->and($this->exports->request(new FakePublishedExport))->toBe(ExportState::Ready)
+        ->and($this->exports->request($failing))->toBe(ExportState::Failed)
+        ->and(file_get_contents($this->counter))->toBe('.');
+
+    $this->travel(11)->minutes();
+
+    expect($this->exports->request(new FakePublishedExport))->toBe(ExportState::Ready)
         ->and($this->exports->failure($failing))->toBeNull();
 });
 
 it('no entrega un exporte que no está listo', function () {
     $this->exports->download(new FakePublishedExport);
 })->throws(NotFoundHttpException::class);
+
+it('no entrega a un invitado un exporte que pide permiso, aunque esté listo', function () {
+    $staffOnly = new FakePublishedExport(permission: AcademicLoadPermission::LoadView, campusId: Campus::factory()->create()->id);
+    $this->exports->generate($staffOnly);
+
+    $this->exports->download($staffOnly);
+})->throws(AuthorizationException::class);
 
 it('rechaza una llave que no sirve como nombre de archivo', function () {
     $this->exports->path(new FakePublishedExport(key: '../otro'));
@@ -82,11 +96,12 @@ it('deja descargar a cualquiera lo público y lo demás solo con el permiso en s
     $staffOnly = new FakePublishedExport(permission: AcademicLoadPermission::LoadView, campusId: $c2->id, unitId: departmentKey(10));
     $head = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $c2->id, 'department_id' => departmentKey(10)])->create();
     $otherHead = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $c2->id, 'department_id' => departmentKey(11)])->create();
-    $student = User::factory()->withRole(Role::Docente)->create();
+    $teacher = User::factory()->withRole(Role::Docente)->create();
+    $can = fn (?User $user, FakePublishedExport $export): bool => Gate::forUser($user)->allows('download', $export);
 
-    expect($this->exports->allows(null, $public))->toBeTrue()
-        ->and($this->exports->allows(null, $staffOnly))->toBeFalse()
-        ->and($this->exports->allows($head, $staffOnly))->toBeTrue()
-        ->and($this->exports->allows($otherHead, $staffOnly))->toBeFalse()
-        ->and($this->exports->allows($student, $staffOnly))->toBeFalse();
+    expect($can(null, $public))->toBeTrue()
+        ->and($can(null, $staffOnly))->toBeFalse()
+        ->and($can($head, $staffOnly))->toBeTrue()
+        ->and($can($otherHead, $staffOnly))->toBeFalse()
+        ->and($can($teacher, $staffOnly))->toBeFalse();
 });
