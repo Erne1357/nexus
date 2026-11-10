@@ -114,6 +114,25 @@ El mapa es `AcademicLoad → Scheduling → Staffing`, así que AcademicLoad no 
 11. **Exportación al SII (4.6):** sigue esperando el layout de sistemas del ITCJ.
 12. **Servidor (4.7):** sin él no hay piloto ni H5. Si sigue sin fecha, conviene decidir con el usuario un plan B para el piloto, como el túnel que se usó para la demo de la 1.16.
 
+### Respuestas de la planeación (10 de noviembre de 2026)
+
+El usuario contestó las doce preguntas en la sesión de planeación de los tres rieles. El detalle y los supuestos que quedan están en [reglas de negocio](../dominio/reglas-de-negocio.md), en "Cierre y reapertura de la carga" y en las secciones de cada riel.
+
+1. **Grupos `confirmed`:** el cierre confirma todos los grupos activos del departamento, y la confirmación se lo avisa al jefe.
+2. **Justificación:** la escribe el jefe por grupo al cerrar y la lee Subdirección. La consulta pública solo dice «Por asignar». Se guarda en `groups.close_justification`, con quién y cuándo.
+3. **Reapertura:** Subdirección o el admin reabren, con motivo, una carga cerrada, aprobada o publicada, y vuelve a ajustes. Republicar crea una versión nueva y conserva la anterior.
+4. **Visto bueno:** Campus II no lo exige; el jefe cierra y publica.
+5. **Solicitudes de cambio:** las pendientes bloquean el cierre (veto de Staffing), y aprobar una exige la carga en asignación o ajustes.
+6. **Grupo compartido propuesto:** bloquea el cierre del departamento que lo imparte.
+7. **Alcance de lo publicado:** la consulta pública muestra lo que cada departamento ya publicó, sin avisar que el semestre está incompleto («los alumnos no se enteran de las cuestiones internas»); lo pendiente solo lo ve el personal con sesión. Las versiones son por carga: la consulta toma la última de cada una y dice «Actualizado el …».
+8. **Lo que ve el docente:** con la carga publicada, «Mi carga» y la oferta muestran lo publicado; antes, lo vivo.
+9. **Cargas sin grupos:** se quedan en borrador, no se cierran ni se publican y aparecen como «Sin grupos».
+10. **Docente dado de baja:** su grupo bloquea el cierre y el tablero lo marca; la baja no toca los grupos.
+11. **Exportación al SII:** dos archivos con la forma de las tablas `grupos` y `horarios` del SII que conocemos por la 1.16, ajustables cuando llegue el layout oficial.
+12. **Servidor:** el despliegue se ensaya completo en local, con stack de producción, HTTPS interno y respaldo con restauración probada. La prueba de concepto se muestra en local o con túnel con clave. Sin fecha de producción; la meta llega hasta la fase 8.
+
+Además: **publicar vuelve a revisar HC-15**, y se veta si algo cambió después del cierre. Los PDF por carrera y semestre, por docente y por salón son públicos; el PDF por departamento y el Excel completo, solo con sesión.
+
 ### Demo por puntos en la fase 4
 
 La fase extiende `demo:seed` como dice [testing.md](../arquitectura/testing.md): el punto va en `DemoCheckpoint` antes de `todo`, y sus pasos y revisiones van en el provider del módulo que hace cada cosa.

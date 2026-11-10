@@ -191,10 +191,11 @@ it('lo exportado se vuelve a importar completo, en orden, con el motor real', fu
 
     $exported = collect(DEMO_TEMPLATES)->mapWithKeys(fn (string $t): array => [$t => collect(array_slice(demoCsv($t), 1))]);
 
-    // La cascada desde `departments` llega a `academic_loads` y a `load_transitions`, que rechaza TRUNCATE
-    // (HC-18), a `department_heads`, de solo lectura desde 3.P8 (AZ-S14), y por `groups` a `group_teacher_assignments`,
+    // La cascada desde `departments` llega a `academic_loads` y a `load_transitions` y `load_snapshots`, que rechazan
+    // TRUNCATE (HC-18), a `department_heads`, de solo lectura desde 3.P8 (AZ-S14), y por `groups` a `group_teacher_assignments`,
     // de solo agregar (HC-16). Solo aquí, dentro de la transacción de la prueba, que se revierte al terminar.
     DB::statement('ALTER TABLE load_transitions DISABLE TRIGGER load_transitions_immutable_truncate');
+    DB::statement('ALTER TABLE load_snapshots DISABLE TRIGGER load_snapshots_immutable_truncate');
     DB::statement('ALTER TABLE department_heads DISABLE TRIGGER department_heads_read_only_truncate');
     DB::statement('ALTER TABLE group_teacher_assignments DISABLE TRIGGER group_teacher_assignments_append_only_truncate');
     DB::statement('TRUNCATE teacher_positions, teacher_departments, teachers, kardex_records, student_progress, students, subject_prerequisites, study_plan_subjects, specialties, subjects, study_plans, career_campus, careers, departments CASCADE');
