@@ -263,6 +263,18 @@ BASIC_AUTH_HASH='$2a$14$...'
 docker compose up -d caddy
 ```
 
+Antes de recrear Caddy, valida la configuración en los dos casos (apagada y encendida):
+
+```bash
+docker run --rm --network none -v $PWD/docker/caddy:/etc/caddy:ro -e APP_DOMAIN=nexus.local -e ACME_EMAIL=a@b.c \
+  caddy:2.11.7-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+docker run --rm --network none -v $PWD/docker/caddy:/etc/caddy:ro -e APP_DOMAIN=nexus.local -e ACME_EMAIL=a@b.c \
+  -e BASIC_AUTH_USER=demo -e BASIC_AUTH_HASH="$(docker run --rm caddy:2.11.7-alpine caddy hash-password --plaintext prueba)" \
+  caddy:2.11.7-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+Las dos deben decir «Valid configuration». Caddy prepara `basic_auth` aunque esté apagada; por eso el valor de respaldo del hash es `b2Zm` («off» en base64), y no `off`, que no lo deja arrancar.
+
 Sin credenciales todas las rutas responden 401; con ellas, la aplicación (que además pide su propio inicio de sesión). Para apagarla, comenta las dos líneas y repite `up -d caddy`. El túnel debe apuntar a `https://127.0.0.1:<HTTPS_PORT>` con la verificación del certificado desactivada (CA interna con `local_certs`) y enviando el nombre `APP_DOMAIN` como Host/SNI. Comparte la contraseña por un canal distinto al del enlace y baja el túnel al terminar. En el servidor real déjala apagada.
 
 ## Probar el stack de producción en una máquina de desarrollo

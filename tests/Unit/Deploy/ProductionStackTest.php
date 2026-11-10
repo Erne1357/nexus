@@ -111,6 +111,7 @@ it('deja apagada por defecto la contraseña previa al sitio del túnel de demost
         ->and($caddy['BASIC_AUTH_HASH'])->toBe('${BASIC_AUTH_HASH:-}')
         ->and($caddyfile)->toContain('@gate expression `"{$BASIC_AUTH_USER:}" != ""`')
         ->and($caddyfile)->toContain('basic_auth @gate')
+        ->and($caddyfile)->toContain('{$BASIC_AUTH_HASH:b2Zm}')
         ->and($template)->toMatch('/^# BASIC_AUTH_USER=/m')
         ->and($template)->not->toMatch('/^BASIC_AUTH_/m');
 });
