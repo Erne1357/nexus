@@ -137,10 +137,11 @@ Además: **publicar vuelve a revisar HC-15**, y se veta si algo cambió después
 
 La fase extiende `demo:seed` como dice [testing.md](../arquitectura/testing.md): el punto va en `DemoCheckpoint` antes de `todo`, y sus pasos y revisiones van en el provider del módulo que hace cada cosa.
 
-- **Punto 8, `publicacion` («Empezando la publicación»):**
-  - Al llegar, toda carga con grupos en su campus está `closed`, o `approved` donde el campus exige visto bueno. Las cargas sin grupos siguen lo que decida la pregunta 9.
-  - Los pasos son el cierre (con la 4.1) y el visto bueno (con la 4.2).
-  - Sus revisiones confirman que cada carga pasa HC-15. Si la 4.1 exige grupos `confirmed`, el paso hacia `publicacion` los confirma, porque en `cierre` todos siguen `planned`.
+- ✅ **Punto 8, `publicacion` («Empezando la publicación»)** (rama `feature/54-demo-publicacion`):
+  - Al llegar, toda carga con grupos en su campus está `closed`; el visto bueno está apagado en todos los campus (decisión del usuario, 10 de noviembre de 2026), así que ninguna queda `approved`. Las cargas sin grupos se quedan en `draft`.
+  - Los pasos son de Staffing (`LoadClosingDemoSeeder`): terreno limpio (solicitudes pendientes rechazadas, acuerdos propuestos respondidos), grupos sin docente o sin salón con la justificación del jefe, y el cierre de cada carga con su jefe, que confirma sus grupos.
+  - Sus revisiones confirman que cada carga cerrada pasa HC-15 (`ClosingBlockersQuery`), que todo grupo activo está `confirmed`, que hay grupos justificados y que las cargas sin grupos siguen en `draft`.
+  - En `todo`, el modo `mixed` cierra unas cargas con justificaciones y reabre una (con el volumen demo solo CEA se puede cerrar); SC se queda en asignación para la publicación. Detalle en [testing.md](../arquitectura/testing.md).
 - **La demo mezclada (`todo`):** agrega cargas cerradas, aprobadas, regresadas por Subdirección y publicadas, con más de una versión de snapshot. Así la 4.2, la 4.4 y la 4.5 tienen pantallas llenas con volumen.
 - `DemoCheckpointsTest` (hasta el último punto con el volumen demo) debe seguir debajo de un minuto.
 

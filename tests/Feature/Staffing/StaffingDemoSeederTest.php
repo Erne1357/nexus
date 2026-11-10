@@ -5,6 +5,7 @@ use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
@@ -21,10 +22,13 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
+use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
+use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
@@ -46,7 +50,8 @@ use Symfony\Component\Console\Output\BufferedOutput;
 | Asignación docente de prueba (tareas 3.8 a 3.12): el DemoSeeder completo de Campus II, que al final corre
 | StaffingDemoSeeder. Se revisa que cada pantalla de Staffing tenga todos sus casos: cargas en asignación, en ajustes y
 | vetadas; rankings; asignaciones del primer lugar y fuera de él con motivo (HC-16), reemplazadas y quitadas;
-| solicitudes de cambio en sus cuatro estados y la carga por docente con quien excede su tope (HC-08) y honorarios.
+| solicitudes de cambio en sus cuatro estados y la carga por docente con quien excede su tope (HC-08) y honorarios;
+| y, con LoadClosingDemoSeeder, una carga cerrada con justificaciones (4.1).
 | Aparte, un mundo chico con C1 y C2 para los traslados justos entre campus (SC-09) y el determinismo.
 */
 
@@ -114,7 +119,7 @@ function staffingLoadsByStatus(): array
         ->all();
 }
 
-it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankeadas, asignaciones dentro y fuera del primer lugar (HC-16), reemplazos y quitadas, solicitudes en sus cuatro estados (3.11) y carga por docente (HC-08), sin duplicar al repetir', function () {
+it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankeadas, asignaciones dentro y fuera del primer lugar (HC-16), reemplazos y quitadas, solicitudes en sus cuatro estados (3.11) y carga por docente (HC-08), una carga cerrada con justificaciones (4.1), sin duplicar al repetir', function () {
     // Un solo DemoSeeder para todas las revisiones: es lo más caro del archivo.
     seedStaffingDemo();
 
@@ -167,8 +172,25 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
     $appliedLoad = AcademicLoad::query()->where('term_id', $this->term->id)->where('department_id', $applied->first()->department_id)->first();
     $approvedLoad = AcademicLoad::query()->where('term_id', $this->term->id)->where('department_id', $requests->firstWhere('status', ChangeRequestStatus::Approved)->department_id)->first();
 
-    expect($appliedLoad->status)->toBe(LoadStatus::Staffing)
+    // La carga de las solicitudes aplicadas regresó sola a asignación; después LoadClosingDemoSeeder pudo cerrarla.
+    expect($appliedLoad->transitions()->where('from_status', LoadStatus::Adjusting)->where('to_status', LoadStatus::Staffing)->exists())->toBeTrue()
         ->and($approvedLoad->status)->toBe(LoadStatus::Adjusting);
+
+    // Casos de cierre (tarea 4.1, LoadClosingDemoSeeder en modo mixed): una carga cerrada por su jefe, sin pendientes de
+    // cierre, con sus grupos confirmados y justificaciones; sin solicitudes pendientes. SC se queda en asignación.
+    $closed = AcademicLoad::query()->where('term_id', $this->term->id)->where('status', LoadStatus::Closed)->with(['department', 'campus', 'term'])->get();
+
+    expect($closed)->not->toBeEmpty()
+        ->and($closed->pluck('department.code')->all())->not->toContain('SC')
+        ->and($byStatus[LoadStatus::Staffing->value] ?? [])->toContain('SC');
+
+    foreach ($closed as $load) {
+        expect(app(ClosingBlockersQuery::class)->of($load)->isClear())->toBeTrue()
+            ->and($groupsOf($load)->where('status', '!=', GroupStatus::Confirmed)->exists())->toBeFalse()
+            ->and($groupsOf($load)->whereNotNull('close_justification')->exists())->toBeTrue()
+            ->and($load->closed_by)->not->toBeNull()
+            ->and(ChangeRequest::query()->where('department_id', $load->department_id)->where('status', ChangeRequestStatus::Pending)->exists())->toBeFalse();
+    }
 
     $loads = TeacherTermLoad::query()->where('term_id', $this->term->id)->get();
     $honorarios = TeacherPosition::query()->currentOn($this->term->starts_on)->where('kind', PositionKind::Honorarios)->pluck('teacher_id')->all();
@@ -187,17 +209,22 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
         ->and($loads->where('remaining_hours', '<', 0)->filter(fn (TeacherTermLoad $load): bool => $load->assigned_hours > $load->limit_hours)->pluck('teacher_id')->all())->toBe([]);
 
     // Volver a correr no duplica nada.
-    $before = [GroupTeacherAssignment::query()->count(), ChangeRequest::query()->count(), Group::query()->whereNotNull('teacher_id')->count()];
+    $snapshot = fn (): array => [
+        GroupTeacherAssignment::query()->count(), ChangeRequest::query()->count(), Group::query()->whereNotNull('teacher_id')->count(),
+        LoadTransition::query()->count(), Group::query()->whereNotNull('close_justification')->count(),
+    ];
+    $before = $snapshot();
 
     (new class extends Seeder
     {
         public function run(): void
         {
             $this->callWith(StaffingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2']]);
+            $this->callWith(LoadClosingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'keepOpen' => ['SC']]);
         }
     })->setContainer(app())->__invoke();
 
-    expect([GroupTeacherAssignment::query()->count(), ChangeRequest::query()->count(), Group::query()->whereNotNull('teacher_id')->count()])->toBe($before);
+    expect($snapshot())->toBe($before);
 });
 
 it('con dos campus siembra traslados justos entre campus (SC-09) y con la misma semilla deja la misma asignación', function () {

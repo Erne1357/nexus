@@ -15,7 +15,7 @@ it('rechaza un punto desconocido, lista los válidos y no toca la base', functio
     User::factory()->create();
 
     $this->artisan('demo:seed', ['--hasta' => 'asignación', '--force' => true])
-        ->expectsOutputToContain('Punto desconocido: asignación. Válidos: catalogos, validacion, propuesta, horarios, asignacion, salones, cierre, todo.')
+        ->expectsOutputToContain('Punto desconocido: asignación. Válidos: catalogos, validacion, propuesta, horarios, asignacion, salones, cierre, publicacion, todo.')
         ->assertExitCode(2);
 
     expect(User::query()->count())->toBe(1);
