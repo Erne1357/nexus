@@ -30,6 +30,7 @@ use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
+use App\Modules\Core\Livewire\BlockViewDataCalls;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
@@ -53,6 +54,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Estático y en register(): Livewire cablea sus hooks al arrancar (ComponentHookRegistry::boot()), y un hook
         // registrado después, con Livewire::componentHook() desde boot(), ya no se engancha.
         ComponentHookRegistry::register(ActiveRoleHook::class);
+        ComponentHookRegistry::register(BlockViewDataCalls::class);
 
         // `scoped`, nunca singleton: con Octane un singleton guardaría el alcance de un usuario
         // para las peticiones siguientes.

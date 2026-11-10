@@ -217,3 +217,23 @@ it('HC-15: un grupo con choque duro no está listo para cerrar, aunque tenga hor
     expect($summary)->hard->toBe(1)->missing->toBe(1)
         ->and($summary->ready())->toBe(0);
 });
+
+it('P10: un docente dado de baja deja al grupo sin docente y el detalle lo marca', function () {
+    readyBoardGroup();
+    $inactive = readyBoardGroup(['teacher_id' => Teacher::factory()->inactive()->create()->id]);
+    $deleted = Teacher::factory()->create();
+    readyBoardGroup(['teacher_id' => $deleted->id]);
+    $deleted->delete();
+    $unassigned = boardGroup();
+    GroupSession::factory()->for($unassigned)->inRoom($this->room)->on(5, '11:00', '13:00')->create();
+
+    $query = app(ConflictBoardQuery::class);
+    $statuses = boardStatuses(User::factory()->admin()->create());
+
+    expect($query->summary($statuses)->withoutTeacher)->toBe(3);
+
+    $detail = $query->detail($statuses)['withoutTeacher'];
+    expect(collect($detail)->firstWhere('id', $inactive->id)['inactive_teacher'])->toBeTrue()
+        ->and(collect($detail)->firstWhere('id', $unassigned->id)['inactive_teacher'])->toBeFalse()
+        ->and(collect($detail)->where('inactive_teacher', true)->count())->toBe(2);
+});
