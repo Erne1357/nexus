@@ -21,7 +21,8 @@ final class StudyPlanQuery
      * en la clave o el nombre con TextSearch; `$careerId` filtra por carrera (un id que no es uuid no
      * trae nada) y `$active` por estado; `null` no filtra. Con `$withPending` trae también cuántas materias de la
      * migración del SII esperan semestre (`pending_placements_count`, las sin resolver) y, con `$pendingOnly`,
-     * solo los planes que tienen alguna (D19). Quién la ve lo decide StudyPlanPolicy en el componente.
+     * solo los planes que tienen alguna y no son retículas históricas (D18 y D19). Quién la ve lo decide
+     * StudyPlanPolicy en el componente.
      *
      * @return LengthAwarePaginator<int, StudyPlan>
      */
@@ -36,7 +37,7 @@ final class StudyPlanQuery
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->when($careerId !== null, fn (Builder $query) => $query->whereIn('career_id', Str::isUuid($careerId) ? [$careerId] : []))
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
-            ->when($withPending && $pendingOnly, fn (Builder $query) => $query->whereHas('pendingPlacements', $unresolved))
+            ->when($withPending && $pendingOnly, fn (Builder $query) => $query->where('is_historical', false)->whereHas('pendingPlacements', $unresolved))
             ->orderBy('code')
             ->paginate($perPage);
     }

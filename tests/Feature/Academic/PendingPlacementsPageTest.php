@@ -221,6 +221,39 @@ describe('pantalla del plan', function () {
         pendingTab($this->servicesHead, $this->plan)->call('openPlace', 2)->assertSet('showDrawer', false);
     });
 
+    it('D18: una materia con semestre sugerido abre el panel con ese semestre elegido y «Sugerido: N»; Escolares lo confirma o lo cambia', function () {
+        $this->drawing->update(['suggested_semester' => 2]);
+        $tab = pendingTab($this->servicesHead, $this->plan);
+
+        expect(textOf(domOf($tab)->querySelector('[data-pending="AE9"]')))->toBe('Dibujo Electrónico AE9 · 2-2-4 Retícula del SII 5/5 Sugerido: 2');
+
+        $tab->call('pick', $this->drawing->id)->assertSet('showDrawer', true)->assertSet('semester', '2');
+        $drawer = domOf($tab)->querySelector('[data-testid="pending-drawer"]');
+
+        expect(textOf($drawer))->toContain('Semestre Semestre 1 Semestre 2 Semestre 3 Semestre 4 Sugerido: 2')
+            ->and(textOf($drawer->querySelector('[data-testid="pending-load"]')))->toBe('Semestre 2: 0 materias · 0 cr → 4 cr')
+            ->and($this->drawing->fresh()->resolved_at)->toBeNull();
+
+        $tab->set('semester', '4')->call('place')->assertHasNoErrors();
+
+        expect(StudyPlanSubject::where('study_plan_id', $this->plan->id)->where('subject_id', $this->drawing->subject_id)->value('semester'))->toBe(4);
+    });
+
+    it('D18: una sugerencia fuera de los semestres que se ofrecen no abre el panel', function () {
+        $this->modern->update(['suggested_semester' => 7]);
+
+        pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)
+            ->assertSet('pickedId', $this->modern->id)->assertSet('showDrawer', false);
+    });
+
+    it('D18: en una retícula histórica, un aviso arriba dice que solo hace falta asignar semestre si vuelve un alumno', function () {
+        $this->plan->update(['is_historical' => true]);
+
+        expect(textOf(domOf(pendingTab($this->servicesHead, $this->plan))->querySelector('[data-testid="pending-historical"]')))
+            ->toBe('Retícula histórica: el SII no trae el semestre de estas materias y ningún alumno está inscrito en este plan. Solo hace falta asignárselo si vuelve un alumno.')
+            ->and(domOf(pendingTab($this->servicesHead, $this->otherPlan))->querySelector('[data-testid="pending-historical"]'))->toBeNull();
+    });
+
     it('para el jefe de Servicios Escolares la retícula es de solo lectura', function () {
         $page = Livewire::actingAs($this->servicesHead)->test('academic::pages.plan', ['plan' => $this->plan->id]);
         $dom = domOf($page);
@@ -336,6 +369,18 @@ describe('lista de planes', function () {
         $page->assertSet('pendingOnly', true)
             ->assertViewHas('plans', fn ($plans): bool => $plans->pluck('code')->all() === ['IIND-2004', 'IIND-2010']);
         expect(domOf($page)->querySelector('[data-testid="filter-pending"]')->getAttribute('aria-pressed'))->toBe('true');
+    });
+
+    it('D18: una retícula histórica no cuenta en «Por validar» de la lista, no lleva su insignia y el filtro la deja fuera', function () {
+        $this->otherPlan->update(['is_historical' => true]);
+        $page = domOf($this->actingAs($this->servicesHead)->get(route('academic.plans'))->assertOk());
+
+        expect(textOf($page->querySelector('[data-testid="filter-pending"]')))->toBe('Por validar 1')
+            ->and($page->querySelector('[data-pending-plan="IIND-2010"]'))->toBeNull()
+            ->and(textOf($page->querySelector('table [data-pending-plan="IIND-2004"]')))->toBe('3 por validar');
+
+        Livewire::actingAs($this->servicesHead)->test('academic::pages.plans')->call('togglePending')
+            ->assertViewHas('plans', fn ($plans): bool => $plans->pluck('code')->all() === ['IIND-2004']);
     });
 
     it('para el jefe de Servicios Escolares dar de alta, editar y activar quedan deshabilitados con su motivo', function () {

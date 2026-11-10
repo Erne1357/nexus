@@ -166,6 +166,19 @@ describe('PendingPlacementsQuery', function () {
         expect((new PendingPlacementsQuery)->countsByPlan())->toBe([$this->plan->id => 1]);
     });
 
+    it('D18: el aviso de la lista de planes no cuenta las retículas históricas, pero su plan sigue mostrando sus pendientes', function () {
+        $historical = StudyPlan::factory()->historical()->create();
+        StudyPlanSubjectPending::factory()->for($historical)->count(2)->create();
+        StudyPlanSubjectPending::factory()->for($this->plan)->create(['suggested_semester' => 4]);
+
+        $query = new PendingPlacementsQuery;
+
+        expect($query->countsByPlan())->toBe([$this->plan->id => 1])
+            ->and($query->countForPlan($historical))->toBe(2)
+            ->and($query->forPlan($historical))->toHaveCount(2)
+            ->and($query->forPlan($this->plan)->sole()->suggested_semester)->toBe(4);
+    });
+
     it('trae la materia de un pendiente aunque se haya borrado del catálogo', function () {
         $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
         $pending->subject->delete();
