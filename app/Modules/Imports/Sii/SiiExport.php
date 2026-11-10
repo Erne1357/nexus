@@ -75,6 +75,14 @@ final class SiiExport
         return new self($dir, $paths);
     }
 
+    /**
+     * Si la exportación trae el archivo; solo los opcionales pueden faltar.
+     */
+    public function has(SiiFile $file): bool
+    {
+        return isset($this->paths[$file->value]);
+    }
+
     public function reader(SiiFile $file): SiiCsvReader
     {
         $path = $this->paths[$file->value] ?? throw new InvalidArgumentException("La exportación no trae el archivo {$file->value}.");

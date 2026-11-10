@@ -77,6 +77,16 @@ it('reporta un archivo obligatorio que no está en la carpeta', function () {
     }
 });
 
+it('abre una exportación sin la historia ni la selección del kárdex, que son opcionales', function () {
+    writeExport($this->dir, skip: ['historia_alumno', 'seleccion_materias']);
+
+    $export = SiiExport::open($this->dir);
+
+    expect($export->has(SiiFile::HistoriaAlumno))->toBeFalse()
+        ->and($export->has(SiiFile::SeleccionMaterias))->toBeFalse()
+        ->and($export->has(SiiFile::Aulas))->toBeTrue();
+});
+
 it('ignora los archivos que no son CSV', function () {
     writeExport($this->dir, skip: ['aulas']);
     file_put_contents($this->dir.'/aulas.txt', 'x');
