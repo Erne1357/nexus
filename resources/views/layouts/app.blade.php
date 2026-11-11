@@ -42,6 +42,7 @@
             </main>
 
             <x-toast />
+            <x-core::confirm-dialog />
 
             @livewireScripts
         </body>
@@ -52,6 +53,7 @@
             </main>
 
             <x-toast />
+            <x-core::confirm-dialog />
 
             @livewireScripts
         </body>

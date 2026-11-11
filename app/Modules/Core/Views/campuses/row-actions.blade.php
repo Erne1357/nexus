@@ -22,7 +22,10 @@
             <x-core::row-menu-item
                 :label="$campus->is_active ? 'Desactivar' : 'Activar'"
                 wire:click="toggleActive('{{ $campus->id }}')"
-                wire:confirm="{{ $campus->is_active ? '¿Desactivar el campus '.$campus->code.'? Nadie podrá trabajar en él hasta que se reactive.' : '¿Activar el campus '.$campus->code.'?' }}"
+                x-confirm="{{ $campus->is_active ? 'Nadie podrá trabajar en el campus '.$campus->code.' hasta que se reactive.' : 'El campus '.$campus->code.' vuelve a estar disponible para trabajar.' }}"
+                data-confirm-title="{{ $campus->is_active ? '¿Desactivar el campus '.$campus->code.'?' : '¿Activar el campus '.$campus->code.'?' }}"
+                data-confirm-button="{{ $campus->is_active ? 'Desactivar' : 'Activar' }}"
+                data-confirm-tone="{{ $campus->is_active ? 'error' : 'primary' }}"
                 :spinner="'toggleActive(\''.$campus->id.'\')'"
             />
         @else

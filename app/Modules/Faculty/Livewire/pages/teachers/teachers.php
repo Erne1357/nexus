@@ -413,7 +413,8 @@ new #[Title('Docentes')] class extends Component
                 $removals[] = [
                     'id' => $adscription->id,
                     'label' => 'Quitar de '.$adscription->department?->code,
-                    'confirm' => $this->removalWarning($teacher, $adscription),
+                    'title' => "¿Quitar al docente {$teacher->rfc} de {$adscription->department?->code}?",
+                    'confirm' => $this->removalWarning($adscription, $teacher),
                     'reason' => Gate::allows('removeAdscription', [Teacher::class, $adscription]) ? null : 'No te puedes quitar a ti mismo de un departamento.',
                 ];
             }
@@ -435,7 +436,7 @@ new #[Title('Docentes')] class extends Component
      * El aviso antes de quitar una adscripción: qué principal le queda, con la regla de RemoveAdscription (la más
      * antigua de las que quedan; las adscripciones llegan en ese orden detrás de la principal).
      */
-    private function removalWarning(Teacher $teacher, TeacherDepartment $adscription): string
+    private function removalWarning(TeacherDepartment $adscription, Teacher $teacher): string
     {
         $rest = $teacher->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription));
         $outcome = match (true) {
@@ -444,7 +445,7 @@ new #[Title('Docentes')] class extends Component
             default => 'Sigue activo y su adscripción principal no cambia.',
         };
 
-        return "¿Quitar al docente {$teacher->rfc} de {$adscription->department?->code}? {$outcome}";
+        return $outcome;
     }
 
     /**

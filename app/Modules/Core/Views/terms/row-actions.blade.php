@@ -27,7 +27,10 @@
                 <x-core::row-menu-item
                     label="Marcar como actual"
                     wire:click="makeCurrent('{{ $term->id }}')"
-                    wire:confirm="¿Marcar el periodo {{ $term->code }} como el actual? Será el periodo de omisión de la credencial."
+                    x-confirm="Será el periodo de omisión de la credencial."
+                    data-confirm-title="¿Marcar el periodo {{ $term->code }} como el actual?"
+                    data-confirm-button="Marcar como actual"
+                    data-confirm-tone="warning"
                     :data-testid="$inTable ? 'make-current-'.$term->code : null"
                     :spinner="'makeCurrent(\''.$term->id.'\')'"
                 />

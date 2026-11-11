@@ -353,7 +353,7 @@ describe('admin', function () {
         $menu = teacherRowMenu($this->admin, 'PRUE000001AB1');
         $item = collect($menu->querySelectorAll('[role="menuitem"]'))->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de II'));
 
-        expect($item->getAttribute('wire:confirm'))->toContain('su adscripción principal pasa a SC');
+        expect($item->getAttribute('x-confirm'))->toContain('su adscripción principal pasa a SC');
     });
 
     it('«Más acciones» junto a «Nuevo docente» lleva «Dar de alta usuarios»', function () {

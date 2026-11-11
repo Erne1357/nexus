@@ -118,6 +118,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return [
             Role::Subdireccion->value => [
                 AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::LoadExport,
+                AcademicLoadPermission::LoadExportSii,
                 AcademicLoadPermission::LoadClose,
                 AcademicLoadPermission::LoadReopen,
                 AcademicLoadPermission::LoadApprove,
@@ -129,6 +131,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             ],
             Role::JefeDepartamento->value => [
                 AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::LoadExport,
+                AcademicLoadPermission::LoadExportSii,
                 AcademicLoadPermission::LoadPropose,
                 AcademicLoadPermission::LoadStartStaffing,
                 AcademicLoadPermission::LoadClose,
@@ -141,6 +145,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             ],
             Role::JefeProyectoDocente->value => [
                 AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::LoadExport,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::AgreementView,
             ],

@@ -117,14 +117,14 @@ it('pide confirmar antes de salir con bloques sin guardar', function () {
 
     expect($page->script($unload))->toBeTrue();
 
-    $page->script('(() => { window.confirm = () => false; return true; })()');
     $page->click('a[href*="tab=disponibilidad"]')
-        ->wait(0.5)
+        ->assertSeeIn('#nexus-confirm', '¿Salir sin guardar?')
+        ->click('@confirm-cancel')
         ->assertPathIs('/faculty/teachers/'.$this->ana->id.'/availability')
         ->assertSee('1 bloque sin guardar');
 
-    $page->script('(() => { window.confirm = () => true; return true; })()');
     $page->click('a[href*="tab=disponibilidad"]')
+        ->click('@confirm-accept')
         ->waitForText('Editar disponibilidad')
         ->assertPathIs('/faculty/teachers/'.$this->ana->id);
 
@@ -172,8 +172,7 @@ it('al volver con Atrás trae lo guardado de nuevo y conserva lo pintado sin gua
         ->click('[data-d="1"][data-h="2"]')
         ->assertSee('2 bloques sin guardar');
 
-    $page->script('(() => { window.confirm = () => true; return true; })()');
-    $page->click('a[href*="tab=disponibilidad"]')->waitForText('Editar disponibilidad');
+    $page->click('a[href*="tab=disponibilidad"]')->click('@confirm-accept')->waitForText('Editar disponibilidad');
 
     // Mientras tanto, otra sesión guarda el jueves a las 7:00.
     TeacherAvailability::factory()->for($this->ana)->for($this->term)->preferred()->create(['day' => 4, 'starts_at' => '07:00', 'ends_at' => '08:00']);

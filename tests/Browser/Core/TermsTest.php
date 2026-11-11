@@ -61,11 +61,9 @@ it('el admin da de alta un periodo, lo edita y lo marca como actual desde la UI'
 
     expect(Term::where('code', '20271')->sole()->name)->toBe('Enero a Junio 2027');
 
-    // Playwright descarta los diálogos: se acepta el wire:confirm a mano.
-    $page->script('window.confirm = () => true');
-
     $page->click('table [aria-label="Acciones de 20271"]')
         ->click('@make-current-20271')
+        ->click('@confirm-accept')
         ->wait(1)
         ->assertPresent('table .badge-primary')
         ->assertNoJavaScriptErrors();
@@ -113,10 +111,8 @@ it('el admin abre el periodo en Campus II desde la ficha y ve quién y cuándo',
         ->navigate('/terms/'.$term->id)
         ->assertSee('No abierto en este periodo');
 
-    // Playwright descarta los diálogos: se acepta el wire:confirm a mano.
-    $page->script('window.confirm = () => true');
-
     $page->click('@open-C2')
+        ->click('@confirm-accept')
         ->waitForText('Periodo abierto en C2')
         ->waitForText('Abierto el')
         ->assertSee('por Ana Admin')

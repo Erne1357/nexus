@@ -35,7 +35,10 @@
                             icon="o-trash"
                             class="btn-ghost btn-sm"
                             wire:click="removeBlock('{{ $block->id }}')"
-                            wire:confirm="¿Quitar el bloqueo del {{ RoomRules::DAYS[$block->day] }} de {{ substr($block->starts_at, 0, 5) }} a {{ substr($block->ends_at, 0, 5) }}?"
+                            x-confirm="El salón queda libre en ese horario."
+                            data-confirm-title="¿Quitar el bloqueo del {{ RoomRules::DAYS[$block->day] }} de {{ substr($block->starts_at, 0, 5) }} a {{ substr($block->ends_at, 0, 5) }}?"
+                            data-confirm-button="Quitar"
+                            data-confirm-tone="error"
                             spinner="removeBlock('{{ $block->id }}')"
                         />
                     </li>

@@ -37,7 +37,10 @@
                 <x-core::row-menu-item
                     :label="$removal['label']"
                     wire:click="removeAdscription('{{ $removal['id'] }}')"
-                    wire:confirm="{{ $removal['confirm'] }}"
+                    x-confirm="{{ $removal['confirm'] }}"
+                    data-confirm-title="{{ $removal['title'] }}"
+                    data-confirm-button="Quitar"
+                    data-confirm-tone="error"
                     :spinner="'removeAdscription(\''.$removal['id'].'\')'"
                 />
             @else
@@ -49,7 +52,10 @@
             <x-core::row-menu-item
                 :label="$teacher->is_active ? 'Desactivar' : 'Activar'"
                 wire:click="toggleActive('{{ $teacher->id }}')"
-                wire:confirm="{{ $teacher->is_active ? '¿Dar de baja al docente '.$teacher->rfc.'? Se desactiva su usuario y terminan sus jefaturas vigentes.' : '¿Activar al docente '.$teacher->rfc.'? Su usuario vuelve a estar activo.' }}"
+                x-confirm="{{ $teacher->is_active ? 'Se desactiva su usuario y terminan sus jefaturas vigentes.' : 'Su usuario vuelve a estar activo.' }}"
+                data-confirm-title="{{ $teacher->is_active ? '¿Dar de baja al docente '.$teacher->rfc.'?' : '¿Activar al docente '.$teacher->rfc.'?' }}"
+                data-confirm-button="{{ $teacher->is_active ? 'Dar de baja' : 'Activar' }}"
+                data-confirm-tone="{{ $teacher->is_active ? 'error' : 'primary' }}"
                 :spinner="'toggleActive(\''.$teacher->id.'\')'"
             />
         @else
