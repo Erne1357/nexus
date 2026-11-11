@@ -63,10 +63,9 @@ it('el admin retoma un lote validado desde el menú, revisa sus errores y lo apl
         ->assertSee('Fila 3')
         ->assertSee('nombre: El campo nombre es obligatorio.');
 
-    // Playwright descarta los diálogos: se acepta el wire:confirm de "Aplicar" a mano.
-    $page->script('window.confirm = () => true');
-
     $page->press('Aplicar 1 fila')
+        ->assertSeeIn('#nexus-confirm', '¿Aplicar 1 fila?')
+        ->click('@confirm-accept')
         ->waitForText('Con error, sin aplicar')
         ->assertSee('Aplicado')
         ->assertNoJavaScriptErrors();
@@ -92,12 +91,11 @@ it('el admin aplica un lote desactivando lo que no viene en el archivo, con la c
         ->waitForText('Campus Cinco')
         ->assertSee('Aplicar 2 filas y desactivar 1');
 
-    // Playwright descarta los diálogos: se guarda el texto del wire:confirm y se acepta.
-    $page->script('window.confirm = (message) => { window.confirmed = message; return true; }');
-
     $page->press('Aplicar 2 filas y desactivar 1')
+        ->assertSeeIn('#nexus-confirm', '¿Aplicar 2 filas y desactivar 1?')
+        ->assertSeeIn('#nexus-confirm', 'Se desactivará 1 registro que no viene en el archivo')
+        ->click('@confirm-accept')
         ->waitForText('1 registro desactivado por no venir en el archivo')
-        ->assertScript('window.confirmed.includes("Se desactivará 1 registro que no viene en el archivo")')
         ->assertSee('Campus Cinco')
         ->assertNoJavaScriptErrors();
 

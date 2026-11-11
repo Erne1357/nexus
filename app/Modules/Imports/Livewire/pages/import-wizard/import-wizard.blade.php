@@ -333,7 +333,10 @@
                                 class="btn-primary"
                                 wire:click="{{ $deactivating ? 'apply('.$missing['missing'].')' : 'apply' }}"
                                 spinner="apply"
-                                wire:confirm="Se escribirán {{ number_format($batch->valid_rows) }} filas en {{ $batchTemplate }}.{{ $batch->error_rows > 0 ? ' Las '.number_format($batch->error_rows).' filas con error se saltan.' : '' }}{{ ! $deactivating ? '' : ($missing['missing'] === 1 ? ' Se desactivará 1 registro que no viene en el archivo; no se borra y se reactiva a mano en el catálogo.' : ' Se desactivarán '.number_format($missing['missing']).' registros que no vienen en el archivo; no se borran y se reactivan a mano en el catálogo.') }}"
+                                x-confirm="{{ $batch->valid_rows === 1 ? 'Se escribirá 1 fila' : 'Se escribirán '.number_format($batch->valid_rows).' filas' }} en {{ $batchTemplate }}.{{ $batch->error_rows > 0 ? ' Las '.number_format($batch->error_rows).' filas con error se saltan.' : '' }}{{ ! $deactivating ? '' : ($missing['missing'] === 1 ? ' Se desactivará 1 registro que no viene en el archivo; no se borra y se reactiva a mano en el catálogo.' : ' Se desactivarán '.number_format($missing['missing']).' registros que no vienen en el archivo; no se borran y se reactivan a mano en el catálogo.') }}"
+                                data-confirm-title="¿{{ ($batch->valid_rows === 1 ? 'Aplicar 1 fila' : 'Aplicar '.number_format($batch->valid_rows).' filas').($deactivating ? ' y desactivar '.number_format($missing['missing']) : '') }}?"
+                                data-confirm-button="Aplicar"
+                                data-confirm-tone="{{ $deactivating ? 'error' : 'warning' }}"
                             />
                         @else
                             <span class="tooltip tooltip-left" data-tip="No hay filas válidas que aplicar.">

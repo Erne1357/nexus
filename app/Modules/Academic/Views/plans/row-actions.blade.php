@@ -41,7 +41,10 @@
             <x-core::row-menu-item
                 :label="$plan->is_active ? 'Desactivar' : 'Activar'"
                 wire:click="toggleActive('{{ $plan->id }}')"
-                wire:confirm="{{ $plan->is_active ? '¿Desactivar el plan '.$plan->code.'?' : '¿Activar el plan '.$plan->code.'?' }}"
+                x-confirm="{{ $plan->is_active ? 'El plan deja de estar disponible para nuevos usos hasta que se reactive.' : 'El plan vuelve a estar disponible.' }}"
+                data-confirm-title="{{ $plan->is_active ? '¿Desactivar el plan '.$plan->code.'?' : '¿Activar el plan '.$plan->code.'?' }}"
+                data-confirm-button="{{ $plan->is_active ? 'Desactivar' : 'Activar' }}"
+                data-confirm-tone="{{ $plan->is_active ? 'error' : 'primary' }}"
                 :spinner="'toggleActive(\''.$plan->id.'\')'"
             />
         @else
