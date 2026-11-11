@@ -2,6 +2,8 @@
 
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\Blade;
+use Illuminate\View\ViewException;
 
 /*
 | ADR-0023: el layout trae una sola vez el diálogo de confirmar de Core, y Campus confirma con él y no con
@@ -51,4 +53,27 @@ it('el JS de la aplicación ya no abre diálogos del navegador (salvo el aviso d
     $js = file_get_contents(resource_path('js/app.js'));
 
     expect($js)->not->toMatch('/(?<![\w.$-])(window\.)?(confirm|alert|prompt)\(/');
+});
+
+it('el diálogo se anuncia como alertdialog con su título y su consecuencia', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $html = $this->get('/campus')->assertOk()->getContent();
+
+    expect($html)->toContain('role="alertdialog"')
+        ->and($html)->toContain('aria-labelledby="nexus-confirm-title"')
+        ->and($html)->toContain('aria-describedby="nexus-confirm-message"')
+        ->and($html)->toContain('id="nexus-confirm-title"')
+        ->and($html)->toContain('id="nexus-confirm-message"');
+});
+
+it('un elemento de menú con href no acepta x-confirm, porque wire:navigate navega antes del clic', function () {
+    Blade::render('<x-core::row-menu-item label="Ver" href="/campus" x-confirm="No alcanza a confirmar." />');
+})->throws(ViewException::class, 'x-confirm va solo en botones');
+
+it('un elemento de menú sin href sí lleva x-confirm', function () {
+    $html = Blade::render('<x-core::row-menu-item label="Desactivar" x-confirm="Nadie podrá trabajar en el campus." />');
+
+    expect($html)->toContain('x-confirm="Nadie podrá trabajar en el campus."')
+        ->and($html)->toContain('type="button"');
 });
