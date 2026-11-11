@@ -83,6 +83,24 @@ it('sin semestres capturados, o con materias más allá de ellos, llega hasta el
     expect(editorGrid($this->plan))->semesters_count->toBe(3);
 });
 
+it('semestersCount() da los mismos semestres que la retícula completa, en una consulta', function () {
+    $query = app(PlanGridEditorQuery::class);
+    $this->plan->update(['semesters_count' => null]);
+    expect($query->semestersCount($this->plan))->toBe(0);
+
+    placeInPlan($this->plan, ($this->subject)('ACF-0901'), 2);
+    $gone = placeInPlan($this->plan, ($this->subject)('ACF-0902'), 6);
+    $gone->subject->delete();
+
+    $plan = $this->plan->fresh();
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    $count = $query->semestersCount($plan);
+    $queries = count(DB::getQueryLog());
+
+    expect($count)->toBe(2)->and($count)->toBe(editorGrid($plan)['semesters_count'])->and($queries)->toBe(1);
+});
+
 it('un plan sin semestres ni materias no tiene semestres', function () {
     $this->plan->update(['semesters_count' => null]);
 

@@ -40,7 +40,7 @@ it('está registrada en Imports sin campo de semestre', function () {
     $template = app(TemplateRegistry::class)->get('pending_placements');
 
     expect($template)->toBeInstanceOf(PendingPlacementsTemplate::class)
-        ->and(array_keys($template->fields()))->toBe(['plan', 'code', 'name', 'theory_hours', 'practice_hours', 'credits', 'department', 'specialty', 'specialty_name', 'kind', 'sii_grid', 'position'])
+        ->and(array_keys($template->fields()))->toBe(['plan', 'code', 'name', 'theory_hours', 'practice_hours', 'credits', 'department', 'specialty', 'specialty_name', 'kind', 'sii_grid', 'position', 'suggested_semester'])
         ->and($template->naturalKey())->toBe(['plan', 'code'])
         ->and($template->deactivatesMissing())->toBeFalse();
 });
@@ -113,4 +113,24 @@ it('el renglón (`position`) del pendiente se escribe al crearlo y no se pisa si
 
     $this->template->apply(pendingPlacementRow(['credits' => '5']), $this->context);
     expect(StudyPlanSubjectPending::sole()->position)->toBe(4);
+});
+
+it('escribe tal cual el semestre sugerido del pendiente sin resolver (D18): solo la migración lo calcula, así que vacío lo borra; uno que no es entero de 1 en adelante es error', function () {
+    $this->template->apply(pendingPlacementRow(['suggested_semester' => '3']), $this->context);
+    expect(StudyPlanSubjectPending::sole()->suggested_semester)->toBe(3);
+
+    $this->template->apply(pendingPlacementRow(['suggested_semester' => '5']), $this->context);
+    expect(StudyPlanSubjectPending::sole()->suggested_semester)->toBe(5);
+
+    $this->template->apply(pendingPlacementRow(['credits' => '5']), $this->context);
+    expect(StudyPlanSubjectPending::sole()->suggested_semester)->toBeNull()
+        ->and($this->template->fields()['suggested_semester'])->toBe('semestre sugerido');
+
+    StudyPlanSubjectPending::sole()->forceFill(['resolved_at' => now(), 'suggested_semester' => 2])->save();
+    $this->template->apply(pendingPlacementRow(['suggested_semester' => '6']), $this->context);
+    expect(StudyPlanSubjectPending::sole()->suggested_semester)->toBe(2);
+
+    foreach (['0', 'tres', '40000'] as $invalid) {
+        expect($this->template->validate(pendingPlacementRow(['suggested_semester' => $invalid]), $this->context)->errors)->toHaveKey('suggested_semester');
+    }
 });

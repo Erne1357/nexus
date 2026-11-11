@@ -171,3 +171,18 @@ it('guarda los créditos totales del plan, y un archivo que no los trae no borra
 it('unos créditos que no son un entero de 0 a 32767 son error', function (mixed $credits) {
     expect($this->template->validate(studyPlanRow(['credits' => $credits]), $this->context)->errors)->toHaveKey('credits');
 })->with(['negativo' => ['-5'], 'texto' => ['muchos'], 'enorme' => ['40000']]);
+
+it('marca si el plan es una retícula histórica (D18) y un archivo que no lo dice no lo cambia', function () {
+    $plan = $this->template->apply(studyPlanRow(['historical' => 'Sí']), $this->context);
+    expect($plan->fresh()->is_historical)->toBeTrue()
+        ->and(studyPlanRow(['historical' => 'no'])['historical'])->toBeFalse()
+        ->and($this->template->validate(studyPlanRow(['historical' => 'Quizá']), $this->context)->errors)->toHaveKey('historical');
+
+    $this->template->apply(studyPlanRow(), $this->context);
+    expect($plan->fresh()->is_historical)->toBeTrue();
+
+    $this->template->apply(studyPlanRow(['historical' => 'No']), $this->context);
+    expect($plan->fresh()->is_historical)->toBeFalse()
+        ->and($this->template->apply(studyPlanRow(['code' => 'ISIC-2004-296']), $this->context)->fresh()->is_historical)->toBeFalse()
+        ->and($this->template->fields()['historical'])->toBe('histórica');
+});
