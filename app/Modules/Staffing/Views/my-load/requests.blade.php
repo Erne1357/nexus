@@ -1,7 +1,8 @@
 {{--
     «Mis solicitudes» de Mi carga (tarea 3.11, maqueta C): el título con cuántas lleva y, con el permiso de pedir, un solo
     «Solicitar cambio» que abre el modal (el grupo se elige ahí); deshabilitado con su motivo si ningún grupo se puede
-    pedir. Si la carga de algún grupo no está en Asignación o Ajustes, una línea lo dice. Debajo, sus solicitudes del
+    pedir. Si la carga de algún grupo que sigue a su nombre no está en Asignación o Ajustes, una línea lo dice (un grupo
+    publicado que después se reasignó o se canceló no cuenta). Debajo, sus solicitudes del
     periodo: grupo, tipo, lo que propuso, estado, el comentario del jefe y la fecha. Con la caja de menos de 44rem, cada
     solicitud se apila.
 --}}
@@ -10,7 +11,8 @@
 @php
     $tz = config('app.timezone');
     $blocked = collect($load['groups'])
-        ->map(fn (array $group) => $mine['groups'][$group['id']]['load'] ?? null)
+        ->filter(fn (array $group) => isset($mine['groups'][$group['id']]))
+        ->map(fn (array $group) => $mine['groups'][$group['id']]['load'])
         ->reject(fn ($status) => \App\Modules\Staffing\Rules\ChangeRequestRules::acceptsRequests($status))
         ->map(fn ($status) => $status?->label() ?? 'sin abrir')
         ->unique()

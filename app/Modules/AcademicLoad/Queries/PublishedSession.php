@@ -27,4 +27,14 @@ final readonly class PublishedSession
     {
         return new self($session['day'], $session['starts_at'], $session['ends_at'], $session['kind'], $session['kind_label'], $session['room']);
     }
+
+    /**
+     * Si la sesión usa un salón de otro departamento que el del grupo: un préstamo (los exportes del personal lo marcan).
+     */
+    public function isLoanedTo(string $departmentId): bool
+    {
+        $owner = $this->room['owner_department_id'] ?? null;
+
+        return $owner !== null && $owner !== $departmentId;
+    }
 }

@@ -2,15 +2,17 @@
 
 namespace App\Modules\Staffing\Actions\ChangeRequests;
 
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Notifications\ChangeRequestRejected;
+use App\Modules\Staffing\Rules\ChangeRequestRules;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Rechaza una solicitud de cambio pendiente (tarea 3.11). Decide el jefe del departamento (ChangeRequestPolicy::decide,
+ * Rechaza una solicitud de cambio pendiente (tarea 3.11), con la carga del departamento en asignación o ajustes (P5). Decide el jefe del departamento (ChangeRequestPolicy::decide,
  * antes de llamarla) y el comentario es obligatorio (supuesto por confirmar). La carga no cambia de estado. Deja
  * bitácora y, después del commit, avisa al solicitante.
  */
@@ -34,6 +36,17 @@ final class RejectChangeRequest
 
             if ($request->status !== ChangeRequestStatus::Pending) {
                 throw ValidationException::withMessages(['status' => 'La solicitud ya no está pendiente.']);
+            }
+
+            $load = AcademicLoad::query()
+                ->where('term_id', $request->term_id)
+                ->where('campus_id', $request->campus_id)
+                ->where('department_id', $request->department_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! ChangeRequestRules::acceptsRequests($load?->status)) {
+                throw ValidationException::withMessages(['status' => 'La carga del departamento está en '.($load?->status->label() ?? 'ningún estado').': solo se deciden solicitudes con la carga en asignación o en ajustes.']);
             }
 
             $request->update(['status' => ChangeRequestStatus::Rejected, 'decided_by' => $actor->getKey(), 'decided_at' => now(), 'decision_comment' => $comment]);
