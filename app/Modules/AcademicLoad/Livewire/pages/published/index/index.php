@@ -1,6 +1,8 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Exports\CampusWorkbook;
+use App\Modules\AcademicLoad\Exports\Sii\SiiFilesExport;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
@@ -8,6 +10,7 @@ use App\Modules\AcademicLoad\Queries\PublishedWeek;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -81,6 +84,14 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'teachers' => $teacherNeedle === '' ? [] : array_slice(array_values(array_filter($schedule->teachers(), fn (array $teacher): bool => str_contains(PublishedWeek::fold($teacher['name']), $teacherNeedle))), 0, 8),
             'rooms' => ! $profile->usesRooms || $roomNeedle === '' ? [] : array_slice(array_values(array_filter($schedule->rooms(), fn (array $room): bool => str_contains(PublishedWeek::fold($room['code'].' '.$room['name'].' '.$room['building']), $roomNeedle))), 0, 8),
             'unpublished' => $unpublished,
+            'staffExports' => $actor->user() !== null && $actor->allowsAny(CampusWorkbook::requiredPermission()) && ($workbook = CampusWorkbook::fromRequest($published, $context->term, $context->campus, request())) !== null && Gate::allows('download', $workbook) ? [
+                'excel' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'excel']),
+                'department' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'departamento']),
+                'departments' => collect($schedule->loads)->map(fn (array $load): array => $load['department'])->sortBy('code')->values()->all(),
+                'sii' => ($sii = SiiFilesExport::fromRequest($published, $context->term, $context->campus, request())) !== null && Gate::allows('download', $sii)
+                    ? route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'sii'])
+                    : null,
+            ] : null,
         ];
     }
 };

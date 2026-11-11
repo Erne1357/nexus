@@ -82,7 +82,7 @@ it('mientras la cola lo arma responde una página que se recarga sola', function
 
     $this->get(publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]))
         ->assertStatus(202)
-        ->assertSee('Preparando el PDF')
+        ->assertSee('Preparando el archivo')
         ->assertSee('<meta http-equiv="refresh" content="3">', false);
 
     Queue::assertPushed(GeneratePublishedExport::class, 1);

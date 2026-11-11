@@ -76,12 +76,12 @@ function managementKeys(array $keys): array
 }
 
 describe('AZ-02: lo que cada puesto ejerce', function () {
-    it('AZ-02: el jefe de Servicios Escolares solo ejerce academic.placement.validate', function () {
-        expect(effectivePermissions($this->servicesHead))->toBe(['academic.placement.validate']);
+    it('AZ-02: el jefe de Servicios Escolares solo ejerce academic.placement.validate y los exportes del personal de lo publicado, con los archivos para el SII', function () {
+        expect(effectivePermissions($this->servicesHead))->toBe(['academic.placement.validate', 'academic_load.load.export', 'academic_load.load.export_sii']);
     });
 
-    it('AZ-S16: el jefe de un departamento académico conserva todo lo de su puesto salvo academic.placement.validate, que nunca ejercía', function () {
-        $granted = array_values(array_diff(app(PermissionRegistry::class)->matrix()[Role::JefeDepartamento->value], ['academic.placement.validate']));
+    it('AZ-S16: el jefe de un departamento académico conserva todo lo de su puesto salvo academic.placement.validate y los archivos para el SII, que no ejerce', function () {
+        $granted = array_values(array_diff(app(PermissionRegistry::class)->matrix()[Role::JefeDepartamento->value], ['academic.placement.validate', 'academic_load.load.export_sii']));
 
         expect(effectivePermissions($this->academicHead))->toBe($granted);
     });
