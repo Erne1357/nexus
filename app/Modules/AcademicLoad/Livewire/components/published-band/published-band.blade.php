@@ -2,13 +2,15 @@
     La banda pública (DESIGN.md, «Consulta publicada»): la del shell sin buscador ni menú. La liebre en el cuadro rojo
     es la marca y lleva a la consulta; luego «Nexus» y la ruta «Horarios». A la derecha, los selectores de Campus y
     Periodo (cambiar uno recarga la consulta con ese contexto) y el acceso. Bajo 768 px mide 56 px: la liebre de 56,
-    sin la ruta, y los selectores compactos. Debajo, la franja roja de 3 px.
+    sin la ruta, y los selectores compactos. Bajo 480 px «Nexus» queda solo para lectores de pantalla, para que los
+    selectores quepan completos, y bajo 380 px los selectores bajan a un segundo renglón de la banda, a lo ancho.
+    Debajo, la franja roja de 3 px.
 --}}
 @php
     $selectClasses = 'select h-10 w-auto min-w-0 max-w-full border-band-content/25 bg-band-content/8 text-band-content text-sm [&>option]:bg-base-100 [&>option]:text-base-content max-md:h-11 max-md:max-w-36 max-md:truncate max-md:ps-2 max-md:pe-8 max-md:text-[13px]';
 @endphp
 <div class="sticky top-0 z-30 text-sm/[1.45]">
-    <header class="flex h-16 items-center gap-[18px] bg-band pe-5 text-band-content max-desktop:gap-3.5 max-md:h-14 max-md:gap-2 max-md:pe-2">
+    <header class="flex h-16 items-center gap-[18px] bg-band pe-5 text-band-content max-desktop:gap-3.5 max-md:h-auto max-md:min-h-14 max-md:gap-2 max-md:pe-2 max-[379px]:flex-wrap max-[379px]:pb-2">
         <a
             href="{{ route('published.index') }}"
             wire:navigate
@@ -23,7 +25,7 @@
             ></span>
         </a>
 
-        <span class="text-xl font-bold tracking-[-0.01em] max-md:text-lg">Nexus</span>
+        <span class="text-xl font-bold tracking-[-0.01em] max-md:text-lg max-[479px]:sr-only">Nexus</span>
 
         <nav aria-label="Ruta" class="flex min-w-0 items-center gap-2 text-[15px] whitespace-nowrap text-band-muted max-md:hidden">
             <span aria-current="page" class="truncate font-medium text-band-content">Horarios</span>
@@ -32,7 +34,7 @@
         <span class="flex-1"></span>
 
         @if ($terms !== [])
-            <div class="flex min-w-0 items-center gap-2 max-md:gap-1.5">
+            <div class="flex min-w-0 items-center gap-2 max-md:gap-1.5 max-[379px]:order-last max-[379px]:basis-full max-[379px]:ps-2 max-[379px]:[&>select]:max-w-none max-[379px]:[&>select]:flex-1">
                 <select wire:model.live="campus" aria-label="Campus" data-testid="published-campus" class="{{ $selectClasses }}">
                     @foreach ($campuses as $option)
                         <option value="{{ $option['id'] }}" @selected($option['id'] === $campus)>{{ $option['name'] }}</option>
