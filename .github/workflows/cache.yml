@@ -1,0 +1,32 @@
+# Calienta la caché de la imagen `dev` al mezclar. Un PR solo lee las cachés de su propia rama, de su rama
+# base y de main (los PR de tarea tienen por base su `riel/<riel>`), así que cada push a develop, main o una
+# rama de riel la deja lista para los PR que vienen. No corre pruebas: ya corrieron en el PR (ci.yml).
+# Va en su propio workflow y con otro nombre de job para que ningún push cree checks llamados `lint`, `tests`
+# o `browser` sobre un commit que después es la cabeza de un PR (develop → main, riel → develop).
+# Detalle en docs/arquitectura/testing.md.
+
+name: Cache
+
+on:
+  push:
+    branches: [develop, main, "riel/**"]
+
+# Un push nuevo a la misma rama deja viejo el calentado anterior.
+concurrency:
+  group: cache-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cache:
+    name: cache
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-write: "true"

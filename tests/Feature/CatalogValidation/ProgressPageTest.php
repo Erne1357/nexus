@@ -18,8 +18,10 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\TermCalendarQuery;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -207,6 +209,10 @@ describe('conteos', function () {
 
         $this->travelTo(now()->setDate(2026, 11, 12)->startOfDay());
         TermStage::factory()->create(['term_id' => $this->term->id, 'stage' => Stage::CatalogValidation, 'starts_on' => '2026-11-10', 'ends_on' => '2026-11-19']);
+        // La primera vista guardó el calendario sin etapas por un día (TermCalendarQuery); la factory no avisa como
+        // la pantalla de etapas, así que se olvida a mano. Sin esto la prueba dependía de que el viaje en el tiempo
+        // pasara de ese día y falló desde el 11 de noviembre de 2026.
+        Cache::forget(TermCalendarQuery::key($this->term->id));
 
         progressPage()->assertSee('Validación de catálogos')->assertSee('10–19 nov')->assertSee('quedan 7 días');
     });

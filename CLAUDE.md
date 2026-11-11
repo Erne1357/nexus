@@ -122,7 +122,7 @@ Detalle: [CONTRIBUTING.md](CONTRIBUTING.md).
 | Pruebas | `tests/Unit/<Modulo>`, `tests/Feature/<Modulo>`, `tests/Browser/<Modulo>`, `tests/Arch` |
 | Fixtures de importación | `tests/Fixtures/imports/` (anonimizados) |
 | Docker | `Dockerfile`, `compose.yaml`, `compose.override.yaml`, `docker/` |
-| CI | `.github/workflows/ci.yml` |
+| CI | `.github/workflows/ci.yml` (PR) y `cache.yml` (push) |
 | Plantillas de issues y PR | `.github/` |
 | Skills del proyecto | `.claude/skills/` |
 | Servicio del motor (R2) | `services/solver/` |
