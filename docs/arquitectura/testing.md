@@ -240,18 +240,19 @@ Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protecci
 
 ### Shards
 
-Desde el 10 de noviembre de 2026, `tests` y `browser` corren cada uno en tres runners a la vez con `--shard=<n>/3` de Pest: cada shard toma un tercio de las clases de prueba de su suite. Las reparte por tiempo con `tests/.pest/shards.json`, que guarda cuánto tarda cada clase; una clase nueva que el archivo no trae se reparte por turno y Pest avisa «shards.json is out of date» en el log, sin fallar. Cada shard de `tests` sigue en paralelo dentro de su runner (`--parallel --processes=$(nproc)`). Un archivo de pruebas siempre corre entero en un proceso, así que el shard más lento nunca baja de lo que tarda su archivo más pesado: un archivo que pase de unos 2 minutos se parte en varios, como `AcademicDemoSeederTest`, que tardaba unos 10 y se partió en cuatro (`AcademicDemo*Test`), y el browser `PlanGridTest`, que tardaba unos 6 y se partió en tres (`PlanGrid*Test`, cada prueba siembra `DemoSeeder`).
+Desde el 10 de noviembre de 2026, `tests` y `browser` corren cada uno en tres runners a la vez con `--shard=<n>/3` de Pest: cada shard toma un tercio de las clases de prueba de su suite. Las reparte por tiempo con `tests/.pest/shards.json`, que guarda cuánto tarda cada clase; una clase nueva que el archivo no trae se reparte por turno y Pest avisa «shards.json is out of date» en el log, sin fallar. Cada shard de `tests` sigue en paralelo dentro de su runner (`--parallel --processes=$(nproc)`). Un archivo de pruebas siempre corre entero en un proceso, así que el shard más lento nunca baja de lo que tarda su archivo más pesado: un archivo que pase de unos 2 minutos se parte en varios, como `AcademicDemoSeederTest`, que tardaba unos 10 y se partió en cinco (`AcademicDemo*Test`; `AcademicDemoMassiveTest` lleva sola la prueba más lenta de la suite), y el browser `PlanGridTest`, que tardaba unos 6 y se partió en tres (`PlanGrid*Test`, cada prueba siembra `DemoSeeder`).
 
-Para medir los tiempos de nuevo (cuando el aviso aparece seguido o un shard tarda mucho más que los otros), en un worktree con la suite verde y los assets compilados:
+Para medir los tiempos de nuevo (cuando el aviso aparece seguido o un shard tarda mucho más que los otros), lo mejor es tomarlos de una corrida verde del CI: cada shard de `tests` sube su JUnit, con el tiempo de cada prueba en el runner y con cobertura, que es lo que se reparte. Los de Browser se miden en local (sus shards no suben JUnit y sin cobertura la proporción local sí sirve):
 
 ```bash
-docker compose exec -T -e DB_DATABASE=nexus_test_<x> -w /app/.worktrees/<rama> app ./vendor/bin/pest --testsuite=Unit,Feature,Arch --parallel --processes=6 --update-shards
-cp tests/.pest/shards.json /tmp/shards-ufa.json
+gh run download <run-id> -p 'tests-shard-*' -D /tmp/ci-run
 docker compose exec -T -e DB_DATABASE=nexus_test_<x> -w /app/.worktrees/<rama> app ./vendor/bin/pest --testsuite=Browser --update-shards
-python3 .github/scripts/merge-shard-timings.py tests/.pest/shards.json /tmp/shards-ufa.json tests/.pest/shards.json
+python3 .github/scripts/merge-shard-timings.py tests/.pest/shards.json tests/.pest/shards.json /tmp/ci-run/tests-shard-*/junit.xml
 ```
 
-`--update-shards` reescribe el archivo solo con las clases de esa corrida; por eso se mide cada suite y se juntan los dos con `merge-shard-timings.py`. Va con `./vendor/bin/pest`: `php artisan test` no siempre lo acepta (con `--filter` dice que la opción no existe), y en paralelo Pest recibe una sola ruta. Los tiempos locales no son los del runner, pero la proporción entre clases sí, que es lo que usa el reparto.
+`merge-shard-timings.py` junta `shards.json` y JUnit (de un `.xml` toma la suma de las pruebas de cada clase; si una clase sale en varias entradas, queda la última). `--update-shards` reescribe el archivo solo con las clases de esa corrida; va con `./vendor/bin/pest`: `php artisan test` no siempre lo acepta (con `--filter` dice que la opción no existe), y en paralelo Pest recibe una sola ruta. Sin una corrida del CI, también se pueden medir Unit/Feature/Arch en local (`--testsuite=Unit,Feature,Arch --parallel --processes=6 --update-shards`, guardando el archivo antes de medir Browser), pero en el runner no guardan la proporción: con los tiempos locales, el primer reparto (#401) dejó un shard en 10 minutos y otro en 3.
+
+**Pendiente: las siembras del demo se vuelven más lentas en un proceso que ya corrió otras.** La prueba del seeder masivo (`AcademicDemoMassiveTest`) tarda unos 35 s sola en local, unos 225 s si corre después de `AcademicDemoReseedTest` en el mismo proceso y unos 500 s en el CI, después de otras clases. Algo se acumula entre pruebas (estado estático del proceso, o filas muertas en PostgreSQL tras cada rollback de `RefreshDatabase`). Averiguarlo bajaría el shard más lento del CI de unos 8 minutos de pruebas a 2 o 3.
 
 ### Qué trae el masivo de la fase 3 (horarios)
 

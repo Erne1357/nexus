@@ -22,10 +22,10 @@ use Tests\Support\Academic\DemoCatalog;
 | especialidades y seriación, los usuarios de prueba y los periodos, para probar las pantallas con datos
 | realistas. DemoSeeder siembra Campus II; con los dos campus se siembran las 12 carreras de Campus I.
 |
-| Las pruebas del demo académico van en cuatro archivos (AcademicDemoSeederTest, AcademicDemoCatalogTest,
-| AcademicDemoStaffTest y AcademicDemoReseedTest) porque casi todas siembran el demo completo: juntas tardaban
-| unos 10 minutos en un solo proceso y marcaban el tiempo de toda la suite. Separadas, se reparten entre los
-| procesos y los shards del CI (docs/arquitectura/testing.md, «Shards»). Los atajos están en
+| Las pruebas del demo académico van en cinco archivos (AcademicDemoSeederTest, AcademicDemoCatalogTest,
+| AcademicDemoStaffTest, AcademicDemoReseedTest y AcademicDemoMassiveTest) porque casi todas siembran el demo
+| completo: juntas tardaban unos 10 minutos en un solo proceso y marcaban el tiempo de toda la suite. Separadas, se
+| reparten entre los procesos y los shards del CI (docs/arquitectura/testing.md, «Shards»). Los atajos están en
 | tests/Support/Academic/DemoCatalog.php.
 |
 | Este archivo: Campus II con DemoSeeder, los casos extremos, los periodos y que no corre en producción.
