@@ -135,7 +135,9 @@ Además: **publicar vuelve a revisar HC-15**, y se veta si algo cambió después
 
 ### Respuestas para el piloto (4.9)
 
-El usuario las contestó el 10 de noviembre de 2026, al reanudar los rieles; las preguntas de los tres rieles fueron en una sola ronda. Reparto: A hace la 4.7 y el ensayo de la 4.10 de principio a fin; B, el canal de incidencias; C, las guías y la revisión de preparación de Campus II. La 4.11 es de los tres, al final.
+> **Pendiente hasta el lanzamiento real** (decisión del usuario del 11 de noviembre de 2026). La preparación del piloto (4.9 a 4.11) se detiene hasta que se vaya a lanzar de verdad; mientras, el trabajo sigue con la fase 5 en otras sesiones. Lo de abajo queda como punto de partida para cuando se retome. No se construyó nada: ni guías, ni botón de reportes, ni revisión de preparación.
+
+El usuario las contestó el 10 de noviembre de 2026, al reanudar los rieles; las preguntas de los tres rieles fueron en una sola ronda. Reparto que se había acordado: A hace la 4.7 y el ensayo de la 4.10 de principio a fin; B, el canal de incidencias; C, las guías y una revisión de preparación de Campus II (propuesta de C, no está en el plan). La 4.11 es de los tres, al final.
 
 1. **Guías:** una página «Ayuda» dentro de Nexus, una por puesto (la del puesto activo), con enlaces a cada pantalla, que se imprime en una hoja. El texto lo mantiene el equipo en el código: si una pantalla cambia, el mismo PR actualiza su guía.
 2. **Quiénes entran al piloto:** todos los puestos de Campus II: jefes de departamento, coordinadores, Subdirección académica, docentes, Servicios Escolares y jefes de proyecto docente. Cada uno recibe su guía y puede reportar.

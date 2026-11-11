@@ -109,3 +109,4 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
   - más adelante los reportes se conectarán con la aplicación de tickets del ITCJ.
 
   Detalle en [fase-4](docs/plan/fase-4-cierre-publicacion-piloto.md#respuestas-para-el-piloto-49). |
+| 2026-11-11 | Decisión del usuario: la preparación del piloto (4.9 a 4.11) queda **pendiente hasta el lanzamiento real**, junto con la 4.7, que espera al servidor. El trabajo sigue con la fase 5 en otras sesiones. Las respuestas del 10 de noviembre quedan en fase-4 como punto de partida. |
