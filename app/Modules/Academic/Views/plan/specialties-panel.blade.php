@@ -60,7 +60,7 @@
                                         icon="o-trash"
                                         class="btn-ghost btn-sm text-error"
                                         wire:click="removeSpecialty('{{ $specialty['id'] }}')"
-                                        x-confirm="Se quita solo la que se capturó por error."
+                                        x-confirm="La especialidad deja de estar en el plan. Quita solo la que se capturó por error."
                                         data-confirm-title="¿Quitar la especialidad {{ $specialty['code'] }} del plan?"
                                         data-confirm-button="Quitar"
                                         data-confirm-tone="error"
