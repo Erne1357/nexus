@@ -15,7 +15,7 @@ Nexus es la nueva fuente de verdad académica del Instituto Tecnológico de Ciud
 1. Lee [PLAN.md](PLAN.md) y el archivo de la fase activa en `docs/plan/`.
 2. Toma un issue (`gh issue view <n>`). Cada issue referencia una tarea del plan (por ejemplo `3.2`).
 3. Si la fase está marcada 🟦 (vaga), **no implementes**: primero una sesión de planeación que la vuelva detallada.
-4. Trabaja en una rama `feature/<issue>-<slug>` creada desde `develop`, en un worktree propio dentro del repo (`.worktrees/<rama>`; comandos con `docker compose exec -w /app/.worktrees/<rama> app ...`, detalle en [CONTRIBUTING.md](CONTRIBUTING.md)).
+4. Trabaja en una rama `feature/<issue>-<slug>` creada desde la rama padre de tu riel (`riel/<riel>`, que sale de `develop`; ver §7), en un worktree propio dentro del repo (`.worktrees/<rama>`; comandos con `docker compose exec -w /app/.worktrees/<rama> app ...`, detalle en [CONTRIBUTING.md](CONTRIBUTING.md)).
 5. Si el issue es claro, ve directo a TDD. Si hay ambigüedad, usa brainstorming y pregunta antes.
 6. Antes de abrir el PR: suite completa verde, Pint, `/code-review`, documentación de la fase actualizada.
 
@@ -91,7 +91,8 @@ Detalle: `docs/arquitectura/testing.md`.
 
 ## 7. Git y PRs
 
-- `feature/*` → `develop` por PR. `develop` → `main` por PR cuando la integración está probada. Ambas ramas están protegidas: **nunca push directo**.
+- **Rama padre por riel** (decisión del usuario, 10 de noviembre de 2026): cada línea de trabajo sale de `develop` a su rama padre `riel/<riel>`, y todos sus PR se mezclan ahí (squash, con CI verde y revisión cruzada). Así los rieles avanzan en paralelo sin esperar el CI de los demás. Ningún PR de tarea apunta directo a `develop`.
+- A `develop` entra solo el PR de cada rama padre, uno a la vez y avisando a los demás rieles: primero se trae `develop` a la rama padre y luego se mezcla con merge commit, no squash. `develop` → `main` por PR cuando la integración está probada. `develop` y `main` están protegidas: **nunca push directo**.
 - Commits convencionales en inglés con el módulo como alcance: `feat(scheduling): add room suggestion query`, `test(staffing): cover HC-16`.
 - Un PR por tarea del plan, de preferencia menos de 400 líneas netas, con `Closes #<issue>`; sigue la plantilla de PR.
 - Revisor cruzado obligatorio y CI verde obligatorio.
