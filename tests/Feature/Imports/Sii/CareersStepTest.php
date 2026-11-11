@@ -219,7 +219,7 @@ it('un campus desconocido se reporta y no genera oferta', function () {
         ->and(collect($batch['incidents'])->where('level', 'warning')->pluck('message')->implode('|'))->toContain('campus');
 });
 
-it('el curado real separa las dos retículas del DCII: traen la misma clave oficial, pero piden 164 y 280 créditos', function () {
+it('el curado real deja las dos retículas del DCII en planes distintos: DII/46 con la clave oficial y DCI/41 en un plan propio', function () {
     $planes = (new SiiMigration(SiiExport::open($this->dir), base_path('app/Modules/Imports/Sii/Curated')))->curated('planes');
     $plans = array_column(array_map(fn (array $r): array => ['grid' => $r['sii_carrera'].'/'.$r['sii_reticula'], 'plan' => $r['plan']], $planes), 'plan', 'grid');
 
