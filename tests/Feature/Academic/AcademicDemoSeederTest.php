@@ -2,8 +2,6 @@
 
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
-use App\Modules\Academic\Enums\PrerequisiteKind;
-use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
@@ -12,128 +10,26 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
-use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
-use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
-use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Facilities\Enums\FacilitiesPermission;
-use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoSeeder;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
+use Tests\Support\Academic\DemoCatalog;
 
 /*
 | Catálogo demo (tarea 1.10 ampliada): departamentos, carreras con su oferta por campus, planes con su retícula,
 | especialidades y seriación, los usuarios de prueba y los periodos, para probar las pantallas con datos
 | realistas. DemoSeeder siembra Campus II; con los dos campus se siembran las 12 carreras de Campus I.
+|
+| Las pruebas del demo académico van en cinco archivos (AcademicDemoSeederTest, AcademicDemoCatalogTest,
+| AcademicDemoStaffTest, AcademicDemoReseedTest y AcademicDemoMassiveTest) porque casi todas siembran el demo
+| completo: juntas tardaban unos 10 minutos en un solo proceso y marcaban el tiempo de toda la suite. Separadas, se
+| reparten entre los procesos y los shards del CI (docs/arquitectura/testing.md, «Shards»). Los atajos están en
+| tests/Support/Academic/DemoCatalog.php.
+|
+| Este archivo: Campus II con DemoSeeder, los casos extremos, los periodos y que no corre en producción.
 */
-
-/**
- * Los campus y el catálogo demo de `$campuses`, sin usuarios ni periodos.
- *
- * @param  list<string>  $campuses
- */
-function seedDemoCatalog(array $campuses): void
-{
-    $seeder = (new DatabaseSeeder)->setContainer(app());
-
-    $seeder->call(CampusSeeder::class);
-    $seeder->callWith(AcademicDemoSeeder::class, ['campuses' => $campuses]);
-}
-
-/**
- * Cuántos registros hay de lo que siembra el demo, contando los borrados.
- *
- * @return array<string, int>
- */
-function demoCounts(): array
-{
-    return [
-        ...collect([Department::class, Career::class, CareerCampus::class, StudyPlan::class, Subject::class, Specialty::class, StudyPlanSubject::class, SubjectPrerequisite::class])
-            ->mapWithKeys(fn (string $model): array => [$model => $model::withTrashed()->count()])
-            ->all(),
-        'users' => User::query()->count(),
-        'role_assignments' => RoleAssignment::query()->count(),
-        'terms' => Term::query()->count(),
-    ];
-}
-
-/**
- * Los usuarios de prueba de DemoStaffSeeder: `subdir`, `jefe.<depto>`, `jpd.<depto>.<campus>` y
- * `coord.<carrera>.<campus>` (los docentes de FacultyDemoSeeder entran con su RFC).
- *
- * @return EloquentCollection<int, User>
- */
-function demoStaff(): EloquentCollection
-{
-    return User::query()
-        ->where(fn ($query) => $query->where('username', 'subdir')
-            ->orWhere('username', 'like', 'jefe.%')
-            ->orWhere('username', 'like', 'jpd.%')
-            ->orWhere('username', 'like', 'coord.%'))
-        ->get();
-}
-
-/**
- * La cadena de seriación más larga (en materias) de un plan, o null si la seriación forma un ciclo.
- *
- * @param  Collection<int, SubjectPrerequisite>  $seriation
- */
-function longestSeriationChain(Collection $seriation): ?int
-{
-    $requires = $seriation->groupBy('subject_id')->map(fn (Collection $rows): array => $rows->pluck('prerequisite_subject_id')->all())->all();
-    $depth = [];
-    $visiting = [];
-
-    $walk = function (string $subject) use (&$walk, &$depth, &$visiting, $requires): ?int {
-        if (isset($depth[$subject])) {
-            return $depth[$subject];
-        }
-
-        if (isset($visiting[$subject])) {
-            return null;
-        }
-
-        $visiting[$subject] = true;
-        $longest = 0;
-
-        foreach ($requires[$subject] ?? [] as $prerequisite) {
-            $chain = $walk($prerequisite);
-
-            if ($chain === null) {
-                return null;
-            }
-
-            $longest = max($longest, $chain);
-        }
-
-        unset($visiting[$subject]);
-
-        return $depth[$subject] = $longest + 1;
-    };
-
-    $longest = 0;
-
-    foreach (array_keys($requires) as $subject) {
-        $chain = $walk($subject);
-
-        if ($chain === null) {
-            return null;
-        }
-
-        $longest = max($longest, $chain);
-    }
-
-    return $longest;
-}
 
 it('siembra las 6 carreras de Campus II con un plan vigente cada una', function () {
     $this->seed(DemoSeeder::class);
@@ -144,100 +40,6 @@ it('siembra las 6 carreras de Campus II con un plan vigente cada una', function 
         ->and($offered->every(fn (CareerCampus $offering): bool => $offering->career->studyPlans()->where('is_active', true)->count() === 1))->toBeTrue()
         ->and($offered->every(fn (CareerCampus $offering): bool => $offering->career->studyPlans()->where('is_current', true)->count() === 1))->toBeTrue()
         ->and(CareerCampus::query()->whereRelation('campus', 'code', 'C1')->exists())->toBeFalse();
-});
-
-it('con los dos campus siembra 12 carreras en C1 y 6 en C2', function () {
-    seedDemoCatalog(['C1', 'C2']);
-
-    $offered = fn (string $campus): int => CareerCampus::query()->whereRelation('campus', 'code', $campus)->where('is_active', true)->count();
-
-    expect($offered('C1'))->toBe(12)
-        ->and($offered('C2'))->toBe(6)
-        ->and(StudyPlan::query()->where('is_active', true)->distinct()->count('career_id'))->toBe(12)
-        ->and(StudyPlan::query()->where('is_active', true)->count())->toBe(12);
-});
-
-it('el tronco común se comparte entre planes', function () {
-    seedDemoCatalog(['C1', 'C2']);
-
-    $plansWith = fn (string $code): int => Subject::query()->where('code', $code)->sole()->studyPlans()->count();
-
-    expect($plansWith('ACF-0901'))->toBeGreaterThanOrEqual(10)
-        ->and($plansWith('ACA-0907'))->toBe(12);
-});
-
-it('toda seriación está en la retícula de su plan y no forma ciclos', function () {
-    seedDemoCatalog(['C1', 'C2']);
-
-    $semesterOf = StudyPlanSubject::query()->get()
-        ->mapWithKeys(fn (StudyPlanSubject $placement): array => ["{$placement->study_plan_id}|{$placement->subject_id}" => $placement->semester]);
-    $prerequisites = SubjectPrerequisite::query()->get();
-
-    expect($prerequisites)->not->toBeEmpty();
-
-    foreach ($prerequisites as $prerequisite) {
-        $subject = $semesterOf["{$prerequisite->study_plan_id}|{$prerequisite->subject_id}"] ?? null;
-        $required = $semesterOf["{$prerequisite->study_plan_id}|{$prerequisite->prerequisite_subject_id}"] ?? null;
-
-        expect($subject)->not->toBeNull('La materia de una seriación no está en la retícula de su plan.')
-            ->and($required)->not->toBeNull('El requisito de una seriación no está en la retícula de su plan.');
-
-        $prerequisite->kind === PrerequisiteKind::Seriacion
-            ? expect($required)->toBeLessThan($subject)
-            : expect($required)->toBeLessThanOrEqual($subject);
-    }
-
-    $chains = $prerequisites->where('kind', PrerequisiteKind::Seriacion)->groupBy('study_plan_id')->map(longestSeriationChain(...));
-
-    expect($chains->contains(null))->toBeFalse()
-        ->and($chains->max())->toBeGreaterThanOrEqual(5)
-        ->and($prerequisites->contains('kind', PrerequisiteKind::Correquisito))->toBeTrue();
-});
-
-it('cada plan vigente tiene 2 o 3 especialidades con materias de especialidad', function () {
-    seedDemoCatalog(['C1', 'C2']);
-
-    $plans = StudyPlan::query()->where('is_active', true)->with(['specialties', 'placements.subject'])->get();
-
-    expect($plans)->toHaveCount(12);
-
-    foreach ($plans as $plan) {
-        expect($plan->specialties->count())->toBeBetween(2, 3, "{$plan->code} no tiene 2 o 3 especialidades.");
-
-        foreach ($plan->specialties as $specialty) {
-            $subjects = $plan->placements->where('specialty_id', $specialty->id)->pluck('subject');
-
-            expect($subjects)->not->toBeEmpty("La especialidad {$specialty->code} de {$plan->code} no tiene materias.")
-                ->and($subjects->every(fn (Subject $subject): bool => $subject->kind === SubjectKind::Especialidad))->toBeTrue();
-        }
-    }
-});
-
-it('la especialidad de una fila de la retícula es de su mismo plan', function () {
-    seedDemoCatalog(['C1', 'C2']);
-
-    $placements = StudyPlanSubject::withTrashed()->whereNotNull('specialty_id')->get();
-    $planOf = Specialty::withTrashed()->pluck('study_plan_id', 'id');
-
-    expect($placements)->not->toBeEmpty()
-        ->and($placements->every(fn (StudyPlanSubject $placement): bool => $planOf[$placement->specialty_id] === $placement->study_plan_id))->toBeTrue();
-});
-
-it('los créditos de cada plan cuadran: las obligatorias sin especialidad más cualquiera de sus especialidades', function () {
-    seedDemoCatalog(['C1', 'C2']);
-
-    $plans = StudyPlan::query()->whereNotNull('total_credits')->has('placements')->with('placements.subject')->get();
-
-    expect($plans->count())->toBeGreaterThan(12);
-
-    foreach ($plans as $plan) {
-        $required = $plan->placements->whereNull('specialty_id')->where('is_required', true)->sum('subject.credits');
-        $specialties = $plan->placements->whereNotNull('specialty_id')->groupBy('specialty_id')->map->sum('subject.credits');
-
-        foreach ($specialties->whenEmpty(fn (Collection $none): Collection => $none->push(0)) as $credits) {
-            expect($required + $credits)->toBe($plan->total_credits, "Los créditos de {$plan->code} no cuadran con su retícula.");
-        }
-    }
 });
 
 it('deja los casos extremos para probar las pantallas', function () {
@@ -259,43 +61,6 @@ it('deja los casos extremos para probar las pantallas', function () {
         ->and(Subject::query()->whereRaw('char_length(name) > 100')->exists())->toBeTrue('Falta una materia con nombre muy largo.');
 });
 
-it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el Tec, jefes de proyecto docente y coordinadores por campus', function () {
-    $this->seed(DemoSeeder::class);
-
-    $c1 = Campus::query()->where('code', 'C1')->sole();
-    $c2 = Campus::query()->where('code', 'C2')->sole();
-    $isic = Career::query()->where('code', 'ISIC')->sole();
-    $iind = Career::query()->where('code', 'IIND')->sole();
-    $sc = Department::query()->where('code', 'SC')->sole();
-    $context = fn (string $username): Actor => app(Actor::class)->forUser(User::query()->where('username', $username)->sole());
-    $coordinator = User::query()->where('username', 'coord.isc.c2')->sole();
-
-    expect(demoStaff()->pluck('username')->all())->toEqualCanonicalizing([
-        'subdir',
-        'jefe.cb', 'jefe.cea', 'jefe.ii', 'jefe.sc',
-        'jpd.cb.c2', 'jpd.cea.c2', 'jpd.ii.c2', 'jpd.sc.c2',
-        'coord.isc.c2', 'coord.ii.c2', 'coord.ige.c2', 'coord.il.c2', 'coord.la.c2', 'coord.cp.c2',
-    ])
-        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $c2->id, career: $isic->id)))->toBeTrue()
-        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $c2->id, career: $iind->id)))->toBeFalse()
-        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $c1->id, career: $isic->id)))->toBeFalse()
-        ->and($context('jefe.sc')->allows(AcademicLoadPermission::LoadView, Target::of(campus: $c2->id, unit: $sc->id)))->toBeTrue()
-        ->and($context('jefe.sc')->allows(AcademicLoadPermission::LoadView, Target::of(campus: $c1->id, unit: $sc->id)))->toBeTrue()
-        ->and($context('jefe.sc')->heldScopes()->sole()->campus_id)->toBeNull()
-        ->and($context('jpd.sc.c2')->allows(AcademicLoadPermission::LoadView, Target::of(campus: $c2->id, unit: $sc->id)))->toBeTrue()
-        ->and($context('jpd.sc.c2')->allows(AcademicLoadPermission::LoadView, Target::of(campus: $c1->id, unit: $sc->id)))->toBeFalse()
-        ->and($context('subdir')->allows(FacilitiesPermission::BuildingView, Target::of(campus: $c2->id)))->toBeTrue()
-        ->and($context('subdir')->allows(FacilitiesPermission::BuildingView, Target::of(campus: $c1->id)))->toBeTrue()
-        ->and($context('subdir')->heldScopes()->sole()->campus_id)->toBeNull()
-        ->and(RoleAssignment::query()->current()->where(['org_unit_id' => $sc->id, 'role' => Role::JefeDepartamento])->sole())
-        ->campus_id->toBeNull()
-        ->user->username->toBe('jefe.sc')
-        ->and(RoleAssignment::query()->current()->where(['org_unit_id' => $sc->id, 'campus_id' => $c2->id, 'role' => Role::JefeProyectoDocente])->whereHas('user', fn ($query) => $query->where('username', 'jpd.sc.c2'))->exists())->toBeTrue()
-        ->and(DB::table('department_heads')->count())->toBe(0)
-        ->and(Hash::check('password', $coordinator->password))->toBeTrue()
-        ->and($coordinator->must_change_password)->toBeFalse();
-});
-
 it('siembra los periodos 20261, 20263 y 20271, con Ene-Jun 2027 como actual', function () {
     $this->seed(DemoSeeder::class);
 
@@ -310,82 +75,6 @@ it('no cambia el periodo actual si ya hay uno', function () {
     expect(Term::query()->orderBy('code')->pluck('is_current', 'code')->all())->toBe(['20261' => false, '20263' => true, '20271' => false]);
 });
 
-it('es idempotente: sembrar dos veces no duplica', function () {
-    $this->seed(DemoSeeder::class);
-    $first = demoCounts();
-    $this->seed(DemoSeeder::class);
-
-    expect(demoCounts())->toBe($first)
-        ->and($first[Subject::class])->toBeGreaterThan(0);
-});
-
-it('el camino del seeder masivo: el demo de Campus II y después los dos campus dejan datos consistentes', function () {
-    $this->seed(DemoSeeder::class);
-
-    $seedBothCampuses = function (): void {
-        $seeder = (new DatabaseSeeder)->setContainer(app());
-        $seeder->callWith(AcademicDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
-        $seeder->callWith(DemoStaffSeeder::class, ['campuses' => ['C1', 'C2']]);
-    };
-
-    $seedBothCampuses();
-    $first = demoCounts();
-    $seedBothCampuses();
-
-    $offered = fn (string $campus): int => CareerCampus::query()->whereRelation('campus', 'code', $campus)->where('is_active', true)->count();
-    $scopes = RoleAssignment::query()->get();
-    $staff = demoStaff();
-    $roleOf = ['subdir' => Role::Subdireccion, 'jefe' => Role::JefeDepartamento, 'jpd' => Role::JefeProyectoDocente, 'coord' => Role::Coordinador];
-    $campusIds = Campus::query()->pluck('id', 'code');
-    $named = fn (string $pattern): Collection => $staff->filter(fn (User $user): bool => preg_match($pattern, $user->username) === 1);
-    $headed = fn (Role $role): array => RoleAssignment::query()->current()->where('role', $role)->whereIn('user_id', $staff->modelKeys())->with('user')->get()->map(fn (RoleAssignment $head): string => $head->user->username)->all();
-
-    expect(demoCounts())->toBe($first)
-        ->and($offered('C1'))->toBe(12)
-        ->and($offered('C2'))->toBe(6)
-        ->and($scopes->countBy(fn (RoleAssignment $scope): string => "{$scope->user_id}|{$scope->role->value}|{$scope->campus_id}|{$scope->org_unit_id}|{$scope->career_id}")->max())->toBe(1)
-        ->and($named('/^subdir$/'))->toHaveCount(1)
-        ->and($named('/^jpd\.[a-z]+\.c1$/'))->toHaveCount(6)
-        ->and($named('/^jpd\.[a-z]+\.c2$/'))->toHaveCount(4)
-        ->and($named('/^coord\.[a-z]+\.c1$/'))->toHaveCount(12)
-        ->and($named('/^coord\.[a-z]+\.c2$/'))->toHaveCount(6)
-        ->and($named('/^jefe\.[a-z]+$/')->pluck('username')->map(fn (string $username): string => substr($username, 5))->sort()->values()->all())
-        ->toBe($named('/^jpd\./')->pluck('username')->map(fn (string $username): string => explode('.', $username)[1])->unique()->sort()->values()->all())
-        ->and($headed(Role::JefeDepartamento))->toEqualCanonicalizing($named('/^jefe\./')->pluck('username')->all())
-        ->and($headed(Role::JefeProyectoDocente))->toEqualCanonicalizing($named('/^jpd\./')->pluck('username')->all());
-
-    foreach ($staff as $user) {
-        $role = $roleOf[strtok($user->username, '.')];
-        $campus = in_array($role, [Role::Subdireccion, Role::JefeDepartamento], true) ? null : $campusIds[strtoupper(substr($user->username, -2))];
-        $context = app(Actor::class)->forUser($user);
-
-        expect($context->heldRoles())->toBe([$role], "{$user->username} no ejerce su rol.")
-            ->and($context->heldScopes()->pluck('campus_id')->all())->toBe([$campus], "{$user->username} no tiene un solo alcance donde le toca.");
-    }
-
-    expect(app(Actor::class)->forUser($staff->firstWhere('username', 'coord.ie.c1'))
-        ->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $campusIds['C1'], career: Career::query()->where('code', 'IELE')->value('id'))))->toBeTrue();
-});
-
-it('completa el rol y el alcance de un usuario de prueba que una corrida anterior dejó a medias', function () {
-    $this->seed(CampusSeeder::class);
-    $c2 = Campus::query()->where('code', 'C2')->sole();
-
-    User::factory()->create(['username' => 'coord.isc.c2']);
-    User::factory()->withRole(Role::Subdireccion, ['valid_from' => '2026-01-01', 'valid_to' => '2026-06-30'])->create(['username' => 'subdir']);
-
-    $this->seed(DemoSeeder::class);
-    $this->seed(DemoSeeder::class);
-
-    $coordinator = User::query()->where('username', 'coord.isc.c2')->sole();
-    $subdirection = User::query()->where('username', 'subdir')->sole();
-
-    expect(app(Actor::class)->forUser($coordinator)->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $c2->id, career: Career::query()->where('code', 'ISIC')->value('id'))))->toBeTrue()
-        ->and(app(Actor::class)->forUser($subdirection)->allows(FacilitiesPermission::BuildingView, Target::of(campus: $c2->id)))->toBeTrue()
-        ->and($coordinator->roleAssignments()->count())->toBe(1)
-        ->and($subdirection->roleAssignments()->count())->toBe(2);
-});
-
 it('no corre en producción', function () {
     $this->app->detectEnvironment(fn (): string => 'production');
 
@@ -397,17 +86,4 @@ it('no corre en producción', function () {
     expect(Department::withTrashed()->count())->toBe(0)
         ->and(User::query()->count())->toBe(0)
         ->and(Term::query()->count())->toBe(0);
-});
-
-it('con todos los departamentos nombra jefe también a los que no tienen carreras ni materias en el campus (demo por puntos, CV-S1)', function () {
-    seedDemoCatalog(['C2']);
-
-    (new DatabaseSeeder)->setContainer(app())->callWith(DemoStaffSeeder::class, ['campuses' => ['C2'], 'allDepartments' => true]);
-
-    $heads = RoleAssignment::query()->current()->where('role', Role::JefeDepartamento)->pluck('org_unit_id');
-
-    expect(Department::query()->where('is_active', true)->pluck('id')->diff($heads)->all())->toBe([])
-        ->and(demoStaff()->pluck('username')->all())->toContain('jefe.ee', 'jefe.mm')
-        ->and(demoStaff()->pluck('username')->filter(fn (string $username): bool => str_starts_with($username, 'jpd.'))->sort()->values()->all())
-        ->toBe(['jpd.cb.c2', 'jpd.cea.c2', 'jpd.ii.c2', 'jpd.sc.c2']);
 });
