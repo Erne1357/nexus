@@ -10,7 +10,7 @@ Reglas de trabajo del equipo. Lo que no esté aquí se decide en el issue y, si 
 | `develop` | Integración. Recibe un PR por riel, uno a la vez, con merge commit (ver «Rama por riel»). | PR obligatorio, conversaciones resueltas, CI verde, sin push directo |
 | `riel/<riel>` | Rama padre de una línea de trabajo, creada desde `develop`. Recibe por PR (squash) todas las tareas del riel y se reusa en cada vuelta. | — |
 | `feature/<issue>-<slug>` | Una por tarea del plan, creada desde la rama padre de su riel. Vive pocos días. | — |
-| `fix/<issue>-<slug>` | Correcciones del piloto o de producción. Salen de `develop` (o de `main` si es urgente, y se regresan a `develop`). | — |
+| `fix/<issue>-<slug>` | Correcciones del piloto o de producción. Salen de la rama padre del riel que atiende la incidencia (o de `main` si es urgente en producción) y regresan por esa rama padre, nunca directo a `develop`. | — |
 
 Ramas cortas: integra a la rama de tu riel al menos cada dos días. Usa un worktree de git por rama para no mezclar cambios entre tareas.
 
