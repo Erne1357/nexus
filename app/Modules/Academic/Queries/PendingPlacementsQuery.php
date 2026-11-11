@@ -12,7 +12,9 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
  * Lecturas de los lugares pendientes de la migración del SII (D18 y D19) para la pantalla de Servicios Escolares
- * («Por validar»). Solo cuentan los sin resolver de planes sin borrar (R23).
+ * («Por validar»). Solo cuentan los sin resolver de planes sin borrar (R23). Los de una retícula histórica no son
+ * trabajo pendiente y no cuentan en el aviso de la lista de planes, pero su plan los sigue mostrando, por si vuelve un
+ * alumno (D18, confirmado el 10 de noviembre de 2026).
  */
 final class PendingPlacementsQuery
 {
@@ -57,15 +59,15 @@ final class PendingPlacementsQuery
     }
 
     /**
-     * Cuántos pendientes sin resolver tiene cada plan sin borrar, por id de plan; los planes sin pendientes no
-     * aparecen.
+     * Cuántos pendientes sin resolver tiene cada plan sin borrar que no es una retícula histórica, por id de plan; los
+     * planes sin pendientes no aparecen.
      *
      * @return array<string, int>
      */
     public function countsByPlan(): array
     {
         return $this->unresolved()
-            ->whereHas('studyPlan')
+            ->whereHas('studyPlan', fn (Builder $query) => $query->where('is_historical', false))
             ->selectRaw('study_plan_id, count(*) as total')
             ->groupBy('study_plan_id')
             ->pluck('total', 'study_plan_id')

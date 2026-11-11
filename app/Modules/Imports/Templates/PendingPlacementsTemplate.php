@@ -21,7 +21,10 @@ use Illuminate\Database\Eloquent\Model;
  * pendiente, y en uno sin resolver se actualiza si el archivo la trae (supuesto por confirmar); lo mismo la retícula
  * del SII de la que salió (`sii_grid`, «carrera/retícula»), que Servicios Escolares ve al validarla. Nunca desactiva.
  * `position` (renglón del SII, de 1 a 99, opcional; D21) se guarda en el pendiente para no perder el dato; al
- * resolverlo, la materia queda al final del semestre que se le asigne (supuesto por confirmar).
+ * resolverlo, la materia queda al final del semestre que se le asigne (supuesto por confirmar). `suggested_semester`
+ * (opcional, de 1 en adelante) es el semestre que la migración sugiere en una retícula viva (D18, confirmado el 10 de
+ * noviembre de 2026). Solo la migración lo calcula, así que en un pendiente sin resolver se escribe tal cual: vacío lo
+ * borra (la retícula pasó a histórica o ya no hay de dónde sugerirlo).
  */
 class PendingPlacementsTemplate extends ImportTemplate
 {
@@ -55,6 +58,7 @@ class PendingPlacementsTemplate extends ImportTemplate
             'kind' => 'tipo',
             'sii_grid' => 'retícula del sii',
             'position' => 'renglón',
+            'suggested_semester' => 'semestre sugerido',
         ];
     }
 
@@ -85,12 +89,17 @@ class PendingPlacementsTemplate extends ImportTemplate
 
     public function rules(): array
     {
-        return [...$this->subjectRules(), 'sii_grid' => ['nullable', 'string', 'max:50'], 'position' => ['nullable', 'integer', 'min:1', 'max:99']];
+        return [
+            ...$this->subjectRules(),
+            'sii_grid' => ['nullable', 'string', 'max:50'],
+            'position' => ['nullable', 'integer', 'min:1', 'max:99'],
+            'suggested_semester' => ['nullable', 'integer', 'min:1', 'max:32767'],
+        ];
     }
 
     public function normalize(array $row): array
     {
-        return $this->normalizeSubjectFields(parent::normalize($row), [], ['position']);
+        return $this->normalizeSubjectFields(parent::normalize($row), [], ['position', 'suggested_semester']);
     }
 
     /**
@@ -111,6 +120,7 @@ class PendingPlacementsTemplate extends ImportTemplate
                 'specialty_id' => $specialty?->getKey() ?? $target->specialty_id,
                 'sii_grid' => $row['sii_grid'] ?? $target->sii_grid,
                 'position' => $row['position'] ?? $target->position,
+                'suggested_semester' => $row['suggested_semester'],
             ])->save();
         }
 

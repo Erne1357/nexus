@@ -1,9 +1,11 @@
 <?php
 
+use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanPrerequisitePending;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
@@ -17,6 +19,7 @@ use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use Illuminate\Support\Facades\DB;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -221,6 +224,56 @@ describe('pantalla del plan', function () {
         pendingTab($this->servicesHead, $this->plan)->call('openPlace', 2)->assertSet('showDrawer', false);
     });
 
+    it('D18: una materia con semestre sugerido abre el panel con ese semestre elegido y «Sugerido: N»; Escolares lo confirma o lo cambia', function () {
+        $this->drawing->update(['suggested_semester' => 2]);
+        $tab = pendingTab($this->servicesHead, $this->plan);
+
+        expect(textOf(domOf($tab)->querySelector('[data-pending="AE9"]')))->toBe('Dibujo Electrónico AE9 · 2-2-4 Retícula del SII 5/5 Sugerido: 2');
+
+        $tab->call('pick', $this->drawing->id)->assertSet('showDrawer', true)->assertSet('semester', '2');
+        $drawer = domOf($tab)->querySelector('[data-testid="pending-drawer"]');
+
+        expect(textOf($drawer))->toContain('Semestre Semestre 1 Semestre 2 Semestre 3 Semestre 4 Sugerido: 2')
+            ->and(textOf($drawer->querySelector('[data-testid="pending-load"]')))->toBe('Semestre 2: 0 materias · 0 cr → 4 cr')
+            ->and($this->drawing->fresh()->resolved_at)->toBeNull();
+
+        $tab->set('semester', '4')->call('place')->assertHasNoErrors();
+
+        expect(StudyPlanSubject::where('study_plan_id', $this->plan->id)->where('subject_id', $this->drawing->subject_id)->value('semester'))->toBe(4);
+    });
+
+    it('D18: una sugerencia fuera de los semestres que se ofrecen no abre el panel y lo dice', function () {
+        $this->modern->update(['suggested_semester' => 7]);
+        $tab = pendingTab($this->servicesHead, $this->plan);
+
+        expect(textOf(domOf($tab)->querySelector('[data-pending="AE22"]')))->toEndWith('Sugerido: 7 (aún no se ofrece en esta retícula)');
+
+        $tab->call('pick', $this->modern->id)->assertSet('pickedId', $this->modern->id)->assertSet('showDrawer', false)
+            ->call('openPlace', 3);
+
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-drawer"]')))->toContain('Sugerido: 7 (aún no se ofrece en esta retícula)');
+    });
+
+    it('D18: en una retícula histórica no se usa la sugerencia que haya quedado', function () {
+        $this->plan->update(['is_historical' => true]);
+        $this->drawing->update(['suggested_semester' => 2]);
+        $tab = pendingTab($this->servicesHead, $this->plan);
+
+        expect(textOf(domOf($tab)->querySelector('[data-pending="AE9"]')))->toBe('Dibujo Electrónico AE9 · 2-2-4 Retícula del SII 5/5');
+
+        $tab->call('pick', $this->drawing->id)->assertSet('showDrawer', false)->call('openPlace', 3);
+
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-drawer"]')))->not->toContain('Sugerido');
+    });
+
+    it('D18: en una retícula histórica, un aviso arriba dice que solo hace falta asignar semestre si vuelve un alumno', function () {
+        $this->plan->update(['is_historical' => true]);
+
+        expect(textOf(domOf(pendingTab($this->servicesHead, $this->plan))->querySelector('[data-testid="pending-historical"]')))
+            ->toBe('Retícula histórica: el SII no trae el semestre de estas materias y ningún alumno está inscrito en este plan. Solo hace falta asignárselo si vuelve un alumno.')
+            ->and(domOf(pendingTab($this->servicesHead, $this->otherPlan))->querySelector('[data-testid="pending-historical"]'))->toBeNull();
+    });
+
     it('para el jefe de Servicios Escolares la retícula es de solo lectura', function () {
         $page = Livewire::actingAs($this->servicesHead)->test('academic::pages.plan', ['plan' => $this->plan->id]);
         $dom = domOf($page);
@@ -234,6 +287,123 @@ describe('pantalla del plan', function () {
 
         $page->call('clearFocus')->assertSet('selectedId', null);
         $page->call('openSpecialties')->assertForbidden();
+    });
+});
+
+describe('requisitos que esperan (seriación del SII, confirmado el 10 de noviembre de 2026)', function () {
+    beforeEach(function () {
+        $code = fn (string $code): Subject => Subject::query()->where('code', $code)->sole();
+        $this->waiting = fn (string $subject, string $prerequisite, PrerequisiteKind $kind = PrerequisiteKind::Seriacion): StudyPlanPrerequisitePending => StudyPlanPrerequisitePending::factory()->create([
+            'study_plan_id' => $this->plan->id, 'subject_id' => $code($subject)->id, 'prerequisite_subject_id' => $code($prerequisite)->id, 'kind' => $kind,
+        ]);
+        $this->drawer = fn (StudyPlanSubjectPending $pending, int $semester) => domOf(pendingTab($this->servicesHead, $this->plan)->call('pick', $pending->id)->call('openPlace', $semester))
+            ->querySelector('[data-testid="pending-drawer"]');
+    });
+
+    it('al validar una materia, el panel dice qué requisitos entran con ella a la seriación y cuáles esperan a la otra materia', function () {
+        ($this->waiting)('AE22', 'ACF-0901');
+        ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
+        ($this->waiting)('AE22', 'AE9');
+
+        $drawer = ($this->drawer)($this->modern, 3);
+
+        expect(textOf($drawer->querySelector('[data-testid="pending-prerequisites"]')))->toBe('Al asignarle semestre entran a la seriación: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).')
+            ->and(textOf($drawer->querySelector('[data-testid="pending-prerequisites-waiting"]')))->toBe('Esperan a que se valide la otra materia: pide AE9 (seriación).')
+            ->and($drawer->querySelector('[data-testid="pending-prerequisites-notes"]'))->toBeNull();
+    });
+
+    it('marca el que no entraría porque cerraría un ciclo, con el semestre elegido: primero entra el que respeta el orden de los semestres', function () {
+        ($this->waiting)('ACF-0901', 'AE22');
+        ($this->waiting)('AE22', 'ACF-0901');
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 4);
+
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-prerequisites"]')))
+            ->toBe('Al asignarle semestre entran a la seriación: pide ACF-0901 (seriación), ACF-0901 la pide (seriación; no entraría: cerraría un ciclo de seriación).');
+
+        $tab->set('semester', '2');
+
+        expect(textOf(domOf($tab)->querySelector('[data-testid="pending-prerequisites"]')))
+            ->toBe('Al asignarle semestre entran a la seriación: pide ACF-0901 (seriación; no entraría: cerraría un ciclo de seriación), ACF-0901 la pide (seriación).');
+    });
+
+    it('pinta la nota de un requisito que siguió esperando', function () {
+        ($this->waiting)('AE22', 'ACF-0901')->forceFill(['note' => 'Cierra un ciclo de seriación: ACF-0901 ya pide, en cadena, a AE22. Sigue esperando.'])->save();
+
+        expect(textOf(($this->drawer)($this->modern, 3)->querySelector('[data-testid="pending-prerequisites-notes"]')))
+            ->toBe('ACF-0901: Cierra un ciclo de seriación: ACF-0901 ya pide, en cadena, a AE22. Sigue esperando.');
+    });
+
+    it('una materia sin requisitos que esperan no lleva esas líneas', function () {
+        ($this->waiting)('AE22', 'ACF-0901');
+
+        $drawer = ($this->drawer)($this->seminar, 3);
+
+        expect($drawer->querySelector('[data-testid="pending-facts"]'))->not->toBeNull()
+            ->and($drawer->querySelector('[data-testid="pending-prerequisites"]'))->toBeNull()
+            ->and($drawer->querySelector('[data-testid="pending-prerequisites-waiting"]'))->toBeNull();
+    });
+
+    it('al agregarla a la retícula entran sus requisitos y lo dice', function () {
+        ($this->waiting)('AE22', 'ACF-0901');
+        ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 4)->call('place');
+
+        expect(lastToastOf($tab))->toMatchArray([
+            'type' => 'success', 'title' => '«Física Moderna» agregada al semestre 4', 'description' => 'Entraron a la seriación: pide ACF-0901 (seriación), AEF-1024 la pide (correquisito).',
+        ])
+            ->and(SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count())->toBe(2)
+            ->and(StudyPlanPrerequisitePending::whereNull('applied_at')->count())->toBe(0);
+    });
+
+    it('un requisito que cerraría un ciclo de seriación no entra y la pantalla lo avisa', function () {
+        ($this->waiting)('ACF-0901', 'AE22');
+        ($this->waiting)('AE22', 'ACF-0901');
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 4)->call('place');
+
+        expect(lastToastOf($tab))->toMatchArray([
+            'type' => 'warning', 'title' => '«Física Moderna» agregada al semestre 4',
+            'description' => 'Entraron a la seriación: pide ACF-0901 (seriación). No entró, porque cerraría un ciclo de seriación, y sigue esperando: ACF-0901 la pide (seriación).',
+        ])
+            ->and(SubjectPrerequisite::where('study_plan_id', $this->plan->id)->count())->toBe(1);
+    });
+
+    it('si la materia ya estaba en la retícula, dice qué requisito ya estaba y cuál no entró porque se quitó en Nexus', function () {
+        $physics = $this->modern->subject;
+        placeInPlan($this->plan, $physics, 2);
+        seriate($this->plan, $physics, Subject::query()->where('code', 'AEF-1024')->sole(), PrerequisiteKind::Correquisito);
+        seriate($this->plan, $physics, Subject::query()->where('code', 'ACF-0901')->sole())->delete();
+        ($this->waiting)('AE22', 'AEF-1024');
+        ($this->waiting)('AE22', 'ACF-0901');
+
+        $tab = pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3)->call('place');
+
+        expect(lastToastOf($tab))->toMatchArray([
+            'type' => 'warning', 'title' => '«Física Moderna» ya estaba en el semestre 2',
+            'description' => 'Quedó validada sin moverla. Ya estaban en la seriación, con su tipo: pide AEF-1024 (correquisito). No entró, porque se quitó de la seriación en Nexus: pide ACF-0901 (seriación).',
+        ]);
+    });
+
+    it('el panel lee los requisitos que esperan con las mismas consultas, tenga uno o varios (la primera vuelta llena los cachés de permisos)', function () {
+        $queries = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            pendingTab($this->servicesHead, $this->plan)->call('pick', $this->modern->id)->call('openPlace', 3);
+
+            return count(DB::getQueryLog());
+        };
+
+        ($this->waiting)('AE22', 'ACF-0901');
+        $queries();
+        $one = $queries();
+        ($this->waiting)('AEF-1024', 'AE22', PrerequisiteKind::Correquisito);
+        ($this->waiting)('IND-1010', 'AE22');
+        ($this->waiting)('ACF-0901', 'AE22');
+        ($this->waiting)('AE22', 'AE9')->forceFill(['note' => 'Una nota.'])->save();
+
+        expect($queries())->toBe($one);
     });
 });
 
@@ -336,6 +506,18 @@ describe('lista de planes', function () {
         $page->assertSet('pendingOnly', true)
             ->assertViewHas('plans', fn ($plans): bool => $plans->pluck('code')->all() === ['IIND-2004', 'IIND-2010']);
         expect(domOf($page)->querySelector('[data-testid="filter-pending"]')->getAttribute('aria-pressed'))->toBe('true');
+    });
+
+    it('D18: una retícula histórica no cuenta en «Por validar» de la lista, no lleva su insignia y el filtro la deja fuera', function () {
+        $this->otherPlan->update(['is_historical' => true]);
+        $page = domOf($this->actingAs($this->servicesHead)->get(route('academic.plans'))->assertOk());
+
+        expect(textOf($page->querySelector('[data-testid="filter-pending"]')))->toBe('Por validar 1')
+            ->and($page->querySelector('[data-pending-plan="IIND-2010"]'))->toBeNull()
+            ->and(textOf($page->querySelector('table [data-pending-plan="IIND-2004"]')))->toBe('3 por validar');
+
+        Livewire::actingAs($this->servicesHead)->test('academic::pages.plans')->call('togglePending')
+            ->assertViewHas('plans', fn ($plans): bool => $plans->pluck('code')->all() === ['IIND-2004']);
     });
 
     it('para el jefe de Servicios Escolares dar de alta, editar y activar quedan deshabilitados con su motivo', function () {

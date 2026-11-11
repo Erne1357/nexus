@@ -230,6 +230,15 @@ final class PlanGridEditorQuery
     }
 
     /**
+     * Los `semesters_count` de forPlan() sin leer la retícula: los semestres del plan o, si una materia está más allá
+     * (o no están capturados), el mayor semestre con materias. Una sola consulta.
+     */
+    public function semestersCount(StudyPlan $plan): int
+    {
+        return max((int) $plan->semesters_count, (int) $this->visiblePlacements($plan)->max('study_plan_subjects.semester'));
+    }
+
+    /**
      * Las filas sin quitar del plan cuya materia sigue en el catálogo.
      *
      * @return Builder<StudyPlanSubject>

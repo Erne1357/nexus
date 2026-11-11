@@ -17,7 +17,8 @@ use Illuminate\Support\Collection;
  * SII (SubjectStanding), sus especialidades, las cadenas de seriación, sus cifras y su kárdex por periodo. El avance se calcula al
  * leer con PlanGrid, desde su kardex y su semestre, para que la ficha no espere al siguiente recálculo de
  * `student_progress` (reglas-de-negocio.md, "Retícula del alumno"). Una vez elegida la especialidad, no muestra
- * las materias de las otras.
+ * las materias de las otras. Aparte lista las materias de su plan que esperan semestre en «Por validar» (D18), que
+ * cuentan en sus cifras pero no están en la retícula.
  */
 final class StudentRecordQuery
 {
@@ -41,7 +42,7 @@ final class StudentRecordQuery
 
         $shown = array_keys(array_intersect_key($grid->credits, array_flip([...$approved, ...$progress['subjects_pending']])));
         $available = array_flip($progress['subjects_available']);
-        $subjects = Subject::withTrashed()->whereIn('id', array_keys($grid->credits))->get(['id', 'code', 'name'])->keyBy('id');
+        $subjects = Subject::withTrashed()->whereIn('id', [...array_keys($grid->credits), ...array_keys($grid->unplaced)])->get(['id', 'code', 'name'])->keyBy('id');
         $specialties = Specialty::withTrashed()->whereIn('id', array_values($grid->specialtyOf))->orderBy('code')->get(['id', 'name']);
         $bandOf = array_flip($specialties->modelKeys());
         [$chainOf, $chains] = $this->chains($shown, $grid->seriation, $subjects);
@@ -112,6 +113,12 @@ final class StudentRecordQuery
                 ->all(),
             chains: $chains,
             kardex: $this->kardex($records),
+            unplaced: array_map(fn (string $subjectId): array => [
+                'code' => $subjects[$subjectId]->code,
+                'name' => $subjects[$subjectId]->name,
+                'credits' => $grid->unplaced[$subjectId],
+                'accredited' => isset($passed[$subjectId]),
+            ], array_map('strval', array_keys($grid->unplaced))),
         );
     }
 

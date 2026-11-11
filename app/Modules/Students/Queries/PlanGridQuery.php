@@ -13,7 +13,7 @@ use App\Modules\Academic\Models\SubjectPrerequisite;
  * La retícula de un plan para calcular el avance de sus alumnos (PlanGrid): sus materias con sus créditos y su
  * semestre, por semestre y clave, su seriación, la especialidad de las materias de especialidad y los créditos
  * totales del plan, y aparte las materias que esperan semestre en «Por validar» (sin las ya resueltas), cuyo
- * aprobado también cuenta. Deja fuera lo que se quitó de la retícula, las materias borradas del catálogo y los
+ * aprobado también cuenta, por su renglón del SII y luego por clave. Deja fuera lo que se quitó de la retícula, las materias borradas del catálogo y los
  * correquisitos, que no impiden cursar una materia; una materia inactiva sigue, porque el plan se ata al alumno
  * al inscribirse.
  *
@@ -71,6 +71,7 @@ final class PlanGridQuery
             ->whereNull('study_plan_subject_pendings.resolved_at')
             ->where('study_plan_subject_pendings.study_plan_id', $studyPlanId)
             ->whereNotIn('study_plan_subject_pendings.subject_id', array_keys($credits))
+            ->orderByRaw('study_plan_subject_pendings.position asc nulls last')
             ->orderBy('subjects.code')
             ->toBase()
             ->pluck('subjects.credits', 'study_plan_subject_pendings.subject_id')

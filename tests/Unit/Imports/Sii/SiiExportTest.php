@@ -77,14 +77,22 @@ it('reporta un archivo obligatorio que no está en la carpeta', function () {
     }
 });
 
-it('abre una exportación sin la historia ni la selección del kárdex, que son opcionales', function () {
-    writeExport($this->dir, skip: ['historia_alumno', 'seleccion_materias']);
+it('abre una exportación sin la historia ni la selección del kárdex ni la seriación, que son opcionales', function () {
+    writeExport($this->dir, skip: ['historia_alumno', 'seleccion_materias', 'requisitos_materia']);
 
     $export = SiiExport::open($this->dir);
 
     expect($export->has(SiiFile::HistoriaAlumno))->toBeFalse()
         ->and($export->has(SiiFile::SeleccionMaterias))->toBeFalse()
+        ->and($export->has(SiiFile::RequisitosMateria))->toBeFalse()
         ->and($export->has(SiiFile::Aulas))->toBeTrue();
+});
+
+it('la seriación del SII trae materia, su requisito y el tipo por carrera y retícula', function () {
+    writeExport($this->dir);
+
+    expect(SiiExport::open($this->dir)->reader(SiiFile::RequisitosMateria)->header())->toBe(['carrera', 'reticula', 'materia', 'materia_relacion', 'tipo_requisito'])
+        ->and(SiiFile::RequisitosMateria->required())->toBeFalse();
 });
 
 it('ignora los archivos que no son CSV', function () {

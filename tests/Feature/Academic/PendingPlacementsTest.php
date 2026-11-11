@@ -31,7 +31,7 @@ describe('ResolvePendingPlacement', function () {
         $specialty = Specialty::factory()->for($this->plan)->create();
         $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create(['specialty_id' => $specialty->id]);
 
-        $placement = app(ResolvePendingPlacement::class)->handle($pending, 4, $this->user);
+        $placement = app(ResolvePendingPlacement::class)->handle($pending, 4, $this->user)->placement;
 
         expect($placement)->toBeInstanceOf(StudyPlanSubject::class)
             ->and($placement->fresh())->study_plan_id->toBe($this->plan->id)->subject_id->toBe($pending->subject_id)
@@ -78,7 +78,7 @@ describe('ResolvePendingPlacement', function () {
         $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
         $this->plan->update(['is_active' => false]);
 
-        $placement = app(ResolvePendingPlacement::class)->handle($pending, 2, $this->user);
+        $placement = app(ResolvePendingPlacement::class)->handle($pending, 2, $this->user)->placement;
 
         expect($placement->fresh())->study_plan_id->toBe($this->plan->id)->semester->toBe(2)
             ->and($pending->fresh()->resolved_by)->toBe($this->user->id)
@@ -103,7 +103,7 @@ describe('ResolvePendingPlacement', function () {
         $pending = StudyPlanSubjectPending::factory()->for($this->plan)->create();
         $placed = placeInPlan($this->plan, $pending->subject, 3);
 
-        $placement = app(ResolvePendingPlacement::class)->handle($pending, 5, $this->user);
+        $placement = app(ResolvePendingPlacement::class)->handle($pending, 5, $this->user)->placement;
 
         expect($placement->id)->toBe($placed->id)
             ->and($placement->wasRecentlyCreated || $placement->wasChanged())->toBeFalse()
@@ -119,7 +119,7 @@ describe('ResolvePendingPlacement', function () {
         $removed = placeInPlan($this->plan, $pending->subject, 3);
         $removed->delete();
 
-        $placement = app(ResolvePendingPlacement::class)->handle($pending, 6, $this->user);
+        $placement = app(ResolvePendingPlacement::class)->handle($pending, 6, $this->user)->placement;
 
         expect($placement->id)->toBe($removed->id)
             ->and($placement->fresh())->semester->toBe(6)->trashed()->toBeFalse()
@@ -164,6 +164,19 @@ describe('PendingPlacementsQuery', function () {
         $gone->delete();
 
         expect((new PendingPlacementsQuery)->countsByPlan())->toBe([$this->plan->id => 1]);
+    });
+
+    it('D18: el aviso de la lista de planes no cuenta las retículas históricas, pero su plan sigue mostrando sus pendientes', function () {
+        $historical = StudyPlan::factory()->historical()->create();
+        StudyPlanSubjectPending::factory()->for($historical)->count(2)->create();
+        StudyPlanSubjectPending::factory()->for($this->plan)->create(['suggested_semester' => 4]);
+
+        $query = new PendingPlacementsQuery;
+
+        expect($query->countsByPlan())->toBe([$this->plan->id => 1])
+            ->and($query->countForPlan($historical))->toBe(2)
+            ->and($query->forPlan($historical))->toHaveCount(2)
+            ->and($query->forPlan($this->plan)->sole()->suggested_semester)->toBe(4);
     });
 
     it('trae la materia de un pendiente aunque se haya borrado del catálogo', function () {

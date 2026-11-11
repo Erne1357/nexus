@@ -116,6 +116,8 @@ git push
 - Antes del squash, compara el diff del PR con el que tenía: deben ser los mismos archivos y líneas.
 - `Closes #<issue>` no cierra el issue al mezclar a `develop`, solo a `main`: ciérralo a mano y mueve la tarjeta a **Hecho**.
 
+**Rama por riel** (decisión del usuario, 10 de noviembre de 2026). Cada riel trabaja sobre `riel/<riel>`, creada desde `develop`. Los PR de sus tareas apuntan a esa rama y entran con squash, con CI verde y revisión cruzada; las cadenas dentro del riel usan el `-s ours` de arriba. A `develop` va un PR por riel, uno a la vez: se trae `develop`, corre el CI y se mezcla con merge commit, no squash. Así `develop` guarda un commit por PR y la rama del riel queda al día para la siguiente vuelta. La tarea se marca en `docs/plan/fase-N.md` con los números de sus PR.
+
 ## Definición de hecho
 
 Una tarea está hecha cuando:

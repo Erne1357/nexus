@@ -26,6 +26,9 @@ use Illuminate\Support\Str;
  *
  * «Créditos» (`credits`, opcional) son los créditos totales del plan (`total_credits`), contra los que se mide el
  * avance del alumno, como en el SII (decidido el 10 de noviembre de 2026). Vacíos no borran los capturados.
+ *
+ * «Histórica» (`historical`, opcional, se reconoce como «vigente») marca la retícula histórica (`is_historical`, D18,
+ * confirmado el 10 de noviembre de 2026): ningún alumno inscrito en el periodo actual. Vacía no la cambia.
  */
 class StudyPlansTemplate extends ImportTemplate
 {
@@ -61,6 +64,7 @@ class StudyPlansTemplate extends ImportTemplate
             'current' => 'vigente',
             'intake' => 'nuevo ingreso',
             'credits' => 'créditos',
+            'historical' => 'histórica',
         ];
     }
 
@@ -89,6 +93,7 @@ class StudyPlansTemplate extends ImportTemplate
             'current' => ['nullable', 'boolean'],
             'intake' => ['nullable', 'boolean'],
             'credits' => ['nullable', 'integer', 'min:0', 'max:32767'],
+            'historical' => ['nullable', 'boolean'],
         ];
     }
 
@@ -106,6 +111,7 @@ class StudyPlansTemplate extends ImportTemplate
 
         $row['current'] = $this->current($row['current']);
         $row['intake'] = $this->current($row['intake']);
+        $row['historical'] = $this->current($row['historical']);
 
         return $row;
     }
@@ -198,6 +204,7 @@ class StudyPlansTemplate extends ImportTemplate
             'total_credits' => is_numeric($row['credits']) ? (int) $row['credits'] : null,
             'is_active' => ($row['current'] ?? true) && (bool) $this->career($row['career'])?->is_active,
             ...($row['intake'] === true ? ['is_current' => true] : []),
+            ...(is_bool($row['historical']) ? ['is_historical' => $row['historical']] : []),
         ];
     }
 

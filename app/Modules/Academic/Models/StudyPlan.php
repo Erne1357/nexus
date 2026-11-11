@@ -16,9 +16,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Plan de estudios de una carrera: una retícula por versión. `code` es la clave natural. Los inactivos se
  * conservan porque hay alumnos cursándolos. Una carrera tiene un solo plan actual (`is_current`), el que se asigna a
- * los alumnos de nuevo ingreso.
+ * los alumnos de nuevo ingreso. Una retícula histórica (`is_historical`, D18) es un plan sin alumnos inscritos en el
+ * periodo actual que no es el de nuevo ingreso: sus materias sin semestre en el SII esperan en «Por validar» sin contar como trabajo pendiente.
  */
-#[Fillable(['career_id', 'code', 'name', 'version', 'semesters_count', 'total_credits', 'is_active', 'is_current', 'valid_from'])]
+#[Fillable(['career_id', 'code', 'name', 'version', 'semesters_count', 'total_credits', 'is_active', 'is_current', 'is_historical', 'valid_from'])]
 #[UseFactory(StudyPlanFactory::class)]
 class StudyPlan extends Model
 {
@@ -35,6 +36,7 @@ class StudyPlan extends Model
             'total_credits' => 'integer',
             'is_active' => 'boolean',
             'is_current' => 'boolean',
+            'is_historical' => 'boolean',
             'valid_from' => 'immutable_date',
         ];
     }
