@@ -227,7 +227,7 @@ Mínimo **80 % de líneas por módulo** desde la fase 1, medido en CI con el rep
 
 ## CI
 
-Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su rama base (también los encadenados sobre otra `feature/*`), a mano (`workflow_dispatch`) y en cada push a `develop`, `main` y las ramas de riel (`riel/**`). El push solo calienta la caché de la imagen: un PR lee las cachés de su rama, de su rama base y de `main`, así que un PR de tarea lee la de su `riel/<riel>`, y uno encadenado sobre otra `feature/*` no la encuentra y su primera corrida construye la imagen completa (unos 5 minutos, ver "Duración"). Una corrida nueva sobre el mismo PR cancela la anterior.
+Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su rama base (también los encadenados sobre otra `feature/*`), y a mano (`workflow_dispatch`); nunca en un push. Una corrida nueva sobre el mismo PR cancela la anterior. Cada push a `develop`, `main` o una rama de riel (`riel/**`) corre otro workflow, `.github/workflows/cache.yml`, con un solo job `cache` que calienta la caché de la imagen: un PR lee las cachés de su rama, de su rama base y de `main`, así que un PR de tarea lee la de su `riel/<riel>`, y uno encadenado sobre otra `feature/*` no la encuentra y su primera corrida construye la imagen completa (unos 5 minutos, ver "Duración"). Van separados para que ningún push cree checks llamados `lint`, `tests` o `browser` sobre un commit que después es la cabeza de un PR (riel → `develop`, `develop` → `main`): con dos checks del mismo nombre en el mismo commit, uno de un push sin pruebas podría pasar por el del PR.
 
 | Job | Contenido | Bloquea el merge |
 |---|---|---|
@@ -271,9 +271,9 @@ CI usa lo mismo que el desarrollo local: la etapa `dev` del `Dockerfile` y los s
 3. Instala Composer dentro del contenedor (`browser` también hace `npm ci`: `pest-plugin-browser` busca `node_modules/.bin/playwright`; Chromium ya viene en la imagen).
 4. Levanta PostgreSQL y Valkey (`lint` no los necesita) y corre su comando con `docker compose run --rm -T app ...`. Cada shard de `tests` corre en paralelo, un proceso por núcleo del runner (`--parallel --processes=$(nproc)`), cada uno con su base `nexus_test_test_<n>`.
 
-La suite corre solo en los PR. Al mezclar a `develop`, `main` o una rama de riel el push corre `lint` y el job `cache`, que solo construye la imagen para calentar la caché: la protección exige la rama al día con su base, así que lo mezclado es lo mismo que el PR ya probó (desde el 2 de noviembre de 2026; antes la suite se repetía en cada push y en la fase 2 pasó de los 20 minutos del job). En local se corren las pruebas que el cambio toca y `tests/Arch`; la regresión completa es la del PR.
+La suite corre solo en los PR. Al mezclar a `develop`, `main` o una rama de riel el push solo corre `cache.yml`, que construye la imagen para calentar la caché; `lint` ya corrió en el PR. La protección exige la rama al día con su base, así que lo mezclado es lo mismo que el PR ya probó (desde el 2 de noviembre de 2026; antes la suite se repetía en cada push y en la fase 2 pasó de los 20 minutos del job). En local se corren las pruebas que el cambio toca y `tests/Arch`; la regresión completa es la del PR.
 
-Los pasos 1 a 3 viven en la acción local `.github/actions/setup-ci`. En un PR solo el shard 1 de `tests` guarda las capas de la imagen en la caché, y en un push, el job `cache` (un solo escritor evita carreras); todos la leen.
+Los pasos 1 a 3 viven en la acción local `.github/actions/setup-ci`. En un PR solo el shard 1 de `tests` guarda las capas de la imagen en la caché, y en un push, el job `cache` de `cache.yml` (un solo escritor evita carreras); todos la leen.
 
 Cachés: capas de la imagen (`type=gha`, incluye Chromium y las extensiones de PHP), descargas de Composer (clave `composer.lock`) y de npm (clave `package-lock.json`). Si cambia el `Dockerfile`, la primera corrida reconstruye desde la capa modificada.
 
