@@ -4,6 +4,7 @@ use App\Modules\Academic\Enums\PrerequisiteKind;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use Illuminate\Database\QueryException;
@@ -127,6 +128,7 @@ describe('valores', function () {
         'horas de teoría negativas' => [fn () => Subject::factory()->create(['theory_hours' => -1]), 'subjects_hours_check'],
         'horas de práctica negativas' => [fn () => Subject::factory()->create(['practice_hours' => -1]), 'subjects_hours_check'],
         'créditos negativos' => [fn () => Subject::factory()->create(['credits' => -1]), 'subjects_credits_check'],
+        'semestre sugerido 0' => [fn () => StudyPlanSubjectPending::factory()->create(['suggested_semester' => 0]), 'study_plan_subject_pendings_suggested_semester_check'],
     ]);
 
     it('solo acepta los tipos conocidos de materia y de seriación, aunque la escritura no pase por el modelo', function (string $table, string $constraint) {
@@ -149,6 +151,15 @@ describe('valores', function () {
 
         expect($subject->fresh()->kind)->toBeNull()
             ->and($plan->fresh()->only(['semesters_count', 'total_credits', 'valid_from']))->toBe(['semesters_count' => null, 'total_credits' => null, 'valid_from' => null]);
+    });
+
+    it('un plan nace como retícula viva y un pendiente sin semestre sugerido (D18)', function () {
+        $plan = StudyPlan::factory()->create();
+        $pending = StudyPlanSubjectPending::factory()->create();
+
+        expect($plan->fresh()->is_historical)->toBeFalse()
+            ->and(StudyPlan::factory()->historical()->create()->fresh()->is_historical)->toBeTrue()
+            ->and($pending->fresh()->suggested_semester)->toBeNull();
     });
 
     it('un plan necesita su carrera y una materia, su departamento', function (Closure $write) {

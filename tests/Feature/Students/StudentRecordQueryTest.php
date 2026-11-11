@@ -220,6 +220,22 @@ it('lo aprobado en una materia que espera semestre en «Por validar» suma a sus
         ->and(collect($record->semesters)->flatten()->pluck('code'))->not->toContain('P-0');
 });
 
+it('D18: lista aparte, por renglón y luego por clave, las materias de su plan que esperan semestre, con sus créditos y si las acreditó', function () {
+    $second = Subject::factory()->create(['code' => 'P-2', 'name' => 'Pendiente dos', 'credits' => 4]);
+    $first = Subject::factory()->create(['code' => 'P-9', 'name' => 'Pendiente nueve', 'credits' => 6]);
+    $last = Subject::factory()->create(['code' => 'P-1', 'name' => 'Pendiente uno', 'credits' => 5]);
+    StudyPlanSubjectPending::factory()->for($this->plan)->for($second)->create(['position' => 3]);
+    StudyPlanSubjectPending::factory()->for($this->plan)->for($first)->create(['position' => 1]);
+    StudyPlanSubjectPending::factory()->for($this->plan)->for($last)->create();
+    recordKardex($this->student, $second, 'aprobada', '20253', grade: 90);
+
+    expect(recordOf($this->student)->unplaced)->toBe([
+        ['code' => 'P-9', 'name' => 'Pendiente nueve', 'credits' => 6, 'accredited' => false],
+        ['code' => 'P-2', 'name' => 'Pendiente dos', 'credits' => 4, 'accredited' => true],
+        ['code' => 'P-1', 'name' => 'Pendiente uno', 'credits' => 5, 'accredited' => false],
+    ]);
+});
+
 it('el kárdex pone primero, como «Sin periodo», lo que el SII trae con un periodo que no existe, igual que al decidir el estado', function () {
     recordKardex($this->student, $this->subjects['A'], 'aprobada', '20253', grade: 90);
     KardexRecord::factory()->for($this->student)->for($this->subjects['F'])->create(['result' => 'aprobada', 'term_code' => null, 'grade' => 80]);

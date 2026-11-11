@@ -147,7 +147,7 @@ describe('al final del semestre', function () {
         placeInPlan($this->plan, ($this->subject)('MMM-1'), 3);
         $pending = StudyPlanSubjectPending::factory()->create(['study_plan_id' => $this->plan->id, 'subject_id' => ($this->subject)('AAA-1')->id]);
 
-        $placement = app(ResolvePendingPlacement::class)->handle($pending, 3, $this->user);
+        $placement = app(ResolvePendingPlacement::class)->handle($pending, 3, $this->user)->placement;
 
         expect(editorOrder($this->plan, 3))->toBe(['MMM-1', 'AAA-1'])
             ->and($placement->fresh()->position)->toBe(2);

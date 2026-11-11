@@ -10,10 +10,24 @@
       ficha elegida, cada semestre que se ofrece lleva «Colocar aquí» bajo su encabezado (el slot `below`, en todos a la
       vez para que los encabezados midan lo mismo). El mosaico recién colocado lleva data-new y el anillo de éxito.
     - El panel (x-drawer a la derecha, a pantalla completa en celular): «Agregar a la retícula», el nombre y la clave;
-      los errores que no son del semestre; créditos, horas, especialidad y retícula del SII; el semestre; la carga del
-      semestre antes y después; y al pie «Cancelar» y «Agregar a la retícula».
+      los errores que no son del semestre; créditos, horas, especialidad y retícula del SII; el semestre, con
+      «Sugerido: N» debajo si la migración lo sugiere; la carga del semestre antes y después; y al pie «Cancelar» y
+      «Agregar a la retícula».
+    - Semestre sugerido (D18): la ficha dice «Sugerido: N» y, si ese semestre se ofrece, elegirla abre el panel con él
+      elegido (aria-haspopup); si todavía no se ofrece, lo dice. En una retícula histórica la sugerencia no se usa, y
+      con pendientes, arriba de todo un aviso `alert-info` dice por qué no hay trabajo.
+    - Requisitos que esperan (seriación del SII): en el panel, debajo de los datos, qué requisitos entran con la materia
+      a la seriación al asignarle semestre (data-testid="pending-prerequisites"), con los que no entrarían por un ciclo
+      marcados en `text-warning`; cuáles esperan a que se valide la otra materia (data-testid="pending-prerequisites-waiting"),
+      con la clave en Mono y su tipo; y la nota de los que la tienen (data-testid="pending-prerequisites-notes").
 --}}
 <div class="space-y-4" data-testid="pending-placements">
+    @if ($historical && $total > 0)
+        <x-alert icon="o-archive-box" class="alert-info alert-soft text-sm" data-testid="pending-historical">
+            <strong>Retícula histórica:</strong> el SII no trae el semestre de estas materias y ningún alumno está inscrito en este plan. Solo hace falta asignárselo si vuelve un alumno.
+        </x-alert>
+    @endif
+
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
         <aside aria-labelledby="pending-tray-title" data-testid="pending-tray"
             class="flex min-w-0 flex-col rounded-box border border-warning/40 bg-warning/8 lg:sticky lg:top-[calc(var(--shell-top)+1rem)] lg:max-h-[calc(100dvh-var(--shell-top)-2rem)] lg:w-64 lg:shrink-0">
@@ -36,6 +50,7 @@
                     @forelse ($pendings as $pending)
                         <button type="button" wire:key="pending-{{ $pending->id }}" wire:click="pick('{{ $pending->id }}')"
                             data-pending="{{ $pending->subject->code }}" aria-pressed="{{ $picked?->id === $pending->id ? 'true' : 'false' }}"
+                            @if ($suggests && $pending->suggested_semester !== null && $pending->suggested_semester <= $offeredSemesters) aria-haspopup="dialog" @endif
                             class="relative flex w-52 shrink-0 cursor-pointer flex-col gap-0.5 rounded-field border border-dashed border-warning/60 bg-base-100 px-2.5 py-2 text-left hover:border-warning aria-pressed:border-solid aria-pressed:border-primary aria-pressed:ring-2 aria-pressed:ring-primary/30 lg:w-auto">
                             <span class="text-[13.5px] font-medium leading-tight">{{ $pending->subject->name }}</span>
                             <span class="flex items-baseline justify-between gap-2 font-mono text-xs text-neutral">
@@ -44,6 +59,14 @@
                                     <span title="Retícula del SII"><span class="sr-only">Retícula del SII</span> {{ $pending->sii_grid }}</span>
                                 @endif
                             </span>
+                            @if ($suggests && $pending->suggested_semester !== null)
+                                <span class="text-xs text-neutral">
+                                    Sugerido: <span class="font-mono font-medium text-base-content">{{ $pending->suggested_semester }}</span>
+                                    @if ($pending->suggested_semester > $offeredSemesters)
+                                        (aún no se ofrece en esta retícula)
+                                    @endif
+                                </span>
+                            @endif
                         </button>
                     @empty
                         <p class="px-1 py-2 text-sm text-neutral">Ninguna coincide con la búsqueda.</p>
@@ -152,7 +175,34 @@
                         </div>
                     </dl>
 
-                    <x-select label="Semestre" name="semester" wire:model.live="semester" :options="$semesterOptions" data-testid="pending-semester" />
+                    @if ($prerequisites['enters'] !== [])
+                        <p class="text-sm leading-snug" data-testid="pending-prerequisites">
+                            Al asignarle semestre entran a la seriación:
+                            @foreach ($prerequisites['enters'] as $item)
+                                <span wire:key="enters-{{ $item['id'] }}">{{ $item['requires'] ? 'pide ' : '' }}<span class="font-mono">{{ $item['code'] }}</span>{{ $item['requires'] ? '' : ' la pide' }} ({{ mb_strtolower($item['kind']->label()) }}@if ($item['cycle'])<span class="text-warning">; no entraría: cerraría un ciclo de seriación</span>@endif){{ $loop->last ? '.' : ',' }}</span>
+                            @endforeach
+                        </p>
+                    @endif
+
+                    @if ($prerequisites['waits'] !== [])
+                        <p class="text-sm leading-snug text-neutral" data-testid="pending-prerequisites-waiting">
+                            Esperan a que se valide la otra materia:
+                            @foreach ($prerequisites['waits'] as $item)
+                                <span wire:key="waits-{{ $item['id'] }}">{{ $item['requires'] ? 'pide ' : '' }}<span class="font-mono">{{ $item['code'] }}</span>{{ $item['requires'] ? '' : ' la pide' }} ({{ mb_strtolower($item['kind']->label()) }}){{ $loop->last ? '.' : ',' }}</span>
+                            @endforeach
+                        </p>
+                    @endif
+
+                    @if ($prerequisites['notes'] !== [])
+                        <ul class="space-y-0.5 text-sm leading-snug text-warning" data-testid="pending-prerequisites-notes">
+                            @foreach ($prerequisites['notes'] as $item)
+                                <li wire:key="note-{{ $item['id'] }}"><span class="font-mono">{{ $item['code'] }}</span>: {{ $item['note'] }}</li>
+                            @endforeach
+                        </ul>
+                    @endif
+
+                    <x-select label="Semestre" name="semester" wire:model.live="semester" :options="$semesterOptions" data-testid="pending-semester"
+                        :hint="! $suggests || $picked->suggested_semester === null ? null : 'Sugerido: '.$picked->suggested_semester.($picked->suggested_semester > $offeredSemesters ? ' (aún no se ofrece en esta retícula)' : '')" />
 
                     @if ($load !== null)
                         <p class="rounded-field bg-base-200 px-3 py-2.5 text-neutral" data-testid="pending-load" aria-live="polite">

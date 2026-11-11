@@ -16,6 +16,9 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * Nexus con `plan_for` (las excluidas del curado solo dejan un aviso por retícula) y la materia se une por su clave
  * oficial del TecNM (SubjectPlacements). Los renglones con estatus `N` (ya no se ofrecen) no entran a la retícula: van a
  * «Por validar», para no perder el kárdex de quien los aprobó (supuesto por confirmar, 10 de noviembre de 2026).
+ * Nexus nunca decide un semestre (D18, confirmado el 10 de noviembre de 2026): un lugar sin semestre en el SII va a «Por
+ * validar»; en una retícula viva, con el semestre sugerido de su misma carrera, y en una histórica (`historical_plans`,
+ * del paso de carreras), tal cual, sin sugerencia.
  * El orden dentro del semestre (D21, confirmado el 5 de noviembre de 2026) sale de `renglon` de la variante que se
  * queda con el lugar (la presencial al fundir); 0 o vacío queda vacío y la materia va al final, por clave.
  *
@@ -28,13 +31,15 @@ use App\Modules\Imports\Sii\SubjectPlacements;
  * departamento y el primer tipo, y se avisa (supuesto por confirmar). La especialidad es la clave del SII con el
  * nombre de `especialidades`; si no está ahí, solo la clave, y se avisa.
  *
- * Entrega tres lotes, en este orden: `subjects` (sin `sii_code`), `pending_placements` (los lugares sin semestre
- * que no empataron con ninguna materia, D18 y D19: la materia se da de alta y el lugar queda en la lista de
- * pendientes de Servicios Escolares, con la retícula del SII de la que salió en `sii_grid`) y `subject_aliases`, con cada clave del SII de cada lugar emitido o pendiente,
+ * Entrega tres lotes, en este orden: `subjects` (sin `sii_code`), `pending_placements` (los lugares sin semestre o
+ * con estatus `N`, D18 y D19: la materia se da de alta y el lugar queda en «Por validar», con la retícula del SII de la
+ * que salió en `sii_grid` y el semestre sugerido en `suggested_semester`, vacío sin sugerencia) y `subject_aliases`,
+ * con cada clave del SII de cada lugar emitido o pendiente,
  * también las que se unieron en una clave TecNM. Recuerda `subject_for`: clave del SII →
  * clave de materia de Nexus, para los pasos de grupos y kárdex (las claves numéricas quedan como llaves int de
  * PHP: búscalas con `$map[$clave] ?? null`), y `subject_for_plan`: plan de Nexus → clave del SII → materia de
- * Nexus, para que el kárdex lleve la clave de cada alumno a la materia de su retícula.
+ * Nexus, para que el kárdex lleve la clave de cada alumno a la materia de su retícula y la seriación (SeriationStep), las
+ * claves de cada requisito a las materias del plan.
  */
 final class SubjectsStep implements SiiStep
 {
@@ -54,10 +59,11 @@ final class SubjectsStep implements SiiStep
         $planFor = $this->map($migration, 'plan_for');
         $versions = $this->map($migration, 'plan_version');
         $departmentForArea = $this->map($migration, 'department_for_area');
+        $historical = $this->map($migration, 'historical_plans');
         $catalog = $this->catalog($migration);
 
         $incidents = [];
-        $placements = new SubjectPlacements($catalog, $versions);
+        $placements = new SubjectPlacements($catalog, $versions, $historical);
         $grid = $placements->grid($this->placements($migration, $planFor, $catalog, $incidents));
         $incidents = [...$incidents, ...$placements->incidents()];
 
@@ -69,7 +75,11 @@ final class SubjectsStep implements SiiStep
 
         yield new SiiBatch('subjects', 'materias.csv', array_values(array_diff_key($rows, $pending)), incidents: $incidents);
         yield new SiiBatch('pending_placements', 'materias_pendientes.csv', array_values(array_map(
-            fn (string $ref): array => [...array_diff_key($rows[$ref], ['semester' => true, 'sii_code' => true]), 'sii_grid' => $pending[$ref]['key']],
+            fn (string $ref): array => [
+                ...array_diff_key($rows[$ref], ['semester' => true, 'sii_code' => true]),
+                'sii_grid' => $pending[$ref]['key'],
+                'suggested_semester' => $pending[$ref]['suggested'] === null ? '' : (string) $pending[$ref]['suggested'],
+            ],
             array_keys(array_intersect_key($pending, $rows)),
         )));
         yield new SiiBatch('subject_aliases', 'claves_materias.csv', $aliases, incidents: $aliasIncidents);
