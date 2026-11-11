@@ -24,9 +24,21 @@ final class JustifyGroup
      */
     public function handle(Group $group, ?string $justification, User $actor): Group
     {
+        return $this->editability->guard(fn (): Group => $this->apply($group, $justification, $actor), 'justification');
+    }
+
+    /**
+     * Lo mismo sin traducir el deadlock, para quien ya corre dentro de su propia transacción (JustifyGroups): ahí un
+     * deadlock abortó la transacción de afuera y no es un rechazo del grupo, así que sale como error de base y quien
+     * llama lo traduce por fuera. Solo las reglas salen como ValidationException.
+     *
+     * @throws ValidationException
+     */
+    public function apply(Group $group, ?string $justification, User $actor): Group
+    {
         $justification = $justification === null || trim($justification) === '' ? null : trim($justification);
 
-        return $this->editability->guard(fn (): Group => DB::transaction(function () use ($group, $justification, $actor): Group {
+        return DB::transaction(function () use ($group, $justification, $actor): Group {
             $this->editability->ensure($group, 'justificaciones', 'justification');
             $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
 
@@ -56,7 +68,7 @@ final class JustifyGroup
                     : "Justificó el grupo {$group->code}: {$justification}");
 
             return $group;
-        }), 'justification');
+        });
     }
 
     private function lacksTeacherOrRoom(Group $group): bool

@@ -107,16 +107,18 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
     /**
      * Subdirección y el jefe de proyecto docente ven la carga y la bandeja (Subdirección, además, la propuesta, y
-     * reabre, da el visto bueno y publica las cargas, tareas 4.1 a 4.3); el jefe de departamento, además, propone la
-     * carga, la pasa a asignación docente, la cierra, la publica si el campus no exige visto bueno, decide la parte de su departamento y pide, ve y decide acuerdos entre
-     * departamentos (Subdirección y el jefe de proyecto docente solo los ven); el coordinador arma, corrige, envía y ve
-     * la propuesta de su carrera.
+     * cierra, reabre, da el visto bueno y publica las cargas, tareas 4.1 a 4.3: cierra cualquiera sin ser paso
+     * obligatorio, confirmado el 10 de noviembre de 2026); el jefe de departamento, además, propone la carga, la pasa a
+     * asignación docente, la cierra, la publica si el campus no exige visto bueno, decide la parte de su departamento y
+     * pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el
+     * coordinador arma, corrige, envía y ve la propuesta de su carrera.
      */
     public function grants(): array
     {
         return [
             Role::Subdireccion->value => [
                 AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::LoadClose,
                 AcademicLoadPermission::LoadReopen,
                 AcademicLoadPermission::LoadApprove,
                 AcademicLoadPermission::LoadPublish,

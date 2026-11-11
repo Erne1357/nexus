@@ -14,8 +14,10 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  *
  * - Ven la carga la subdirección, el jefe de departamento y el jefe de proyecto docente, dentro de su
  *   campus y su departamento.
- * - Propone (sale de borrador), pasa a asignación y cierra el jefe de departamento de ese campus y departamento
- *   (supuesto por confirmar).
+ * - Propone (sale de borrador) y pasa a asignación el jefe de departamento de ese campus y departamento (supuesto por
+ *   confirmar).
+ * - Cierra el jefe de departamento; Subdirección también, cualquier carga, sin ser paso obligatorio (confirmado el 10
+ *   de noviembre de 2026).
  * - Reabre y da el visto bueno la Subdirección (tareas 4.1 y 4.2).
  *
  * - Publica la Subdirección, o el jefe de departamento si el campus no exige visto bueno (tarea 4.3).

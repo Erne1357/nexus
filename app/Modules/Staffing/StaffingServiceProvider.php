@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing;
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
@@ -104,7 +105,9 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * «Asignación docente» para quienes ven el ranking de algún departamento (StaffingPermission::RankingView).
+     * «Asignación docente» para quienes ven el ranking de algún departamento (StaffingPermission::RankingView); «Cierre
+     * de la carga» para quienes cierran la carga de algún departamento (`academic_load.load.close`: el jefe y
+     * Subdirección) y «Avance del cierre» para quienes la reabren (`academic_load.load.reopen`: Subdirección y el admin).
      *
      * @return list<NavigationItem>
      */
@@ -124,6 +127,10 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                     || $context->allowsAny(StaffingPermission::ChangeRequestDecide)
                     || $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule)
                     || $context->allowsAny(StaffingPermission::ChangeRequestApplyRoom)),
+            new NavigationItem('Cierre de la carga', 'staffing.closing', 'o-lock-closed', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadClose)),
+            new NavigationItem('Avance del cierre', 'staffing.closing-board', 'o-chart-bar-square', NavigationArea::Academico,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadReopen)),
         ];
     }
 
