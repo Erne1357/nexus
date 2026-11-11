@@ -227,7 +227,7 @@ Mínimo **80 % de líneas por módulo** desde la fase 1, medido en CI con el rep
 
 ## CI
 
-Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su rama base (también los encadenados sobre otra `feature/*`), a mano (`workflow_dispatch`) y en cada push a `develop` y `main`. El push solo calienta la caché de la imagen: un PR lee las cachés de su rama, de su rama base y de `main`, así que un PR encadenado no encuentra la de `develop` y su primera corrida construye la imagen completa (unos 5 minutos, ver "Duración"). Una corrida nueva sobre el mismo PR cancela la anterior.
+Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su rama base (también los encadenados sobre otra `feature/*`), a mano (`workflow_dispatch`) y en cada push a `develop`, `main` y las ramas de riel (`riel/**`). El push solo calienta la caché de la imagen: un PR lee las cachés de su rama, de su rama base y de `main`, así que un PR de tarea lee la de su `riel/<riel>`, y uno encadenado sobre otra `feature/*` no la encuentra y su primera corrida construye la imagen completa (unos 5 minutos, ver "Duración"). Una corrida nueva sobre el mismo PR cancela la anterior.
 
 | Job | Contenido | Bloquea el merge |
 |---|---|---|
@@ -236,7 +236,7 @@ Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su ram
 | `browser` | Browser tests de Pest 5 en el contenedor `dev` con Chromium, en tres shards (`browser 1/3`…); el job `browser` junta sus resultados | Sí |
 | `rendimiento` | Presupuestos de rendimiento (aún no existe) | No (informa; ver arriba) |
 
-Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protección de `develop` y `main` (tarea 0.12): no se renombran sin actualizar la protección. Los shards no son checks requeridos: los jobs `tests` y `browser` esperan a los suyos, corren aunque alguno falle (`!cancelled()`) y fallan si alguno no pasó. Si dependieran de los shards sin esa condición, un shard rojo los dejaría como omitidos, y GitHub cuenta un check omitido como aprobado.
+Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protección de `develop` y `main` (tarea 0.12): no se renombran sin actualizar la protección. Los shards no son checks requeridos: los jobs `tests` y `browser` esperan a los suyos, corren siempre (`always()`, también si alguien cancela la corrida) y fallan si alguno no pasó. Sin esa condición, un shard rojo los dejaría como omitidos, y GitHub cuenta un check requerido omitido como aprobado; con `!cancelled()`, lo mismo pasaría al cancelar la corrida.
 
 ### Shards
 
@@ -270,7 +270,7 @@ CI usa lo mismo que el desarrollo local: la etapa `dev` del `Dockerfile` y los s
 3. Instala Composer dentro del contenedor (`browser` también hace `npm ci`: `pest-plugin-browser` busca `node_modules/.bin/playwright`; Chromium ya viene en la imagen).
 4. Levanta PostgreSQL y Valkey (`lint` no los necesita) y corre su comando con `docker compose run --rm -T app ...`. Cada shard de `tests` corre en paralelo, un proceso por núcleo del runner (`--parallel --processes=$(nproc)`), cada uno con su base `nexus_test_test_<n>`.
 
-La suite corre solo en los PR. Al mezclar a `develop` o `main` el push corre `lint` y el job `cache`, que solo construye la imagen para calentar la caché: la protección exige la rama al día con su base, así que lo mezclado es lo mismo que el PR ya probó (desde el 2 de noviembre de 2026; antes la suite se repetía en cada push y en la fase 2 pasó de los 20 minutos del job). En local se corren las pruebas que el cambio toca y `tests/Arch`; la regresión completa es la del PR.
+La suite corre solo en los PR. Al mezclar a `develop`, `main` o una rama de riel el push corre `lint` y el job `cache`, que solo construye la imagen para calentar la caché: la protección exige la rama al día con su base, así que lo mezclado es lo mismo que el PR ya probó (desde el 2 de noviembre de 2026; antes la suite se repetía en cada push y en la fase 2 pasó de los 20 minutos del job). En local se corren las pruebas que el cambio toca y `tests/Arch`; la regresión completa es la del PR.
 
 Los pasos 1 a 3 viven en la acción local `.github/actions/setup-ci`. En un PR solo el shard 1 de `tests` guarda las capas de la imagen en la caché, y en un push, el job `cache` (un solo escritor evita carreras); todos la leen.
 

@@ -12,12 +12,12 @@ on:
   # Todo PR, sin importar su rama base: un PR encadenado (base en otra feature/*)
   # también debe pasar los tres checks antes de revisarse.
   pull_request:
-  # Al mezclar a develop o main solo se calienta la caché de la imagen (un PR solo lee
-  # las cachés de su propia rama, de su rama base y de main) y se corre lint: la suite ya
-  # corrió en el PR, y la protección exige la rama al día con su base, así que el código
-  # mezclado es el mismo que se probó.
+  # Al mezclar a develop, main o una rama de riel solo se calienta la caché de la imagen (un PR
+  # solo lee las cachés de su propia rama, de su rama base y de main; los PR de tarea tienen
+  # por base su `riel/<riel>`) y se corre lint: la suite ya corrió en el PR, y la protección
+  # exige la rama al día con su base, así que el código mezclado es el mismo que se probó.
   push:
-    branches: [develop, main]
+    branches: [develop, main, "riel/**"]
   workflow_dispatch:
 
 concurrency:
@@ -84,12 +84,13 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-  # El check requerido: junta los shards. Corre aunque alguno falle (`!cancelled()`) y falla si alguno
-  # no pasó; así un shard rojo nunca deja `tests` como omitido, que GitHub contaría como aprobado.
+  # El check requerido: junta los shards. Corre siempre (`always()`), aunque un shard falle o alguien
+  # cancele la corrida, y falla si alguno no pasó: un check requerido omitido, GitHub lo cuenta como
+  # aprobado. Con `!cancelled()` una corrida cancelada lo dejaría omitido.
   tests:
     name: tests
     needs: tests-shard
-    if: ${{ !cancelled() && github.event_name != 'push' }}
+    if: ${{ always() && github.event_name != 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -115,6 +116,7 @@ jobs:
           .github/scripts/coverage-summary.sh clover.xml no-text-report 80 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Resultado de los shards
+        if: ${{ always() }}
         run: |
           echo "Shards de tests: ${{ needs.tests-shard.result }}"
           test "${{ needs.tests-shard.result }}" = success
@@ -186,11 +188,12 @@ jobs:
   browser:
     name: browser
     needs: browser-shard
-    if: ${{ !cancelled() && github.event_name != 'push' }}
+    if: ${{ always() && github.event_name != 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Resultado de los shards
+        if: ${{ always() }}
         run: |
           echo "Shards de browser: ${{ needs.browser-shard.result }}"
           test "${{ needs.browser-shard.result }}" = success
