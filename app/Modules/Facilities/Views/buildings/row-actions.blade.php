@@ -21,7 +21,10 @@
         <x-core::row-menu-item
             :label="$building->is_active ? 'Desactivar' : 'Activar'"
             wire:click="toggleActive('{{ $building->id }}')"
-            wire:confirm="{{ $building->is_active ? '¿Desactivar el edificio '.$building->code.'?' : '¿Activar el edificio '.$building->code.'?' }}"
+            x-confirm="{{ $building->is_active ? 'El edificio deja de estar disponible hasta que se reactive.' : 'El edificio vuelve a estar disponible.' }}"
+            data-confirm-title="{{ $building->is_active ? '¿Desactivar el edificio '.$building->code.'?' : '¿Activar el edificio '.$building->code.'?' }}"
+            data-confirm-button="{{ $building->is_active ? 'Desactivar' : 'Activar' }}"
+            data-confirm-tone="{{ $building->is_active ? 'error' : 'primary' }}"
             :spinner="'toggleActive(\''.$building->id.'\')'"
         />
     </x-core::row-menu>

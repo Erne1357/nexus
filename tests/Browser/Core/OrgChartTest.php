@@ -80,10 +80,8 @@ it('el admin crea, mueve y desactiva una unidad', function () {
 
     expect($grants->fresh()->parent_id)->toBe($administrative->id);
 
-    // Playwright descarta los diálogos: se acepta el wire:confirm a mano.
-    $page->script('window.confirm = () => true');
-
     $page->click('@unit-deactivate')
+        ->click('@confirm-accept')
         ->waitForText('Unidad desactivada')
         ->assertMissing('@org-unit-BECAS')
         ->check('showInactive')

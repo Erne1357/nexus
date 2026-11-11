@@ -22,7 +22,10 @@
         <x-core::row-menu-item
             :label="$subject->is_active ? 'Desactivar' : 'Activar'"
             wire:click="toggleActive('{{ $subject->id }}')"
-            wire:confirm="{{ $subject->is_active ? '¿Desactivar la materia '.$subject->code.'? No se podrá si hay alumnos que todavía la necesitan.' : '¿Activar la materia '.$subject->code.'?' }}"
+            x-confirm="{{ $subject->is_active ? 'No se podrá si hay alumnos que todavía la necesitan.' : 'La materia vuelve a estar disponible.' }}"
+            data-confirm-title="{{ $subject->is_active ? '¿Desactivar la materia '.$subject->code.'?' : '¿Activar la materia '.$subject->code.'?' }}"
+            data-confirm-button="{{ $subject->is_active ? 'Desactivar' : 'Activar' }}"
+            data-confirm-tone="{{ $subject->is_active ? 'error' : 'primary' }}"
             :spinner="'toggleActive(\''.$subject->id.'\')'"
         />
     </x-core::row-menu>

@@ -649,6 +649,8 @@ document.addEventListener('alpine:init', () => {
         return {
             tool: 'unavailable',
             pending: 0,
+            /** Ya se confirmó salir sin guardar: la navegación que sigue no vuelve a preguntar. */
+            leaving: false,
             saving: false,
             copying: false,
             syncing: false,
@@ -728,17 +730,38 @@ document.addEventListener('alpine:init', () => {
                 }
             },
 
-            /** Al ir a otra pantalla con wire:navigate con bloques sin guardar, pide confirmar; Atrás y Adelante, no. */
+            /**
+             * Al ir a otra pantalla con wire:navigate con bloques sin guardar, pide confirmar en el diálogo de Nexus
+             * (ADR-0023); Atrás y Adelante, no. Detiene la navegación y, si se confirma, la repite sin preguntar.
+             */
             confirmLeave(event) {
-                if (this.pending === 0 || event.detail?.history) {
+                const url = event.detail?.url ? String(event.detail.url) : '';
+
+                if (this.pending === 0 || event.detail?.history || this.leaving || url === '') {
                     return;
                 }
 
+                event.preventDefault();
+
                 const blocks = this.pending === 1 ? '1 bloque sin guardar' : `${this.pending} bloques sin guardar`;
 
-                if (!window.confirm(`Tienes ${blocks}. ¿Salir sin guardar?`)) {
-                    event.preventDefault();
-                }
+                window.nexusConfirm({
+                    title: '¿Salir sin guardar?',
+                    message: `Tienes ${blocks}; se pierden al salir.`,
+                    button: 'Salir sin guardar',
+                    tone: 'warning',
+                    run: () => {
+                        // livewire:navigate se dispara dentro de navigate(): mientras, `leaving` deja pasar esta
+                        // navegación; después vuelve a preguntar por si la navegación no se completó.
+                        this.leaving = true;
+
+                        try {
+                            window.Livewire.navigate(url);
+                        } finally {
+                            this.leaving = false;
+                        }
+                    },
+                });
             },
 
             /** Una sola cuenta tras cada cambio: las celdas, las cifras, las horas de cada día y los rangos. */
@@ -1303,11 +1326,16 @@ document.addEventListener('livewire:init', () => {
 
             asked = true;
 
-            if (confirm('Tu perfil cambió (en otra pestaña o por un cambio en tus puestos). ¿Recargar la página?')) {
-                window.location.reload();
-            } else {
-                asked = false;
-            }
+            window.nexusConfirm({
+                title: 'Tu perfil cambió',
+                message: 'Cambió en otra pestaña o por un cambio en tus puestos. Recarga la página para seguir con el perfil de ahora.',
+                button: 'Recargar',
+                tone: 'primary',
+                run: () => window.location.reload(),
+                onCancel: () => {
+                    asked = false;
+                },
+            });
         });
     });
 });

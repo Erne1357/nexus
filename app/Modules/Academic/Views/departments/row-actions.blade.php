@@ -24,7 +24,10 @@
         <x-core::row-menu-item
             :label="$department->is_active ? 'Desactivar' : 'Activar'"
             wire:click="toggleActive('{{ $department->id }}')"
-            wire:confirm="{{ $department->is_active ? '¿Desactivar el departamento '.$department->code.'?' : '¿Activar el departamento '.$department->code.'?' }}"
+            x-confirm="{{ $department->is_active ? 'El departamento deja de estar disponible para nuevos usos hasta que se reactive.' : 'El departamento vuelve a estar disponible.' }}"
+            data-confirm-title="{{ $department->is_active ? '¿Desactivar el departamento '.$department->code.'?' : '¿Activar el departamento '.$department->code.'?' }}"
+            data-confirm-button="{{ $department->is_active ? 'Desactivar' : 'Activar' }}"
+            data-confirm-tone="{{ $department->is_active ? 'error' : 'primary' }}"
             :spinner="'toggleActive(\''.$department->id.'\')'"
         />
 
@@ -34,7 +37,10 @@
             <x-core::row-menu-item
                 label="Borrar"
                 wire:click="delete('{{ $department->id }}')"
-                wire:confirm="¿Borrar el departamento {{ $department->code }}? Dejará de aparecer en el catálogo y se cerrarán los alcances de sus jefes."
+                x-confirm="Dejará de aparecer en el catálogo y se cerrarán los alcances de sus jefes."
+                data-confirm-title="¿Borrar el departamento {{ $department->code }}?"
+                data-confirm-button="Borrar"
+                data-confirm-tone="error"
                 :spinner="'delete(\''.$department->id.'\')'"
                 danger
             />
