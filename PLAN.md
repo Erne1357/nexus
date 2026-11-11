@@ -101,3 +101,11 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
   - las notas de los rieles.
 
   La fase 4 sigue ⬜ y se ejecuta después de una sesión corta de planeación (#351). |
+| 2026-11-10 | Fase 4, piloto de Campus II (4.9). Decisiones del usuario:
+  - **el piloto espera al servidor del ITCJ**, sin túnel ni nube, así que la 4.7 es la ruta crítica de H4 y H5;
+  - al piloto entran todos los puestos;
+  - cada puesto tiene una guía «Ayuda» dentro de Nexus, que se imprime en una hoja;
+  - los reportes se hacen con un botón dentro de Nexus; la bandeja solo la ve el admin y no hay tiempos de respuesta comprometidos;
+  - más adelante los reportes se conectarán con la aplicación de tickets del ITCJ.
+
+  Detalle en [fase-4](docs/plan/fase-4-cierre-publicacion-piloto.md#respuestas-para-el-piloto-49). |

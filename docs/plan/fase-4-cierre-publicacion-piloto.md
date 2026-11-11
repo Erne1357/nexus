@@ -133,6 +133,21 @@ El usuario contestó las doce preguntas en la sesión de planeación de los tres
 
 Además: **publicar vuelve a revisar HC-15**, y se veta si algo cambió después del cierre. Los PDF por carrera y semestre, por docente y por salón son públicos; el PDF por departamento y el Excel completo, solo con sesión.
 
+### Respuestas para el piloto (4.9)
+
+El usuario las contestó el 10 de noviembre de 2026, al reanudar los rieles; las preguntas de los tres rieles fueron en una sola ronda. Reparto: A hace la 4.7 y el ensayo de la 4.10 de principio a fin; B, el canal de incidencias; C, las guías y la revisión de preparación de Campus II. La 4.11 es de los tres, al final.
+
+1. **Guías:** una página «Ayuda» dentro de Nexus, una por puesto (la del puesto activo), con enlaces a cada pantalla, que se imprime en una hoja. El texto lo mantiene el equipo en el código: si una pantalla cambia, el mismo PR actualiza su guía.
+2. **Quiénes entran al piloto:** todos los puestos de Campus II: jefes de departamento, coordinadores, Subdirección académica, docentes, Servicios Escolares y jefes de proyecto docente. Cada uno recibe su guía y puede reportar.
+3. **Reportes:** con un botón «Reportar un problema» dentro de Nexus, que guarda en una tabla privada la página, el puesto activo, la hora, el texto y una captura opcional. Nada personal sale del servidor: el issue de GitHub (repo público, regla 9) lo abre el equipo, anonimizado y con la etiqueta `piloto`.
+4. **Bandeja de reportes:** solo la ve el admin. Cada usuario ve el estado de sus propios reportes (recibido, en revisión, resuelto) y recibe un aviso de Nexus cuando se resuelve, con una nota del equipo.
+5. **Tiempos de respuesta:** sin compromiso fijo. Se atienden en orden de llegada, lo antes posible, sin plazos prometidos a los usuarios.
+6. **Servidor:** si el del ITCJ no está listo, **el piloto espera al servidor**. No corre en una máquina del equipo con túnel ni en la nube. Esto hace de la 4.7 la ruta crítica de H4 y H5.
+
+Pendiente para después: el ITCJ ya tiene una aplicación de tickets, y la idea es conectar los reportes de Nexus con ella más adelante. Por ahora viven en Nexus; el reporte se diseña para poder mandarse a otro sistema sin depender de GitHub.
+
+Cómo trabaja el coordinador único de Campus II (respuesta de la planeación de la fase 5): recibe un nombramiento de coordinador por cada carrera del campus. El perfil activo cuenta todos los nombramientos del puesto (`Actor`, AZ-S4), así que trabaja todas sus carreras sin cambiar de perfil.
+
 ### Demo por puntos en la fase 4
 
 La fase extiende `demo:seed` como dice [testing.md](../arquitectura/testing.md): el punto va en `DemoCheckpoint` antes de `todo`, y sus pasos y revisiones van en el provider del módulo que hace cada cosa.
@@ -235,6 +250,7 @@ La fase extiende `demo:seed` como dice [testing.md](../arquitectura/testing.md):
 
 ## Riesgos y notas
 
+- El piloto espera al servidor del ITCJ (decisión del usuario del 10 de noviembre de 2026): si la 4.7 se atrasa, se recorren el piloto (4.9), H4 y H5. No hay plan B con túnel ni con la nube.
 - Si el 4 de diciembre la captura no está completa, publicar lo que esté y terminar el resto directamente en Nexus durante la semana siguiente; la consulta pública admite republicar (nueva versión).
 - La consulta pública expone nombres de docentes y salones, como hoy lo hace el SII; no expone datos de alumnos.
 - La fase cierra formalmente el 18 de diciembre, pero el soporte del piloto continúa hasta el inicio del semestre en enero con una persona de guardia.
