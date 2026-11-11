@@ -232,11 +232,26 @@ Workflow: `.github/workflows/ci.yml`. Se ejecuta en todo PR, sin importar su ram
 | Job | Contenido | Bloquea el merge |
 |---|---|---|
 | `lint` | Pint en modo verificación (`./vendor/bin/pint --test`) | Sí |
-| `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey; reporte de cobertura por módulo; las 20 pruebas y los 10 archivos más lentos de la corrida en el resumen del job (`--log-junit` y `.github/scripts/slowest-tests.py`, informativo) | Sí |
-| `browser` | Browser tests de Pest 5 en el contenedor `dev` con Chromium | Sí |
+| `tests` | Unit, feature y arquitectura contra PostgreSQL y Valkey, en tres shards (`tests 1/3`, `tests 2/3`, `tests 3/3`); el job `tests` los junta: reporte de cobertura por módulo y las 20 pruebas y los 10 archivos más lentos de los tres en su resumen (`--log-junit` y `.github/scripts/slowest-tests.py`, informativo) | Sí |
+| `browser` | Browser tests de Pest 5 en el contenedor `dev` con Chromium, en tres shards (`browser 1/3`…); el job `browser` junta sus resultados | Sí |
 | `rendimiento` | Presupuestos de rendimiento (aún no existe) | No (informa; ver arriba) |
 
-Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protección de `develop` y `main` (tarea 0.12): no se renombran sin actualizar la protección.
+Los nombres `lint`, `tests` y `browser` son los checks requeridos de la protección de `develop` y `main` (tarea 0.12): no se renombran sin actualizar la protección. Los shards no son checks requeridos: los jobs `tests` y `browser` esperan a los suyos, corren aunque alguno falle (`!cancelled()`) y fallan si alguno no pasó. Si dependieran de los shards sin esa condición, un shard rojo los dejaría como omitidos, y GitHub cuenta un check omitido como aprobado.
+
+### Shards
+
+Desde el 10 de noviembre de 2026, `tests` y `browser` corren cada uno en tres runners a la vez con `--shard=<n>/3` de Pest: cada shard toma un tercio de las clases de prueba de su suite. Las reparte por tiempo con `tests/.pest/shards.json`, que guarda cuánto tarda cada clase; una clase nueva que el archivo no trae se reparte por turno y Pest avisa «shards.json is out of date» en el log, sin fallar. Cada shard de `tests` sigue en paralelo dentro de su runner (`--parallel --processes=$(nproc)`). Un archivo de pruebas siempre corre entero en un proceso, así que el shard más lento nunca baja de lo que tarda su archivo más pesado: un archivo que pase de unos 2 minutos se parte en varios, como `AcademicDemoSeederTest`, que tardaba unos 10 y se partió en cuatro (`AcademicDemo*Test`), y el browser `PlanGridTest`, que tardaba unos 6 y se partió en tres (`PlanGrid*Test`, cada prueba siembra `DemoSeeder`).
+
+Para medir los tiempos de nuevo (cuando el aviso aparece seguido o un shard tarda mucho más que los otros), en un worktree con la suite verde y los assets compilados:
+
+```bash
+docker compose exec -T -e DB_DATABASE=nexus_test_<x> -w /app/.worktrees/<rama> app ./vendor/bin/pest --testsuite=Unit,Feature,Arch --parallel --processes=6 --update-shards
+cp tests/.pest/shards.json /tmp/shards-ufa.json
+docker compose exec -T -e DB_DATABASE=nexus_test_<x> -w /app/.worktrees/<rama> app ./vendor/bin/pest --testsuite=Browser --update-shards
+python3 .github/scripts/merge-shard-timings.py tests/.pest/shards.json /tmp/shards-ufa.json tests/.pest/shards.json
+```
+
+`--update-shards` reescribe el archivo solo con las clases de esa corrida; por eso se mide cada suite y se juntan los dos con `merge-shard-timings.py`. Va con `./vendor/bin/pest`: `php artisan test` no siempre lo acepta (con `--filter` dice que la opción no existe), y en paralelo Pest recibe una sola ruta. Los tiempos locales no son los del runner, pero la proporción entre clases sí, que es lo que usa el reparto.
 
 ### Qué trae el masivo de la fase 3 (horarios)
 
@@ -253,11 +268,11 @@ CI usa lo mismo que el desarrollo local: la etapa `dev` del `Dockerfile` y los s
 1. Construye la imagen `dev` con Buildx y la caché de GitHub Actions (`type=gha`) y la etiqueta `nexus-app:dev`, que es la que espera `compose.override.yaml`; así `docker compose run` no reconstruye nada. Los build args `UID`/`GID` son los del usuario del runner, para que el usuario `app` de la imagen pueda escribir en el código montado en `/app`.
 2. Crea `.env` desde `.env.example` con un `APP_KEY` generado (igual que el README).
 3. Instala Composer dentro del contenedor (`browser` también hace `npm ci`: `pest-plugin-browser` busca `node_modules/.bin/playwright`; Chromium ya viene en la imagen).
-4. Levanta PostgreSQL y Valkey (`lint` no los necesita) y corre su comando con `docker compose run --rm -T app ...`. `tests` corre en paralelo, un proceso por núcleo del runner (`--parallel --processes=$(nproc)`), cada uno con su base `nexus_test_test_<n>`.
+4. Levanta PostgreSQL y Valkey (`lint` no los necesita) y corre su comando con `docker compose run --rm -T app ...`. Cada shard de `tests` corre en paralelo, un proceso por núcleo del runner (`--parallel --processes=$(nproc)`), cada uno con su base `nexus_test_test_<n>`.
 
-La suite corre solo en los PR. Al mezclar a `develop` o `main` el push corre `lint` y el job `tests` solo construye la imagen para calentar la caché: la protección exige la rama al día con su base, así que lo mezclado es lo mismo que el PR ya probó (desde el 2 de noviembre de 2026; antes la suite se repetía en cada push y en la fase 2 pasó de los 20 minutos del job). En local se corren las pruebas que el cambio toca y `tests/Arch`; la regresión completa es la del PR.
+La suite corre solo en los PR. Al mezclar a `develop` o `main` el push corre `lint` y el job `cache`, que solo construye la imagen para calentar la caché: la protección exige la rama al día con su base, así que lo mezclado es lo mismo que el PR ya probó (desde el 2 de noviembre de 2026; antes la suite se repetía en cada push y en la fase 2 pasó de los 20 minutos del job). En local se corren las pruebas que el cambio toca y `tests/Arch`; la regresión completa es la del PR.
 
-Los pasos 1 a 3 viven en la acción local `.github/actions/setup-ci`. Solo el job `tests` guarda las capas de la imagen en la caché (un solo escritor evita carreras); los tres la leen.
+Los pasos 1 a 3 viven en la acción local `.github/actions/setup-ci`. En un PR solo el shard 1 de `tests` guarda las capas de la imagen en la caché, y en un push, el job `cache` (un solo escritor evita carreras); todos la leen.
 
 Cachés: capas de la imagen (`type=gha`, incluye Chromium y las extensiones de PHP), descargas de Composer (clave `composer.lock`) y de npm (clave `package-lock.json`). Si cambia el `Dockerfile`, la primera corrida reconstruye desde la capa modificada.
 
@@ -265,24 +280,27 @@ Las actions están fijadas por SHA completo con la versión en un comentario, ig
 
 ### Cobertura
 
-La imagen `dev` trae `pcov`. El job `tests` corre con `--coverage-clover` y `--coverage-text`, y `.github/scripts/coverage-summary.sh` deja en el resumen del job la cobertura de líneas por módulo de `app/Modules/` y el reporte completo. Desde la fase 1 es bloqueante: el paso falla si un módulo queda debajo de 80 % y nombra cuál. Los browser tests no entran al reporte.
+La imagen `dev` trae `pcov`. Cada shard de `tests` corre con `--coverage-clover` y sube su Clover y su JUnit como artefacto (`tests-shard-<n>`, 3 días). El job `tests` los baja, los junta con `.github/scripts/merge-clover.py` y `.github/scripts/coverage-summary.sh` deja en su resumen la cobertura de líneas por módulo de `app/Modules/`. Ya no lleva el reporte de texto completo: cada shard solo tendría el suyo. Desde la fase 1 es bloqueante: el paso falla si un módulo queda debajo de 80 % y nombra cuál. Los browser tests no entran al reporte.
 
 - Los totales salen del reporte Clover y no del de texto: el de texto omite las clases sin ninguna línea ejecutada, y un módulo con clases sin pruebas saldría con más cobertura de la real.
 - `phpunit.xml` saca del cálculo los `*.blade.php` y los componentes MFC (`app/Modules/*/Livewire`). Livewire los compila a `storage/framework/views` y ejecuta la copia, así que sobre el archivo fuente la cobertura siempre da cero aunque las pruebas feature los recorran. La lógica que el mínimo debe vigilar vive en Actions, Queries, Policies, Rules, Jobs y Models; los componentes se prueban con feature y browser.
 - También saca migraciones y factories (`app/Modules/*/Database/Migrations` y `Factories`): corren en toda prueba e inflarían el mínimo de un módulo con Actions sin cubrir. Los seeders sí cuentan.
 - El código fuera de `app/Modules/` sale en la tabla como informativo, sin mínimo.
 - El paso también falla si el Clover no trae ningún módulo: un cambio de formato o de rutas no pasa como cobertura suficiente.
+- La cobertura solo se calcula si pasaron los tres shards: con uno incompleto saldría de menos.
+- Juntar Clover no es sumar líneas: PHPUnit cuenta una instrucción que cae en la línea de la firma de un método, pero no escribe su línea, y un archivo que un shard no cargó puede traer una línea ejecutable de más. `merge-clover.py` toma esos totales de las métricas de los shards que cargaron el archivo; con dos archivos de prueba dio los mismos totales por archivo que su corrida junta.
 
 ### Duración
 
 Meta: menos de **10 minutos** en total para `lint` + `tests` + `browser`. Los tres jobs corren en paralelo, así que el tiempo de reloj es el del más lento. Medido en el PR #77 (los tres jobs en paralelo): unos **5 minutos** con la caché de la imagen vacía (la primera corrida, o tras cambiar el `Dockerfile`; casi todo es construir la imagen con Chromium) y **menos de 2 minutos** con la caché caliente. Si se excede, primero se paraleliza por módulo, después se revisa qué browser tests se pueden bajar a feature.
 
-Con unas 6 300 pruebas (9 de noviembre de 2026), el job `tests` es el más lento y su tiempo depende de la máquina que asigna GitHub: la misma suite con 4 procesos tardó 607 s en #349 y 1 193 s en #350. Por eso su límite es de 45 minutos (#349). Para saber qué se lleva el tiempo, el resumen del job muestra las pruebas y los archivos más lentos. Si pasa de 30 minutos de forma constante, el siguiente paso es partir `tests` en dos jobs en paralelo, por ejemplo con `--shard`. Antes hay que actualizar los checks requeridos de la protección de `develop` y `main`.
+Con unas 6 300 pruebas (9 de noviembre de 2026), el job `tests` es el más lento y su tiempo depende de la máquina que asigna GitHub: la misma suite con 4 procesos tardó 607 s en #349 y 1 193 s en #350. El 10 de noviembre de 2026 `tests` tardaba unos 11 minutos y `browser` unos 12 (#389), y los dos se partieron en tres shards (ver «Shards»). Para saber qué se lleva el tiempo, el resumen del job `tests` muestra las pruebas y los archivos más lentos de los tres shards. Si un shard pasa de 20 minutos de forma constante, primero se vuelven a medir los tiempos y después se suben los shards (la matriz y el `/3` de cada job). Cada PR ocupa nueve runners (lint, seis shards y los dos que juntan); con varios PR a la vez, GitHub puede poner shards en espera.
 
 ### Cuando falla
 
 - Cada job muestra la salida de Pest en su log; el resumen del job `tests` lleva la cobertura.
-- Si falla un browser test, el job sube las capturas de `tests/Browser/Screenshots` como artefacto `browser-screenshots`.
+- Si falla un browser test, su shard sube las capturas de `tests/Browser/Screenshots` como artefacto `browser-screenshots-<n>`.
+- Para correr en local lo mismo que un shard: `php artisan test --testsuite=Browser --shard=2/3`.
 - Para reproducirlo en local, los mismos comandos: `docker compose exec app ./vendor/bin/pint --test`, `docker compose exec app php artisan test --testsuite=Unit,Feature,Arch` y `docker compose exec app php artisan test --testsuite=Browser`.
 
 ## Pruebas inestables

@@ -2,7 +2,9 @@
 # Todo corre dentro de la imagen `dev` del Dockerfile (la misma que se usa en local),
 # con PostgreSQL y Valkey de compose.yaml. Detalle en docs/arquitectura/testing.md.
 # Los nombres de los jobs (`lint`, `tests`, `browser`) son los checks requeridos de la tarea 0.12:
-# no los renombres sin actualizar la protección de ramas.
+# no los renombres sin actualizar la protección de ramas. `tests` y `browser` corren en shards
+# (`tests 1/3`, `browser 1/3`…, en paralelo, cada uno con su runner) y el job con el nombre requerido
+# junta sus resultados: falla si algún shard falló.
 
 name: CI
 
@@ -38,12 +40,91 @@ jobs:
       - name: Pint (verificación)
         run: docker compose run --rm -T --no-deps app ./vendor/bin/pint --test
 
+  # Cada shard corre un tercio de las clases de prueba, repartidas por tiempo con tests/.pest/shards.json
+  # (Pest, `--shard`; las clases nuevas que el archivo no trae se reparten por turno, con aviso).
+  tests-shard:
+    name: tests ${{ matrix.shard }}/3
+    if: ${{ github.event_name != 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Un solo job por corrida guarda las capas de la imagen.
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-write: ${{ matrix.shard == 1 && 'true' || 'false' }}
+
+      - name: Levantar PostgreSQL y Valkey
+        run: docker compose up -d --wait postgres valkey
+
+      # Cobertura con pcov en Clover; el job `tests` junta los de los tres shards. En paralelo, un
+      # proceso por núcleo del runner: cada uno con su base nexus_test_test_<n>.
+      - name: Unit, Feature y Arch (shard ${{ matrix.shard }}/3)
+        run: |
+          docker compose run --rm -T app php artisan test \
+            --testsuite=Unit,Feature,Arch --compact \
+            --parallel --processes="$(nproc)" \
+            --shard=${{ matrix.shard }}/3 \
+            --coverage-clover=storage/logs/clover.xml \
+            --log-junit=storage/logs/junit.xml
+
+      - name: Subir cobertura y tiempos del shard
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tests-shard-${{ matrix.shard }}
+          path: |
+            storage/logs/clover.xml
+            storage/logs/junit.xml
+          if-no-files-found: ignore
+          retention-days: 3
+
+  # El check requerido: junta los shards. Corre aunque alguno falle (`!cancelled()`) y falla si alguno
+  # no pasó; así un shard rojo nunca deja `tests` como omitido, que GitHub contaría como aprobado.
   tests:
     name: tests
+    needs: tests-shard
+    if: ${{ !cancelled() && github.event_name != 'push' }}
     runs-on: ubuntu-24.04
-    # La suite pasó de 20 minutos en la corrida de #336 (cancelada sin pruebas fallidas) y llegó a 23 con la demo por
-    # puntos (#348), con mucha variación entre corridas; el paso «Pruebas más lentas» dice qué pesa.
-    timeout-minutes: 45
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Bajar cobertura y tiempos de los shards
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: tests-shard-*
+          path: shards
+
+      # Informativo: las 20 pruebas y los 10 archivos más lentos de los tres shards, en el resumen del job.
+      - name: Pruebas más lentas
+        run: python3 .github/scripts/slowest-tests.py shards/*/junit.xml 20 >> "$GITHUB_STEP_SUMMARY"
+
+      # Bloqueante desde la fase 1: falla si un módulo de app/Modules/ queda debajo de 80 %. Solo con los
+      # tres Clover: con un shard incompleto la cobertura saldría de menos. `shell: bash` activa pipefail.
+      - name: Cobertura por módulo (mínimo 80 %)
+        if: ${{ needs.tests-shard.result == 'success' }}
+        shell: bash
+        run: |
+          python3 .github/scripts/merge-clover.py clover.xml shards/tests-shard-1/clover.xml shards/tests-shard-2/clover.xml shards/tests-shard-3/clover.xml
+          .github/scripts/coverage-summary.sh clover.xml no-text-report 80 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Resultado de los shards
+        run: |
+          echo "Shards de tests: ${{ needs.tests-shard.result }}"
+          test "${{ needs.tests-shard.result }}" = success
+
+  # Al mezclar a develop o main no corre la suite: solo se calienta la caché de la imagen (ver `on:` arriba).
+  cache:
+    name: cache
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -51,40 +132,16 @@ jobs:
         with:
           cache-write: "true"
 
-      - name: Levantar PostgreSQL y Valkey
-        if: ${{ github.event_name != 'push' }}
-        run: docker compose up -d --wait postgres valkey
-
-      # Cobertura con pcov: Clover para el mínimo por módulo, texto para leer el detalle. En
-      # paralelo, un proceso por núcleo del runner: cada uno con su base nexus_test_test_<n>.
-      - name: Unit, Feature y Arch
-        if: ${{ github.event_name != 'push' }}
-        run: |
-          docker compose run --rm -T app php artisan test \
-            --testsuite=Unit,Feature,Arch --compact \
-            --parallel --processes="$(nproc)" \
-            --coverage-clover=storage/logs/clover.xml \
-            --coverage-text=storage/logs/coverage.txt \
-            --log-junit=storage/logs/junit.xml
-
-      # Informativo: las 20 pruebas y los 10 archivos más lentos de esta corrida, en el resumen del job.
-      - name: Pruebas más lentas
-        if: ${{ !cancelled() && github.event_name != 'push' }}
-        run: python3 .github/scripts/slowest-tests.py storage/logs/junit.xml 20 >> "$GITHUB_STEP_SUMMARY"
-
-      # Bloqueante desde la fase 1: falla si un módulo de app/Modules/ queda debajo de 80 %.
-      # `shell: bash` activa pipefail, para que el código de salida del script no se pierda en el tee.
-      - name: Cobertura por módulo (mínimo 80 %)
-        if: ${{ !cancelled() && github.event_name != 'push' && hashFiles('storage/logs/clover.xml') != '' }}
-        shell: bash
-        run: .github/scripts/coverage-summary.sh storage/logs/clover.xml storage/logs/coverage.txt 80 | tee -a "$GITHUB_STEP_SUMMARY"
-
-  browser:
-    name: browser
-    # Solo en PR: al mezclar no calienta ninguna caché que no caliente `tests`.
+  browser-shard:
+    name: browser ${{ matrix.shard }}/3
+    # Solo en PR: al mezclar no calienta ninguna caché que no caliente `cache`.
     if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -114,13 +171,26 @@ jobs:
       - name: Levantar PostgreSQL y Valkey
         run: docker compose up -d --wait postgres valkey
 
-      - name: Browser tests
-        run: docker compose run --rm -T app php artisan test --testsuite=Browser --compact
+      - name: Browser tests (shard ${{ matrix.shard }}/3)
+        run: docker compose run --rm -T app php artisan test --testsuite=Browser --compact --shard=${{ matrix.shard }}/3
 
       - name: Subir capturas de los tests que fallaron
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-screenshots
+          name: browser-screenshots-${{ matrix.shard }}
           path: tests/Browser/Screenshots
           if-no-files-found: ignore
+
+  # El check requerido: junta los shards, como `tests`.
+  browser:
+    name: browser
+    needs: browser-shard
+    if: ${{ !cancelled() && github.event_name != 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Resultado de los shards
+        run: |
+          echo "Shards de browser: ${{ needs.browser-shard.result }}"
+          test "${{ needs.browser-shard.result }}" = success

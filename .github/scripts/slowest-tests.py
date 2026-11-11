@@ -5,7 +5,9 @@ Sirve para ver en CI qué hace crecer el job `tests` (en paralelo, el archivo m�
 Nunca falla el job: sin reporte o con un reporte que no se puede leer, lo dice y sale con 0.
 Detalle en docs/arquitectura/testing.md, «CI».
 
-Uso: slowest-tests.py <junit.xml> [cuántas pruebas, 20 por omisión]
+Con shards, recibe el reporte de cada uno y los lee juntos.
+
+Uso: slowest-tests.py <junit.xml> [<junit.xml> ...] [cuántas pruebas, 20 por omisión]
 """
 
 import sys
@@ -14,23 +16,25 @@ from collections import defaultdict
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print("Uso: slowest-tests.py <junit.xml> [cuántas]")
+    arguments = sys.argv[1:]
+    limit = int(arguments.pop()) if len(arguments) > 1 and arguments[-1].isdigit() else 20
+
+    if not arguments:
+        print("Uso: slowest-tests.py <junit.xml> [<junit.xml> ...] [cuántas]")
         return 0
 
-    path = sys.argv[1]
-    limit = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 20
-
-    try:
-        root = ElementTree.parse(path).getroot()
-    except (OSError, ElementTree.ParseError) as error:
-        print(f"### Pruebas más lentas\n\nSin reporte JUnit que leer ({error}).")
-        return 0
+    roots = []
+    for path in arguments:
+        try:
+            roots.append(ElementTree.parse(path).getroot())
+        except (OSError, ElementTree.ParseError) as error:
+            print(f"### Pruebas más lentas\n\nSin reporte JUnit que leer ({error}).")
+            return 0
 
     cases = []
     by_file = defaultdict(float)
 
-    for case in root.iter("testcase"):
+    for case in (case for root in roots for case in root.iter("testcase")):
         seconds = float(case.get("time") or 0)
         file = case.get("file") or case.get("classname") or "?"
         file = file.split("/tests/", 1)[-1] if "/tests/" in file else file
