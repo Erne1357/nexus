@@ -36,7 +36,7 @@
         </div>
     </div>
 
-    <div class="flex flex-wrap items-end gap-x-4 gap-y-3 border-y border-base-300 py-4 max-md:[&_select]:w-full max-md:[&>*]:w-full">
+    <div class="flex flex-wrap items-end gap-x-4 gap-y-3 border-y border-base-300 py-4 max-md:[&>*]:w-full">
         <div class="md:min-w-56"><x-select label="Carrera" wire:model.live="carrera" :options="$careerOptions" data-testid="published-career" /></div>
         <div class="md:min-w-40">
             @if (count($plans) > 1)
