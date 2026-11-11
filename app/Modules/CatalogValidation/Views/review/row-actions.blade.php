@@ -53,7 +53,10 @@
             <x-core::row-menu-item
                 :label="$record->is_active ? 'Desactivar' : 'Activar'"
                 wire:click="toggleActive('{{ $record->id }}')"
-                wire:confirm="{{ $record->is_active ? '¿Desactivar '.$code.'? Deja de ofrecerse en el catálogo.' : '¿Activar '.$code.'?' }}"
+                x-confirm="{{ $record->is_active ? 'Deja de ofrecerse en el catálogo.' : 'Vuelve a ofrecerse en el catálogo.' }}"
+                data-confirm-title="{{ $record->is_active ? '¿Desactivar '.$code.'?' : '¿Activar '.$code.'?' }}"
+                data-confirm-button="{{ $record->is_active ? 'Desactivar' : 'Activar' }}"
+                data-confirm-tone="{{ $record->is_active ? 'error' : 'primary' }}"
                 :spinner="'toggleActive(\''.$record->id.'\')'"
             />
         @else

@@ -111,7 +111,9 @@ it('quitar un propuesto pide confirmar y retira su acuerdo al instante', functio
     $component = quotasAs($this->jefe, $this->group);
     $remove = domOf($component)->querySelector('[data-quota="IIND"] button[aria-label="Retirar la propuesta de IIND"]');
 
-    expect($remove?->getAttribute('wire:confirm'))->toBe('¿Retirar la propuesta de IIND? Se retira en este momento y el jefe de Sistemas ya no la verá.');
+    expect($remove?->getAttribute('wire:confirm'))->toBeNull()
+        ->and($remove?->getAttribute('data-confirm-title'))->toBe('¿Retirar la propuesta de IIND?')
+        ->and($remove?->getAttribute('x-confirm'))->toBe('Se retira en este momento y el jefe de Sistemas ya no la verá.');
 
     $component
         ->call('removeCareer', $this->foreign->id)

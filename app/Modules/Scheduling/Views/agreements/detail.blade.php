@@ -153,7 +153,7 @@
                 <x-button label="Confirmar rechazo" class="btn-error max-md:h-11 max-md:min-h-11" wire:click="reject('{{ $detail['id'] }}')" spinner="reject" x-bind:disabled="! text.trim()" data-testid="agreement-reject-confirm" />
             @else
                 @if ($canCancel)
-                    <x-button label="Cancelar solicitud" icon="o-x-mark" class="btn-ghost mr-auto max-md:h-11 max-md:min-h-11 max-md:mr-0" wire:click="cancel('{{ $detail['id'] }}')" wire:confirm="¿Cancelar la solicitud? Ya no habrá nada que decidir." spinner="cancel" data-testid="agreement-cancel" />
+                    <x-button label="Cancelar solicitud" icon="o-x-mark" class="btn-ghost mr-auto max-md:h-11 max-md:min-h-11 max-md:mr-0" wire:click="cancel('{{ $detail['id'] }}')" x-confirm="Ya no habrá nada que decidir." data-confirm-title="¿Cancelar la solicitud?" data-confirm-button="Cancelar solicitud" data-confirm-tone="error" spinner="cancel" data-testid="agreement-cancel" />
                 @endif
                 <x-button label="Rechazar…" class="btn-outline btn-error max-md:h-11 max-md:min-h-11" wire:click="confirmReject('{{ $detail['id'] }}')" :disabled="! $canDecide"
                     :aria-describedby="$canDecide ? null : 'agreement-reason'" data-testid="agreement-reject" />
