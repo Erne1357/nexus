@@ -79,6 +79,7 @@
         "subdireccion": [
             "academic_load.agreement.view",
             "academic_load.load.approve",
+            "academic_load.load.close",
             "academic_load.load.publish",
             "academic_load.load.publish_approved",
             "academic_load.load.reopen",

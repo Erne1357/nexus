@@ -126,3 +126,12 @@ it('el listener recalcula la clave cuando cambian las sesiones del grupo', funct
 
     expect($this->group->fresh()->code)->toBe('B');
 });
+
+it('un cambio solo de salón no recalcula la clave', function () {
+    $code = $this->group->fresh()->code;
+    GroupSession::factory()->for($this->group)->on(1, '08:00', '10:00')->create();
+
+    GroupScheduleChanged::dispatch($this->group, false);
+
+    expect($this->group->fresh()->code)->toBe($code);
+});

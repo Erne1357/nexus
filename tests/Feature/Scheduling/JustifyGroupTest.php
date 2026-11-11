@@ -70,7 +70,7 @@ it('no se escribe con la carga cerrada', function () {
     expect($this->group->fresh()->close_justification)->toBeNull();
 });
 
-it('la policy deja justificar a quien cierra la carga del departamento', function (?Role $role, int $department, bool $expected) {
+it('la policy deja justificar a quien cierra la carga del departamento: el jefe y Subdirección', function (?Role $role, int $department, bool $expected) {
     $user = $role === null
         ? User::factory()->admin()->create()
         : User::factory()->withRole($role, [
@@ -85,5 +85,5 @@ it('la policy deja justificar a quien cierra la carga del departamento', functio
     'jefe de otro departamento' => [Role::JefeDepartamento, 11, false],
     'jefe de proyecto docente' => [Role::JefeProyectoDocente, 10, false],
     'coordinador de la carrera' => [Role::Coordinador, 10, false],
-    'subdirección' => [Role::Subdireccion, 10, false],
+    'subdirección' => [Role::Subdireccion, 10, true],
 ]);

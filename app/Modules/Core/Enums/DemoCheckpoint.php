@@ -23,6 +23,8 @@ enum DemoCheckpoint: string
     case Staffing = 'asignacion';
     case Rooms = 'salones';
     case Closing = 'cierre';
+    case Publication = 'publicacion';
+    case Reanalysis = 'reanalisis';
     case All = 'todo';
 
     public function label(): string
@@ -35,6 +37,8 @@ enum DemoCheckpoint: string
             self::Staffing => 'Empezando la asignación docente',
             self::Rooms => 'Empezando salones y acuerdos',
             self::Closing => 'Empezando el cierre',
+            self::Publication => 'Empezando la publicación',
+            self::Reanalysis => 'Empezando el re-análisis',
             self::All => 'Todos los casos',
         };
     }
@@ -62,6 +66,8 @@ enum DemoCheckpoint: string
             self::Staffing => Stage::Staffing,
             self::Rooms => Stage::Rooms,
             self::Closing => Stage::Closing,
+            self::Publication => Stage::Publication,
+            self::Reanalysis => Stage::Reanalysis,
         };
     }
 

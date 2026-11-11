@@ -153,7 +153,7 @@ it('no bloquea con acuerdos decididos, cancelados, de otro campus o periodo, ni 
     expect($this->load->fresh()->status)->toBe(LoadStatus::Closed);
 });
 
-it('la policy deja cerrar al admin y al jefe del departamento, y niega a los demás', function (?Role $role, bool $sameDepartment, bool $expected) {
+it('la policy deja cerrar al admin, al jefe del departamento y a Subdirección, y niega a los demás', function (?Role $role, bool $sameDepartment, bool $expected) {
     $campus = Campus::factory()->create();
     $load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['campus_id' => $campus->id, 'department_id' => departmentKey(10)]);
     $user = $role === null
@@ -169,6 +169,6 @@ it('la policy deja cerrar al admin y al jefe del departamento, y niega a los dem
     'jefe del departamento' => [Role::JefeDepartamento, true, true],
     'jefe de otro departamento' => [Role::JefeDepartamento, false, false],
     'jefe de proyecto docente' => [Role::JefeProyectoDocente, true, false],
-    'subdirección' => [Role::Subdireccion, true, false],
+    'subdirección' => [Role::Subdireccion, true, true],
     'coordinador' => [Role::Coordinador, true, false],
 ]);

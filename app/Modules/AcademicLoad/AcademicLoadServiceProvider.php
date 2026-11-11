@@ -6,6 +6,7 @@ use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
@@ -23,9 +24,11 @@ use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
+use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\Core\Authorization\Actor;
@@ -39,6 +42,8 @@ use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Faculty\Enums\HistorySource;
+use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -102,16 +107,18 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
     /**
      * Subdirección y el jefe de proyecto docente ven la carga y la bandeja (Subdirección, además, la propuesta, y
-     * reabre, da el visto bueno y publica las cargas, tareas 4.1 a 4.3); el jefe de departamento, además, propone la
-     * carga, la pasa a asignación docente, la cierra, la publica si el campus no exige visto bueno, decide la parte de su departamento y pide, ve y decide acuerdos entre
-     * departamentos (Subdirección y el jefe de proyecto docente solo los ven); el coordinador arma, corrige, envía y ve
-     * la propuesta de su carrera.
+     * cierra, reabre, da el visto bueno y publica las cargas, tareas 4.1 a 4.3: cierra cualquiera sin ser paso
+     * obligatorio, confirmado el 10 de noviembre de 2026); el jefe de departamento, además, propone la carga, la pasa a
+     * asignación docente, la cierra, la publica si el campus no exige visto bueno, decide la parte de su departamento y
+     * pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el
+     * coordinador arma, corrige, envía y ve la propuesta de su carrera.
      */
     public function grants(): array
     {
         return [
             Role::Subdireccion->value => [
                 AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::LoadClose,
                 AcademicLoadPermission::LoadReopen,
                 AcademicLoadPermission::LoadApprove,
                 AcademicLoadPermission::LoadPublish,
@@ -160,6 +167,11 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 'seed' => $demo->seed,
                 'complete' => true,
             ])),
+            // La publicación termina la etapa 8: cada carga cerrada sale con su versión 1 (tarea 4.3).
+            new DemoStep(DemoCheckpoint::Reanalysis, 'Cargas cerradas publicadas con su versión 1', fn (DemoContext $demo) => $demo->runSeeder(PublicationDemoSeeder::class, [
+                'campuses' => $demo->campuses,
+                'term' => $demo->termCode,
+            ])),
         ];
     }
 
@@ -169,6 +181,30 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo));
 
         return [
+            new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($campusIds): true|string {
+                $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo))
+                    ->where('status', '!=', LoadStatus::Draft)
+                    ->where(fn (Builder $load) => $load->where('status', '!=', LoadStatus::Published)->orWhere('current_version', '!=', 1)
+                        ->orWhereDoesntHave('snapshots', fn (Builder $snapshot) => $snapshot->where('version', 1)))
+                    ->count();
+
+                return $behind === 0 ? true : "{$behind} cargas con grupos no están publicadas en su versión 1.";
+            }),
+            new DemoCheck([DemoCheckpoint::Reanalysis], 'Cada foto cumple la forma del snapshot y el historial docente la sigue', function (DemoContext $demo) use ($campusIds): true|string {
+                $snapshots = LoadSnapshot::query()->latestVersion()
+                    ->whereIn('academic_load_id', AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo))->select('id'))
+                    ->get();
+                $invalid = $snapshots->filter(fn (LoadSnapshot $snapshot): bool => SnapshotPayload::errors($snapshot->payload) !== [])->count();
+                $taught = $snapshots->sum(fn (LoadSnapshot $snapshot): int => count(array_filter($snapshot->payload['groups'], fn (array $group): bool => $group['teacher'] !== null)));
+                $history = TeacherSubjectHistory::query()->where('term_code', $demo->termCode)->whereIn('campus_id', $campusIds($demo))->where('source', HistorySource::Nexus)->count();
+
+                return match (true) {
+                    $snapshots->isEmpty() => 'No hay fotos publicadas.',
+                    $invalid > 0 => "{$invalid} fotos no cumplen la forma v1.",
+                    $history !== $taught => "El historial docente tiene {$history} filas de Nexus y las fotos dicen {$taught} grupos con docente.",
+                    default => true,
+                };
+            }),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Cada carrera ofrecida tiene su propuesta aceptada', function (DemoContext $demo) use ($campusIds, $proposals): true|string {
                 $offered = CareerCampus::query()->whereIn('campus_id', $campusIds($demo))->where('is_active', true)->count();
                 $accepted = $proposals($demo)->where('status', ProposalStatus::Accepted)->count();

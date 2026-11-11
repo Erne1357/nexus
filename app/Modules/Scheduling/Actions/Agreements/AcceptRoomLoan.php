@@ -44,7 +44,7 @@ final class AcceptRoomLoan
             $group = Group::query()->find($agreement->group_id);
 
             if ($group !== null) {
-                GroupScheduleChanged::dispatch($group);
+                GroupScheduleChanged::dispatch($group, timesChanged: false);
             }
 
             return $agreement;

@@ -16,9 +16,11 @@ use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\PublicationShowcaseDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Scheduling\Events\GroupsCreated;
+use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -64,6 +66,21 @@ class DemoSeeder extends Seeder
         $scheduling->__invoke(['profile' => 'demo', 'campuses' => ['C2']]);
         $this->callWith(SchedulingAgreementsDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'cleanDepartments' => $scheduling->cleanDepartments()]);
         $this->callWith(StaffingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2']]);
+        // Cargas cerradas con justificaciones y una reabierta (tarea 4.1); SC no se toca (en la demo no cierra: tiene
+        // solicitudes aprobadas sin aplicar). La que queda cerrada (CEA) la publica con sus versiones la tarea 4.3.
+        $this->callWith(LoadClosingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'keepOpen' => ['SC']]);
+        $this->showcase();
         $this->call(LoginScreenDemoSeeder::class);
+    }
+
+    /**
+     * CEA, la que deja cerrada el paso anterior, publicada en tres versiones (tarea 4.3). Solo con `demo:seed
+     * --hasta=todo`, que prende `demo.showcase`: las pruebas que siembran la demo no lo necesitan.
+     */
+    public function showcase(): void
+    {
+        if (config('demo.showcase', false)) {
+            $this->callWith(PublicationShowcaseDemoSeeder::class, ['campus' => 'C2', 'department' => 'CEA', 'versions' => 3]);
+        }
     }
 }

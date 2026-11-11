@@ -114,7 +114,8 @@ final class LoadEditability
     }
 
     /**
-     * Corre `$work` y, si la base detecta un deadlock, lo traduce a un error de validación en vez de un 500.
+     * Corre `$work` y, si la base detecta un deadlock, lo traduce a un error de validación en vez de un 500 (con
+     * `$message`, si se da). Va por fuera de la transacción: dentro de ella, PostgreSQL ya la abortó y no se puede seguir.
      *
      * @template T
      *
@@ -123,13 +124,13 @@ final class LoadEditability
      *
      * @throws ValidationException
      */
-    public function guard(Closure $work, string $key = 'session'): mixed
+    public function guard(Closure $work, string $key = 'session', ?string $message = null): mixed
     {
         try {
             return $work();
         } catch (QueryException|DeadlockException $exception) {
             if ($this->isDeadlock($exception)) {
-                throw ValidationException::withMessages([$key => 'Otra persona está cambiando esta carga; intenta de nuevo.']);
+                throw ValidationException::withMessages([$key => $message ?? 'Otra persona está cambiando esta carga; intenta de nuevo.']);
             }
 
             throw $exception;
