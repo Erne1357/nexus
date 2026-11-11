@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\AcademicLoad\Http\Controllers\DownloadPublishedPdf;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -20,4 +21,14 @@ Route::middleware('throttle:published-schedule')->prefix('horarios')->name('publ
     Route::livewire('/{periodo}/{campus}/carrera/{carrera}', 'academic-load::pages.published.semester')->name('semester');
     Route::livewire('/{periodo}/{campus}/docente/{docente}', 'academic-load::pages.published.teacher')->name('teacher');
     Route::livewire('/{periodo}/{campus}/salon/{salon}', 'academic-load::pages.published.room')->name('room');
+});
+
+/*
+| Descargas públicas de los PDF de lo publicado (tarea 4.5), sin sesión: el controlador busca el sujeto en lo publicado
+| antes de encolar nada y tiene su propio tope para encolar (DownloadPublishedPdf::ENQUEUES_PER_MINUTE).
+*/
+Route::middleware('throttle:published-schedule')->prefix('horarios/{periodo}/{campus}')->name('published.')->group(function () {
+    Route::get('/carrera/{carrera}/pdf', [DownloadPublishedPdf::class, 'semester'])->name('semester.pdf');
+    Route::get('/docente/{docente}/pdf', [DownloadPublishedPdf::class, 'teacher'])->name('teacher.pdf');
+    Route::get('/salon/{salon}/pdf', [DownloadPublishedPdf::class, 'room'])->name('room.pdf');
 });

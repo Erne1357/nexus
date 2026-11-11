@@ -87,6 +87,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'selectedDay' => $day,
             'updated' => PublishedWeek::updatedOn($schedule->updatedAt($groups)),
             'backUrl' => route('published.index', ['periodo' => $this->periodo, 'campus' => $this->campus]),
+            'pdfUrl' => route('published.teacher.pdf', ['periodo' => $this->periodo, 'campus' => $this->campus, 'docente' => $this->docente]),
         ];
     }
 };

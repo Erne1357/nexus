@@ -155,6 +155,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'planOptions' => array_map(fn (array $row): array => ['id' => $row['plan']['code'], 'name' => $row['plan']['code']], array_reverse($entry['plans'])),
             'semesterOptions' => array_map(fn (int $semester): array => ['id' => $semester, 'name' => 'Semestre '.$semester], $plan['semesters']),
             'backUrl' => route('published.index', ['periodo' => $this->periodo, 'campus' => $this->campus]),
+            'pdfUrl' => $groups === [] ? null : route('published.semester.pdf', ['periodo' => $this->periodo, 'campus' => $this->campus, 'carrera' => $this->carrera, 'reticula' => $this->plan, 'semestre' => $this->semester]),
         ];
     }
 };

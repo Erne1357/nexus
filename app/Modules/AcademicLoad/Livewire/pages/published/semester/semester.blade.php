@@ -19,7 +19,12 @@
         <a href="{{ $backUrl }}" wire:navigate class="btn btn-ghost btn-sm -ms-2.5 justify-self-start max-md:h-11"><x-icon name="o-arrow-left" class="h-4 w-4" aria-hidden="true" />Horarios</a>
 
         <div class="grid min-w-0 gap-1.5">
-            <h1 class="text-2xl font-bold leading-tight md:text-3xl" data-testid="published-career-name">{{ $career['name'] }}</h1>
+            <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                <h1 class="min-w-0 text-2xl font-bold leading-tight md:text-3xl" data-testid="published-career-name">{{ $career['name'] }}</h1>
+                @if ($pdfUrl !== null)
+                    <a href="{{ $pdfUrl }}" class="btn btn-outline btn-sm max-md:h-11" data-testid="published-pdf"><x-icon name="o-arrow-down-tray" class="h-4 w-4" aria-hidden="true" />Descargar PDF</a>
+                @endif
+            </div>
             <p class="flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                 <span class="font-medium text-base-content">Semestre {{ $semester }}</span>
                 <span>{{ $plural(count($subjects), 'materia', 'materias') }} · {{ $plural($groupCount, 'grupo', 'grupos') }}</span>
