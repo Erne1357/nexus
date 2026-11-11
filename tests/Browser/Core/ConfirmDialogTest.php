@@ -27,6 +27,7 @@ it('confirma en el diálogo de Nexus: cancelar no hace nada y confirmar corre la
         ->click('table [role="menuitem"]:has-text("Desactivar")')
         ->assertSeeIn('#nexus-confirm', '¿Desactivar el campus C2?')
         ->assertSeeIn('#nexus-confirm', 'Nadie podrá trabajar en el campus C2 hasta que se reactive.')
+        ->assertAttribute('#nexus-confirm', 'aria-labelledby', 'nexus-confirm-title')
         ->assertScript('document.activeElement?.dataset.testid === "confirm-cancel"')
         ->click('@confirm-cancel')
         ->assertScript('document.getElementById("nexus-confirm").open === false')
