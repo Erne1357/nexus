@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -112,6 +113,31 @@ it('una pestaña que no existe en la URL muestra la retícula', function () {
         ->assertSet('tab', 'reticula')
         ->assertSee('Cálculo Integral')
         ->assertDontSee('Ago-Dic 2025');
+});
+
+it('D18: debajo de la retícula lista las materias que esperan semestre: «Por validar» en un plan vivo y «Sin semestre en el SII» en uno histórico', function () {
+    $waiting = Subject::factory()->create(['code' => 'ZZZ-1', 'name' => 'Materia sin semestre', 'credits' => 4]);
+    StudyPlanSubjectPending::factory()->for($this->student->studyPlan)->for($waiting)->create();
+    KardexRecord::factory()->for($this->student)->for($waiting)->create(['term_code' => '20253', 'grade' => 90]);
+    $list = fn () => domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $this->student->id]))->querySelector('[data-testid="student-unplaced"]');
+
+    expect(textOf($list()))->toBe('Por validar ZZZ-1 Materia sin semestre 4 cr Acreditada');
+
+    $this->student->studyPlan->update(['is_historical' => true]);
+
+    expect(textOf($list()))->toBe('Sin semestre en el SII ZZZ-1 Materia sin semestre 4 cr Acreditada');
+});
+
+it('D18: en una retícula histórica sin ningún semestre no pinta una cuadrícula vacía: la lista lleva todas sus materias', function () {
+    $plan = StudyPlan::factory()->historical()->for($this->career)->create(['code' => 'ISIC-1993-001']);
+    StudyPlanSubjectPending::factory()->for($plan)->for(Subject::factory()->create(['code' => 'OLD-1', 'name' => 'Materia vieja', 'credits' => 8]))->create();
+    $student = Student::factory()->for($plan)->create(['campus_id' => $this->campus->id, 'current_semester' => null]);
+
+    $page = domOf(Livewire::actingAs($this->coordinator)->test('students::pages.student', ['student' => $student->id]));
+
+    expect($page->querySelector('[data-testid="student-grid"]'))->toBeNull()
+        ->and($page->querySelector('[data-testid="standing-legend"]'))->toBeNull()
+        ->and(textOf($page->querySelector('[data-testid="student-unplaced"]')))->toBe('Sin semestre en el SII OLD-1 Materia vieja 8 cr Sin acreditar');
 });
 
 it('el listado lleva a la ficha de cada alumno', function () {

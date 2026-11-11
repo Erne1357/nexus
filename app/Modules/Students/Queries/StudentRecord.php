@@ -7,7 +7,8 @@ use App\Modules\Students\Models\Student;
 
 /**
  * La ficha de un alumno (tarea 1.6), como la arma StudentRecordQuery: sus cifras, su retícula por semestre,
- * las especialidades y las cadenas de seriación de esa retícula y su kárdex por periodo.
+ * las especialidades y las cadenas de seriación de esa retícula, su kárdex por periodo y, aparte, las materias de su
+ * plan que esperan semestre.
  */
 final readonly class StudentRecord
 {
@@ -21,6 +22,7 @@ final readonly class StudentRecord
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la retícula, por su clave, y cuántas tiene cada una
      * @param  list<array{index: int, name: string, size: int}>  $chains  cadenas de seriación, por su primera materia
      * @param  list<array{term: string|null, label: string, records: list<KardexRecord>}>  $kardex  primero lo que no tiene periodo y luego del periodo más antiguo al más reciente
+     * @param  list<array{code: string, name: string, credits: int, accredited: bool}>  $unplaced  las materias de su plan que esperan semestre en «Por validar» (D18), por su renglón del SII y luego por clave, y si las acreditó
      */
     public function __construct(
         public Student $student,
@@ -36,5 +38,6 @@ final readonly class StudentRecord
         public array $specialties,
         public array $chains,
         public array $kardex,
+        public array $unplaced = [],
     ) {}
 }

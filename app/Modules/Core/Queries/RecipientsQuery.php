@@ -36,10 +36,25 @@ final class RecipientsQuery
      */
     public function holders(Permission $permission, Target $target): array
     {
-        $roles = $this->permissions->rolesGranting($permission);
+        return $this->holdersByKey($permission, ['target' => $target])['target'];
+    }
 
-        if ($roles === []) {
-            return [];
+    /**
+     * holders() para varios objetivos a la vez (un tablero con un renglón por departamento): los candidatos se leen
+     * una vez y cada objetivo se decide con la misma regla. Por la llave de cada objetivo.
+     *
+     * @template TKey of array-key
+     *
+     * @param  array<TKey, Target>  $targets
+     * @return array<TKey, list<array{user: User, role: Role}>>
+     */
+    public function holdersByKey(Permission $permission, array $targets): array
+    {
+        $roles = $this->permissions->rolesGranting($permission);
+        $holders = array_map(fn (): array => [], $targets);
+
+        if ($roles === [] || $targets === []) {
+            return $holders;
         }
 
         $candidates = User::query()
@@ -48,13 +63,13 @@ final class RecipientsQuery
             ->orderBy('name')
             ->get();
 
-        $holders = [];
-
         foreach ($candidates as $user) {
-            $role = $this->context->forUser($user)->rolesAllowing($permission, $target)[0] ?? null;
+            foreach ($targets as $key => $target) {
+                $role = $this->context->forUser($user)->rolesAllowing($permission, $target)[0] ?? null;
 
-            if ($role !== null) {
-                $holders[] = ['user' => $user, 'role' => $role];
+                if ($role !== null) {
+                    $holders[$key][] = ['user' => $user, 'role' => $role];
+                }
             }
         }
 

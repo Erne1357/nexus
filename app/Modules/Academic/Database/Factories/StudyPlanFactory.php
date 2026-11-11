@@ -36,4 +36,12 @@ class StudyPlanFactory extends Factory
     {
         return $this->state(['is_active' => false]);
     }
+
+    /**
+     * Una retícula histórica (D18): ningún alumno inscrito en el periodo actual.
+     */
+    public function historical(): static
+    {
+        return $this->state(['is_historical' => true]);
+    }
 }

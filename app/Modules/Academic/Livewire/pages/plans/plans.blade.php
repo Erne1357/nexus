@@ -10,7 +10,8 @@
     `.impeccable/mocks/por-validar/planes.html`): el filtro «Por validar N» después de los demás, y bajo el nombre
     del plan «N por validar» (insignia de advertencia que lleva a «Por validar» del plan; data-pending-plan con la
     clave), no en una columna propia, para que la tabla siga cabiendo en su caja a 1440 px. Un plan sin pendientes no
-    lleva nada: «Al día» sería ruido en cada renglón. En el celular, la insignia va bajo el detalle. Sin permiso de
+    lleva nada: «Al día» sería ruido en cada renglón. Una retícula histórica tampoco, ni cuenta en el filtro: lo suyo
+    no es trabajo pendiente (D18). En el celular, la insignia va bajo el detalle. Sin permiso de
     alta, «Nuevo plan» queda deshabilitado con su motivo.
 --}}
 <div>

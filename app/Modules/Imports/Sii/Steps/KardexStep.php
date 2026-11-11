@@ -98,6 +98,9 @@ final class KardexStep implements SiiStep
             $this->rows($export, $subjects, $students, $best, $current),
             incidents: [...$this->historyIncidents($tally), ...$selectionIncidents],
         );
+
+        // La corrida vuelve aquí después de aplicar el lote: la verificación (VerificationStep) lo necesita aplicado.
+        $migration->remember('kardex_applied', fn (): bool => true);
     }
 
     /**

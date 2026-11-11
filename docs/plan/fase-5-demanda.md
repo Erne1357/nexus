@@ -13,6 +13,74 @@ Que Nexus calcule, antes de que el coordinador abra su propuesta, cuántos alumn
 - Fase 4: snapshot publicado de `20271` (grupos abiertos, cupos y ocupación real) como referencia para medir el error.
 - Retrospectiva de R1 (tarea 4.11) con los ajustes que los coordinadores hicieron a mano sobre los elegibles.
 
+## Punto de partida (10 de noviembre de 2026)
+
+Se escribió durante la fase 4, para que la fase 5 arranque con lo que hoy existe y con las decisiones del usuario. **Por ahora es solo planeación** (decisión del usuario, 10 de noviembre de 2026): ningún riel implementa nada de la fase 5 hasta que el usuario abra la fase. Los tres siguen en la fase 4.
+
+### Qué ya existe y se reutiliza
+
+- **Elegibles:** `Students\Queries\EligibleStudentsQuery`.
+  - `countsFor(Career, Campus)` da los elegibles por materia y `distinctFor()` los alumnos distintos. Lee `student_progress`: una fila por alumno con `subjects_available`, sin periodo, que se recalcula al importar alumnos o kárdex (`RefreshStudentProgress`).
+  - Es el estado de hoy, **sin historia**: para las tasas hay que reconstruir quién era elegible al inicio de cada periodo pasado a partir del kárdex (ver «Ajustes»).
+- **Grupos sugeridos:** `AcademicLoad\Rules\SuggestedGroups`.
+  - Calcula `ceil(esperados / tamaño)` con `demand.target_group_size` (`{"default": 35, "lab": 25}`) en `settings` con alcance global.
+  - Solo distingue normal y laboratorio. `ProposalAnomalies` lee `demand.min_group_size`, 10 por omisión.
+  - Hoy ninguna pantalla edita `settings`; solo los seeders.
+- **Kárdex:** `kardex_records` con `term_code`, `grade`, `result` (`aprobada`, `reprobada`, `cursando` o `baja`) y `attempt`.
+  - La migración del SII (tarea 1.16, #353 y #354) trae la historia desde 1964: unos 2 millones de renglones, con la oportunidad de `tipo_evaluacion`.
+  - Los periodos que no existen en Nexus pasan sin `term_code`.
+  - De `seleccion_materias` solo entran, como `cursando`, los periodos que el SII todavía no pasó a la historia: no hay inscripciones históricas aparte.
+  - La demo y el masivo ya siembran kárdex de varios periodos (`TrajectorySimulator`, ingresos de 2022 a 2026 y egresados desde 2018).
+- **Propuesta de carrera:** `proposal_items` tiene `eligible_students`, `expected_students` y `requested_groups`.
+  - `StartCareerProposal` los nace con los elegibles y los grupos sugeridos.
+  - **No hay columnas de lo sugerido aparte de lo capturado**: el coordinador sobrescribe.
+  - «Alumnos posibles» queda congelado en `career_proposals.eligible_students`.
+- **Precedente de cálculo por departamento:** `StaffingSupplyDemoSeeder::demand()` ya hace la cadena elegibles → grupos sugeridos → horas por departamento para la demo.
+- **Lo publicado:** `load_snapshots`, payload v1, trae los grupos abiertos por materia con su `capacity` y sus `placements[].seats`, pero **no la ocupación**: en R1 la inscripción sigue en el SII.
+  - «La última versión de cada carga» ya existe: el scope `LoadSnapshot::query()->latestVersion()` y, con #366, `AcademicLoad\Exports\Sii\SiiLoadExport::latestSnapshots(Term, Campus)`. Los dos son de AcademicLoad.
+- **Mapa de módulos:** el diagrama ya tiene `Students --> Demand --> AcademicLoad`. El módulo `Demand` no existe todavía. Por el ADR-0022, sus tablas van en el esquema `demand`.
+
+### Respuestas del usuario (10 de noviembre de 2026)
+
+1. **Ocupación real:** sale del **kárdex** de cada periodo: quien tiene la materia ese periodo, aprobada, reprobada o cursando, la tomó. Antes de usarlo con datos reales se vuelve a importar la información más actual del SII. Así se mide el error de la 5.9 y se muestra el historial de la 5.6, sin otra exportación.
+2. **Recálculo:** si la proyección se recalcula después de que el coordinador corrigió, **se conserva lo que capturó y se avisa** («la proyección cambió: ahora sugiere N»), para que decida él.
+3. **Historial y tasas:** se comparan con **el mismo tipo de periodo**, Ene-Jun con los Ene-Jun anteriores y Ago-Dic con los Ago-Dic, porque cada uno abre materias de semestres distintos. Por omisión, los últimos 4 (`demand.history_terms`).
+4. **Tablero de demanda del departamento (5.7):** es de **todo el Tec**, con una insignia por campus. En palabras del usuario: «el campus no es tan decisivo como parece en Nexus»; el jefe de departamento es uno para todo el Tec.
+5. **Parámetros (5.8):** los ajustan **Subdirección y admin**, para todo el Tec, sin despliegue.
+6. **Primer semestre:** no sale de la fórmula. Con los alumnos de nuevo ingreso ya inscritos, **el coordinador arma «paquetes»**: conjuntos de materias de primer semestre, y a veces de segundo, que se asignan cada uno a varios alumnos. La proyección de primer semestre toma lo que el coordinador capture; el concepto de paquete es nuevo en Nexus (ver «Preguntas abiertas»).
+7. **Coordinadores:** en Campus I hay un coordinador por carrera; **en Campus II uno solo para todas las carreras**. Para el piloto de la fase 4 basta con darle a esa persona un nombramiento de coordinador por cada carrera de Campus II. Si conviene un puesto «coordinador de campus» que cubra todas sus carreras se decide al planear.
+
+### Ajustes a las tareas
+
+- **Regla del mapa para toda la fase: Demand calcula; lo que compara con las propuestas o con lo publicado vive en AcademicLoad.** Demand está a la izquierda de AcademicLoad (`Students --> Demand --> AcademicLoad`), así que no lee `proposal_items`, `load_snapshots`, `LoadSnapshot` ni `SiiLoadExport`. Es lo mismo que pasa con `SuggestedGroups` en la 5.3.
+- **5.2, tasas históricas:** `student_progress` no guarda historia, así que la tasa de no inscripción de un periodo pasado necesita los elegibles **al inicio de ese periodo**. Hay que reconstruirlos del kárdex: lo aprobado antes del periodo, la seriación y el plan del alumno en ese momento.
+  - Es la parte más cara y más delicada de la fase.
+  - Conviene una consulta por periodo y campus que se pueda probar con un kárdex sintético, separada de la fórmula, como ya dice la tarea.
+  - Los renglones sin `term_code` no entran.
+- **5.3, la fórmula** (reglas de negocio, «Elegibilidad y demanda», R2): `SuggestedGroups` es de AcademicLoad, pero Demand está a su izquierda en el mapa y no puede usarlo.
+  - Muévelo a `Demand/Rules`, que AcademicLoad sí puede importar, o duplica la lectura del parámetro.
+  - Los tamaños por tipo de materia siguen siendo dos, normal 35 y laboratorio 25, hasta que se decida otra cosa.
+- **5.5, precarga:** `proposal_items` necesita columnas para lo sugerido (esperados y grupos) aparte de lo capturado. Va en el mismo PR que `modelo-de-datos.md`. El aviso «la proyección cambió» compara lo sugerido nuevo contra lo sugerido guardado, nunca contra lo capturado.
+- **5.6, historial:** la pantalla es la de la propuesta, en AcademicLoad. Desde ahí lee la ocupación por periodo, que da Demand con el kárdex de Students, y los grupos abiertos, que salen de `load_snapshots` desde R1; antes de R1 no hay. Demand nunca lee la foto.
+- **5.7, tablero:** de todo el Tec, con la forma de los tableros de cierre de la fase 4: un renglón por materia e insignias por campus. Como compara lo proyectado contra lo pedido (`proposal_items`), vive en AcademicLoad y lee lo que calcula Demand.
+- **5.8, parámetros:** es la primera pantalla que edita `settings`. Va en Core, con permiso de Subdirección y admin y bitácora de cada cambio. Las claves son `demand.history_terms`, `demand.target_group_size`, `demand.min_group_size` y el umbral para resaltar diferencias.
+- **5.9, evaluación:** compara lo que la fórmula habría dicho «como si» se hubiera corrido antes de `20271` contra los grupos publicados de `20271` y el kárdex de `20271` reimportado al terminar el semestre.
+  - Lo publicado es **la última versión de cada carga** (`latestVersion`): una carga reabierta y republicada tiene varias fotos, y no cuentan las que el público ya no ve.
+  - Como compara contra lo publicado, el comando vive en AcademicLoad y llama a la fórmula de Demand.
+  - Hasta tener ese kárdex solo se puede medir contra periodos anteriores.
+- **Demo por puntos:** la proyección se calcula al abrir el periodo, así que el punto `propuesta` es el que ya trae las propuestas en borrador precargadas. La demo tiene kárdex de varios periodos para las tasas.
+
+### Preguntas abiertas para cuando se abra la fase
+
+- **Paquetes de primer semestre:** ¿cuántos por carrera, cómo se arman (todas las materias del semestre en el mismo horario) y quién asigna a cada alumno a su paquete? Toca a la fase 6 (horarios de cada paquete sin choques) y a la 9 (inscripción).
+- **Tamaño objetivo por tipo:** ¿bastan normal y laboratorio, o hay más tipos (especialidad, inglés, complementarias)?
+- **Verano:** ¿la proyección también calcula cursos de verano, o solo Ene-Jun y Ago-Dic? (supuesto: solo los semestres).
+- **Coordinador de campus:** ¿se modela como un puesto que cubre todas las carreras del campus?
+
+### Reparto cuando se abra la fase
+
+Como en la tabla «Reparto»: A el núcleo de Demand (5.1–5.4), B la precarga y las pantallas (5.5–5.7) y C los parámetros, la evaluación y los datos (5.8–5.10). Acordado por los tres rieles el 10 de noviembre de 2026.
+
 ## Alcance
 
 ### Incluye

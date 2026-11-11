@@ -20,7 +20,7 @@ final readonly class PlanGrid
      * @param  array<string, int>  $semesterOf  id de materia → su semestre en la retícula
      * @param  array<string, int>  $creditShare  id de materia → porcentaje de los créditos del plan que pide
      * @param  int|null  $totalCredits  créditos totales del plan, si están capturados
-     * @param  array<string, int>  $unplaced  id de materia → créditos, de las que esperan semestre en «Por validar»
+     * @param  array<string, int>  $unplaced  id de materia → créditos, de las que esperan semestre en «Por validar», por su renglón y su clave
      */
     public function __construct(
         public array $credits,

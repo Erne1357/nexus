@@ -15,7 +15,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Recalcula la clave de un grupo con la nomenclatura del SII (GroupCode; reglas-de-negocio.md, "Grupos y horarios"):
  * la letra de la hora de inicio más temprana de sus sesiones, con número si otro grupo no cancelado de la misma
  * materia y periodo ya la tiene, o una clave provisional si se quedó sin sesiones. La llama el listener de
- * GroupScheduleChanged cada vez que cambian sus sesiones.
+ * GroupScheduleChanged cada vez que cambian los días u horas de sus sesiones (un cambio solo de salón no la llama).
  *
  * En una transacción relee el grupo con bloqueo. No toca un grupo cancelado ni el de un departamento cuya carga del
  * periodo y campus está publicada (supuesto por confirmar). Solo escribe si la clave cambia, y entonces deja la

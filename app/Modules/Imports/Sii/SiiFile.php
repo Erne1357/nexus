@@ -22,6 +22,7 @@ enum SiiFile: string
     case Horarios = 'horarios';
     case HistoriaAlumno = 'historia_alumno';
     case SeleccionMaterias = 'seleccion_materias';
+    case RequisitosMateria = 'requisitos_materia';
 
     /**
      * Encabezados exactos (normalizados) que trae la exportación real. Si cambian, la migración se detiene.
@@ -309,6 +310,13 @@ enum SiiFile: string
                 'cuantas_curso',
                 'creditos_materia_sm',
             ],
+            self::RequisitosMateria => [
+                'carrera',
+                'reticula',
+                'materia',
+                'materia_relacion',
+                'tipo_requisito',
+            ],
         };
     }
 
@@ -332,11 +340,12 @@ enum SiiFile: string
 
     /**
      * Si la exportación debe traer el archivo. Los de la parte 1 son obligatorios; los del kárdex (historia y
-     * selección), que llegaron después, no: sin ellos el paso `kardex` avisa y no los migra.
+     * selección) y la seriación (`requisitos_materia`), que llegaron después, no: sin ellos los pasos `kardex` y
+     * `seriacion` avisan y no los migran.
      */
     public function required(): bool
     {
-        return ! in_array($this, [self::HistoriaAlumno, self::SeleccionMaterias], true);
+        return ! in_array($this, [self::HistoriaAlumno, self::SeleccionMaterias, self::RequisitosMateria], true);
     }
 
     /**

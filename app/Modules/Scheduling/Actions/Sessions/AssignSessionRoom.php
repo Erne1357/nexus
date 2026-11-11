@@ -99,7 +99,7 @@ final class AssignSessionRoom
                 ->withChanges(['attributes' => SessionRules::snapshot($session), 'old' => $old])
                 ->log($this->describe($group, $session, $previous, $room));
 
-            GroupScheduleChanged::dispatch($group);
+            GroupScheduleChanged::dispatch($group, timesChanged: false);
 
             return [$session, $group, $loans];
         }));
