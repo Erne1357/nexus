@@ -39,7 +39,7 @@ sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota
 8,18,IIND-1993-297,IIND,presencial,si,520,
 9,10,II-80-025,II,presencial,si,3,
 CP,30,COPU-2010-205,COPU,presencial,si,1084,
-DCI,41,DCII-2009-02,DCII,presencial,si,1,
+DCI,41,DCII-2009-02-41,DCII,presencial,si,1,"misma clave oficial que DII/46, pero pide 280 créditos (sus materias suman 234) y DII/46 pide 164: plan aparte (decidido por el usuario el 10 de noviembre de 2026); clave provisional, verificar"
 DII,46,DCII-2009-02,DCII,presencial,si,7,
 DIN,45,DING-2010-13,DING,presencial,si,48,
 EIA,47,EIAM-2007-001,EIAM,presencial,si,0,
