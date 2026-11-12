@@ -454,7 +454,11 @@
                     <x-input label="Correo" name="email" wire:model="email" type="email" />
                 </div>
                 <div class="md:col-span-3">
-                    <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" :hint="'@'.$institutionalDomain.'. A él va su invitación de acceso.'" />
+                    @if ($institutionalEmailReason === null)
+                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" :hint="'@'.$institutionalDomain.'. A él va su invitación de acceso.'" />
+                    @else
+                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" disabled :hint="$institutionalEmailReason" />
+                    @endif
                 </div>
                 <div class="md:col-span-3">
                     <x-select label="Grado" name="degree" wire:model="degree" :options="$degrees" placeholder="Sin grado" />
