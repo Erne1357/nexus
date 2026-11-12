@@ -98,8 +98,7 @@ final readonly class ModalityProfile
      * La ventana que cubre a varios perfiles, para lo que es del docente y no de una modalidad: su disponibilidad
      * (MS11, supuesto por confirmar). Los días son la unión ordenada; el inicio, el más temprano; el fin, el más tarde;
      * y el bloque, el más corto de los perfiles si divide exacto la ventana. Si no la divide, el máximo común divisor
-     * de todos los bloques y la ventana (supuesto por confirmar), que sí la divide y deja cada bloque de cada modalidad
-     * como un múltiplo de la cuadrícula. Lo demás (salones, bloques fijos, asignación, docentes externos y visto bueno)
+     * de todos los bloques y la ventana (supuesto por confirmar), que siempre divide la ventana. Lo demás (salones, bloques fijos, asignación, docentes externos y visto bueno)
      * no importa a la disponibilidad y sale de DEFAULTS. Sin perfiles es el presencial por omisión.
      *
      * @param  iterable<ModalityProfile>  $profiles
@@ -128,9 +127,6 @@ final readonly class ModalityProfile
         if ($window % $block !== 0) {
             $block = array_reduce($blocks, fn (int $carry, int $minutes): int => self::gcd($carry, $minutes), $window);
         }
-
-        $days = array_values(array_unique($days));
-        sort($days);
 
         return self::fromArray([
             'days' => $days,

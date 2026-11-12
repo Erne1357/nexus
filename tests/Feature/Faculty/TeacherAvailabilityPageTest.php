@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -104,8 +105,18 @@ describe('ventana (MS11)', function () {
             ->assertSee('Sábado');
     });
 
-    it('no necesita campus: un usuario sin campus la abre', function () {
-        availabilityEditor($this->admin, $this->ana)->assertSee('lunes a viernes, 7:00 a 21:00');
+    it('es la misma en la página de un campus: la ventana no depende del campus', function () {
+        onCampusPage(Campus::factory()->create(['code' => 'C2']));
+
+        availabilityEditor($this->admin, $this->ana)
+            ->assertSee('lunes a viernes, 7:00 a 21:00')
+            ->assertDontSee('Sábado');
+    });
+
+    it('el encabezado dice «Horario» sin nombrar modalidades', function () {
+        availabilityEditor($this->admin, $this->ana)
+            ->assertSeeHtml('Horario <span class="font-medium text-base-content">lunes a viernes')
+            ->assertDontSee('Horario de las modalidades activas');
     });
 });
 

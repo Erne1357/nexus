@@ -37,7 +37,7 @@
                     </h1>
                     <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                         <span>Docente <span class="font-mono text-base-content">{{ $teacher->rfc }}</span> <span class="font-medium text-base-content">{{ $teacher->name }}</span></span>
-                        <span>Horario de las modalidades activas <span class="font-medium text-base-content">{{ $grid['schedule'] }}</span></span>
+                        <span>Horario <span class="font-medium text-base-content">{{ $grid['schedule'] }}</span></span>
                         <span>Bloques de <span class="font-medium text-base-content">{{ $blocks }}</span></span>
                     </p>
                 </div>

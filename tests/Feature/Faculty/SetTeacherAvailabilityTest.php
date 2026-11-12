@@ -15,7 +15,7 @@ use Spatie\Activitylog\Models\Activity;
 | Guardar la disponibilidad de un docente en un periodo (S12, supuesto por confirmar): las celdas marcadas se
 | revisan contra el perfil de la cuadrícula (días, horario y bloque) y se guardan como rangos unidos; las filas
 | anteriores de esos días y ese horario se quitan con borrado lógico. Lo de otros días u horas del mismo periodo
-| (capturado con el perfil de otro campus) y lo de otros periodos no se toca. Guardar lo mismo no escribe; un
+| (capturado con otra ventana) y lo de otros periodos no se toca. Guardar lo mismo no escribe; un
 | cambio deja una entrada de bitácora con el antes y el después y avisa tras el commit.
 */
 

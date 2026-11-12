@@ -28,14 +28,17 @@ final class AvailabilityGridQuery
     public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
 
     /**
-     * El perfil de la cuadrícula: la ventana que cubre a las modalidades activas, sin borrar (MS11, supuesto por
-     * confirmar; ModalityProfile::covering). Con solo Presencial activa es lunes a viernes, de 7:00 a 21:00, bloques de
-     * 60 minutos. Sin ninguna activa, el presencial por omisión.
+     * El perfil de la cuadrícula: la ventana que cubre a las modalidades activas, sin borrar y con bloques de tiempo
+     * (MS11 y R20, supuestos por confirmar; ModalityProfile::covering). Una modalidad sin bloques de tiempo no ensancha
+     * la cuadrícula, como en SessionRules, GroupFitQuery y CampusWindow. Con solo Presencial activa es lunes a viernes,
+     * de 7:00 a 21:00, bloques de 60 minutos; sin ninguna que cuente, el presencial por omisión.
      */
     public function profile(): ModalityProfile
     {
         return ModalityProfile::covering(
-            Modality::query()->where('is_active', true)->get()->map(fn (Modality $modality): ModalityProfile => $modality->profile),
+            Modality::query()->where('is_active', true)->get()
+                ->map(fn (Modality $modality): ModalityProfile => $modality->profile)
+                ->filter(fn (ModalityProfile $profile): bool => $profile->usesTimeBlocks),
         );
     }
 

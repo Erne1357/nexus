@@ -152,6 +152,12 @@ describe('perfil (S12)', function () {
             ->and($profile->dayEnd)->toBe('21:00');
     });
 
+    it('una modalidad activa sin bloques de tiempo no ensancha la cuadrícula (R20, supuesto por confirmar)', function () {
+        Modality::factory()->create(['settings' => ['uses_time_blocks' => false, 'days' => [1, 2, 3, 4, 5, 6], 'day_start' => '06:00', 'day_end' => '22:00']]);
+
+        expect($this->grids->profile()->toArray())->toBe(ModalityProfile::DEFAULTS);
+    });
+
     it('no cuenta las modalidades inactivas ni las borradas', function () {
         Modality::factory()->inactive()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
         Modality::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]])->delete();
