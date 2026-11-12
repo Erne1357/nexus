@@ -1465,3 +1465,280 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 });
+
+/*
+| catalogReviewList: la lista de una revisión de catálogo (DESIGN.md, «Revisión por registro»; opción A «Tabla con
+| columna Revisión», elegida por el usuario el 12 de noviembre de 2026). Vive en catalog-validation::review.list y lleva
+| lo que es del navegador, sin ir al servidor hasta marcar o guardar:
+|
+| - La selección: los ids elegidos con las casillas o con Espacio. Con algo elegido se ve la barra «N elegidos»;
+|   «Elegir los N por revisar» toma los pendientes que dejan los filtros (data-pending del contenedor, que Livewire
+|   repinta) y «Marcar N como revisados» los manda a markSelected(). Lo que ya quedó revisado sale de la selección; si
+|   el servidor no marcó, se queda elegido. Si cambia quién marca (validar o reabrir), Livewire cambia el wire:key del
+|   contenedor y la lista arranca de nuevo, sin selección; data-can-mark lo dice en cada tecla.
+| - El teclado, solo en la tabla (desde 768 px): J y K mueven el foco de fila en fila; Espacio elige la fila del foco; R
+|   marca los elegidos o, si no hay, la fila del foco; Enter abre su «Acciones» (docentes) o «Editar». Nada de esto corre
+|   al escribir en un campo, con Ctrl, Alt o Meta, ni con un diálogo, un drawer o un menú abierto. Si la fila marcada
+|   sale de la lista («Por revisar»), el foco pasa a la que quedó en su lugar.
+| - El recuadro del correo institucional de un docente: lo abre cualquier [data-email-open] (delegado en el contenedor,
+|   también desde un menú «Acciones»), junto al nombre visible del docente, y guarda con saveEmail(), que devuelve si se
+|   guardó o por qué no; al cerrarse, el foco vuelve a lo que lo abrió (al botón «Acciones» si fue desde su menú).
+*/
+
+/** Lo que abrió el recuadro del correo, fuera del estado de Alpine: un nodo dentro de un Proxy reactivo no se enfoca. */
+let reviewEmailOrigin = null;
+
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('catalogReviewList', (config) => ({
+        /** Los ids elegidos. */
+        selected: [],
+        marking: false,
+        email: { id: null, name: '', value: '', error: '', saving: false },
+
+        isSelected(id) {
+            return this.selected.includes(id);
+        },
+
+        toggle(id) {
+            this.selected = this.isSelected(id) ? this.selected.filter((chosen) => chosen !== id) : [...this.selected, id];
+        },
+
+        forget(id) {
+            this.selected = this.selected.filter((chosen) => chosen !== id);
+        },
+
+        clear() {
+            this.selected = [];
+        },
+
+        /** Si quien mira marca registros, como lo pintó Livewire la última vez (cambia al validar o reabrir). */
+        canMark() {
+            return this.$root.dataset.canMark === 'true';
+        },
+
+        /** Los pendientes que dejan los filtros (hasta 500), como los pintó Livewire la última vez. */
+        pendingAll() {
+            try {
+                return JSON.parse(this.$root.dataset.pending || '[]');
+            } catch {
+                return [];
+            }
+        },
+
+        chooseAllPending() {
+            this.selected = this.pendingAll();
+        },
+
+        /** Los pendientes de la página, de la tabla. */
+        pageIds() {
+            return [...this.$root.querySelectorAll('tr[data-row][data-pending]')].map((row) => row.dataset.row);
+        },
+
+        allPageChosen() {
+            const ids = this.pageIds();
+
+            return ids.length > 0 && ids.every((id) => this.selected.includes(id));
+        },
+
+        choosePage(checked) {
+            const ids = this.pageIds();
+            this.selected = checked ? [...new Set([...this.selected, ...ids])] : this.selected.filter((id) => !ids.includes(id));
+        },
+
+        async markChosen() {
+            if (this.marking || this.selected.length === 0) {
+                return;
+            }
+
+            const index = this.indexOf(this.currentRow());
+            this.marking = true;
+
+            try {
+                await this.$wire.markSelected([...this.selected]);
+            } finally {
+                this.marking = false;
+            }
+
+            this.$nextTick(() => {
+                const pending = this.pendingAll();
+                this.selected = this.selected.filter((id) => pending.includes(id));
+                this.refocus(index);
+            });
+        },
+
+        async markRow(row) {
+            const index = this.indexOf(row);
+            const id = row.dataset.row;
+            this.forget(id);
+
+            await this.$wire.setReviewed(id, true);
+            this.$nextTick(() => this.refocus(index));
+        },
+
+        /** Las filas de la tabla visibles (debajo de 768 px la tabla se oculta y el teclado no corre). */
+        rows() {
+            return [...this.$root.querySelectorAll('tr[data-row]')].filter((row) => row.offsetParent !== null);
+        },
+
+        currentRow() {
+            const row = document.activeElement?.closest?.('tr[data-row]');
+
+            return row && this.$root.contains(row) ? row : null;
+        },
+
+        indexOf(row) {
+            return row ? this.rows().indexOf(row) : -1;
+        },
+
+        focusRow(row) {
+            if (!row) {
+                return;
+            }
+
+            row.focus({ preventScroll: true });
+            row.scrollIntoView({ block: 'nearest' });
+        },
+
+        refocus(index) {
+            if (index < 0 || this.currentRow()) {
+                return;
+            }
+
+            const rows = this.rows();
+            this.focusRow(rows[Math.min(index, rows.length - 1)]);
+        },
+
+        onKey(event) {
+            if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+                return;
+            }
+
+            const target = event.target;
+
+            if (target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) {
+                return;
+            }
+
+            if (document.querySelector('dialog[open], .drawer-toggle:checked, :popover-open')) {
+                return;
+            }
+
+            const rows = this.rows();
+
+            if (rows.length === 0) {
+                return;
+            }
+
+            const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+            const current = this.currentRow();
+            const onRow = current !== null && target === current;
+
+            if (key === 'j' || key === 'k') {
+                const index = this.indexOf(current);
+                const step = key === 'j' ? 1 : -1;
+                this.focusRow(index === -1 ? rows[0] : rows[Math.max(0, Math.min(rows.length - 1, index + step))]);
+            } else if (key === ' ' && onRow) {
+                if (this.canMark() && current.hasAttribute('data-pending')) {
+                    this.toggle(current.dataset.row);
+                }
+            } else if (key === 'r' && this.canMark()) {
+                if (this.selected.length > 0) {
+                    this.markChosen();
+                } else if (current?.hasAttribute('data-pending')) {
+                    this.markRow(current);
+                } else {
+                    return;
+                }
+            } else if (key === 'Enter' && onRow) {
+                current.querySelector(config.teachers ? '[aria-haspopup="menu"]' : '[data-row-enter]')?.click();
+            } else {
+                return;
+            }
+
+            event.preventDefault();
+        },
+
+        openEmailFrom(event) {
+            const opener = event.target instanceof Element ? event.target.closest('[data-email-open]') : null;
+
+            if (!opener || !this.$root.contains(opener)) {
+                return;
+            }
+
+            const id = opener.dataset.emailOpen;
+            const anchor = [...this.$root.querySelectorAll(`[data-email-anchor="${id}"]`)].find((cell) => cell.offsetParent !== null) ?? opener;
+            const menu = opener.closest('[popover]');
+            const domain = `@${config.domain}`;
+            const current = opener.dataset.emailCurrent ?? '';
+
+            reviewEmailOrigin = menu?.id ? document.querySelector(`[popovertarget="${menu.id}"]`) ?? opener : opener;
+            Object.assign(this.email, {
+                id,
+                name: opener.dataset.emailName ?? '',
+                value: current.toLowerCase().endsWith(domain) ? current.slice(0, -domain.length) : current,
+                error: '',
+                saving: false,
+            });
+
+            const pop = this.$refs.emailPop;
+
+            if (!pop.matches(':popover-open')) {
+                pop.showPopover();
+            }
+
+            this.placeEmail(anchor);
+            this.$nextTick(() => this.$refs.emailInput?.focus());
+        },
+
+        /** Debajo del nombre del docente y, si no cabe, arriba; nunca fuera de la ventana. */
+        placeEmail(anchor) {
+            const box = anchor.getBoundingClientRect();
+            const pop = this.$refs.emailPop;
+            const margin = 8;
+            const width = pop.offsetWidth;
+            const height = pop.offsetHeight;
+            const below = box.bottom + 6;
+            const above = box.top - height - 6;
+
+            pop.style.left = `${Math.max(margin, Math.min(box.left, window.innerWidth - width - margin))}px`;
+            pop.style.top = `${Math.max(margin, below + height > window.innerHeight - margin && above >= margin ? above : Math.min(below, window.innerHeight - height - margin))}px`;
+        },
+
+        emailToggled(event) {
+            if (event.newState !== 'closed') {
+                return;
+            }
+
+            const back = reviewEmailOrigin;
+            reviewEmailOrigin = null;
+            back?.focus?.({ preventScroll: true });
+        },
+
+        closeEmail() {
+            if (this.$refs.emailPop?.matches(':popover-open')) {
+                this.$refs.emailPop.hidePopover();
+            }
+        },
+
+        async saveEmail() {
+            if (this.email.saving) {
+                return;
+            }
+
+            this.email.saving = true;
+            this.email.error = '';
+
+            try {
+                const result = await this.$wire.saveEmail(this.email.id, this.email.value);
+
+                if (result?.saved) {
+                    this.closeEmail();
+                } else {
+                    this.email.error = result?.error ?? 'No se pudo guardar el correo.';
+                }
+            } finally {
+                this.email.saving = false;
+            }
+        },
+    }));
+});
