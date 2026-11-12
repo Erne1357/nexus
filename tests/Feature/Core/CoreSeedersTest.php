@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
+use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\StaffingMode;
