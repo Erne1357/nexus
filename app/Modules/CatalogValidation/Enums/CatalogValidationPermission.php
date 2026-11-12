@@ -8,8 +8,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo CatalogValidation: el avance de validación y la revisión de catálogos de un departamento. La
- * clave es `catalog_validation.<recurso>.<accion>`. Las acciones sobre una revisión declaran campus (nulo en los
- * catálogos generales) y unidad (el departamento); el avance no declara dimensiones. Corregir, validar, reabrir y
+ * clave es `catalog_validation.<recurso>.<accion>`. Las acciones sobre una revisión declaran solo la unidad (el departamento): los
+ * catálogos son de la institución, sin campus ni modalidad (AZ-S17, supuesto por confirmar); el avance no declara dimensiones. Corregir, validar, reabrir y
  * observar solo son del jefe del departamento: el admin no los tiene (CV-S1, ver el provider). Abrir la validación del
  * periodo (CV9) es solo del admin: no se concede a ningún puesto y no declara dimensiones.
  */
@@ -44,7 +44,7 @@ enum CatalogValidationPermission: string implements Permission
     {
         return match ($this) {
             self::ProgressView, self::ProgressRemind, self::ReviewOpen => [],
-            default => [Dimension::Campus, Dimension::Unit],
+            self::ReviewView, self::ReviewResolveFlag, self::ReviewCorrect, self::ReviewValidate, self::ReviewReopen, self::ReviewFlag => [Dimension::Unit],
         };
     }
 

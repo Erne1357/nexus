@@ -67,7 +67,7 @@ final class NotifyPendingReviews
                 }
 
                 $heads = array_values(array_filter(
-                    $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $department->getKey())),
+                    $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey())),
                     fn (array $holder): bool => ! isset($reached[$holder['user']->getKey()]),
                 ));
 
@@ -108,7 +108,7 @@ final class NotifyPendingReviews
                 continue;
             }
 
-            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $department->getKey()));
+            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey()));
 
             $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $campus, $department, $pending)));
         }

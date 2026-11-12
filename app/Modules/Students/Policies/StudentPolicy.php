@@ -37,6 +37,6 @@ final class StudentPolicy
             ? $student->career?->department_id
             : Career::withTrashed()->whereKey($student->career_id)->value('department_id');
 
-        return $this->actor($user)->allows(StudentsPermission::StudentView, Target::of(campus: $student->campus_id, unit: $department, career: $student->career_id));
+        return $this->actor($user)->allows(StudentsPermission::StudentView, Target::of(modality: $student->modality_id, campus: $student->campus_id, unit: $department, career: $student->career_id));
     }
 }
