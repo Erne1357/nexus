@@ -22,23 +22,30 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * entre la revisión y el insert, la restricción única de la base responde con el mismo error de
  * código. Después del commit avisa con CampusCreated.
  *
- * Liga el campus a su modalidad del catálogo por el puente `modality_id` (ADR-0025; se quita al contraer). El puente no
- * va a la bitácora: sale de `modality`, que sí va.
+ * El campus es solo el lugar (MS3), así que la pantalla pide únicamente código y nombre: sin `modality` ni `settings`
+ * nace presencial, ligado a Presencial por el puente `modality_id` (ADR-0025; se quita al contraer), con el perfil de
+ * esa modalidad en `settings` para que Scheduling, que todavía lo lee ahí, no vea una jornada distinta (supuesto por
+ * confirmar). Quien llame con `modality` o `settings` (sembradores, pruebas) los conserva. El puente no va a la
+ * bitácora: sale de `modality`, que sí va.
  */
 final class CreateCampus
 {
     public function __construct(private readonly CampusRules $rules) {}
 
     /**
-     * @param  array{code: string, name: string, modality: Modality|string, settings: array<string, mixed>}  $data
+     * @param  array{code: string, name: string, modality?: Modality|string, settings?: array<string, mixed>}  $data
      *
      * @throws ValidationException
      */
     public function handle(array $data): Campus
     {
         $code = $this->rules->normalizeCode($data['code']);
-        $settings = $this->rules->profile($data['settings']);
-        $modality = $data['modality'] instanceof Modality ? $data['modality'] : Modality::from($data['modality']);
+        $modality = match (true) {
+            ! isset($data['modality']) => Modality::Presencial,
+            $data['modality'] instanceof Modality => $data['modality'],
+            default => Modality::from($data['modality']),
+        };
+        $settings = $this->rules->profile($data['settings'] ?? $this->defaultSettings($modality));
 
         return DB::transaction(function () use ($code, $data, $settings, $modality): Campus {
             $this->rules->ensureCodeIsFree($code);
@@ -66,5 +73,15 @@ final class CreateCampus
 
             return $campus;
         });
+    }
+
+    /**
+     * El perfil del campus que no lo trae: el de su modalidad del catálogo, si existe; si no, el presencial por omisión.
+     *
+     * @return array<string, mixed>
+     */
+    private function defaultSettings(Modality $modality): array
+    {
+        return CatalogModality::query()->where('code', $modality->catalogCode())->first()?->settings ?? [];
     }
 }

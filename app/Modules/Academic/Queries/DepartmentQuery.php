@@ -63,6 +63,16 @@ final class DepartmentQuery
     }
 
     /**
+     * Las claves de los departamentos activos y sin borrar, en orden: lo que dice el panel de abrir el periodo.
+     *
+     * @return list<string>
+     */
+    public function activeCodes(): array
+    {
+        return Department::query()->where('is_active', true)->orderBy('code')->pluck('code')->all();
+    }
+
+    /**
      * El departamento que se va a editar o borrar, sin los borrados.
      *
      * @throws ModelNotFoundException<Department>

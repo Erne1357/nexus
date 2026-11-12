@@ -123,6 +123,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
             new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Campus::class]),
+            new NavigationItem('Modalidades', 'core.modalities', 'o-squares-2x2', NavigationArea::Academico,
+                ability: 'viewAny', arguments: [Modality::class]),
             new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Academico,
                 ability: 'viewAny', arguments: [Term::class], childRoutes: ['core.terms.show']),
             new NavigationItem('Organigrama', 'core.org-chart', 'o-rectangle-group', NavigationArea::Academico,
@@ -143,6 +145,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             Role::Subdireccion->value => [
                 CorePermission::CampusView,
                 CorePermission::CampusUpdateProfile,
+                CorePermission::ModalityView,
+                CorePermission::ModalityUpdateProfile,
                 CorePermission::TermView,
                 CorePermission::TermCreate,
                 CorePermission::TermUpdate,

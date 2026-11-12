@@ -102,6 +102,8 @@
             "catalog_validation.review.view",
             "core.campus.update_profile",
             "core.campus.view",
+            "core.modality.update_profile",
+            "core.modality.view",
             "core.term.create",
             "core.term.make_current",
             "core.term.manage_calendar",

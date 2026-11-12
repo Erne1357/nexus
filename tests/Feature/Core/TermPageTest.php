@@ -219,7 +219,7 @@ describe('sección «Modalidades»', function () {
             ->assertSeeInOrder(['Abierto en', 'Abrir en Modalidad A', 'Abrir en Presencial', 'Calendario', 'Modalidades', 'A1', 'Modalidad A', 'No abierto en este periodo', 'PRES', 'Presencial'])
             ->assertSee('Abrir en Modalidad A')
             ->assertDontSee('Abrir en Modalidad Z')
-            ->assertSee('¿Abrir el periodo 20271 en Presencial?');
+            ->assertSeeHtml('wire:click="prepareOpen(');
     });
 
     it('el resumen muestra las claves abiertas y un botón por modalidad pendiente', function () {
@@ -263,6 +263,77 @@ describe('sección «Modalidades»', function () {
             ->and(AcademicLoad::count())->toBe(2)
             ->and(CatalogReview::count())->toBe(0);
     })->with(['admin', 'subdireccion']);
+
+    it('«Abrir en Presencial» abre el panel con lo que se crea y no escribe nada hasta confirmar', function () {
+        Department::factory()->create(['code' => 'D1']);
+        Department::factory()->create(['code' => 'D2']);
+        Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSet('showOpen', false)
+            ->call('prepareOpen', $this->m2->id)
+            ->assertSet('showOpen', true)
+            ->assertSee('Abrir Ene-Jun 2027 en Presencial')
+            ->assertSee('Revisa lo que se crea antes de abrir.')
+            ->assertSee('4')
+            ->assertSee('cargas académicas en borrador')
+            ->assertSeeInOrder(['D1', 'D2'])
+            ->assertSee('C1 · Campus I')
+            ->assertSee('C2 · Campus II')
+            ->assertSee('Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00')
+            ->assertSee('Usa el calendario general del periodo')
+            ->assertSeeHtml('wire:click="openIn(')
+            ->assertSee('Queda en la bitácora con tu nombre.')
+            ->assertSee('Abrir en Presencial');
+
+        expect(TermOpening::count())->toBe(0)->and(AcademicLoad::count())->toBe(0);
+    });
+
+    it('confirmar en el panel abre el periodo, cierra el panel y lo dice en un toast', function () {
+        Department::factory()->create(['code' => 'D1']);
+
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('prepareOpen', $this->m2->id)
+            ->call('openIn', $this->m2->id)
+            ->assertSet('showOpen', false);
+
+        expect(lastToastOf($page)['title'])->toBe('Periodo abierto en Presencial')
+            ->and(TermOpening::count())->toBe(1);
+    });
+
+    it('en una modalidad ya abierta, el panel es «Completar apertura» y cuenta solo lo que falta', function () {
+        Department::factory()->create(['code' => 'D1']);
+        Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id])->call('openIn', $this->m2->id);
+        Department::factory()->create(['code' => 'D2']);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('prepareOpen', $this->m2->id)
+            ->assertSee('Completar la apertura de Ene-Jun 2027 en Presencial')
+            ->assertSee('carga académica en borrador')
+            ->assertSeeHtml('wire:click="completeIn(')
+            ->assertSee('Completar apertura');
+    });
+
+    it('el panel dice cuando la modalidad ya tiene ventanas propias en el calendario', function () {
+        termPageStage($this->term, Stage::Staffing, $this->m2, '2026-11-24', '2026-12-04');
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('prepareOpen', $this->m2->id)
+            ->assertSee('Tiene ventana propia en 1 etapa');
+    });
+
+    it('no abre el panel de una modalidad inactiva', function () {
+        $this->m3->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('prepareOpen', $this->m3->id)
+            ->assertNotFound();
+    });
 
     it('«Completar apertura» crea lo que falte y la segunda vez dice que no faltaba nada', function () {
         $page = Livewire::actingAs($this->admin)
@@ -728,7 +799,7 @@ describe('otros roles e invitados', function () {
 
         $arguments = match ($method) {
             'editStage' => ['staffing'],
-            'addModalityWindow', 'removeModalityWindow', 'openIn', 'completeIn' => [$this->m2->id],
+            'addModalityWindow', 'removeModalityWindow', 'openIn', 'completeIn', 'prepareOpen' => [$this->m2->id],
             default => [],
         };
 
@@ -738,7 +809,7 @@ describe('otros roles e invitados', function () {
             ->and(TermOpening::count())->toBe(0)
             ->and($this->term->fresh())->name->toBe('Ene-Jun 2027')->is_current->toBeTrue()
             ->and(Activity::count())->toBe(0);
-    })->with($roles)->with(['edit', 'save', 'makeCurrent', 'editStage', 'clearGeneral', 'addModalityWindow', 'removeModalityWindow', 'saveStage', 'openIn', 'completeIn']);
+    })->with($roles)->with(['edit', 'save', 'makeCurrent', 'editStage', 'clearGeneral', 'addModalityWindow', 'removeModalityWindow', 'saveStage', 'openIn', 'completeIn', 'prepareOpen']);
 
     it('no pueden elegir el periodo de origen ni copiar aunque la página la abriera el admin', function () {
         termPageStage($this->other, Stage::Proposal, null, '2026-08-24', '2026-09-04');
