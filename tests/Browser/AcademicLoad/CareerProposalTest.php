@@ -22,7 +22,7 @@ use App\Modules\Core\Models\User;
 beforeEach(function () {
     $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['code' => '20271']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id]);
     $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas Computacionales']);
     CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => $campus->id]);
     $department = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);

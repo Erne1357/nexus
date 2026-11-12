@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * Borra de la caché el calendario del periodo que cambió: una sola entrada por periodo, con la ventana general
- * y las de todos los campus (TermCalendarQuery::key).
+ * y las de todas las modalidades (TermCalendarQuery::key).
  */
 final class ForgetTermCalendar
 {

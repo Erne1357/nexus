@@ -37,7 +37,7 @@ beforeEach(function () {
     $this->actor = User::factory()->create();
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->term = Term::factory()->create(['code' => '20271']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
     $this->career = Career::factory()->create(['code' => 'ISC']);
     CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $this->campus->id]);
     $this->plan = StudyPlan::factory()->create(['career_id' => $this->career->id, 'code' => 'ISIC-2010-224']);
@@ -107,6 +107,7 @@ it('arma la propuesta en borrador con una fila por materia, sus elegibles y la p
 
 it('la propuesta nace con la modalidad del catálogo de su campus y cada fila con el campus de la propuesta (ampliación de la ronda 2)', function () {
     $this->campus->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
     placeInPlan($this->plan, Subject::factory()->create(['code' => 'ACF-0901']), 1);
     placeInPlan($this->plan, Subject::factory()->create(['code' => 'SCD-1015']), 5);
 
@@ -204,9 +205,9 @@ it('devuelve la propuesta que ya existe aunque el periodo o la oferta ya no la d
     expect(startProposal()->id)->toBe($existing->id);
 });
 
-it('rechaza un periodo que no está abierto en el campus y no escribe nada', function () {
+it('M4: rechaza un periodo que no está abierto en la modalidad del campus y no escribe nada', function () {
     $closed = Term::factory()->create(['code' => '20273']);
-    TermOpening::factory()->create(['term_id' => $closed->id]);
+    TermOpening::factory()->create(['term_id' => $closed->id, 'modality_id' => Modality::factory()->create()->id]);
 
     expect(fn () => startProposal(term: $closed))->toThrow(
         fn (ValidationException $e) => expect($e->errors())->toBe(['term' => ['El periodo 20273 no está abierto en C2.']]),

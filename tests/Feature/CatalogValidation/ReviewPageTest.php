@@ -43,7 +43,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica-Electrónica']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
     app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
 
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();

@@ -78,7 +78,7 @@ function seedTwoCampusWorld(): void
             $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
             $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C1' => 30, 'C2' => 40]]);
             $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C1' => 6, 'C2' => 10]]);
-            $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C1', 'C2']]]);
+            $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES']]]);
             $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
             $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
             Event::fakeFor(fn () => $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2']]), [GroupsCreated::class]);
@@ -169,8 +169,11 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
         ->and($requests->whereNotNull('teacher_id')->count())->toBe($requests->count())
         ->and($requests->pluck('department_id')->unique()->count())->toBeGreaterThanOrEqual(2);
 
-    $appliedLoad = AcademicLoad::query()->where('term_id', $this->term->id)->where('department_id', $applied->first()->department_id)->first();
-    $approvedLoad = AcademicLoad::query()->where('term_id', $this->term->id)->where('department_id', $requests->firstWhere('status', ChangeRequestStatus::Approved)->department_id)->first();
+    // La carga de la solicitud es la de su campus y departamento: abrir Presencial crea las de C1 y C2 a la vez (M4).
+    $loadOf = fn (ChangeRequest $request): AcademicLoad => AcademicLoad::query()->where('term_id', $this->term->id)
+        ->where('campus_id', $request->campus_id)->where('department_id', $request->department_id)->sole();
+    $appliedLoad = $loadOf($applied->first());
+    $approvedLoad = $loadOf($requests->firstWhere('status', ChangeRequestStatus::Approved));
 
     // La carga de las solicitudes aplicadas regresó sola a asignación; después LoadClosingDemoSeeder pudo cerrarla.
     expect($appliedLoad->transitions()->where('from_status', LoadStatus::Adjusting)->where('to_status', LoadStatus::Staffing)->exists())->toBeTrue()

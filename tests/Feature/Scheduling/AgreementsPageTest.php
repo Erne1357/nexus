@@ -41,7 +41,7 @@ const AGREEMENTS = 'scheduling::pages.agreements';
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
@@ -321,7 +321,7 @@ describe('aceptar varios', function () {
             'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->cb->id,
         ]);
         $otherCampus = Campus::factory()->create();
-        TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $otherCampus->id]);
+        // El periodo ya está abierto en su modalidad, Presencial (M4).
         $elsewhere = InterdepartmentalAgreement::factory()->create([
             'term_id' => $this->term->id, 'campus_id' => $otherCampus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
         ]);
@@ -623,7 +623,7 @@ describe('otros puestos', function () {
 
     it('un jefe de otro campus no ve nada: ni la lista ni el acuerdo por ?acuerdo=', function () {
         $other = Campus::factory()->create();
-        TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $other->id]);
+        // El periodo ya está abierto en su modalidad, Presencial (M4).
         vacate(Role::JefeDepartamento, $this->sc->id);
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $other->id, 'department_id' => $this->sc->id, 'valid_from' => today()->toDateString()])->create();
 

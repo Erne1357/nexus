@@ -119,7 +119,7 @@ it('CV9: al abrir la validación avisa a los jefes y abrir el periodo no', funct
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
-    app(OpenTerm::class)->handle($this->term, $this->c2);
+    app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
 
     expect($this->jefeSistemas->notifications()->count())->toBe(0);
 
@@ -132,9 +132,9 @@ it('CV9: al abrir la validación avisa a los jefes y abrir el periodo no', funct
 
 it('si la apertura falla, no avisa a nadie', function () {
     $this->actingAs(User::factory()->admin()->create());
-    $this->c2->update(['is_active' => false]);
+    modalityOf('PRES')->update(['is_active' => false]);
 
-    expect(fn () => app(OpenTerm::class)->handle($this->term, $this->c2))->toThrow(ValidationException::class);
+    expect(fn () => app(OpenTerm::class)->handle($this->term, modalityOf('PRES')))->toThrow(ValidationException::class);
 
     expect(DatabaseNotification::query()->count())->toBe(0);
 });

@@ -1,11 +1,12 @@
 {{--
     El panel de una etapa del calendario (core::pages.term), dentro del x-drawer: «Etapa N de 8» con su estado, su
-    nombre y el periodo; «General · todos los campus» con las fechas generales y «Quitar fechas»; y «Por campus ·
-    ventana propia», un bloque por campus activo: con ventana propia muestra sus fechas y «Quitar ventana propia»;
-    sin ella, «Agregar ventana propia» y las fechas generales que usa. Los campos se llaman como las claves de las
-    Actions (general.starts_on, own.{campus}.ends_on), así sus errores caen en su campo. Nada se guarda hasta
-    «Guardar». `$editing` trae la etapa, su número, su ventana general efectiva y `generalPreview`, las fechas generales que se editan
-    en el panel (lo que usan los campus sin ventana propia; null si no forman una ventana) y `generalEmpty`, si ambas están vacías; `close()` es del x-drawer.
+    nombre y el periodo; «General · todas las modalidades» con las fechas generales y «Quitar fechas»; y «Por
+    modalidad · ventana propia» (M4), un bloque por modalidad activa: con ventana propia muestra sus fechas y «Quitar
+    ventana propia»; sin ella, «Agregar ventana propia» y las fechas generales que usa. Los campos se llaman como las
+    claves de las Actions (general.starts_on, own.{modalidad}.ends_on), así sus errores caen en su campo. Nada se guarda
+    hasta «Guardar». `$editing` trae la etapa, su número, su ventana general efectiva y `generalPreview`, las fechas
+    generales que se editan en el panel (lo que usan las modalidades sin ventana propia; null si no forman una ventana)
+    y `generalEmpty`, si ambas están vacías; `close()` es del x-drawer.
 --}}
 @php($window = $editing['window'])
 
@@ -24,7 +25,7 @@
 
     <div class="flex-1 space-y-6 px-5 pb-8 pt-4">
         <section class="space-y-3" data-testid="general-section">
-            <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">General · todos los campus</h3>
+            <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">General · todas las modalidades</h3>
             <div class="grid grid-cols-2 gap-3">
                 <x-input label="Desde" name="general.starts_on" type="date" wire:model="general.starts_on" data-testid="general-starts" />
                 <x-input label="Hasta" name="general.ends_on" type="date" wire:model="general.ends_on" data-testid="general-ends" />
@@ -32,35 +33,35 @@
             <x-button label="Quitar fechas" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="clearGeneral" spinner="clearGeneral" />
         </section>
 
-        <section class="space-y-3" data-testid="campus-section">
-            <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Por campus · ventana propia</h3>
+        <section class="space-y-3" data-testid="modality-section">
+            <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Por modalidad · ventana propia</h3>
 
-            @foreach ($campuses as $campus)
+            @foreach ($modalities as $modality)
                 <div
-                    wire:key="own-{{ $campus->id }}"
-                    @class(['space-y-3 rounded-box border p-3', 'border-info/45 bg-info/5' => isset($own[$campus->id]), 'border-base-300' => ! isset($own[$campus->id])])
-                    data-testid="campus-{{ $campus->code }}"
+                    wire:key="own-{{ $modality->id }}"
+                    @class(['space-y-3 rounded-box border p-3', 'border-info/45 bg-info/5' => isset($own[$modality->id]), 'border-base-300' => ! isset($own[$modality->id])])
+                    data-testid="modality-{{ $modality->code }}"
                 >
                     <div class="flex flex-wrap items-center gap-x-2.5 gap-y-2">
-                        <b class="text-base font-bold">{{ $campus->name }}</b>
-                        <span class="font-mono text-sm text-neutral">{{ $campus->code }}</span>
+                        <b class="text-base font-bold">{{ $modality->name }}</b>
+                        <span class="font-mono text-sm text-neutral">{{ $modality->code }}</span>
 
                         <span class="ms-auto">
-                            @if (isset($own[$campus->id]))
-                                <x-button label="Quitar ventana propia" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeCampusWindow('{{ $campus->id }}')" spinner="removeCampusWindow('{{ $campus->id }}')" data-testid="remove-{{ $campus->code }}" />
+                            @if (isset($own[$modality->id]))
+                                <x-button label="Quitar ventana propia" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeModalityWindow('{{ $modality->id }}')" spinner="removeModalityWindow('{{ $modality->id }}')" data-testid="remove-{{ $modality->code }}" />
                             @else
-                                <x-button label="Agregar ventana propia" icon="o-plus" class="btn-outline btn-sm" wire:click="addCampusWindow('{{ $campus->id }}')" spinner="addCampusWindow('{{ $campus->id }}')" data-testid="add-{{ $campus->code }}" />
+                                <x-button label="Agregar ventana propia" icon="o-plus" class="btn-outline btn-sm" wire:click="addModalityWindow('{{ $modality->id }}')" spinner="addModalityWindow('{{ $modality->id }}')" data-testid="add-{{ $modality->code }}" />
                             @endif
                         </span>
                     </div>
 
-                    @if (isset($own[$campus->id]))
+                    @if (isset($own[$modality->id]))
                         <div class="grid grid-cols-2 gap-3">
-                            <x-input label="Desde" name="own.{{ $campus->id }}.starts_on" type="date" wire:model="own.{{ $campus->id }}.starts_on" data-testid="own-{{ $campus->code }}-starts" />
-                            <x-input label="Hasta" name="own.{{ $campus->id }}.ends_on" type="date" wire:model="own.{{ $campus->id }}.ends_on" data-testid="own-{{ $campus->code }}-ends" />
+                            <x-input label="Desde" name="own.{{ $modality->id }}.starts_on" type="date" wire:model="own.{{ $modality->id }}.starts_on" data-testid="own-{{ $modality->code }}-starts" />
+                            <x-input label="Hasta" name="own.{{ $modality->id }}.ends_on" type="date" wire:model="own.{{ $modality->id }}.ends_on" data-testid="own-{{ $modality->code }}-ends" />
                         </div>
                     @else
-                        <p class="flex flex-wrap items-center justify-between gap-x-3 text-neutral" data-testid="general-preview-{{ $campus->code }}">
+                        <p class="flex flex-wrap items-center justify-between gap-x-3 text-neutral" data-testid="general-preview-{{ $modality->code }}">
                             {{ $editing['generalPreview'] !== null ? 'Usa las fechas generales' : ($editing['generalEmpty'] ? 'Sin fechas generales.' : 'Fechas generales incompletas.') }}
                             @if ($editing['generalPreview'] !== null)
                                 <span class="font-mono text-base-content">{{ $editing['generalPreview'] }}</span>

@@ -23,7 +23,8 @@ function seedCaptureScenario(bool $open = true): Term
     $term = Term::factory()->create(['code' => '20271']);
 
     if ($open) {
-        app(OpenTerm::class)->handle($term, Campus::factory()->create(['code' => 'C2']));
+        Campus::factory()->create(['code' => 'C2']);
+        app(OpenTerm::class)->handle($term, modalityOf('PRES'));
     }
 
     foreach (range(1, 200) as $n) {
