@@ -166,6 +166,22 @@ describe('adscripciones', function () {
             ->and(lastToastOf($page))->description->toContain('queda dado de baja y su cuenta se inhabilita');
     });
 
+    it('al jefe de proyecto docente la última adscripción se le ve deshabilitada con su motivo, y llamarla es 403 (confirmado)', function () {
+        $beto = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => '1000009', 'name' => 'Beto Solo']);
+        $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => Campus::factory()->create()->id, 'department_id' => $this->sc->id])->create();
+        $adscription = $beto->adscriptions()->sole();
+
+        teacherRecord($jpd, $beto)
+            ->assertSee('Es su último departamento: lo quita el jefe de departamento.')
+            ->call('confirmRemoveAdscription', $adscription->id)
+            ->assertForbidden();
+
+        expect($adscription->fresh()->trashed())->toBeFalse()
+            ->and($beto->fresh()->is_active)->toBeTrue();
+
+        teacherRecord($this->jefe, $beto)->call('confirmRemoveAdscription', $adscription->id)->assertSet('showRemoveAdscriptionModal', true);
+    });
+
     it('CV-S8: a quien ocupa un puesto solo lo quitan el admin o la Subdirección', function () {
         $this->ana->update(['user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ii->id])->create()->id]);
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();

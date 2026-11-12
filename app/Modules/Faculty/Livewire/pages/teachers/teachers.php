@@ -408,6 +408,7 @@ new #[Title('Docentes')] class extends Component
                     'reason' => match (true) {
                         $teacher->user_id !== null && $teacher->user_id === $context->user()?->getKey() => 'No te puedes quitar a ti mismo de un departamento.',
                         $teacher->user_id !== null && isset($staff[$teacher->user_id]) && ! $canDeactivate => 'Ocupa un puesto: lo quitan el administrador o la Subdirección.',
+                        $teacher->adscriptions->count() === 1 && ! $context->allows(FacultyPermission::TeacherDepartmentRemoveLast, Target::of(unit: $adscription->department_id)) => 'Es su último departamento: lo quita el jefe de departamento.',
                         default => null,
                     },
                 ];

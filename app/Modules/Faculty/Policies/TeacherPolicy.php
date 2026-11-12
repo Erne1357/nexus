@@ -121,18 +121,24 @@ final class TeacherPolicy
      * quitar la última adscripción da de baja al docente (CV8, confirmado el 12 de noviembre de 2026;
      * DischargeTeacherFromDepartment). A un docente cuyo usuario ocupa un puesto vigente o por empezar (un jefe, un
      * coordinador, la Subdirección…) solo lo quitan quienes dan de baja docentes, el admin y la Subdirección (CV-S8,
-     * confirmado el 12 de noviembre de 2026 para la baja desde Docentes). Gate busca la policy por el modelo, y
-     * TeacherDepartment no tiene una propia: se pregunta con `can('removeAdscription', [Teacher::class, $adscription])`.
+     * confirmado el 12 de noviembre de 2026 para la baja desde Docentes). La última adscripción solo la quitan el jefe de
+     * departamento, la Subdirección y el admin (`faculty.teacher_department.remove_last`); el jefe de proyecto docente,
+     * solo si al docente le queda otro departamento (confirmado el 12 de noviembre de 2026). Gate busca la policy por el
+     * modelo, y TeacherDepartment no tiene una propia: se pregunta con
+     * `can('removeAdscription', [Teacher::class, $adscription])`.
      */
     public function removeAdscription(User $user, TeacherDepartment $adscription): bool
     {
         $teacherUserId = $adscription->relationLoaded('teacher')
             ? $adscription->teacher?->user_id
             : Teacher::withTrashed()->whereKey($adscription->teacher_id)->value('user_id');
+        $scope = $this->actor($user);
 
-        return $this->actor($user)->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
+        return $scope->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
             && ! $this->isSelf($user, $teacherUserId)
-            && ! $this->staffOnlyForDeactivators($user, $teacherUserId);
+            && ! $this->staffOnlyForDeactivators($user, $teacherUserId)
+            && ($scope->allows(FacultyPermission::TeacherDepartmentRemoveLast, Target::of(unit: $adscription->department_id))
+                || TeacherDepartment::query()->where('teacher_id', $adscription->teacher_id)->whereKeyNot($adscription->getKey())->exists());
     }
 
     /**

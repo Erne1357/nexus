@@ -226,6 +226,7 @@ new #[Title('Ficha del docente')] class extends Component
                 : match (true) {
                     ! $context->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id)) => 'Solo quien administra ese departamento lo quita.',
                     $isSelf => 'No te puedes quitar a ti mismo de un departamento.',
+                    $adscriptionCount === 1 && ! $context->allows(FacultyPermission::TeacherDepartmentRemoveLast, Target::of(unit: $adscription->department_id)) => 'Es su último departamento: lo quita el jefe de departamento.',
                     default => 'Ocupa un puesto: lo quitan el administrador o la Subdirección.',
                 };
             $primaryReasons[$adscription->id] = Gate::allows('setPrimaryAdscription', [Teacher::class, $adscription])

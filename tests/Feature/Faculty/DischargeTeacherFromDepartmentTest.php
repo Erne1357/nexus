@@ -90,6 +90,16 @@ describe('quién da de baja y quién agrega', function () {
         'coordinador' => fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(21)])->create(),
     ]);
 
+    it('la última adscripción solo la quita el jefe de departamento; el jefe de proyecto docente, si le queda otro departamento (confirmado)', function () {
+        $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => Campus::factory()->create()->id, 'department_id' => $this->sc->id])->create();
+        $twoDepartments = Teacher::factory()->adscribedTo($this->ii)->adscribedTo($this->sc, primary: false)->create();
+
+        expect($jpd->can('removeAdscription', [Teacher::class, $twoDepartments->adscriptions()->where('department_id', $this->sc->id)->sole()]))->toBeTrue()
+            ->and($jpd->can('removeAdscription', [Teacher::class, $this->adscription]))->toBeFalse()
+            ->and($this->jefe->can('removeAdscription', [Teacher::class, $this->adscription]))->toBeTrue()
+            ->and(User::factory()->withRole(Role::Subdireccion)->create()->can('removeAdscription', [Teacher::class, $this->adscription]))->toBeTrue();
+    });
+
     it('nadie se da de baja a sí mismo', function () {
         $own = Teacher::factory()->adscribedTo($this->sc)->create(['user_id' => $this->jefe->id]);
 
