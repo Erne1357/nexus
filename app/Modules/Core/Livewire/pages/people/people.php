@@ -107,7 +107,7 @@ new #[Title('Personas y puestos')] class extends Component
             $this->appCampus === '' ? null : $this->appCampus,
             $this->appCurrent !== 'all',
         );
-        $described = $labels->describe($page->getCollection());
+        $described = $labels->describe($page->getCollection(), withCareerNames: true);
         $options = $people->scopeOptions(Role::Coordinador, null);
         $rows = [];
 

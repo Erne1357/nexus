@@ -21,9 +21,10 @@ final class AssignmentLabels
 
     /**
      * @param  iterable<RoleAssignment>  $assignments
+     * @param  bool  $withCareerNames  también el nombre de cada carrera (una consulta más), para las tablas
      * @return array<string, AssignmentLabel> por id del nombramiento
      */
-    public function describe(iterable $assignments): array
+    public function describe(iterable $assignments, bool $withCareerNames = false): array
     {
         $list = [];
 
@@ -35,7 +36,7 @@ final class AssignmentLabels
         $campuses = $this->idsOf($list, 'campus_id') === [] ? [] : Campus::withTrashed()->whereKey($this->idsOf($list, 'campus_id'))->pluck('name', 'id')->all();
         $modalities = $this->idsOf($list, 'modality_id') === [] ? [] : Modality::withTrashed()->whereKey($this->idsOf($list, 'modality_id'))->pluck('name', 'id')->all();
         $careers = $this->labels->careers($this->idsOf($list, 'career_id'));
-        $careerNames = $this->labels->careerNames($this->idsOf($list, 'career_id'));
+        $careerNames = $withCareerNames ? $this->labels->careerNames($this->idsOf($list, 'career_id')) : [];
 
         $described = [];
 
