@@ -191,6 +191,23 @@ it('AC-10: la bitácora registra el alta, los cambios y el bloque a nombre de qu
         ->and($dump)->not->toContain($hash);
 });
 
+it('AC-10: si una escritura falla, el error no lleva los valores de la consulta (el hash del NIP)', function () {
+    Student::factory()->create(['control_number' => '21110001']);
+    DB::unprepared(<<<'SQL'
+        create function students_test_reject_user() returns trigger language plpgsql as $$ begin raise exception 'rechazado'; end $$;
+        create trigger students_test_reject_user before insert on users for each row execute function students_test_reject_user();
+        SQL);
+
+    try {
+        syncStudentAccounts(['21110001' => '4821']);
+        $this->fail('Debió fallar');
+    } catch (RuntimeException $exception) {
+        expect($exception->getMessage())->toBe('No se pudo escribir la cuenta de un alumno (SQLSTATE P0001).')
+            ->and($exception->getPrevious())->toBeNull()
+            ->and((string) $exception)->not->toContain('$2y$')->not->toContain('4821');
+    }
+});
+
 it('AC-10: el bloque viaja cifrado en la cola: ni los números de control ni los NIP van en claro', function () {
     config(['queue.default' => 'database']);
 
