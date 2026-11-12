@@ -348,15 +348,17 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * Marca o desmarca un registro como revisado desde su fila (CV7).
+     * Marca (`$reviewed`) o desmarca un registro como revisado desde su fila (CV7). El estado que se quiere viene de la
+     * pantalla, no de leer la marca aquí: así un envío repetido o una pantalla vieja no la invierten (las dos Actions no
+     * hacen nada si ya está como se pide).
      */
-    public function toggleReviewed(string $id, MarkRecordsReviewed $markRecords, UnmarkRecordReviewed $unmarkRecord, CatalogContentsQuery $contents, CatalogRecordsQuery $records): void
+    public function setReviewed(string $id, bool $reviewed, MarkRecordsReviewed $markRecords, UnmarkRecordReviewed $unmarkRecord, CatalogContentsQuery $contents): void
     {
         $review = $this->currentReview();
         $this->authorize('mark', $review);
         $record = $contents->findOrFail($review, $id);
 
-        if ($records->reviewedIds($review, [$record->getKey()]) === []) {
+        if ($reviewed) {
             $markRecords->handle($review, [$record->getKey()], $this->user());
         } else {
             $unmarkRecord->handle($review, $record, $this->user());

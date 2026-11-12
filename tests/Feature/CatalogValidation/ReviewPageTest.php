@@ -796,16 +796,31 @@ describe('periodo anterior por revisión', function () {
 describe('marcas de revisado (CV7)', function () {
     it('CV7: el jefe marca y desmarca un registro desde su fila, y la revisión pasa a en revisión', function () {
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->assertSeeHtml("wire:click=\"toggleReviewed('{$this->subject->id}')\"")
-            ->call('toggleReviewed', $this->subject->id)
+            ->assertSeeHtml("wire:click=\"setReviewed('{$this->subject->id}', true)\"")
+            ->call('setReviewed', $this->subject->id, true)
             ->assertHasNoErrors();
 
         expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeTrue()
             ->and(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::InReview);
 
-        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('toggleReviewed', $this->subject->id)->assertHasNoErrors();
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->assertSeeHtml("wire:click=\"setReviewed('{$this->subject->id}', false)\"")->call('setReviewed', $this->subject->id, false)->assertHasNoErrors();
 
         expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeFalse();
+    });
+
+    it('CV7: un envío repetido o de una pantalla vieja no invierte la marca: pide el estado, no lo alterna', function () {
+        $page = reviewPage($this->jefe, ['catalogo' => 'subjects']);
+
+        $page->call('setReviewed', $this->subject->id, true)->call('setReviewed', $this->subject->id, true);
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('setReviewed', $this->subject->id, true);
+
+        expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->count())->toBe(1)
+            ->and(Activity::query()->where('event', 'reviewed')->count())->toBe(1);
+
+        $page->call('setReviewed', $this->subject->id, false)->call('setReviewed', $this->subject->id, false);
+
+        expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeFalse()
+            ->and(Activity::query()->where('event', 'unreviewed')->count())->toBe(1);
     });
 
     it('CV7: marca juntos los registros elegidos y limpia la selección', function () {
@@ -829,7 +844,7 @@ describe('marcas de revisado (CV7)', function () {
             ->set('selected', [$this->subject->id, $foreign->id])
             ->call('markSelected')
             ->assertHasErrors('record');
-        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('toggleReviewed', $foreign->id)->assertNotFound();
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('setReviewed', $foreign->id, true)->assertNotFound();
 
         expect(CatalogReviewMark::count())->toBe(0);
     });
@@ -869,8 +884,8 @@ describe('marcas de revisado (CV7)', function () {
         reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
 
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->assertDontSeeHtml("wire:click=\"toggleReviewed('{$this->subject->id}')\"")
-            ->call('toggleReviewed', $this->subject->id)
+            ->assertDontSeeHtml("wire:click=\"setReviewed('{$this->subject->id}'")
+            ->call('setReviewed', $this->subject->id, true)
             ->assertHasErrors('status');
     });
 
@@ -883,7 +898,7 @@ describe('marcas de revisado (CV7)', function () {
 
         $page = reviewPage($this->jefe, ['catalogo' => 'subjects']);
         $this->actingAs($user);
-        $page->call('toggleReviewed', $this->subject->id)->assertForbidden();
+        $page->call('setReviewed', $this->subject->id, true)->assertForbidden();
 
         $page = reviewPage($this->jefe, ['catalogo' => 'subjects'])->set('selected', [$this->subject->id]);
         $this->actingAs($user);
@@ -896,7 +911,7 @@ describe('marcas de revisado (CV7)', function () {
         $this->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => false]]);
         $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['department_id' => $this->sis->id]);
 
-        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('toggleReviewed', $room->id)->assertHasNoErrors();
+        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('setReviewed', $room->id, true)->assertHasNoErrors();
 
         expect(CatalogReviewMark::query()->where('record_id', $room->id)->exists())->toBeTrue();
     });
