@@ -138,3 +138,51 @@ it('rechaza un perfil con valores inválidos', function (array $settings) {
     'día como texto' => [['days' => ['1']]],
     'días que no son lista' => [['days' => 'L-V']],
 ]);
+
+describe('covering (MS11, supuesto por confirmar)', function () {
+    it('la ventana cubre lunes a sábado de 7:00 a 21:00 con dos modalidades activas (MS11)', function () {
+        $window = ModalityProfile::covering([
+            ModalityProfile::fromArray(['days' => [1, 2, 3, 4, 5], 'day_start' => '07:00', 'day_end' => '21:00', 'block_minutes' => 60]),
+            ModalityProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '20:00', 'block_minutes' => 60]),
+        ]);
+
+        expect($window->days)->toBe([1, 2, 3, 4, 5, 6])
+            ->and($window->dayStart)->toBe('07:00')
+            ->and($window->dayEnd)->toBe('21:00')
+            ->and($window->blockMinutes)->toBe(60);
+    });
+
+    it('une los días sin repetir y toma el bloque más corto si divide la ventana', function () {
+        $window = ModalityProfile::covering([
+            ModalityProfile::fromArray(['days' => [1, 3], 'block_minutes' => 60]),
+            ModalityProfile::fromArray(['days' => [3, 6], 'block_minutes' => 30]),
+        ]);
+
+        expect($window->days)->toBe([1, 3, 6])
+            ->and($window->blockMinutes)->toBe(30);
+    });
+
+    it('si el bloque más corto no divide la ventana usa el máximo común divisor de los bloques y la ventana', function () {
+        $window = ModalityProfile::covering([
+            ModalityProfile::fromArray(['day_start' => '08:00', 'day_end' => '20:00', 'block_minutes' => 90]),
+            ModalityProfile::fromArray(['day_start' => '07:00', 'day_end' => '14:00', 'block_minutes' => 70]),
+        ]);
+
+        // Ventana 7:00 a 20:00 = 780 min; 70 no la divide; mcd(90, 70, 780) = 10.
+        expect($window->dayStart)->toBe('07:00')
+            ->and($window->dayEnd)->toBe('20:00')
+            ->and($window->blockMinutes)->toBe(10);
+    });
+
+    it('sin perfiles es el presencial por omisión', function () {
+        expect(ModalityProfile::covering([])->toArray())->toBe(ModalityProfile::DEFAULTS);
+    });
+
+    it('con un solo perfil conserva su ventana y toma lo demás de los valores por omisión', function () {
+        $window = ModalityProfile::covering([ModalityProfile::fromArray(['staffing_mode' => 'central', 'allow_external_teachers' => true, 'days' => [2, 4]])]);
+
+        expect($window->days)->toBe([2, 4])
+            ->and($window->allowExternalTeachers)->toBeFalse()
+            ->and($window->staffingMode->value)->toBe('department');
+    });
+});

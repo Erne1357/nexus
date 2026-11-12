@@ -95,6 +95,57 @@ final readonly class ModalityProfile
     }
 
     /**
+     * La ventana que cubre a varios perfiles, para lo que es del docente y no de una modalidad: su disponibilidad
+     * (MS11, supuesto por confirmar). Los días son la unión ordenada; el inicio, el más temprano; el fin, el más tarde;
+     * y el bloque, el más corto de los perfiles si divide exacto la ventana. Si no la divide, el máximo común divisor
+     * de todos los bloques y la ventana (supuesto por confirmar), que sí la divide y deja cada bloque de cada modalidad
+     * como un múltiplo de la cuadrícula. Lo demás (salones, bloques fijos, asignación, docentes externos y visto bueno)
+     * no importa a la disponibilidad y sale de DEFAULTS. Sin perfiles es el presencial por omisión.
+     *
+     * @param  iterable<ModalityProfile>  $profiles
+     */
+    public static function covering(iterable $profiles): self
+    {
+        $days = [];
+        $blocks = [];
+        $start = null;
+        $end = null;
+
+        foreach ($profiles as $profile) {
+            $days = [...$days, ...$profile->days];
+            $blocks[] = $profile->blockMinutes;
+            $start = $start === null || self::minutesOf($profile->dayStart) < self::minutesOf($start) ? $profile->dayStart : $start;
+            $end = $end === null || self::minutesOf($profile->dayEnd) > self::minutesOf($end) ? $profile->dayEnd : $end;
+        }
+
+        if ($blocks === []) {
+            return self::fromArray([]);
+        }
+
+        $window = self::minutesOf($end) - self::minutesOf($start);
+        $block = min($blocks);
+
+        if ($window % $block !== 0) {
+            $block = array_reduce($blocks, fn (int $carry, int $minutes): int => self::gcd($carry, $minutes), $window);
+        }
+
+        $days = array_values(array_unique($days));
+        sort($days);
+
+        return self::fromArray([
+            'days' => $days,
+            'day_start' => $start,
+            'day_end' => $end,
+            'block_minutes' => $block,
+        ]);
+    }
+
+    private static function gcd(int $a, int $b): int
+    {
+        return $b === 0 ? $a : self::gcd($b, $a % $b);
+    }
+
+    /**
      * El arreglo que se guarda en `modalities.settings`.
      *
      * @return array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool}

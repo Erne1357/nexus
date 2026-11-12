@@ -10,6 +10,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\AddExternalLoad;
@@ -67,7 +68,7 @@ it('el perfil que declara el jefe de su departamento inicia la revisión de doce
 
 it('la disponibilidad y las horas fuera del ITCJ del jefe también la inician', function () {
     $this->actingAs($this->jefe);
-    app(SetTeacherAvailability::class)->handle($this->teacher, $this->term, [['day' => 1, 'starts_at' => '09:00', 'kind' => AvailabilityKind::Unavailable]], $this->campus->profile);
+    app(SetTeacherAvailability::class)->handle($this->teacher, $this->term, [['day' => 1, 'starts_at' => '09:00', 'kind' => AvailabilityKind::Unavailable]], ModalityProfile::fromArray([]));
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
 
     CatalogReview::query()->update(['status' => ReviewStatus::Pending]);

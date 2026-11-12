@@ -3,7 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Enums\AvailabilityKind;
@@ -17,7 +17,7 @@ use Spatie\Activitylog\Models\Activity;
 /*
 | Editor de disponibilidad (`/faculty/teachers/{teacher}/availability`, faculty::pages.teacher-availability; DESIGN.md,
 | "Cuadrícula día x hora"): página hija de la ficha con la cuadrícula del periodo activo. La cuadrícula usa el perfil
-| del campus activo o, sin él, el presencial por omisión (S12, supuesto por confirmar). Sin periodo activo pide
+| de la ventana que cubre a las modalidades activas (MS11, supuesto por confirmar). Sin periodo activo pide
 | elegirlo. Lo abren y guardan quienes administran al docente (TeacherPolicy::manageAvailability); cada método vuelve
 | a autorizar. «Copiar del periodo anterior» trae la del semestre anterior, sin verano, sin guardarla.
 */
@@ -89,26 +89,23 @@ it('el enlace de regreso lleva a la pestaña Disponibilidad de la ficha', functi
         ->assertSeeHtml('href="'.route('faculty.teachers.show', ['teacher' => $this->ana->id, 'tab' => 'disponibilidad']).'"');
 });
 
-describe('perfil (S12)', function () {
-    it('usa el del campus activo', function () {
-        $ead = Campus::factory()->create(['code' => 'EAD', 'name' => 'Educación a Distancia', 'settings' => ['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '14:00']]);
-        Campus::factory()->create(['code' => 'C2']);
-        session([Actor::ACTIVE_CAMPUS => $ead->id]);
-
+describe('ventana (MS11)', function () {
+    it('con solo Presencial activa es la de hoy', function () {
         availabilityEditor($this->admin, $this->ana)
-            ->assertSee('Horario de Educación a Distancia')
-            ->assertSee('lunes a sábado, 8:00 a 14:00')
-            ->assertSee('Sábado')
-            ->assertDontSee('20:00');
-    });
-
-    it('sin campus activo usa el presencial por omisión', function () {
-        Campus::factory()->count(2)->create();
-
-        availabilityEditor($this->admin, $this->ana)
-            ->assertSee('Horario presencial por omisión')
             ->assertSee('lunes a viernes, 7:00 a 21:00')
             ->assertDontSee('Sábado');
+    });
+
+    it('cubre a las modalidades activas', function () {
+        Modality::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '22:00']]);
+
+        availabilityEditor($this->admin, $this->ana)
+            ->assertSee('lunes a sábado, 7:00 a 22:00')
+            ->assertSee('Sábado');
+    });
+
+    it('no necesita campus: un usuario sin campus la abre', function () {
+        availabilityEditor($this->admin, $this->ana)->assertSee('lunes a viernes, 7:00 a 21:00');
     });
 });
 
@@ -125,19 +122,15 @@ describe('guardar', function () {
             ->and(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Disponibilidad guardada', 'description' => 'Ene-Jun 2027: 2 h no disponibles y 1 h preferidas.']);
     });
 
-    it('guarda con el perfil del campus activo', function () {
-        $ead = Campus::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
-        Campus::factory()->create();
-        session([Actor::ACTIVE_CAMPUS => $ead->id]);
+    it('guarda un sábado cuando una modalidad activa lo cubre', function () {
+        Modality::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
 
         availabilityEditor($this->admin, $this->ana)->call('save', [['day' => 6, 'starts_at' => '08:00', 'kind' => 'unavailable']]);
 
         expect(savedAvailability($this->ana, $this->term))->toBe(['6 08:00-09:00 unavailable']);
     });
 
-    it('sin campus activo rechaza un sábado, que no está en el perfil por omisión', function () {
-        Campus::factory()->count(2)->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
-
+    it('rechaza un sábado con solo Presencial activa, que no está en su ventana', function () {
         $page = availabilityEditor($this->admin, $this->ana)->call('save', [['day' => 6, 'starts_at' => '09:00', 'kind' => 'unavailable']]);
 
         expect(savedAvailability($this->ana, $this->term))->toBe([])

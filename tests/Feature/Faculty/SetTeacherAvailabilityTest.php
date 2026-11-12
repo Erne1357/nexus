@@ -1,6 +1,6 @@
 <?php
 
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Actions\SetTeacherAvailability;
 use App\Modules\Faculty\Enums\AvailabilityKind;
@@ -22,20 +22,20 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->teacher = Teacher::factory()->create(['rfc' => '1000001']);
     $this->term = Term::factory()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
-    $this->profile = CampusProfile::fromArray([]);
+    $this->profile = ModalityProfile::fromArray([]);
     $this->activityBase = (int) Activity::max('id');
 });
 
 /**
  * @param  list<array{0: int, 1: string, 2?: string}>  $cells  día, hora y tipo (`unavailable` si falta)
  */
-function setAvailability(Teacher $teacher, Term $term, array $cells, ?CampusProfile $profile = null): void
+function setAvailability(Teacher $teacher, Term $term, array $cells, ?ModalityProfile $profile = null): void
 {
     app(SetTeacherAvailability::class)->handle($teacher, $term, array_map(fn (array $cell): array => [
         'day' => $cell[0],
         'starts_at' => $cell[1],
         'kind' => $cell[2] ?? 'unavailable',
-    ], $cells), $profile ?? CampusProfile::fromArray([]));
+    ], $cells), $profile ?? ModalityProfile::fromArray([]));
 }
 
 /**
@@ -139,7 +139,7 @@ it('no toca la disponibilidad del docente en otro periodo ni la de otro docente'
 });
 
 it('conserva lo de los días y horas que no están en el perfil (S12)', function () {
-    $ead = CampusProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '07:00', 'day_end' => '22:00']);
+    $ead = ModalityProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '07:00', 'day_end' => '22:00']);
     setAvailability($this->teacher, $this->term, [[6, '08:00'], [6, '09:00'], [1, '20:00'], [1, '21:00'], [1, '07:00']], $ead);
 
     setAvailability($this->teacher, $this->term, [[1, '20:00', 'preferred']]);
@@ -152,7 +152,7 @@ it('conserva lo de los días y horas que no están en el perfil (S12)', function
 });
 
 it('vuelve a unir lo que se conserva fuera del horario con lo que no cambió, así guardar lo mismo no escribe', function () {
-    $ead = CampusProfile::fromArray(['day_start' => '07:00', 'day_end' => '22:00']);
+    $ead = ModalityProfile::fromArray(['day_start' => '07:00', 'day_end' => '22:00']);
     setAvailability($this->teacher, $this->term, [[1, '20:00'], [1, '21:00']], $ead);
     $row = TeacherAvailability::query()->sole();
 
@@ -292,7 +292,7 @@ describe('rechaza', function () {
 });
 
 it('con bloques de 30 minutos guarda medias horas', function () {
-    $profile = CampusProfile::fromArray(['block_minutes' => 30]);
+    $profile = ModalityProfile::fromArray(['block_minutes' => 30]);
 
     setAvailability($this->teacher, $this->term, [[1, '07:00'], [1, '07:30'], [1, '09:30', 'preferred']], $profile);
 

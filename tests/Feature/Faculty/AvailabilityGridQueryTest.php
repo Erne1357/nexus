@@ -1,7 +1,7 @@
 <?php
 
-use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Enums\AvailabilityKind;
 use App\Modules\Faculty\Models\Teacher;
@@ -11,7 +11,7 @@ use App\Modules\Faculty\Queries\AvailabilityGridQuery;
 
 /*
 | La cuadrícula día × hora de la disponibilidad de un docente en un periodo (S12, supuesto por confirmar): los
-| días, el horario y el bloque salen del perfil del campus activo o, sin él, del perfil presencial por omisión.
+| días, el horario y el bloque salen de la ventana que cubre a las modalidades activas (MS11).
 | Cada celda dice su tipo; el resumen cuenta las horas disponibles, preferidas y no disponibles contra las horas
 | base del periodo. «Copiar del periodo anterior» toma el semestre anterior, sin contar verano (confirmado el
 | 30 de octubre de 2026).
@@ -43,7 +43,7 @@ function gridKinds(array $grid): array
 }
 
 it('arma la cuadrícula del perfil presencial: lunes a viernes, de 7:00 a 21:00 en bloques de una hora', function () {
-    $grid = $this->grids->for($this->teacher, $this->term, CampusProfile::fromArray([]));
+    $grid = $this->grids->for($this->teacher, $this->term, ModalityProfile::fromArray([]));
 
     expect(array_column($grid['days'], 'name'))->toBe(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'])
         ->and(array_column($grid['days'], 'short'))->toBe(['Lun', 'Mar', 'Mié', 'Jue', 'Vie'])
@@ -56,7 +56,7 @@ it('arma la cuadrícula del perfil presencial: lunes a viernes, de 7:00 a 21:00 
 });
 
 it('usa los días, el horario y el bloque del perfil que recibe', function () {
-    $profile = CampusProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '14:00', 'block_minutes' => 30]);
+    $profile = ModalityProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '14:00', 'block_minutes' => 30]);
 
     $grid = $this->grids->for($this->teacher, $this->term, $profile);
 
@@ -72,7 +72,7 @@ it('marca cada celda con su tipo y el texto del rango en la segunda celda', func
     availabilityRow($this->teacher, $this->term, 1, '09:00', '13:00', AvailabilityKind::Preferred);
     availabilityRow($this->teacher, $this->term, 5, '14:00', '21:00');
 
-    $grid = $this->grids->for($this->teacher, $this->term, CampusProfile::fromArray([]));
+    $grid = $this->grids->for($this->teacher, $this->term, ModalityProfile::fromArray([]));
 
     expect(gridKinds($grid))->toBe([
         'u.pppp........',
@@ -96,7 +96,7 @@ it('da los rangos de cada día y el resumen de horas contra las horas base del p
     TeacherPosition::factory()->for($this->teacher)->asignatura(10)->create();
     TeacherPosition::factory()->for($this->teacher)->medioTiempo()->create(['valid_to' => '2026-12-31']);
 
-    $grid = $this->grids->for($this->teacher, $this->term, CampusProfile::fromArray([]));
+    $grid = $this->grids->for($this->teacher, $this->term, ModalityProfile::fromArray([]));
 
     expect($grid['ranges'][0])->toBe([
         ['starts_at' => '07:00', 'ends_at' => '08:00', 'kind' => AvailabilityKind::Unavailable, 'label' => '7:00–8:00'],
@@ -110,7 +110,7 @@ it('da los rangos de cada día y el resumen de horas contra las horas base del p
 it('cuenta medias horas con bloques de 30 minutos', function () {
     availabilityRow($this->teacher, $this->term, 1, '07:00', '07:30');
 
-    $grid = $this->grids->for($this->teacher, $this->term, CampusProfile::fromArray(['block_minutes' => 30]));
+    $grid = $this->grids->for($this->teacher, $this->term, ModalityProfile::fromArray(['block_minutes' => 30]));
 
     expect($grid['summary'])->toMatchArray(['available' => 69.5, 'unavailable' => 0.5, 'total' => 70])
         ->and($grid['days'][0]['available'])->toBe(13.5);
@@ -120,7 +120,7 @@ it('un bloque que solo en parte cae en un rango toma su tipo, y el no disponible
     availabilityRow($this->teacher, $this->term, 1, '07:30', '08:15', AvailabilityKind::Preferred);
     availabilityRow($this->teacher, $this->term, 1, '08:15', '08:30');
 
-    $grid = $this->grids->for($this->teacher, $this->term, CampusProfile::fromArray([]));
+    $grid = $this->grids->for($this->teacher, $this->term, ModalityProfile::fromArray([]));
 
     expect(gridKinds($grid)[0])->toBe('pu............');
 });
@@ -131,22 +131,32 @@ it('no cuenta lo borrado, lo de otro periodo ni lo que queda fuera del perfil', 
     availabilityRow($this->teacher, $this->term, 6, '08:00', '10:00');
     availabilityRow($this->teacher, $this->term, 3, '21:00', '22:00');
 
-    $grid = $this->grids->for($this->teacher, $this->term, CampusProfile::fromArray([]));
+    $grid = $this->grids->for($this->teacher, $this->term, ModalityProfile::fromArray([]));
 
     expect(gridKinds($grid))->toBe(array_fill(0, 5, '..............'))
         ->and($grid['summary']['unavailable'])->toBe(0);
 });
 
 describe('perfil (S12)', function () {
-    it('es el del campus activo', function () {
-        $ead = Campus::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '14:00']]);
-
-        expect($this->grids->profile($ead)->days)->toBe([1, 2, 3, 4, 5, 6])
-            ->and($this->grids->profile($ead)->dayStart)->toBe('08:00');
+    it('con solo Presencial activa la cuadrícula es la de hoy', function () {
+        expect($this->grids->profile()->toArray())->toBe(ModalityProfile::DEFAULTS);
     });
 
-    it('sin campus activo es el presencial por omisión', function () {
-        expect($this->grids->profile(null)->toArray())->toBe(CampusProfile::DEFAULTS);
+    it('la ventana cubre lunes a sábado de 7:00 a 21:00 con dos modalidades activas (MS11)', function () {
+        Modality::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '20:00']]);
+
+        $profile = $this->grids->profile();
+
+        expect($profile->days)->toBe([1, 2, 3, 4, 5, 6])
+            ->and($profile->dayStart)->toBe('07:00')
+            ->and($profile->dayEnd)->toBe('21:00');
+    });
+
+    it('no cuenta las modalidades inactivas ni las borradas', function () {
+        Modality::factory()->inactive()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
+        Modality::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]])->delete();
+
+        expect($this->grids->profile()->toArray())->toBe(ModalityProfile::DEFAULTS);
     });
 });
 
@@ -172,8 +182,8 @@ describe('periodo anterior', function () {
         availabilityRow($this->teacher, $this->term, 1, '07:00', '08:00');
         availabilityRow($this->teacher, $agoDic, 1, '07:00', '08:00')->delete();
 
-        expect($this->grids->hasAvailability($this->teacher, $this->term, CampusProfile::fromArray([])))->toBeTrue()
-            ->and($this->grids->hasAvailability($this->teacher, $agoDic, CampusProfile::fromArray([])))->toBeFalse();
+        expect($this->grids->hasAvailability($this->teacher, $this->term, ModalityProfile::fromArray([])))->toBeTrue()
+            ->and($this->grids->hasAvailability($this->teacher, $agoDic, ModalityProfile::fromArray([])))->toBeFalse();
     });
 
     it('solo cuenta la disponibilidad que cae en los días y el horario del perfil', function () {
@@ -181,8 +191,8 @@ describe('periodo anterior', function () {
         availabilityRow($this->teacher, $this->term, 1, '21:00', '22:00');
         availabilityRow($this->teacher, $this->term, 2, '05:00', '07:00');
 
-        expect($this->grids->hasAvailability($this->teacher, $this->term, CampusProfile::fromArray([])))->toBeFalse()
-            ->and($this->grids->hasAvailability($this->teacher, $this->term, CampusProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6]])))->toBeTrue()
-            ->and($this->grids->hasAvailability($this->teacher, $this->term, CampusProfile::fromArray(['day_end' => '22:00'])))->toBeTrue();
+        expect($this->grids->hasAvailability($this->teacher, $this->term, ModalityProfile::fromArray([])))->toBeFalse()
+            ->and($this->grids->hasAvailability($this->teacher, $this->term, ModalityProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6]])))->toBeTrue()
+            ->and($this->grids->hasAvailability($this->teacher, $this->term, ModalityProfile::fromArray(['day_end' => '22:00'])))->toBeTrue();
     });
 });

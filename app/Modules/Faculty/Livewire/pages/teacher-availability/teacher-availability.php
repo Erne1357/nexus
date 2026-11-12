@@ -23,9 +23,9 @@ use Mary\Traits\Toast;
  * «Copiar de <periodo>» trae la del semestre anterior como punto de partida, sin guardarla, y currentKinds() da lo
  * guardado cuando el navegador restaura la página de su caché.
  *
- * El periodo y el campus son los activos al abrir la página y se quedan fijos (`#[Locked]`): lo que se guarda es lo
- * que se vio aunque la credencial cambie en otra pestaña. El perfil de la cuadrícula es el de ese campus o, sin él, el
- * presencial por omisión (S12, supuesto por confirmar). Sin periodo activo pide elegirlo.
+ * El periodo es el activo al abrir la página y se queda fijo (`#[Locked]`): lo que se guarda es lo que se vio
+ * aunque la credencial cambie en otra pestaña. La cuadrícula es la ventana que cubre a las modalidades activas, sin
+ * campus (MS11, supuesto por confirmar). Sin periodo activo pide elegirlo.
  *
  * Lo abren y guardan quienes administran al docente (TeacherPolicy::manageAvailability); autoriza en mount(), en
  * with() y en cada método. save() y copyPrevious() no vuelven a pintar la página (la cuadrícula es de Alpine): dan
@@ -43,17 +43,12 @@ new #[Title('Disponibilidad')] class extends Component
     #[Locked]
     public ?string $termId = null;
 
-    /** El campus activo al abrir la página, cuyo perfil arma la cuadrícula; null si no había. */
-    #[Locked]
-    public ?string $campusId = null;
-
     public function mount(string $teacher, TeacherQuery $teachers, Actor $context): void
     {
         $model = $teachers->findOrFail($teacher);
         $this->authorize('manageAvailability', $model);
         $this->teacherId = $model->id;
         $this->termId = $context->activeTerm()?->id;
-        $this->campusId = $context->activeCampus()?->id;
     }
 
     /**
@@ -65,15 +60,13 @@ new #[Title('Disponibilidad')] class extends Component
         $this->authorize('manageAvailability', $teacher);
 
         $term = $this->term($terms);
-        $campus = $grids->campus($this->campusId);
-        $profile = $grids->profile($campus);
+        $profile = $grids->profile();
         $grid = $term === null ? null : $grids->for($teacher, $term, $profile);
         $previous = $term === null ? null : $grids->previousTerm($term);
 
         return [
             'teacher' => $teacher,
             'term' => $term,
-            'campus' => $campus,
             'grid' => $grid,
             'blocks' => $profile->blockMinutes === 60 ? 'una hora' : "{$profile->blockMinutes} minutos",
             'previous' => $previous,
@@ -105,7 +98,7 @@ new #[Title('Disponibilidad')] class extends Component
             return false;
         }
 
-        $profile = $grids->profile($grids->campus($this->campusId));
+        $profile = $grids->profile();
 
         try {
             $marked = $setAvailability->handle($teacher, $term, $cells, $profile);
@@ -136,7 +129,7 @@ new #[Title('Disponibilidad')] class extends Component
         $this->authorize('manageAvailability', $teacher);
         $term = $this->term($terms);
         $previous = $term === null ? null : $grids->previousTerm($term);
-        $profile = $grids->profile($grids->campus($this->campusId));
+        $profile = $grids->profile();
 
         if ($previous === null || ! $grids->hasAvailability($teacher, $previous, $profile)) {
             $this->error('No se copió la disponibilidad', $previous === null ? 'No hay un semestre anterior.' : e("{$previous->name} no tiene disponibilidad en este horario."));
@@ -163,7 +156,7 @@ new #[Title('Disponibilidad')] class extends Component
         $this->authorize('manageAvailability', $teacher);
         $term = $this->term($terms);
 
-        return $term === null ? null : $this->editorConfig($grids->for($teacher, $term, $grids->profile($grids->campus($this->campusId))))['kinds'];
+        return $term === null ? null : $this->editorConfig($grids->for($teacher, $term, $grids->profile()))['kinds'];
     }
 
     private function term(TermQuery $terms): ?Term
