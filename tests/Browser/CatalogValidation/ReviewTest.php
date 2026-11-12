@@ -1,70 +1,112 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
-use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Models\Teacher;
 
 /*
-| Validación de catálogos en el navegador: el jefe de departamento entra por el menú, abre Materias, corrige una
-| materia en el drawer (eso la marca como revisada, CV7), le agrega una observación, marca la otra con su interruptor,
-| vuelve al tablero por su pestaña y valida, que solo se activa con todo revisado.
+| Validación de catálogos en el navegador, opción A «Tabla con columna Revisión» (12 de noviembre de 2026): el jefe de
+| departamento entra por el menú, mueve un salón a un edificio de otro campus desde su drawer (el campus sigue al
+| edificio y queda revisado, CV-S10, CV7); en Docentes escribe en la búsqueda sin que los atajos corran, marca registros
+| con el teclado (J, Espacio, R), captura un correo institucional en el recuadro de la fila (AC-06), da de baja a un
+| docente con su confirmación (CV8), marca los que faltan juntos con «Elegir los N por revisar» y, con todo revisado,
+| valida el catálogo desde «Revisaste los N docentes».
 */
 
-it('el jefe abre Materias, corrige una materia, la observa, regresa y valida', function () {
+it('el jefe revisa salones y docentes registro por registro, con teclado y en lote, y valida', function () {
     $term = Term::factory()->current()->create();
-    $campus = Campus::factory()->create();
+    $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $c2->id]);
     app(CreateTermReviews::class)->handle($term, Catalog::cases());
-    Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Programación Orientada a Objetos', 'department_id' => $sis->id]);
-    Subject::factory()->create(['code' => 'SCD-1028', 'name' => 'Redes de Computadoras', 'department_id' => $sis->id]);
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['username' => 'jefe']);
 
-    visit('/login')
+    $room = Room::factory()->for(Building::factory()->create(['campus_id' => $c2->id, 'code' => 'E2', 'name' => 'Edificio 2']))->create(['code' => 'Y-104', 'name' => 'Aula Y-104', 'department_id' => $sis->id]);
+    $north = Building::factory()->create(['campus_id' => $c1->id, 'code' => 'LC', 'name' => 'Laboratorio de cómputo']);
+
+    foreach (['AAAA800101AA1' => 'Adriana Beltrán', 'BBBB800101BB1' => 'Beatriz Olivas', 'CCCC800101CC1' => 'Carlos Mendoza', 'DDDD800101DD1' => 'Diana Trejo', 'FFFF800101FF1' => 'Francisco Lerma'] as $rfc => $name) {
+        Teacher::factory()->adscribedTo($sis)->create(['rfc' => $rfc, 'name' => $name, 'institutional_email' => strtolower(substr($rfc, 0, 4)).'@cdjuarez.tecnm.mx']);
+    }
+    $leaving = Teacher::factory()->adscribedTo($sis)->create(['rfc' => 'EEEE800101EE1', 'name' => 'Elena Saucedo', 'institutional_email' => 'eeee@cdjuarez.tecnm.mx']);
+    $withoutEmail = Teacher::factory()->adscribedTo($sis)->create(['rfc' => 'ZZZZ800101ZZ1', 'name' => 'Daniel Esparza']);
+
+    $page = visit('/login')
         ->fill('username', 'jefe')
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
         ->click('#nexus-menu a[data-label="Validar catálogos"]')
         ->assertPathIs('/catalog-validation')
-        ->assertSee('0 de 5')
-        ->click('@open-subjects')
-        ->assertSee('Programación Orientada a Objetos')
-        ->click('@edit-SCD-1027')
-        ->fill('name', 'Programación Orientada a Objetos I')
-        ->press('Guardar')
-        ->waitForText('Materia actualizada')
-        ->click('@edit-SCD-1027')
-        ->select('flag', 'missing_data')
-        ->fill('comment', 'Faltan las horas de práctica.')
-        ->click('@add-flag')
-        ->waitForText('Observación agregada')
-        ->assertSee('Faltan las horas de práctica.')
-        ->click('[aria-label="Cerrar el panel"]')
-        ->assertSee('1 de 2 revisados')
-        ->assertSee('Falta 1 registro por revisar.')
-        ->click('@reviewed-SCD-1028')
-        ->waitForText('2 de 2 revisados')
-        ->click('@tab-board')
-        ->assertSee('1 observación abierta')
-        ->click('@validate-subjects')
+        ->click('@tab-rooms')
+        ->waitForText('0 de 1 revisados')
+        ->click('@edit-Y-104')
+        ->select('#room-building', $north->id)
+        ->waitForText('con el edificio.')
+        ->assertSeeIn('@room-campus', 'Campus I')
+        ->click('@save-record')
+        ->waitForText('Salón actualizado')
+        ->assertSee('Revisaste el único salón.');
+
+    expect($room->fresh())->building_id->toBe($north->id)->campus_id->toBe($c1->id);
+
+    $page->click('@tab-teachers')
+        ->waitForText('0 de 7 revisados')
+        ->type('input[aria-label="Buscar registros"]', 'jr r')
+        ->assertScript("document.activeElement.getAttribute('aria-label') === 'Buscar registros'")
+        ->assertDontSee('Marcar 1 como revisado')
+        ->clear('input[aria-label="Buscar registros"]')
+        ->waitForText('Esparza')
+        ->assertSee('0 de 7 revisados');
+
+    $page->script('document.activeElement.blur()');
+
+    $page->keys('@review-table', 'j')
+        ->keys('tr[data-row]:focus', ' ')
+        ->keys('tr[data-row]:focus', 'j')
+        ->keys('tr[data-row]:focus', ' ')
+        ->assertSee('Marcar 2 como revisados')
+        ->keys('tr[data-row]:focus', 'r')
+        ->waitForText('2 de 7 revisados')
+        ->assertScript("document.activeElement.getAttribute('aria-label').startsWith('DDDD800101DD1')")
+        ->keys('tr[data-row]:focus', 'r')
+        ->waitForText('3 de 7 revisados')
+        ->click('@add-email-ZZZZ800101ZZ1')
+        ->fill('#review-email-input', 'daniel.esparza')
+        ->click('@save-email')
+        ->waitForText('Correo institucional guardado')
+        ->assertSee('4 de 7 revisados')
+        ->click('@discharge-EEEE800101EE1')
+        ->assertSeeIn('#nexus-confirm', '¿Dar de baja a Elena Saucedo?')
+        ->assertSeeIn('#nexus-confirm', 'No tiene otro departamento')
+        ->click('#nexus-confirm [data-testid="confirm-accept"]')
+        ->waitForText('Docente dado de baja')
+        ->assertSee('4 de 6 revisados')
+        ->click('@select-FFFF800101FF1')
+        ->click('@choose-all-pending')
+        ->assertSee('Marcar 2 como revisados')
+        ->click('@mark-selected')
+        ->waitForText('Revisaste los 6 docentes.')
+        ->click('@validate-teachers-done')
         ->click('@confirm-accept')
         ->waitForText('Revisión validada')
-        ->assertSee('1 de 5')
         ->assertNoJavaScriptErrors();
 
-    $review = CatalogReview::query()->where('catalog', 'subjects')->sole();
+    $review = CatalogReview::query()->where('catalog', Catalog::Teachers)->sole();
 
-    expect(Subject::where('code', 'SCD-1027')->sole()->name)->toBe('Programación Orientada a Objetos I')
-        ->and($review->status)->toBe(ReviewStatus::Validated)
-        ->and(CatalogReviewFlag::count())->toBe(1);
+    expect($review->status)->toBe(ReviewStatus::Validated)
+        ->and(CatalogReviewMark::query()->where('catalog_review_id', $review->id)->count())->toBe(6)
+        ->and($withoutEmail->fresh()->institutional_email)->toBe('daniel.esparza@cdjuarez.tecnm.mx')
+        ->and($leaving->fresh()->is_active)->toBeFalse();
 });

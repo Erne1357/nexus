@@ -1,5 +1,6 @@
 {{--
-    Los contadores de una revisión (CatalogReviewQuery::summary): activos e inactivos, observaciones abiertas y las
+    Los contadores de una revisión (CatalogReviewQuery::summary): activos e inactivos (en un renglón de cifras; solo los
+    activos se revisan, CV7), observaciones abiertas y las
     altas y las bajas contra la foto de la validación anterior (CV3), solo como cifras: «+7 altas · −6 bajas», en texto
     neutro lo que es cero (decidido por el usuario el 2 de noviembre de 2026). Una revisión sin foto anterior lo dice en
     texto neutro: «Primer periodo en Nexus» si ningún catálogo la tiene (`$firstTerm`; en el tablero lo dice la tarjeta
@@ -13,16 +14,11 @@
 @php($figures = ['added' => ['sign' => '+', 'one' => 'alta', 'many' => 'altas', 'none' => 'Sin altas', 'call' => "\$set('change', '".($change === 'added' ? '' : 'added')."')", 'title' => 'Mostrar solo las altas', 'testid' => 'filter-added'], 'removed' => ['sign' => '−', 'one' => 'baja', 'many' => 'bajas', 'none' => 'Sin bajas', 'call' => "\$set('showRemoved', true)", 'title' => 'Ver bajas', 'testid' => 'view-removed']])
 @php($counts = $summary['added'] === null ? null : ['added' => count($summary['added']), 'removed' => count($summary['removed'])])
 
-<div @class(['flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm' => $inline, 'space-y-3' => ! $inline]) @if ($inline) data-testid="review-counters" @endif>
-    @if ($inline)
-        <span><b class="font-mono font-semibold tabular-nums">{{ $summary['active'] }}</b> activos</span>
-        <span class="text-neutral"><b class="font-mono font-semibold tabular-nums">{{ $summary['inactive'] }}</b> inactivos</span>
-    @else
-        <dl class="grid grid-cols-2 gap-3 border-y border-base-300 py-3">
-            <div class="flex flex-col-reverse"><dt class="text-sm text-neutral">Activos</dt><dd class="font-mono text-2xl font-semibold leading-tight">{{ $summary['active'] }}</dd></div>
-            <div class="flex flex-col-reverse"><dt class="text-sm text-neutral">Inactivos</dt><dd class="font-mono text-2xl font-semibold leading-tight">{{ $summary['inactive'] }}</dd></div>
-        </dl>
-    @endif
+<div @class(['flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm' => $inline, 'space-y-2 border-t border-base-300 pt-3' => ! $inline]) @if ($inline) data-testid="review-counters" @endif>
+    <p class="flex flex-wrap gap-x-4 text-sm">
+        <span><b class="font-mono font-semibold tabular-nums">{{ $summary['active'] }}</b> {{ $summary['active'] === 1 ? 'activo' : 'activos' }}</span>
+        <span class="text-neutral"><b class="font-mono font-semibold tabular-nums">{{ $summary['inactive'] }}</b> {{ $summary['inactive'] === 1 ? 'inactivo' : 'inactivos' }}</span>
+    </p>
 
     @if ($counts === null)
         @if ($inline || ! $firstTerm)
