@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Database\Factories\AcademicLoadFactory;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Carga académica de un departamento en un campus y un periodo: la unidad de cierre (ADR-0008). Su estado
  * cambia solo por las transiciones de la tarea 2.3.
  */
-#[Fillable(['term_id', 'campus_id', 'department_id', 'status', 'closed_by', 'closed_at', 'approved_by', 'approved_at', 'published_by', 'published_at', 'current_version'])]
+#[Fillable(['term_id', 'campus_id', 'modality_id', 'department_id', 'status', 'closed_by', 'closed_at', 'approved_by', 'approved_at', 'published_by', 'published_at', 'current_version'])]
 #[UseFactory(AcademicLoadFactory::class)]
 class AcademicLoad extends Model
 {
@@ -54,6 +55,16 @@ class AcademicLoad extends Model
     public function campus(): BelongsTo
     {
         return $this->belongsTo(Campus::class);
+    }
+
+    /**
+     * Su modalidad del catálogo (ADR-0025): ampliación de la ronda 2, la de su campus al crearla; aún no la lee nadie.
+     *
+     * @return BelongsTo<Modality, $this>
+     */
+    public function modality(): BelongsTo
+    {
+        return $this->belongsTo(Modality::class);
     }
 
     /**

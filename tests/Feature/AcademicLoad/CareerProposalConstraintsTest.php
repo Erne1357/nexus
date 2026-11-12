@@ -23,9 +23,11 @@ use Illuminate\Support\Facades\DB;
 */
 
 it('la propuesta nace en borrador y conoce su periodo, campus y carrera', function () {
+    $campus = Campus::factory()->create();
     $proposal = CareerProposal::query()->create([
         'term_id' => Term::factory()->create()->id,
-        'campus_id' => Campus::factory()->create()->id,
+        'campus_id' => $campus->id,
+        'modality_id' => $campus->modality_id,
         'career_id' => Career::factory()->create()->id,
     ])->fresh();
 

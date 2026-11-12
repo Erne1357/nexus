@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Models;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Database\Factories\ProposalItemFactory;
+use App\Modules\Core\Models\Campus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -17,9 +18,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Una materia de la propuesta de carrera: el plan y el semestre de la retícula de donde se tomó, los elegibles
  * al armarla y lo que corrige el coordinador (alumnos esperados, grupos solicitados y notas). Su departamento
- * es el de la materia.
+ * es el de la materia. `campus_id` es el campus de su propuesta (ampliación de la ronda 2, ADR-0025; aún no lo lee
+ * nadie): al contraer, la propuesta es por carrera y modalidad y lleva una fila por materia y campus (M6).
  */
-#[Fillable(['career_proposal_id', 'subject_id', 'study_plan_id', 'semester', 'eligible_students', 'expected_students', 'requested_groups', 'notes'])]
+#[Fillable(['career_proposal_id', 'campus_id', 'subject_id', 'study_plan_id', 'semester', 'eligible_students', 'expected_students', 'requested_groups', 'notes'])]
 #[UseFactory(ProposalItemFactory::class)]
 class ProposalItem extends Model
 {
@@ -45,6 +47,16 @@ class ProposalItem extends Model
     public function proposal(): BelongsTo
     {
         return $this->belongsTo(CareerProposal::class, 'career_proposal_id');
+    }
+
+    /**
+     * El campus de la fila: hoy, el de su propuesta (ampliación de la ronda 2, ADR-0025).
+     *
+     * @return BelongsTo<Campus, $this>
+     */
+    public function campus(): BelongsTo
+    {
+        return $this->belongsTo(Campus::class);
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Database\Factories\InterdepartmentalAgreementFactor
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
@@ -27,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * de Scheduling, sin relación aquí porque Scheduling está a la derecha en el mapa.
  */
 #[Fillable([
-    'term_id', 'campus_id', 'kind', 'from_department_id', 'to_department_id', 'group_id', 'room_id', 'day', 'starts_at',
+    'term_id', 'campus_id', 'modality_id', 'kind', 'from_department_id', 'to_department_id', 'group_id', 'room_id', 'day', 'starts_at',
     'ends_at', 'career_id', 'max_seats', 'status', 'comment', 'requested_by', 'decided_by', 'decided_at', 'cancelled_by', 'cancelled_at',
 ])]
 #[UseFactory(InterdepartmentalAgreementFactory::class)]
@@ -76,6 +77,16 @@ class InterdepartmentalAgreement extends Model
     public function campus(): BelongsTo
     {
         return $this->belongsTo(Campus::class);
+    }
+
+    /**
+     * Su modalidad del catálogo (ADR-0025): ampliación de la ronda 2, la de su campus al pedirlo; aún no la lee nadie.
+     *
+     * @return BelongsTo<Modality, $this>
+     */
+    public function modality(): BelongsTo
+    {
+        return $this->belongsTo(Modality::class);
     }
 
     /**
