@@ -2,7 +2,8 @@
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
-use App\Modules\Core\Navigation\MenuEntry;
+use App\Modules\Core\Enums\NavigationGroup;
+use App\Modules\Core\Navigation\MenuGrid;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Navigation\RecentPages;
@@ -10,30 +11,29 @@ use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 /**
- * El menú que se transforma (DESIGN.md, "El menú que se transforma"): las entradas del registro
- * Navigation que el usuario puede ver, agrupadas por área. Cerrado muestra la franja de iconos de
- * área y las entradas del área actual; abierto, el buscador y todas las áreas en columnas. Abrir,
+ * El menú que se transforma (DESIGN.md, "El menú que se transforma"): Inicio y las entradas del registro
+ * Navigation que el usuario puede ver, por área y, dentro de un área, por grupo (MN-01). Cerrado, la
+ * franja de iconos (Inicio y un icono por área) se queda fija y la columna de al lado muestra el área
+ * actual y se desplaza sola; abierto, el buscador y todas las áreas en la retícula de MenuGrid. Abrir,
  * cerrar, buscar y animar lo hace el componente Alpine `nexusShell` (resources/js/app.js).
  *
- * El área actual es la de la entrada de la pantalla (Navigation::forRoute) si el usuario la ve; si
- * no, la primera que ve. La entrada activa es esa misma entrada.
+ * Inicio no es una entrada del registro: es el primer icono de la franja, lo ve cualquier usuario activo y
+ * en Inicio lleva aria-current. El área actual es la de la entrada de la pantalla (Navigation::forRoute)
+ * si el usuario la ve; si no, la primera que ve. Su columna se muestra cerrada y su icono se marca, salvo
+ * en Inicio, donde la columna muestra la primera área sin marcarla. La entrada activa es la de la pantalla.
  *
- * El icono de cada área es un enlace: el del área actual lleva a su primera entrada (la principal);
- * el de las demás, a la última página que el usuario visitó de esa área (RecentPages) o, si no ha
- * visitado ninguna, a su primera entrada. Al pintarse en una página completa, el menú anota esa
- * página como la última de su área.
+ * El icono de cada área es un enlace: el del área actual lleva a su primera entrada (la principal); el de
+ * las demás, a la última página que el usuario visitó de esa área (RecentPages) o, si no ha visitado
+ * ninguna, a su primera entrada. Al pintarse en una página completa, el menú anota esa página como la
+ * última de su área.
  *
- * Cada elemento lleva su lugar en la retícula del menú abierto: `--c` es el número de área, que en
- * escritorio es también su columna y, cerrado, su renglón en la franja de iconos; `--i`, el de la
- * entrada dentro del área. En tableta el menú abierto tiene tres columnas (`--col-t`) y las áreas de
- * la cuarta en adelante bajan a `--base-t`, un renglón debajo de la más larga de las tres primeras.
+ * Cada icono, nombre, encabezado de grupo y entrada lleva su lugar en la retícula del menú abierto:
+ * `--oc`, `--or` y `--os` (columna, renglón y columnas que abarca) con cinco columnas, y `--oc3`, `--or3`
+ * y `--os3` con las tres de la tableta.
  */
 new class extends Component
 {
-    /**
-     * Renglón del encabezado de cada área en el menú abierto: los dos primeros son del buscador.
-     */
-    private const int FIRST_AREA_ROW = 3;
+    private const int DESKTOP_COLUMNS = 5;
 
     private const int TABLET_COLUMNS = 3;
 
@@ -54,60 +54,86 @@ new class extends Component
     }
 
     /**
-     * @return array{areas: list<array{area: NavigationArea, current: bool, href: string, style: string, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string}>}>}
+     * @return array{home: array{href: string, current: bool}, areas: list<array{area: NavigationArea, current: bool, marked: bool, headings: bool, href: string, iconStyle: string, nameStyle: string, groups: list<array{group: ?NavigationGroup, style: ?string, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string}>}>}>}
      */
     public function with(Navigation $navigation, Actor $context, RecentPages $recentPages): array
     {
-        $groups = $navigation->visibleByArea($context);
+        $menu = $navigation->visibleByArea($context);
         $routeItem = $this->route === null ? null : $navigation->forRoute($this->route);
-        $visibleAreas = array_column($groups, 'area');
+        $onHome = $this->route === 'home';
+        $visibleAreas = array_column($menu, 'area');
         $currentArea = in_array($routeItem?->area, $visibleAreas, true) ? $routeItem->area : ($visibleAreas[0] ?? null);
 
-        // Provisional (tarea 1.20): la retícula de la opción B reemplaza este aplanado.
-        foreach ($groups as $index => $group) {
-            $groups[$index]['items'] = array_merge(...array_map(
-                fn (array $inner): array => array_map(fn (MenuEntry $entry): NavigationItem => $entry->item, $inner['entries']),
-                $group['groups'],
-            ));
-        }
+        $shape = array_map(fn (array $area): array => [
+            'headings' => $area['headings'],
+            'groups' => array_map(
+                fn (array $group): array => ['heading' => $area['headings'] && $group['group'] !== null, 'entries' => count($group['entries'])],
+                $area['groups'],
+            ),
+        ], $menu);
 
-        $longestOnTop = max([0, ...array_map(fn (array $group): int => count($group['items']), array_slice($groups, 0, self::TABLET_COLUMNS))]);
-        $tabletWrapRow = self::FIRST_AREA_ROW + $longestOnTop + 2;
+        $wide = MenuGrid::place($shape, self::DESKTOP_COLUMNS);
+        $narrow = MenuGrid::place($shape, self::TABLET_COLUMNS);
 
         $areas = [];
 
-        foreach ($groups as $position => $group) {
-            $number = sprintf('--c: %d', $position + 1);
-            $tablet = sprintf(
-                '--col-t: %d; --base-t: %d',
-                $position % self::TABLET_COLUMNS + 1,
-                $position < self::TABLET_COLUMNS ? self::FIRST_AREA_ROW : $tabletWrapRow,
-            );
+        foreach ($menu as $index => $area) {
+            $groups = [];
 
-            $entries = [];
+            foreach ($area['groups'] as $position => $group) {
+                $entries = [];
 
-            foreach ($group['items'] as $index => $item) {
-                $entries[] = [
-                    'item' => $item,
-                    'active' => $item === $routeItem,
-                    // La entrada es la página misma, o el listado de la pantalla hija en que se está.
-                    'page' => $item === $routeItem && $item->route === $this->route,
-                    'style' => sprintf('%s; --i: %d; %s', $number, $index + 1, $tablet),
+                foreach ($group['entries'] as $order => $entry) {
+                    $entries[] = [
+                        'item' => $entry->item,
+                        'active' => $entry->item === $routeItem,
+                        // La entrada es la página misma, o el listado de la pantalla hija en que se está.
+                        'page' => $entry->item === $routeItem && $entry->item->route === $this->route,
+                        'style' => $this->placeOf($wide[$index]['groups'][$position]['entries'][$order], $narrow[$index]['groups'][$position]['entries'][$order]),
+                    ];
+                }
+
+                $heading = $wide[$index]['groups'][$position]['heading'];
+
+                $groups[] = [
+                    'group' => $heading === null ? null : $group['group'],
+                    'style' => $heading === null ? null : $this->placeOf($heading, $narrow[$index]['groups'][$position]['heading']),
+                    'entries' => $entries,
                 ];
             }
 
-            $current = $group['area'] === $currentArea;
-            $main = route($group['items'][0]->route);
+            $current = $area['area'] === $currentArea;
+            $main = route($area['groups'][0]['entries'][0]->item->route);
 
             $areas[] = [
-                'area' => $group['area'],
+                'area' => $area['area'],
                 'current' => $current,
-                'href' => $current ? $main : ($recentPages->last($group['area']) ?? $main),
-                'style' => "{$number}; {$tablet}",
-                'entries' => $entries,
+                'marked' => $current && ! $onHome,
+                'headings' => $area['headings'],
+                'href' => $current ? $main : ($recentPages->last($area['area']) ?? $main),
+                'iconStyle' => $this->placeOf($wide[$index]['icon'], $narrow[$index]['icon']),
+                'nameStyle' => $this->placeOf($wide[$index]['name'], $narrow[$index]['name']),
+                'groups' => $groups,
             ];
         }
 
-        return ['areas' => $areas];
+        return [
+            'home' => ['href' => route('home'), 'current' => $onHome],
+            'areas' => $areas,
+        ];
+    }
+
+    /**
+     * Las variables de un elemento con su lugar en la retícula de cinco columnas y en la de tres.
+     *
+     * @param  array{column: int, row: int, span: int}  $wide
+     * @param  array{column: int, row: int, span: int}  $narrow
+     */
+    private function placeOf(array $wide, array $narrow): string
+    {
+        return sprintf(
+            '--oc: %d; --or: %d; --os: %d; --oc3: %d; --or3: %d; --os3: %d',
+            $wide['column'], $wide['row'], $wide['span'], $narrow['column'], $narrow['row'], $narrow['span'],
+        );
     }
 };

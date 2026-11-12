@@ -6,7 +6,7 @@ use App\Modules\Core\Models\User;
 
 /*
 | CRUD de Planes de estudio en el navegador: el admin entra por el menú, da de alta un plan y lo
-| edita desde la UI. Planes es del área Académico, la del inicio.
+| edita desde la UI. Planes es de Administración › Catálogos: se llega abriendo el menú con la liebre.
 */
 
 beforeEach(function () {
@@ -21,6 +21,7 @@ it('el admin da de alta un plan y luego lo edita desde la UI', function () {
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Planes de estudio"]')
         ->assertPathIs('/academic/plans')
         ->assertSee('Sistemas 2010')

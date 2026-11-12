@@ -7,10 +7,10 @@ use App\Modules\Core\Models\User;
 
 /*
 | Layout en el navegador. DemoCatalog (tests/Fixtures/Modules) agrega "Saludo", para coordinadores,
-| en Servicios escolares, y "Elementos", solo para el admin, en Recursos humanos, a "Inicio" de Core
-| (Académico). Cerrado, el menú muestra el área de la pantalla; las demás se ven al abrirlo con la
-| liebre. Los iconos de área no abren el menú: llevan a la última página que visitaste del área. El
-| campus, el periodo y el tema están en la tarjeta de la credencial.
+| en Servicios escolares, y "Elementos", solo para el admin, en Recursos humanos. Inicio es el primer
+| icono de la franja. Cerrado, el menú muestra el área de la pantalla (en Inicio, la primera); las demás
+| se ven al abrirlo con la liebre. Los iconos de área no abren el menú: llevan a la última página que
+| visitaste del área. El campus, el periodo y el tema están en la tarjeta de la credencial.
 */
 
 beforeEach(function () {
@@ -39,7 +39,7 @@ function signInFromBrowser(string $username)
 
 it('navegación muestra solo lo permitido por rol', function () {
     $page = signInFromBrowser('19110001')
-        ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->assertVisible('#nexus-menu [data-menu-home]')
         ->assertMissing('a[data-label="Saludo"]')
         ->click('@hare')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Saludo')
@@ -54,7 +54,7 @@ it('navegación muestra solo lo permitido por rol', function () {
         ->assertPathIs('/login');
 
     signInFromBrowser('admin')
-        ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->assertVisible('#nexus-menu [data-menu-home]')
         ->click('@hare')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Saludo')
         ->assertSeeIn('[aria-label="Navegación principal"]', 'Elementos')
@@ -67,10 +67,11 @@ it('el icono de otra área lleva a la última página que visitaste de ella, con
 
     $page->navigate('/campus?search=Campus')
         ->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
-        ->click('[data-menu-area="datos"] [data-menu-flip="icon"]')
-        ->assertPathIs('/imports')
+        ->assertPresent('[data-menu-area="administracion"] [data-menu-flip="icon"][data-area-current]')
+        ->click('[data-menu-area="servicios_escolares"] [data-menu-flip="icon"]')
+        ->assertPathIs('/students')
         ->assertScript('document.body.dataset.menu', 'closed')
-        ->click('[data-menu-area="academico"] [data-menu-flip="icon"]')
+        ->click('[data-menu-area="administracion"] [data-menu-flip="icon"]')
         ->assertPathIs('/campus')
         ->assertQueryStringHas('search', 'Campus')
         ->assertScript('document.body.dataset.menu', 'closed')
@@ -79,7 +80,21 @@ it('el icono de otra área lleva a la última página que visitaste de ella, con
         ->assertNoJavaScriptErrors();
 });
 
-it('el menú no brinca: lo que espera para moverse sale de su lugar inicial, y al cerrar todo va a la vez', function () {
+it('Inicio, el primer icono de la franja, lleva al inicio; ahí la columna muestra la primera área sin marcar su icono', function () {
+    signInFromBrowser('admin')
+        ->navigate('/campus')
+        ->assertVisible('a[data-label="Campus"]')
+        ->click('#nexus-menu [data-menu-home]')
+        ->assertPathIs('/')
+        ->assertAttribute('#nexus-menu [data-menu-home]', 'aria-current', 'page')
+        ->assertNotPresent('#nexus-menu [data-area-current]')
+        ->assertVisible('a[data-label="Validar catálogos"]')
+        ->assertMissing('a[data-label="Campus"]')
+        ->assertScript('document.querySelector("#nexus-menu [data-menu-home]").getBoundingClientRect().top < document.querySelector(\'[data-menu-area="academico"] [data-menu-flip="icon"]\').getBoundingClientRect().top')
+        ->assertNoJavaScriptErrors();
+});
+
+it('el menú no brinca: lo que espera para moverse sale de su lugar inicial, la cascada no pasa de 400 ms y al cerrar todo va a la vez', function () {
     $page = signInFromBrowser('admin');
 
     // Las animaciones del menú y de la copia que se desvanece al cerrar. Una con retraso y sin fill
@@ -97,6 +112,7 @@ it('el menú no brinca: lo que espera para moverse sale de su lugar inicial, y a
 
                         return delay > 0 && fill !== 'backwards' && fill !== 'both';
                     }).length,
+                    longestWait: Math.max(0, ...ofMenu.map((animation) => animation.effect.getTiming().delay)),
                     ghost: ofMenu.some((animation) => animation.effect.target.closest('[data-menu-ghost]') !== null),
                 };
             };
@@ -109,7 +125,8 @@ it('el menú no brinca: lo que espera para moverse sale de su lugar inicial, y a
 
     $closing = $page->script('(() => { Alpine.$data(document.body).closeMenu(); return { closedAtOnce: document.body.dataset.menu === "closed", ...menuMotion() }; })()');
 
-    expect($opening)->count->toBeGreaterThan(0)->jumps->toBe(0)
+    // La cascada de abrir no espera más de 400 ms, aunque el admin vea todo el menú.
+    expect($opening)->count->toBeGreaterThan(0)->jumps->toBe(0)->longestWait->toBeLessThanOrEqual(400)->toBeGreaterThan(0)
         ->and($closing)->closedAtOnce->toBeTrue()->ghost->toBeTrue()->jumps->toBe(0);
 
     $page->assertScript('document.querySelector("[data-menu-ghost]") === null')
