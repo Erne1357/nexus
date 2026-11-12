@@ -10,6 +10,7 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
@@ -191,6 +192,21 @@ describe('recordar a todos', function () {
 });
 
 describe('conteos', function () {
+    it('CV7: cada catálogo sin validar dice cuántos registros van revisados, también la mini insignia de Salones', function () {
+        $subject = Subject::factory()->create(['department_id' => $this->sis->id]);
+        Subject::factory()->create(['department_id' => $this->sis->id]);
+        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Subjects)->sole();
+        CatalogReviewMark::factory()->for($review, 'review')->on($subject)->create();
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['department_id' => $this->sis->id]);
+
+        progressPage()
+            ->assertSeeHtml('1/2<span class="sr-only"> revisados</span>')
+            ->assertSee('Campus II: Pendiente · 0 de 1 revisados')
+            ->assertSeeText(', pendiente, 0 de 1 revisados');
+
+        expect($room->department_id)->toBe($this->sis->id);
+    });
+
     it('cuenta las validadas y en revisión del periodo activo, y las observaciones abiertas', function () {
         CatalogReview::query()->where('department_id', $this->sis->id)->whereNull('campus_id')->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
         CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);

@@ -62,6 +62,7 @@
 
             @include('catalog-validation::review.who', ['review' => $review])
             @include('catalog-validation::review.counters', ['summary' => $card['summary'], 'firstTerm' => $firstTerm])
+            @include('catalog-validation::review.reviewed-count', ['card' => $card])
 
             @if ($card['readiness'] !== null)
                 @include('catalog-validation::review.readiness', ['counts' => $card['readiness'], 'term' => $term, 'department' => $department])
@@ -74,6 +75,9 @@
             @foreach ($card['reopenVetoes'] as $veto)
                 <p class="relative z-10 text-xs text-neutral" data-testid="reopen-veto-{{ $review->catalog->value }}">{{ $veto }}</p>
             @endforeach
+            @if ($card['canValidate'] && $card['validateReason'] !== null && $review->status !== \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated)
+                <p class="relative z-10 text-xs text-neutral" data-testid="validate-reason-{{ $review->catalog->value }}">{{ $card['validateReason'] }}</p>
+            @endif
         </article>
     @endforeach
 </div>

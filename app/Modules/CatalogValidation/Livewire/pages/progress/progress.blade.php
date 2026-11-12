@@ -107,12 +107,12 @@
                                         @include('catalog-validation::progress.who', ['row' => $row, 'campuses' => $campuses])
                                     </td>
                                     @foreach ($generalColumns as $column)
-                                        <td class="px-2 py-2.5" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']]])</td>
+                                        <td class="px-2 py-2.5" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']]])</td>
                                     @endforeach
                                     @if ($roomColumns !== [])
                                         <td class="px-2 py-2.5"><div class="flex gap-1">
                                             @foreach ($roomColumns as $column)
-                                                <span data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'roomCampus' => $column['campus']])</span>
+                                                <span data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']], 'roomCampus' => $column['campus']])</span>
                                             @endforeach
                                         </div></td>
                                     @endif
@@ -166,7 +166,7 @@
                                 <dl class="grid grid-cols-[7.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
                                     @foreach ($row['pending_columns'] as $column)
                                         <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $column['catalog']->label() }}@if ($column['campus']) <span class="font-mono normal-case tracking-normal">{{ $column['campus']->code }}</span>@endif</dt>
-                                        <dd>@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'showDate' => true])</dd>
+                                        <dd>@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']], 'showDate' => true])</dd>
                                     @endforeach
                                 </dl>
                             @endif

@@ -29,7 +29,10 @@ use Spatie\Activitylog\Models\Activity;
  */
 final class ValidationProgressQuery
 {
-    public function __construct(private readonly RecipientsQuery $recipients) {}
+    public function __construct(
+        private readonly RecipientsQuery $recipients,
+        private readonly CatalogContentsQuery $contents,
+    ) {}
 
     /**
      * Los campus donde el periodo está abierto, activos y sin borrar, por código.
@@ -51,7 +54,8 @@ final class ValidationProgressQuery
      * `columns`: Docentes, Materias, Planes y Carreras, y una de Salones por campus que usa salones; `general_columns` y
      * `room_columns` las traen ya separadas (la pantalla pinta Salones en una sola columna con una insignia por campus). `rows`: cada
      * departamento activo, con sus revisiones por columna (nula si falta), cuántas lleva validadas del total, sus
-     * pendientes y en revisión, las observaciones abiertas, el jefe vigente, el estado de su carga por campus
+     * pendientes y en revisión, cuántos registros lleva revisados de cuántos en cada una (`reviewed`, nulo si falta; CV7),
+     * las observaciones abiertas, el jefe vigente, el estado de su carga por campus
      * (evento LoadStatusesRequested) y el último recordatorio en los campus del alcance. El jefe sale de lo mismo que
      * recibe el aviso (RecipientsQuery::holders: permiso de validar la revisión sobre el departamento, usuario activo), `heads` y `head` (el primero), y de
      * ahí `remind_blocked_reason`, el motivo por el que «Recordar» no aplica (nada pendiente o sin jefe), nulo si
@@ -95,6 +99,8 @@ final class ValidationProgressQuery
             ->get()
             ->keyBy(fn (CatalogReview $review): string => $review->department_id.'|'.($review->campus_id === null ? $review->catalog->value : 'rooms:'.$review->campus_id));
 
+        $reviewed = $this->contents->progressOf($reviews->values());
+
         $flags = CatalogReviewFlag::query()
             ->join('catalog_reviews', 'catalog_reviews.id', '=', 'catalog_review_flags.review_id')
             ->where('catalog_reviews.term_id', $term->getKey())
@@ -115,7 +121,7 @@ final class ValidationProgressQuery
 
         $reminders = $this->lastReminders($term, $departments->modelKeys(), $campuses->pluck('code')->all());
 
-        $rows = $departments->map(function (Department $department) use ($columns, $reviews, $flags, $heads, $campuses, $statuses, $reminders): array {
+        $rows = $departments->map(function (Department $department) use ($columns, $reviews, $reviewed, $flags, $heads, $campuses, $statuses, $reminders): array {
             $cells = [];
 
             foreach ($columns as $column) {
@@ -131,6 +137,7 @@ final class ValidationProgressQuery
                 'heads' => $heads->get($department->getKey()),
                 'head' => $heads->get($department->getKey())->first(),
                 'cells' => $cells,
+                'reviewed' => array_map(fn (?CatalogReview $review): ?array => $review === null ? null : $reviewed[$review->getKey()], $cells),
                 'validated' => $validated,
                 'in_review' => $inReview,
                 'pending' => $total - $validated - $inReview,

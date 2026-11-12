@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Facilities\Models\Building;
@@ -129,4 +130,55 @@ it('busca un registro de la revisión por su id; uno ajeno o que no es uuid no e
     expect($query->findOrFail($review, $own->id)->is($own))->toBeTrue()
         ->and(fn () => $query->findOrFail($review, $foreign->id))->toThrow(ModelNotFoundException::class)
         ->and(fn () => $query->findOrFail($review, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
+});
+
+describe('cuántos van revisados (CV7)', function () {
+    it('cuenta los registros de la revisión y los que tienen marca, sin las marcas de los que ya no están', function () {
+        $review = contentsReview(Catalog::Subjects, $this->department);
+        $marked = Subject::factory()->create(['department_id' => $this->department->id]);
+        Subject::factory()->inactive()->create(['department_id' => $this->department->id]);
+        $gone = Subject::factory()->create(['department_id' => $this->department->id]);
+        CatalogReviewMark::factory()->for($review, 'review')->on($marked)->create();
+        CatalogReviewMark::factory()->for($review, 'review')->on($gone)->create();
+        $gone->delete();
+
+        $query = app(CatalogContentsQuery::class);
+
+        expect($query->progress($review))->toBe(['reviewed' => 1, 'total' => 2])
+            ->and($query->unreviewedCount($review))->toBe(1);
+    });
+
+    it('cuenta varias revisiones de cada catálogo a la vez, cada una con su departamento y su campus', function () {
+        $campus = Campus::factory()->create();
+        $teachers = contentsReview(Catalog::Teachers, $this->department);
+        $otherTeachers = contentsReview(Catalog::Teachers, $this->other);
+        $plans = contentsReview(Catalog::StudyPlans, $this->department);
+        $rooms = contentsReview(Catalog::Rooms, $this->department, $campus);
+        $teacher = Teacher::factory()->adscribedTo($this->department)->adscribedTo($this->other, primary: false)->create();
+        Teacher::factory()->adscribedTo($this->department)->create();
+        $plan = StudyPlan::factory()->for(Career::factory()->create(['department_id' => $this->department->id]))->create();
+        $room = roomIn($campus, ['department_id' => $this->department->id]);
+        roomIn(Campus::factory()->create(), ['department_id' => $this->department->id]);
+        CatalogReviewMark::factory()->for($teachers, 'review')->on($teacher)->create();
+        CatalogReviewMark::factory()->for($plans, 'review')->on($plan)->create();
+        CatalogReviewMark::factory()->for($rooms, 'review')->on($room)->create();
+
+        expect(app(CatalogContentsQuery::class)->progressOf(collect([$teachers, $otherTeachers, $plans, $rooms])))->toBe([
+            $teachers->id => ['reviewed' => 1, 'total' => 2],
+            $otherTeachers->id => ['reviewed' => 0, 'total' => 1],
+            $plans->id => ['reviewed' => 1, 'total' => 1],
+            $rooms->id => ['reviewed' => 1, 'total' => 1],
+        ]);
+    });
+
+    it('dice si todos los ids son de la revisión', function () {
+        $review = contentsReview(Catalog::Careers, $this->department);
+        $own = Career::factory()->create(['department_id' => $this->department->id]);
+        $foreign = Career::factory()->create(['department_id' => $this->other->id]);
+        $query = app(CatalogContentsQuery::class);
+
+        expect($query->containsAll($review, [$own->id]))->toBeTrue()
+            ->and($query->containsAll($review, [$own->id, $foreign->id]))->toBeFalse()
+            ->and($query->containsAll($review, ['no-es-uuid']))->toBeFalse();
+    });
 });

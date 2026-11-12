@@ -91,6 +91,16 @@ class CatalogReview extends Model
     }
 
     /**
+     * Los registros que el jefe ya marcó como revisados (CV7). Solo cuentan los que siguen en la revisión.
+     *
+     * @return HasMany<CatalogReviewMark, $this>
+     */
+    public function marks(): HasMany
+    {
+        return $this->hasMany(CatalogReviewMark::class);
+    }
+
+    /**
      * «Materias de SIS» o «Salones de SIS en C2», para la bitácora.
      *
      * @return Attribute<string, never>

@@ -9,6 +9,7 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Enums\Role;
@@ -18,6 +19,7 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Support\Collection;
 
 /*
@@ -222,4 +224,18 @@ it('entrega por renglón las columnas que aún no están validadas, para el celu
     $sis = collect($board['rows'])->first(fn (array $row) => $row['department']->is($this->sis));
 
     expect(array_column($sis['pending_columns'], 'key'))->toBe(['subjects', 'study_plans', 'careers', 'rooms:'.$this->c1->id, 'rooms:'.$this->c2->id]);
+});
+
+it('CV7: dice por celda cuántos registros van revisados de cuántos, y nulo si falta la revisión', function () {
+    CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Careers)->delete();
+    $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Teachers)->sole();
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+    Teacher::factory()->adscribedTo($this->sis)->create();
+    CatalogReviewMark::factory()->for($review, 'review')->on($teacher)->create();
+
+    $sis = collect(($this->progress)()['rows'])->firstWhere('department.code', 'SIS');
+
+    expect($sis['reviewed']['teachers'])->toBe(['reviewed' => 1, 'total' => 2])
+        ->and($sis['reviewed']['subjects'])->toBe(['reviewed' => 0, 'total' => 0])
+        ->and($sis['reviewed']['careers'])->toBeNull();
 });

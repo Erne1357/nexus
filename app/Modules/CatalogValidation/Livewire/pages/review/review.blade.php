@@ -37,7 +37,7 @@
     </div>
     @endif
 
-    @foreach (['status', 'record'] as $key)
+    @foreach (['status', 'record', 'records'] as $key)
         @error($key)
             <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft mb-4 text-sm" :title="$message" data-testid="review-error" />
         @enderror
@@ -69,6 +69,7 @@
                 })
                 <a wire:key="tab-{{ $tabCatalog->value }}" role="tab" href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $tabCatalog->value]) }}" wire:click.prevent="$set('catalog', '{{ $tabCatalog->value }}')" aria-selected="{{ $current !== null && $current['review']->catalog === $tabCatalog ? 'true' : 'false' }}" data-testid="tab-{{ $tabCatalog->value }}" @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $current !== null && $current['review']->catalog === $tabCatalog])>
                     {{ $tabCatalog->label() }}
+                    <span class="font-mono text-xs font-normal text-neutral tabular-nums" title="Revisados" data-testid="tab-reviewed-{{ $tabCatalog->value }}">{{ $tab['reviewed']['reviewed'] }}/{{ $tab['reviewed']['total'] }}<span class="sr-only"> revisados</span></span>
                     <x-icon :name="$tabIcon" :class="'h-4 w-4 '.$tabTone" aria-hidden="true" />
                     <span class="sr-only">{{ $tab['status']->label() }}</span>
                 </a>

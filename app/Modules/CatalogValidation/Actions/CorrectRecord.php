@@ -28,13 +28,15 @@ use Illuminate\Validation\ValidationException;
  * planes, que no tienen veto de desactivación: si quiere darlos de baja, les pone la observación «Inactivo»
  * y lo resuelve el admin. Las materias sí, porque SubjectDeactivating las veta. Todo en una transacción con
  * la revisión bloqueada (así no se cruza con ValidateReview): exige que no esté validada y que el registro sea
- * suyo, delega y, si algo cambió, pasa la revisión a en revisión (StartReview, CV-S4).
+ * suyo, delega y, si algo cambió, marca el registro como revisado (MarkRecordsReviewed, CV7) y pasa la revisión a en
+ * revisión (StartReview, CV-S4). Guardar sin cambios no es una corrección: no marca (CV-S7, supuesto por confirmar).
  */
 final class CorrectRecord
 {
     public function __construct(
         private readonly CatalogReviewRules $rules,
         private readonly StartReview $startReview,
+        private readonly MarkRecordsReviewed $markRecords,
         private readonly UpdateSubject $updateSubject,
         private readonly UpdateCareer $updateCareer,
         private readonly UpdateStudyPlan $updateStudyPlan,
@@ -71,6 +73,7 @@ final class CorrectRecord
             };
 
             if ($record->wasChanged()) {
+                $this->markRecords->handle($review, [$record->getKey()], $actor);
                 $this->startReview->handle($review, $actor);
             }
 

@@ -4,8 +4,10 @@ use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\CorrectRecord;
 use App\Modules\CatalogValidation\Actions\FlagRecord;
+use App\Modules\CatalogValidation\Actions\MarkRecordsReviewed;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
+use App\Modules\CatalogValidation\Actions\UnmarkRecordReviewed;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
@@ -15,6 +17,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -44,6 +47,8 @@ use Mary\Traits\Toast;
  *
  * Tablero: el avance (HC-14) y una tarjeta por revisión, con Validar o Reabrir. Lista de un catálogo: búsqueda,
  * filtros, tabla y un drawer por registro para corregirlo (CV1, CV2) y ver, poner y resolver observaciones (CV4).
+ * Cada registro se marca como revisado desde su fila, o varios a la vez, y Validar solo se activa con todos revisados
+ * (CV7); la tarjeta, la pestaña y el renglón de la lista dicen cuántos van.
  *
  * El jefe cubre su departamento; Subdirección y el admin abren cualquiera en lectura, y solo resuelven
  * observaciones (CV-S1). Toda escritura pasa por su Action, después de autorizar con CatalogReviewPolicy en cada
@@ -78,6 +83,17 @@ new #[Title('Validación de catálogos')] class extends Component
 
     /** '' (todos), 'with' (con observación abierta) o 'without'. */
     public string $flagFilter = '';
+
+    /** '' (todos), 'reviewed' (marcados como revisados) o 'unreviewed' (CV7). */
+    public string $reviewedFilter = '';
+
+    /**
+     * Los registros elegidos para marcarlos juntos como revisados. Viven en el navegador (`wire:model` sin `.live`)
+     * hasta «Marcar como revisados»; markSelected() los valida contra la revisión.
+     *
+     * @var list<string>
+     */
+    public array $selected = [];
 
     public bool $showConfirm = false;
 
@@ -163,6 +179,8 @@ new #[Title('Validación de catálogos')] class extends Component
             return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null, 'missingInvitations' => ['email' => 0, 'user' => 0]];
         }
 
+        $reviewed = $contents->progressOf($state['reviews']);
+
         $open = $this->openCatalog();
         $openReview = $open === null ? null : $state['reviews']->first(fn (CatalogReview $review): bool => $review->catalog === $open);
 
@@ -170,12 +188,12 @@ new #[Title('Validación de catálogos')] class extends Component
         | El tablero arma las cinco tarjetas y el avance (HC-14); la lista, solo la revisión abierta y sin preguntar
         | por el veto de Reabrir (confirm() lo vuelve a preguntar al pedirlo).
         */
-        $current = $openReview === null ? null : $this->card($openReview, $reviews, false);
-        $cards = $current === null ? $this->byWork($state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews, true))) : collect([$current]);
+        $current = $openReview === null ? null : $this->card($openReview, $reviews, false, $reviewed[$openReview->getKey()]);
+        $cards = $current === null ? $this->byWork($state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews, true, $reviewed[$review->getKey()]))) : collect([$current]);
         $firstTerm = $current === null
             ? $cards->every(fn (array $card): bool => $card['summary']['added'] === null)
             : $state['reviews']->every(fn (CatalogReview $review): bool => $reviews->previousValidation($review) === null);
-        $data += ['empty' => null, 'firstTerm' => $firstTerm, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status])->all(), 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
+        $data += ['empty' => null, 'firstTerm' => $firstTerm, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status, 'reviewed' => $reviewed[$review->getKey()]])->all(), 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
 
         $data += $this->confirmation($cards, $access);
 
@@ -184,7 +202,7 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'status', 'flagFilter', 'missing', 'change', 'department', 'catalog'], true)) {
+        if (in_array($property, ['search', 'status', 'flagFilter', 'reviewedFilter', 'missing', 'change', 'department', 'catalog'], true)) {
             $this->resetPage();
         }
 
@@ -208,7 +226,7 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         if (in_array($property, ['department', 'catalog'], true)) {
-            $this->reset('search', 'status', 'flagFilter', 'missing', 'change', 'showDrawer', 'showRemoved', 'editingId');
+            $this->reset('search', 'status', 'flagFilter', 'reviewedFilter', 'missing', 'change', 'showDrawer', 'showRemoved', 'editingId', 'selected');
         }
     }
 
@@ -217,7 +235,7 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     public function clearFilters(): void
     {
-        $this->reset('search', 'status', 'flagFilter', 'missing', 'change');
+        $this->reset('search', 'status', 'flagFilter', 'reviewedFilter', 'missing', 'change');
         $this->resetPage();
     }
 
@@ -239,6 +257,7 @@ new #[Title('Validación de catálogos')] class extends Component
         } else {
             abort_unless($action === 'validate', 404);
             $this->authorize('validate', $review);
+            app(CatalogReviewRules::class)->ensureAllReviewed($review);
         }
 
         $this->confirmAction = $action;
@@ -328,6 +347,41 @@ new #[Title('Validación de catálogos')] class extends Component
         $this->success($record->is_active ? 'Registro activado' : 'Registro desactivado', $this->describe($review, $record));
     }
 
+    /**
+     * Marca o desmarca un registro como revisado desde su fila (CV7).
+     */
+    public function toggleReviewed(string $id, MarkRecordsReviewed $markRecords, UnmarkRecordReviewed $unmarkRecord, CatalogContentsQuery $contents, CatalogRecordsQuery $records): void
+    {
+        $review = $this->currentReview();
+        $this->authorize('mark', $review);
+        $record = $contents->findOrFail($review, $id);
+
+        if ($records->reviewedIds($review, [$record->getKey()]) === []) {
+            $markRecords->handle($review, [$record->getKey()], $this->user());
+        } else {
+            $unmarkRecord->handle($review, $record, $this->user());
+        }
+    }
+
+    /**
+     * «Marcar como revisados»: los registros elegidos, juntos (CV7). Si uno no es de la revisión, no marca ninguno.
+     */
+    public function markSelected(MarkRecordsReviewed $markRecords): void
+    {
+        $review = $this->currentReview();
+        $this->authorize('mark', $review);
+
+        $data = $this->validate(
+            ['selected' => ['required', 'array', 'max:500'], 'selected.*' => ['string']],
+            ['selected.required' => 'Elige los registros que ya revisaste.', 'selected.max' => 'Marca hasta 500 a la vez.'],
+        );
+
+        $count = $markRecords->handle($review, array_values($data['selected']), $this->user());
+        $this->selected = [];
+
+        $this->success($count === 1 ? '1 registro revisado' : "{$count} registros revisados", e($review->title));
+    }
+
     public function addFlag(FlagRecord $flagRecord, CatalogContentsQuery $contents): void
     {
         $review = $this->currentReview();
@@ -375,6 +429,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'features' => 'características',
             'flag' => 'tipo de observación',
             'comment' => 'comentario',
+            'selected' => 'registros elegidos',
         ];
     }
 
@@ -439,9 +494,10 @@ new #[Title('Validación de catálogos')] class extends Component
     /**
      * Lo que muestra la tarjeta de una revisión y lo que el usuario puede hacer con ella.
      *
+     * @param  array{reviewed: int, total: int}  $reviewed  cuántos registros van revisados (CV7)
      * @return array<string, mixed>
      */
-    private function card(CatalogReview $review, CatalogReviewQuery $reviews, bool $withVetoes): array
+    private function card(CatalogReview $review, CatalogReviewQuery $reviews, bool $withVetoes, array $reviewed): array
     {
         $validated = $review->status === ReviewStatus::Validated;
         $isHead = Gate::allows('flag', $review);
@@ -457,9 +513,19 @@ new #[Title('Validación de catálogos')] class extends Component
             default => null,
         };
 
+        $canMark = Gate::allows('mark', $review);
+
         return [
             'review' => $review,
             'summary' => $reviews->summary($review),
+            'reviewed' => $reviewed,
+            'canMark' => ! $validated && $canMark,
+            'markReason' => match (true) {
+                ! $canMark => 'Solo el jefe del departamento marca lo revisado.',
+                $validated => 'La revisión ya está validada: reábrela para marcar.',
+                default => null,
+            },
+            'validateReason' => CatalogReviewRules::unreviewedMessage($reviewed['total'] - $reviewed['reviewed']),
             'readiness' => $isTeachers && $withVetoes ? app(TeacherTermReadinessQuery::class)->counts($review->department, $review->term) : null,
             'canValidate' => Gate::allows('validate', $review),
             'canReopen' => $canReopen,
@@ -533,7 +599,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'active' => true,
             'inactive' => false,
             default => null,
-        }, $this->flagFilter, onlyIds: $this->onlyIds($review, $current['summary']));
+        }, $this->flagFilter, onlyIds: $this->onlyIds($review, $current['summary']), reviewed: $this->reviewedFilter);
 
         $readiness = $review->catalog === Catalog::Teachers
             ? app(TeacherTermReadinessQuery::class)->forTeachers($review->department, $review->term, $page->getCollection()->map->getKey()->all())
@@ -549,17 +615,25 @@ new #[Title('Validación de catálogos')] class extends Component
             }
         }
 
+        $headers = $this->headersOf($review->catalog);
+
+        if ($current['canMark']) {
+            array_unshift($headers, ['key' => 'select', 'label' => 'Elegir', 'class' => 'w-1']);
+        }
+
         return [
             'page' => $page,
             'readiness' => $readiness,
+            'reviewedMap' => $records->reviewedIds($review, $page->getCollection()->map->getKey()->all()),
+            'reviewedFilters' => [['id' => 'unreviewed', 'name' => 'Sin revisar'], ['id' => 'reviewed', 'name' => 'Revisados']],
             'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin perfil']],
             'flagMap' => $records->openFlags($review, $page->getCollection()->map->getKey()),
-            'headers' => $this->headersOf($review->catalog),
+            'headers' => $headers,
             'rowDecoration' => ['text-neutral' => fn (Model $record): bool => ! $record->is_active],
             'editing' => $editing,
             'removed' => $current['summary']['removed'] ?? [],
             'changeFilters' => [['id' => 'added', 'name' => 'Altas'], ['id' => 'removed', 'name' => 'Bajas']],
-            'hasFilters' => $this->search !== '' || $this->status !== '' || $this->flagFilter !== '' || $this->missing !== '' || $this->change !== '',
+            'hasFilters' => $this->search !== '' || $this->status !== '' || $this->flagFilter !== '' || $this->reviewedFilter !== '' || $this->missing !== '' || $this->change !== '',
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
             'flagFilters' => [['id' => 'with', 'name' => 'Con observación abierta'], ['id' => 'without', 'name' => 'Sin observación abierta']],
             'flagOptions' => collect(ReviewFlag::cases())->filter(fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog))->map(fn (ReviewFlag $flag): array => ['id' => $flag->value, 'name' => $flag->label()])->values()->all(),
@@ -620,7 +694,7 @@ new #[Title('Validación de catálogos')] class extends Component
     private function headersOf(Catalog $catalog): array
     {
         $name = ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'];
-        $closing = [['key' => 'flags', 'label' => 'Observación', 'class' => 'max-[1023px]:hidden'], ['key' => 'is_active', 'label' => 'Estado']];
+        $closing = [['key' => 'flags', 'label' => 'Observación', 'class' => 'max-[1023px]:hidden'], ['key' => 'is_active', 'label' => 'Estado'], ['key' => 'reviewed', 'label' => 'Revisado']];
 
         return [...match ($catalog) {
             Catalog::Subjects => [

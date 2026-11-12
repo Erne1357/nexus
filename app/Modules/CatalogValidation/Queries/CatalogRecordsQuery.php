@@ -15,8 +15,8 @@ use Illuminate\Support\Collection;
 
 /**
  * Lo que muestra la lista de un catálogo de la pantalla de validación: los registros de la revisión
- * (CatalogContentsQuery) paginados, con búsqueda, filtro de estado y de observación abierta, y las
- * observaciones de un registro. Quién ve la revisión lo decide CatalogReviewPolicy.
+ * (CatalogContentsQuery) paginados, con búsqueda, filtro de estado, de observación abierta y de revisado (CV7), las
+ * observaciones de un registro y cuáles de la página ya están revisados. Quién ve la revisión lo decide CatalogReviewPolicy.
  */
 final class CatalogRecordsQuery
 {
@@ -24,11 +24,13 @@ final class CatalogRecordsQuery
 
     /**
      * Una página de registros por clave. `$flag` es `with` (con observación abierta), `without` (sin ella) o vacío;
-     * `$onlyIds`, si no es null, deja solo esos registros (el filtro «Falta» de docentes).
+     * `$onlyIds`, si no es null, deja solo esos registros (el filtro «Falta» de docentes); `$reviewed` es `reviewed`
+     * (marcados como revisados), `unreviewed` (sin marca) o vacío.
      *
+     * @param  ?list<string>  $onlyIds
      * @return LengthAwarePaginator<int, Model>
      */
-    public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15, ?array $onlyIds = null): LengthAwarePaginator
+    public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15, ?array $onlyIds = null, string $reviewed = ''): LengthAwarePaginator
     {
         $query = $this->contents->query($review);
         $model = $query->getModel();
@@ -54,6 +56,11 @@ final class CatalogRecordsQuery
             $query->whereIn($model->qualifyColumn('id'), $onlyIds);
         }
 
+        if ($reviewed === 'reviewed' || $reviewed === 'unreviewed') {
+            $marks = $review->marks()->select('record_id');
+            $reviewed === 'reviewed' ? $query->whereIn($model->qualifyColumn('id'), $marks) : $query->whereNotIn($model->qualifyColumn('id'), $marks);
+        }
+
         return $query->paginate($perPage);
     }
 
@@ -73,6 +80,17 @@ final class CatalogRecordsQuery
             ->groupBy('flaggable_id')
             ->map(fn (Collection $flags): array => $flags->pluck('flag')->all())
             ->all();
+    }
+
+    /**
+     * De los registros dados, los que ya están marcados como revisados (CV7), como llaves.
+     *
+     * @param  list<string>  $ids
+     * @return array<string, true>
+     */
+    public function reviewedIds(CatalogReview $review, array $ids): array
+    {
+        return array_fill_keys($review->marks()->whereIn('record_id', $ids)->pluck('record_id')->all(), true);
     }
 
     /**

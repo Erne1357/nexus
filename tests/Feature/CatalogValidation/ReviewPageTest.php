@@ -12,6 +12,7 @@ use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -57,6 +58,14 @@ function reviewOf(Catalog $catalog, ?Department $department = null): CatalogRevi
         ->where('department_id', ($department ?? test()->sis)->id)
         ->where('catalog', $catalog)
         ->sole();
+}
+
+/**
+ * Marca como revisados todos los registros de la revisión (CV7), para poder validarla.
+ */
+function reviewMarkAll(Catalog $catalog, ?Department $department = null): void
+{
+    markAllReviewed(reviewOf($catalog, $department), test()->jefe);
 }
 
 function reviewPage(?User $user = null, array $query = [])
@@ -232,6 +241,8 @@ describe('tablero', function () {
     });
 
     it('valida desde la tarjeta con confirmación: cambia el estado y deja bitácora', function () {
+        reviewMarkAll(Catalog::Subjects);
+
         reviewPage()
             ->call('confirm', 'validate', 'subjects')
             ->assertSee('Vas a validar')
@@ -549,6 +560,8 @@ describe('captura de docentes (2.6, CV6)', function () {
             ->assertSeeHtml(e(route('catalog-validation.review', ['department' => $this->sis->id, 'catalogo' => 'teachers', 'falta' => 'disponibilidad'])))
             ->assertSeeHtml('data-testid="missing-perfil"');
 
+        reviewMarkAll(Catalog::Teachers);
+
         $component->call('confirm', 'validate', 'teachers')->assertSet('showConfirm', true);
     });
 
@@ -778,5 +791,113 @@ describe('periodo anterior por revisión', function () {
         $url = collect(reviewPage()->effects['url'] ?? [])->get('catalog');
 
         expect($url['use'] ?? null)->toBe('push');
+    });
+});
+
+describe('marcas de revisado (CV7)', function () {
+    it('CV7: el jefe marca y desmarca un registro desde su fila, y la revisión pasa a en revisión', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSeeHtml("wire:click=\"toggleReviewed('{$this->subject->id}')\"")
+            ->call('toggleReviewed', $this->subject->id)
+            ->assertHasNoErrors();
+
+        expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeTrue()
+            ->and(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::InReview);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('toggleReviewed', $this->subject->id)->assertHasNoErrors();
+
+        expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeFalse();
+    });
+
+    it('CV7: marca juntos los registros elegidos y limpia la selección', function () {
+        $other = Subject::where('code', 'SCA-1002')->sole();
+
+        $component = reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->set('selected', [$this->subject->id, $other->id])
+            ->call('markSelected')
+            ->assertHasNoErrors()
+            ->assertSet('selected', []);
+
+        expect(CatalogReviewMark::query()->pluck('record_id')->all())->toEqualCanonicalizing([$this->subject->id, $other->id])
+            ->and(lastToastOf($component)['title'])->toBe('2 registros revisados');
+    });
+
+    it('sin elegir nada pide elegir, y un registro ajeno no se marca', function () {
+        $foreign = Subject::where('code', 'AEF-1009')->sole();
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('markSelected')->assertHasErrors('selected');
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->set('selected', [$this->subject->id, $foreign->id])
+            ->call('markSelected')
+            ->assertHasErrors('record');
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('toggleReviewed', $foreign->id)->assertNotFound();
+
+        expect(CatalogReviewMark::count())->toBe(0);
+    });
+
+    it('cuenta los revisados en la tarjeta, en la pestaña y en el renglón de la lista', function () {
+        CatalogReviewMark::factory()->for(reviewOf(Catalog::Subjects), 'review')->on($this->subject)->create();
+
+        reviewPage()->assertSeeHtml('data-testid="reviewed-count-subjects"')->assertSee('1 de 2 revisados');
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->assertSee('1 de 2 revisados')->assertSeeHtml('data-testid="tab-reviewed-subjects"');
+    });
+
+    it('CV7: Validar queda deshabilitado con su motivo mientras falte revisar, y no valida llamando el método', function () {
+        reviewPage()
+            ->assertSee('Faltan 2 registros por revisar.')
+            ->assertDontSeeHtml("wire:click=\"confirm('validate', 'subjects')\"")
+            ->call('confirm', 'validate', 'subjects')
+            ->assertHasErrors('status')
+            ->assertSet('showConfirm', false);
+
+        expect(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::Pending);
+
+        reviewMarkAll(Catalog::Subjects);
+
+        reviewPage()->assertSeeHtml("wire:click=\"confirm('validate', 'subjects')\"");
+    });
+
+    it('filtra por revisados y sin revisar', function () {
+        CatalogReviewMark::factory()->for(reviewOf(Catalog::Subjects), 'review')->on($this->subject)->create();
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->set('reviewedFilter', 'unreviewed')->assertSee('SCA-1002')->assertDontSee('SCD-1027')
+            ->set('reviewedFilter', 'reviewed')->assertSee('SCD-1027')->assertDontSee('SCA-1002');
+    });
+
+    it('con la revisión validada no se marca: la fila solo muestra el estado', function () {
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertDontSeeHtml("wire:click=\"toggleReviewed('{$this->subject->id}')\"")
+            ->call('toggleReviewed', $this->subject->id)
+            ->assertHasErrors('status');
+    });
+
+    it('admin, Subdirección y otro rol no marcan, ni llamando los métodos directo', function (string $who) {
+        $user = match ($who) {
+            'admin' => User::factory()->admin()->create(),
+            'subdirección' => User::factory()->withRole(Role::Subdireccion, [])->create(),
+            'coordinador' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create(),
+        };
+
+        $page = reviewPage($this->jefe, ['catalogo' => 'subjects']);
+        $this->actingAs($user);
+        $page->call('toggleReviewed', $this->subject->id)->assertForbidden();
+
+        $page = reviewPage($this->jefe, ['catalogo' => 'subjects'])->set('selected', [$this->subject->id]);
+        $this->actingAs($user);
+        $page->call('markSelected')->assertForbidden();
+
+        expect(CatalogReviewMark::count())->toBe(0);
+    })->with(['admin', 'subdirección', 'coordinador']);
+
+    it('CV7: en salones de un campus que no deja corregirlos, el jefe sí marca', function () {
+        $this->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => false]]);
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['department_id' => $this->sis->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('toggleReviewed', $room->id)->assertHasNoErrors();
+
+        expect(CatalogReviewMark::query()->where('record_id', $room->id)->exists())->toBeTrue();
     });
 });

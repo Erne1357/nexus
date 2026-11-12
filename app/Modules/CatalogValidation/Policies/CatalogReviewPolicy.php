@@ -19,6 +19,8 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  *   (`uses_rooms` y `heads_edit_rooms`), sus salones (CV2); confirmado el 2 de noviembre de 2026.
  * - Corregir, validar, reabrir y poner observaciones: solo ese jefe; ni el admin ni Subdirección (CV-S1,
  *   supuesto por confirmar).
+ * - Marcar y desmarcar registros como revisados (CV7): quien valida, con el mismo permiso, porque sin todos revisados
+ *   no se valida; también los salones de un campus que no deja que los jefes los corrijan.
  * - Ver el tablero de avance de validación y recordar a los jefes sus pendientes (tarea 2.5): solo Subdirección y
  *   el admin; los jefes, coordinadores y demás roles no (supuesto por confirmar).
  * - Ver la revisión y sus observaciones, y marcar una observación como resuelta: ese jefe, el admin y
@@ -70,6 +72,14 @@ final class CatalogReviewPolicy
     }
 
     public function validate(User $user, CatalogReview $review): bool
+    {
+        return $this->can($user, CatalogValidationPermission::ReviewValidate, $review);
+    }
+
+    /**
+     * Marcar o desmarcar registros de la revisión como revisados (MarkRecordsReviewed, UnmarkRecordReviewed; CV7).
+     */
+    public function mark(User $user, CatalogReview $review): bool
     {
         return $this->can($user, CatalogValidationPermission::ReviewValidate, $review);
     }
