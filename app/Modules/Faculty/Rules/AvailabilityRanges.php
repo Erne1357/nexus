@@ -7,13 +7,13 @@ use InvalidArgumentException;
 
 /**
  * Unión de bloques de disponibilidad (`teacher_availability`): lo que se marca en la cuadrícula día × hora son
- * bloques del perfil del campus; lo que se guarda son rangos. Los bloques contiguos del mismo tipo y del mismo día
+ * bloques de la ventana de las modalidades activas (MS11); lo que se guarda son rangos. Los bloques contiguos del mismo tipo y del mismo día
  * forman un rango; un cambio de tipo, de día o un hueco empieza otro. El orden de entrada no importa: el resultado
  * sale por día y hora. Pura: no lee la base ni el perfil, solo la duración del bloque. Las horas van en `HH:MM`.
  */
 final class AvailabilityRanges
 {
-    /** Nombre de cada día de `teacher_availability.day` (ISO-8601, 1 = lunes, como en el perfil del campus). */
+    /** Nombre de cada día de `teacher_availability.day` (ISO-8601, 1 = lunes, como en el perfil de la modalidad). */
     public const array DAY_NAMES = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado'];
 
     /**
