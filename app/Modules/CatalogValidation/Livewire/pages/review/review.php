@@ -21,6 +21,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Rules\RoomRules;
+use App\Modules\Faculty\Queries\TeacherAccessQuery;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -159,7 +160,7 @@ new #[Title('Validación de catálogos')] class extends Component
         };
 
         if ($empty !== null) {
-            return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null];
+            return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null, 'withoutInstitutionalEmail' => 0];
         }
 
         $open = $this->openCatalog();
@@ -502,7 +503,8 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * La revisión que espera confirmación, con lo que valida, para el modal.
+     * La revisión que espera confirmación, con lo que valida, para el modal. Al validar la de docentes, cuántos docentes
+     * activos sin acceso no tienen correo institucional y no recibirán su invitación (AC-09).
      *
      * @param  Collection<int, array<string, mixed>>  $cards
      * @return array<string, mixed>
@@ -510,8 +512,11 @@ new #[Title('Validación de catálogos')] class extends Component
     private function confirmation(Collection $cards): array
     {
         $card = $this->confirmAction === '' ? null : $cards->first(fn (array $card): bool => $card['review']->catalog->value === $this->confirmCatalog);
+        $withoutEmail = $card !== null && $this->confirmAction === 'validate' && $card['review']->catalog === Catalog::Teachers
+            ? app(TeacherAccessQuery::class)->withoutInstitutionalEmail($card['review']->department_id)
+            : 0;
 
-        return ['confirming' => $card];
+        return ['confirming' => $card, 'withoutInstitutionalEmail' => $withoutEmail];
     }
 
     /**
