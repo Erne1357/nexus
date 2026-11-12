@@ -5,7 +5,7 @@ namespace App\Modules\Imports\Templates;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Students\Enums\StudentModality;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\Student;
@@ -27,7 +27,8 @@ use Illuminate\Validation\Rule;
  * Tec, así que desactivaría a los alumnos de los demás campus; las bajas llegan en el estatus. Busca cada
  * carrera, plan y campus una vez por corrida. Al terminar el lote despacha el recálculo del progreso.
  *
- * `modality` (presencial, a distancia, mixta; «EAD» es a distancia) es del alumno y `status_reason` es el motivo del
+ * `modality` (presencial, a distancia, «EAD» o mixta) es del alumno y se guarda como la modalidad del catálogo: presencial
+ * es `PRES`; a distancia, «EAD» y mixta, `EAD`; sin ella, `PRES` (MS7, supuesto por confirmar). Es del alumno y `status_reason` es el motivo del
  * SII (BD1, BT1, TIT…), que se guarda junto al estatus de Nexus y se escribe en mayúsculas (D12 y D15, confirmados
  * el 5 de noviembre de 2026; lo de «EAD» y las mayúsculas, supuesto por confirmar). Como los demás campos, un
  * cambio no los pisa con vacío. `active` (el SII lo da por estatus: inscritos y bajas temporales cuentan como activos)
@@ -49,6 +50,18 @@ class StudentsTemplate extends ImportTemplate
 
     /** @var array<string, string|null> id de campus por clave, en esta corrida */
     private array $campuses = [];
+
+    /** @var array<string, string|null> id de modalidad por clave, en esta corrida */
+    private array $modalities = [];
+
+    /** Texto de la modalidad (sin acentos, en minúsculas y con guion bajo) → clave del catálogo (MS7, supuesto por confirmar). */
+    private const array MODALITY_CODES = [
+        'presencial' => 'PRES',
+        'distancia' => 'EAD',
+        'a_distancia' => 'EAD',
+        'ead' => 'EAD',
+        'mixta' => 'EAD',
+    ];
 
     public function key(): string
     {
@@ -101,7 +114,7 @@ class StudentsTemplate extends ImportTemplate
             'campus' => ['required', 'string'],
             'semester' => ['nullable', 'integer', 'min:1', 'max:20'],
             'status' => ['nullable', 'string'],
-            'modality' => ['nullable', Rule::enum(StudentModality::class)],
+            'modality' => ['nullable', Rule::in(array_keys(self::MODALITY_CODES))],
             'status_reason' => ['nullable', 'string', 'max:10'],
             'active' => ['nullable', 'boolean'],
         ];
@@ -187,14 +200,17 @@ class StudentsTemplate extends ImportTemplate
 
     protected function attributes(array $row, ImportContext $context): array
     {
+        // Sin modalidad en el archivo no se manda `modality_id`: un alta toma Presencial de `defaults()` y un cambio no la pisa.
+        $modality = $row['modality'] === null ? [] : ['modality_id' => $this->modalityId(self::MODALITY_CODES[$row['modality']])];
+
         return [
+            ...$modality,
             'name' => $row['name'],
             'career_id' => $this->career($row['career'])?->id,
             'study_plan_id' => $this->plan($row['study_plan'])?->id,
             'campus_id' => $this->campus($row['campus']),
             'current_semester' => $row['semester'],
             'status' => StudentStatus::tryFrom((string) $row['status']),
-            'modality' => StudentModality::tryFrom((string) $row['modality']),
             'status_reason' => $row['status_reason'],
             'is_active' => $row['active'] ?? true,
         ];
@@ -209,16 +225,28 @@ class StudentsTemplate extends ImportTemplate
     }
 
     /**
-     * El valor de StudentModality que corresponde al texto, o el texto tal cual si no lo conoce.
+     * La modalidad en minúsculas y con guion bajo si el texto es una que Nexus reconoce, o el texto tal cual si no.
      */
     private function modality(string $value): string
     {
         $slug = self::slug($value);
 
-        return StudentModality::tryFrom($slug)?->value ?? match ($slug) {
-            'ead', 'a_distancia' => StudentModality::Distancia->value,
-            default => $value,
-        };
+        return array_key_exists($slug, self::MODALITY_CODES) ? $slug : $value;
+    }
+
+    /**
+     * Un alumno nuevo sin modalidad en el archivo queda en Presencial (MS7); un cambio sin ella no la pisa.
+     *
+     * @return array<string, mixed>
+     */
+    protected function defaults(ImportContext $context): array
+    {
+        return ['modality_id' => $this->modalityId('PRES')];
+    }
+
+    private function modalityId(string $code): ?string
+    {
+        return array_key_exists($code, $this->modalities) ? $this->modalities[$code] : $this->modalities[$code] = Modality::query()->where('code', $code)->value('id');
     }
 
     private function career(string $code): ?Career

@@ -9,7 +9,8 @@ use Illuminate\Contracts\Session\Session;
 /**
  * La última página que el usuario visitó de cada área del menú, en su sesión: a ella lleva el icono
  * del área (DESIGN.md, "Navigation"). La anota el menú al pintarse en una página completa; la olvida
- * SetActiveContext al cambiar el campus o el periodo, porque una ficha de otro campus ya no se abriría.
+ * SetActiveContext al cambiar el periodo, porque una ficha de otro periodo ya no aplicaría, y SwitchRole al cambiar
+ * de perfil.
  *
  * No se registra en el contenedor: cada petición arma la suya con su sesión y su contexto (Octane).
  */

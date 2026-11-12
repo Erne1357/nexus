@@ -5,10 +5,10 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectAlias;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\SubjectsTemplate;
-use App\Modules\Students\Enums\StudentModality;
 use App\Modules\Students\Models\Student;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -67,8 +67,8 @@ it('un alias no se repite', function () {
 });
 
 it('el alumno guarda modalidad y motivo del SII', function () {
-    $student = Student::factory()->create(['modality' => StudentModality::Distancia, 'status_reason' => 'BT1']);
+    $student = Student::factory()->inModality(Modality::query()->where('code', 'EAD')->firstOrFail())->create(['status_reason' => 'BT1']);
 
-    expect($student->fresh())->modality->toBe(StudentModality::Distancia)->status_reason->toBe('BT1')
-        ->and(StudentModality::Mixta->label())->toBe('Mixta');
+    expect($student->fresh())->modality->code->toBe('EAD')->status_reason->toBe('BT1')
+        ->and(Student::factory()->create()->modality->code)->toBe('PRES');
 });

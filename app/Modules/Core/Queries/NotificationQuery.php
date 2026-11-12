@@ -4,7 +4,6 @@ namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
@@ -70,17 +69,16 @@ final class NotificationQuery
     }
 
     /**
-     * @return Collection<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string, role: ?string}>
+     * @return Collection<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, role: ?string}>
      */
-    public function recent(User $user, int $limit = self::RECENT, bool $withCampus = false): Collection
+    public function recent(User $user, int $limit = self::RECENT): Collection
     {
         $notifications = $this->newestFirst($user)->limit($limit)->get();
-        $codes = $withCampus ? $this->campusCodes($notifications->all()) : [];
         $today = $this->today();
         $roleTitle = $this->roleTitles($user);
 
         return $notifications
-            ->map(fn (DatabaseNotification $notification): array => $this->row($notification, $codes, $today, $roleTitle))
+            ->map(fn (DatabaseNotification $notification): array => $this->row($notification, $today, $roleTitle))
             ->values();
     }
 
@@ -111,9 +109,9 @@ final class NotificationQuery
      * `$onlyUnread`, solo las que no ha leído; con `$classes`, solo las de esos tipos de aviso.
      *
      * @param  list<string>  $classes
-     * @return LengthAwarePaginator<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string, role: ?string}>
+     * @return LengthAwarePaginator<int, array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, role: ?string}>
      */
-    public function paginated(User $user, bool $onlyUnread = false, int $perPage = self::PER_PAGE, array $classes = [], bool $withCampus = false): LengthAwarePaginator
+    public function paginated(User $user, bool $onlyUnread = false, int $perPage = self::PER_PAGE, array $classes = []): LengthAwarePaginator
     {
         $query = $this->newestFirst($user);
 
@@ -127,11 +125,9 @@ final class NotificationQuery
 
         $today = $this->today();
         $page = $query->paginate($perPage);
-        $codes = $withCampus ? $this->campusCodes($page->items()) : [];
-
         $roleTitle = $this->roleTitles($user);
 
-        return $page->through(fn (DatabaseNotification $notification): array => $this->row($notification, $codes, $today, $roleTitle));
+        return $page->through(fn (DatabaseNotification $notification): array => $this->row($notification, $today, $roleTitle));
     }
 
     /**
@@ -157,11 +153,10 @@ final class NotificationQuery
     }
 
     /**
-     * @param  array<string, string>  $campusCodes
      * @param  Closure(Role): string  $roleTitle
-     * @return array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, campus: ?string, role: ?string}
+     * @return array{id: string, title: string, body: string, icon: string, tone: string, read: bool, at: CarbonImmutable, group: string, group_label: string, role: ?string}
      */
-    private function row(DatabaseNotification $notification, array $campusCodes, CarbonImmutable $today, Closure $roleTitle): array
+    private function row(DatabaseNotification $notification, CarbonImmutable $today, Closure $roleTitle): array
     {
         $message = NotificationMessage::fromArray($notification->data);
         $at = CarbonImmutable::parse($notification->created_at);
@@ -177,7 +172,6 @@ final class NotificationQuery
             'at' => $at,
             'group' => $group,
             'group_label' => $groupLabel,
-            'campus' => $message->campusId === null ? null : ($campusCodes[$message->campusId] ?? null),
             'role' => $message->role === null ? null : $roleTitle($message->role),
         ];
     }
@@ -203,22 +197,6 @@ final class NotificationQuery
     private function today(): CarbonImmutable
     {
         return CarbonImmutable::now(config('app.timezone'))->startOfDay();
-    }
-
-    /**
-     * Las claves cortas (`C2`) de los campus que citan estos avisos, en una sola consulta.
-     *
-     * @param  array<int, DatabaseNotification>  $notifications
-     * @return array<string, string>
-     */
-    private function campusCodes(array $notifications): array
-    {
-        $ids = array_values(array_unique(array_filter(array_map(
-            fn (DatabaseNotification $notification): ?string => NotificationMessage::fromArray($notification->data)->campusId,
-            $notifications,
-        ))));
-
-        return $ids === [] ? [] : Campus::withTrashed()->whereKey($ids)->pluck('code', 'id')->all();
     }
 
     private function typeKey(string $class): string

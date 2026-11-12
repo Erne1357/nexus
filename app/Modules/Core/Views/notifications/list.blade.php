@@ -1,8 +1,8 @@
 {{--
     Los avisos agrupados por día (Hoy, Ayer, Esta semana, Antes), el mismo en la tarjeta de la campana y en
     «Todas las notificaciones». Llegan de la más nueva a la más vieja, así que cada grupo es continuo. Recibe
-    `$rows` (la lista de renglones de NotificationQuery) y `$showCampus` (la clave del campus al frente, solo si
-    el usuario trabaja en más de uno) y `$showRole` (el puesto tras la hora, solo si tiene más de uno). Cada grupo lleva un encabezado de 11.5 px en mayúsculas, como los de tabla.
+    `$rows` (la lista de renglones de NotificationQuery) y `$showRole` (el puesto tras la hora, solo si tiene más de
+    uno). El campus del aviso no se muestra: la pantalla del aviso se abre en él (#415). Cada grupo lleva un encabezado de 11.5 px en mayúsculas, como los de tabla.
 --}}
 @foreach (collect($rows)->groupBy('group') as $group => $groupRows)
     <li wire:key="notification-group-{{ $group }}" class="border-b border-base-300 last:border-b-0" data-testid="group-{{ $group }}">
@@ -11,7 +11,7 @@
         <ul role="list">
             @foreach ($groupRows as $item)
                 <li wire:key="notification-{{ $item['id'] }}" class="border-b border-base-300 last:border-b-0">
-                    @include('core::notifications.item', ['item' => $item, 'showCampus' => $showCampus, 'showRole' => $showRole ?? false])
+                    @include('core::notifications.item', ['item' => $item, 'showRole' => $showRole ?? false])
                 </li>
             @endforeach
         </ul>

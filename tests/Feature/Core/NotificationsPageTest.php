@@ -208,26 +208,18 @@ it('la tarjeta de la campana agrupa igual', function () {
     Livewire::actingAs($ana)->test('core::components.bell')->assertSeeHtml('data-testid="group-hoy"');
 });
 
-it('el campus del aviso va al frente solo cuando el usuario trabaja en más de un campus', function () {
+it('el aviso no lleva la clave del campus, aunque el usuario trabaje en varios (#415)', function (string $component) {
     Campus::factory()->create(['code' => 'C1']);
-    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $admin = User::factory()->admin()->create();
-    $admin->notify(new PageNotice('En el dos', 'home', $c2->getKey()));
+    $admin->notify(new PageNotice('Aviso del periodo', 'home', $c2->getKey()));
 
-    Livewire::actingAs($admin)->test('core::pages.notifications')
-        ->assertSeeHtml('data-testid="notification-campus"')
-        ->assertSeeText('C2');
-});
-
-it('con un solo campus, el aviso no lleva la clave del campus', function () {
-    $c2 = Campus::factory()->create(['code' => 'C2']);
-    $admin = User::factory()->admin()->create();
-    $admin->notify(new PageNotice('En el dos', 'home', $c2->getKey()));
-
-    Livewire::actingAs($admin)->test('core::pages.notifications')
-        ->assertSee('En el dos')
-        ->assertDontSeeHtml('data-testid="notification-campus"');
-});
+    Livewire::actingAs($admin)->test($component)
+        ->assertSee('Aviso del periodo')
+        ->assertDontSeeHtml('data-testid="notification-campus"')
+        ->assertDontSeeText('C2')
+        ->assertDontSeeText('Campus II');
+})->with(['página' => 'core::pages.notifications', 'campana' => 'core::components.bell']);
 
 it('filtra por tipo, en la URL, y un tipo desconocido vuelve a todos', function () {
     $ana = User::factory()->create();

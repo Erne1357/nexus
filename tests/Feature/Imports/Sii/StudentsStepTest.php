@@ -14,7 +14,6 @@ use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\StudentsStep;
 use App\Modules\Imports\Sii\TeacherRoster;
-use App\Modules\Students\Enums\StudentModality;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
 use Illuminate\Support\Facades\File;
@@ -245,7 +244,7 @@ it('migra a los alumnos de punta a punta sin errores', function () {
         ->and($student->status)->toBeNull()
         ->and($student->is_active)->toBeFalse()
         ->and($student->status_reason)->toBe('ASP')
-        ->and($student->modality)->toBe(StudentModality::Distancia)
+        ->and($student->modality->code)->toBe('EAD')
         ->and(Student::query()->where('control_number', 'S1')->sole())->status->toBe(StudentStatus::Activo)->is_active->toBeTrue()
         ->and(Student::query()->where('control_number', 'S3')->sole())->is_active->toBeFalse()
         ->and(ImportBatch::query()->where('template', 'students')->sum('error_rows'))->toBe(0)
