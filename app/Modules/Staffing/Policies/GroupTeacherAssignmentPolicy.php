@@ -10,7 +10,8 @@ use App\Modules\Staffing\Enums\StaffingPermission;
 
 /**
  * Quién asigna o quita el docente de un grupo (reglas-de-negocio.md, "Aprobaciones y permisos", fila «Asignar
- * docente»): el jefe del departamento del grupo y el jefe de proyecto docente de su departamento y campus. El estado
+ * docente»): el jefe del departamento del grupo y el jefe de proyecto docente de su departamento y modalidad; con campus en el nombramiento, solo
+ * los grupos del suyo (AZ-S17, MS6). El estado
  * de la carga lo revisa la Action.
  */
 final class GroupTeacherAssignmentPolicy

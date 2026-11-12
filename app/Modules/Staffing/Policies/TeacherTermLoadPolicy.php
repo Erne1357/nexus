@@ -11,10 +11,10 @@ use App\Modules\Staffing\Enums\StaffingPermission;
 
 /**
  * Quién ve la carga por docente de un departamento, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila «Ver
- * la carga por docente»): el jefe de departamento y el jefe de proyecto docente de ese departamento con su campus, y
- * la Subdirección. El admin pasa por la concesión implícita del registro. Los docentes no son de un campus y sus
- * horas suman todos, pero el permiso lleva campus como los demás de Staffing: se pregunta con el campus de la
- * credencial.
+ * la carga por docente»): el jefe de departamento y el jefe de proyecto docente de ese departamento y modalidad
+ * (aunque su nombramiento tenga campus), y la Subdirección. El admin pasa por la concesión implícita del registro.
+ * Los docentes no son de un campus y sus horas suman todos: el permiso es de la modalidad (AZ-S17, MS6) y se pregunta
+ * con la del campus de la pantalla.
  */
 final class TeacherTermLoadPolicy
 {

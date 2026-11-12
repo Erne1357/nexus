@@ -27,8 +27,9 @@ use Illuminate\Support\Facades\DB;
  * departamento.
  *
  * Quién ve una solicitud es ChangeRequestPolicy::view en SQL (visible()): quien la pidió; quien tiene ver, decidir o
- * aplicar las de salón sobre el campus y el departamento del grupo (jefes, jefe de proyecto docente, Subdirección), y
- * el coordinador de la carrera dueña del grupo en su campus, solo las de horario (las aplica él). También da los grupos
+ * aplicar las de salón sobre la modalidad y el departamento del grupo (jefes, jefe de proyecto docente, Subdirección;
+ * el campus del nombramiento no limita la lectura), y el coordinador de la carrera dueña del grupo en su modalidad (y
+ * en su campus, si el nombramiento lo tiene; AZ-S17, MS6), solo las de horario (las aplica él). También da los grupos
  * en que el coordinador puede pedir una nueva. Un número constante de consultas.
  */
 final class ChangeRequestsQuery
@@ -197,7 +198,8 @@ final class ChangeRequestsQuery
     }
 
     /**
-     * Si ve las solicitudes de todo el departamento en el campus: ver, decidir o aplicar las de salón.
+     * Si ve las solicitudes de todo el departamento en la modalidad del campus: ver, decidir o aplicar las de salón (esta
+     * última, con el campus del nombramiento si lo tiene).
      */
     private function overseesUnit(Actor $context, string $campusId, string $departmentId): bool
     {

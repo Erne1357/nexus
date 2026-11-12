@@ -14,11 +14,11 @@ use App\Modules\Staffing\Models\ChangeRequest;
  * Quién pide, ve, decide y aplica una solicitud de cambio (reglas-de-negocio.md, "Solicitudes de cambio"):
  *
  * - Pide el docente asignado hoy al grupo (permiso personal; el dueño es su usuario) o el coordinador de la carrera
- *   dueña del grupo en su campus.
+ *   dueña del grupo en su modalidad y, si su nombramiento tiene campus, en el campus del grupo (AZ-S17, MS6).
  * - Ve quien la pidió, los jefes, el jefe de proyecto docente, la Subdirección y quien la aplicaría.
  * - Decide el jefe del departamento del grupo.
- * - Aplica, según el tipo (confirmado el 7 de noviembre de 2026): el horario, el coordinador de la carrera dueña; el
- *   salón, el jefe del departamento.
+ * - Aplica, según el tipo (confirmado el 7 de noviembre de 2026): el horario, el coordinador de la carrera dueña (con
+ *   campus en el nombramiento, solo un grupo del suyo); el salón, el jefe del departamento.
  *
  * Los estados (pendiente, aprobada…) los exigen las Actions. El admin pasa por la concesión implícita.
  */

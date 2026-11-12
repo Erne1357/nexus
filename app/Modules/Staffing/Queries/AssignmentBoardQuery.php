@@ -131,7 +131,7 @@ final class AssignmentBoardQuery
     }
 
     /**
-     * Los departamentos activos cuyo ranking puede ver el usuario en el campus, por clave: el suyo para el jefe y el
+     * Los departamentos activos cuyo ranking puede ver el usuario en la modalidad del campus, por clave: el suyo para el jefe y el
      * jefe de proyecto docente; todos para Subdirección y el admin.
      *
      * @return Collection<int, Department>
