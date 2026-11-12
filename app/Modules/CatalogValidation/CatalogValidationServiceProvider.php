@@ -20,6 +20,7 @@ use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\CampusUpdated;
 use App\Modules\Core\Events\TermOpened;
@@ -70,9 +71,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico,
+            new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico, group: NavigationGroup::Validacion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView)),
-            new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico,
+            new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico, group: NavigationGroup::Validacion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ProgressView)),
         ];
     }

@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
  * nulo, y la pantalla muestra lo mismo deshabilitado.
  *
  * - AZ-S13 (confirmado el 3 de noviembre de 2026): los departamentos académicos siguen bajo la Subdirección Académica;
- *   su nombre, clave y estado se editan en Académico (lo exige también un trigger de la base) y no se mueven aquí.
+ *   su nombre, clave y estado se editan en Administración › Departamentos (lo exige también un trigger de la base) y no se mueven aquí.
  * - La Dirección es la raíz única: no se mueve, no se desactiva ni cambia de tipo. Sus claves y la de la Subdirección
  *   Académica (OrgTree::ROOT y OrgTree::ACADEMIC) son las que Nexus busca, así que no cambian; la Subdirección
  *   Académica tampoco cambia de tipo ni se desactiva, porque AZ-S10 y AZ-S13 se apoyan en ella (supuesto por
@@ -34,7 +34,7 @@ final class OrgUnitRules
     public function lockedReason(OrgUnit $unit): ?string
     {
         return $unit->kind === OrgUnitKind::DepartamentoAcademico
-            ? 'Es un departamento académico: su nombre, su clave y su estado se editan en Académico › Departamentos.'
+            ? 'Es un departamento académico: su nombre, su clave y su estado se editan en Administración › Departamentos.'
             : null;
     }
 
@@ -118,7 +118,7 @@ final class OrgUnitRules
         }
 
         if ($kind === OrgUnitKind::DepartamentoAcademico) {
-            return 'Los departamentos académicos se dan de alta en Académico.';
+            return 'Los departamentos académicos se dan de alta en Administración › Departamentos.';
         }
 
         if ($unit === null) {

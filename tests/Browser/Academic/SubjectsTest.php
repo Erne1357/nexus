@@ -7,7 +7,7 @@ use App\Modules\Core\Models\User;
 
 /*
 | CRUD de Materias en el navegador: el admin entra por el menú, da de alta una materia y la edita
-| desde la UI. Materias es del área Académico, la del inicio.
+| desde la UI. Materias es de Administración › Catálogos: se llega abriendo el menú con la liebre.
 */
 
 beforeEach(function () {
@@ -22,6 +22,7 @@ it('el admin da de alta una materia y luego la edita desde la UI', function () {
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Materias"]')
         ->assertPathIs('/academic/subjects')
         ->assertSee('Cálculo Diferencial')

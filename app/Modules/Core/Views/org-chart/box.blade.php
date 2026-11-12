@@ -1,6 +1,6 @@
 {{--
     Una caja del Organigrama (core::pages.org-chart), de un OrgChartNode: el tipo en versalitas (con candado si es un
-    departamento académico, que se edita en Académico), el nombre, el titular o lo que falta («Sin jefe vigente»,
+    departamento académico, que se edita en Administración › Departamentos), el nombre, el titular o lo que falta («Sin jefe vigente»,
     «Sin titular vigente»; la raíz, «Sin titular en Nexus»), la clave en Mono con las personas de la unidad y sus hijas
     y «Inactiva» si aplica. La raíz lleva filete superior `primary`, el primer nivel uno más delgado y la académica
     borde punteado sobre `base-200`. Es un botón: elegirla, atenuarla al buscar y el marco de elegida los hace el
@@ -27,7 +27,7 @@
     <span class="flex items-center gap-1.5 text-[11.5px] font-medium uppercase tracking-[0.09em] text-secondary-muted">
         {{ $node->kind->label() }}
         @if ($node->locked)
-            <x-icon name="o-lock-closed" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span class="sr-only">(se edita en Académico)</span>
+            <x-icon name="o-lock-closed" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span class="sr-only">(se edita en Administración › Departamentos)</span>
         @endif
     </span>
 

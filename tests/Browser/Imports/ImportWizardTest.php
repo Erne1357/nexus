@@ -51,7 +51,7 @@ it('el admin retoma un lote validado desde el menú, revisa sus errores y lo apl
     app(ValidateImportBatch::class)->handle($batch);
     app(ExportBatchErrors::class)->handle($batch);
 
-    // Importaciones es del área Datos: se llega abriendo el menú completo con la liebre.
+    // Importaciones es de Administración › Datos: se llega abriendo el menú completo con la liebre.
     $page = signInToImports('admin')
         ->click('@hare')
         ->click('Importaciones')
@@ -105,10 +105,10 @@ it('el admin aplica un lote desactivando lo que no viene en el archivo, con la c
 
 it('un coordinador no ve la entrada Importaciones en el menú', function () {
     signInToImports('19110001')
-        ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->assertVisible('#nexus-menu [data-menu-home]')
         ->click('@hare')
         ->assertVisible('[data-menu-area="academico"] [data-menu-flip="name"]')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Importaciones')
-        ->assertNotPresent('[data-menu-area="datos"]')
+        ->assertNotPresent('[data-menu-area="administracion"]')
         ->assertNoJavaScriptErrors();
 });

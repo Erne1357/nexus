@@ -24,6 +24,7 @@ use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetActiveRole;
@@ -118,14 +119,13 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
-            new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Academico,
+            new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Administracion, group: NavigationGroup::Institucion,
                 ability: 'viewAny', arguments: [Campus::class]),
-            new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Academico,
+            new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Administracion, group: NavigationGroup::Institucion,
                 ability: 'viewAny', arguments: [Term::class], childRoutes: ['core.terms.show']),
-            new NavigationItem('Organigrama', 'core.org-chart', 'o-rectangle-group', NavigationArea::Academico,
+            new NavigationItem('Organigrama', 'core.org-chart', 'o-rectangle-group', NavigationArea::Administracion, group: NavigationGroup::Institucion,
                 ability: 'viewAny', arguments: [OrgUnit::class]),
-            new NavigationItem('Personas y puestos', 'core.people', 'o-users', NavigationArea::Academico,
+            new NavigationItem('Personas y puestos', 'core.people', 'o-users', NavigationArea::Administracion, group: NavigationGroup::Institucion,
                 ability: 'viewAny', arguments: [RoleAssignment::class], childRoutes: ['core.people.show']),
         ];
     }

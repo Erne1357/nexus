@@ -13,6 +13,7 @@ use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
@@ -114,22 +115,22 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::Academico,
+            new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::Academico, group: NavigationGroup::Asignacion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
-            new NavigationItem('Carga por docente', 'staffing.teacher-loads', 'o-user-group', NavigationArea::Academico,
+            new NavigationItem('Carga por docente', 'staffing.teacher-loads', 'o-user-group', NavigationArea::Academico, group: NavigationGroup::Asignacion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::TeacherLoadView)),
             new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
             new NavigationItem('Oferta', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
-            new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::Academico,
+            new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::Academico, group: NavigationGroup::Asignacion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::ChangeRequestView)
                     || $context->allowsAny(StaffingPermission::ChangeRequestDecide)
                     || $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule)
                     || $context->allowsAny(StaffingPermission::ChangeRequestApplyRoom)),
-            new NavigationItem('Cierre de la carga', 'staffing.closing', 'o-lock-closed', NavigationArea::Academico,
+            new NavigationItem('Cierre de la carga', 'staffing.closing', 'o-lock-closed', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadClose)),
-            new NavigationItem('Avance del cierre', 'staffing.closing-board', 'o-chart-bar-square', NavigationArea::Academico,
+            new NavigationItem('Avance del cierre', 'staffing.closing-board', 'o-chart-bar-square', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadReopen)),
         ];
     }
