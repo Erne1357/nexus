@@ -54,7 +54,7 @@ final class GroupPolicy
 
     public function justify(User $user, Group $group): bool
     {
-        return $this->actor($user)->allows(AcademicLoadPermission::LoadClose, Target::of(campus: $group->campus_id, unit: $group->department_id));
+        return $this->actor($user)->allows(AcademicLoadPermission::LoadClose, Target::of(modality: $group->modality_id, unit: $group->department_id));
     }
 
     private function can(User $user, SchedulingPermission $permission, Group $group): bool

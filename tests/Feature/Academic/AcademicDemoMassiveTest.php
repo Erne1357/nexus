@@ -76,5 +76,5 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
     }
 
     expect(app(Actor::class)->forUser($staff->firstWhere('username', 'coord.ie.c1'))
-        ->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $campusIds['C1'], career: Career::query()->where('code', 'IELE')->value('id'))))->toBeTrue();
+        ->allows(AcademicLoadPermission::ProposalView, Target::of(modality: modalityOf('PRES')->id, career: Career::query()->where('code', 'IELE')->value('id'))))->toBeTrue();
 });

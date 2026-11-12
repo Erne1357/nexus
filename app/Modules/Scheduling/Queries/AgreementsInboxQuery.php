@@ -69,8 +69,8 @@ final class AgreementsInboxQuery
         $grouped = [self::DECIDE => [], self::SENT => [], self::DONE => []];
 
         foreach ($rows as $row) {
-            $deciders[$row['to']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementDecide, Target::of(campus: $campus->getKey(), unit: $row['to']['id']));
-            $requesters[$row['from']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementRequest, Target::of(campus: $campus->getKey(), unit: $row['from']['id']));
+            $deciders[$row['to']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementDecide, Target::of(modality: $campus->modality_id, unit: $row['to']['id']));
+            $requesters[$row['from']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $campus->modality_id, campus: $campus->getKey(), unit: $row['from']['id']));
             $row['side'] = $deciders[$row['to']['id']] ? 'to' : ($requesters[$row['from']['id']] ? 'from' : null);
 
             if ($row['status'] !== AgreementStatus::Proposed) {
@@ -174,7 +174,7 @@ final class AgreementsInboxQuery
             ->where('campus_id', $campus->getKey());
 
         return $actor->constrain($query, AcademicLoadPermission::AgreementView, [
-            'campus' => 'campus_id',
+            'modality' => 'modality_id',
             'unit' => fn (Builder $scoped, array $ids) => $scoped->where(fn (Builder $either) => $either
                 ->whereIn('from_department_id', $ids)
                 ->orWhereIn('to_department_id', $ids)),

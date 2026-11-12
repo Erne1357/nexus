@@ -9,8 +9,8 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 /**
  * Quién descarga un exporte de lo publicado (reglas-de-negocio.md, «Exportes de lo publicado»; decisión del usuario
  * del 10 de noviembre de 2026): lo público (PDF por carrera y semestre, por docente y por salón), cualquiera, también
- * sin sesión; lo demás (PDF por departamento, Excel del campus, archivos para el SII), quien tiene su permiso en el
- * campus y la unidad del exporte. Registrada para la interfaz, así que vale para cada exporte que la implemente.
+ * sin sesión; lo demás (PDF por departamento, Excel del campus, archivos para el SII), quien tiene su permiso en la
+ * modalidad (la de su campus) y la unidad del exporte. Registrada para la interfaz, así que vale para cada exporte que la implemente.
  */
 final class PublishedExportPolicy
 {

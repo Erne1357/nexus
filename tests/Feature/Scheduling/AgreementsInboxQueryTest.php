@@ -233,6 +233,7 @@ it('no hace una consulta por acuerdo: las mismas consultas con 1 que con 8 acuer
     loanOf($this->ii, $this->sc);
     shareOf($this->cb, $this->sc);
     loanOf($this->ii, $this->sc, ['status' => AgreementStatus::Cancelled]);
+    $count();
     $one = $count();
     foreach (range(1, 4) as $i) {
         loanOf($this->ii, $this->sc);

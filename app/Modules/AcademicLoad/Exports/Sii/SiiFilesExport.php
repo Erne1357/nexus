@@ -93,7 +93,7 @@ final class SiiFilesExport implements StaffExport
     }
 
     /**
-     * Como los demás exportes del personal: el campus y los departamentos que publicaron más Servicios Escolares. El
+     * Como los demás exportes del personal: la modalidad del campus y los departamentos que publicaron más Servicios Escolares. El
      * permiso solo aplica a Servicios Escolares y a la Subdirección Académica, así que no lo tiene el jefe de un
      * departamento académico.
      */

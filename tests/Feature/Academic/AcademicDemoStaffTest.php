@@ -34,6 +34,7 @@ use Tests\Support\Academic\DemoCatalog;
 
 it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el Tec, jefes de proyecto docente y coordinadores en Presencial y por campus (AZ-S17)', function () {
     $this->seed(DemoSeeder::class);
+    modalityOf('EAD')->update(['is_active' => true]);
 
     $c1 = Campus::query()->where('code', 'C1')->sole();
     $c2 = Campus::query()->where('code', 'C2')->sole();
@@ -49,14 +50,13 @@ it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el
         'jpd.cb.c2', 'jpd.cea.c2', 'jpd.ii.c2', 'jpd.sc.c2',
         'coord.isc.c2', 'coord.ii.c2', 'coord.ige.c2', 'coord.il.c2', 'coord.la.c2', 'coord.cp.c2',
     ])
-        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $c2->id, career: $isic->id)))->toBeTrue()
-        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $c2->id, career: $iind->id)))->toBeFalse()
-        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $c1->id, career: $isic->id)))->toBeFalse()
-        ->and($context('jefe.sc')->allows(AcademicLoadPermission::LoadView, Target::of(campus: $c2->id, unit: $sc->id)))->toBeTrue()
-        ->and($context('jefe.sc')->allows(AcademicLoadPermission::LoadView, Target::of(campus: $c1->id, unit: $sc->id)))->toBeTrue()
+        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(modality: modalityOf('PRES')->id, career: $isic->id)))->toBeTrue()
+        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(modality: modalityOf('PRES')->id, career: $iind->id)))->toBeFalse()
+        ->and($context('coord.isc.c2')->allows(AcademicLoadPermission::ProposalView, Target::of(modality: modalityOf('PRES')->id, career: $isic->id)))->toBeTrue()
+        ->and($context('jefe.sc')->allows(AcademicLoadPermission::LoadView, Target::of(modality: modalityOf('PRES')->id, unit: $sc->id)))->toBeTrue()
         ->and($context('jefe.sc')->heldScopes()->sole()->campus_id)->toBeNull()
-        ->and($context('jpd.sc.c2')->allows(AcademicLoadPermission::LoadView, Target::of(campus: $c2->id, unit: $sc->id)))->toBeTrue()
-        ->and($context('jpd.sc.c2')->allows(AcademicLoadPermission::LoadView, Target::of(campus: $c1->id, unit: $sc->id)))->toBeFalse()
+        ->and($context('jpd.sc.c2')->allows(AcademicLoadPermission::LoadView, Target::of(modality: modalityOf('PRES')->id, unit: $sc->id)))->toBeTrue()
+        ->and($context('jpd.sc.c2')->allows(AcademicLoadPermission::LoadView, Target::of(modality: modalityOf('EAD')->id, unit: $sc->id)))->toBeFalse()
         ->and($context('subdir')->allows(FacilitiesPermission::BuildingView, Target::of(campus: $c2->id)))->toBeTrue()
         ->and($context('subdir')->allows(FacilitiesPermission::BuildingView, Target::of(campus: $c1->id)))->toBeTrue()
         ->and($context('subdir')->heldScopes()->sole()->campus_id)->toBeNull()
@@ -84,7 +84,7 @@ it('completa el rol y el alcance de un usuario de prueba que una corrida anterio
     $coordinator = User::query()->where('username', 'coord.isc.c2')->sole();
     $subdirection = User::query()->where('username', 'subdir')->sole();
 
-    expect(app(Actor::class)->forUser($coordinator)->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $c2->id, career: Career::query()->where('code', 'ISIC')->value('id'))))->toBeTrue()
+    expect(app(Actor::class)->forUser($coordinator)->allows(AcademicLoadPermission::ProposalView, Target::of(modality: modalityOf('PRES')->id, career: Career::query()->where('code', 'ISIC')->value('id'))))->toBeTrue()
         ->and(app(Actor::class)->forUser($subdirection)->allows(FacilitiesPermission::BuildingView, Target::of(campus: $c2->id)))->toBeTrue()
         ->and($coordinator->roleAssignments()->count())->toBe(1)
         ->and($subdirection->roleAssignments()->count())->toBe(2);

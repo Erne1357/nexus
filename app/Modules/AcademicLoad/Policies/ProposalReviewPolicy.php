@@ -15,11 +15,11 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  * docs/dominio/reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Aceptar o regresar la parte del
  * departamento en una propuesta de carrera"):
  *
- * - Ven la bandeja de un departamento en un campus con el permiso `academic_load.proposal_review.view`: la
+ * - Ven la bandeja de un departamento en una modalidad con el permiso `academic_load.proposal_review.view`: la
  *   subdirección, el jefe de departamento y el jefe de proyecto docente de ese departamento (supuesto por
  *   confirmar).
- * - Acepta (AcceptProposalReview) o regresa (ReturnProposalReview) la parte el jefe de ese departamento en el
- *   campus de la propuesta, como quien propone la carga (supuesto por confirmar).
+ * - Acepta (AcceptProposalReview) o regresa (ReturnProposalReview) la parte el jefe de ese departamento en la
+ *   modalidad de la propuesta (AZ-S17), como quien propone la carga (supuesto por confirmar).
  *
  * El admin pasa por la concesión implícita del registro.
  */

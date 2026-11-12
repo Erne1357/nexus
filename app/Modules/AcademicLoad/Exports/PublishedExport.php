@@ -35,7 +35,7 @@ interface PublishedExport
     public function permission(): ?AcademicLoadPermission;
 
     /**
-     * El campus y, si aplica, la unidad sobre los que se pregunta el permiso.
+     * La modalidad y, si aplica, la unidad sobre los que se pregunta el permiso.
      */
     public function scope(): Target;
 

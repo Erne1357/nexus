@@ -68,7 +68,7 @@ enum AcademicLoadPermission: string implements Permission
             self::AgreementRequest => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
             self::ProposalUpdate => [Dimension::Modality, Dimension::Career, Dimension::Campus],
             self::AgreementView, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Modality, Dimension::Unit],
-            default => [Dimension::Modality, Dimension::Career],
+            self::ProposalCreate, self::ProposalSubmit, self::ProposalView => [Dimension::Modality, Dimension::Career],
         };
     }
 
