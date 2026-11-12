@@ -11,7 +11,8 @@ use RuntimeException;
 /**
  * Invita a un docente a activar su acceso (AC-07): manda a su correo institucional la invitación de Core
  * (SendAccessInvitation). Solo a un docente activo y sin borrar, con usuario sin contraseña y con correo institucional
- * (sin él no se habilita, confirmado el 11 de noviembre de 2026); si no, una ValidationException sobre `access` con el
+ * (sin él no se habilita, confirmado el 11 de noviembre de 2026), y sin otro puesto (SendAccessInvitation: a los jefes
+ * los habilita el admin); si no, una ValidationException sobre `access` con el
  * motivo, sin escribir. Quién puede lo decide TeacherPolicy (`inviteAccess`) o quien la llama.
  */
 final class InviteTeacherAccess

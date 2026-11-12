@@ -9,11 +9,13 @@ use App\Modules\Core\Support\AccessInvitationLink;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * El enlace de la invitación de acceso (AC-08), para invitados. Abrirlo (GET) solo muestra la página con el botón
  * «Activar mi acceso», porque los filtros de correo abren los enlaces solos; el botón (POST al mismo enlace firmado)
- * llama a AcceptAccessInvitation y manda al login con un aviso. Un enlace con la firma rota o vencida, usado,
+ * llama a AcceptAccessInvitation, cierra la sesión que hubiera abierta en esa computadora, inicia la del invitado con
+ * una sesión nueva y lo lleva directo a cambiar la contraseña, para que la contraseña por defecto dure lo menos posible. Un enlace con la firma rota o vencida, usado,
  * reenviado, de un correo que cambió o de un usuario que no existe o está inactivo muestra la misma página (403), sin
  * decir cuál de esas fue ni si el usuario existe.
  */
@@ -32,11 +34,19 @@ final class AccessInvitationPage
 
     public function accept(Request $request, string $user, string $hash, AcceptAccessInvitation $acceptAccessInvitation): RedirectResponse|Response
     {
-        if (! $request->hasValidSignature() || $acceptAccessInvitation->handle($user, $hash) === null) {
+        $accepted = $request->hasValidSignature() ? $acceptAccessInvitation->handle($user, $hash) : null;
+
+        if ($accepted === null) {
             return $this->closed();
         }
 
-        return redirect()->route('login')->with('status', 'access-accepted');
+        $guard = Auth::guard(config('fortify.guard'));
+        $guard->logout();
+        $request->session()->invalidate();
+        $guard->login($accepted);
+        $request->session()->regenerate();
+
+        return redirect()->route('user-password.edit');
     }
 
     private function closed(): Response

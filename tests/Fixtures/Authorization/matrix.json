@@ -203,6 +203,7 @@
             "faculty.teacher_user.invite",
             "faculty.teacher_user.provision",
             "faculty.teacher_user.reset_password",
+            "faculty.teacher_user.update_staff_email",
             "scheduling.group.manage",
             "scheduling.quota.manage",
             "scheduling.room.assign",

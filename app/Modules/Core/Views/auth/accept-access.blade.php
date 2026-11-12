@@ -5,7 +5,7 @@
 <x-core::layouts.guest title="Activar tu acceso">
     <x-card :title="$action ? 'Activa tu acceso a Nexus' : 'Este enlace ya no sirve'" shadow separator class="w-full max-w-sm">
         @if ($action)
-            <p class="mb-4">Tu usuario es <span class="font-mono font-semibold">{{ $username }}</span>. Al activarlo entras con la contraseña que viene en el correo y Nexus te pedirá cambiarla.</p>
+            <p class="mb-4">Tu usuario es <span class="font-mono font-semibold">{{ $username }}</span>. Al activarlo entras a Nexus y lo primero será elegir tu propia contraseña.</p>
 
             <form method="POST" action="{{ $action }}">
                 @csrf

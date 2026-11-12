@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Deja sin efecto la invitación de acceso de un usuario que todavía no tiene contraseña: borra `access_invited_at`, así
  * que su enlace deja de servir (AC-07: cambiar el correo institucional invalida el enlace anterior, supuesto por
- * confirmar). Sin invitación o con contraseña no escribe nada. Deja bitácora sobre el usuario.
+ * confirmar), y el correo sin verificar que le puso la invitación. Sin invitación o con contraseña no escribe nada.
+ * Deja bitácora sobre el usuario.
  */
 final class CancelAccessInvitation
 {
@@ -21,14 +22,20 @@ final class CancelAccessInvitation
                 return;
             }
 
-            $invitedAt = $user->access_invited_at->toIso8601String();
-            $user->forceFill(['access_invited_at' => null])->save();
+            $old = ['access_invited_at' => $user->access_invited_at->toIso8601String()];
+            $new = ['access_invited_at' => null];
+
+            if ($user->email_verified_at === null && $user->email !== null) {
+                [$old['email'], $new['email']] = [$user->email, null];
+            }
+
+            $user->forceFill($new)->save();
 
             activity()
                 ->performedOn($user)
                 ->causedBy($actor)
                 ->event('access-invitation-cancelled')
-                ->withChanges(['attributes' => ['access_invited_at' => null], 'old' => ['access_invited_at' => $invitedAt]])
+                ->withChanges(['attributes' => $new, 'old' => $old])
                 ->log("Dejó sin efecto la invitación de acceso de {$user->username}");
         });
     }
