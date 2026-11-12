@@ -6,11 +6,9 @@ use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewValidated;
-use App\Modules\CatalogValidation\Listeners\CreateReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnCampusUpdated;
 use App\Modules\CatalogValidation\Listeners\InviteTeacherAfterValidation;
 use App\Modules\CatalogValidation\Listeners\InviteTeachersOnReviewValidated;
-use App\Modules\CatalogValidation\Listeners\NotifyPendingReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
@@ -22,7 +20,6 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\CampusUpdated;
-use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Faculty\Events\AdscriptionChanged;
@@ -38,9 +35,9 @@ use Illuminate\Support\Facades\Event;
  * Módulo CatalogValidation: revisión de los catálogos de cada departamento por periodo
  * (docs/dominio/modelo-de-datos.md, "CatalogValidation"). Depende de Imports y de lo que está a su izquierda.
  *
- * Escucha a Core, que no depende de CatalogValidation: al abrir un periodo en un campus crea las revisiones
- * que falten y avisa a los jefes que tienen catálogos por validar, y si un campus empieza a usar salones, las de
- * salones de los periodos abiertos en él. Escucha a Faculty: la captura del jefe sobre un docente suyo inicia la
+ * Escucha a Core, que no depende de CatalogValidation: si un campus empieza a usar salones, completa las de salones de
+ * los periodos abiertos en él donde el admin ya abrió ese catálogo. Abrir un periodo ya no crea revisiones: el admin abre la
+ * validación por catálogo (OpenCatalogValidation, CV9). Escucha a Faculty: la captura del jefe sobre un docente suyo inicia la
  * revisión de docentes (CV-S4). Validar la revisión de docentes invita a los docentes del departamento a activar su
  * acceso, y el que queda en condiciones después (correo capturado, adscripción, usuario) se invita entonces (AC-09).
  */
@@ -50,8 +47,6 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     {
         parent::boot();
 
-        Event::listen(TermOpened::class, CreateReviewsOnTermOpened::class);
-        Event::listen(TermOpened::class, NotifyPendingReviewsOnTermOpened::class);
         Event::listen(CampusUpdated::class, CreateRoomsReviewsOnCampusUpdated::class);
 
         Event::listen(CatalogReviewValidated::class, InviteTeachersOnReviewValidated::class);

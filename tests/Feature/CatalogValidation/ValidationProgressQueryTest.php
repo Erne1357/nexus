@@ -39,7 +39,7 @@ beforeEach(function () {
 
     foreach ([$this->c2, $this->c1, $this->online] as $campus) {
         TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $campus->id]);
-        app(CreateTermReviews::class)->handle($this->term, $campus);
+        app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
     }
 
     $this->progress = fn (?Collection $campuses = null, string $search = '', string $status = '') => app(ValidationProgressQuery::class)
@@ -97,11 +97,17 @@ it('con un solo campus filtrado que usa salones cuenta la de salones y cuadra co
         ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->c2, $this->sis)));
 });
 
-it('los salones solo cuentan si algún campus del alcance los usa', function () {
+it('CV9: las columnas y el total son los catálogos abiertos en el periodo, sin importar el campus del filtro', function () {
+    CatalogReview::query()->whereIn('catalog', [Catalog::Rooms->value, Catalog::Careers->value])->delete();
+
     $board = ($this->progress)(collect([$this->online]));
 
-    expect($board['global']['total'])->toBe(8)
-        ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans', 'careers']);
+    expect($board['global']['total'])->toBe(6)
+        ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans']);
+
+    CatalogReview::query()->delete();
+
+    expect(array_column(($this->progress)()['columns'], 'key'))->toBe([]);
 });
 
 it('suma validadas, en revisión y pendientes por fila, por columna y en lo global', function () {

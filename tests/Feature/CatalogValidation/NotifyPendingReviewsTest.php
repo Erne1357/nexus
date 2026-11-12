@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\NotifyPendingReviews;
+use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
@@ -114,10 +115,15 @@ it('no avisa a los departamentos inactivos ni a quien no es jefe de ese departam
     Notification::assertNotSentTo([$this->jefeSistemas, $jpd], CatalogReviewsPending::class);
 });
 
-it('al abrir el periodo en un campus avisa a los jefes, después de guardar la apertura', function () {
-    $this->actingAs(User::factory()->admin()->create());
+it('CV9: al abrir la validación avisa a los jefes y abrir el periodo no', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
 
     app(OpenTerm::class)->handle($this->term, $this->c2);
+
+    expect($this->jefeSistemas->notifications()->count())->toBe(0);
+
+    app(OpenCatalogValidation::class)->handle($this->term, Catalog::cases(), $admin);
 
     expect($this->jefeSistemas->notifications()->count())->toBe(1)
         ->and($this->jefeBasicas->notifications()->count())->toBe(1)
