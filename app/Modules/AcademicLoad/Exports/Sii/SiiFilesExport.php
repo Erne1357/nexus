@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad\Exports\Sii;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Exports\Concerns\ResolvesCampusModality;
 use App\Modules\AcademicLoad\Exports\StaffExport;
 use App\Modules\AcademicLoad\Exports\StaffExports;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
@@ -29,6 +30,8 @@ use ZipArchive;
  */
 final class SiiFilesExport implements StaffExport
 {
+    use ResolvesCampusModality;
+
     /**
      * @param  list<string>  $snapshotIds
      * @param  list<string>  $departmentIds  los departamentos que publicaron, para el permiso
@@ -90,13 +93,13 @@ final class SiiFilesExport implements StaffExport
     }
 
     /**
-     * Como los demás exportes del personal: el campus y los departamentos que publicaron más Servicios Escolares. El
+     * Como los demás exportes del personal: la modalidad del campus y los departamentos que publicaron más Servicios Escolares. El
      * permiso solo aplica a Servicios Escolares y a la Subdirección Académica, así que no lo tiene el jefe de un
      * departamento académico.
      */
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId, unit: StaffExports::units($this->departmentIds));
+        return Target::of(modality: $this->modalityId($this->campusId), unit: StaffExports::units($this->departmentIds));
     }
 
     /**

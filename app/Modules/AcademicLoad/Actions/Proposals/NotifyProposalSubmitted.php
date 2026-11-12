@@ -51,7 +51,7 @@ final class NotifyProposalSubmitted
                 continue;
             }
 
-            $heads = $this->recipients->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $proposal->campus_id, unit: $department->getKey()));
+            $heads = $this->recipients->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(modality: $proposal->modality_id, unit: $department->getKey()));
 
             $notified += $this->notifyHolders->handle($heads, new ProposalSubmitted($proposal, $department, (int) $row->subjects, (int) $row->groups, $resubmitted))->count();
         }

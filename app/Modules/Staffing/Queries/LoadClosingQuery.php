@@ -65,7 +65,7 @@ final class LoadClosingQuery
     public function departmentsFor(Actor $actor, string $termId): Collection
     {
         $withGroups = $actor->constrain(AcademicLoad::query()->where('academic_loads.term_id', $termId), AcademicLoadPermission::LoadClose, [
-            'campus' => 'academic_loads.campus_id',
+            'modality' => 'academic_loads.modality_id',
             'unit' => 'academic_loads.department_id',
         ])
             ->groupBy('academic_loads.department_id')

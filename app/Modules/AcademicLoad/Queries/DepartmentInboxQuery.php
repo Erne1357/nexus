@@ -134,7 +134,7 @@ final class DepartmentInboxQuery
             )
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => $context->allows(AcademicLoadPermission::ProposalReviewView, Target::of(campus: $campus->getKey(), unit: $department->getKey())))
+            ->filter(fn (Department $department): bool => $context->allows(AcademicLoadPermission::ProposalReviewView, Target::of(modality: $campus->modality_id, unit: $department->getKey())))
             ->values();
     }
 

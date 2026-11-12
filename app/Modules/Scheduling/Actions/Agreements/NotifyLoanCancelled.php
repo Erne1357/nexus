@@ -28,7 +28,7 @@ final class NotifyLoanCancelled
             return 0;
         }
 
-        $owners = $this->recipients->holders(AcademicLoadPermission::AgreementDecide, Target::of(campus: $agreement->campus_id, unit: $agreement->to_department_id));
+        $owners = $this->recipients->holders(AcademicLoadPermission::AgreementDecide, Target::of(modality: $agreement->modality_id, unit: $agreement->to_department_id));
 
         return $this->notifyHolders->handle($owners, new LoanCancelled($agreement))->count();
     }

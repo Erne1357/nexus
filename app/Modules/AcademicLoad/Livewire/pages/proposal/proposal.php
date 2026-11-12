@@ -286,6 +286,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     {
         $proposal = $this->authorizedProposal('update', $proposals);
         $item = $proposals->itemOrFail($proposal, (string) $this->itemId)->load(['subject' => fn ($query) => $query->withTrashed()]);
+        $this->authorize('update', [$proposal, $item]);
 
         $this->requested_groups = SuggestedGroups::fromSettings()->for(max(0, (int) $this->expected_students), (bool) $item->subject->needs_lab);
     }
@@ -297,6 +298,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     {
         $proposal = $this->authorizedProposal('update', $proposals);
         $item = $proposals->itemOrFail($proposal, (string) $this->itemId);
+        $this->authorize('update', [$proposal, $item]);
 
         $this->resetErrorBag();
 
@@ -320,6 +322,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     {
         $proposal = $this->authorizedProposal('update', $proposals);
         $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('update', [$proposal, $item]);
 
         if (! in_array($field, ['expected_students', 'requested_groups'], true)) {
             return;

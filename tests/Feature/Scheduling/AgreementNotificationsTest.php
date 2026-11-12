@@ -97,10 +97,11 @@ it('al proponerse un grupo compartido, avisa al jefe del departamento de la carr
         && $notification->message($this->jefeSc)->body === '6 lugares de ISC');
 });
 
-it('el aviso se queda en el campus: un jefe del mismo departamento en otro campus no lo recibe', function () {
+it('el aviso se queda en la modalidad: un jefe del mismo departamento en otra modalidad no lo recibe', function () {
     Notification::fake();
+    modalityOf('EAD')->update(['is_active' => true]);
     vacate(Role::JefeDepartamento, $this->sc->id);
-    $elsewhere = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => Campus::factory()->create()->id, 'department_id' => $this->sc->id, 'valid_from' => today()->toDateString()])->create();
+    $elsewhere = User::factory()->withRole(Role::JefeDepartamento, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->sc->id, 'valid_from' => today()->toDateString()])->create();
 
     event(new AgreementRequested(($this->loan)()));
 

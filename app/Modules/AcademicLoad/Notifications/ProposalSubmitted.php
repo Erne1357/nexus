@@ -69,7 +69,7 @@ final class ProposalSubmitted extends NexusNotification
             return 'Esa propuesta ya no existe.';
         }
 
-        if (! $context->allows(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $proposal->campus_id, unit: $department->getKey()))) {
+        if (! $context->allows(AcademicLoadPermission::ProposalReviewDecide, Target::of(modality: $proposal->modality_id, unit: $department->getKey()))) {
             return "Ya no eres jefe de {$department->name}.";
         }
 

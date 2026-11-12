@@ -66,7 +66,7 @@ final class CareerProposalQuery
             ->whereIn('id', CareerCampus::query()->where('campus_id', $campus->getKey())->where('is_active', true)->select('career_id'))
             ->orderBy('code')
             ->get()
-            ->filter(fn (Career $career): bool => $context->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $campus->getKey(), career: $career->getKey())))
+            ->filter(fn (Career $career): bool => $context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: $campus->modality_id, career: $career->getKey())))
             ->values();
     }
 

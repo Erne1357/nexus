@@ -12,6 +12,7 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
@@ -510,7 +511,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     {
         $key = "{$permission->value}|{$campus->id}|{$departmentId}";
 
-        return $this->heads[$key] ??= app(RecipientsQuery::class)->holders($permission, Target::of(campus: $campus->id, unit: $departmentId))[0]['user'] ?? $this->admin;
+        return $this->heads[$key] ??= app(RecipientsQuery::class)->holders($permission, Target::of(modality: $campus->modality_id, campus: in_array(Dimension::Campus, $permission->dimensions(), true) ? $campus->id : null, unit: $departmentId))[0]['user'] ?? $this->admin;
     }
 
     // ---------------------------------------------------------------- préstamos

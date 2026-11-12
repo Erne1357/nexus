@@ -44,8 +44,15 @@ it('niega al jefe de otro departamento', function () {
         ->and($jefe->can('propose', $this->load))->toBeFalse();
 });
 
-it('niega al jefe de proyecto docente y al jefe de departamento de otro campus', function (Role $role) {
+it('AZ-S17: el jefe de proyecto docente y el jefe de departamento de otro campus ven la carga de su modalidad', function (Role $role) {
     $user = User::factory()->withRole($role, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
+
+    expect($user->can('view', $this->load))->toBeTrue();
+})->with([Role::JefeProyectoDocente, Role::JefeDepartamento]);
+
+it('AZ-S17: niega al jefe de proyecto docente y al jefe de departamento de otra modalidad', function (Role $role) {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $user = User::factory()->withRole($role, ['modality_id' => modalityOf('EAD')->id, 'department_id' => departmentKey(10)])->create();
 
     expect($user->can('view', $this->load))->toBeFalse()
         ->and($user->can('propose', $this->load))->toBeFalse();
