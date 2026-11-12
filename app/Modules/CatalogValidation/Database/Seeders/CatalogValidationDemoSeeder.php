@@ -495,28 +495,18 @@ class CatalogValidationDemoSeeder extends Seeder
     }
 
     /**
-     * El jefe del departamento de la revisión (en el campus de salones, o en cualquier campus abierto); si no hay,
-     * el administrador.
+     * El jefe del departamento de la revisión (las revisiones no son de un campus); si no hay, el administrador.
      */
     private function headOf(CatalogReview $review): User
     {
-        $key = $review->term_id.'/'.$review->department_id.'/'.($review->campus_id ?? '');
+        $key = $review->term_id.'/'.$review->department_id;
 
         return $this->heads[$key] ??= $this->findHead($review);
     }
 
     private function findHead(CatalogReview $review): User
     {
-        $campuses = $review->campus_id === null ? $this->openedCampuses($review->term) : collect([$review->campus]);
-
-        foreach ($campuses as $campus) {
-            $head = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $review->department_id))[0]['user'] ?? null;
-
-            if ($head !== null) {
-                return $head;
-            }
-        }
-
-        return User::query()->where('username', 'admin')->firstOrFail();
+        return $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $review->department_id))[0]['user']
+            ?? User::query()->where('username', 'admin')->firstOrFail();
     }
 }

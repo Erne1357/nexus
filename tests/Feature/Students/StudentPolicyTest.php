@@ -142,3 +142,23 @@ it('AZ-S17: la lista de alumnos coincide con la policy por modalidad y campus', 
 
     expect($listed)->toBe([$mine->control_number]);
 });
+
+it('M10: con EAD inactiva, Subdirección y el jefe ven al alumno de EAD en la lista y en la ficha; el coordinador de PRES no', function () {
+    $ead = modalityOf('EAD');
+    $ead->update(['is_active' => false]);
+    $student = Student::factory()->for(StudyPlan::factory()->for($this->career))->inModality($ead)->create(['campus_id' => $this->campus->id, 'control_number' => '21000077']);
+    $viewers = [
+        'subdireccion' => [studentViewer(Role::Subdireccion), true],
+        'jefe' => [studentViewer(Role::JefeDepartamento, ['department_id' => $this->department->id]), true],
+        'coordinador PRES' => [studentViewer(Role::Coordinador, ['modality_id' => modalityOf('PRES')->id, 'career_id' => $this->career->id]), false],
+    ];
+
+    foreach ($viewers as [$user, $sees]) {
+        $this->actingAs($user);
+        app()->forgetScopedInstances();
+        $listed = app(StudentQuery::class)->forTable(app(Actor::class), $this->campus, [], '', 25)->pluck('control_number')->all();
+
+        expect($user->can('view', $student))->toBe($sees)
+            ->and(in_array('21000077', $listed, true))->toBe($sees);
+    }
+});

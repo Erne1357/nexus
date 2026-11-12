@@ -29,7 +29,10 @@ enum StudentsPermission: string implements Permission
      */
     public function dimensions(): array
     {
-        return $this->isPersonal() ? [] : [Dimension::Modality, Dimension::Campus, Dimension::Unit, Dimension::Career];
+        return match ($this) {
+            self::StudentView => [Dimension::Modality, Dimension::Campus, Dimension::Unit, Dimension::Career],
+            self::MyRecordView => [],
+        };
     }
 
     public function isPersonal(): bool

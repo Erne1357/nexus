@@ -121,15 +121,15 @@ final class CatalogReviewQuery
         return Department::query()
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => self::allowsOnDepartment($context, CatalogValidationPermission::ReviewView, null, $department->getKey()))
+            ->filter(fn (Department $department): bool => self::allowsOnDepartment($context, CatalogValidationPermission::ReviewView, $department->getKey()))
             ->values();
     }
 
     /**
      * Si `$permission` vale sobre el departamento. Las revisiones no son de un campus ni de una modalidad (AZ-S17), por
-     * eso `$campus` no entra en la decisión. Es la regla única de CatalogReviewPolicy y de las pantallas.
+     * eso solo se decide por el departamento. Es la regla única de CatalogReviewPolicy y de las pantallas.
      */
-    public static function allowsOnDepartment(Actor $context, CatalogValidationPermission $permission, ?string $campus, string $department): bool
+    public static function allowsOnDepartment(Actor $context, CatalogValidationPermission $permission, string $department): bool
     {
         return $context->allows($permission, Target::of(unit: $department));
     }

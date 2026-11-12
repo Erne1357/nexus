@@ -14,16 +14,17 @@ use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Students\Enums\StudentsPermission;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\Fixtures\Authorization\FakePermission;
 
 /*
 | Spec §7.1 (Autorización por permisos): un nombramiento con una dimensión vacía cubre cualquier valor, así que un
 | permiso sobre un recurso con `campus_id` que no declara `Dimension::Campus` se concedería "en todos los campus"
-| aunque el puesto sea de uno. Esta prueba lo impide (§14) y fija D4 a D6 del plan 3.P9:
+| aunque el puesto sea de uno. Esta prueba lo impide (§14) y fija D4 a D6 del plan 3.P9 y la excepción RV (revisiones sin campus):
 | D4: `core.term.open` declaraba campus y desde M4 declara modalidad (`term_openings` ya no tiene campus); D5:
 | `core.assignment.*` e `imports.batch.*`, solo del admin; D6: `catalog_validation.progress.*`, solo de puestos de todo
-| el Tec; D7: `catalog_validation.review.*` sin campus ni modalidad (`core.term.manage_calendar` dejó de ser excepción: `term_stages` ya no tiene campus, M4).
+| el Tec; RV: `catalog_validation.review.*` sin campus ni modalidad (`core.term.manage_calendar` dejó de ser excepción: `term_stages` ya no tiene campus, M4).
 */
 
 /**
@@ -77,14 +78,14 @@ function dimensionTables(): array
 }
 
 /**
- * Permisos que, sobre una tabla con `campus_id`, pueden no declarar campus, con su motivo (D5 y D6).
+ * Permisos que, sobre una tabla con `campus_id`, pueden no declarar campus, con su motivo (D5, D6 y RV).
  *
  * @return array<string, string>
  */
 function dimensionExceptions(): array
 {
     $admin = 'D5: solo del admin, que cubre todo; si se concede a otro puesto hay que decidir sus dimensiones en ese PR.';
-    $noCampus = 'D7: las revisiones de catálogos son del departamento en todo el Tec, sin campus ni modalidad (AZ-S17, supuesto por confirmar); `catalog_reviews.campus_id` siempre es nulo y declarar el campus dejaría sin acceso a un nombramiento con campus.';
+    $noCampus = 'RV: las revisiones de catálogos son del departamento en todo el Tec, sin campus ni modalidad (AZ-S17, supuesto por confirmar); `catalog_reviews.campus_id` siempre es nulo (CHECK) y, si el permiso declarara el campus, un nombramiento con campus nunca cubriría una revisión sin campus.';
     $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección); el panel o tablero abarca todos los campus.';
 
     return [
@@ -218,7 +219,7 @@ it('spec §7.1: ningún permiso del módulo sobre un recurso con campus_id omite
     expect($problems)->toBe([]);
 })->with($enums);
 
-it('cada excepción es solo del admin (D5) o solo de puestos de todo el Tec (D6)', function (string $key, string $reason) {
+it('cada excepción es solo del admin (D5), solo de puestos de todo el Tec (D6) o de revisiones sin campus (RV)', function (string $key, string $reason) {
     $registry = app(PermissionRegistry::class);
     $permission = collect($registry->permissions())->firstWhere('value', $key);
 
@@ -230,8 +231,12 @@ it('cada excepción es solo del admin (D5) o solo de puestos de todo el Tec (D6)
         return;
     }
 
-    if (str_starts_with($reason, 'D7')) {
-        expect($permission->dimensions())->not->toContain(Dimension::Campus)->not->toContain(Dimension::Modality);
+    if (str_starts_with($reason, 'RV')) {
+        $check = DB::selectOne("select pg_get_constraintdef(oid) as definition from pg_constraint where conname = 'catalog_reviews_campus_check'");
+
+        expect($check?->definition)->toContain('campus_id IS NULL')
+            ->and($permission->dimensions())->not->toContain(Dimension::Campus)->not->toContain(Dimension::Modality)
+            ->and(array_values(array_filter($registry->rolesGranting($permission), fn (Role $role): bool => in_array($role, [Role::JefeProyectoDocente, Role::Coordinador], true))))->toBe([], "{$key} no se concede a un puesto que lleva campus");
 
         return;
     }

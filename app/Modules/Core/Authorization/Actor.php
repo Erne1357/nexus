@@ -103,6 +103,9 @@ final class Actor
     /** @var Collection<int, Modality>|null todas las modalidades activas, por código */
     private ?Collection $activeModalities = null;
 
+    /** @var Collection<int, Modality>|null todas las modalidades no borradas, activas o no (M10), por código */
+    private ?Collection $existingModalities = null;
+
     /** El contexto que creó este con forUser() o asRole(): de él salen los campus y las modalidades activos. */
     private ?self $catalogSource = null;
 
@@ -232,6 +235,21 @@ final class Actor
     }
 
     /**
+     * allows() para trabajar la carga de una modalidad (escribir, abrir): sobre una modalidad inactiva solo el admin
+     * puede. Un nombramiento sin modalidad la cubre para ver (M10), no para trabajarla (MS8).
+     */
+    public function allowsWorking(Permission $permission, Target $target): bool
+    {
+        $inactive = array_any($target->values(Dimension::Modality) ?? [], fn (string $modality): bool => ! $this->isActiveModality($modality));
+
+        if ($inactive && ! $this->isAdmin()) {
+            return false;
+        }
+
+        return $this->allows($permission, $target);
+    }
+
+    /**
      * Los puestos que tiene (todos, no solo el activo; sin el admin) que conceden `$permission` y tienen algún
      * nombramiento que lo aporta y cubre `$target` en cada dimensión que el permiso declara: la regla de allows() sin el atajo
      * del admin, para saber a quién y con qué puesto le toca un aviso. En el orden del enum. Solo permisos de gestión.
@@ -279,8 +297,9 @@ final class Actor
      * dimensiones ampliaría el alcance.
      * - `campus` es siempre una columna: todo recurso de un campus tiene `campus_id`. Un nombramiento sin campus deja
      *   los campus activos y los registros sin campus (lo general), como allows().
-     * - `modality` es siempre una columna, igual que el campus (AZ-S17): un nombramiento sin modalidad deja las
-     *   modalidades activas y los registros sin modalidad; uno con modalidad, solo esa y solo si sigue activa (MS8).
+     * - `modality` es siempre una columna, igual que el campus (AZ-S17): un nombramiento sin modalidad deja todas las
+     *   modalidades no borradas, activas o no (M10: una modalidad inactiva solo bloquea trabajar su carga, no ver a sus
+     *   alumnos), y los registros sin modalidad; uno con modalidad, solo esa y solo si sigue activa (MS8).
      * - `unit` y `career` son una columna o una Closure(Builder, list<string>): void, para cuando la dimensión sale de
      *   una relación. Un nombramiento que no las fija no agrega nada (también quedan los registros sin valor); uno que
      *   las fija pide los valores que cubre (en unidad, la unidad y sus descendientes) con whereIn, o se los pasa a la
@@ -644,6 +663,9 @@ final class Actor
     }
 
     /**
+     * Un nombramiento sin campus cubre los campus activos; uno sin modalidad cubre todas las no borradas, activas o no
+     * (M10); uno que fija campus o modalidad solo cubre ese valor si sigue activo (MS8).
+     *
      * @param  list<string>|null  $values  los del objetivo en la dimensión; null si no tiene
      */
     private function coversValues(AssignmentScope $scope, Dimension $dimension, ?array $values): bool
@@ -653,7 +675,7 @@ final class Actor
         if ($fixed === null) {
             return match ($dimension) {
                 Dimension::Campus => $values === null || array_any($values, fn (string $campus): bool => $this->isActiveCampus($campus)),
-                Dimension::Modality => $values === null || array_any($values, fn (string $modality): bool => $this->isActiveModality($modality)),
+                Dimension::Modality => $values === null || array_any($values, fn (string $modality): bool => $this->existingModalities()->contains(fn (Modality $existing): bool => $existing->getKey() === $modality)),
                 default => true,
             };
         }
@@ -720,7 +742,7 @@ final class Actor
 
         if ($dimension === Dimension::Modality && is_string($mapping)) {
             if ($fixed === null) {
-                $clause->where(fn (Builder $modality) => $modality->whereIn($mapping, $this->activeModalities()->modelKeys())->orWhereNull($mapping));
+                $clause->where(fn (Builder $modality) => $modality->whereIn($mapping, $this->existingModalities()->modelKeys())->orWhereNull($mapping));
             } else {
                 $this->whereValues($clause, $mapping, $this->isActiveModality($fixed) ? [$fixed] : []);
             }
@@ -790,6 +812,21 @@ final class Actor
         return $this->activeModalities ??= Modality::query()->where('is_active', true)->orderBy('code')->get();
     }
 
+    /**
+     * Todas las modalidades no borradas, activas o no (M10): las que cubre un nombramiento sin modalidad. Como
+     * activeModalities(), la comparten los contextos derivados.
+     *
+     * @return Collection<int, Modality>
+     */
+    private function existingModalities(): Collection
+    {
+        if ($this->catalogSource !== null) {
+            return $this->catalogSource->existingModalities();
+        }
+
+        return $this->existingModalities ??= Modality::query()->orderBy('code')->get();
+    }
+
     private function resolvedUser(): ?User
     {
         $user = ($this->resolveUser)();
@@ -809,6 +846,7 @@ final class Actor
         $this->loadedFor = $user?->getKey();
         $this->activeCampuses = null;
         $this->activeModalities = null;
+        $this->existingModalities = null;
         $this->campuses = [];
         $this->modalities = [];
         $this->scopeModels = null;

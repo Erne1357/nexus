@@ -21,7 +21,7 @@ use Tests\Fixtures\Authorization\FakePermission;
 /*
 | AZ-S17: el alcance por modalidad, con el campus opcional (M5, M7 y M9, confirmados el 12 de noviembre de 2026; MS6 y
 | MS8, supuestos por confirmar). Un nombramiento sin modalidad cubre todas las activas; uno con modalidad, solo esa y
-| solo si está activa y sin borrar. Lo que se lee declara la modalidad sin el campus; lo que se escribe sobre algo con
+| solo si está activa y sin borrar (MS8); uno sin modalidad cubre también las inactivas (M10: una modalidad inactiva solo bloquea trabajar su carga, no ver a sus alumnos). Lo que se lee declara la modalidad sin el campus; lo que se escribe sobre algo con
 | campus declara también el campus. Permisos de prueba: FakePermission::ViewModality*. Carreras X (20) e Y (21),
 | departamento 10. EAD se activa en estas pruebas; En línea sigue inactiva.
 */
@@ -96,12 +96,12 @@ it('MS8: desactivar la modalidad deja sin acceso aunque el snapshot ya esté en 
     expect(modalityActor(User::find($user->id))->allows(FakePermission::ViewModalityCareer, $target))->toBeTrue();
 });
 
-it('AZ-S17: un jefe de departamento, que no fija modalidad, cubre todas las modalidades activas y no las inactivas', function () {
+it('AZ-S17: un jefe de departamento, que no fija modalidad, cubre todas las modalidades, activas o no (M10)', function () {
     $actor = modalityActor(User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => departmentKey(10)])->create());
 
     expect($actor->allows(FakePermission::ViewModalityUnit, Target::of(modality: $this->pres->id, unit: departmentKey(10))))->toBeTrue()
         ->and($actor->allows(FakePermission::ViewModalityUnit, Target::of(modality: $this->ead->id, unit: departmentKey(10))))->toBeTrue()
-        ->and($actor->allows(FakePermission::ViewModalityUnit, Target::of(modality: $this->enl->id, unit: departmentKey(10))))->toBeFalse()
+        ->and($actor->allows(FakePermission::ViewModalityUnit, Target::of(modality: $this->enl->id, unit: departmentKey(10))))->toBeTrue()
         ->and($actor->allows(FakePermission::ViewModalityUnit, Target::of(unit: departmentKey(10))))->toBeTrue()
         ->and($actor->modalities()->pluck('code')->all())->toBe(['EAD', 'PRES']);
 });
@@ -164,7 +164,7 @@ it('AZ-S17: constrain() deja fuera las filas de otra modalidad y, con campus, la
 
     $head = modalityActor(User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => departmentKey(10)])->create());
 
-    expect($names($head->constrain($probe->newQuery(), FakePermission::ViewModality, $columns)))->toBe(['pres-c1-x', 'pres-c2-x', 'pres-c2-y', 'ead-c2-x', 'sin-c2-x']);
+    expect($names($head->constrain($probe->newQuery(), FakePermission::ViewModality, $columns)))->toBe(['pres-c1-x', 'pres-c2-x', 'pres-c2-y', 'ead-c2-x', 'enl-c2-x', 'sin-c2-x']);
 });
 
 it('constrain() pide la modalidad como columna, no como Closure', function () {
@@ -193,4 +193,45 @@ it('un snapshot cacheado sin modality_id se descarta y se vuelve a leer de la ba
         ->and(AuthorizationSnapshots::FORMAT)->toBe(3)
         ->and($snapshot->scopes())->toEqual([new AssignmentScope(Role::Coordinador, $this->c2->id, null, $this->x, $this->pres->id)])
         ->and(AuthorizationSnapshot::fromArray($snapshot->toArray()))->toEqual($snapshot);
+});
+
+it('M10: con EAD inactiva, quien no fija modalidad la cubre; quien tiene EAD no (MS8) y quien tiene PRES tampoco', function () {
+    $this->ead->update(['is_active' => false]);
+    $onEad = Target::of(modality: $this->ead->id, unit: departmentKey(10), career: $this->x);
+
+    $head = modalityActor(User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => departmentKey(10)])->create());
+    $headCovers = $head->allows(FakePermission::ViewModalityUnit, $onEad);
+    $headOptions = $head->modalities()->pluck('code')->all();
+    $ofEad = modalityActor(User::factory()->withRole(Role::Coordinador, ['modality_id' => $this->ead->id, 'career_id' => $this->x])->create());
+    $ofEadCovers = $ofEad->allows(FakePermission::ViewModalityCareer, $onEad);
+    $ofPres = modalityActor(User::factory()->withRole(Role::Coordinador, ['modality_id' => $this->pres->id, 'career_id' => $this->x])->create());
+    $ofPresCovers = $ofPres->allows(FakePermission::ViewModalityCareer, $onEad);
+
+    expect($headCovers)->toBeTrue()
+        ->and($ofEadCovers)->toBeFalse()
+        ->and($ofPresCovers)->toBeFalse()
+        ->and($headOptions)->toBe(['PRES']);
+});
+
+it('M10: constrain() de quien no fija modalidad deja las filas de una modalidad inactiva; el que fija una inactiva, ninguna', function () {
+    $this->ead->update(['is_active' => false]);
+    Schema::create('modality_probes_m10', function (Blueprint $table): void {
+        $table->id();
+        $table->uuid('modality_id')->nullable();
+    });
+    DB::table('modality_probes_m10')->insert([['modality_id' => $this->pres->id], ['modality_id' => $this->ead->id]]);
+    $probe = new class extends Model
+    {
+        protected $table = 'modality_probes_m10';
+
+        public $timestamps = false;
+    };
+    $columns = ['modality' => 'modality_probes_m10.modality_id'];
+
+    $head = modalityActor(User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => departmentKey(10)])->create());
+    $ofHead = $head->constrain($probe->newQuery(), FakePermission::ViewModality, $columns)->count();
+    $ofEad = modalityActor(User::factory()->withRole(Role::Coordinador, ['modality_id' => $this->ead->id, 'career_id' => $this->x])->create());
+    $ofEadRows = $ofEad->constrain($probe->newQuery(), FakePermission::ViewModality, $columns)->count();
+
+    expect($ofHead)->toBe(2)->and($ofEadRows)->toBe(0);
 });

@@ -60,10 +60,14 @@ final class TermPolicy
     /**
      * Abrir el periodo en una modalidad o completar una apertura (M4; fila "Abrir periodo, calendario, perfil de
      * campus": la Subdirección). El permiso declara la dimensión modalidad, así que se decide sobre el par (periodo,
-     * modalidad). Sin modalidad pregunta si abre en alguna: es el `canOpen` de la página.
+     * modalidad). Abrir es trabajar la carga de la modalidad: una inactiva solo la abre el admin (M10; un nombramiento sin modalidad ya cubre las inactivas para ver, no para abrir). Sin modalidad pregunta si abre en alguna: es el `canOpen` de la página.
      */
     public function open(User $user, Term $term, ?Modality $modality = null): bool
     {
-        return $this->actor($user)->allows(CorePermission::TermOpen, $modality === null ? null : Target::of(modality: $modality->getKey()));
+        $actor = $this->actor($user);
+
+        return $modality === null
+            ? $actor->allows(CorePermission::TermOpen)
+            : $actor->allowsWorking(CorePermission::TermOpen, Target::of(modality: $modality->getKey()));
     }
 }
