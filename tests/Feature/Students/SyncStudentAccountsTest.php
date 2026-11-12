@@ -2,9 +2,11 @@
 
 use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\SiiNip;
 use App\Modules\Students\Actions\SyncStudentAccounts;
+use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Jobs\SyncStudentAccountsJob;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Rules\InstitutionalEmail;
@@ -54,7 +56,7 @@ it('AC-10: crea el usuario del alumno vigente con su NIP, el puesto de alumno y 
 
 it('AC-10: el alumno entra con su número de control y su NIP; el que no es vigente, no', function () {
     Student::factory()->create(['control_number' => '21110001']);
-    Student::factory()->inactive()->create(['control_number' => '21110002']);
+    Student::factory()->create(['control_number' => '21110002', 'status' => StudentStatus::Egresado]);
     syncStudentAccounts(['21110001' => '4821', '21110002' => '1357']);
 
     $this->post('/login', ['username' => '21110002', 'password' => '1357'])->assertSessionHasErrors(['username' => __('auth.failed')]);
@@ -64,36 +66,64 @@ it('AC-10: el alumno entra con su número de control y su NIP; el que no es vige
     $this->assertAuthenticatedAs(accountOf('21110001'));
 });
 
-it('AC-10: al volverse vigente se activa y al dejar de serlo, o al borrarse, se desactiva', function () {
-    $student = Student::factory()->inactive()->create(['control_number' => '21110001']);
+it('AC-10: la vigencia sale del estatus: activo y baja temporal entran; egresado, baja definitiva, sin estatus o borrado, no', function (?StudentStatus $status, bool $deleted, bool $active) {
+    $student = Student::factory()->create(['control_number' => '21110001', 'status' => $status, 'is_active' => ! $active]);
+
+    if ($deleted) {
+        $student->delete();
+    }
+
+    syncStudentAccounts(['21110001' => '4821']);
+
+    expect(accountOf('21110001')->is_active)->toBe($active);
+})->with([
+    'activo' => [StudentStatus::Activo, false, true],
+    'baja temporal' => [StudentStatus::BajaTemporal, false, true],
+    'egresado' => [StudentStatus::Egresado, false, false],
+    'baja definitiva' => [StudentStatus::BajaDefinitiva, false, false],
+    'sin estatus' => [null, false, false],
+    'activo pero borrado' => [StudentStatus::Activo, true, false],
+]);
+
+it('AC-10: al volverse vigente se activa y al dejar de serlo se desactiva', function () {
+    $student = Student::factory()->create(['control_number' => '21110001', 'status' => StudentStatus::BajaDefinitiva]);
     syncStudentAccounts(['21110001' => '4821']);
     expect(accountOf('21110001')->is_active)->toBeFalse();
 
-    $student->update(['is_active' => true]);
+    $student->update(['status' => StudentStatus::Activo]);
     expect(syncStudentAccounts(['21110001' => '4821'])['updated'])->toBe(1)
         ->and(accountOf('21110001')->is_active)->toBeTrue();
 
-    $student->update(['is_active' => false]);
-    syncStudentAccounts(['21110001' => '4821']);
-    expect(accountOf('21110001')->is_active)->toBeFalse();
-
-    $student->update(['is_active' => true]);
-    $student->delete();
+    $student->update(['status' => StudentStatus::Egresado]);
     syncStudentAccounts(['21110001' => '4821']);
     expect(accountOf('21110001')->is_active)->toBeFalse();
 });
 
-it('AC-10: un NIP vacío deja al usuario sin acceso, también al que ya tenía el del SII', function () {
+it('AC-10: no desactiva al usuario que tiene un puesto de personal, y lo reporta', function () {
+    $student = Student::factory()->create(['control_number' => '21110001']);
+    syncStudentAccounts(['21110001' => '4821']);
+    RoleAssignment::factory()->create(['user_id' => accountOf('21110001')->id, 'role' => Role::Admin, 'valid_from' => today()->toDateString()]);
+    $student->update(['status' => StudentStatus::Egresado]);
+
+    $summary = syncStudentAccounts(['21110001' => '4821']);
+
+    expect(accountOf('21110001')->is_active)->toBeTrue()
+        ->and($summary['kept_active'])->toBe(['21110001']);
+});
+
+it('AC-10: un NIP vacío deja sin acceso a quien no tiene contraseña, pero no le quita su NIP del SII a quien ya lo tiene', function () {
     Student::factory()->create(['control_number' => '21110001']);
     Student::factory()->create(['control_number' => '21110002']);
 
     syncStudentAccounts(['21110001' => '', '21110002' => '4821']);
-    syncStudentAccounts(['21110002' => '']);
+    $summary = syncStudentAccounts(['21110001' => '', '21110002' => '']);
 
-    foreach (['21110001', '21110002'] as $controlNumber) {
-        expect(accountOf($controlNumber)->password)->toBeNull()
-            ->and(accountOf($controlNumber)->password_origin)->toBeNull();
-    }
+    expect(accountOf('21110001')->password)->toBeNull()
+        ->and(accountOf('21110001')->password_origin)->toBeNull()
+        ->and(Hash::check('4821', accountOf('21110002')->password))->toBeTrue()
+        ->and(accountOf('21110002')->password_origin)->toBe(PasswordOrigin::SiiNip)
+        ->and($summary['nips_kept'])->toBe(['21110002'])
+        ->and($summary['unchanged'])->toBe(2);
 });
 
 it('AC-10: no toca un usuario con su número de control que no es suyo, y salta lo que no es alumno en Nexus', function () {
@@ -173,10 +203,10 @@ it('AC-13: el usuario toma el correo institucional; si otro usuario lo tiene, se
 
 it('AC-10: la bitácora registra el alta, los cambios y el bloque a nombre de quien corrió, nunca el NIP ni su hash', function () {
     $actor = User::factory()->create();
-    $student = Student::factory()->inactive()->create(['control_number' => '21110001']);
+    $student = Student::factory()->create(['control_number' => '21110001', 'status' => StudentStatus::Egresado]);
     $base = (int) Activity::query()->max('id');
     syncStudentAccounts(['21110001' => '4821'], $actor);
-    $student->update(['is_active' => true]);
+    $student->update(['status' => StudentStatus::Activo]);
     syncStudentAccounts(['21110001' => '9753'], $actor);
 
     $hash = accountOf('21110001')->password;
