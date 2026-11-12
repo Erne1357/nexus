@@ -17,10 +17,11 @@ use App\Modules\Faculty\Models\Teacher;
 
 /*
 | Validación de catálogos en el navegador, opción A «Tabla con columna Revisión» (12 de noviembre de 2026): el jefe de
-| departamento mueve un salón a un edificio de otro campus desde su drawer (el campus sigue al edificio y queda revisado,
-| CV-S10, CV7); en Docentes marca registros con el teclado (J, Espacio, R), captura un correo institucional en el
-| recuadro de la fila (AC-06), da de baja a un docente con su confirmación (CV8), marca los que faltan juntos con
-| «Elegir los N por revisar» y, con todo revisado, valida el catálogo desde «Revisaste los N docentes».
+| departamento entra por el menú, mueve un salón a un edificio de otro campus desde su drawer (el campus sigue al
+| edificio y queda revisado, CV-S10, CV7); en Docentes escribe en la búsqueda sin que los atajos corran, marca registros
+| con el teclado (J, Espacio, R), captura un correo institucional en el recuadro de la fila (AC-06), da de baja a un
+| docente con su confirmación (CV8), marca los que faltan juntos con «Elegir los N por revisar» y, con todo revisado,
+| valida el catálogo desde «Revisaste los N docentes».
 */
 
 it('el jefe revisa salones y docentes registro por registro, con teclado y en lote, y valida', function () {
@@ -46,8 +47,10 @@ it('el jefe revisa salones y docentes registro por registro, con teclado y en lo
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->navigate('/catalog-validation?catalogo=rooms')
-        ->assertSee('0 de 1 revisados')
+        ->click('#nexus-menu a[data-label="Validar catálogos"]')
+        ->assertPathIs('/catalog-validation')
+        ->click('@tab-rooms')
+        ->waitForText('0 de 1 revisados')
         ->click('@edit-Y-104')
         ->select('#room-building', $north->id)
         ->waitForText('con el edificio.')
@@ -60,7 +63,16 @@ it('el jefe revisa salones y docentes registro por registro, con teclado y en lo
 
     $page->click('@tab-teachers')
         ->waitForText('0 de 7 revisados')
-        ->keys('@review-table', 'j')
+        ->type('input[aria-label="Buscar registros"]', 'jr r')
+        ->assertScript("document.activeElement.getAttribute('aria-label') === 'Buscar registros'")
+        ->assertDontSee('Marcar 1 como revisado')
+        ->clear('input[aria-label="Buscar registros"]')
+        ->waitForText('Esparza')
+        ->assertSee('0 de 7 revisados');
+
+    $page->script('document.activeElement.blur()');
+
+    $page->keys('@review-table', 'j')
         ->keys('tr[data-row]:focus', ' ')
         ->keys('tr[data-row]:focus', 'j')
         ->keys('tr[data-row]:focus', ' ')

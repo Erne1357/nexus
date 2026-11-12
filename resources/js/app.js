@@ -1472,9 +1472,10 @@ document.addEventListener('alpine:init', () => {
 | lo que es del navegador, sin ir al servidor hasta marcar o guardar:
 |
 | - La selección: los ids elegidos con las casillas o con Espacio. Con algo elegido se ve la barra «N elegidos»;
-|   «Elegir los N por revisar» toma los pendientes de toda la revisión (data-pending del contenedor, que Livewire
+|   «Elegir los N por revisar» toma los pendientes que dejan los filtros (data-pending del contenedor, que Livewire
 |   repinta) y «Marcar N como revisados» los manda a markSelected(). Lo que ya quedó revisado sale de la selección; si
-|   el servidor no marcó, se queda elegido.
+|   el servidor no marcó, se queda elegido. Si cambia quién marca (validar o reabrir), Livewire cambia el wire:key del
+|   contenedor y la lista arranca de nuevo, sin selección; data-can-mark lo dice en cada tecla.
 | - El teclado, solo en la tabla (desde 768 px): J y K mueven el foco de fila en fila; Espacio elige la fila del foco; R
 |   marca los elegidos o, si no hay, la fila del foco; Enter abre su «Acciones» (docentes) o «Editar». Nada de esto corre
 |   al escribir en un campo, con Ctrl, Alt o Meta, ni con un diálogo, un drawer o un menú abierto. Si la fila marcada
@@ -1510,7 +1511,12 @@ document.addEventListener('alpine:init', () => {
             this.selected = [];
         },
 
-        /** Los pendientes de toda la revisión (hasta 500), como los pintó Livewire la última vez. */
+        /** Si quien mira marca registros, como lo pintó Livewire la última vez (cambia al validar o reabrir). */
+        canMark() {
+            return this.$root.dataset.canMark === 'true';
+        },
+
+        /** Los pendientes que dejan los filtros (hasta 500), como los pintó Livewire la última vez. */
         pendingAll() {
             try {
                 return JSON.parse(this.$root.dataset.pending || '[]');
@@ -1632,10 +1638,10 @@ document.addEventListener('alpine:init', () => {
                 const step = key === 'j' ? 1 : -1;
                 this.focusRow(index === -1 ? rows[0] : rows[Math.max(0, Math.min(rows.length - 1, index + step))]);
             } else if (key === ' ' && onRow) {
-                if (config.canMark && current.hasAttribute('data-pending')) {
+                if (this.canMark() && current.hasAttribute('data-pending')) {
                     this.toggle(current.dataset.row);
                 }
-            } else if (key === 'r' && config.canMark) {
+            } else if (key === 'r' && this.canMark()) {
                 if (this.selected.length > 0) {
                     this.markChosen();
                 } else if (current?.hasAttribute('data-pending')) {

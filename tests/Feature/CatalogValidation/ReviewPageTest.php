@@ -1191,7 +1191,7 @@ describe('revisión por registro (opción A)', function () {
             ->and(CatalogReviewMark::query()->where('record_id', $teacher->id)->exists())->toBeTrue();
     });
 
-    it('AC-06: admin, Subdirección y otro jefe no capturan el correo desde esta pantalla', function (string $who) {
+    it('AC-06: admin y Subdirección ven la lista sin el recuadro del correo y no lo capturan', function (string $who) {
         $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
         $user = $who === 'admin' ? User::factory()->admin()->create() : User::factory()->withRole(Role::Subdireccion, [])->create();
 
@@ -1202,6 +1202,73 @@ describe('revisión por registro (opción A)', function () {
 
         expect($teacher->fresh()->institutional_email)->toBeNull();
     })->with(['admin', 'subdirección']);
+
+    it('AC-06: admin, Subdirección y el jefe de otro departamento no capturan el correo llamando el método sobre la pantalla del jefe', function (string $who) {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+        $user = match ($who) {
+            'admin' => User::factory()->admin()->create(),
+            'subdirección' => User::factory()->withRole(Role::Subdireccion, [])->create(),
+            'jefe de otro departamento' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(),
+        };
+
+        $page = reviewPage($this->jefe, ['catalogo' => 'teachers']);
+        $this->actingAs($user);
+        $page->call('saveEmail', $teacher->id, 'ana')->assertForbidden();
+
+        expect($teacher->fresh()->institutional_email)->toBeNull();
+    })->with(['admin', 'subdirección', 'jefe de otro departamento']);
+
+    it('«Por revisar» no se queda en una página vacía: al marcar los de la última, pasa a la que ahora es la última', function () {
+        Subject::factory()->count(60)->sequence(fn ($sequence) => ['code' => sprintf('PEN-%03d', $sequence->index), 'department_id' => $this->sis->id])->create();
+        $lastTen = Subject::query()->where('code', 'like', 'PEN-%')->orderByDesc('code')->limit(11)->pluck('id')->all();
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->call('gotoPage', 2)
+            ->assertSee('PEN-059')
+            ->call('markSelected', $lastTen)
+            ->assertDontSee('Ningún registro coincide.')
+            ->assertSee('PEN-000')
+            ->assertSet('paginators.page', 1);
+    });
+
+    it('CV7: un inactivo sin marca no se revisa: sin casilla, sin «Por revisar» y fuera de los pendientes', function () {
+        $inactive = Subject::where('code', 'SCA-1002')->sole();
+
+        $html = reviewPage($this->jefe, ['catalogo' => 'subjects', 'revision' => 'todos'])
+            ->assertSee('Inactivo: no se revisa')
+            ->assertDontSeeHtml('data-testid="select-SCA-1002"')
+            ->assertDontSeeHtml('data-testid="mark-SCA-1002"')
+            ->assertSee('Elegir los 1 por revisar de esta página')
+            ->html();
+
+        expect(str($html)->after('data-row="'.$inactive->id.'"')->before('>')->contains('data-pending'))->toBeFalse()
+            ->and(substr_count(str($html)->after('data-testid="record-cards"')->toString(), 'Por revisar'))->toBe(1);
+
+        reviewPage(User::factory()->admin()->create(), ['department' => $this->sis->id, 'catalogo' => 'subjects', 'revision' => 'todos'])
+            ->assertSee('Inactivo: no se revisa');
+    });
+
+    it('«Elegir los N por revisar» toma los pendientes que dejan la búsqueda y los filtros, no los de toda la revisión', function () {
+        Subject::factory()->create(['code' => 'RED-1', 'name' => 'Redes I', 'department_id' => $this->sis->id]);
+        Subject::factory()->create(['code' => 'RED-2', 'name' => 'Redes II', 'department_id' => $this->sis->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSee('Elegir los 3 por revisar')
+            ->set('search', 'Redes')
+            ->assertSee('Elegir los 2 por revisar')
+            ->assertDontSee('Elegir los 3 por revisar');
+    });
+
+    it('validar o reabrir cambia quién marca y la lista arranca de nuevo en el navegador, sin selección', function () {
+        reviewMarkAll(Catalog::Subjects);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSeeHtml('data-can-mark="true"')->assertSeeHtml('wire:key="review-list-subjects-marca"')
+            ->call('confirm', 'validate', 'subjects')->call('confirmed')
+            ->assertSeeHtml('data-can-mark="false"')->assertSeeHtml('wire:key="review-list-subjects-lee"')
+            ->call('confirm', 'reopen', 'subjects')->call('confirmed')
+            ->assertSeeHtml('data-can-mark="true"')->assertSeeHtml('wire:key="review-list-subjects-marca"');
+    });
 
     it('decisión 6: los salones se filtran por campus y por edificio', function () {
         $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);

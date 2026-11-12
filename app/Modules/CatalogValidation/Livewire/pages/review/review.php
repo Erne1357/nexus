@@ -33,6 +33,7 @@ use App\Modules\Faculty\Queries\TeacherAccessQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Arr;
@@ -740,11 +741,24 @@ new #[Title('Validación de catálogos')] class extends Component
         /** @var CatalogReview $review */
         $review = $current['review'];
         $isRooms = $review->catalog === Catalog::Rooms;
-        $page = $records->page($review, $this->search, null, $this->segment === 'con-observacion' ? 'with' : '', self::PER_PAGE, $this->onlyIds($review, $current['summary']), match ($this->segment) {
+        $onlyIds = $this->onlyIds($review, $current['summary']);
+        [$campusId, $buildingId] = $isRooms ? [$this->roomCampus, $this->roomBuilding] : ['', ''];
+        $query = fn (): LengthAwarePaginator => $records->page($review, $this->search, null, $this->segment === 'con-observacion' ? 'with' : '', self::PER_PAGE, $onlyIds, match ($this->segment) {
             'por-revisar' => 'pending',
             'revisados' => 'reviewed',
             default => '',
-        }, $isRooms ? $this->roomCampus : '', $isRooms ? $this->roomBuilding : '');
+        }, $campusId, $buildingId);
+        $page = $query();
+
+        /*
+        | Marcar los de la última página de «Por revisar» la deja vacía aunque queden pendientes en las anteriores: se pasa
+        | a la que ahora es la última.
+        */
+        if ($page->isEmpty() && $page->currentPage() > 1) {
+            $this->setPage($page->lastPage());
+            $page = $query();
+        }
+
         $ids = $page->getCollection()->map->getKey()->all();
 
         $readiness = $review->catalog === Catalog::Teachers
@@ -773,10 +787,10 @@ new #[Title('Validación de catálogos')] class extends Component
             'buildingGroups' => $buildingGroups,
             'buildingCampus' => $this->campusOfBuilding($buildingGroups, $this->building_id),
             'marks' => $marks,
-            'pagePending' => count(array_diff($ids, array_keys($marks))),
+            'pagePending' => $page->getCollection()->filter(fn (Model $record): bool => $record->is_active && ! isset($marks[$record->getKey()]))->count(),
             'allReviewed' => $this->segment === 'por-revisar' && $segmentCounts['pending'] === 0 && $onlySegment,
             'doneMessage' => $this->doneMessage($review->catalog, $current['reviewed']['total']),
-            'pendingIds' => $current['canMark'] ? $records->pendingIds($review) : [],
+            'pendingIds' => $current['canMark'] ? $records->pendingIds($review, $this->search, $onlyIds, $campusId, $buildingId) : [],
             'segments' => [
                 ['id' => 'por-revisar', 'label' => 'Por revisar', 'count' => $segmentCounts['pending']],
                 ['id' => 'revisados', 'label' => 'Revisados', 'count' => $segmentCounts['reviewed']],
@@ -892,7 +906,7 @@ new #[Title('Validación de catálogos')] class extends Component
         $ids = $teachers->map->getKey()->all();
         $departments = $records->teacherDepartments($current['review'], $ids);
         $staff = $records->staffUserIds(array_values(array_filter($teachers->pluck('user_id')->all())));
-        $dischargeReasons = $this->dischargeReasons($current, $records, $ids, $staff);
+        $dischargeReasons = $this->dischargeReasons($current, $records, $ids, $staff, $departments);
         $context = app(Actor::class);
         $unit = Target::of(unit: $current['review']->department_id);
         $canEmail = $context->allows(FacultyPermission::TeacherUpdate, $unit) && $context->allows(FacultyPermission::TeacherUserInvite, $unit);
@@ -984,21 +998,25 @@ new #[Title('Validación de catálogos')] class extends Component
      * @param  array<string, mixed>  $current
      * @param  list<string>  $ids
      * @param  array<string, true>  $staff  los usuarios de la página que ocupan un puesto
+     * @param  array<string, array{here_primary: bool, others: list<array{code: string, name: string, is_primary: bool}>}>  $departments  los otros departamentos de cada docente
      * @return array<string, ?string>
      */
-    private function dischargeReasons(array $current, CatalogRecordsQuery $records, array $ids, array $staff): array
+    private function dischargeReasons(array $current, CatalogRecordsQuery $records, array $ids, array $staff, array $departments): array
     {
         /*
         | La regla de TeacherPolicy::removeAdscription para toda la página, con dos consultas y no una por docente:
-        | dischargeTeacher() vuelve a preguntar a la policy al pedirlo.
+        | dischargeTeacher() vuelve a preguntar a la policy al pedirlo. La última adscripción solo la quita quien tiene
+        | `remove_last` en el departamento (CV8: el jefe de proyecto docente no).
         */
         $adscriptions = $records->teacherAdscriptions($current['review'], $ids);
         $context = app(Actor::class);
-        $canRemove = $context->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $current['review']->department_id));
+        $unit = Target::of(unit: $current['review']->department_id);
+        $canRemove = $context->allows(FacultyPermission::TeacherDepartmentRemove, $unit);
+        $canRemoveLast = $context->allows(FacultyPermission::TeacherDepartmentRemoveLast, $unit);
         $canDeactivate = $context->allows(FacultyPermission::TeacherDeactivate);
         $me = $context->user()?->getKey();
 
-        return collect($ids)->mapWithKeys(function (string $id) use ($current, $adscriptions, $staff, $canRemove, $canDeactivate, $me): array {
+        return collect($ids)->mapWithKeys(function (string $id) use ($current, $adscriptions, $staff, $departments, $canRemove, $canRemoveLast, $canDeactivate, $me): array {
             $userId = $adscriptions[$id]->teacher?->user_id ?? null;
 
             return [$id => match (true) {
@@ -1006,6 +1024,7 @@ new #[Title('Validación de catálogos')] class extends Component
                 ! isset($adscriptions[$id]) || ! $canRemove => 'Solo quien administra el departamento da de baja a sus docentes.',
                 $userId !== null && $userId === $me => 'No te puedes dar de baja a ti mismo.',
                 $userId !== null && isset($staff[$userId]) && ! $canDeactivate => 'Ocupa un puesto: lo da de baja el administrador o la Subdirección.',
+                ! $canRemoveLast && ($departments[$id]['others'] ?? []) === [] => 'Es su único departamento: lo dan de baja el jefe de departamento, la Subdirección o el administrador.',
                 default => null,
             }];
         })->all();

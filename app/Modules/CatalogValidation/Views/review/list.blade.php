@@ -29,11 +29,12 @@
 @php($validated = $review->status === \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated)
 @php($canMark = $current['canMark'])
 <div
-    x-data="catalogReviewList({ canMark: @js($canMark), teachers: @js($isTeachers), domain: @js($emailDomain) })"
+    x-data="catalogReviewList({ teachers: @js($isTeachers), domain: @js($emailDomain) })"
     x-on:keydown.window="onKey($event)"
     x-on:click="openEmailFrom($event)"
     data-pending="{{ json_encode($pendingIds) }}"
-    wire:key="review-list-{{ $catalogValue }}"
+    data-can-mark="{{ $canMark ? 'true' : 'false' }}"
+    wire:key="review-list-{{ $catalogValue }}-{{ $canMark ? 'marca' : 'lee' }}"
 >
     <section class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2.5 rounded-box border border-base-300 bg-base-100 px-4 py-3" data-testid="review-block">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -175,10 +176,11 @@
                         @foreach ($page as $record)
                             @php($key = $record->code ?? $record->rfc)
                             @php($isReviewed = isset($marks[$record->id]))
+                            @php($isPending = $record->is_active && ! $isReviewed)
                             <tr
                                 wire:key="row-{{ $record->id }}"
                                 data-row="{{ $record->id }}"
-                                @if ($canMark && ! $isReviewed) data-pending @endif
+                                @if ($canMark && $isPending) data-pending @endif
                                 tabindex="-1"
                                 aria-label="{{ $key }} · {{ $record->name }}"
                                 x-bind:class="isSelected('{{ $record->id }}') && 'bg-primary/5'"
@@ -186,10 +188,10 @@
                             >
                                 @if ($canMark)
                                     <td class="w-1">
-                                        @unless ($isReviewed)
+                                        @if ($isPending)
                                             <input type="checkbox" class="checkbox checkbox-sm" aria-label="Elegir {{ $key }}" data-testid="select-{{ $key }}"
                                                 x-bind:checked="isSelected('{{ $record->id }}')" x-on:change="toggle('{{ $record->id }}')">
-                                        @endunless
+                                        @endif
                                     </td>
                                 @endif
                                 <td><span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $isRooms ? $record->code : $key }}</span></td>
@@ -243,9 +245,10 @@
                 @foreach ($page as $record)
                     @php($key = $record->code ?? $record->rfc)
                     @php($isReviewed = isset($marks[$record->id]))
+                    @php($isPending = $record->is_active && ! $isReviewed)
                     <li wire:key="record-card-{{ $record->id }}" x-bind:class="isSelected('{{ $record->id }}') && 'bg-primary/5'" @class(['grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-1 px-3 py-3', 'text-neutral' => ! $record->is_active])>
                         <div class="pt-0.5">
-                            @if ($canMark && ! $isReviewed)
+                            @if ($canMark && $isPending)
                                 <label class="-m-2 flex h-11 w-11 cursor-pointer items-start justify-center pt-2">
                                     <input type="checkbox" class="checkbox checkbox-sm" aria-label="Elegir {{ $key }}" x-bind:checked="isSelected('{{ $record->id }}')" x-on:change="toggle('{{ $record->id }}')">
                                 </label>
@@ -256,7 +259,7 @@
                                 <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $isRooms ? \App\Modules\CatalogValidation\Queries\CatalogContentsQuery::roomCode($record) : $key }}</span>
                                 @if ($isReviewed)
                                     <x-core::status-badge tone="success" label="Revisado" />
-                                @else
+                                @elseif ($isPending)
                                     <x-core::status-badge tone="draft" icon="o-clock" label="Por revisar" />
                                 @endif
                             </div>
@@ -289,7 +292,7 @@
                                 <p class="text-[12.5px] text-neutral">Revisado por {{ $marks[$record->id]['short'] }}</p>
                             @endif
                             <div class="-ms-1 flex flex-wrap items-center gap-1 pt-1">
-                                @if ($canMark && ! $isReviewed)
+                                @if ($canMark && $isPending)
                                     @include('catalog-validation::review.review-cell', ['record' => $record, 'inTable' => false])
                                 @endif
                                 @include('catalog-validation::review.row-actions', ['record' => $record, 'inTable' => false])
@@ -301,7 +304,7 @@
         @endif
 
         @if ($canMark)
-            <div class="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-b-box border-t border-base-300 bg-base-200 px-4 py-2.5 shadow-[0_-6px_16px_-10px_rgb(9_45_72/0.35)]" role="region" aria-label="Selección" x-show="selected.length > 0" x-cloak data-testid="selection-bar">
+            <div class="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-b-box border-t border-base-300 bg-base-200 px-4 py-2.5 shadow-float" role="region" aria-label="Selección" x-show="selected.length > 0" x-cloak data-testid="selection-bar">
                 <span class="text-sm" aria-live="polite"><b class="font-mono font-semibold" x-text="selected.length"></b> <span x-text="selected.length === 1 ? 'elegido' : 'elegidos'"></span></span>
                 <button type="button" class="link text-sm font-medium underline-offset-4" x-show="selected.length < pendingAll().length" x-on:click="chooseAllPending()" data-testid="choose-all-pending">Elegir los {{ count($pendingIds) }} por revisar</button>
                 <button type="button" class="link text-sm font-medium underline-offset-4" x-on:click="clear()" data-testid="clear-selection">Quitar la selección</button>

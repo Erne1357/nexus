@@ -57,7 +57,9 @@ it('CV7: «Por revisar» son los activos sin marca; las cifras del filtro segmen
         ->and(pageCodes($review, 'reviewed'))->toBe(['A-1', 'D-4'])
         ->and(pageCodes($review, flag: 'with'))->toBe(['B-2'])
         ->and($this->records->segmentCounts($review))->toBe(['pending' => 2, 'reviewed' => 2, 'flagged' => 1, 'all' => 5])
-        ->and($this->records->pendingIds($review))->toBe([$flagged->id, Subject::where('code', 'C-3')->sole()->id]);
+        ->and($this->records->pendingIds($review))->toBe([$flagged->id, Subject::where('code', 'C-3')->sole()->id])
+        ->and($this->records->pendingIds($review, 'C-3'))->toBe([Subject::where('code', 'C-3')->sole()->id])
+        ->and($this->records->pendingIds($review, onlyIds: [$flagged->id, $marked->id]))->toBe([$flagged->id]);
 });
 
 it('CV7: dice quién marcó cada registro y cuándo', function () {
@@ -83,7 +85,16 @@ it('CV8: da los otros departamentos de cada docente, la principal primero, y si 
 
     $departments = $this->records->teacherDepartments($review, [$alone->id, $here->id, $there->id]);
 
-    expect($departments[$alone->id])->toBe(['here_primary' => true, 'others' => []])
+    $tied = Teacher::factory()->adscribedTo($this->department)->create();
+    $sameTime = now()->subDay();
+    $first = $tied->adscriptions()->create(['department_id' => $this->other->id, 'is_primary' => false]);
+    $second = $tied->adscriptions()->create(['department_id' => $third->id, 'is_primary' => false]);
+    $first->forceFill(['created_at' => $sameTime])->save();
+    $second->forceFill(['created_at' => $sameTime])->save();
+    $byId = strcmp($first->id, $second->id) < 0 ? ['ELE', 'CB'] : ['CB', 'ELE'];
+
+    expect(array_column($this->records->teacherDepartments($review, [$tied->id])[$tied->id]['others'], 'code'))->toBe($byId)
+        ->and($departments[$alone->id])->toBe(['here_primary' => true, 'others' => []])
         ->and($departments[$here->id])->toBe(['here_primary' => true, 'others' => [['code' => 'ELE', 'name' => 'Eléctrica-Electrónica', 'is_primary' => false]]])
         ->and($departments[$there->id]['here_primary'])->toBeFalse()
         ->and(array_column($departments[$there->id]['others'], 'code'))->toBe(['ELE', 'CB']);

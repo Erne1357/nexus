@@ -49,7 +49,7 @@ final class CatalogRecordsQuery
      */
     public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15, ?array $onlyIds = null, string $reviewed = '', string $campusId = '', string $buildingId = ''): LengthAwarePaginator
     {
-        $query = $this->contents->query($review);
+        $query = $this->filtered($review, $search, $onlyIds, $campusId, $buildingId);
         $model = $query->getModel();
 
         match ($review->catalog) {
@@ -58,8 +58,6 @@ final class CatalogRecordsQuery
             default => null,
         };
 
-        TextSearch::apply($query, [$review->catalog === Catalog::Teachers ? 'rfc' : 'code', 'name'], $search);
-
         if ($active !== null) {
             $query->where($model->qualifyColumn('is_active'), $active);
         }
@@ -67,10 +65,6 @@ final class CatalogRecordsQuery
         if ($flag === 'with' || $flag === 'without') {
             $open = $review->flags()->whereNull('resolved_at')->where('flaggable_type', $model->getMorphClass())->select('flaggable_id');
             $flag === 'with' ? $query->whereIn($model->qualifyColumn('id'), $open) : $query->whereNotIn($model->qualifyColumn('id'), $open);
-        }
-
-        if ($onlyIds !== null) {
-            $query->whereIn($model->qualifyColumn('id'), $onlyIds);
         }
 
         if (in_array($reviewed, ['reviewed', 'unreviewed', 'pending'], true)) {
@@ -82,6 +76,28 @@ final class CatalogRecordsQuery
             $query->where($model->qualifyColumn('is_active'), true);
         }
 
+        return $query->paginate($perPage);
+    }
+
+    /**
+     * Los registros de la revisión con los filtros de la barra que no son de revisión: la búsqueda, `$onlyIds` («Falta»
+     * y «Cambio») y, en salones, el campus y el edificio (un id que no es uuid no deja ninguno). La base de page() y de
+     * pendingIds(), para que «Elegir los N por revisar» elija lo mismo que se ve.
+     *
+     * @param  ?list<string>  $onlyIds
+     * @return Builder<Model>
+     */
+    private function filtered(CatalogReview $review, string $search, ?array $onlyIds, string $campusId, string $buildingId): Builder
+    {
+        $query = $this->contents->query($review);
+        $model = $query->getModel();
+
+        TextSearch::apply($query, [$review->catalog === Catalog::Teachers ? 'rfc' : 'code', 'name'], $search);
+
+        if ($onlyIds !== null) {
+            $query->whereIn($model->qualifyColumn('id'), $onlyIds);
+        }
+
         if ($review->catalog === Catalog::Rooms) {
             foreach (['campus_id' => $campusId, 'building_id' => $buildingId] as $column => $id) {
                 if ($id !== '') {
@@ -90,7 +106,7 @@ final class CatalogRecordsQuery
             }
         }
 
-        return $query->paginate($perPage);
+        return $query;
     }
 
     /**
@@ -113,14 +129,15 @@ final class CatalogRecordsQuery
     }
 
     /**
-     * Los ids de los registros activos sin revisar de la revisión, por clave y hasta `$limit`: los que elige «Elegir los
-     * N por revisar» para marcarlos juntos (CV7).
+     * Los ids de los registros activos sin revisar de la revisión que dejan los filtros de la barra (los de page() que no
+     * son de revisión), por clave y hasta `$limit`: los que elige «Elegir los N por revisar» para marcarlos juntos (CV7).
      *
+     * @param  ?list<string>  $onlyIds
      * @return list<string>
      */
-    public function pendingIds(CatalogReview $review, int $limit = 500): array
+    public function pendingIds(CatalogReview $review, string $search = '', ?array $onlyIds = null, string $campusId = '', string $buildingId = '', int $limit = 500): array
     {
-        $query = $this->contents->query($review);
+        $query = $this->filtered($review, $search, $onlyIds, $campusId, $buildingId);
         $model = $query->getModel();
 
         return $query
@@ -149,9 +166,9 @@ final class CatalogRecordsQuery
 
     /**
      * Los otros departamentos de los docentes dados (sus adscripciones sin borrar fuera del de la revisión), la principal
-     * primero y luego de la más antigua a la más nueva (el orden en que RemoveAdscription escoge la principal que queda),
-     * y si la del departamento de la revisión es su principal: con eso la fila dice «También en» o «Principal en» y la
-     * confirmación de la baja dice qué pasa (CV8).
+     * primero y luego de la más antigua a la más nueva y por id (el orden en que RemoveAdscription escoge la principal que
+     * queda), y si la del departamento de la revisión es su principal: con eso la fila dice «También en» o «Principal en»
+     * y la confirmación de la baja dice qué pasa (CV8).
      *
      * @param  list<string>  $teacherIds
      * @return array<string, array{here_primary: bool, others: list<array{code: string, name: string, is_primary: bool}>}>
@@ -165,6 +182,7 @@ final class CatalogRecordsQuery
             ->whereIn('teacher_id', $teacherIds)
             ->orderByDesc('is_primary')
             ->orderBy('created_at')
+            ->orderBy('id')
             ->get()
             ->each(function (TeacherDepartment $adscription) use ($review, &$result): void {
                 if ($adscription->department_id === $review->department_id) {
