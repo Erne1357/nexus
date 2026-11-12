@@ -2,7 +2,7 @@
     El campus de una pantalla (#415, WithCampusFilter): la credencial ya no lo elige. Con pocas opciones es el filtro
     segmentado de DESIGN.md («Filtro segmentado»: un `join` de botones de 40 px, 44 en celular, con `aria-pressed` y el
     elegido en primary; si no cabe, se desplaza de lado dentro de su caja, nunca la página); con más de cuatro
-    opciones, un select que cambia al elegir. No se pinta si hay un solo campus: no hay nada que elegir.
+    botones (contando «Todos»), un select que cambia al elegir. No se pinta si hay un solo campus: no hay nada que elegir.
 
     `options`: los campus de campusOptions(); `selected`: el código del campus que la pantalla muestra (campusFilter()
     o requiredCampus()), null para «todos»; `all`: si la pantalla puede mostrar todos los campus juntos (ofrece

@@ -85,7 +85,8 @@ final class OpenNotification
         }
 
         try {
-            $url = route($message->route, $campus === null ? $message->parameters : [...$message->parameters, 'campus' => $campus->code]);
+            // Un parámetro `campus` guardado en el aviso (el de una ruta que lo lleva en su camino) gana.
+            $url = route($message->route, $campus === null ? $message->parameters : $message->parameters + ['campus' => $campus->code]);
         } catch (UrlGenerationException) {
             return NotificationTarget::unavailable('Esa pantalla no está disponible.');
         }

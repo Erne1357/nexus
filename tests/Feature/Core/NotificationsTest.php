@@ -197,6 +197,15 @@ it('abrirla deja la credencial en el periodo del aviso y abre la pantalla en su 
         ->and(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([]);
 });
 
+it('un parámetro campus guardado en el aviso gana al código de su campus', function () {
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $admin = User::factory()->admin()->create();
+    $admin->notify(notice(parameters: ['campus' => 'guardado'], termId: Term::factory()->current()->create()->id, campusId: $c2->id));
+    $this->actingAs($admin);
+
+    expect(app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'))->url)->toBe(route('home', ['campus' => 'guardado']));
+});
+
 it('un aviso sin campus abre su pantalla sin ?campus=', function () {
     $admin = User::factory()->admin()->create();
     $admin->notify(notice());
