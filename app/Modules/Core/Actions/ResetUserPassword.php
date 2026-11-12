@@ -13,17 +13,17 @@ use Illuminate\Support\Str;
  * las demás sesiones (AuthenticateSession) y se rota el remember token. A un usuario sin contraseña
  * es **dar acceso** (AC-03): la habilitación manual, que la bitácora registra como `access-granted`
  * en lugar de `password-reset`. Solo la usa el administrador, que se pasa como `$actor`. La bitácora
- * nunca lleva la contraseña.
+ * nunca lleva la contraseña. Devuelve si fue dar acceso, decidido con el renglón bloqueado.
  */
 final class ResetUserPassword
 {
     public function __construct(private readonly DefaultPassword $defaultPassword) {}
 
-    public function handle(User $user, ?User $actor = null): void
+    public function handle(User $user, ?User $actor = null): bool
     {
         $password = $this->defaultPassword->value();
 
-        DB::transaction(function () use ($user, $actor, $password): void {
+        return DB::transaction(function () use ($user, $actor, $password): bool {
             $user = User::lockForUpdate()->findOrFail($user->getKey());
             $granting = $user->password === null;
 
@@ -40,6 +40,8 @@ final class ResetUserPassword
                     : "Reinició la contraseña de {$user->username}");
 
             UserPasswordReset::dispatch($user, $actor);
+
+            return $granting;
         });
     }
 }

@@ -257,7 +257,7 @@ new #[Title('Ficha del docente')] class extends Component
             'removingPosition' => $this->removingPositionId === null ? null : $record->positions->firstWhere('id', $this->removingPositionId),
             'positionCounts' => $this->showPositionModal ? $this->positionCountsInTerm($record->term) : false,
             'canReset' => Gate::allows('resetPassword', $teacher),
-            'grantsAccess' => $record->access?->hasAccess() === false,
+            'grantsAccess' => $record->access?->hasPassword() === false,
             'canDeactivate' => Gate::allows('deactivate', $teacher),
             'deactivateReason' => $context->allows(FacultyPermission::TeacherDeactivate)
                 ? 'No te puedes dar de baja a ti mismo.'
@@ -334,15 +334,15 @@ new #[Title('Ficha del docente')] class extends Component
 
     /**
      * Devuelve el usuario del docente a la contraseña por defecto y lo obliga a cambiarla. Si no tenía contraseña es
-     * «Dar acceso», la habilitación manual (AC-03). Solo el administrador.
+     * «Dar acceso», la habilitación manual (AC-03), que a un usuario inactivo no se le da: no podría entrar. Solo el
+     * administrador.
      */
     public function resetPassword(TeacherQuery $teachers, ResetUserPassword $resetUserPassword, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('resetPassword', $teacher);
         $user = $teacher->user;
-        $granting = $user !== null && $user->password === null;
-        $failure = $granting ? 'No se pudo dar acceso' : 'No se pudo restablecer la contraseña';
+        $failure = $user !== null && $user->password === null ? 'No se pudo dar acceso' : 'No se pudo restablecer la contraseña';
 
         if ($user === null) {
             $this->error($failure, 'El docente no tiene usuario.');
@@ -350,15 +350,21 @@ new #[Title('Ficha del docente')] class extends Component
             return;
         }
 
+        if ($user->password === null && ! $user->is_active) {
+            $this->error($failure, 'Su usuario está inactivo: reactiva al docente antes.');
+
+            return;
+        }
+
         try {
-            $resetUserPassword->handle($user, $context->user());
+            $granted = $resetUserPassword->handle($user, $context->user());
         } catch (RuntimeException $exception) {
             $this->error($failure, e($exception->getMessage()));
 
             return;
         }
 
-        $this->success($granting ? 'Acceso dado' : 'Contraseña restablecida', e("{$user->username} entra con la contraseña por defecto y debe cambiarla al entrar."));
+        $this->success($granted ? 'Acceso dado' : 'Contraseña restablecida', e("{$user->username} entra con la contraseña por defecto y debe cambiarla al entrar."));
     }
 
     /**

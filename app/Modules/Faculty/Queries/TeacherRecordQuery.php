@@ -50,9 +50,11 @@ final class TeacherRecordQuery
         $termDay = $term?->starts_on->toDateString();
         $order = ['vigente' => 0, 'por_empezar' => 1, 'vencida' => 2];
         $positions = $teacher->positions()->get();
-        $user = $teacher->user_id === null ? null : $teacher->user()->first(['id', 'username', 'is_active', 'must_change_password', 'access_invited_at', 'password']);
-        $access = $user === null ? null : UserAccess::of($user);
-        $user?->offsetUnset('password');
+        $user = $teacher->user_id === null ? null : $teacher->user()
+            ->select(['id', 'username', 'is_active', 'must_change_password', 'access_invited_at'])
+            ->selectRaw('password is not null as has_password')
+            ->first();
+        $access = $user === null ? null : UserAccess::resolve((bool) $user->has_password, $user->access_invited_at !== null, $user->must_change_password);
         $status = $positions->mapWithKeys(fn (TeacherPosition $position): array => [$position->id => $this->status($position, $today)])->all();
 
         $positions = $positions

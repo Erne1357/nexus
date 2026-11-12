@@ -32,9 +32,10 @@ it('AC-04: sin acceso, invitación enviada, debe cambiar su contraseña o con ac
         ->and(UserAccess::Granted->tone())->toBe(StatusTone::Success);
 });
 
-it('AC-01: solo tiene acceso quien tiene contraseña', function () {
-    expect(UserAccess::None->hasAccess())->toBeFalse()
-        ->and(UserAccess::Invited->hasAccess())->toBeFalse()
-        ->and(UserAccess::MustChangePassword->hasAccess())->toBeTrue()
-        ->and(UserAccess::Granted->hasAccess())->toBeTrue();
+it('AC-01: sin acceso e invitación enviada son los estados sin contraseña', function () {
+    expect(UserAccess::None->hasPassword())->toBeFalse()
+        ->and(UserAccess::Invited->hasPassword())->toBeFalse()
+        ->and(UserAccess::MustChangePassword->hasPassword())->toBeTrue()
+        ->and(UserAccess::Granted->hasPassword())->toBeTrue()
+        ->and(UserAccess::resolve(hasPassword: false, invited: true, mustChangePassword: true))->toBe(UserAccess::Invited);
 });

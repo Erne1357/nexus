@@ -114,13 +114,15 @@ class FacultyDemoSeeder extends Seeder
     }
 
     /**
-     * Da acceso a los usuarios de docentes que no lo tienen, con la contraseña por defecto y cambio obligatorio: en la
-     * demo se entra como docente con su número (supuesto por confirmar); en producción lo da el admin o la invitación.
+     * Da acceso a los usuarios de los docentes activos de la plantilla que no lo tienen, con la contraseña por defecto
+     * y cambio obligatorio, con un solo hash: en la demo se entra como docente con su número (supuesto por confirmar);
+     * en producción lo da el admin o la invitación. Los docentes que los seeders posteriores dan de alta con
+     * CreateTeacher siguen AC-02 y nacen sin acceso, como en producción.
      */
     private function grantDemoAccess(): void
     {
         DB::table('users')
-            ->whereIn('id', DB::table('teachers')->whereNotNull('user_id')->select('user_id'))
+            ->whereIn('id', DB::table('teachers')->whereNotNull('user_id')->where('is_active', true)->whereNull('deleted_at')->select('user_id'))
             ->whereNull('password')
             ->update(['password' => app(DefaultPassword::class)->hash(), 'must_change_password' => true, 'updated_at' => now()]);
     }

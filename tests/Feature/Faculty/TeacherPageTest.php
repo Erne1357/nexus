@@ -308,6 +308,19 @@ describe('acceso (AC-03 y AC-04)', function () {
             ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Acceso dado');
     });
 
+    it('AC-03: a un usuario inactivo sin contraseña no se le da acceso: deshabilitado con su motivo y un toast si se llama', function () {
+        $this->docente->forceFill(['password' => null, 'is_active' => false])->save();
+
+        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+
+        expect(textOf($dom->querySelector('[data-testid="reset-password"]')))->toBe('Dar acceso Su usuario está inactivo: reactiva al docente antes.');
+
+        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+
+        expect(lastToastOf($page))->type->toBe('error')->title->toBe('No se pudo dar acceso')
+            ->and($this->docente->fresh()->password)->toBeNull();
+    });
+
     it('AC-03: el jefe ve «Dar acceso» deshabilitado con su motivo, recibe 403 al llamarlo y el docente sigue sin acceso', function () {
         $this->docente->forceFill(['password' => null, 'must_change_password' => true])->save();
 

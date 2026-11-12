@@ -50,7 +50,9 @@
                 @else
                     <x-core::row-menu-item :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'" :reason="$deactivateReason" disabled data-testid="toggle-active" />
                 @endif
-                @if ($canReset && $grantsAccess)
+                @if ($canReset && $grantsAccess && ! $record->user->is_active)
+                    <x-core::row-menu-item label="Dar acceso" reason="Su usuario está inactivo: reactiva al docente antes." disabled data-testid="reset-password" />
+                @elseif ($canReset && $grantsAccess)
                     <x-core::row-menu-item
                         label="Dar acceso"
                         wire:click="resetPassword"
