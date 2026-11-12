@@ -73,6 +73,10 @@ beforeEach(function () {
         SiiFixtures::line(SiiFile::RequisitosMateria, ['carrera' => "'A'", 'reticula' => '3', 'materia' => "'QU1'", 'materia_relacion' => "'CD1'", 'tipo_requisito' => "'P'"]),
         SiiFixtures::line(SiiFile::RequisitosMateria, ['carrera' => "'A'", 'reticula' => '3', 'materia' => "'ZZZ'", 'materia_relacion' => "'QU1'", 'tipo_requisito' => "'C'"]),
     ]);
+    SiiFixtures::write($this->dir.'/acceso.csv', SiiFile::Acceso, [
+        SiiFixtures::line(SiiFile::Acceso, ['usuario' => "'usuario1'", 'contrasena' => "'d41d8cd98f00b204e9800998ecf8427e'"]),
+    ]);
+    SiiFixtures::write($this->dir.'/permisos.csv', SiiFile::Permisos, [SiiFixtures::line(SiiFile::Permisos, ['usuario' => "'usuario1'"])]);
     SiiFixtures::write($this->dir.'/materias_claves_tecnm.csv', SiiFile::MateriasClavesTecnm, [
         SiiFixtures::line(SiiFile::MateriasClavesTecnm, ['carrera' => "'A'", 'reticula' => '1', 'materia' => "'CD1'", 'clave_tecnm' => "'ACF-0901'"]),
     ]);
