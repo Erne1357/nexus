@@ -188,10 +188,11 @@ final class ExportDemoFiles extends Command
                     ->join('careers as c', 'c.id', '=', 'st.career_id')
                     ->join('study_plans as p', 'p.id', '=', 'st.study_plan_id')
                     ->join('campuses as k', 'k.id', '=', 'st.campus_id')
+                    ->join('modalities as m', 'm.id', '=', 'st.modality_id')
                     ->whereNull('st.deleted_at')->whereNull('c.deleted_at')->whereNull('p.deleted_at')
-                    ->select(['st.id', 'st.control_number', 'st.name', 'c.code as career', 'p.code as plan', 'k.code as campus', 'st.current_semester', 'st.status', 'st.modality', 'st.status_reason']),
+                    ->select(['st.id', 'st.control_number', 'st.name', 'c.code as career', 'p.code as plan', 'k.code as campus', 'st.current_semester', 'st.status', 'm.code as modality', 'st.status_reason']),
                 'st.id',
-                fn (object $r): array => [$r->control_number, $r->name, $r->career, $r->plan, $r->campus, $r->current_semester, $r->status, $r->modality, $r->status_reason],
+                fn (object $r): array => [$r->control_number, $r->name, $r->career, $r->plan, $r->campus, $r->current_semester, $r->status, $r->modality === 'PRES' ? 'presencial' : 'EAD', $r->status_reason],
             ),
 
             'kardex' => fn (): iterable => $this->chunked(

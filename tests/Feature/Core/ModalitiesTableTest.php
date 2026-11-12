@@ -20,6 +20,8 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
+    // La modalidad del alumno apunta al catálogo: su migración, posterior, se deshace primero.
+    (require base_path('app/Modules/Students/Database/Migrations/2026_11_12_210101_replace_student_modality_with_modality_id.php'))->down();
     $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210001_create_modalities_table.php');
     $this->migration->down();
 });
