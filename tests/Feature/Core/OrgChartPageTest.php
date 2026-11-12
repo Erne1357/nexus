@@ -307,18 +307,21 @@ it('P1: nombra al jefe de un departamento desde el panel, con la unidad fija, y 
     $panel->assertSee('Rosa Pérez');
 });
 
-it('P1: nombra jefe de proyecto docente pidiendo el campus', function () {
+it('AZ-S17: nombra jefe de proyecto docente pidiendo la modalidad, con el campus opcional', function () {
     $panel = appointPanelOn($this->systems, 'Rosa', User::factory()->create(['name' => 'Rosa Pérez', 'username' => 'rosa'])->username)
         ->set('role', 'jefe_proyecto_docente')
         ->assertSet('unit', $this->systems->id)
+        ->assertSet('modality', modalityOf('PRES')->id)
+        ->set('modality', '')
         ->call('appoint')
-        ->assertHasErrors(['campus' => 'Elige el campus.']);
+        ->assertHasErrors(['modality' => 'Elige la modalidad.']);
 
-    $panel->set('campus', $this->c2->id)->call('appoint')->assertHasNoErrors();
+    $panel->set('modality', modalityOf('PRES')->id)->set('campus', $this->c2->id)->call('appoint')->assertHasNoErrors();
 
     $assignment = User::where('username', 'rosa')->sole()->roleAssignments()->sole();
 
     expect($assignment->role)->toBe(Role::JefeProyectoDocente)
+        ->and($assignment->modality_id)->toBe(modalityOf('PRES')->id)
         ->and($assignment->campus_id)->toBe($this->c2->id)
         ->and($assignment->org_unit_id)->toBe($this->systems->id);
 });

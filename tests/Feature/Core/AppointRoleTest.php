@@ -10,6 +10,7 @@ use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\RoleAppointed;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
@@ -22,7 +23,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | AppointRole nombra un puesto con las columnas que Role::scopeColumns() pide (AZ-S10, AZ-S11) y sin quitarle el puesto
-| exclusivo a nadie (AZ-S7). Quién puede nombrar lo decide RoleAssignmentPolicy antes de llamarla.
+| exclusivo a nadie (AZ-S7). El coordinador y el jefe de proyecto docente piden una modalidad activa y llevan campus
+| solo si se elige (AZ-S17). Quién puede nombrar lo decide RoleAssignmentPolicy antes de llamarla.
 */
 
 beforeEach(function () {
@@ -30,7 +32,7 @@ beforeEach(function () {
 
     $this->admin = User::factory()->admin()->create(['name' => 'Ada Admin']);
     $this->rosa = User::factory()->create(['name' => 'Rosa Ruiz']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
     CareerCampus::factory()->create(['career_id' => $this->isc->id, 'campus_id' => $this->c2->id]);
     $this->systems = OrgUnit::find(Department::factory()->create(['name' => 'Sistemas y Computación'])->id);
@@ -42,11 +44,14 @@ beforeEach(function () {
 });
 
 /**
- * @param  array<string, mixed>  $overrides
+ * Nombra con AppointRole. El coordinador y el jefe de proyecto docente van, si no se dice otra, en Presencial; `false`
+ * no pasa modalidad.
  */
-function appoint(User $user, Role $role, ?Campus $campus = null, ?OrgUnit $unit = null, ?string $career = null, ?CarbonImmutable $from = null, ?CarbonImmutable $to = null): RoleAssignment
+function appoint(User $user, Role $role, ?Campus $campus = null, ?OrgUnit $unit = null, ?string $career = null, ?CarbonImmutable $from = null, ?CarbonImmutable $to = null, Modality|false|null $modality = null): RoleAssignment
 {
-    return app(AppointRole::class)->handle($user, $role, $campus, $unit, $career, $from ?? CarbonImmutable::parse('2026-11-03'), $to);
+    $modality ??= in_array('modality_id', $role->scopeColumns(), true) ? modalityOf('PRES') : false;
+
+    return app(AppointRole::class)->handle($user, $role, $campus, $unit, $career, $from ?? CarbonImmutable::parse('2026-11-03'), $to, $modality ?: null);
 }
 
 function expectInvalid(Closure $call, string $key, string $message): void
@@ -56,7 +61,7 @@ function expectInvalid(Closure $call, string $key, string $message): void
     });
 }
 
-it('nombra coordinador de una carrera en un campus, con bitácora y evento después del commit', function () {
+it('AZ-S17: nombra coordinador de una carrera en una modalidad y un campus, con bitácora y evento después del commit', function () {
     Event::fake([RoleAppointed::class]);
 
     $assignment = appoint($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id);
@@ -65,6 +70,7 @@ it('nombra coordinador de una carrera en un campus, con bitácora y evento despu
         ->user_id->toBe($this->rosa->id)
         ->role->toBe(Role::Coordinador)
         ->campus_id->toBe($this->c2->id)
+        ->modality_id->toBe(modalityOf('PRES')->id)
         ->career_id->toBe($this->isc->id)
         ->org_unit_id->toBeNull()
         ->and($assignment->valid_from->toDateString())->toBe('2026-11-03')
@@ -74,7 +80,7 @@ it('nombra coordinador de una carrera en un campus, con bitácora y evento despu
 
     expect($entry->subject->is($this->rosa))->toBeTrue()
         ->and($entry->causer->is($this->admin))->toBeTrue()
-        ->and($entry->description)->toBe('Nombró a Rosa Ruiz como Coordinador de carrera · ISC · C2')
+        ->and($entry->description)->toBe('Nombró a Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Campus II')
         ->and($entry->properties['role_assignment_id'])->toBe($assignment->id);
 
     Event::assertDispatched(RoleAppointed::class, fn (RoleAppointed $event): bool => $event->assignment->is($assignment));
@@ -103,28 +109,50 @@ it('valida las columnas que pide cada puesto', function (Role $role, array $scop
     $campus = ['c2' => $this->c2, null => null];
     $unit = ['systems' => $this->systems, 'planning' => $this->planning, 'academic' => $this->academic, null => null];
     $career = ['isc' => $this->isc->id, null => null];
+    $modality = ['pres' => modalityOf('PRES'), 'ead' => modalityOf('EAD'), null => false];
 
     expectInvalid(
-        fn () => appoint($this->rosa, $role, $campus[$scope[0]], $unit[$scope[1]], $career[$scope[2]]),
+        fn () => appoint($this->rosa, $role, $campus[$scope[0]], $unit[$scope[1]], $career[$scope[2]], modality: $modality[$scope[3]]),
         $key,
         $message,
     );
 
     expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse();
 })->with([
-    'coordinador sin campus' => [Role::Coordinador, [null, null, 'isc'], 'campus', 'Elige el campus.'],
-    'coordinador sin carrera' => [Role::Coordinador, ['c2', null, null], 'career', 'Elige la carrera.'],
-    'coordinador con unidad' => [Role::Coordinador, ['c2', 'systems', 'isc'], 'unit', 'Este puesto no lleva unidad.'],
-    'jefe con campus' => [Role::JefeDepartamento, ['c2', 'systems', null], 'campus', 'Este puesto no lleva campus.'],
-    'jefe sin unidad' => [Role::JefeDepartamento, [null, null, null], 'unit', 'Elige el departamento.'],
-    'jefe sobre una subdirección' => [Role::JefeDepartamento, [null, 'planning', null], 'unit', 'Subdirección de Planeación no es un departamento académico ni Servicios Escolares.'],
-    'jefe de proyecto docente sin unidad' => [Role::JefeProyectoDocente, ['c2', null, null], 'unit', 'Elige el departamento académico.'],
-    'jefe de proyecto docente sin campus' => [Role::JefeProyectoDocente, [null, 'systems', null], 'campus', 'Elige el campus.'],
-    'subdirección sin unidad' => [Role::Subdireccion, [null, null, null], 'unit', 'Elige la subdirección.'],
-    'subdirección sobre otra subdirección (AZ-S10)' => [Role::Subdireccion, [null, 'planning', null], 'unit', 'El puesto de Subdirección Académica va sobre la unidad Subdirección Académica.'],
-    'docente con campus' => [Role::Docente, ['c2', null, null], 'campus', 'Este puesto no lleva campus.'],
-    'admin con carrera' => [Role::Admin, [null, null, 'isc'], 'career', 'Este puesto no lleva carrera.'],
+    'AZ-S17: coordinador sin modalidad' => [Role::Coordinador, ['c2', null, 'isc', null], 'modality', 'Elige la modalidad.'],
+    'AZ-S17: coordinador en una modalidad inactiva' => [Role::Coordinador, ['c2', null, 'isc', 'ead'], 'modality', 'La modalidad EAD está inactiva.'],
+    'coordinador sin carrera' => [Role::Coordinador, ['c2', null, null, 'pres'], 'career', 'Elige la carrera.'],
+    'coordinador con unidad' => [Role::Coordinador, ['c2', 'systems', 'isc', 'pres'], 'unit', 'Este puesto no lleva unidad.'],
+    'jefe con campus' => [Role::JefeDepartamento, ['c2', 'systems', null, null], 'campus', 'Este puesto no lleva campus.'],
+    'jefe con modalidad' => [Role::JefeDepartamento, [null, 'systems', null, 'pres'], 'modality', 'Este puesto no lleva modalidad.'],
+    'jefe sin unidad' => [Role::JefeDepartamento, [null, null, null, null], 'unit', 'Elige el departamento.'],
+    'jefe sobre una subdirección' => [Role::JefeDepartamento, [null, 'planning', null, null], 'unit', 'Subdirección de Planeación no es un departamento académico ni Servicios Escolares.'],
+    'jefe de proyecto docente sin unidad' => [Role::JefeProyectoDocente, ['c2', null, null, 'pres'], 'unit', 'Elige el departamento académico.'],
+    'AZ-S17: jefe de proyecto docente sin modalidad' => [Role::JefeProyectoDocente, ['c2', 'systems', null, null], 'modality', 'Elige la modalidad.'],
+    'subdirección sin unidad' => [Role::Subdireccion, [null, null, null, null], 'unit', 'Elige la subdirección.'],
+    'subdirección sobre otra subdirección (AZ-S10)' => [Role::Subdireccion, [null, 'planning', null, null], 'unit', 'El puesto de Subdirección Académica va sobre la unidad Subdirección Académica.'],
+    'docente con campus' => [Role::Docente, ['c2', null, null, null], 'campus', 'Este puesto no lleva campus.'],
+    'admin con carrera' => [Role::Admin, [null, null, 'isc', null], 'career', 'Este puesto no lleva carrera.'],
+    'admin con modalidad' => [Role::Admin, [null, null, null, 'pres'], 'modality', 'Este puesto no lleva modalidad.'],
 ]);
+
+it('AZ-S17: el campus es opcional: nombra coordinador y jefe de proyecto docente de una modalidad en todos sus campus', function () {
+    $coordinator = appoint($this->rosa, Role::Coordinador, null, null, $this->isc->id);
+    $lead = appoint($this->rosa, Role::JefeProyectoDocente, null, $this->systems);
+
+    expect($coordinator->fresh())->campus_id->toBeNull()->modality_id->toBe(modalityOf('PRES')->id)
+        ->and($lead->fresh())->campus_id->toBeNull()->modality_id->toBe(modalityOf('PRES')->id)
+        ->and(activitySince()->where('event', 'created')->pluck('description')->all())->toBe([
+            'Nombró a Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Todos los campus',
+            'Nombró a Rosa Ruiz como Jefe de proyecto docente · Sistemas y Computación · Presencial · Todos los campus',
+        ]);
+});
+
+it('AZ-S17: sin campus, la carrera debe ofrecerse en algún campus activo', function () {
+    $nowhere = Career::factory()->create(['code' => 'IGE']);
+
+    expectInvalid(fn () => appoint($this->rosa, Role::Coordinador, null, null, $nowhere->id), 'career', 'Esa carrera no se ofrece en ningún campus.');
+});
 
 it('D19: nombra jefe del Departamento de Servicios Escolares, que no es un departamento académico', function () {
     $services = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento, 'parent_id' => $this->planning->id]);
@@ -147,10 +175,10 @@ it('D19: los demás departamentos que no son académicos siguen sin jefe en Nexu
 });
 
 it('junta todos los errores de alcance en una sola excepción', function () {
-    expect(fn () => appoint($this->rosa, Role::Coordinador, null, $this->systems, null))
+    expect(fn () => appoint($this->rosa, Role::Coordinador, null, $this->systems, null, modality: false))
         ->toThrow(function (ValidationException $exception): void {
             expect($exception->errors())->toBe([
-                'campus' => ['Elige el campus.'],
+                'modality' => ['Elige la modalidad.'],
                 'unit' => ['Este puesto no lleva unidad.'],
                 'career' => ['Elige la carrera.'],
             ]);
@@ -188,7 +216,7 @@ it('rechaza a la misma persona dos veces en el mismo puesto y alcance con fechas
     expectInvalid(
         fn () => appoint($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-12-31')),
         'role',
-        'Rosa Ruiz ya es Coordinador de carrera · ISC · C2 en esas fechas.',
+        'Rosa Ruiz ya es Coordinador de carrera · ISC · Presencial · Campus II en esas fechas.',
     );
 
     $other = Career::factory()->create(['code' => 'IGE']);
@@ -257,6 +285,7 @@ it('si otra sesión nombra a la misma persona jefe de proyecto docente entre la 
             'user_id' => $this->rosa->id,
             'role' => Role::JefeProyectoDocente->value,
             'campus_id' => $this->c2->id,
+            'modality_id' => modalityOf('PRES')->id,
             'org_unit_id' => $this->systems->id,
             'valid_from' => '2026-11-01',
         ]);
@@ -265,7 +294,7 @@ it('si otra sesión nombra a la misma persona jefe de proyecto docente entre la 
     expectInvalid(
         fn () => appoint($this->rosa, Role::JefeProyectoDocente, $this->c2, $this->systems),
         'role',
-        'Rosa Ruiz ya es Jefe de proyecto docente · Sistemas y Computación · C2 en esas fechas.',
+        'Rosa Ruiz ya es Jefe de proyecto docente · Sistemas y Computación · Presencial · Campus II en esas fechas.',
     );
 
     expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse();

@@ -9,6 +9,7 @@ use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,14 +23,16 @@ use RuntimeException;
  *
  * - `subdir`: Subdirección Académica, una para todo el Tec (sin campus), sobre la unidad Subdirección Académica.
  * - `jefe.<depto>`: jefe de cada departamento activo de los campus de `$campuses`, de todo el Tec (sin campus).
- * - `jpd.<depto>.<campus>`: jefe de proyecto docente del departamento en cada campus de `$campuses`.
- * - `coord.<carrera>.<campus>`: coordinador de cada carrera ofrecida en el campus (`alias` de data/careers.php).
+ * - `jpd.<depto>.<campus>`: jefe de proyecto docente del departamento en Presencial y en cada campus de `$campuses`.
+ * - `coord.<carrera>.<campus>`: coordinador de cada carrera ofrecida en el campus, en Presencial y en ese campus
+ *   (`alias` de data/careers.php). Conservan el campus para que el demo siga teniendo un coordinador por campus
+ *   (AZ-S17: el campus es opcional, pero acota).
  *
  * Los departamentos de un campus son los activos que coordinan una carrera ofrecida en él o imparten una materia de
  * sus planes vigentes. Jefes y jefes de proyecto docente son nombramientos de `role_assignments`, sin otra tabla.
  *
  * Entran con la contraseña `password` sin tener que cambiarla (supuesto S5, por confirmar). Requiere el catálogo
- * (AcademicDemoSeeder), y la unidad Subdirección Académica. A un usuario que ya existe solo
+ * (AcademicDemoSeeder), la unidad Subdirección Académica y la modalidad `PRES` (la siembra su migración). A un usuario que ya existe solo
  * se le completan el rol y el nombramiento si le faltan, y un departamento que ya tiene jefe vigente lo conserva.
  * Los puestos exclusivos son uno por unidad (AZ-S7): si la Subdirección Académica o un departamento ya tienen, de
  * otro usuario, un nombramiento de Subdirección o de jefe vigente o por empezar, no se crea `subdir` o
@@ -56,6 +59,8 @@ class DemoStaffSeeder extends Seeder
 
         $academic = app(OrgTree::class)->idOf(OrgTree::ACADEMIC)
             ?? throw new RuntimeException('Falta la unidad '.OrgTree::ACADEMIC.': corre antes las migraciones.');
+        $presencial = Modality::query()->where('code', 'PRES')->value('id')
+            ?? throw new RuntimeException('Falta la modalidad PRES: corre antes las migraciones.');
 
         if (! $this->seatTaken(Role::Subdireccion, $academic, 'subdir')) {
             $this->user('subdir', 'Subdirección Académica', Role::Subdireccion, ['org_unit_id' => $academic]);
@@ -78,13 +83,13 @@ class DemoStaffSeeder extends Seeder
                     $headed[$department->id] = true;
                 }
 
-                $this->user("jpd.{$slug}.{$suffix}", "Jefatura de proyecto docente de {$department->name} · {$campus->name}", Role::JefeProyectoDocente, ['campus_id' => $campus->id, 'org_unit_id' => $department->id]);
+                $this->user("jpd.{$slug}.{$suffix}", "Jefatura de proyecto docente de {$department->name} · {$campus->name}", Role::JefeProyectoDocente, ['modality_id' => $presencial, 'campus_id' => $campus->id, 'org_unit_id' => $department->id]);
             }
 
             foreach ($careers as $career) {
                 $alias = $aliases[$career->code] ?? Str::lower($career->code);
 
-                $this->user("coord.{$alias}.{$suffix}", "Coordinación de {$career->name} · {$campus->name}", Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => $career->id]);
+                $this->user("coord.{$alias}.{$suffix}", "Coordinación de {$career->name} · {$campus->name}", Role::Coordinador, ['modality_id' => $presencial, 'campus_id' => $campus->id, 'career_id' => $career->id]);
             }
         }
 
@@ -141,7 +146,7 @@ class DemoStaffSeeder extends Seeder
      */
     private function user(string $username, string $name, Role $role, array $scope): User
     {
-        $scope = ['campus_id' => null, 'org_unit_id' => null, 'career_id' => null, ...$scope];
+        $scope = ['campus_id' => null, 'org_unit_id' => null, 'career_id' => null, 'modality_id' => null, ...$scope];
         $user = User::query()->where('username', $username)->first();
 
         if ($user === null) {

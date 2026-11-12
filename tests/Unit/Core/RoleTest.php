@@ -9,10 +9,17 @@ it('exige a cada rol las columnas de alcance de PROJECT.md (Actores y roles)', f
     'admin no necesita alcance' => [Role::Admin, []],
     'subdirección: su unidad (Subdirección Académica), sin campus' => [Role::Subdireccion, ['org_unit_id']],
     'jefe de departamento: la unidad de un departamento en todo el Tec' => [Role::JefeDepartamento, ['org_unit_id']],
-    'jefe de proyecto docente: la unidad de un departamento en un campus' => [Role::JefeProyectoDocente, ['campus_id', 'org_unit_id']],
-    'coordinador: una carrera en un campus' => [Role::Coordinador, ['campus_id', 'career_id']],
+    'AZ-S17: jefe de proyecto docente: la unidad de un departamento en una modalidad' => [Role::JefeProyectoDocente, ['modality_id', 'org_unit_id']],
+    'AZ-S17: coordinador: una carrera en una modalidad' => [Role::Coordinador, ['modality_id', 'career_id']],
     'docente: todo el Tec, sin campus' => [Role::Docente, []],
 ]);
+
+it('AZ-S17: el coordinador y el jefe de proyecto docente admiten el campus sin pedirlo; los demás puestos, nada', function () {
+    expect(collect(Role::cases())->mapWithKeys(fn (Role $role): array => [$role->value => $role->optionalScopeColumns()])->filter()->all())->toBe([
+        'jefe_proyecto_docente' => ['campus_id'],
+        'coordinador' => ['campus_id'],
+    ]);
+});
 
 it('solo el jefe de departamento y la Subdirección son uno por unidad en cada fecha (AZ-S7)', function () {
     expect(collect(Role::cases())->filter(fn (Role $role): bool => $role->isExclusive())->values()->all())
@@ -82,7 +89,7 @@ it('la pista del formulario «Nombrar» dice qué alcance pide cada puesto', fun
     [Role::Admin, 'Este puesto no tiene alcance: vale en todo el sistema.'],
     [Role::Subdireccion, 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.'],
     [Role::JefeDepartamento, 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.'],
-    [Role::JefeProyectoDocente, 'Este puesto pide campus y departamento académico.'],
-    [Role::Coordinador, 'Este puesto pide campus y carrera.'],
+    [Role::JefeProyectoDocente, 'Este puesto pide modalidad y departamento académico. El campus es opcional: sin campus, trabaja todos los de su modalidad.'],
+    [Role::Coordinador, 'Este puesto pide modalidad y carrera. El campus es opcional: sin campus, trabaja todos los de su modalidad.'],
     [Role::Docente, null],
 ]);

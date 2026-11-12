@@ -12,14 +12,21 @@ use Carbon\CarbonImmutable;
 use Illuminate\Validation\Rule;
 
 /**
- * Los campos del formulario «Nombrar» (puesto, campus, unidad, carrera y fechas), iguales en «Personas y puestos» y en
- * el panel del Organigrama: limpia lo que dependía del puesto o del campus anterior, valida y llama a AppointRole. La
- * vista es `core::people.appoint-fields`. La unidad puede venir fija (el Organigrama) y entonces no se elige.
+ * Los campos del formulario «Nombrar» (puesto, modalidad, campus, unidad, carrera y fechas), iguales en «Personas y
+ * puestos» y en el panel del Organigrama: limpia lo que dependía del puesto o del campus anterior, valida y llama a
+ * AppointRole. La vista es `core::people.appoint-fields`. La unidad puede venir fija (el Organigrama) y entonces no se
+ * elige. La modalidad (AZ-S17) viene elegida si hay una sola activa; el campus del coordinador y del jefe de proyecto
+ * docente es opcional. El diseño final de este formulario es de la tarea T13 (U3).
  */
 trait AppointsRoles
 {
-    /** El puesto, el campus, la unidad, la carrera y las fechas; el servidor solo usa las columnas que el puesto pide. */
+    /**
+     * El puesto, la modalidad, el campus, la unidad, la carrera y las fechas; el servidor solo usa las columnas que el
+     * puesto pide o admite.
+     */
     public string $role = '';
+
+    public string $modality = '';
 
     public string $campus = '';
 
@@ -39,18 +46,21 @@ trait AppointsRoles
         $this->resetValidation();
         $this->reset('campus', 'career', 'to');
         $this->role = $role->value;
+        $this->modality = app(PeopleQuery::class)->defaultModalityId() ?? '';
         $this->unit = $lockedUnit?->getKey() ?? '';
         $this->from = today()->toDateString();
     }
 
     /**
-     * Un puesto nuevo olvida el alcance del anterior (y la unidad si no es fija); un campus nuevo, la carrera.
+     * Un puesto nuevo olvida el alcance del anterior (y la unidad si no es fija) y vuelve a la modalidad propuesta; un
+     * campus nuevo, la carrera.
      */
     protected function appointFieldUpdated(string $property, bool $unitLocked = false): void
     {
         if ($property === 'role') {
             $this->resetValidation();
             $this->reset('campus', 'career');
+            $this->modality = app(PeopleQuery::class)->defaultModalityId() ?? '';
 
             if (! $unitLocked) {
                 $this->reset('unit');
@@ -78,7 +88,7 @@ trait AppointsRoles
         ]);
 
         $role = Role::from($this->role);
-        $columns = $role->scopeColumns();
+        $columns = [...$role->scopeColumns(), ...$role->optionalScopeColumns()];
 
         return $appointRole->handle(
             $person,
@@ -88,6 +98,7 @@ trait AppointsRoles
             in_array('career_id', $columns, true) && $this->career !== '' ? $this->career : null,
             CarbonImmutable::parse($this->from),
             $this->to === '' ? null : CarbonImmutable::parse($this->to),
+            in_array('modality_id', $columns, true) ? $people->modality($this->modality) : null,
         );
     }
 }

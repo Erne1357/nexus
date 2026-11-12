@@ -9,11 +9,25 @@ it('withRole() rechaza un alcance que no llena lo que exige el rol', function (R
     expect(fn () => User::factory()->withRole($role, $scope))->toThrow(InvalidArgumentException::class);
 })->with([
     'coordinador sin carrera' => [Role::Coordinador, ['campus_id' => fakeKey(1)]],
-    'coordinador sin campus' => [Role::Coordinador, ['career_id' => fakeKey(20)]],
     'jefe de departamento sin departamento' => [Role::JefeDepartamento, ['campus_id' => fakeKey(1)]],
-    'jefe de proyecto docente sin campus' => [Role::JefeProyectoDocente, ['department_id' => fakeKey(10)]],
-    'jefe de proyecto docente con campus nulo' => [Role::JefeProyectoDocente, ['campus_id' => null, 'department_id' => fakeKey(10)]],
+    'jefe de proyecto docente sin departamento' => [Role::JefeProyectoDocente, ['campus_id' => fakeKey(1)]],
+    'jefe de proyecto docente con departamento nulo' => [Role::JefeProyectoDocente, ['department_id' => null]],
 ]);
+
+it('AZ-S17: withRole() da al coordinador y al jefe de proyecto docente Presencial si no se dice otra, y el campus es opcional', function () {
+    $user = User::factory()
+        ->withRole(Role::Coordinador, ['career_id' => careerKey(20)])
+        ->withRole(Role::JefeProyectoDocente, ['department_id' => departmentKey(10), 'modality_id' => modalityOf('EAD')->id])
+        ->create();
+
+    expect($user->roleAssignments()->where('role', Role::Coordinador)->sole())
+        ->modality_id->toBe(modalityOf('PRES')->id)
+        ->campus_id->toBeNull()
+        ->and($user->roleAssignments()->where('role', Role::JefeProyectoDocente)->sole())
+        ->modality_id->toBe(modalityOf('EAD')->id)
+        ->campus_id->toBeNull()
+        ->and(User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create()->roleAssignments()->sole()->modality_id)->toBeNull();
+});
 
 it('withRole() da el nombramiento cuando el alcance está completo', function () {
     $campus = Campus::factory()->create();

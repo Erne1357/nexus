@@ -37,8 +37,9 @@ final class AuthorizationSnapshots
      *
      * - 1: el primero, con `unit_is_department`.
      * - 2: sin `unit_is_department` (3.P9).
+     * - 3: con `modality_id` (AZ-S17, carga por modalidad).
      */
-    public const int FORMAT = 2;
+    public const int FORMAT = 3;
 
     /** @var array<string, AuthorizationSnapshot> */
     private array $memo = [];
@@ -80,7 +81,8 @@ final class AuthorizationSnapshots
 
     /**
      * Los nombramientos vigentes hoy que llenan Role::scopeColumns(), en una consulta. La base ya lo exige (CHECK
-     * `role_assignments_scope_complete`); el filtro queda como defensa.
+     * `role_assignments_scope_complete`); el filtro queda como defensa. No mira si su campus o su modalidad están
+     * activos: eso lo decide Actor en cada petición, para que activar o desactivar uno cuente sin esperar a la caché.
      */
     private function load(User $user): AuthorizationSnapshot
     {
@@ -98,6 +100,7 @@ final class AuthorizationSnapshots
                 $assignment->campus_id,
                 $assignment->org_unit_id,
                 $assignment->career_id,
+                $assignment->modality_id,
             ))
             ->values()
             ->all());

@@ -4,7 +4,8 @@ namespace App\Modules\Core\Queries;
 
 /**
  * Cómo se muestra un nombramiento: el puesto (`title`), el alcance en etiquetas cortas (`chips`) y el renglón de una
- * línea (`summary`), p. ej. «Coordinador de carrera · ISC · C2».
+ * línea (`summary`), p. ej. «Coordinador de carrera · ISC · Presencial · Campus II» o «Jefe de proyecto docente ·
+ * Sistemas y Computación · Presencial · Todos los campus».
  */
 final readonly class AssignmentLabel
 {

@@ -20,7 +20,9 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
-    // La modalidad del alumno apunta al catálogo: su migración, posterior, se deshace primero.
+    // La modalidad del alumno y la de los nombramientos apuntan al catálogo: sus migraciones, posteriores, se deshacen
+    // primero.
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210201_add_modality_to_role_assignments.php'))->down();
     (require base_path('app/Modules/Students/Database/Migrations/2026_11_12_210101_replace_student_modality_with_modality_id.php'))->down();
     $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210001_create_modalities_table.php');
     $this->migration->down();

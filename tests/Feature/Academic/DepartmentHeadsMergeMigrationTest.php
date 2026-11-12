@@ -22,6 +22,8 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-07 12:00', 'America/Ciudad_Juarez'));
 
+    // La modalidad de los nombramientos (AZ-S17), posterior, reemplazó la exclusión de esta migración: se deshace primero.
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210201_add_modality_to_role_assignments.php'))->down();
     $this->migration = require base_path('app/Modules/Academic/Database/Migrations/2026_11_07_000001_merge_department_heads_into_role_assignments.php');
     $this->migration->down();
 

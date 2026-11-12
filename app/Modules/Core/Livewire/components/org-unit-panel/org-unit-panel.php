@@ -116,7 +116,7 @@ new class extends Component
             'roleCase' => Role::tryFrom($this->role),
             'options' => $this->showAppoint && Role::tryFrom($this->role) !== null
                 ? $people->scopeOptions(Role::from($this->role), Str::isUuid($this->campus) ? $this->campus : null)
-                : ['campuses' => [], 'units' => [], 'careers' => []],
+                : ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []],
             'person' => $this->showAppoint && $this->appointUserId !== null ? $people->findOrFail($this->appointUserId) : null,
             'found' => $this->showAppoint && $this->appointUserId === null ? $people->search($this->findPerson) : collect(),
         ];
@@ -222,7 +222,7 @@ new class extends Component
         $this->authorize('viewAny', OrgUnit::class);
 
         $this->resetValidation();
-        $this->reset('showAppoint', 'findPerson', 'appointUserId', 'role', 'campus', 'unit', 'career', 'from', 'to');
+        $this->reset('showAppoint', 'findPerson', 'appointUserId', 'role', 'modality', 'campus', 'unit', 'career', 'from', 'to');
     }
 
     /**

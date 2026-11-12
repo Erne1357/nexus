@@ -70,20 +70,31 @@ it('filtra por un puesto vigente y trae solo los vigentes', function () {
 });
 
 it('holders compara solo las columnas del puesto', function () {
+    $pres = modalityOf('PRES')->id;
     $isc = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id])->create(['name' => 'Ana ISC']);
     User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->ige->id])->create(['name' => 'Beto IGE']);
     User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id, 'valid_from' => '2025-01-01', 'valid_to' => '2026-01-01'])->create(['name' => 'Cris Viejo']);
     $admin = User::factory()->admin()->create(['name' => 'Ada Admin']);
     $other = User::factory()->admin()->create(['name' => 'Beta Admin']);
 
-    $holders = $this->people->holders(Role::Coordinador, $this->c2->id, null, $this->isc->id);
+    $holders = $this->people->holders(Role::Coordinador, $this->c2->id, null, $this->isc->id, $pres);
 
     expect($holders->pluck('user.name')->all())->toBe(['Ana ISC'])
         ->and($holders->first()->user_id)->toBe($isc->id)
-        ->and($this->people->holders(Role::Coordinador, $this->c2->id, null, null))->toBeEmpty()
-        ->and($this->people->holders(Role::Coordinador, null, null, $this->isc->id))->toBeEmpty()
+        ->and($this->people->holders(Role::Coordinador, $this->c2->id, null, null, $pres))->toBeEmpty()
+        ->and($this->people->holders(Role::Coordinador, $this->c2->id, null, $this->isc->id))->toBeEmpty()
         ->and($this->people->holders(Role::Admin, null, null, null)->pluck('user_id')->sort()->values()->all())
         ->toBe(collect([$admin->id, $other->id])->sort()->values()->all());
+});
+
+it('AZ-S17: holders con el campus opcional: sin campus, todos los de la modalidad; con campus, los de ese campus y los de todos los campus', function () {
+    $pres = modalityOf('PRES')->id;
+    User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id])->create(['name' => 'Ana C2']);
+    User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => $this->isc->id])->create(['name' => 'Beto C1']);
+    User::factory()->withRole(Role::Coordinador, ['career_id' => $this->isc->id])->create(['name' => 'Cris Todos']);
+
+    expect($this->people->holders(Role::Coordinador, null, null, $this->isc->id, $pres)->pluck('user.name')->sort()->values()->all())->toBe(['Ana C2', 'Beto C1', 'Cris Todos'])
+        ->and($this->people->holders(Role::Coordinador, $this->c2->id, null, $this->isc->id, $pres)->pluck('user.name')->sort()->values()->all())->toBe(['Ana C2', 'Cris Todos']);
 });
 
 it('scopeOptions: lo que cada puesto ofrece para elegir', function () {
@@ -108,7 +119,19 @@ it('scopeOptions: lo que cada puesto ofrece para elegir', function () {
             ['id' => $this->ige->id, 'name' => 'IGE · Ingeniería en Gestión Empresarial'],
             ['id' => $this->isc->id, 'name' => 'ISC · Ingeniería en Sistemas Computacionales'],
         ])
-        ->and($coordinador['campuses'])->toBe([['id' => $this->c1->id, 'name' => 'C1 · Campus I'], ['id' => $this->c2->id, 'name' => 'C2 · Campus II']]);
+        ->and($coordinador['campuses'])->toBe([['id' => $this->c1->id, 'name' => 'C1 · Campus I'], ['id' => $this->c2->id, 'name' => 'C2 · Campus II']])
+        ->and($coordinador['modalities'])->toBe([['id' => modalityOf('PRES')->id, 'name' => 'Presencial']]);
+});
+
+it('AZ-S17: scopeOptions sin campus da las carreras que se ofrecen en algún campus si el campus es opcional, y ninguna si no hay carrera', function () {
+    expect(array_column($this->people->scopeOptions(Role::Coordinador, null)['careers'], 'id'))->toBe([$this->ige->id, $this->isc->id])
+        ->and($this->people->scopeOptions(Role::JefeProyectoDocente, null)['careers'])->toBe([])
+        ->and($this->people->defaultModalityId())->toBe(modalityOf('PRES')->id);
+
+    modalityOf('EAD')->update(['is_active' => true]);
+
+    expect($this->people->defaultModalityId())->toBeNull()
+        ->and(array_column($this->people->modalityOptions(), 'name'))->toBe(['EAD', 'Presencial']);
 });
 
 it('busca personas por nombre o usuario, hasta el límite', function () {

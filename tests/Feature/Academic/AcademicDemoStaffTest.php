@@ -32,7 +32,7 @@ use Tests\Support\Academic\DemoCatalog;
 | Este archivo: los usuarios de prueba con su rol y su alcance.
 */
 
-it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el Tec, jefes de proyecto docente y coordinadores por campus', function () {
+it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el Tec, jefes de proyecto docente y coordinadores en Presencial y por campus (AZ-S17)', function () {
     $this->seed(DemoSeeder::class);
 
     $c1 = Campus::query()->where('code', 'C1')->sole();
@@ -64,6 +64,8 @@ it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el
         ->campus_id->toBeNull()
         ->user->username->toBe('jefe.sc')
         ->and(RoleAssignment::query()->current()->where(['org_unit_id' => $sc->id, 'campus_id' => $c2->id, 'role' => Role::JefeProyectoDocente])->whereHas('user', fn ($query) => $query->where('username', 'jpd.sc.c2'))->exists())->toBeTrue()
+        ->and(RoleAssignment::query()->whereIn('role', [Role::Coordinador, Role::JefeProyectoDocente])->get())
+        ->each(fn ($assignment) => $assignment->modality_id->toBe(modalityOf('PRES')->id)->campus_id->toBe($c2->id))
         ->and(DB::table('department_heads')->count())->toBe(0)
         ->and(Hash::check('password', $coordinator->password))->toBeTrue()
         ->and($coordinator->must_change_password)->toBeFalse();
