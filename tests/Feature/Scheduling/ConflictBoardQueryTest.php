@@ -138,7 +138,7 @@ it('el detalle trae los choques agrupados por grupo y los grupos de cada pendien
         ->and(array_column($detail['withoutTeacher'], 'code'))->toBe(['2']);
 });
 
-it('cada quien cuenta solo su alcance: el jefe su departamento, el coordinador su carrera en su campus', function () {
+it('cada quien cuenta solo su alcance: el jefe su departamento, el coordinador su carrera en la modalidad (AZ-S17)', function () {
     readyBoardGroup();
     boardGroup(['subject_id' => Subject::factory()->create(['department_id' => departmentKey(11)])->id]);
     $otherCareer = Career::factory()->create();
@@ -150,7 +150,7 @@ it('cada quien cuenta solo su alcance: el jefe su departamento, el coordinador s
 
     expect(boardStatuses($jefe))->toHaveCount(1)
         ->and(boardStatuses($coordinador))->toHaveCount(2)
-        ->and(boardStatuses($otherCampus))->toHaveCount(0)
+        ->and(boardStatuses($otherCampus))->toHaveCount(2)
         ->and(boardStatuses(User::factory()->withRole(Role::Docente)->create()))->toHaveCount(0);
 });
 

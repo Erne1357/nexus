@@ -239,7 +239,7 @@ final class ConflictBoardQuery
             ->where('groups.status', '<>', GroupStatus::Cancelled->value);
 
         return $actor->constrain($query, SchedulingPermission::ScheduleView, [
-            'campus' => 'groups.campus_id',
+            'modality' => 'groups.modality_id',
             'unit' => 'groups.department_id',
             'career' => fn (Builder $careers, array $ids) => $careers->whereIn('groups.owner_career_id', $ids)
                 ->orWhereExists(GroupQuota::query()->toBase()->whereColumn('group_quotas.group_id', 'groups.id')->whereIn('group_quotas.career_id', $ids)),

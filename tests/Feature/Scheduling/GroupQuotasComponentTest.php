@@ -267,8 +267,9 @@ it('un jefe que pierde el permiso después de montar recibe 403 al guardar o agr
     expect(GroupQuota::query()->count())->toBe(1);
 });
 
-it('un grupo de otro campus no lo ve el coordinador de su carrera en otro campus', function () {
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => $this->owner->id])->create();
+it('AZ-S17: un grupo de otra modalidad no lo ve el coordinador de su carrera', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => $this->owner->id])->create();
 
     quotasAs($coordinador, $this->group)->assertForbidden();
 });

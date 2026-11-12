@@ -21,7 +21,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  * (reglas-de-negocio.md, "Editor de horarios").
  *
  * - careers(): las carreras activas que se ofrecen en el campus (`career_campus` activa) y que el actor ve con
- *   «Ver los horarios» (SchedulingPermission::ScheduleView) sobre la carrera: su campus, su departamento como unidad y
+ *   «Ver los horarios» (SchedulingPermission::ScheduleView) sobre la carrera: su modalidad (MS6), su departamento como unidad y
  *   ella misma. Además, como supuesto por confirmar, las carreras donde el actor ve algún grupo sin cancelar del
  *   periodo y campus, aunque ya no se ofrezcan o estén inactivas: el jefe de un departamento que imparte en otras
  *   carreras (Ciencias Básicas) llega así a sus grupos, y ningún grupo se queda sin camino.
@@ -146,18 +146,19 @@ final class PlanSemestersQuery
         $byCareer = $actor->constrain(
             CareerCampus::query()
                 ->join('careers as offered', 'offered.id', '=', 'career_campus.career_id')
+                ->join('campuses as offered_campus', 'offered_campus.id', '=', 'career_campus.campus_id')
                 ->where('career_campus.campus_id', $campus->id)
                 ->where('career_campus.is_active', true)
                 ->where('offered.is_active', true)
                 ->select('career_campus.career_id'),
             SchedulingPermission::ScheduleView,
-            ['campus' => 'career_campus.campus_id', 'unit' => 'offered.department_id', 'career' => 'career_campus.career_id'],
+            ['modality' => 'offered_campus.modality_id', 'unit' => 'offered.department_id', 'career' => 'career_campus.career_id'],
         );
 
         $byGroups = $actor->constrain(
             Group::query()->active()->where('groups.term_id', $term->id)->where('groups.campus_id', $campus->id)->select('groups.owner_career_id'),
             SchedulingPermission::ScheduleView,
-            ['campus' => 'groups.campus_id', 'unit' => 'groups.department_id', 'career' => 'groups.owner_career_id'],
+            ['modality' => 'groups.modality_id', 'unit' => 'groups.department_id', 'career' => 'groups.owner_career_id'],
         );
 
         return Career::query()
