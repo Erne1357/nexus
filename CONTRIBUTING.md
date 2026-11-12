@@ -50,6 +50,8 @@ docker compose exec -T postgres dropdb -U nexus nexus_test_<x>   # al cerrar el 
 
 La base también separa los discos falsos: `tests/TestCase.php` guarda los de `Storage::fake()` y las copias temporales de Livewire en `storage/framework/testing/disks/<disco>_test_<base>`. Así, dos corridas a la vez en el mismo worktree, cada una con su base, no se borran los archivos.
 
+Con varias bases de pruebas corriendo a la vez, cada `RefreshDatabase` borra y migra unas 70 tablas, y el límite de bloqueos por defecto de PostgreSQL (64) se agota: salen fallas sueltas «out of shared memory… max_locks_per_transaction» que pasan al repetirlas. El `compose.override.yaml` de desarrollo arranca PostgreSQL con `max_locks_per_transaction=256` (#430); si tu volumen ya existía, aplica el cambio con `docker compose up -d postgres` cuando nadie esté corriendo pruebas. Al terminar, borra también las copias `nexus_test_<x>_test_1` a `_4` que deja `--parallel`.
+
 **Volumen de Postgres que ya existe.** El script de `docker/postgres/` solo corre cuando el volumen está vacío. Si ya levantaste el stack antes de la tarea 0.3, crea la base a mano una vez: `docker compose exec -T postgres createdb -U nexus nexus_test`.
 
 ## Commits

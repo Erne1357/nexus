@@ -31,6 +31,9 @@ services:
       - .:/app
 
   postgres:
+    # Solo dev: varias sesiones corren pruebas a la vez, cada una con su base, y RefreshDatabase borra y migra ~70
+    # tablas por corrida; con el valor por defecto (64) salen fallas sueltas «out of shared memory» (#430).
+    command: ["postgres", "-c", "max_locks_per_transaction=256"]
     ports:
       - "${FORWARD_DB_PORT:-5432}:5432"
     volumes:

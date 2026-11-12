@@ -57,6 +57,29 @@ final class BuildingQuery
     }
 
     /**
+     * Los edificios sin borrar de los campus activos, por campus y clave, como opciones de x-select: «C2 · A · Edificio
+     * A». Para mover un salón a un edificio de otro campus al validar los catálogos (CV2, CV-S10); los inactivos también,
+     * y lo dicen.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function optionsInActiveCampuses(): array
+    {
+        return Building::query()
+            ->join('campuses', 'campuses.id', '=', 'buildings.campus_id')
+            ->where('campuses.is_active', true)
+            ->whereNull('campuses.deleted_at')
+            ->orderBy('campuses.code')
+            ->orderBy('buildings.code')
+            ->get(['buildings.id', 'buildings.code', 'buildings.name', 'buildings.is_active', 'campuses.code as campus_code'])
+            ->map(fn (Building $building): array => [
+                'id' => $building->id,
+                'name' => "{$building->getAttribute('campus_code')} · {$building->code} · {$building->name}".($building->is_active ? '' : ' (inactivo)'),
+            ])
+            ->all();
+    }
+
+    /**
      * El edificio que se va a editar, sin los borrados. El id llega del navegador: uno que no es uuid no
      * existe (ADR-0014).
      *

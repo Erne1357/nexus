@@ -4,8 +4,9 @@ namespace App\Modules\CatalogValidation\Enums;
 
 /**
  * Catálogo que el jefe de departamento valida cada periodo (docs/dominio/modelo-de-datos.md,
- * `catalog_reviews`). Docentes, materias, planes y carreras son generales: se revisan una vez por periodo
- * para todo el Tec. Los salones se revisan en cada campus (D2, confirmado el 1 de noviembre de 2026).
+ * `catalog_reviews`). Todos se revisan una vez por periodo y departamento, para todo el Tec, también los salones de
+ * todos los campus (decisión 6, confirmada el 12 de noviembre de 2026). Los salones solo se exigen donde el campus
+ * usa salones (HC-14).
  */
 enum Catalog: string
 {
@@ -27,20 +28,23 @@ enum Catalog: string
     }
 
     /**
-     * Si se revisa una vez por periodo para todo el Tec (sin campus); si no, se revisa en cada campus.
-     */
-    public function isGeneral(): bool
-    {
-        return $this !== self::Rooms;
-    }
-
-    /**
-     * Los catálogos generales, en el orden del enum.
+     * Los que no son salones, en el orden del enum: los exige la carga de cualquier campus (HC-14).
      *
      * @return list<self>
      */
     public static function general(): array
     {
-        return array_values(array_filter(self::cases(), fn (self $catalog): bool => $catalog->isGeneral()));
+        return array_values(array_filter(self::cases(), fn (self $catalog): bool => $catalog !== self::Rooms));
+    }
+
+    /**
+     * Los catálogos que exige la carga de un campus para salir de borrador (HC-14), en el orden del enum: todos, y los
+     * salones solo si su perfil usa salones.
+     *
+     * @return list<self>
+     */
+    public static function requiredFor(bool $usesRooms): array
+    {
+        return $usesRooms ? self::cases() : self::general();
     }
 }
