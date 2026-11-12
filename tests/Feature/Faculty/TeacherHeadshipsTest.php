@@ -108,6 +108,19 @@ describe('nombrar', function () {
             ->campus_id->toBeNull();
     });
 
+    it('AZ-S17: un campus que no existe es un error del campo, no un jefe de proyecto docente de todos los campus', function () {
+        headshipRecord($this->admin, $this->ana)
+            ->call('createHeadship')
+            ->set('headKind', 'jefe_proyecto_docente')
+            ->set('headDepartmentId', $this->sc->id)
+            ->set('headCampusId', fakeKey(999_999))
+            ->set('headFrom', today()->toDateString())
+            ->call('saveHeadship')
+            ->assertHasErrors(['headCampusId' => 'Elige el campus.']);
+
+        expect(RoleAssignment::where('role', Role::JefeProyectoDocente)->exists())->toBeFalse();
+    });
+
     it('un segundo jefe vigente del departamento muestra el error en su campo y no escribe nada', function () {
         $other = User::factory()->create(['name' => 'Luis Mora']);
         headshipFor($other, Role::JefeDepartamento, $this->sc->id, null, ['valid_from' => today()->subMonth()->toDateString()]);

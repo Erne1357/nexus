@@ -16,6 +16,7 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Events\TransactionBeginning;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
@@ -146,6 +147,24 @@ it('AZ-S17: el campus es opcional: nombra coordinador y jefe de proyecto docente
             'Nombró a Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Todos los campus',
             'Nombró a Rosa Ruiz como Jefe de proyecto docente · Sistemas y Computación · Presencial · Todos los campus',
         ]);
+});
+
+it('MS8: vuelve a revisar la modalidad bajo el candado: si se desactiva antes de escribir, no nombra al coordinador', function () {
+    $fired = false;
+
+    Event::listen(TransactionBeginning::class, function () use (&$fired): void {
+        if ($fired) {
+            return;
+        }
+
+        $fired = true;
+        DB::table('modalities')->where('code', 'PRES')->update(['is_active' => false]);
+    });
+
+    expectInvalid(fn () => appoint($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id), 'modality', 'La modalidad Presencial está inactiva.');
+
+    expect($fired)->toBeTrue()
+        ->and(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse();
 });
 
 it('AZ-S17: sin campus, la carrera debe ofrecerse en algún campus activo', function () {

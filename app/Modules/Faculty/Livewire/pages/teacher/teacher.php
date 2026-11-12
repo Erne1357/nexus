@@ -445,9 +445,18 @@ new #[Title('Ficha del docente')] class extends Component
             'headTo' => ['nullable', 'date_format:Y-m-d'],
         ], ['headKind.in' => 'Elige un cargo de la lista.']);
         $role = Role::from($data['headKind']);
+        $campus = $role === Role::JefeProyectoDocente ? $people->campus($data['headCampusId']) : null;
 
         if (! $teacher->is_active) {
             $this->addError('headKind', 'El docente está inactivo: reactívalo antes de nombrarlo.');
+
+            return;
+        }
+
+        // Solo el campo vacío es «Todos los campus» (AZ-S17): un id que no es de un campus es un error, no un jefe de
+        // proyecto docente de todos los campus.
+        if ($role === Role::JefeProyectoDocente && filled($data['headCampusId'] ?? null) && $campus === null) {
+            $this->addError('headCampusId', 'Elige el campus.');
 
             return;
         }
@@ -469,7 +478,7 @@ new #[Title('Ficha del docente')] class extends Component
             $assignment = $appointRole->handle(
                 $user,
                 $role,
-                $role === Role::JefeProyectoDocente ? $people->campus($data['headCampusId']) : null,
+                $campus,
                 $people->unit($data['headDepartmentId']),
                 null,
                 CarbonImmutable::parse($data['headFrom']),

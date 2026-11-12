@@ -117,6 +117,17 @@ it('AZ-S17: nombra coordinador pidiendo modalidad y carrera, con el campus opcio
         ->org_unit_id->toBeNull();
 });
 
+it('AZ-S17: un campus que no existe es un error del campo, no «Todos los campus»', function () {
+    personPage($this->beto)->call('openAppoint')
+        ->set('campus', fakeKey(999_999))
+        ->set('career', $this->isc->id)
+        ->call('appoint')
+        ->assertHasErrors(['campus' => 'Elige el campus.'])
+        ->assertSet('showModal', true);
+
+    expect(RoleAssignment::where('user_id', $this->beto->id)->exists())->toBeFalse();
+});
+
 it('AZ-S17: sin campus, el coordinador queda en todos los campus de su modalidad', function () {
     $page = personPage($this->beto)->call('openAppoint')
         ->set('career', $this->isc->id)

@@ -10,6 +10,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\PeopleQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Los campos del formulario «Nombrar» (puesto, modalidad, campus, unidad, carrera y fechas), iguales en «Personas y
@@ -89,11 +90,18 @@ trait AppointsRoles
 
         $role = Role::from($this->role);
         $columns = [...$role->scopeColumns(), ...$role->optionalScopeColumns()];
+        $campus = in_array('campus_id', $columns, true) ? $people->campus($this->campus) : null;
+
+        // Solo el campo vacío es «Todos los campus» (AZ-S17): un id que no es de un campus no se vuelve un nombramiento
+        // de todos los campus.
+        if (in_array('campus_id', $columns, true) && $this->campus !== '' && $campus === null) {
+            throw ValidationException::withMessages(['campus' => 'Elige el campus.']);
+        }
 
         return $appointRole->handle(
             $person,
             $role,
-            in_array('campus_id', $columns, true) ? $people->campus($this->campus) : null,
+            $campus,
             in_array('org_unit_id', $columns, true) ? ($lockedUnit ?? $people->unit($this->unit)) : null,
             in_array('career_id', $columns, true) && $this->career !== '' ? $this->career : null,
             CarbonImmutable::parse($this->from),
