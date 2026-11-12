@@ -59,8 +59,11 @@ final class MigrateSii extends Command
             return self::FAILURE;
         }
 
+        $only = array_values((array) $this->option('only'));
+        $incidentsFile = RunSiiMigration::incidentsFileName($only);
+
         try {
-            $report = $migration->handle($dir, $user, (bool) $this->option('dry-run'), array_values((array) $this->option('only')));
+            $report = $migration->handle($dir, $user, (bool) $this->option('dry-run'), $only);
         } catch (SiiContractBroken $exception) {
             $this->components->error($exception->getMessage());
 
@@ -68,8 +71,8 @@ final class MigrateSii extends Command
         } catch (SiiMigrationStopped $stopped) {
             $this->components->error($stopped->getMessage().' Excepción: '.class_basename($stopped->getPrevious() ?? $stopped).'.');
             $this->components->warn($this->option('dry-run')
-                ? 'Era un ensayo: no quedó nada. Detalle en _incidencias.csv y en el log.'
-                : "Los lotes anteriores ya se aplicaron ({$stopped->appliedBatches}); repetir la migración no los cambia. Detalle en _incidencias.csv y en el log.");
+                ? 'Era un ensayo: no quedó nada. Detalle en {$incidentsFile} y en el log.'
+                : "Los lotes anteriores ya se aplicaron ({$stopped->appliedBatches}); repetir la migración no los cambia. Detalle en {$incidentsFile} y en el log.");
 
             return self::FAILURE;
         } catch (InvalidArgumentException $exception) {
@@ -91,15 +94,15 @@ final class MigrateSii extends Command
             $this->components->bulletList($report->notes());
         }
         if ($report->unreadable > 0) {
-            $this->components->warn("{$report->unreadable} renglones del SII no se pudieron leer y no se migran (ver «malformados» en _incidencias.csv).");
+            $this->components->warn("{$report->unreadable} renglones del SII no se pudieron leer y no se migran (ver «malformados» en {$incidentsFile}).");
         }
 
-        $incidents = "Incidencias: {$report->incidents} (ver _incidencias.csv).";
+        $incidents = "Incidencias: {$report->incidents} (ver {$incidentsFile}).";
 
         if ($this->option('dry-run')) {
             $this->components->info("Ensayo terminado, sin cambios. {$incidents}");
         } elseif ($report->differences() > 0) {
-            $this->components->warn("Migración terminada con diferencias: la verificación contra el SII encontró {$report->differences()} renglones o alumnos que no cuadran (errores del paso verificacion en _incidencias.csv; detalle en el esquema sii_verificacion). Nada se revirtió. {$incidents}");
+            $this->components->warn("Migración terminada con diferencias: la verificación contra el SII encontró {$report->differences()} renglones o alumnos que no cuadran (errores del paso verificacion en {$incidentsFile}; detalle en el esquema sii_verificacion). Nada se revirtió. {$incidents}");
         } else {
             $this->components->info("Migración terminada. {$incidents}");
         }

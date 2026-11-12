@@ -103,8 +103,8 @@ it('AC-10: el NIP no sale en la consola, las incidencias ni los archivos interme
 
     ($this->migrate)();
 
-    $incidents = File::get("{$this->dir}/_incidencias.csv");
-    $nexus = collect(File::exists("{$this->dir}/_nexus") ? File::allFiles("{$this->dir}/_nexus") : [])->map(fn ($file): string => File::get($file->getPathname()))->implode("\n");
+    $incidents = File::get("{$this->dir}/_incidencias.cuentas_alumnos.csv");
+    $nexus = collect(File::exists("{$this->dir}/_nexus.cuentas_alumnos") ? File::allFiles("{$this->dir}/_nexus.cuentas_alumnos") : [])->map(fn ($file): string => File::get($file->getPathname()))->implode("\n");
     expect(Artisan::output())->toContain('student_accounts')->toContain('Encoló las cuentas de 21 alumno(s) en 1 bloque(s)')->not->toContain('NIP-SECRETO')
         ->and($incidents)->toContain('1 alumno(s) sin NIP en el SII')
         ->and($incidents)->toContain('1 alumno(s) con NIP de 1 a 3 dígitos')
@@ -124,7 +124,7 @@ it('AC-10: si más del 5 % de los alumnos vienen sin NIP, no encola nada y lo re
 
     Bus::assertNothingBatched();
     expect(Artisan::output())->toContain('No se encoló ninguna cuenta de alumno')
-        ->and(File::get("{$this->dir}/_incidencias.csv"))->toContain('2 de 20 alumnos sin NIP en el SII, más del 5 %');
+        ->and(File::get("{$this->dir}/_incidencias.cuentas_alumnos.csv"))->toContain('2 de 20 alumnos sin NIP en el SII, más del 5 %');
 });
 
 it('AC-10: con hasta el 5 % sin NIP sí encola, y avisa de los vacíos', function () {
@@ -138,7 +138,7 @@ it('AC-10: con hasta el 5 % sin NIP sí encola, y avisa de los vacíos', functio
     ($this->migrate)();
 
     Bus::assertBatchCount(1);
-    expect(File::get("{$this->dir}/_incidencias.csv"))->toContain('1 alumno(s) sin NIP en el SII');
+    expect(File::get("{$this->dir}/_incidencias.cuentas_alumnos.csv"))->toContain('1 alumno(s) sin NIP en el SII');
 });
 
 it('AC-10: un número de control repetido vale por su primer renglón, y se avisa', function () {
@@ -151,5 +151,5 @@ it('AC-10: un número de control repetido vale por su primer renglón, y se avis
     ($this->migrate)();
 
     Bus::assertBatched(fn (PendingBatch $batch): bool => $batch->jobs->sole()->nips === ['21110001' => '1111']);
-    expect(File::get("{$this->dir}/_incidencias.csv"))->toContain('1 renglón(es) con un número de control repetido: vale el primero');
+    expect(File::get("{$this->dir}/_incidencias.cuentas_alumnos.csv"))->toContain('1 renglón(es) con un número de control repetido: vale el primero');
 });
