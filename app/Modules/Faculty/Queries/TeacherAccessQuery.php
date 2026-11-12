@@ -2,6 +2,7 @@
 
 namespace App\Modules\Faculty\Queries;
 
+use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Database\Eloquent\Builder;
@@ -13,9 +14,12 @@ use Illuminate\Database\Eloquent\Collection;
  */
 final class TeacherAccessQuery
 {
+    public function __construct(private readonly RoleAssignmentRules $rules) {}
+
     /**
-     * Los que se invitan al validar: usuario activo sin contraseña, correo institucional y sin invitación vigente (nunca
-     * invitados, o con la invitación ya vencida). Con `$teacherId`, solo ese docente, si cumple.
+     * Los que se invitan al validar: usuario activo sin contraseña y sin otro puesto vigente o por empezar (a los jefes
+     * los habilita el admin, AC-07), correo institucional y sin invitación vigente (nunca invitados, o con la invitación
+     * ya vencida). Con `$teacherId`, solo ese docente, si cumple.
      *
      * @return Collection<int, Teacher>
      */
@@ -27,18 +31,18 @@ final class TeacherAccessQuery
             ->whereHas('user', fn (Builder $user) => $user
                 ->whereNull('password')
                 ->where('is_active', true)
+                ->whereNotIn('users.id', $this->rules->staffUserIds())
                 ->where(fn (Builder $invited) => $invited
                     ->whereNull('access_invited_at')
                     ->orWhere('access_invited_at', '<=', now()->subDays(AccessInvitationLink::DAYS))))
-            ->with('user')
             ->orderBy('rfc')
             ->get();
     }
 
     /**
-     * Cuántos docentes sin acceso no recibirán su invitación, por qué: `email`, los de usuario activo sin contraseña a
-     * los que les falta el correo institucional (al capturarlo, les llega); `user`, los demás sin acceso, que no tienen
-     * usuario o lo tienen inactivo (lo resuelve el admin).
+     * Cuántos docentes sin acceso no recibirán su invitación, por qué: `email`, los de usuario activo sin contraseña y
+     * sin otro puesto a los que les falta el correo institucional (al capturarlo, les llega); `user`, los demás sin
+     * acceso, que no tienen usuario, lo tienen inactivo o tienen otro puesto (les da acceso el admin).
      *
      * @return array{email: int, user: int}
      */
@@ -47,12 +51,19 @@ final class TeacherAccessQuery
         return [
             'email' => $this->ofDepartment($departmentId)
                 ->whereNull('institutional_email')
-                ->whereHas('user', fn (Builder $user) => $user->whereNull('password')->where('is_active', true))
+                ->whereHas('user', fn (Builder $user) => $user
+                    ->whereNull('password')
+                    ->where('is_active', true)
+                    ->whereNotIn('users.id', $this->rules->staffUserIds()))
                 ->count(),
             'user' => $this->ofDepartment($departmentId)
                 ->where(fn (Builder $query) => $query
                     ->whereNull('user_id')
-                    ->orWhereHas('user', fn (Builder $user) => $user->whereNull('password')->where('is_active', false)))
+                    ->orWhereHas('user', fn (Builder $user) => $user
+                        ->whereNull('password')
+                        ->where(fn (Builder $blocked) => $blocked
+                            ->where('is_active', false)
+                            ->orWhereIn('users.id', $this->rules->staffUserIds()))))
                 ->count(),
         ];
     }

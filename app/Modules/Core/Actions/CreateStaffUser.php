@@ -13,10 +13,10 @@ use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Da de alta un usuario de personal, activo y obligado a cambiar su contraseña en su primer acceso. Por omisión nace
- * con la contraseña por defecto: es el alta manual del admin (AC-05, supuesto por confirmar), y sin
- * NEXUS_DEFAULT_PASSWORD falla antes de escribir. Con `$withAccess = false` nace **sin acceso**, sin contraseña, hasta
- * que se le dé (AC-01 y AC-02); así nacen los de los docentes. Un username repetido es una ValidationException sobre
+ * Da de alta un usuario de personal, activo y obligado a cambiar su contraseña en su primer acceso. Quien lo da de alta
+ * decide siempre si nace con acceso (`$withAccess` no tiene valor por omisión): sin acceso, sin contraseña, hasta que
+ * se le dé (AC-01 y AC-02), así nacen los de los docentes; con acceso, con la contraseña por defecto, que es el alta
+ * manual del admin (AC-05, supuesto por confirmar), y sin NEXUS_DEFAULT_PASSWORD falla antes de escribir. Un username repetido es una ValidationException sobre
  * `username`, también si otra sesión lo toma entre la revisión y el insert. La bitácora nunca lleva la contraseña.
  * Después del commit avisa con StaffUserCreated.
  */
@@ -28,7 +28,7 @@ final class CreateStaffUser
      * @throws ValidationException
      * @throws RuntimeException si `$withAccess` y falta NEXUS_DEFAULT_PASSWORD
      */
-    public function handle(string $username, string $name, ?string $email = null, bool $withAccess = true): User
+    public function handle(string $username, string $name, bool $withAccess, ?string $email = null): User
     {
         $passwordHash = $withAccess ? $this->defaultPassword->hash() : null;
 

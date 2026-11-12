@@ -136,7 +136,7 @@ it('AC-12: la contraseña actual equivocada se rechaza con el mensaje de siempre
 });
 
 it('AC-12: el alta manual, el reinicio del admin y la invitación aceptada dejan la contraseña por defecto como origen', function () {
-    $created = app(CreateStaffUser::class)->handle('ABCD800101XX1', 'Ana Pérez');
+    $created = app(CreateStaffUser::class)->handle('ABCD800101XX1', 'Ana Pérez', withAccess: true);
     $withoutAccess = app(CreateStaffUser::class)->handle('ABCD800101XX2', 'Beto Pérez', withAccess: false);
 
     $student = studentWithNip('123');

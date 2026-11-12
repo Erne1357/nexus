@@ -43,6 +43,7 @@ function dimensionTables(): array
         'core.term.manage_calendar' => 'term_stages',
         'core.assignment' => 'role_assignments',
         'core.org_unit' => 'org_units',
+        'core.user' => 'users',
         'academic.department' => 'departments',
         'academic.career' => 'careers',
         'academic.subject' => 'subjects',

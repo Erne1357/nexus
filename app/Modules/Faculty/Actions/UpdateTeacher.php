@@ -5,6 +5,7 @@ namespace App\Modules\Faculty\Actions;
 use App\Modules\Core\Actions\CancelAccessInvitation;
 use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Events\TeacherUpdated;
 use App\Modules\Faculty\Models\Teacher;
@@ -21,7 +22,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * claves que recibe. Quién puede lo decide TeacherPolicy (`update`) antes de llamarla. Hace cumplir las mismas reglas
  * que CreateTeacher (TeacherRules). Si su usuario ya tenía una invitación de acceso y sigue sin contraseña, cambiar el
  * correo institucional la manda de nuevo al correo nuevo, así que el enlace anterior deja de servir; borrarlo, o
- * cambiarlo a un docente inactivo, la deja sin efecto (AC-07, supuesto por confirmar). Va en la misma transacción.
+ * cambiarlo a un docente inactivo o que ya tiene otro puesto, la deja sin efecto (AC-07, supuesto por confirmar). Va
+ * en la misma transacción.
  *
  * No cambia el RFC ni el estado: el RFC es el usuario del docente y la clave del SII (supuesto
  * por confirmar: no se edita), y la baja es SetTeacherActive, que además sincroniza su acceso.
@@ -40,6 +42,7 @@ final class UpdateTeacher
         private readonly TeacherRules $rules,
         private readonly SendAccessInvitation $sendAccessInvitation,
         private readonly CancelAccessInvitation $cancelAccessInvitation,
+        private readonly RoleAssignmentRules $roleRules,
     ) {}
 
     /**
@@ -131,7 +134,7 @@ final class UpdateTeacher
             return;
         }
 
-        if ($teacher->institutional_email === null || ! $teacher->is_active) {
+        if ($teacher->institutional_email === null || ! $teacher->is_active || $this->roleRules->holdsStaffRole($user->getKey())) {
             $this->cancelAccessInvitation->handle($user, $actor);
 
             return;
