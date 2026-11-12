@@ -185,7 +185,7 @@ describe('agrupado por área', function () {
             ->recursos_humanos->toContain('Elementos')
             ->administracion->toContain('Campus', 'Periodos', 'Importaciones')
             ->and(navigationAreasFor($coordinador))
-            ->academico->toContain('Propuesta de carrera')
+            ->academico->toContain('Horarios publicados')
             ->servicios_escolares->toContain('Saludo')
             ->not->toHaveKey('administracion');
     });

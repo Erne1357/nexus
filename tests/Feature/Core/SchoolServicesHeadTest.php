@@ -3,6 +3,8 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\SwitchRole;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
@@ -33,7 +35,10 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto.
+    CatalogReview::factory()->for($term)->create();
+    AcademicLoad::factory()->for($term)->create();
     $this->services = OrgUnit::factory()->create([
         'code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento,
         'parent_id' => app(OrgTree::class)->idOf(OrgTree::ACADEMIC),
