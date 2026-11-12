@@ -57,15 +57,15 @@ it('AZ-S17: un coordinador de PRES limitado a C2 ve los grupos de C1 y C2 de su 
         ->and($coordinador->can('manage', $this->inC2))->toBeTrue();
 });
 
-it('AZ-S17: un jefe de proyecto docente de PRES limitado a C2 ve C1 pero no asigna salón ni reparte cupos ahí', function () {
+it('AZ-S17: un jefe de proyecto docente de PRES limitado a C2 ve los grupos de C1 en el tablero', function () {
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => $this->pres->id, 'campus_id' => $this->c2->id, 'department_id' => departmentKey(11)])->create();
 
     expect($jpd->can('view', $this->inC1))->toBeTrue()
-        ->and($jpd->can('assignRoom', $this->inC1))->toBeFalse()
-        ->and($jpd->can('manageQuotas', $this->inC1))->toBeFalse();
+        ->and(boardGroupIds($jpd, $this->c1))->toBe([$this->inC1->id])
+        ->and(boardGroupIds($jpd, $this->c2))->toBe([$this->inC2->id]);
 });
 
-it('AZ-S17: un jefe de departamento limitado a C2 por campus no asigna salón en C1', function () {
+it('AZ-S17: mecanismo de la dimensión Campus en RoomAssign: un puesto limitado a C2 no asigna salón en C1', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(11)])->create();
 
     expect($jefe->can('assignRoom', $this->inC1))->toBeFalse()

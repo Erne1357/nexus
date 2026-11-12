@@ -17,9 +17,11 @@ use App\Modules\Scheduling\Models\Group;
  * entera y se escribe en el campus, MS6), su departamento (el de la materia) y su carrera dueña:
  *
  * - Lo ven quienes ven la carga (Subdirección, el jefe de su departamento en cualquier campus, el jefe de proyecto
- *   docente de su departamento en su campus) y el coordinador de su carrera dueña en su campus.
+ *   docente de su departamento) y el coordinador de su carrera dueña. Se ve la modalidad entera aunque el puesto
+ *   tenga un campus (MS6).
  * - Lo gestionan y acomodan sus sesiones el coordinador de su carrera dueña y el jefe de su departamento.
  * - Asignan salón y reparten cupos el jefe de su departamento.
+ * - Al escribir, el puesto con campus solo lo hace en ese campus (MS6).
  * - Justifica que se quede sin docente o sin salón al cerrar (HC-15) quien cierra la carga de su departamento
  *   (`academic_load.load.close`: el jefe y Subdirección; P2, confirmado el 10 de noviembre de 2026).
  *
