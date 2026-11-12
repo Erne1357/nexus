@@ -45,6 +45,6 @@
                 Ya no entras con tu NIP del SII: entras con tu contraseña de Nexus.
             @endif
         </p>
-        <x-button label="Cambiar contraseña" icon="o-key" link="{{ route('user-password.edit') }}" class="btn-outline mt-4" />
+        <x-button label="Cambiar contraseña" icon="o-key" link="{{ route('user-password.edit') }}" class="btn-outline mt-4" data-testid="change-password" />
     </section>
 </div>
