@@ -24,9 +24,26 @@ beforeEach(function () {
     $this->department = Department::factory()->create();
 });
 
-it('sin revisiones lista todos los generales y los salones, en el orden del enum', function () {
+it('HC-14 y CV9: sin revisiones en el periodo (ningún catálogo abierto) no falta nada', function () {
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))->toBe([]);
+});
+
+it('HC-14 y CV9: con todos los catálogos abiertos y sin validar lista todos, en el orden del enum; uno abierto sin la revisión de este departamento también cuenta', function () {
+    $other = Department::factory()->create();
+
+    foreach (Catalog::cases() as $catalog) {
+        CatalogReview::factory()->create(['catalog' => $catalog, 'term_id' => $this->term->id, 'department_id' => $other->id]);
+    }
+
     expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))
         ->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
+});
+
+it('HC-14 y CV9: los catálogos que no se abrieron no bloquean y los abiertos sin validar sí', function () {
+    CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
+    CatalogReview::factory()->general(Catalog::Careers)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
+
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))->toBe([Catalog::Subjects]);
 });
 
 it('acepta los ids en lugar de los modelos y quita los validados', function () {
@@ -35,11 +52,13 @@ it('acepta los ids en lugar de los modelos y quita los validados', function () {
     CatalogReview::factory()->general(Catalog::Careers)->inReview()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
     expect(app(CatalogReviewQuery::class)->pendingFor($this->term->id, $this->campus, $this->department->id))
-        ->toBe([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
+        ->toBe([Catalog::Careers]);
 });
 
 it('no pide salones si el perfil del campus no los usa', function () {
     $campus = Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+
+    CatalogReview::factory()->rooms()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
     expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $campus, $this->department))
         ->not->toContain(Catalog::Rooms);

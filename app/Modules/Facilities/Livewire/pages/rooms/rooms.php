@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Facilities\Actions\AddRoomBlock;
 use App\Modules\Facilities\Actions\CreateRoom;
@@ -13,7 +14,9 @@ use App\Modules\Facilities\Queries\BuildingQuery;
 use App\Modules\Facilities\Queries\RoomQuery;
 use App\Modules\Facilities\Rules\RoomRules;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
@@ -25,9 +28,10 @@ use Mary\Traits\Toast;
  * CRUD de Salones, con la forma de Campus: tabla con búsqueda y filtros por edificio, tipo, departamento
  * dueño y estado; alta y edición en un modal; activar o desactivar desde la tabla. Los salones no se
  * borran. «Bloqueos» abre un panel lateral (x-drawer) con los bloqueos del salón y el formulario para
- * agregar otro. Es de un campus, el activo de la credencial (Actor::activeCampus()): el listado y
- * el alta usan ese campus, el formulario no lleva un select de campus y, sin uno elegido, la pantalla pide
- * elegirlo. Lo administran el admin y la Subdirección del campus (RoomPolicy).
+ * agregar otro. Cada salón es de un campus; la credencial ya no lo elige (#415): el listado muestra los salones
+ * de todos los campus del usuario cuyo perfil usa salones (`usesRooms`), con una columna «Campus» y el filtro de
+ * campus con «Todos» (WithCampusFilter); el alta toma el campus del edificio elegido, y el select de edificios va
+ * agrupado por campus. Lo administran el admin y la Subdirección del campus (RoomPolicy).
  *
  * El componente lee con RoomQuery, autoriza con RoomPolicy en mount() y en cada acción (una petición puede
  * llegar con una página que abrió otra sesión), valida la forma de los datos y llama a CreateRoom,
@@ -36,7 +40,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Salones')] class extends Component
 {
-    use Toast, WithPagination;
+    use Toast, WithCampusFilter, WithPagination;
 
     /** Búsqueda por clave o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
     #[Session]
@@ -80,6 +84,14 @@ new #[Title('Salones')] class extends Component
     /** Las características en una línea, separadas por comas. */
     public string $features = '';
 
+    /**
+     * Los edificios que ofrece la edición del salón (edit() los lee una vez); el navegador no los puede cambiar.
+     *
+     * @var list<array{id: string, name: string, campus: string}>
+     */
+    #[Locked]
+    public array $editingBuildings = [];
+
     /** Si el panel de bloqueos está abierto. */
     public bool $showDrawer = false;
 
@@ -108,8 +120,11 @@ new #[Title('Salones')] class extends Component
      */
     public function with(RoomQuery $rooms, BuildingQuery $buildingQuery, DepartmentQuery $departmentQuery, Actor $context): array
     {
-        $campus = $context->activeCampus();
-        $buildings = $campus === null ? [] : $buildingQuery->options($campus);
+        $options = $this->campusOptions();
+        $shown = $this->campusFilter();
+        $roomCampuses = ($shown === null ? $options : collect([$shown]))->filter(fn (Campus $campus): bool => $campus->profile->usesRooms)->values();
+        $buildings = $buildingQuery->options($roomCampuses);
+        $buildingGroups = $this->buildingGroups($buildingQuery, $options);
         $departments = $departmentQuery->options();
         $types = $rooms->typeOptions();
         $ownerFilters = [['id' => RoomQuery::WITHOUT_OWNER, 'name' => 'Sin dueño'], ...$departments];
@@ -118,10 +133,12 @@ new #[Title('Salones')] class extends Component
         $blocksRoom = $this->openBlocksRoom($rooms);
 
         return [
-            'campus' => $campus,
-            'rooms' => $campus === null || ! $campus->profile->usesRooms ? null : $rooms->forTable(
+            'campusOptions' => $options,
+            'shownCampus' => $shown,
+            'usesRooms' => $roomCampuses->isNotEmpty(),
+            'rooms' => $roomCampuses->isEmpty() ? null : $rooms->forTable(
                 $context,
-                $campus,
+                $roomCampuses,
                 $this->search,
                 $this->buildingFilter === '' ? null : $this->buildingFilter,
                 $this->typeFilter === '' ? null : $this->typeFilter,
@@ -132,10 +149,12 @@ new #[Title('Salones')] class extends Component
                     default => null,
                 },
             ),
-            'usesRooms' => $campus === null || $campus->profile->usesRooms,
-            'canCreate' => $campus !== null && $campus->profile->usesRooms && auth()->user()->can('create', [Room::class, $campus]),
+            'canCreate' => $this->creatableCampuses()->isNotEmpty(),
+            'formBuildings' => collect($this->formBuildings($buildingQuery))->groupBy('campus')->all(),
             'ownerOptions' => $rooms->ownerOptions($this->department_id === '' ? null : $this->department_id),
-            'buildings' => $buildings,
+            'buildingGroups' => $buildingGroups,
+            'buildingScope' => $this->buildingFilter !== '' ? $this->buildingFilter : ($shown === null ? '' : "campus:{$shown->code}"),
+            'buildings' => $options->count() > 1 ? array_map(fn (array $building): array => [...$building, 'name' => "{$building['campus']} · {$building['name']}"], $buildings) : $buildings,
             'types' => $types,
             'departments' => $departments,
             'ownerFilters' => $ownerFilters,
@@ -144,6 +163,7 @@ new #[Title('Salones')] class extends Component
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-32 min-[1200px]:min-w-44'],
+                ...($options->count() > 1 ? [['key' => 'campus', 'label' => 'Campus', 'class' => 'max-[1023px]:hidden']] : []),
                 ['key' => 'building', 'label' => 'Edificio', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'type', 'label' => 'Tipo', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'capacity', 'label' => 'Capacidad'],
@@ -165,9 +185,28 @@ new #[Title('Salones')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'buildingFilter', 'typeFilter', 'ownerFilter', 'status'], true)) {
+        if (in_array($property, ['search', 'campus', 'buildingFilter', 'typeFilter', 'ownerFilter', 'status'], true)) {
             $this->resetPage();
         }
+    }
+
+    /**
+     * El filtro «Edificio» con más de un campus: un solo select con un grupo por campus. «Todo C2» (`campus:C2`) fija
+     * el campus, un edificio fija el edificio y la opción vacía lo quita todo, así la barra no gana otro control.
+     */
+    public function setBuildingScope(string $value): void
+    {
+        $this->buildingFilter = '';
+        $this->campus = null;
+
+        if (str_starts_with($value, 'campus:')) {
+            $code = substr($value, 7);
+            $this->campus = $this->campusOptions()->contains('code', $code) ? $code : null;
+        } else {
+            $this->buildingFilter = $value;
+        }
+
+        $this->resetPage();
     }
 
     public function updatedShowDrawer(bool $open): void
@@ -177,22 +216,23 @@ new #[Title('Salones')] class extends Component
         }
     }
 
-    public function create(Actor $context): void
+    public function create(): void
     {
-        $this->authorize('create', [Room::class, $this->campus($context)]);
+        abort_if($this->creatableCampuses()->isEmpty(), 403);
 
         $this->resetValidation();
-        $this->reset('editingId', 'building_id', 'code', 'name', 'type', 'capacity', 'department_id', 'features');
+        $this->reset('editingId', 'editingBuildings', 'building_id', 'code', 'name', 'type', 'capacity', 'department_id', 'features');
         $this->showModal = true;
     }
 
-    public function edit(string $id, RoomQuery $rooms): void
+    public function edit(string $id, RoomQuery $rooms, BuildingQuery $buildings): void
     {
         $room = $rooms->findOrFail($id);
         $this->authorize('update', $room);
 
         $this->resetValidation();
         $this->editingId = $room->id;
+        $this->editingBuildings = $buildings->options($this->creatableCampuses()->push($room->campus)->unique('id')->values());
         $this->building_id = $room->building_id;
         $this->code = $room->code;
         $this->name = $room->name ?? '';
@@ -203,17 +243,30 @@ new #[Title('Salones')] class extends Component
         $this->showModal = true;
     }
 
-    public function save(CreateRoom $createRoom, UpdateRoom $updateRoom, RoomQuery $rooms, Actor $context): void
+    public function save(CreateRoom $createRoom, UpdateRoom $updateRoom, RoomQuery $rooms, BuildingQuery $buildings): void
     {
         if ($this->editingId === null) {
-            $campus = $this->campus($context);
+            $creatable = $this->creatableCampuses();
+            abort_if($creatable->isEmpty(), 403);
+            $data = $this->validatedRoom();
+            $campus = $buildings->findInCampuses($this->building_id, $creatable)?->campus
+                ?? throw ValidationException::withMessages(['building_id' => 'El edificio no es de un campus donde puedas dar de alta salones.']);
             $this->authorize('create', [Room::class, $campus]);
-            $room = $createRoom->handle($campus, $this->validatedRoom());
+            $room = $createRoom->handle($campus, $data);
             $this->success('Salón creado', $this->describe($room));
         } else {
             $room = $rooms->findOrFail($this->editingId);
             $this->authorize('update', $room);
-            $room = $updateRoom->handle($room, $this->validatedRoom());
+            $data = $this->validatedRoom();
+
+            if ($data['building_id'] !== $room->building_id) {
+                // Mover el salón: el campus sigue al edificio, que debe ser de un campus donde puede administrar salones.
+                $target = $buildings->findInCampuses($data['building_id'], $this->creatableCampuses())?->campus
+                    ?? throw ValidationException::withMessages(['building_id' => 'El edificio no es de un campus donde puedas administrar salones.']);
+                $this->authorize('create', [Room::class, $target]);
+            }
+
+            $room = $updateRoom->handle($room, $data);
             $this->success('Salón actualizado', $this->describe($room));
         }
 
@@ -289,14 +342,50 @@ new #[Title('Salones')] class extends Component
     }
 
     /**
-     * El campus activo de la credencial; sin uno no hay dónde dar de alta (403).
+     * Los edificios de los campus que usan salones, agrupados por campus, para el filtro «Edificio» de la barra.
+     *
+     * @param  Collection<int, Campus>  $options
+     * @return array<string, array{name: string, buildings: list<array{id: string, name: string}>}>
      */
-    private function campus(Actor $context): Campus
+    private function buildingGroups(BuildingQuery $buildingQuery, Collection $options): array
     {
-        $campus = $context->activeCampus() ?? abort(403, 'Elige un campus en tu credencial.');
-        abort_unless($campus->profile->usesRooms, 403, 'Este campus no usa salones.');
+        $campuses = $options->filter(fn (Campus $campus): bool => $campus->profile->usesRooms)->values();
 
-        return $campus;
+        return $campuses->count() < 2 ? [] : collect($buildingQuery->options($campuses))->groupBy('campus')
+            ->map(fn (Collection $group, string $code): array => ['name' => $campuses->firstWhere('code', $code)->name, 'buildings' => $group->map(fn (array $building): array => ['id' => $building['id'], 'name' => $building['name']])->all()])
+            ->all();
+    }
+
+    /**
+     * Los campus donde el usuario puede dar de alta un salón: los que usan salones y donde RoomPolicy::create lo
+     * permite.
+     *
+     * @return Collection<int, Campus>
+     */
+    private function creatableCampuses(): Collection
+    {
+        return $this->campusOptions()
+            ->filter(fn (Campus $campus): bool => $campus->profile->usesRooms && auth()->user()->can('create', [Room::class, $campus]))
+            ->values();
+    }
+
+    /**
+     * Los edificios del formulario: al editar, los de los campus donde puede administrar salones y el del salón, leídos en edit() (el campus sigue al edificio, CV-S10); en un
+     * alta, los de los campus donde puede dar de alta, para agruparlos por campus.
+     *
+     * @return list<array{id: string, name: string, campus: string}>
+     */
+    private function formBuildings(BuildingQuery $buildings): array
+    {
+        if (! $this->showModal) {
+            return [];
+        }
+
+        if ($this->editingId === null) {
+            return $buildings->options($this->creatableCampuses());
+        }
+
+        return $this->editingBuildings;
     }
 
     /**

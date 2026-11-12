@@ -10,7 +10,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  * Permisos del módulo CatalogValidation: el avance de validación y la revisión de catálogos de un departamento. La
  * clave es `catalog_validation.<recurso>.<accion>`. Las acciones sobre una revisión declaran campus (nulo en los
  * catálogos generales) y unidad (el departamento); el avance no declara dimensiones. Corregir, validar, reabrir y
- * observar solo son del jefe del departamento: el admin no los tiene (CV-S1, ver el provider).
+ * observar solo son del jefe del departamento: el admin no los tiene (CV-S1, ver el provider). Abrir la validación del
+ * periodo (CV9) es solo del admin: no se concede a ningún puesto y no declara dimensiones.
  */
 enum CatalogValidationPermission: string implements Permission
 {
@@ -22,6 +23,7 @@ enum CatalogValidationPermission: string implements Permission
     case ReviewValidate = 'catalog_validation.review.validate';
     case ReviewReopen = 'catalog_validation.review.reopen';
     case ReviewFlag = 'catalog_validation.review.flag';
+    case ReviewOpen = 'catalog_validation.review.open';
 
     public function label(): string
     {
@@ -34,13 +36,14 @@ enum CatalogValidationPermission: string implements Permission
             self::ReviewValidate => 'Validar una revisión',
             self::ReviewReopen => 'Reabrir una revisión validada',
             self::ReviewFlag => 'Poner observaciones en una revisión',
+            self::ReviewOpen => 'Abrir la validación de catálogos de un periodo',
         };
     }
 
     public function dimensions(): array
     {
         return match ($this) {
-            self::ProgressView, self::ProgressRemind => [],
+            self::ProgressView, self::ProgressRemind, self::ReviewOpen => [],
             default => [Dimension::Campus, Dimension::Unit],
         };
     }
@@ -55,6 +58,6 @@ enum CatalogValidationPermission: string implements Permission
      */
     public function appliesTo(): ?UnitApplicability
     {
-        return UnitApplicability::academic();
+        return $this === self::ReviewOpen ? null : UnitApplicability::academic();
     }
 }

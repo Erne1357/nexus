@@ -95,6 +95,7 @@ function dimensionExceptions(): array
         'core.term.manage_calendar' => $tec,
         'catalog_validation.progress.view' => $tec,
         'catalog_validation.progress.remind' => $tec,
+        'catalog_validation.review.open' => $admin,
     ];
 }
 
