@@ -1,5 +1,5 @@
 {{--
-    «Nombrar» como cajón (T13, U3 opción A «Drawer con casillas»; ADR-0023): el puesto, la modalidad (solo se elige si hay
+    «Nombrar» como cajón (U3 opción A «Drawer con casillas»; ADR-0023): el puesto, la modalidad (solo se elige si hay
     más de una activa, MS16), el campus opcional (AZ-S17: «Todos los campus» por omisión) y, para el coordinador, las
     carreras por departamento con casillas y quién las coordina hoy (M5, MS19: un nombramiento por carrera, todos o
     ninguno); el jefe de proyecto docente pide su departamento. Los atajos «Todas las de …» marcan las carreras del
@@ -76,7 +76,7 @@
         @endif
 
         @if ($isCoordinator)
-            <section data-testid="career-checklist" class="space-y-3">
+            <section data-testid="career-checklist" class="space-y-3" wire:loading.class="pointer-events-none opacity-60" wire:target="campus,selectAllInCampus,selectAllInModality,toggleDepartment,modality">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold">Carreras <span class="font-normal text-neutral">· {{ $count === 1 ? '1 elegida' : $count.' elegidas' }}</span></h3>
                     <div class="w-full sm:w-56">
@@ -103,34 +103,44 @@
                         </button>
                     </div>
 
-                    @forelse ($careerGroups as $group)
+                    @php $shown = 0; @endphp
+                    @foreach ($careerGroups as $group)
+                        @continue (! collect($group['careers'])->contains('visible', true))
+                        @php $shown++; @endphp
                         @php
                             $ids = array_column(array_filter($group['careers'], fn (array $row): bool => $row['state'] !== 'mine'), 'id');
                             $picked = count(array_intersect($ids, $careers));
                         @endphp
                         <div wire:key="group-{{ $group['id'] }}" class="border-t border-base-300">
                             <label class="flex cursor-pointer items-center gap-3 bg-base-200/60 px-3 py-2 max-md:min-h-11">
-                                <input type="checkbox" class="checkbox checkbox-sm" wire:click="toggleDepartment('{{ $group['id'] }}')" @checked($ids !== [] && $picked === count($ids)) x-init="$el.indeterminate = {{ $picked > 0 && $picked < count($ids) ? 'true' : 'false' }}" aria-label="Todas las carreras de {{ $group['name'] }}" />
+                                <input type="checkbox" class="checkbox checkbox-sm" wire:click="toggleDepartment('{{ $group['id'] }}')" @checked($picked === count($ids)) @disabled($ids === []) x-init="$el.indeterminate = {{ $picked > 0 && $picked < count($ids) ? 'true' : 'false' }}" aria-label="Todas las carreras de {{ $group['name'] }}" />
                                 <span class="text-sm font-semibold"><span class="font-mono">{{ $group['code'] }}</span> · {{ $group['name'] }}</span>
                             </label>
 
                             @foreach ($group['careers'] as $row)
+                                @continue (! $row['visible'])
                                 <label wire:key="career-{{ $row['id'] }}" @class(['flex items-start gap-3 border-t border-base-300 px-3 py-2.5 max-md:min-h-11', 'cursor-pointer' => $row['state'] !== 'mine', 'text-neutral' => $row['state'] === 'mine'])>
-                                    <input type="checkbox" class="checkbox checkbox-sm mt-1" wire:model.live="careers" value="{{ $row['id'] }}" @disabled($row['state'] === 'mine') data-testid="career-{{ $row['code'] }}" />
+                                    @if ($row['state'] === 'mine')
+                                        <input type="checkbox" class="checkbox checkbox-sm mt-1" checked disabled data-testid="career-{{ $row['code'] }}" />
+                                    @else
+                                        <input type="checkbox" class="checkbox checkbox-sm mt-1" wire:model.live="careers" value="{{ $row['id'] }}" data-testid="career-{{ $row['code'] }}" />
+                                    @endif
                                     <span class="min-w-0">
                                         <span class="font-mono font-semibold">{{ $row['code'] }}</span>
                                         <span class="ms-2">{{ $row['name'] }}</span>
                                         <span class="mt-0.5 flex items-center gap-1 text-sm text-neutral">
                                             <x-icon :name="$row['state'] === 'free' ? 'o-exclamation-triangle' : 'o-user'" @class(['h-4 w-4 shrink-0', 'text-warning' => $row['state'] === 'free']) aria-hidden="true" />
-                                            {{ $row['state'] === 'mine' ? 'Ya la coordina esta persona' : $row['holders'] }}
+                                            {{ $row['holders'] }}
                                         </span>
                                     </span>
                                 </label>
                             @endforeach
                         </div>
-                    @empty
-                        <p class="border-t border-base-300 px-3 py-4 text-sm text-neutral">No hay carreras que se ofrezcan {{ $campusName === null ? 'en un campus activo' : 'en '.$campusName }}.</p>
-                    @endforelse
+                    @endforeach
+
+                    @if ($shown === 0)
+                        <p class="border-t border-base-300 px-3 py-4 text-sm text-neutral">{{ $careerSearch === '' ? 'No hay carreras que se ofrezcan '.($campusName === null ? 'en un campus activo' : 'en '.$campusName).'.' : 'Ninguna carrera coincide con la búsqueda.' }}</p>
+                    @endif
                 </div>
             </section>
         @elseif (in_array('career_id', $columns, true))

@@ -12,6 +12,11 @@ final class DefaultScopeLabels implements ScopeLabels
         return [];
     }
 
+    public function careerNames(array $careerIds): array
+    {
+        return [];
+    }
+
     public function careerOptions(?string $campusId): array
     {
         return [];

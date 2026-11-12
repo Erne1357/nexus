@@ -144,13 +144,16 @@ final class PeopleQuery
     }
 
     /**
-     * La lista con casillas de «Nombrar» al coordinador (T13, U3): las carreras que se ofrecen en el campus (sin campus,
-     * en algún campus activo), por departamento, cada una con quién la coordina hoy en esa modalidad. `state` es `mine`
-     * si `$person` ya la coordina en ese alcance (no se vuelve a nombrar), `held` si la coordina otra persona y `free`
-     * si nadie; `holders` lo dice en español («Daniel Ríos · todos los campus», «Sin coordinador en C2»). `$search`
-     * deja las carreras cuya clave o nombre lo contiene, y los departamentos que se quedan con alguna.
+     * La lista con casillas de «Nombrar» al coordinador (U3; M5, MS19, AZ-S17): las carreras que se ofrecen en el campus
+     * (sin campus, en algún campus activo), por departamento, cada una con quién la coordina hoy en esa modalidad.
+     * `state` es `mine` si `$person` ya la coordina en el alcance elegido y no hace falta nombrarla otra vez (con campus,
+     * en ese campus o en todos; sin campus, solo en todos: ampliar a una coordinadora de C2 a todos los campus sí se
+     * puede), `held` si la coordina otra persona y `free` si nadie. `holders` lo dice en español («Daniel Ríos · todos
+     * los campus», «Sin coordinador en C2», «Ya la coordina en C2»). `visible` es falso para las carreras que `$search`
+     * (clave o nombre) no deja ver; la lista siempre trae todas para que los atajos y las cuentas no dependan de la
+     * búsqueda.
      *
-     * @return list<array{id: string, code: string, name: string, careers: list<array{id: string, code: string, name: string, state: string, holders: string}>}>
+     * @return list<array{id: string, code: string, name: string, careers: list<array{id: string, code: string, name: string, state: string, holders: string, visible: bool}>}>
      */
     public function careerChecklist(?string $campusId, ?string $modalityId, ?User $person = null, string $search = ''): array
     {
@@ -179,22 +182,22 @@ final class PeopleQuery
             $careers = [];
 
             foreach ($group['careers'] as $career) {
-                if ($term !== '' && ! str_contains(mb_strtolower($career['code'].' '.$career['name']), $term)) {
-                    continue;
-                }
-
                 $holders = $held->get($career['id'], collect());
+                $own = $person === null ? null : $holders->where('user_id', $person->getKey())->sortBy(fn (RoleAssignment $assignment): int => $assignment->campus_id === null ? 0 : 1)->first(
+                    fn (RoleAssignment $assignment): bool => $campusId !== null || $assignment->campus_id === null,
+                );
                 $names = $holders->map(fn (RoleAssignment $assignment): string => $assignment->user->name.' · '.($assignment->campus_id === null ? 'todos los campus' : $codes->get($assignment->campus_id, '')))->unique()->implode(', ');
                 $careers[] = [
                     ...$career,
-                    'state' => $person !== null && $holders->contains('user_id', $person->getKey()) ? 'mine' : ($holders->isEmpty() ? 'free' : 'held'),
-                    'holders' => $names !== '' ? $names : ($campusCode === null ? 'Sin coordinador' : "Sin coordinador en {$campusCode}"),
+                    'state' => $own !== null ? 'mine' : ($holders->isEmpty() ? 'free' : 'held'),
+                    'holders' => $own !== null
+                        ? 'Ya la coordina en '.($own->campus_id === null ? 'todos los campus' : $codes->get($own->campus_id, ''))
+                        : ($names !== '' ? $names : ($campusCode === null ? 'Sin coordinador' : "Sin coordinador en {$campusCode}")),
+                    'visible' => $term === '' || str_contains(mb_strtolower($career['code'].' '.$career['name']), $term),
                 ];
             }
 
-            if ($careers !== []) {
-                $result[] = [...$group, 'careers' => $careers];
-            }
+            $result[] = [...$group, 'careers' => $careers];
         }
 
         return $result;

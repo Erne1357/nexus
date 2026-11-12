@@ -9,7 +9,7 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 
 /*
-| «Nombrar» como cajón con casillas (T13, U3 opción A) en el navegador: el admin nombra a un coordinador sobre dos
+| «Nombrar» como cajón con casillas (U3 opción A) en el navegador: el admin nombra a un coordinador sobre dos
 | carreras de Presencial sin elegir campus y las ve en la pestaña «Nombramientos» con «Todos los campus». El cajón y la
 | pestaña se capturan a 1440 y 390 px.
 */
@@ -81,5 +81,34 @@ it('el cajón de «Nombrar» se ve completo en celular, sin desbordar', function
         ->assertSee('Nombrar a Rosa Ruiz Almanza')
         ->assertScript('document.documentElement.scrollWidth <= window.innerWidth')
         ->screenshot(filename: 'appoint-drawer-390')
+        ->assertNoJavaScriptErrors();
+});
+
+it('el cajón y la pestaña se capturan a 768, 1920 y 2560 px y en oscuro', function () {
+    $page = visit('/login')
+        ->fill('username', 'admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/people/'.$this->rosa->id);
+
+    foreach ([768, 1920, 2560] as $width) {
+        $page->resize($width, 1000)->click('@appoint')->assertSee('Todas las de Presencial')->screenshot(filename: "appoint-drawer-{$width}");
+        $page->press('Cancelar');
+    }
+
+    $page->navigate('/people')->click('@tab-appointments')->assertSee('Carrera o departamento');
+
+    foreach ([768, 1920, 2560] as $width) {
+        $page->resize($width, 1000)->screenshot(filename: "appointments-tab-{$width}");
+    }
+
+    $page->navigate('/people/'.$this->rosa->id)
+        ->resize(1280, 900)
+        ->script("document.documentElement.dataset.theme = 'nexus-dark'");
+
+    $page->click('@appoint')
+        ->assertSee('Todas las de Presencial')
+        ->screenshot(filename: 'appoint-drawer-dark-1280')
         ->assertNoJavaScriptErrors();
 });

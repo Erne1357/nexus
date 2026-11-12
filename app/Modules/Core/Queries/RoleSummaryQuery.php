@@ -15,7 +15,7 @@ use App\Modules\Core\Models\RoleAssignment;
  * El renglón de cada puesto en la credencial: «Coordinador de carrera · ISC, IGE (C2)». El nombre del puesto para quien
  * lo ocupa (Role::titleOn() con las unidades de sus nombramientos: «Jefe del Departamento de Servicios Escolares», AZ-02)
  * y, si sus nombramientos lo tienen, los nombres de sus unidades (se omite el que el nombre del puesto ya dice), los
- * códigos de sus carreras (los pone ScopeLabels; sin ellos, «N carreras»), sus modalidades (T13) y sus campus entre
+ * códigos de sus carreras (los pone ScopeLabels; sin ellos, «N carreras»), sus modalidades y sus campus entre
  * paréntesis. Un puesto sin
  * alcance es solo su nombre.
  */
@@ -70,9 +70,13 @@ final class RoleSummaryQuery
         $campusCodes = collect($assignments)->map(fn (RoleAssignment $a): ?string => $campuses[$a->campus_id] ?? null)
             ->filter()->unique()->sort()->values();
 
-        $parts = array_filter([
+        $scope = implode(' · ', array_filter([
             $unitNames->implode(', '),
-            implode(' · ', array_filter([$careerText, $modalityNames->implode(', ')])),
+            $careerText,
+            $modalityNames->implode(', '),
+        ]));
+        $parts = array_filter([
+            $scope,
             $campusCodes->isEmpty() ? null : '('.$campusCodes->implode(', ').')',
         ]);
 

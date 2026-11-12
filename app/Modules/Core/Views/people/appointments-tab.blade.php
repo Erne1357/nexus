@@ -1,5 +1,5 @@
 {{--
-    La pestaña «Nombramientos» de «Personas y puestos» (T13, U3 opción A): filtros (persona, puesto, modalidad, campus,
+    La pestaña «Nombramientos» de «Personas y puestos» (U3 opción A): filtros (persona, puesto, modalidad, campus,
     vigencia) y una tabla plana con un renglón por nombramiento: Persona, Puesto, Carrera o departamento, Modalidad,
     Campus («Todos los campus» si el nombramiento no fija uno) y Vigencia. Debajo de 768 px, renglones apilados. Espera
     $appointments, $rows, $titles, $roles, $modalities, $campuses, $currentOptions y $headers.
@@ -35,7 +35,15 @@
         @endscope
 
         @scope('cell_scope', $assignment, $rows)
-            <span class="font-mono font-semibold">{{ $rows[$assignment->getKey()]['scope'] }}</span>
+            @php $row = $rows[$assignment->getKey()]; @endphp
+            @if ($row['careerCode'] !== null)
+                <span class="font-mono font-semibold">{{ $row['careerCode'] }}</span>
+                @if ($row['careerName'] !== null)
+                    <div class="text-sm text-neutral">{{ $row['careerName'] }}</div>
+                @endif
+            @else
+                {{ $row['unit'] ?? '—' }}
+            @endif
         @endscope
 
         @scope('cell_modality', $assignment, $rows)
@@ -43,7 +51,7 @@
         @endscope
 
         @scope('cell_campus', $assignment, $rows)
-            {{ $rows[$assignment->getKey()]['campus'] === '—' ? '—' : $rows[$assignment->getKey()]['campus'] }}
+            {{ $rows[$assignment->getKey()]['campus'] }}
         @endscope
 
         @scope('cell_validity', $assignment, $rows, $stateTone)
@@ -61,7 +69,7 @@
             @php $row = $rows[$assignment->getKey()]; @endphp
             <li wire:key="appointment-card-{{ $assignment->id }}" class="space-y-1 px-4 py-3">
                 <a href="{{ route('core.people.show', $assignment->user_id) }}" wire:navigate class="font-semibold">{{ $assignment->user->name }}</a>
-                <div>{{ $titles[$assignment->getKey()] }} · <span class="font-mono font-semibold">{{ $row['scope'] }}</span></div>
+                <div>{{ $titles[$assignment->getKey()] }} · @if ($row['careerCode'] !== null)<span class="font-mono font-semibold">{{ $row['careerCode'] }}</span>@else{{ $row['unit'] ?? '—' }}@endif</div>
                 <div class="text-sm text-neutral">{{ $row['modality'] }} · {{ $row['campus'] }}</div>
                 <div class="font-mono text-sm tabular-nums">{{ $assignment->valid_to === null ? 'Desde '.$assignment->valid_from->format('d/m/Y') : $assignment->valid_from->format('d/m/Y').' – '.$assignment->valid_to->format('d/m/Y') }}</div>
             </li>

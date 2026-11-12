@@ -35,11 +35,12 @@ final class AssignmentLabels
         $campuses = $this->idsOf($list, 'campus_id') === [] ? [] : Campus::withTrashed()->whereKey($this->idsOf($list, 'campus_id'))->pluck('name', 'id')->all();
         $modalities = $this->idsOf($list, 'modality_id') === [] ? [] : Modality::withTrashed()->whereKey($this->idsOf($list, 'modality_id'))->pluck('name', 'id')->all();
         $careers = $this->labels->careers($this->idsOf($list, 'career_id'));
+        $careerNames = $this->labels->careerNames($this->idsOf($list, 'career_id'));
 
         $described = [];
 
         foreach ($list as $assignment) {
-            $described[$assignment->getKey()] = $this->label($assignment, $units, $campuses, $modalities, $careers);
+            $described[$assignment->getKey()] = $this->label($assignment, $units, $campuses, $modalities, $careers, $careerNames);
         }
 
         return $described;
@@ -89,8 +90,9 @@ final class AssignmentLabels
      * @param  array<string, string>  $campuses
      * @param  array<string, string>  $modalities
      * @param  array<string, string>  $careers
+     * @param  array<string, string>  $careerNames
      */
-    private function label(RoleAssignment $assignment, array $units, array $campuses, array $modalities, array $careers): AssignmentLabel
+    private function label(RoleAssignment $assignment, array $units, array $campuses, array $modalities, array $careers, array $careerNames = []): AssignmentLabel
     {
         $unit = $assignment->org_unit_id === null ? null : ($units[$assignment->org_unit_id] ?? null);
         $title = $assignment->role->titleOn($unit === null ? [] : [$unit]);
@@ -119,6 +121,17 @@ final class AssignmentLabels
 
         $values = array_values(array_filter(array_column($chips, 'value'), fn (string $value): bool => $value !== $title && ($unit === null || $value !== $unit['name'] || ! str_contains($title, $value))));
 
-        return new AssignmentLabel($title, $chips, implode(' · ', [$title, ...$values]));
+        $chipValue = fn (string $label): ?string => collect($chips)->firstWhere('label', $label)['value'] ?? null;
+
+        return new AssignmentLabel(
+            $title,
+            $chips,
+            implode(' · ', [$title, ...$values]),
+            careerCode: $chipValue('Carrera'),
+            careerName: $assignment->career_id === null ? null : ($careerNames[$assignment->career_id] ?? null),
+            unitName: $unit['name'] ?? null,
+            modalityName: $chipValue('Modalidad'),
+            campusName: $chipValue('Campus'),
+        );
     }
 }

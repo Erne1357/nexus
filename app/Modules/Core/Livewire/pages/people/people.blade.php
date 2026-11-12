@@ -2,7 +2,7 @@
     «Personas y puestos» (DESIGN.md, «Personas y puestos»), con la anatomía de una pantalla de catálogo: encabezado,
     barra con la búsqueda y el filtro «Puesto» (sin acción principal) y una tabla con el usuario en Mono, la persona,
     un chip por puesto vigente y el estado; «Ver puestos» abre la ficha. Debajo de 768 px la tabla cede su lugar a
-    renglones apilados, que no repiten los data-testid de la tabla. La pestaña «Nombramientos» (T13, U3 opción A) es una
+    renglones apilados, que no repiten los data-testid de la tabla. La pestaña «Nombramientos» (U3 opción A) es una
     tabla plana de nombramientos con modalidad, campus y vigencia, y sus filtros.
 --}}
 <div>
@@ -12,7 +12,7 @@
         </x-slot:subtitle>
     </x-header>
 
-    <div role="tablist" class="tabs tabs-border mb-4" data-testid="people-tabs">
+    <div role="tablist" aria-label="Vistas de personas y puestos" class="tabs tabs-border mb-4" data-testid="people-tabs">
         <button type="button" role="tab" wire:click="showTab('people')" @class(['tab max-md:min-h-11', 'tab-active font-semibold' => $tab === 'people']) aria-selected="{{ $tab === 'people' ? 'true' : 'false' }}" data-testid="tab-people">Personas</button>
         <button type="button" role="tab" wire:click="showTab('appointments')" @class(['tab max-md:min-h-11', 'tab-active font-semibold' => $tab === 'appointments']) aria-selected="{{ $tab === 'appointments' ? 'true' : 'false' }}" data-testid="tab-appointments">Nombramientos</button>
     </div>

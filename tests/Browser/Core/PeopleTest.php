@@ -50,6 +50,7 @@ it('el admin nombra coordinadora a una persona y luego termina el nombramiento',
         ->click('@appoint')
         ->assertSee('Nombrar a Rosa Ruiz Almanza')
         ->click('input[name="campus"][value="'.$this->c2->id.'"]')
+        ->assertSee('Todas las de Presencial en Campus II')
         ->click('@career-ISC')
         ->fill('from', today()->subDays(10)->toDateString())
         ->click('@appoint-submit')

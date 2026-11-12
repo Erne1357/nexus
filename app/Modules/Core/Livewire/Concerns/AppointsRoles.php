@@ -20,7 +20,7 @@ use Illuminate\Validation\ValidationException;
  * puestos» y en el panel del Organigrama: limpia lo que dependía del puesto o del campus anterior, valida y llama a
  * AppointRole. La vista es `core::people.appoint-fields`. La unidad puede venir fija (el Organigrama) y entonces no se
  * elige. La modalidad (AZ-S17) viene elegida si hay una sola activa; el campus del coordinador y del jefe de proyecto
- * docente es opcional. El coordinador se nombra sobre varias carreras a la vez (T13, U3 opción A: `careers`, las casillas
+ * docente es opcional. El coordinador se nombra sobre varias carreras a la vez (U3 opción A: `careers`, las casillas
  * del cajón; M5, MS19) con AppointCareerCoordinator; sin casillas elegidas usa `career` (el Organigrama).
  */
 trait AppointsRoles
@@ -77,7 +77,27 @@ trait AppointsRoles
                 $this->reset('unit');
             }
         } elseif ($property === 'campus') {
-            $this->reset('career', 'careers');
+            $this->keepOfferedCareers();
+        }
+    }
+
+    /**
+     * Un campus nuevo conserva las carreras marcadas que también se ofrecen en él y suelta las demás, para no perder
+     * lo marcado mientras la petición del campus está en camino.
+     */
+    private function keepOfferedCareers(): void
+    {
+        $campus = Str::isUuid($this->campus) ? $this->campus : null;
+        $offered = [];
+
+        foreach (app(PeopleQuery::class)->careerChecklist($campus, $this->modality) as $group) {
+            array_push($offered, ...array_column($group['careers'], 'id'));
+        }
+
+        $this->careers = array_values(array_intersect($this->careers, $offered));
+
+        if (! in_array($this->career, $offered, true)) {
+            $this->reset('career');
         }
     }
 
@@ -198,7 +218,9 @@ trait AppointsRoles
         $modality = $people->modality($this->modality);
 
         if ($modality === null) {
-            throw ValidationException::withMessages(['modality' => 'Elige la modalidad.', 'career' => 'Elige al menos una carrera.']);
+            $none = $this->careers === [] && $this->career === '';
+
+            throw ValidationException::withMessages(['modality' => 'Elige la modalidad.', ...($none ? ['career' => 'Elige al menos una carrera.'] : [])]);
         }
 
         $careers = $this->careers !== [] ? $this->careers : ($this->career === '' ? [] : [$this->career]);

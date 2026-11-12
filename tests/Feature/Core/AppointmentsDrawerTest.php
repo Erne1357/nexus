@@ -12,7 +12,7 @@ use App\Modules\Core\Queries\RoleSummaryQuery;
 use Livewire\Livewire;
 
 /*
-| «Nombrar» como cajón con casillas (T13, U3 opción A) y la pestaña «Nombramientos» de «Personas y puestos»: el
+| «Nombrar» como cajón con casillas (U3 opción A) y la pestaña «Nombramientos» de «Personas y puestos»: el
 | coordinador se nombra sobre varias carreras de una modalidad, con campus opcional (M5, MS19, AZ-S17); la lista plana
 | muestra modalidad y «Todos los campus». Solo el admin nombra.
 */
@@ -149,19 +149,90 @@ it('un jefe de proyecto docente se nombra en el mismo cajón con modalidad, depa
         ->modality_id->toBe($this->pres->id);
 });
 
-it('solo el admin abre el cajón y nombra: un coordinador recibe 403', function (string $method) {
+it('solo el admin abre el cajón y nombra: un coordinador recibe 403 en cada método', function (string $method) {
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id])->create();
-    $page = Livewire::actingAs($coordinator)->test('core::pages.person', ['user' => $this->beto->id]);
+    $before = RoleAssignment::count();
 
-    $page->assertForbidden();
-    expect(RoleAssignment::where('user_id', $this->beto->id)->exists())->toBeFalse();
-})->with(['openAppoint', 'appoint']);
-
-it('un coordinador no puede nombrar aunque llame a la Action desde su propia sesión', function () {
-    $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id])->create();
-
-    Livewire::actingAs($coordinator)->test('core::pages.person', ['user' => $this->beto->id])->assertForbidden();
     $this->actingAs($coordinator)->get(route('core.people.show', $this->beto->id))->assertForbidden();
+
+    $page = drawerPage($this->beto)->call('openAppoint')->set('campus', $this->c2->id)->set('careers', [$this->isc->id]);
+
+    $this->actingAs($coordinator);
+
+    $arguments = $method === 'toggleDepartment' ? [$this->sc->id] : [];
+    $page->call($method, ...$arguments)->assertForbidden();
+
+    expect(RoleAssignment::count())->toBe($before);
+})->with(['openAppoint', 'appoint', 'selectAllInCampus', 'selectAllInModality', 'toggleDepartment']);
+
+it('la pestaña «Nombramientos» recibe 403 si quien la usa ya no es admin', function () {
+    $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id])->create();
+    $page = Livewire::actingAs($this->admin)->test('core::pages.people');
+
+    $this->actingAs($coordinator);
+
+    $page->call('showTab', 'appointments')->assertForbidden();
+});
+
+it('«Ya la coordina» cuenta solo el alcance exacto: sin campus, una coordinación de C2 no cuenta y se puede ampliar', function () {
+    appointment($this->beto, Role::Coordinador, ['career_id' => $this->isc->id, 'modality_id' => $this->pres->id, 'campus_id' => $this->c2->id]);
+
+    $page = drawerPage($this->beto)->call('openAppoint')
+        ->assertDontSee('Ya la coordina')
+        ->call('selectAllInModality')
+        ->assertSet('careers', fn (array $ids): bool => in_array($this->isc->id, $ids, true) && count($ids) === 4)
+        ->set('campus', $this->c2->id)
+        ->assertSee('Ya la coordina en C2')
+        ->assertSeeHtml('data-testid="career-ISC"')
+        ->call('selectAllInCampus')
+        ->assertSet('careers', fn (array $ids): bool => ! in_array($this->isc->id, $ids, true) && count($ids) === 2)
+        ->assertSee('Nombrar en 2 carreras');
+
+    $page->set('campus', '')->set('careers', [$this->isc->id])->call('appoint')->assertHasNoErrors();
+
+    expect(RoleAssignment::where('user_id', $this->beto->id)->whereNull('campus_id')->sole()->career_id)->toBe($this->isc->id);
+});
+
+it('«Ya la coordina» con una coordinación de todos los campus vale para cualquier campus', function () {
+    appointment($this->beto, Role::Coordinador, ['career_id' => $this->isc->id, 'modality_id' => $this->pres->id, 'campus_id' => null]);
+
+    drawerPage($this->beto)->call('openAppoint')
+        ->assertSee('Ya la coordina en todos los campus')
+        ->set('campus', $this->c2->id)
+        ->assertSee('Ya la coordina en todos los campus')
+        ->call('selectAllInCampus')
+        ->assertSet('careers', fn (array $ids): bool => ! in_array($this->isc->id, $ids, true));
+});
+
+it('un campus nuevo conserva las carreras marcadas que también se ofrecen en él', function () {
+    drawerPage($this->beto)->call('openAppoint')
+        ->set('careers', [$this->isc->id, $this->ilog->id])
+        ->set('campus', $this->c2->id)
+        ->assertSet('careers', [$this->isc->id])
+        ->set('campus', $this->c1->id)
+        ->assertSet('careers', []);
+});
+
+it('la búsqueda solo oculta renglones: los atajos, la cuenta y el departamento usan todas las carreras', function () {
+    drawerPage($this->beto)->call('openAppoint')
+        ->set('campus', $this->c2->id)
+        ->set('careerSearch', 'IIND')
+        ->assertSeeHtml('data-testid="career-IIND"')
+        ->assertDontSeeHtml('data-testid="career-ISC"')
+        ->assertSee('(3)')
+        ->call('toggleDepartment', $this->sc->id)
+        ->assertSet('careers', fn (array $ids): bool => collect($ids)->sort()->values()->all() === collect([$this->isc->id, $this->itic->id])->sort()->values()->all())
+        ->call('selectAllInCampus')
+        ->assertSet('careers', fn (array $ids): bool => count($ids) === 3);
+});
+
+it('sin modalidad elegida solo pide la modalidad si ya hay carreras marcadas', function () {
+    drawerPage($this->beto)->call('openAppoint')
+        ->set('modality', '')
+        ->set('careers', [$this->isc->id])
+        ->call('appoint')
+        ->assertHasErrors(['modality'])
+        ->assertHasNoErrors(['career']);
 });
 
 /**
@@ -211,6 +282,13 @@ it('la pestaña «Nombramientos» no la ve quien no es admin', function () {
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id])->create();
 
     Livewire::actingAs($coordinator)->test('core::pages.people')->assertForbidden();
+});
+
+it('la credencial separa la unidad y la modalidad del jefe de proyecto docente', function () {
+    appointment($this->beto, Role::JefeProyectoDocente, ['org_unit_id' => $this->sc->id, 'modality_id' => $this->pres->id, 'campus_id' => $this->c2->id]);
+    $summary = app(RoleSummaryQuery::class)->forHeldRoles(app(Actor::class)->forUser($this->beto->fresh()));
+
+    expect($summary['jefe_proyecto_docente'])->toBe('Jefe de proyecto docente · Sistemas y Computación · Presencial (C2)');
 });
 
 it('la credencial dice la modalidad del puesto que la lleva', function () {

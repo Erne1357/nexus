@@ -18,7 +18,7 @@ use Livewire\WithPagination;
  * el componente autoriza en mount(), al renderizar y en cada cambio, porque una petición puede llegar con una página
  * que abrió otra sesión.
  *
- * La pestaña «Nombramientos» (T13, U3) lista un renglón por nombramiento (AppointmentsQuery) con modalidad y campus
+ * La pestaña «Nombramientos» lista un renglón por nombramiento (AppointmentsQuery) con modalidad y campus
  * («Todos los campus» si no lo fija), y sus filtros: persona, puesto, modalidad, campus y vigencia.
  */
 new #[Title('Personas y puestos')] class extends Component
@@ -112,12 +112,14 @@ new #[Title('Personas y puestos')] class extends Component
         $rows = [];
 
         foreach ($page as $assignment) {
-            $chips = collect($described[$assignment->getKey()]->chips);
+            $label = $described[$assignment->getKey()];
             $day = today()->toDateString();
             $rows[$assignment->getKey()] = [
-                'scope' => $chips->first(fn (array $chip): bool => in_array($chip['label'], ['Carrera', 'Depto.', 'Unidad'], true))['value'] ?? '—',
-                'modality' => $chips->firstWhere('label', 'Modalidad')['value'] ?? 'Todas',
-                'campus' => $chips->firstWhere('label', 'Campus')['value'] ?? '—',
+                'careerCode' => $label->careerCode,
+                'careerName' => $label->careerName,
+                'unit' => $label->unitName,
+                'modality' => $label->modalityName ?? 'Todas',
+                'campus' => $label->campusName ?? '—',
                 'state' => $assignment->valid_from->toDateString() > $day ? 'future' : ($assignment->valid_to !== null && $assignment->valid_to->toDateString() < $day ? 'ended' : 'current'),
             ];
         }

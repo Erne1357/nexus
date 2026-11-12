@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
 /**
- * La lista plana de la pestaña «Nombramientos» de «Personas y puestos» (T13, U3): un renglón por nombramiento con su
+ * La lista plana de la pestaña «Nombramientos» de «Personas y puestos» (U3): un renglón por nombramiento con su
  * persona, por nombre. Es de los puestos que el admin nombra: no trae los de docente (AZ-S11, se manejan en la ficha del
  * docente) ni los de alumno (decenas de miles, AC-15). Filtra por persona (nombre o usuario), puesto, modalidad, campus
  * (`$campus` un id, o `all` para los que valen en todos los campus) y vigencia (solo los vigentes hoy, o todos).

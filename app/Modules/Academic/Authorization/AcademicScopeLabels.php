@@ -23,6 +23,11 @@ final class AcademicScopeLabels implements ScopeLabels
         return Career::withTrashed()->whereKey($careerIds)->pluck('code', 'id')->all();
     }
 
+    public function careerNames(array $careerIds): array
+    {
+        return $careerIds === [] ? [] : Career::withTrashed()->whereKey($careerIds)->pluck('name', 'id')->all();
+    }
+
     public function careerOptions(?string $campusId): array
     {
         return Career::query()

@@ -200,10 +200,9 @@ new #[Title('Ficha de la persona')] class extends Component
     {
         $described = $labels->describe($assignments);
         $first = $described[$assignments[0]->getKey()];
-        $codes = collect($assignments)->flatMap(fn (RoleAssignment $assignment): array => array_column(array_filter($described[$assignment->getKey()]->chips, fn (array $chip): bool => $chip['label'] === 'Carrera'), 'value'));
-        $rest = array_column(array_filter($first->chips, fn (array $chip): bool => $chip['label'] !== 'Carrera'), 'value');
+        $codes = collect($assignments)->map(fn (RoleAssignment $assignment): ?string => $described[$assignment->getKey()]->careerCode)->filter();
 
-        return implode(' · ', [$first->title, count($assignments).' carreras ('.$codes->implode(', ').')', ...$rest]);
+        return implode(' · ', array_filter([$first->title, count($assignments).' carreras ('.$codes->implode(', ').')', $first->modalityName, $first->campusName]));
     }
 
     /**

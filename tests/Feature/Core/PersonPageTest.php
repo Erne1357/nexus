@@ -94,7 +94,7 @@ it('AZ-S17: nombra coordinador pidiendo modalidad y carrera, con el campus opcio
         ->assertSeeHtml('data-testid="field-campus"')
         ->assertSeeHtml('data-testid="career-checklist"')
         ->assertDontSeeHtml('data-testid="field-unit"')
-        ->assertSee('Este puesto pide modalidad y carrera. El campus es opcional: sin campus, trabaja todos los de su modalidad.')
+        ->assertSee('Pide una modalidad y una o varias carreras; el campus es opcional: sin campus, trabaja todos los de su modalidad. Se crea un nombramiento por carrera.')
         ->assertViewHas('options', fn (array $options): bool => array_column($options['careers'], 'id') === [$this->ind->id, $this->isc->id]);
 
     $page->set('campus', $this->c2->id)

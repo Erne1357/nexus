@@ -2,7 +2,7 @@
     Los campos del formulario «Nombrar» (DESIGN.md, «Personas y puestos», modal «Nombrar»), en el modal de la ficha y en
     el panel del Organigrama: aviso de `user`, «Puesto» con su nota y su pista, modalidad, campus, carrera y unidad según
     el puesto (la unidad, deshabilitada si viene fija) y las fechas. El campus del coordinador y del jefe de proyecto
-    docente es opcional (AZ-S17): vacío es «Todos los campus». El diseño final es de la tarea T13 (U3). Espera $offered,
+    docente es opcional (AZ-S17): vacío es «Todos los campus». Lo usa el panel del Organigrama; la ficha usa `appoint-drawer`. Espera $offered,
     $roleCase, $options, $roleNote y $lockedUnit.
 --}}
 @php
