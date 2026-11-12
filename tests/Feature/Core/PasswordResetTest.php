@@ -99,6 +99,7 @@ describe('pedir el enlace', function () {
 
     it('AC-16: manda al correo institucional confirmado del personal un enlace para elegir otra contraseña', function () {
         Notification::fake();
+        config(['mail.default' => 'smtp']);
 
         requestResetLink('PEAA800101XX1')
             ->assertRedirect(route('password.request'))
@@ -156,6 +157,17 @@ describe('pedir el enlace', function () {
         'dominio que solo contiene al institucional' => [['email' => 'ana@cdjuarez.tecnm.mx.example.com'], 'PEAA800101XX1'],
         'personal con el correo sin confirmar' => [['email_verified_at' => null], 'PEAA800101XX1'],
     ]);
+
+    it('AC-16: si el correo se escribe en el log o se guarda en memoria, no lleva el enlace', function (string $mailer) {
+        config(['mail.default' => $mailer]);
+        $link = 'https://nexus.test/reset-password?token='.str_repeat('a', 64).'&username=PEAA800101XX1';
+        $mail = (new PasswordResetLink('PEAA800101XX1', 'Ana Pérez', $link, 60))->toMail($this->staff);
+        $text = implode(' ', [...$mail->introLines, ...$mail->outroLines]);
+
+        expect($mail->actionUrl)->toBeNull()
+            ->and($text)->not->toContain(str_repeat('a', 64))
+            ->and($text)->toContain('Pide el enlace otra vez cuando el correo esté configurado');
+    })->with(['log', 'array']);
 
     it('AC-16: la petición no busca al usuario: siempre encola el mismo trabajo, que solo lleva el usuario escrito', function () {
         Queue::fake();
