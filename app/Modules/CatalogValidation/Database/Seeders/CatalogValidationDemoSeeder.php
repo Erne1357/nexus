@@ -510,7 +510,7 @@ class CatalogValidationDemoSeeder extends Seeder
         $campuses = $review->campus_id === null ? $this->openedCampuses($review->term) : collect([$review->campus]);
 
         foreach ($campuses as $campus) {
-            $head = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $review->department_id))[0]['user'] ?? null;
+            $head = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $review->department_id))[0]['user'] ?? null;
 
             if ($head !== null) {
                 return $head;

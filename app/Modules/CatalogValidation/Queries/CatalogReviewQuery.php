@@ -126,12 +126,12 @@ final class CatalogReviewQuery
     }
 
     /**
-     * Si `$permission` vale sobre el departamento en el campus dado o, sin campus (las revisiones no son de uno), en
-     * alguno de los campus del usuario. Es la regla única de CatalogReviewPolicy y de las pantallas.
+     * Si `$permission` vale sobre el departamento. Las revisiones no son de un campus ni de una modalidad (AZ-S17), por
+     * eso `$campus` no entra en la decisión. Es la regla única de CatalogReviewPolicy y de las pantallas.
      */
     public static function allowsOnDepartment(Actor $context, CatalogValidationPermission $permission, ?string $campus, string $department): bool
     {
-        return $context->allows($permission, Target::of(campus: $campus ?? $context->campuses()->map->getKey()->all(), unit: $department));
+        return $context->allows($permission, Target::of(unit: $department));
     }
 
     /**

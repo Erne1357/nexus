@@ -106,6 +106,7 @@ final class StudentQuery
         );
 
         return $context->constrain($query, StudentsPermission::StudentView, [
+            'modality' => 'students.modality_id',
             'campus' => 'students.campus_id',
             'unit' => fn (Builder $students, array $units) => $students->whereIn('students.career_id', Career::withTrashed()->whereIn('department_id', $units)->select('id')),
             'career' => 'students.career_id',

@@ -23,7 +23,7 @@ use Tests\Fixtures\Authorization\FakePermission;
 | aunque el puesto sea de uno. Esta prueba lo impide (§14) y fija D4 a D6 del plan 3.P9:
 | D4: `core.term.open` declaraba campus y desde M4 declara modalidad (`term_openings` ya no tiene campus); D5:
 | `core.assignment.*` e `imports.batch.*`, solo del admin; D6: `catalog_validation.progress.*`, solo de puestos de todo
-| el Tec (`core.term.manage_calendar` dejó de ser excepción: `term_stages` ya no tiene campus, M4).
+| el Tec; D7: `catalog_validation.review.*` sin campus ni modalidad (`core.term.manage_calendar` dejó de ser excepción: `term_stages` ya no tiene campus, M4).
 */
 
 /**
@@ -84,6 +84,7 @@ function dimensionTables(): array
 function dimensionExceptions(): array
 {
     $admin = 'D5: solo del admin, que cubre todo; si se concede a otro puesto hay que decidir sus dimensiones en ese PR.';
+    $noCampus = 'D7: las revisiones de catálogos son del departamento en todo el Tec, sin campus ni modalidad (AZ-S17, supuesto por confirmar); `catalog_reviews.campus_id` siempre es nulo y declarar el campus dejaría sin acceso a un nombramiento con campus.';
     $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección); el panel o tablero abarca todos los campus.';
 
     return [
@@ -96,6 +97,12 @@ function dimensionExceptions(): array
         'catalog_validation.progress.view' => $tec,
         'catalog_validation.progress.remind' => $tec,
         'catalog_validation.review.open' => $admin,
+        'catalog_validation.review.view' => $noCampus,
+        'catalog_validation.review.resolve_flag' => $noCampus,
+        'catalog_validation.review.correct' => $noCampus,
+        'catalog_validation.review.validate' => $noCampus,
+        'catalog_validation.review.reopen' => $noCampus,
+        'catalog_validation.review.flag' => $noCampus,
     ];
 }
 
@@ -219,6 +226,12 @@ it('cada excepción es solo del admin (D5) o solo de puestos de todo el Tec (D6)
 
     if (str_starts_with($reason, 'D5')) {
         expect($registry->rolesGranting($permission))->toBe([], "{$key} es solo del admin");
+
+        return;
+    }
+
+    if (str_starts_with($reason, 'D7')) {
+        expect($permission->dimensions())->not->toContain(Dimension::Campus)->not->toContain(Dimension::Modality);
 
         return;
     }

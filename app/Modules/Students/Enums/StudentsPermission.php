@@ -23,9 +23,13 @@ enum StudentsPermission: string implements Permission
         };
     }
 
+    /**
+     * Los datos de un alumno son de su campus y de su modalidad (AZ-S17, MS7): quien ve alumnos con el nombramiento
+     * limitado a un campus solo ve los de ese campus (supuesto por confirmar).
+     */
     public function dimensions(): array
     {
-        return $this->isPersonal() ? [] : [Dimension::Campus, Dimension::Unit, Dimension::Career];
+        return $this->isPersonal() ? [] : [Dimension::Modality, Dimension::Campus, Dimension::Unit, Dimension::Career];
     }
 
     public function isPersonal(): bool

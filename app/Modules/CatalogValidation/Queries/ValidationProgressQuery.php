@@ -106,7 +106,7 @@ final class ValidationProgressQuery
 
         $campus = $campuses->first();
         $heads = $departments->mapWithKeys(fn (Department $department): array => [
-            $department->getKey() => $campus === null ? collect() : collect($this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $department->getKey())))->pluck('user'),
+            $department->getKey() => $campus === null ? collect() : collect($this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey())))->pluck('user'),
         ]);
 
         $statuses = new LoadStatusesRequested($term, $campuses->pluck('id')->all());

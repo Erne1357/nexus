@@ -3,10 +3,12 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Queries\StudentQuery;
 
 /*
 | StudentPolicy. Según reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Consultar alumnos"): el admin ve a
@@ -80,4 +82,63 @@ it('la misma persona con otro perfil activo es rechazada', function () {
     actingAsRole($user, Role::Docente);
     expect($user->can('viewAny', Student::class))->toBeFalse()
         ->and($user->can('view', $this->student))->toBeFalse();
+});
+
+/*
+| AZ-S17 (MS7): los datos de un alumno son de su campus y de su modalidad. Un coordinador de PRES limitado a un campus
+| solo ve a los de ese campus (supuesto por confirmar).
+*/
+
+it('AZ-S17: el coordinador de PRES limitado a C2 ve a los alumnos de C2 de su carrera y no a los de C1', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $pres = modalityOf('PRES');
+    $plan = StudyPlan::factory()->for($this->career);
+    $inC2 = Student::factory()->for($plan)->inModality($pres)->create(['campus_id' => $c2->id]);
+    $inC1 = Student::factory()->for($plan)->inModality($pres)->create(['campus_id' => $c1->id]);
+    $coordinator = studentViewer(Role::Coordinador, ['modality_id' => $pres->id, 'campus_id' => $c2->id, 'career_id' => $this->career->id]);
+
+    expect($coordinator->can('view', $inC2))->toBeTrue()
+        ->and($coordinator->can('view', $inC1))->toBeFalse();
+});
+
+it('AZ-S17: el coordinador de PRES sin campus ve a los alumnos de ambos campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $pres = modalityOf('PRES');
+    $plan = StudyPlan::factory()->for($this->career);
+    $coordinator = studentViewer(Role::Coordinador, ['modality_id' => $pres->id, 'career_id' => $this->career->id]);
+
+    expect($coordinator->can('view', Student::factory()->for($plan)->inModality($pres)->create(['campus_id' => $c1->id])))->toBeTrue()
+        ->and($coordinator->can('view', Student::factory()->for($plan)->inModality($pres)->create(['campus_id' => $c2->id])))->toBeTrue();
+});
+
+it('AZ-S17: el coordinador de EAD no ve a los alumnos de PRES', function () {
+    $ead = modalityOf('EAD');
+    $ead->update(['is_active' => true]);
+    $pres = modalityOf('PRES');
+    $plan = StudyPlan::factory()->for($this->career);
+    $coordinator = studentViewer(Role::Coordinador, ['modality_id' => $ead->id, 'career_id' => $this->career->id]);
+
+    expect($coordinator->can('view', Student::factory()->for($plan)->inModality($pres)->create(['campus_id' => $this->campus->id])))->toBeFalse()
+        ->and($coordinator->can('view', Student::factory()->for($plan)->inModality($ead)->create(['campus_id' => $this->campus->id])))->toBeTrue();
+});
+
+it('AZ-S17: la lista de alumnos coincide con la policy por modalidad y campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $ead = modalityOf('EAD');
+    $ead->update(['is_active' => true]);
+    $pres = modalityOf('PRES');
+    $plan = StudyPlan::factory()->for($this->career);
+    $mine = Student::factory()->for($plan)->inModality($pres)->create(['campus_id' => $c2->id, 'control_number' => '21000001']);
+    Student::factory()->for($plan)->inModality($pres)->create(['campus_id' => $c1->id, 'control_number' => '21000002']);
+    Student::factory()->for($plan)->inModality($ead)->create(['campus_id' => $c2->id, 'control_number' => '21000003']);
+    $coordinator = studentViewer(Role::Coordinador, ['modality_id' => $pres->id, 'campus_id' => $c2->id, 'career_id' => $this->career->id]);
+    $this->actingAs($coordinator);
+    app()->forgetScopedInstances();
+
+    $listed = app(StudentQuery::class)->forTable(app(Actor::class), $c2, [], '', 25)->pluck('control_number')->all();
+
+    expect($listed)->toBe([$mine->control_number]);
 });
