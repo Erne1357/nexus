@@ -642,10 +642,21 @@ describe('otro campus', function () {
 });
 
 describe('contexto', function () {
-    it('sin campus activo pide elegirlo', function () {
+    it('sin ningún campus activo donde trabaje, responde 403', function () {
+        Campus::query()->update(['is_active' => false]);
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
 
-        Livewire::actingAs($subdireccion)->test(SCHEDULE_EDITOR)->assertOk()->assertSee('Elige un campus en tu credencial');
+        Livewire::actingAs($subdireccion)->test(SCHEDULE_EDITOR)->assertForbidden();
+    });
+
+    it('AZ-02: Subdirección elige el campus en la página y cambiarlo la reabre en él, sin el grupo', function () {
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        Livewire::withQueryParams(['campus' => $this->otherCampus->code])->actingAs($subdireccion)->test(SCHEDULE_EDITOR)
+            ->assertSee($this->otherCampus->name)
+            ->assertSeeHtml('data-testid="campus-filter-'.$this->campus->code.'"')
+            ->set('campus', $this->campus->code)
+            ->assertRedirect(route('scheduling.editor', ['campus' => $this->campus->code]));
     });
 
     it('el menú lleva a «Horarios» en Académico a quien ve los horarios', function () {

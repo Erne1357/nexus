@@ -33,9 +33,10 @@
                 <x-core::status-badge tone="primary" :label="$term->name" />
             @endif
         </h1>
+        <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
         @isset($plan)
             <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-neutral" data-testid="editor-facts">
-                <span class="font-medium text-base-content">{{ $campus->name }}</span>
+                <span class="font-medium text-base-content">{{ $shownCampus->name }}</span>
                 <span>Retícula <span class="font-mono text-base-content">{{ $plan->code }}</span></span>
                 <span>Grupos <span class="font-mono text-base-content">{{ count($groups) }}</span></span>
                 <span>Horas colocadas <span class="text-base-content"><span class="font-mono">{{ $placedHours }}</span> de <span class="font-mono">{{ $requiredHours }}</span></span></span>

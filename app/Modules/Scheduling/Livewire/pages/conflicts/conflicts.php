@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Queries\BoardCount;
@@ -28,6 +29,7 @@ use Mary\Traits\Toast;
 new #[Title('Choques y avance')] class extends Component
 {
     use Toast;
+    use WithCampusFilter;
 
     /** 'reticula' (carrera, retícula y semestre) o 'departamentos' (matriz). */
     #[Url(as: 'vista', except: 'reticula')]
@@ -64,11 +66,11 @@ new #[Title('Choques y avance')] class extends Component
         $this->authorizeView($context);
 
         $term = $context->activeTerm();
-        $campus = $context->activeCampus();
+        $campus = $this->requiredCampus();
         $links = ['editor' => Route::has('scheduling.editor'), 'assign' => Route::has('staffing.assign')];
 
-        if ($term === null || $campus === null) {
-            return ['term' => $term, 'campus' => $campus, 'summary' => null, 'links' => $links];
+        if ($term === null) {
+            return ['term' => $term, 'shownCampus' => $campus, 'summary' => null, 'links' => $links, ...$this->campusViewData()];
         }
 
         $statuses = $board->statuses($context, $term, $campus);
@@ -79,7 +81,8 @@ new #[Title('Choques y avance')] class extends Component
 
         return [
             'term' => $term,
-            'campus' => $campus,
+            'shownCampus' => $campus,
+            ...$this->campusViewData(),
             'links' => $links,
             'syncedAt' => $board->lastSyncedAt($term, $campus),
             'summary' => $board->summary($statuses),
@@ -94,6 +97,11 @@ new #[Title('Choques y avance')] class extends Component
             'departments' => $this->normalizedView() === 'departamentos' ? $board->byDepartment($statuses) : [],
             'drawer' => $this->showDrawer ? $this->drawer($board, $statuses) : null,
         ];
+    }
+
+    public function updatedCampus(): void
+    {
+        $this->reopenOnCampus('scheduling.conflicts');
     }
 
     public function updatedView(): void
@@ -139,7 +147,7 @@ new #[Title('Choques y avance')] class extends Component
         $this->authorizeView($context);
 
         $term = $context->activeTerm() ?? abort(404);
-        $campus = $context->activeCampus() ?? abort(404);
+        $campus = $this->requiredCampus();
 
         abort_unless($board->hasDepartment($context, $term, $campus, $id), 404);
 
@@ -158,7 +166,7 @@ new #[Title('Choques y avance')] class extends Component
         $this->authorizeView($context);
 
         $term = $context->activeTerm() ?? abort(404);
-        $campus = $context->activeCampus() ?? abort(404);
+        $campus = $this->requiredCampus();
 
         RecomputeScheduleConflicts::dispatch($term->id, $campus->id);
         $this->pollUntil = now()->addSeconds(30)->getTimestamp();

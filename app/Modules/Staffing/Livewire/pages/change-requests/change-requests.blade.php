@@ -18,6 +18,7 @@
             @if ($requests !== null)
                 <p class="mt-1.5 text-sm text-neutral">Cambios de horario y de salón que piden los docentes y la coordinación en los grupos de {{ $departmentName }}.</p>
             @endif
+            <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-3" />
         </div>
         @if (($requests !== null && count($departments) > 1) || $canRequest)
             <div class="flex flex-wrap items-end gap-3 max-md:w-full">

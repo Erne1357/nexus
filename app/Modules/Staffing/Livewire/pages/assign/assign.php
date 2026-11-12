@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Transitions\StartStaffing;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\AssignTeacher;
@@ -45,6 +46,7 @@ use Mary\Traits\Toast;
 new #[Title('Asignación docente')] class extends Component
 {
     use Toast;
+    use WithCampusFilter;
 
     private const array VIEWS = ['materia', 'paneles'];
 
@@ -185,6 +187,11 @@ new #[Title('Asignación docente')] class extends Component
         $this->openRequestedGroup($query);
         $this->openOnGroupsWithoutTeacher($query);
         $this->checkBlockers($query, $blockers);
+    }
+
+    public function updatedCampus(): void
+    {
+        $this->reopenOnCampus('staffing.assign');
     }
 
     /**
@@ -348,7 +355,7 @@ new #[Title('Asignación docente')] class extends Component
     public function with(AssignmentBoardQuery $query, GroupRankingQuery $rankings): array
     {
         if ($this->departmentId === null) {
-            return ['board' => null];
+            return ['board' => null, ...$this->campusViewData()];
         }
 
         $board = $this->board($query);
@@ -364,6 +371,7 @@ new #[Title('Asignación docente')] class extends Component
         $stateMessage = $this->stateMessage($board);
 
         return [
+            ...$this->campusViewData(),
             'board' => $board,
             'visible' => $visible,
             'sections' => $this->view === 'materia' ? $this->sections($board, $visible) : [],
@@ -392,13 +400,7 @@ new #[Title('Asignación docente')] class extends Component
         $this->termId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
-        $campus = $context->activeCampus();
-
-        if ($campus === null) {
-            $this->message = 'Elige un campus en tu credencial para ver la asignación docente.';
-
-            return;
-        }
+        $campus = $this->requiredCampus();
 
         $term = $context->activeTerm();
 
