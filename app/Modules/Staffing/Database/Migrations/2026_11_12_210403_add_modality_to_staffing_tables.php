@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Ampliar (ronda 2 de la carga por modalidad, ADR-0025; el primer paso de ampliar → cambiar → contraer):
+ * Ampliar (ronda 2 de la carga por modalidad, hacia M1 y ADR-0025; el primer paso de ampliar → cambiar → contraer):
  * `staffing_rankings`, `group_teacher_assignments` y `change_requests` reciben `modality_id` (FK obligatoria a
  * `modalities`), copiada de su grupo como ya copian el periodo y el campus (`groups.modality_id` ya es obligatoria desde
  * `2026_11_12_210402_add_modality_to_groups`, así que ninguna fila queda sin ella), con un índice igual a cada uno de

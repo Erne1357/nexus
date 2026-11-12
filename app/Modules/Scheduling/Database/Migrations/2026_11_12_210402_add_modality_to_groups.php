@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Ampliar (ronda 2 de la carga por modalidad, ADR-0025; el primer paso de ampliar → cambiar → contraer):
+ * Ampliar (ronda 2 de la carga por modalidad, hacia M1 y ADR-0025; el primer paso de ampliar → cambiar → contraer):
  *
  * - `groups` y `schedule_conflicts` reciben `modality_id` (FK obligatoria a `modalities`), llena con la modalidad del
  *   catálogo de su campus (el puente `campuses.modality_id`: C1 y C2 → `PRES`), con un índice igual a cada uno de los
