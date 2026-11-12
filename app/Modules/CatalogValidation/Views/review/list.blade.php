@@ -1,252 +1,332 @@
 {{--
-    La lista de un catálogo (`?catalogo=`), bajo la fila de pestañas de la página, con la anatomía de las pantallas de
-    catálogo (DESIGN.md, "Anatomía de una pantalla de catálogo"): un solo renglón con el nombre, el estado, las cifras
-    (activos, inactivos, observaciones, altas y bajas) y Validar o Reabrir; la barra de herramientas común a la misma
-    altura que en los demás catálogos (búsqueda y filtros, con «Cambio» si hay foto anterior; sin acción principal:
-    Validar vive en el renglón); la tabla en una superficie con filete y, debajo de 768 px, renglones apilados que no
-    repiten los data-testid. «Editar» abre el drawer (catalog-validation::review.drawer); las bajas, el suyo.
+    La lista de un catálogo (`?catalogo=`), bajo la fila de pestañas de la página: opción A «Tabla con columna Revisión»
+    (elegida por el usuario el 12 de noviembre de 2026; DESIGN.md, «Revisión por registro»).
 
-    En docentes, quien corrige agrega por su RFC a un docente que ya existe (CV-S9) y da de baja desde el menú de la fila
-    (CV8).
+    - El renglón de la revisión: nombre, estado, «N de M revisados» con su barra, las cifras y «Validar catálogo», que
+      solo se habilita con todos los activos revisados (CV7) y, si no, lleva su motivo escrito al lado.
+    - La barra: búsqueda, el filtro segmentado Por revisar · Revisados · Con observación · Todos (`?revision=`), los filtros
+      del catálogo (Falta en docentes; Campus y Edificio en salones; Cambio si hay foto anterior) y, en docentes,
+      «Agregar docente» (CV-S9) a la derecha. Debajo, a quien marca, los atajos de teclado.
+    - La tabla: una casilla por registro sin revisar (a quien marca), la clave, el nombre con sus insignias y, en
+      docentes, su correo institucional (o «Sin correo institucional» y «Agregar», que abre el recuadro del correo) y sus
+      otros departamentos; las columnas del catálogo; «Revisión» («Marcar revisado» o la insignia con quién y cuándo) y
+      las acciones de fila. Lo que no se puede en una fila (la baja de quien ocupa un puesto) lleva su motivo escrito en
+      ella. Debajo de 768 px, renglones apilados.
+    - La selección y el teclado viven en el navegador (Alpine `catalogReviewList`, resources/js/app.js): J y K mueven el
+      foco por las filas, Espacio elige, R marca la fila o los elegidos y Enter abre «Acciones» (docentes) o «Editar». Con
+      algo elegido, la barra «N elegidos · Elegir los M por revisar · Quitar la selección · Marcar N como revisados» se
+      queda pegada al pie.
+    - «Por revisar» vacío dice «Revisaste los N …» y ofrece «Validar catálogo».
 
-    Marcas de revisado (CV7): el renglón dice cuántos van y por qué Validar no se activa; cada fila lleva su interruptor
-    «Revisado» y, a quien marca, una casilla para elegirla; «Marcar como revisados» marca los elegidos juntos. La
-    selección vive en el navegador (`wire:model` sin `.live`) hasta ese botón.
+    El drawer del registro (catalog-validation::review.drawer), el de bajas y el de «Agregar docente» van al final.
 --}}
 @php($review = $current['review'])
-@php($catalogValue = $review->catalog->value)
+@php($catalog = $review->catalog)
+@php($catalogValue = $catalog->value)
 @php($hasPrevious = $current['summary']['added'] !== null)
-@php($isTeachers = $review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers)
-<div>
-    <section class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2.5 rounded-box border border-base-300 bg-base-100 px-4 py-2.5" data-testid="review-block">
+@php($isTeachers = $catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers)
+@php($isRooms = $catalog === \App\Modules\CatalogValidation\Enums\Catalog::Rooms)
+@php($validated = $review->status === \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated)
+@php($canMark = $current['canMark'])
+<div
+    x-data="catalogReviewList({ canMark: @js($canMark), teachers: @js($isTeachers), domain: @js($emailDomain) })"
+    x-on:keydown.window="onKey($event)"
+    x-on:click="openEmailFrom($event)"
+    data-pending="{{ json_encode($pendingIds) }}"
+    wire:key="review-list-{{ $catalogValue }}"
+>
+    <section class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2.5 rounded-box border border-base-300 bg-base-100 px-4 py-3" data-testid="review-block">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 class="text-lg font-bold leading-tight">{{ $review->catalog->label() }}</h2>
+            <h2 class="text-lg font-bold leading-tight">{{ $catalog->label() }}</h2>
             <x-core::status-badge :tone="$review->status->tone()" :label="$review->status->label()" />
-            @include('catalog-validation::review.who', ['review' => $review])
         </div>
 
-        @include('catalog-validation::review.counters', ['summary' => $current['summary'], 'inline' => true, 'firstTerm' => $firstTerm])
-        @include('catalog-validation::review.reviewed-count', ['card' => $current])
+        @if ($validated)
+            @include('catalog-validation::review.who', ['review' => $review])
+        @else
+            @include('catalog-validation::review.reviewed-count', ['card' => $current])
+        @endif
 
-        <div class="flex w-full gap-2 md:ms-auto md:w-auto">
+        @include('catalog-validation::review.counters', ['summary' => $current['summary'], 'inline' => true, 'firstTerm' => $firstTerm])
+
+        <div class="flex w-full flex-wrap items-center justify-end gap-x-3 gap-y-2 md:ms-auto md:w-auto">
+            @include('catalog-validation::review.validate-why', ['card' => $current])
             @include('catalog-validation::review.actions', ['card' => $current, 'grow' => false, 'small' => true])
         </div>
 
         @foreach ($current['reopenVetoes'] as $veto)
             <p class="w-full text-xs text-neutral">{{ $veto }}</p>
         @endforeach
-        @if ($current['canValidate'] && $current['validateReason'] !== null && $review->status !== \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated)
-            <p class="w-full text-xs text-neutral" data-testid="validate-reason">{{ $current['validateReason'] }}</p>
+        @if (! $canMark && $current['markReason'] !== null)
+            <p id="review-locked" class="flex w-full items-center gap-1.5 text-sm text-neutral" data-testid="review-locked"><x-icon name="o-lock-closed" class="h-4 w-4 shrink-0" aria-hidden="true" />{{ $current['markReason'] }}</p>
         @endif
     </section>
 
-    <x-core::catalog-toolbar :narrow="$isTeachers && $hasPrevious">
-        <x-slot:search>
-            <x-input wire:model.live.debounce.300ms="search" :placeholder="$isTeachers ? 'Número o nombre' : 'Clave o nombre'" aria-label="Buscar registros" icon="o-magnifying-glass" clearable />
-        </x-slot:search>
+    {{-- Barra de herramientas: la de catálogo (DESIGN.md), con el filtro segmentado de la revisión en lugar de «Estado». --}}
+    <div class="mb-2 flex flex-wrap items-start gap-x-2.5 gap-y-3 md:items-center" data-testid="catalog-toolbar">
+        <div class="w-full md:w-56" data-testid="catalog-search">
+            <x-input wire:model.live.debounce.300ms="search" :placeholder="$isTeachers ? 'RFC o nombre' : 'Clave o nombre'" aria-label="Buscar registros" icon="o-magnifying-glass" clearable />
+        </div>
+
+        <div class="w-full md:w-auto">
+            @include('catalog-validation::review.segments')
+        </div>
+
+        <div class="contents [&>*]:w-full md:[&>*]:w-40">
+            @if ($isTeachers)
+                <x-select wire:model.live="missing" aria-label="Falta" :options="$missingFilters" placeholder="Falta" data-testid="filter-missing" />
+            @endif
+            @if ($isRooms)
+                <x-select wire:model.live="roomCampus" aria-label="Campus" :options="$roomFilters['campuses']" placeholder="Campus" data-testid="filter-campus" />
+                <x-select wire:model.live="roomBuilding" aria-label="Edificio" :options="$roomFilters['buildings']" placeholder="Edificio" data-testid="filter-building" />
+            @endif
+            @if ($hasPrevious)
+                <x-select wire:model.live="change" aria-label="Cambio" :options="$changeFilters" placeholder="Cambio" data-testid="filter-change" />
+            @endif
+        </div>
 
         @if ($isTeachers)
-            <x-select wire:model.live="missing" aria-label="Falta" :options="$missingFilters" placeholder="Falta" />
-        @endif
-        @if ($hasPrevious)
-            <x-select wire:model.live="change" aria-label="Cambio" :options="$changeFilters" placeholder="Cambio" data-testid="filter-change" />
-        @endif
-        <x-select wire:model.live="reviewedFilter" aria-label="Revisión" :options="$reviewedFilters" placeholder="Revisión" data-testid="filter-reviewed" />
-        <x-select wire:model.live="flagFilter" aria-label="Observación" :options="$flagFilters" placeholder="Observación" />
-        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
-    </x-core::catalog-toolbar>
-
-    @if ($isTeachers && $current['canEdit'])
-        <form wire:submit="addTeacher" class="mb-2 flex flex-wrap items-start gap-2" data-testid="add-teacher">
-            <x-input wire:model="newTeacherRfc" placeholder="RFC de un docente que ya existe" aria-label="RFC del docente que se agrega" class="font-mono" />
-            <x-button type="submit" label="Agregar a {{ $review->department?->code }}" icon="o-user-plus" class="btn-outline" spinner="addTeacher" />
-        </form>
-    @endif
-
-    @if ($current['canMark'])
-        <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" x-data data-testid="mark-bar">
-            <x-button icon="o-check-circle" class="btn-sm btn-outline" wire:click="markSelected" spinner="markSelected" x-bind:disabled="$wire.selected.length === 0" data-testid="mark-selected">
-                Marcar como revisados
-            </x-button>
-            <span class="text-neutral"><span class="font-mono tabular-nums" x-text="$wire.selected.length">{{ count($selected) }}</span> elegidos</span>
-            @error('selected')
-                <span class="text-error">{{ $message }}</span>
-            @enderror
-        </div>
-    @endif
-
-    <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <x-table
-            :headers="$headers"
-            :rows="$page"
-            :row-decoration="$rowDecoration"
-            class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
-        >
-            @scope('header_select', $header, $page)
-                <input type="checkbox" class="checkbox checkbox-sm" aria-label="Elegir los registros de esta página" data-testid="select-page"
-                    x-data x-on:change="const ids = @js($page->getCollection()->map->getKey()->all()); $wire.selected = $el.checked ? [...new Set([...$wire.selected, ...ids])] : $wire.selected.filter((id) => ! ids.includes(id))">
-            @endscope
-
-            @scope('cell_select', $record)
-                <input type="checkbox" class="checkbox checkbox-sm" value="{{ $record->id }}" wire:model="selected" aria-label="Elegir {{ $record->code ?? $record->rfc }}">
-            @endscope
-
-            @scope('cell_reviewed', $record, $current, $reviewedMap)
-                @include('catalog-validation::review.reviewed-toggle', ['record' => $record, 'card' => $current, 'reviewedMap' => $reviewedMap, 'inTable' => true])
-            @endscope
-
-            @scope('cell_name', $record, $flagMap, $review)
-                <span @class(['block', 'font-semibold' => $record->is_active])>{{ $record->name }}</span>
-                @if ($review->catalog !== \App\Modules\CatalogValidation\Enums\Catalog::Rooms && ! empty($flagMap[$record->id]))
-                    <span class="mt-1 block min-[1024px]:hidden">@include('catalog-validation::review.flag-badge', ['flags' => $flagMap[$record->id]])</span>
-                @endif
-            @endscope
-
-            @scope('cell_code', $record, $flagMap, $review)
-                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->code }}</span>
-                @if ($review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Rooms && ! empty($flagMap[$record->id]))
-                    <span class="mt-1 block min-[1024px]:hidden">@include('catalog-validation::review.flag-badge', ['flags' => $flagMap[$record->id]])</span>
-                @endif
-            @endscope
-
-            @scope('cell_rfc', $record)
-                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->rfc }}</span>
-            @endscope
-
-            @scope('cell_theory_hours', $record)
-                <span class="block text-end font-mono tabular-nums">{{ $record->theory_hours }}</span>
-            @endscope
-
-            @scope('cell_practice_hours', $record)
-                <span class="block text-end font-mono tabular-nums">{{ $record->practice_hours }}</span>
-            @endscope
-
-            @scope('cell_credits', $record)
-                <span class="block text-end font-mono tabular-nums">{{ $record->credits }}</span>
-            @endscope
-
-            @scope('cell_capacity', $record)
-                <span class="block text-end font-mono tabular-nums">{{ $record->capacity }}</span>
-            @endscope
-
-            @scope('cell_campus', $record)
-                <span class="font-mono" title="{{ $record->campus?->name }}">{{ $record->campus?->code }}</span>
-            @endscope
-
-            @scope('cell_building', $record)
-                <span class="font-mono" title="{{ $record->building?->name }}">{{ $record->building?->code }}</span>
-            @endscope
-
-            @scope('cell_type', $record)
-                {{ $record->type->label() }}
-            @endscope
-
-            @scope('cell_career', $record)
-                <span class="font-mono" title="{{ $record->career?->name }}">{{ $record->career?->code }}</span>
-            @endscope
-
-            @scope('cell_availability', $record, $readiness)
-                @if (! $record->is_active)
-                    <span class="text-neutral" aria-label="Sin dato: docente inactivo">—</span>
-                @elseif ($readiness[$record->id]['has_availability'] ?? false)
-                    <x-core::status-badge tone="success" label="Capturada" />
+            <div class="w-full md:ms-auto md:w-auto">
+                @if ($current['canEdit'])
+                    <x-button label="Agregar docente" icon="o-user-plus" class="btn-outline w-full md:w-auto" wire:click="$set('showAddTeacher', true)" data-testid="add-teacher" />
                 @else
-                    <x-core::status-badge tone="warning" label="Falta" />
+                    <button type="button" class="btn btn-outline w-full md:w-auto" aria-disabled="true" disabled aria-describedby="add-teacher-why"><x-icon name="o-user-plus" class="h-4 w-4" aria-hidden="true" />Agregar docente</button>
+                    <p id="add-teacher-why" class="mt-1 text-xs text-neutral md:max-w-56">{{ $current['editReason'] }}</p>
                 @endif
-            @endscope
+            </div>
+        @endif
+    </div>
 
-            @scope('cell_profile', $record, $readiness)
-                @php($subjects = $readiness[$record->id]['subjects'] ?? 0)
-                <span @class(['block text-end font-mono tabular-nums', 'text-warning' => $subjects === 0 && $record->is_active])>{{ $subjects === 0 && ! $record->is_active ? '—' : $subjects }}</span>
-            @endscope
+    @if ($canMark)
+        <p class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-neutral max-md:hidden" aria-label="Atajos de teclado" data-testid="keyboard-hint">
+            <span class="inline-flex items-center gap-1.5"><kbd class="kbd kbd-sm font-mono">J</kbd><kbd class="kbd kbd-sm font-mono">K</kbd> moverte</span>
+            <span class="inline-flex items-center gap-1.5"><kbd class="kbd kbd-sm font-mono">Espacio</kbd> elegir</span>
+            <span class="inline-flex items-center gap-1.5"><kbd class="kbd kbd-sm font-mono">R</kbd> marcar revisado (o los elegidos)</span>
+            <span class="inline-flex items-center gap-1.5"><kbd class="kbd kbd-sm font-mono">Enter</kbd> {{ $isTeachers ? 'acciones' : 'editar' }}</span>
+        </p>
+    @else
+        <div class="mb-3"></div>
+    @endif
 
-            @scope('cell_external', $record, $readiness)
-                <span class="block text-end font-mono tabular-nums">{{ $readiness[$record->id]['external_hours'] ?? 0 }}</span>
-            @endscope
+    @error('selected')
+        <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft mb-3 text-sm" :title="$message" data-testid="selection-error" />
+    @enderror
 
-            @scope('cell_base', $record, $readiness)
-                <span class="block text-end font-mono tabular-nums">{{ $readiness[$record->id]['base_hours'] ?? 0 }}</span>
-            @endscope
-
-            @scope('cell_flags', $record, $flagMap)
-                @include('catalog-validation::review.flag-badge', ['flags' => $flagMap[$record->id] ?? []])
-            @endscope
-
-            @scope('cell_is_active', $record)
-                <x-core::status-badge :tone="$record->is_active ? 'success' : 'neutral'" :label="$record->is_active ? 'Activo' : 'Inactivo'" />
-            @endscope
-
-            @scope('actions', $record, $current, $dischargeReasons)
-                @include('catalog-validation::review.row-actions', ['record' => $record, 'card' => $current, 'inTable' => true, 'dischargeReasons' => $dischargeReasons])
-            @endscope
-
-            <x-slot:empty>
-                @include('catalog-validation::review.empty-list')
-            </x-slot:empty>
-        </x-table>
-
-        <ul class="divide-y divide-base-300 md:hidden" data-testid="record-cards">
-            @foreach ($page as $record)
-                <li wire:key="record-card-{{ $record->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $record->is_active])>
-                    <div class="flex items-center justify-between gap-2.5">
-                        <span class="flex items-center gap-2.5">
-                            @if ($current['canMark'])
-                                <input type="checkbox" class="checkbox checkbox-sm" value="{{ $record->id }}" wire:model="selected" aria-label="Elegir {{ $record->code ?? $record->rfc }}">
-                            @endif
-                            <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $record->code ?? $record->rfc }}</span>
-                        </span>
-                        <x-core::status-badge :tone="$record->is_active ? 'success' : 'neutral'" :label="$record->is_active ? 'Activo' : 'Inactivo'" />
-                    </div>
-                    <p @class(['font-semibold' => $record->is_active])>{{ $record->name ?? '—' }}</p>
-
-                    <div class="text-neutral">
-                        @switch ($review->catalog)
-                            @case (\App\Modules\CatalogValidation\Enums\Catalog::Subjects)
-                                <span class="font-mono tabular-nums">{{ $record->theory_hours }}-{{ $record->practice_hours }}-{{ $record->credits }}</span>
-                                @break
-                            @case (\App\Modules\CatalogValidation\Enums\Catalog::Rooms)
-                                <span class="font-mono">{{ $record->campus?->code }} · {{ $record->building?->code }}</span> · <span class="font-mono tabular-nums">{{ $record->capacity }}</span> lugares · {{ $record->type->label() }}
-                                @break
-                            @case (\App\Modules\CatalogValidation\Enums\Catalog::Teachers)
-                                @php($ready = $readiness[$record->id] ?? null)
-                                @if ($record->is_active)
-                                    <x-core::status-badge :tone="($ready['has_availability'] ?? false) ? 'success' : 'warning'" :label="($ready['has_availability'] ?? false) ? 'Disponibilidad capturada' : 'Sin disponibilidad'" />
-                                @else
-                                    <span>Docente inactivo</span>
-                                @endif
-                                · <span class="font-mono tabular-nums">{{ $ready['subjects'] ?? 0 }}</span> materias en perfil · <span class="font-mono tabular-nums">{{ $ready['external_hours'] ?? 0 }}</span> h fuera
-                                @break
-                            @case (\App\Modules\CatalogValidation\Enums\Catalog::StudyPlans)
-                                <span class="font-mono">{{ $record->career?->code }}</span>
-                                @break
-                        @endswitch
-                    </div>
-
-                    @if (! empty($flagMap[$record->id]))
-                        @include('catalog-validation::review.flag-badge', ['flags' => $flagMap[$record->id]])
+    <section class="rounded-box border border-base-300 bg-base-100" aria-label="Registros de {{ $catalog->label() }}">
+        @if ($page->isEmpty())
+            @if ($allReviewed)
+                <div class="flex flex-col items-center gap-3 px-5 py-10 text-center" data-testid="all-reviewed">
+                    <x-icon name="o-check-circle" class="h-8 w-8 text-success" aria-hidden="true" />
+                    <p class="text-xl font-bold">{{ $doneMessage }}</p>
+                    @if ($validated)
+                        <p class="text-neutral">El catálogo ya está validado.</p>
+                    @elseif ($current['canValidate'] && $current['validateReason'] === null)
+                        <p class="max-w-prose text-neutral">Ya puedes validar el catálogo. Lo que corrijas después de validar pide reabrirlo.</p>
+                        <x-button label="Validar catálogo" icon="o-check" class="btn-primary" wire:click="confirm('validate', '{{ $catalogValue }}')" spinner="confirm" data-testid="validate-{{ $catalogValue }}-done" />
+                    @else
+                        <p class="text-neutral">Lo valida el jefe del departamento.</p>
                     @endif
-
-                    @include('catalog-validation::review.reviewed-toggle', ['record' => $record, 'card' => $current, 'reviewedMap' => $reviewedMap, 'inTable' => false])
-                    @include('catalog-validation::review.row-actions', ['record' => $record, 'card' => $current, 'inTable' => false, 'dischargeReasons' => $dischargeReasons])
-                </li>
-            @endforeach
-
-            @if ($page->isEmpty())
-                <li class="px-4 py-6">@include('catalog-validation::review.empty-list')</li>
+                </div>
+            @else
+                <div class="px-4 py-6">@include('catalog-validation::review.empty-list')</div>
             @endif
-        </ul>
+        @else
+            <div class="overflow-x-auto max-md:hidden">
+                <table class="table [&_td]:px-3 [&_td]:py-2.5 [&_th]:px-3" data-testid="review-table">
+                    <thead class="bg-secondary/40 text-[11.5px] font-medium uppercase tracking-[0.09em] text-secondary-muted">
+                        <tr>
+                            @if ($canMark)
+                                <th class="w-1">
+                                    @if ($pagePending > 0)
+                                        <input type="checkbox" class="checkbox checkbox-sm" aria-label="Elegir los {{ $pagePending }} por revisar de esta página" data-testid="select-page"
+                                            x-bind:checked="allPageChosen()" x-on:change="choosePage($el.checked)">
+                                    @endif
+                                </th>
+                            @endif
+                            <th>{{ $isTeachers ? 'RFC' : 'Clave' }}</th>
+                            <th class="min-w-40 min-[1200px]:min-w-56">{{ match ($catalog) { \App\Modules\CatalogValidation\Enums\Catalog::Teachers => 'Docente', \App\Modules\CatalogValidation\Enums\Catalog::Subjects => 'Materia', \App\Modules\CatalogValidation\Enums\Catalog::StudyPlans => 'Plan', \App\Modules\CatalogValidation\Enums\Catalog::Careers => 'Carrera', default => 'Nombre' } }}</th>
+                            @switch ($catalog)
+                                @case (\App\Modules\CatalogValidation\Enums\Catalog::Teachers)
+                                    <th class="max-[1023px]:hidden">Disponibilidad</th>
+                                    <th class="text-end max-[1199px]:hidden">Perfil</th>
+                                    <th class="text-end max-[1535px]:hidden">Fuera</th>
+                                    <th class="text-end max-[1535px]:hidden">Plaza</th>
+                                    @break
+                                @case (\App\Modules\CatalogValidation\Enums\Catalog::Rooms)
+                                    <th>Campus</th>
+                                    <th class="max-[1023px]:hidden">Edificio</th>
+                                    <th class="text-end max-[1023px]:hidden">Capacidad</th>
+                                    <th class="max-[1535px]:hidden">Tipo</th>
+                                    @break
+                                @case (\App\Modules\CatalogValidation\Enums\Catalog::Subjects)
+                                    <th class="text-end">HT</th>
+                                    <th class="text-end">HP</th>
+                                    <th class="text-end">Créd.</th>
+                                    @break
+                                @case (\App\Modules\CatalogValidation\Enums\Catalog::StudyPlans)
+                                    <th>Carrera</th>
+                                    @break
+                            @endswitch
+                            <th>Revisión</th>
+                            <th class="w-1"><span class="sr-only">Acciones</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($page as $record)
+                            @php($key = $record->code ?? $record->rfc)
+                            @php($isReviewed = isset($marks[$record->id]))
+                            <tr
+                                wire:key="row-{{ $record->id }}"
+                                data-row="{{ $record->id }}"
+                                @if ($canMark && ! $isReviewed) data-pending @endif
+                                tabindex="-1"
+                                aria-label="{{ $key }} · {{ $record->name }}"
+                                x-bind:class="isSelected('{{ $record->id }}') && 'bg-primary/5'"
+                                @class(['border-base-300 outline-primary focus-visible:outline-2 focus-visible:-outline-offset-2', 'text-neutral' => ! $record->is_active])
+                            >
+                                @if ($canMark)
+                                    <td class="w-1">
+                                        @unless ($isReviewed)
+                                            <input type="checkbox" class="checkbox checkbox-sm" aria-label="Elegir {{ $key }}" data-testid="select-{{ $key }}"
+                                                x-bind:checked="isSelected('{{ $record->id }}')" x-on:change="toggle('{{ $record->id }}')">
+                                        @endunless
+                                    </td>
+                                @endif
+                                <td><span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $isRooms ? $record->code : $key }}</span></td>
+                                <td data-email-anchor="{{ $record->id }}">
+                                    @include('catalog-validation::review.record-name', ['record' => $record, 'inTable' => true])
+                                </td>
+                                @switch ($catalog)
+                                    @case (\App\Modules\CatalogValidation\Enums\Catalog::Teachers)
+                                        <td class="max-[1023px]:hidden">
+                                            @if (! $record->is_active)
+                                                <span class="text-neutral" aria-label="Sin dato: docente inactivo">—</span>
+                                            @elseif ($readiness[$record->id]['has_availability'] ?? false)
+                                                <x-core::status-badge tone="success" label="Capturada" />
+                                            @else
+                                                <x-core::status-badge tone="warning" label="Falta" />
+                                            @endif
+                                        </td>
+                                        @php($subjects = $readiness[$record->id]['subjects'] ?? 0)
+                                        <td class="text-end max-[1199px]:hidden"><span @class(['font-mono tabular-nums', 'text-warning' => $subjects === 0 && $record->is_active])>{{ $subjects === 0 && ! $record->is_active ? '—' : $subjects }}</span></td>
+                                        <td class="text-end max-[1535px]:hidden"><span class="font-mono tabular-nums">{{ $readiness[$record->id]['external_hours'] ?? 0 }}</span></td>
+                                        <td class="text-end max-[1535px]:hidden"><span class="font-mono tabular-nums">{{ $readiness[$record->id]['base_hours'] ?? 0 }}</span></td>
+                                        @break
+                                    @case (\App\Modules\CatalogValidation\Enums\Catalog::Rooms)
+                                        <td><span class="font-mono font-semibold" title="{{ $record->campus?->name }}">{{ $record->campus?->code }}</span></td>
+                                        <td class="max-[1023px]:hidden"><span class="font-mono" title="{{ $record->building?->name }}">{{ $record->building?->code }}</span></td>
+                                        <td class="text-end max-[1023px]:hidden"><span class="font-mono tabular-nums">{{ $record->capacity }}</span></td>
+                                        <td class="max-[1535px]:hidden">{{ $record->type->label() }}</td>
+                                        @break
+                                    @case (\App\Modules\CatalogValidation\Enums\Catalog::Subjects)
+                                        <td class="text-end"><span class="font-mono tabular-nums">{{ $record->theory_hours }}</span></td>
+                                        <td class="text-end"><span class="font-mono tabular-nums">{{ $record->practice_hours }}</span></td>
+                                        <td class="text-end"><span class="font-mono tabular-nums">{{ $record->credits }}</span></td>
+                                        @break
+                                    @case (\App\Modules\CatalogValidation\Enums\Catalog::StudyPlans)
+                                        <td><span class="font-mono" title="{{ $record->career?->name }}">{{ $record->career?->code }}</span></td>
+                                        @break
+                                @endswitch
+                                <td class="w-1 whitespace-nowrap">
+                                    @include('catalog-validation::review.review-cell', ['record' => $record, 'inTable' => true])
+                                </td>
+                                <td class="w-1">
+                                    @include('catalog-validation::review.row-actions', ['record' => $record, 'inTable' => true])
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <ul class="divide-y divide-base-300 md:hidden" data-testid="record-cards">
+                @foreach ($page as $record)
+                    @php($key = $record->code ?? $record->rfc)
+                    @php($isReviewed = isset($marks[$record->id]))
+                    <li wire:key="record-card-{{ $record->id }}" x-bind:class="isSelected('{{ $record->id }}') && 'bg-primary/5'" @class(['grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-1 px-3 py-3', 'text-neutral' => ! $record->is_active])>
+                        <div class="pt-0.5">
+                            @if ($canMark && ! $isReviewed)
+                                <label class="-m-2 flex h-11 w-11 cursor-pointer items-start justify-center pt-2">
+                                    <input type="checkbox" class="checkbox checkbox-sm" aria-label="Elegir {{ $key }}" x-bind:checked="isSelected('{{ $record->id }}')" x-on:change="toggle('{{ $record->id }}')">
+                                </label>
+                            @endif
+                        </div>
+                        <div class="min-w-0 space-y-1">
+                            <div class="flex items-start justify-between gap-2.5">
+                                <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $record->is_active])>{{ $isRooms ? \App\Modules\CatalogValidation\Queries\CatalogContentsQuery::roomCode($record) : $key }}</span>
+                                @if ($isReviewed)
+                                    <x-core::status-badge tone="success" label="Revisado" />
+                                @else
+                                    <x-core::status-badge tone="draft" icon="o-clock" label="Por revisar" />
+                                @endif
+                            </div>
+                            <div data-email-anchor="{{ $record->id }}">
+                                @include('catalog-validation::review.record-name', ['record' => $record, 'inTable' => false])
+                            </div>
+                            <p class="text-[12.5px] text-neutral">
+                                @switch ($catalog)
+                                    @case (\App\Modules\CatalogValidation\Enums\Catalog::Subjects)
+                                        <span class="font-mono tabular-nums">{{ $record->theory_hours }}-{{ $record->practice_hours }}-{{ $record->credits }}</span>
+                                        @break
+                                    @case (\App\Modules\CatalogValidation\Enums\Catalog::Rooms)
+                                        <span class="font-mono">{{ $record->building?->code }}</span> · <span class="font-mono tabular-nums">{{ $record->capacity }}</span> lugares · {{ $record->type->label() }}
+                                        @break
+                                    @case (\App\Modules\CatalogValidation\Enums\Catalog::Teachers)
+                                        @php($ready = $readiness[$record->id] ?? null)
+                                        @if ($record->is_active)
+                                            {{ ($ready['has_availability'] ?? false) ? 'Disponibilidad capturada' : 'Sin disponibilidad' }}
+                                        @else
+                                            Docente inactivo
+                                        @endif
+                                        · <span class="font-mono tabular-nums">{{ $ready['subjects'] ?? 0 }}</span> materias en perfil
+                                        @break
+                                    @case (\App\Modules\CatalogValidation\Enums\Catalog::StudyPlans)
+                                        <span class="font-mono">{{ $record->career?->code }}</span> · {{ $record->career?->name }}
+                                        @break
+                                @endswitch
+                            </p>
+                            @if ($isReviewed)
+                                <p class="text-[12.5px] text-neutral">Revisado por {{ $marks[$record->id]['short'] }}</p>
+                            @endif
+                            <div class="-ms-1 flex flex-wrap items-center gap-1 pt-1">
+                                @if ($canMark && ! $isReviewed)
+                                    @include('catalog-validation::review.review-cell', ['record' => $record, 'inTable' => false])
+                                @endif
+                                @include('catalog-validation::review.row-actions', ['record' => $record, 'inTable' => false])
+                            </div>
+                        </div>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+
+        @if ($canMark)
+            <div class="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-b-box border-t border-base-300 bg-base-200 px-4 py-2.5 shadow-[0_-6px_16px_-10px_rgb(9_45_72/0.35)]" role="region" aria-label="Selección" x-show="selected.length > 0" x-cloak data-testid="selection-bar">
+                <span class="text-sm" aria-live="polite"><b class="font-mono font-semibold" x-text="selected.length"></b> <span x-text="selected.length === 1 ? 'elegido' : 'elegidos'"></span></span>
+                <button type="button" class="link text-sm font-medium underline-offset-4" x-show="selected.length < pendingAll().length" x-on:click="chooseAllPending()" data-testid="choose-all-pending">Elegir los {{ count($pendingIds) }} por revisar</button>
+                <button type="button" class="link text-sm font-medium underline-offset-4" x-on:click="clear()" data-testid="clear-selection">Quitar la selección</button>
+                <button type="button" class="btn btn-primary btn-sm max-md:h-11 max-md:w-full md:ms-auto" x-on:click="markChosen()" x-bind:disabled="marking" data-testid="mark-selected">
+                    <x-icon name="o-check" class="h-4 w-4" aria-hidden="true" />
+                    <span x-text="'Marcar ' + selected.length + (selected.length === 1 ? ' como revisado' : ' como revisados')"></span>
+                </button>
+            </div>
+        @endif
 
         @if ($page->isNotEmpty() || $page->hasPages())
             <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
                 @if ($page->isNotEmpty())
                     @php($keyOf = fn ($record): string => $record->code ?? $record->rfc)
-                    <p>{{ $review->catalog->label() }} <span class="font-mono">{{ $keyOf($page->getCollection()->first()) }}</span>@if ($page->count() > 1) a <span class="font-mono">{{ $keyOf($page->getCollection()->last()) }}</span> · <span class="font-mono">{{ $page->firstItem() }}–{{ $page->lastItem() }}</span>@else · <span class="font-mono">{{ $page->firstItem() }}</span>@endif de <span class="font-mono">{{ $page->total() }}</span></p>
+                    <p>{{ $catalog->label() }} <span class="font-mono">{{ $keyOf($page->getCollection()->first()) }}</span>@if ($page->count() > 1) a <span class="font-mono">{{ $keyOf($page->getCollection()->last()) }}</span> · <span class="font-mono">{{ $page->firstItem() }}–{{ $page->lastItem() }}</span>@else · <span class="font-mono">{{ $page->firstItem() }}</span>@endif de <span class="font-mono">{{ $page->total() }}</span></p>
                 @endif
 
                 {{ $page->onEachSide(1)->links(data: ['scrollTo' => false, 'summary' => false]) }}
             </div>
         @endif
-    </div>
+    </section>
+
+    @if ($isTeachers)
+        @include('catalog-validation::review.email-popover')
+    @endif
 
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="review-drawer-title" data-testid="review-drawer">
         @if ($editing !== null)
@@ -259,4 +339,12 @@
             @include('catalog-validation::review.removed', ['review' => $review, 'removed' => $removed])
         @endif
     </x-drawer>
+
+    @if ($isTeachers)
+        <x-drawer wire:model.live="showAddTeacher" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="add-teacher-title" data-testid="add-teacher-drawer">
+            @if ($candidates !== null)
+                @include('catalog-validation::review.add-teacher', ['review' => $review, 'candidates' => $candidates])
+            @endif
+        </x-drawer>
+    @endif
 </div>

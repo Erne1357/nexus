@@ -57,13 +57,13 @@ final class BuildingQuery
     }
 
     /**
-     * Los edificios sin borrar de los campus activos, por campus y clave, como opciones de x-select: «C2 · A · Edificio
-     * A». Para mover un salón a un edificio de otro campus al validar los catálogos (CV2, CV-S10); los inactivos también,
-     * y lo dicen.
+     * Los edificios sin borrar de los campus activos, agrupados por campus (por clave) y por clave, para el select con
+     * grupos que mueve un salón a un edificio de otro campus al validar los catálogos (CV2, CV-S10): el campus sigue al
+     * edificio. Cada edificio dice «A · Edificio A» y, si está inactivo, lo dice.
      *
-     * @return list<array{id: string, name: string}>
+     * @return list<array{id: string, code: string, name: string, buildings: list<array{id: string, name: string}>}>
      */
-    public function optionsInActiveCampuses(): array
+    public function groupedByActiveCampus(): array
     {
         return Building::query()
             ->join('campuses', 'campuses.id', '=', 'buildings.campus_id')
@@ -71,11 +71,18 @@ final class BuildingQuery
             ->whereNull('campuses.deleted_at')
             ->orderBy('campuses.code')
             ->orderBy('buildings.code')
-            ->get(['buildings.id', 'buildings.code', 'buildings.name', 'buildings.is_active', 'campuses.code as campus_code'])
-            ->map(fn (Building $building): array => [
-                'id' => $building->id,
-                'name' => "{$building->getAttribute('campus_code')} · {$building->code} · {$building->name}".($building->is_active ? '' : ' (inactivo)'),
+            ->get(['buildings.id', 'buildings.code', 'buildings.name', 'buildings.is_active', 'campuses.id as campus_id', 'campuses.code as campus_code', 'campuses.name as campus_name'])
+            ->groupBy('campus_id')
+            ->map(fn ($buildings): array => [
+                'id' => $buildings->first()->getAttribute('campus_id'),
+                'code' => $buildings->first()->getAttribute('campus_code'),
+                'name' => $buildings->first()->getAttribute('campus_name'),
+                'buildings' => $buildings->map(fn (Building $building): array => [
+                    'id' => $building->id,
+                    'name' => "{$building->code} · {$building->name}".($building->is_active ? '' : ' (inactivo)'),
+                ])->values()->all(),
             ])
+            ->values()
             ->all();
     }
 
