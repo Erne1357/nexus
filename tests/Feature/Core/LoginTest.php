@@ -102,6 +102,29 @@ it('compara la contraseña aunque el usuario esté inactivo', function () {
     expect($compared->getArrayCopy())->toBe([$inactive->password]);
 });
 
+it('AC-01: no deja entrar a un usuario sin contraseña y responde igual que a una credencial incorrecta', function () {
+    User::factory()->create(['username' => '19110001', 'password' => null, 'must_change_password' => true]);
+
+    $this->from('/login')
+        ->post('/login', ['username' => '19110001', 'password' => 'cualquiera'])
+        ->assertRedirect('/login')
+        ->assertSessionHasErrors(['username' => __('auth.failed')]);
+
+    $this->assertGuest();
+});
+
+it('AC-01: a un usuario sin contraseña le compara la contraseña contra el hash señuelo', function () {
+    $existing = User::factory()->create();
+    User::factory()->create(['username' => '19110001', 'password' => null]);
+    $compared = spyPasswordChecks();
+
+    $this->post('/login', ['username' => '19110001', 'password' => 'password']);
+
+    expect($compared)->toHaveCount(1)
+        ->and($compared[0])->not->toBeNull()
+        ->and(password_get_info($compared[0]))->toBe(password_get_info($existing->password));
+});
+
 it('entra con un username con mayúsculas tal como viene del SII', function () {
     $user = User::factory()->create(['username' => 'C19110001']);
 

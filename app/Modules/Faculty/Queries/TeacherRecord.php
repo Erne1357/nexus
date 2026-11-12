@@ -2,6 +2,7 @@
 
 namespace App\Modules\Faculty\Queries;
 
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
@@ -15,6 +16,7 @@ use Illuminate\Support\Collection;
  *
  * `positionStatus` da, por id de plaza, `vigente`, `por_empezar` o `vencida` hoy; `countsInTerm`, si la plaza cuenta
  * en las horas base del periodo (S1, supuesto por confirmar: vigente el primer día). `baseHours` es null sin periodo.
+ * `access` es el estado del acceso de su usuario (AC-04); null sin usuario.
  */
 final readonly class TeacherRecord
 {
@@ -33,5 +35,6 @@ final readonly class TeacherRecord
         public ?int $baseHours,
         public ?Term $term,
         public ?User $user,
+        public ?UserAccess $access,
     ) {}
 }

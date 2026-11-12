@@ -1,8 +1,8 @@
 {{--
     Ficha del docente (DESIGN.md, "Ficha del docente"), con la forma de la ficha del alumno: un enlace de regreso a
     Docentes, el encabezado con su nombre, número y estado, sus datos clave y a la derecha «Editar datos» y
-    «Acciones» (baja o reactivación y «Restablecer contraseña», deshabilitada con su motivo para quien no es
-    administrador); una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
+    «Acciones» (baja o reactivación y «Restablecer contraseña», o «Dar acceso» si su usuario no tiene contraseña,
+    AC-03, deshabilitada con su motivo para quien no es administrador); una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
     pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil (materias apto/preferente y «Horas fuera del
     ITCJ») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad es la vista de solo lectura
     del periodo activo con el enlace al editor (faculty::teachers.availability-tab). Agregar o editar una plaza y quitar
@@ -50,7 +50,20 @@
                 @else
                     <x-core::row-menu-item :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'" :reason="$deactivateReason" disabled data-testid="toggle-active" />
                 @endif
-                @if ($canReset)
+                @if ($canReset && $grantsAccess && ! $record->user->is_active)
+                    <x-core::row-menu-item label="Dar acceso" reason="Su usuario está inactivo: reactiva al docente antes." disabled data-testid="reset-password" />
+                @elseif ($canReset && $grantsAccess)
+                    <x-core::row-menu-item
+                        label="Dar acceso"
+                        wire:click="resetPassword"
+                        x-confirm="Entra con la contraseña por defecto y tendrá que cambiarla al entrar."
+                        data-confirm-title="¿Dar acceso a {{ $record->teacher->rfc }}?"
+                        data-confirm-button="Dar acceso"
+                        data-confirm-tone="primary"
+                        spinner="resetPassword"
+                        data-testid="reset-password"
+                    />
+                @elseif ($canReset)
                     <x-core::row-menu-item
                         label="Restablecer contraseña"
                         wire:click="resetPassword"
@@ -61,8 +74,24 @@
                         spinner="resetPassword"
                         data-testid="reset-password"
                     />
+                @elseif ($grantsAccess)
+                    <x-core::row-menu-item label="Dar acceso" reason="Solo el administrador da acceso." disabled data-testid="reset-password" />
                 @else
                     <x-core::row-menu-item label="Restablecer contraseña" reason="Solo el administrador restablece contraseñas." disabled data-testid="reset-password" />
+                @endif
+                @if ($inviteReason === '')
+                    <x-core::row-menu-item
+                        label="Reenviar invitación"
+                        wire:click="resendInvitation"
+                        x-confirm="Se manda un enlace nuevo a {{ $record->teacher->institutional_email }}; el anterior deja de servir."
+                        data-confirm-title="¿Reenviar la invitación de {{ $record->teacher->rfc }}?"
+                        data-confirm-button="Reenviar"
+                        data-confirm-tone="primary"
+                        spinner="resendInvitation"
+                        data-testid="resend-invitation"
+                    />
+                @elseif ($inviteReason !== null)
+                    <x-core::row-menu-item label="Reenviar invitación" :reason="$inviteReason" disabled data-testid="resend-invitation" />
                 @endif
             </x-core::row-menu>
         </div>
@@ -271,6 +300,7 @@
                             ['RFC', '<span class="font-mono">'.e($record->teacher->rfc).'</span>'],
                             ['Nombre', e($record->teacher->name)],
                             ['Correo', $record->teacher->email ? e($record->teacher->email) : '<span class="text-neutral">Sin correo</span>'],
+                            ['Correo institucional', $record->teacher->institutional_email ? e($record->teacher->institutional_email) : '<span class="text-neutral">Sin correo institucional</span>'],
                             ['Grado', $record->teacher->degree ? e($record->teacher->degree->label()) : '<span class="text-neutral">Sin grado</span>'],
                             ['Fecha de ingreso', $record->teacher->hired_on ? e($record->teacher->hired_on->format('d/m/Y')) : '<span class="text-neutral">Sin fecha</span>'],
                         ] as [$term, $value])
@@ -285,9 +315,7 @@
                                 @if ($record->user)
                                     <span class="font-mono">{{ $record->user->username }}</span>
                                     <x-core::status-badge :tone="$record->user->is_active ? 'success' : 'neutral'" :label="$record->user->is_active ? 'Activo' : 'Inactivo'" />
-                                    @if ($record->user->must_change_password)
-                                        <x-core::status-badge tone="warning" label="Debe cambiar la contraseña" />
-                                    @endif
+                                    <x-core::status-badge :tone="$record->access->tone()" :label="$record->access->label()" data-testid="user-access" />
                                 @else
                                     <span class="text-neutral">Sin usuario</span>
                                 @endif
@@ -390,7 +418,7 @@
                     <x-input label="Hasta (si tiene)" name="headTo" wire:model="headTo" type="date" hint="Vacío es sin fecha de fin." />
                 </div>
                 @unless ($record->user)
-                    <p class="text-sm text-neutral">Todavía no tiene usuario: se le crea con la contraseña por defecto antes de nombrarlo.</p>
+                    <p class="text-sm text-neutral">Todavía no tiene usuario: se le crea, sin acceso, antes de nombrarlo. Después dale acceso desde «Acciones».</p>
                 @endunless
 
                 <x-slot:actions>
@@ -422,13 +450,20 @@
                 <div class="md:col-span-4">
                     <x-input label="Nombre" name="name" wire:model="name" />
                 </div>
-                <div class="md:col-span-4">
+                <div class="md:col-span-3">
                     <x-input label="Correo" name="email" wire:model="email" type="email" />
                 </div>
-                <div class="md:col-span-2">
+                <div class="md:col-span-3">
+                    @if ($institutionalEmailReason === null)
+                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" :hint="'@'.$institutionalDomain.'. A él va su invitación de acceso.'" />
+                    @else
+                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" disabled :hint="$institutionalEmailReason" />
+                    @endif
+                </div>
+                <div class="md:col-span-3">
                     <x-select label="Grado" name="degree" wire:model="degree" :options="$degrees" placeholder="Sin grado" />
                 </div>
-                <div class="md:col-span-2">
+                <div class="md:col-span-3">
                     <x-input label="Fecha de ingreso" name="hired_on" wire:model="hired_on" type="date" />
                 </div>
             </div>

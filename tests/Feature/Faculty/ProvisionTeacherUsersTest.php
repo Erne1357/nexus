@@ -16,9 +16,9 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | ProvisionTeacherUsers corre SyncTeacherAccess sobre todos los docentes, por bloques (a los borrados les aplica la
-| baja si falta; supuesto por confirmar), con un solo hash de la contraseña por defecto por corrida, y deja una entrada de bitácora de la corrida con las cuentas,
-| además de las de cada docente que cambió. Sin NEXUS_DEFAULT_PASSWORD falla antes de tocar a nadie. La despacha
-| el job ProvisionTeacherUsersJob, único en la cola.
+| baja si falta; supuesto por confirmar), y deja una entrada de bitácora de la corrida con las cuentas, además de las
+| de cada docente que cambió. Los usuarios nuevos nacen sin acceso (AC-02), así que no necesita NEXUS_DEFAULT_PASSWORD.
+| La despacha el job ProvisionTeacherUsersJob, único en la cola.
 */
 
 beforeEach(function () {
@@ -56,7 +56,7 @@ it('con 3 activos, 1 inactivo, 1 borrado y 1 conflicto devuelve las cuentas', fu
     $run = Activity::where('event', 'provisioned')->sole();
 
     expect($created)->toHaveCount(3)
-        ->and($created->pluck('password')->unique())->toHaveCount(1)
+        ->and($created->every(fn (User $user): bool => $user->password === null))->toBeTrue()
         ->and($created->every(fn (User $user): bool => $user->must_change_password && $user->is_active))->toBeTrue()
         ->and(RoleAssignment::where('role', Role::Docente)->whereNull('campus_id')->whereIn('user_id', $created->pluck('id'))->count())->toBe(3)
         ->and(RoleAssignment::whereNotNull('campus_id')->exists())->toBeFalse()
@@ -112,17 +112,12 @@ it('no da usuario a un docente borrado', function () {
     expect(User::where('username', '1111111')->exists())->toBeFalse();
 });
 
-it('sin NEXUS_DEFAULT_PASSWORD lanza y no crea a nadie', function () {
+it('AC-02: sin NEXUS_DEFAULT_PASSWORD da de alta a los docentes igual, sin acceso', function () {
     config(['auth.default_password' => null]);
     teachersToProvision($this->department);
-    $users = User::count();
 
-    expect(fn () => app(ProvisionTeacherUsers::class)->handle())
-        ->toThrow(RuntimeException::class, 'NEXUS_DEFAULT_PASSWORD');
-
-    expect(User::count())->toBe($users)
-        ->and(Teacher::whereNotNull('user_id')->exists())->toBeFalse()
-        ->and(Activity::count())->toBe(0);
+    expect(app(ProvisionTeacherUsers::class)->handle())->toMatchArray(['created' => 3])
+        ->and(User::whereNull('password')->count())->toBe(3);
 });
 
 it('deja la corrida y los cambios de cada docente a nombre de quien la pidió', function () {

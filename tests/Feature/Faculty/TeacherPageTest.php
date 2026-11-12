@@ -278,6 +278,64 @@ describe('restablecer contraseña', function () {
     });
 });
 
+describe('acceso (AC-03 y AC-04)', function () {
+    it('AC-04: la sección Datos muestra el estado del acceso del usuario del docente', function (?string $password, bool $mustChange, string $label) {
+        $this->docente->forceFill(['password' => $password, 'must_change_password' => $mustChange])->save();
+
+        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+
+        expect(textOf($dom->querySelector('[data-testid="user-access"]')))->toBe($label);
+    })->with([
+        'sin contraseña' => [null, true, 'Sin acceso'],
+        'con la de defecto' => ['clave-por-defecto-1', true, 'Debe cambiar su contraseña'],
+        'con la suya' => ['otra-clave-123', false, 'Con acceso'],
+    ]);
+
+    it('AC-03: a un docente sin acceso el admin le ve «Dar acceso» y se lo da con la contraseña por defecto y cambio obligatorio', function () {
+        $this->docente->forceFill(['password' => null, 'must_change_password' => true])->save();
+
+        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        $item = $dom->querySelector('[data-testid="reset-password"]');
+
+        expect(textOf($item))->toBe('Dar acceso')
+            ->and($item->getAttribute('aria-disabled'))->toBeNull()
+            ->and($item->getAttribute('data-confirm-title'))->toBe('¿Dar acceso a 1000001?');
+
+        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+
+        expect($this->docente->fresh())->must_change_password->toBeTrue()
+            ->and(Hash::check(config('auth.default_password'), $this->docente->fresh()->password))->toBeTrue()
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Acceso dado');
+    });
+
+    it('AC-03: a un usuario inactivo sin contraseña no se le da acceso: deshabilitado con su motivo y un toast si se llama', function () {
+        $this->docente->forceFill(['password' => null, 'is_active' => false])->save();
+
+        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+
+        expect(textOf($dom->querySelector('[data-testid="reset-password"]')))->toBe('Dar acceso Su usuario está inactivo: reactiva al docente antes.');
+
+        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+
+        expect(lastToastOf($page))->type->toBe('error')->title->toBe('No se pudo dar acceso')
+            ->and($this->docente->fresh()->password)->toBeNull();
+    });
+
+    it('AC-03: el jefe ve «Dar acceso» deshabilitado con su motivo, recibe 403 al llamarlo y el docente sigue sin acceso', function () {
+        $this->docente->forceFill(['password' => null, 'must_change_password' => true])->save();
+
+        $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        $item = $dom->querySelector('[data-testid="reset-password"]');
+
+        expect(textOf($item))->toBe('Dar acceso Solo el administrador da acceso.')
+            ->and($item->getAttribute('aria-disabled'))->toBe('true');
+
+        teacherRecord($this->jefe, $this->ana)->call('resetPassword')->assertForbidden();
+
+        expect($this->docente->fresh()->password)->toBeNull();
+    });
+});
+
 describe('alcance', function () {
     it('el jefe de SC recibe 403 en la ficha de un docente de otro departamento, y el de CB en la de uno de SC e II', function () {
         $this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->beto->id))->assertForbidden();

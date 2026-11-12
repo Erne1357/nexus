@@ -108,7 +108,7 @@ describe('alta', function () {
             ]])
             ->and(Activity::query()->where('subject_type', (new TeacherDepartment)->getMorphClass())->sole()->description)
             ->toBe('Adscribió al docente 1234567 a SC (principal)')
-            ->and(Activity::query()->where('description', 'Dio de alta al usuario 1234567')->exists())->toBeTrue();
+            ->and(Activity::query()->where('description', 'Dio de alta al usuario 1234567, sin acceso')->exists())->toBeTrue();
         Event::assertDispatched(TeacherCreated::class, fn (TeacherCreated $event): bool => $event->teacher->is($teacher));
         Event::assertDispatched(AdscriptionChanged::class);
     });
@@ -153,13 +153,13 @@ describe('alta', function () {
             ->and(Teacher::count())->toBe(0);
     });
 
-    it('si no puede crear el usuario por falta de NEXUS_DEFAULT_PASSWORD, no da de alta nada', function () {
+    it('AC-02: sin NEXUS_DEFAULT_PASSWORD da de alta al docente y a su usuario, sin acceso', function () {
         config(['auth.default_password' => null]);
 
-        expect(fn () => newTeacher())->toThrow(RuntimeException::class, 'NEXUS_DEFAULT_PASSWORD')
-            ->and(Teacher::count())->toBe(0)
-            ->and(TeacherDepartment::count())->toBe(0)
-            ->and(User::count())->toBe(0);
+        $teacher = newTeacher();
+
+        expect($teacher->fresh()->user->password)->toBeNull()
+            ->and(TeacherDepartment::count())->toBe(1);
     });
 
     it('un evento que se revierte con la transacción no avisa', function () {

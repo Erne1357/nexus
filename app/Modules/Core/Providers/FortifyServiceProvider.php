@@ -91,10 +91,11 @@ final class FortifyServiceProvider extends ServiceProvider
     }
 
     /**
-     * Usuario activo cuyo username y contraseña coinciden, o null. Un usuario inactivo recibe
-     * el mismo mensaje genérico (`auth.failed`) que una credencial incorrecta. La contraseña se
-     * compara siempre, contra un hash señuelo si el username no existe, para que el tiempo de
-     * respuesta no delate si el usuario existe o está inactivo; el Timebox iguala el resto.
+     * Usuario activo cuyo username y contraseña coinciden, o null. Un usuario inactivo o sin
+     * contraseña (sin acceso, AC-01) recibe el mismo mensaje genérico (`auth.failed`) que una
+     * credencial incorrecta. La contraseña se compara siempre, contra un hash señuelo si el username
+     * no existe o no tiene contraseña, para que el tiempo de respuesta no delate si el usuario existe,
+     * está inactivo o no tiene acceso; el Timebox iguala el resto.
      */
     private function authenticate(Request $request): ?User
     {
@@ -108,7 +109,7 @@ final class FortifyServiceProvider extends ServiceProvider
                 $user?->password ?? $this->decoyPasswordHash(),
             );
 
-            if ($user === null || ! $user->is_active || ! $passwordMatches) {
+            if ($user === null || ! $user->is_active || $user->password === null || ! $passwordMatches) {
                 return null;
             }
 

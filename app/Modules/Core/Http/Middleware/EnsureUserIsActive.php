@@ -10,9 +10,9 @@ use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Si un usuario se desactiva con la sesión abierta, en su siguiente petición se cierra la sesión
- * y vuelve al login. El aviso no explica el motivo, igual que el login no distingue a un usuario
- * inactivo de una credencial incorrecta. A una petición JSON o de Livewire le responde 401 en
+ * Si un usuario se desactiva o se queda sin acceso (sin contraseña, AC-01) con la sesión abierta,
+ * en su siguiente petición se cierra la sesión y vuelve al login. El aviso no explica el motivo,
+ * igual que el login no distingue a un usuario inactivo o sin acceso de una credencial incorrecta. A una petición JSON o de Livewire le responde 401 en
  * lugar de redirigir. Va en el grupo `web` (bootstrap/app.php), antes de EnsurePasswordIsChanged.
  */
 final class EnsureUserIsActive
@@ -26,7 +26,7 @@ final class EnsureUserIsActive
     {
         $user = $request->user();
 
-        if ($user instanceof User && ! $user->is_active) {
+        if ($user instanceof User && (! $user->is_active || $user->password === null)) {
             Auth::guard(config('fortify.guard'))->logout();
 
             $request->session()->invalidate();

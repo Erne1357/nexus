@@ -10,19 +10,22 @@ use Illuminate\Support\Str;
 
 /**
  * Devuelve a un usuario a la contraseña por defecto y lo obliga a cambiarla. El hash nuevo cierra
- * las demás sesiones (AuthenticateSession) y se rota el remember token. Solo la usa el
- * administrador, que se pasa como `$actor`. La bitácora registra el reinicio, nunca la contraseña.
+ * las demás sesiones (AuthenticateSession) y se rota el remember token. A un usuario sin contraseña
+ * es **dar acceso** (AC-03): la habilitación manual, que la bitácora registra como `access-granted`
+ * en lugar de `password-reset`. Solo la usa el administrador, que se pasa como `$actor`. La bitácora
+ * nunca lleva la contraseña. Devuelve si fue dar acceso, decidido con el renglón bloqueado.
  */
 final class ResetUserPassword
 {
     public function __construct(private readonly DefaultPassword $defaultPassword) {}
 
-    public function handle(User $user, ?User $actor = null): void
+    public function handle(User $user, ?User $actor = null): bool
     {
         $password = $this->defaultPassword->value();
 
-        DB::transaction(function () use ($user, $actor, $password): void {
+        return DB::transaction(function () use ($user, $actor, $password): bool {
             $user = User::lockForUpdate()->findOrFail($user->getKey());
+            $granting = $user->password === null;
 
             $user->forceFill(['password' => $password, 'must_change_password' => true]);
             $user->setRememberToken(Str::random(60));
@@ -31,10 +34,14 @@ final class ResetUserPassword
             activity()
                 ->performedOn($user)
                 ->causedBy($actor)
-                ->event('password-reset')
-                ->log("Reinició la contraseña de {$user->username}");
+                ->event($granting ? 'access-granted' : 'password-reset')
+                ->log($granting
+                    ? "Dio acceso a {$user->username} con la contraseña por defecto"
+                    : "Reinició la contraseña de {$user->username}");
 
             UserPasswordReset::dispatch($user, $actor);
+
+            return $granting;
         });
     }
 }

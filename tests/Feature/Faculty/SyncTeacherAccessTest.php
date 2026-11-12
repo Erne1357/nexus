@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
@@ -18,12 +19,11 @@ use App\Modules\Faculty\Models\TeacherDepartment;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| SyncTeacherAccess (spec 4.1): todo docente activo tiene usuario (username = RFC, contraseña por
-| defecto y cambio obligatorio) con el rol `docente`. El docente no es de un campus (confirmado el 30 de octubre de
+| SyncTeacherAccess (spec 4.1): todo docente activo tiene usuario (username = RFC, sin acceso hasta que se le dé, AC-02,
+| y cambio obligatorio) con el rol `docente`. El docente no es de un campus (confirmado el 30 de octubre de
 | 2026); de ahí sale que su alcance sea uno solo, sin campus, tenga o no departamento, y que se cierren los
 | alcances de `docente` por campus que quedaron de antes. Reutiliza un usuario existente con su número sin tocar su contraseña, salvo que esté ligado
 | a otro docente (S15, supuesto por confirmar). La baja desactiva su usuario, salvo admin, y termina sus jefaturas
@@ -76,7 +76,7 @@ function teachingScopes(User $user): array
         ->all();
 }
 
-it('da usuario a un docente activo sin usuario: su número, la contraseña por defecto y cambio obligatorio', function () {
+it('AC-02: da usuario a un docente activo sin usuario: su número, sin acceso (sin contraseña) y cambio obligatorio', function () {
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create([
         'rfc' => '1234567',
         'name' => 'Ana Pérez',
@@ -95,7 +95,8 @@ it('da usuario a un docente activo sin usuario: su número, la contraseña por d
         ->email->toBe('ana@example.test')
         ->is_active->toBeTrue()
         ->must_change_password->toBeTrue()
-        ->and(Hash::check(app(DefaultPassword::class)->value(), $user->password))->toBeTrue()
+        ->password->toBeNull()
+        ->and(UserAccess::of($user))->toBe(UserAccess::None)
         ->and($user->roleAssignments()->current()->where('role', Role::Docente)->exists())->toBeTrue()
         ->and($scope)
         ->role->toBe(Role::Docente)
@@ -121,7 +122,7 @@ it('deja en la bitácora el alta del usuario, la liga con el docente y su acceso
     $everything = Activity::all()->toJson();
 
     expect(Activity::count())->toBe(3)
-        ->and($created->description)->toBe('Dio de alta al usuario 1234567')
+        ->and($created->description)->toBe('Dio de alta al usuario 1234567, sin acceso')
         ->and($linked->event)->toBe('updated')
         ->and($linked->description)->toBe('Ligó al docente 1234567 con el usuario 1234567')
         ->and($linked->attribute_changes->all())->toBe(['attributes' => ['user_id' => $user->id], 'old' => ['user_id' => null]])
@@ -130,8 +131,7 @@ it('deja en la bitácora el alta del usuario, la liga con el docente y su acceso
             'attributes' => ['docente_general' => true],
             'old' => ['docente_general' => false],
         ])
-        ->and($everything)->not->toContain(app(DefaultPassword::class)->value())
-        ->and($everything)->not->toContain($user->password);
+        ->and($everything)->not->toContain(app(DefaultPassword::class)->value());
 });
 
 it('no le da usuario a un docente inactivo', function () {
@@ -457,13 +457,12 @@ it('no le pone a la cuenta nueva un correo que ya usa otro usuario', function ()
         ->and($teacher->fresh()->email)->toBe('ana@example.test');
 });
 
-it('usa el hash de contraseña que se le da', function () {
-    $hash = Hash::make(app(DefaultPassword::class)->value());
+it('AC-02: crea el usuario sin acceso aunque falte NEXUS_DEFAULT_PASSWORD', function () {
+    config(['auth.default_password' => null]);
     $teacher = Teacher::factory()->create();
 
-    app(SyncTeacherAccess::class)->handle($teacher, $hash);
-
-    expect($teacher->fresh()->user->password)->toBe($hash);
+    expect(syncAccess($teacher))->toBe(AccessSync::Created)
+        ->and($teacher->fresh()->user->password)->toBeNull();
 });
 
 it('no liga un usuario inactivo con su número: conflict y sigue inactivo', function () {

@@ -5,7 +5,6 @@ namespace App\Modules\Faculty\Actions;
 use App\Modules\Faculty\Events\TeacherUpdated;
 use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -21,9 +20,6 @@ final class SetTeacherActive
 {
     public function __construct(private readonly SyncTeacherAccess $syncTeacherAccess) {}
 
-    /**
-     * @throws RuntimeException si al reactivarlo hay que crearle usuario y falta NEXUS_DEFAULT_PASSWORD
-     */
     public function handle(Teacher $teacher, bool $active): Teacher
     {
         return DB::transaction(function () use ($teacher, $active): Teacher {

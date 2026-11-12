@@ -8,7 +8,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Se dio de alta un usuario de personal con la contraseña por defecto (CreateStaffUser). Sale
+ * Se dio de alta un usuario de personal, con la contraseña por defecto o sin acceso (CreateStaffUser). Sale
  * después del commit.
  */
 final class StaffUserCreated implements ShouldDispatchAfterCommit

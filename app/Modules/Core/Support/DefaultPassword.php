@@ -9,7 +9,8 @@ use RuntimeException;
 /**
  * Contraseña por defecto del personal, leída de `auth.default_password` (NEXUS_DEFAULT_PASSWORD).
  * Solo vive en el `.env`: el repositorio es público. Sin valor configurado falla con un mensaje
- * claro, para que nunca se cree un usuario sin contraseña conocida por el administrador.
+ * claro, para que no se dé acceso a nadie con una contraseña que el administrador no conoce. Un
+ * usuario sin acceso (AC-01) no la necesita: nace sin contraseña.
  *
  * `hash()` calcula el hash una vez por instancia, para reutilizarlo en una corrida masiva.
  */

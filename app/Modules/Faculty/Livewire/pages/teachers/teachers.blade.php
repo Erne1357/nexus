@@ -43,7 +43,7 @@
                         <x-core::row-menu-item
                             label="Dar de alta usuarios"
                             wire:click="provisionUsers"
-                            x-confirm="Se revisa el acceso de todos los docentes: los activos sin usuario lo reciben con la contraseña por defecto y los dados de baja lo pierden. Corre en segundo plano."
+                            x-confirm="Se revisa el acceso de todos los docentes: los activos sin usuario lo reciben, todavía sin acceso, y los dados de baja lo pierden. Corre en segundo plano."
                             data-confirm-title="¿Dar de alta usuarios?"
                             data-confirm-button="Dar de alta"
                             data-confirm-tone="warning"
