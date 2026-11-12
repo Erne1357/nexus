@@ -176,7 +176,7 @@ final class SemesterBoardQuery
     }
 
     /**
-     * Lo que el actor puede con el grupo, con su puesto activo: los permisos y el objetivo de GroupPolicy (el campus, el
+     * Lo que el actor puede con el grupo, con su puesto activo: los permisos y el objetivo de GroupPolicy (la modalidad, el campus, el
      * departamento y la carrera dueña del grupo). Un grupo que no ve es contexto, y con la edición bloqueada no puede
      * nada.
      *
@@ -184,8 +184,9 @@ final class SemesterBoardQuery
      */
     private static function abilities(Actor $actor, Group $group, ?string $blockedReason): array
     {
-        $target = Target::of(campus: $group->campus_id, unit: $group->department_id, career: $group->owner_career_id);
-        $context = ! $actor->allows(SchedulingPermission::ScheduleView, $target);
+        $read = Target::of(modality: $group->modality_id, unit: $group->department_id, career: $group->owner_career_id);
+        $target = Target::of(modality: $group->modality_id, campus: $group->campus_id, unit: $group->department_id, career: $group->owner_career_id);
+        $context = ! $actor->allows(SchedulingPermission::ScheduleView, $read);
         $open = ! $context && $blockedReason === null;
 
         return [

@@ -9,8 +9,10 @@ use App\Modules\Core\Authorization\UnitApplicability;
 /**
  * Permisos del módulo Scheduling (docs/dominio/reglas-de-negocio.md, "Aprobaciones y permisos"): ver los horarios y
  * el tablero de choques, crear y cancelar grupos, editar sesiones, asignar salón y repartir cupos. La clave es
- * `scheduling.<recurso>.<accion>`. El objetivo es un grupo: su campus, su departamento (unidad) y su carrera dueña.
- * Asignar salón y repartir cupos son del departamento que imparte, así que no declaran carrera.
+ * `scheduling.<recurso>.<accion>`. El objetivo es un grupo: su modalidad, su campus, su departamento (unidad) y su
+ * carrera dueña. Ver se limita a la modalidad (MS6, AZ-S17: quien tiene un campus ve toda la modalidad); lo que crea,
+ * mueve, cancela o reparte algo de un campus declara además el campus. Asignar salón y repartir cupos son del
+ * departamento que imparte, así que no declaran carrera.
  */
 enum SchedulingPermission: string implements Permission
 {
@@ -34,8 +36,9 @@ enum SchedulingPermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::RoomAssign, self::QuotaManage => [Dimension::Campus, Dimension::Unit],
-            default => [Dimension::Campus, Dimension::Unit, Dimension::Career],
+            self::ScheduleView => [Dimension::Modality, Dimension::Unit, Dimension::Career],
+            self::GroupManage, self::SessionEdit => [Dimension::Modality, Dimension::Campus, Dimension::Unit, Dimension::Career],
+            self::RoomAssign, self::QuotaManage => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
         };
     }
 

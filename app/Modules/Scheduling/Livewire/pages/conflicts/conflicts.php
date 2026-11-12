@@ -19,7 +19,7 @@ use Mary\Traits\Toast;
  * Tablero de choques y avance (tarea 3.4): qué le falta a la carga del campus activo en el periodo activo para cerrar
  * (HC-15). La vista principal es por carrera, retícula y semestre, y la otra, la matriz por departamento con su
  * drawer (decidido por el usuario el 7 de noviembre de 2026). Lo ven quienes ven la carga y el coordinador de su
- * carrera en su campus (`scheduling.schedule.view`); ConflictBoardQuery filtra por ese alcance. Cada método público
+ * carrera, de toda la modalidad aunque el puesto tenga un campus (MS6; `scheduling.schedule.view`); ConflictBoardQuery filtra por ese alcance. Cada método público
  * vuelve a autorizar, porque la petición puede llegar con una pantalla que abrió otra sesión.
  *
  * Cada pendiente enlaza a la pantalla que lo corrige: el editor de horarios (`scheduling.editor`, tarea 3.5) y la

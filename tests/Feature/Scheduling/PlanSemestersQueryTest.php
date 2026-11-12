@@ -71,12 +71,12 @@ it('al admin y a la Subdirección les da las carreras activas que se ofrecen en 
     'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create()],
 ]);
 
-it('al coordinador, solo su carrera en su campus', function () {
+it('al coordinador, solo su carrera, también si su puesto es de otro campus de la modalidad (AZ-S17)', function () {
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
     $elsewhere = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->otherCampus->id, 'career_id' => $this->isc->id])->create();
 
     expect(plannerCareersFor($coordinator))->toBe(['ISC'])
-        ->and(plannerCareersFor($elsewhere))->toBe([]);
+        ->and(plannerCareersFor($elsewhere))->toBe(['ISC']);
 });
 
 it('al jefe, las carreras de su departamento; al de otro departamento, ninguna', function () {
