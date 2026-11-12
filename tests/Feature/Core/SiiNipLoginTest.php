@@ -8,6 +8,8 @@ use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Core\Support\SiiNip;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -72,6 +74,29 @@ it('AC-14: rehace con el costo normal el hash del NIP en el primer inicio correc
     expect(password_get_info($user->password)['options']['cost'])->toBe(5)
         ->and(Hash::check('0123', $user->password))->toBeTrue()
         ->and($user->password_origin)->toBe(PasswordOrigin::SiiNip);
+});
+
+it('AC-14: si el rehash falla, entra igual y lo reportado no lleva el hash', function () {
+    $user = studentWithNip('123');
+    $stored = $user->password;
+    config(['hashing.bcrypt.rounds' => 5]);
+    Hash::forgetDrivers();
+    DB::unprepared(<<<'SQL'
+        create function core_test_reject_rehash() returns trigger language plpgsql as $$ begin raise exception 'rechazado'; end $$;
+        create trigger core_test_reject_rehash before update of password on users for each row execute function core_test_reject_rehash();
+        SQL);
+    $reported = [];
+    app(ExceptionHandler::class)->reportable(function (Throwable $exception) use (&$reported): void {
+        $reported[] = (string) $exception;
+    });
+
+    $this->post('/login', ['username' => '21110001', 'password' => '123'])->assertRedirect('/');
+
+    $this->assertAuthenticatedAs($user);
+    expect($user->fresh()->password)->toBe($stored)
+        ->and($reported)->toHaveCount(1)
+        ->and($reported[0])->toContain('No se pudo rehacer el hash de una contraseña (SQLSTATE P0001).')
+        ->and($reported[0])->not->toContain('$2y$');
 });
 
 it('AC-14: guarda el NIP con costo 10, o con el configurado si es menor', function () {
