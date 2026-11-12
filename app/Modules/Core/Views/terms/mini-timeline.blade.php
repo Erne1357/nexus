@@ -1,7 +1,7 @@
 {{--
     El bloque «Calendario» de Inicio (maqueta B): una línea de tiempo corta con la etapa o etapas en curso y las dos
-    que siguen, solo de lectura, para el periodo y el campus activos. `$timeline` es un StageTimeline de solo esas
-    etapas, `$caption`, «Ene-Jun 2027 · Campus II», y `$termUrl`, el enlace a la ficha del periodo para quien puede verla
+    que siguen, solo de lectura, para el periodo activo. `$timeline` es un StageTimeline de solo esas
+    etapas, `$caption`, el periodo («Ene-Jun 2027»), y `$termUrl`, el enlace a la ficha del periodo para quien puede verla
     (null si no). Desde 512 px de ancho es la línea de tiempo con los nombres a
     la izquierda; debajo, cada renglón apila su nombre, sus fechas y una mini barra sobre las mismas semanas.
 --}}

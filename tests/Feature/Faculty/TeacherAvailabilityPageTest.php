@@ -93,7 +93,7 @@ describe('perfil (S12)', function () {
     it('usa el del campus activo', function () {
         $ead = Campus::factory()->create(['code' => 'EAD', 'name' => 'Educación a Distancia', 'settings' => ['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '14:00']]);
         Campus::factory()->create(['code' => 'C2']);
-        session([Actor::ACTIVE_CAMPUS => $ead->id]);
+        onCampusPage($ead);
 
         availabilityEditor($this->admin, $this->ana)
             ->assertSee('Horario de Educación a Distancia')
@@ -128,7 +128,7 @@ describe('guardar', function () {
     it('guarda con el perfil del campus activo', function () {
         $ead = Campus::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
         Campus::factory()->create();
-        session([Actor::ACTIVE_CAMPUS => $ead->id]);
+        onCampusPage($ead);
 
         availabilityEditor($this->admin, $this->ana)->call('save', [['day' => 6, 'starts_at' => '08:00', 'kind' => 'unavailable']]);
 

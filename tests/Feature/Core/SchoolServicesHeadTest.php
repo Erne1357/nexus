@@ -120,13 +120,13 @@ describe('AZ-02: credencial', function () {
     it('AZ-02: nombra su unidad: «Jefe del Departamento de Servicios Escolares»', function () {
         $credential = domOf($this->actingAs($this->servicesHead)->get('/'))->querySelector('[data-testid="credential"]');
 
-        expect(textOf($credential))->toBe('SE Sara Escolar Jefe del Departamento de Servicios Escolares · Campus II · Ene-Jun 2027');
+        expect(textOf($credential))->toBe('SE Sara Escolar Jefe del Departamento de Servicios Escolares · Ene-Jun 2027');
     });
 
     it('AZ-S16: el jefe de un departamento académico conserva su nombre de puesto', function () {
         $credential = domOf($this->actingAs($this->academicHead)->get('/'))->querySelector('[data-testid="credential"]');
 
-        expect(textOf($credential))->toBe('JP Juan Pérez Jefe de departamento académico · Campus II · Ene-Jun 2027');
+        expect(textOf($credential))->toBe('JP Juan Pérez Jefe de departamento académico · Ene-Jun 2027');
     });
 
     it('AZ-02: Inicio lo nombra igual y dice lo que hace', function () {

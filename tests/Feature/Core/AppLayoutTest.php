@@ -67,19 +67,19 @@ describe('banda', function () {
             ->and($page->querySelector('button[aria-label="Buscar"][aria-controls="nexus-menu"]'))->not->toBeNull();
     });
 
-    it('muestra en la credencial el nombre, las iniciales, el rol, el campus y el periodo activos', function () {
+    it('muestra en la credencial el nombre, las iniciales, el rol y el periodo activos, sin campus', function () {
         $coordinador = User::factory()
             ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
             ->create(['name' => 'Carla Cota Ruiz']);
 
         $credential = domOf($this->actingAs($coordinador)->get('/'))->querySelector('[data-testid="credential"]');
 
-        expect(textOf($credential))->toBe('CC Carla Cota Ruiz Coordinador de carrera · Campus II · Ene-Jun 2027')
+        expect(textOf($credential))->toBe('CC Carla Cota Ruiz Coordinador de carrera · Ene-Jun 2027')
             ->and($credential->getAttribute('aria-expanded'))->toBe('false')
             ->and($credential->getAttribute('aria-controls'))->toBe('nexus-credential');
     });
 
-    it('al admin sin campus elegido le muestra su rol y el periodo', function () {
+    it('al admin le muestra su rol y el periodo', function () {
         Campus::factory()->create(['code' => 'C1']);
 
         $credential = domOf($this->actingAs(User::factory()->admin()->create(['name' => 'Ana López']))->get('/'))
@@ -97,19 +97,17 @@ describe('banda', function () {
         RoleAssignment::where('user_id', $vencido->id)->update(['valid_to' => today()->subDay()]);
 
         expect(textOf(domOf($this->actingAs($jefe)->get('/'))->querySelector('[data-testid="credential"]')))
-            ->toBe('JP Juan Pérez Jefe de departamento académico · Campus II · Ene-Jun 2027')
+            ->toBe('JP Juan Pérez Jefe de departamento académico · Ene-Jun 2027')
             ->and(textOf(domOf($this->actingAs($vencido)->get('/'))->querySelector('[data-testid="credential"]')))
             ->toBe('EL Eva Luna Ene-Jun 2027');
     });
 
-    it('escapa el nombre del usuario y el del campus', function () {
-        $this->c2->update(['name' => '<script>alert(1)</script>']);
+    it('escapa el nombre del usuario', function () {
         $coordinador = User::factory()
             ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
             ->create(['name' => '<img src=x onerror=alert(2)>']);
 
         $this->actingAs($coordinador)->get('/')
-            ->assertDontSee('<script>alert(1)</script>', false)
             ->assertDontSee('<img src=x onerror=alert(2)>', false)
             ->assertSee('&lt;img src=x onerror=alert(2)&gt;', false);
     });
@@ -126,7 +124,7 @@ describe('tarjeta de la credencial', function () {
             ->and(textOf($card->querySelector('[data-testid="credential-header"]')))->toBe('AL Ana López Administración · alopez');
     });
 
-    it('trae el selector de campus y periodo, el tema, el cambio de contraseña y el cierre de sesión', function () {
+    it('trae el selector de periodo (sin campus), el tema, el cambio de contraseña y el cierre de sesión', function () {
         Campus::factory()->create(['code' => 'C1']);
 
         $response = $this->actingAs(User::factory()->admin()->create())->get('/')
@@ -134,7 +132,7 @@ describe('tarjeta de la credencial', function () {
         $card = domOf($response)->getElementById('nexus-credential');
         $logout = $card->querySelector('form[action="'.route('logout').'"]');
 
-        expect($card->querySelector('select[name="campus"]'))->not->toBeNull()
+        expect($card->querySelector('select[name="campus"]'))->toBeNull()
             ->and($card->querySelector('select[name="term"]'))->not->toBeNull()
             ->and($card->querySelector('[data-testid="theme-toggle"]'))->not->toBeNull()
             ->and(textOf($card->querySelector('a[href="'.route('user-password.edit').'"]')))->toBe('Cambiar contraseña')
