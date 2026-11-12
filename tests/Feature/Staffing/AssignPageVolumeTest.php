@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use Livewire\Features\SupportTesting\Testable;
@@ -47,7 +46,7 @@ beforeEach(function () {
  */
 function volumeAssignPage(User $user, array $query = []): Testable
 {
-    test()->withSession([Actor::ACTIVE_CAMPUS => test()->world->campus->id]);
+    onCampusPage(test()->world->campus);
 
     return Livewire::withQueryParams($query)->actingAs($user)->test('staffing::pages.assign');
 }

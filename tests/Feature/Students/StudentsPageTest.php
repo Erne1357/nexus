@@ -3,7 +3,6 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -46,7 +45,7 @@ function listsStudents(array $controlNumbers): Closure
 function studentsPageAs(User $user, ?Campus $campus = null): Testable
 {
     if ($campus !== null) {
-        session([Actor::ACTIVE_CAMPUS => $campus->id]);
+        onCampusPage($campus);
     }
 
     return Livewire::actingAs($user)->test('students::pages.students');

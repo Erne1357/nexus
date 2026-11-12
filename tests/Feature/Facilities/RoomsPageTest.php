@@ -41,7 +41,7 @@ beforeEach(function () {
 
     $this->admin = User::factory()->admin()->create();
     $this->sub = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])->create();
-    session([Actor::ACTIVE_CAMPUS => $this->c2->id]);
+    onCampusPage($this->c2);
 });
 
 /**
@@ -83,7 +83,7 @@ describe('admin', function () {
     });
 
     it('sin campus activo pide elegirlo y no lista nada', function () {
-        session()->forget(Actor::ACTIVE_CAMPUS);
+        onCampusPage(null);
 
         $this->actingAs($this->admin)->get(route('facilities.rooms'))
             ->assertOk()->assertSee('Elige un campus en tu credencial')->assertDontSee('A-101')->assertDontSee('Nuevo salón');
@@ -253,7 +253,7 @@ describe('bloqueos del salón en el panel', function () {
     it('la subdirección de C1 no abre, agrega ni quita bloqueos de un salón de C2', function () {
         vacate(Role::Subdireccion);
         $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id, 'valid_from' => today()->toDateString()])->create();
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
+        onCampusPage($this->c1);
 
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id)->assertForbidden();
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('removeBlock', $this->monday->id)->assertForbidden();
@@ -334,7 +334,7 @@ describe('subdirección', function () {
     it('de C1 no puede editar ni desactivar un salón de C2 llamando directo', function () {
         vacate(Role::Subdireccion);
         $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id, 'valid_from' => today()->toDateString()])->create();
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
+        onCampusPage($this->c1);
 
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('edit', $this->a101->id)->assertForbidden();
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('toggleActive', $this->a101->id)->assertForbidden();
@@ -347,7 +347,7 @@ describe('subdirección', function () {
             ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(1)])->create();
 
         actingAsRole($multi, Role::Coordinador);
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
+        onCampusPage($this->c1);
 
         Livewire::test('facilities::pages.rooms')->assertForbidden();
 
