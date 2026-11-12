@@ -44,7 +44,7 @@ beforeEach(function () {
     $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica-Electrónica']);
     TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
-    app(CreateTermReviews::class)->handle($this->term, $this->campus->catalogModality);
+    app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
 
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
     $this->subject = Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Programación Orientada a Objetos', 'department_id' => $this->sis->id, 'theory_hours' => 3, 'practice_hours' => 0, 'credits' => 5]);

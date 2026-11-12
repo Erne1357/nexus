@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Enums\Role;
@@ -24,7 +25,7 @@ it('es un job en cola que avisa solo a los departamentos dados y deja bitácora 
     $campus = Campus::factory()->create(['code' => 'C2']);
     $sis = Department::factory()->create();
     $ele = Department::factory()->create();
-    app(CreateTermReviews::class)->handle($term, $campus->catalogModality);
+    app(CreateTermReviews::class)->handle($term, Catalog::cases());
     $jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create();
     $jefeEle = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $ele->id])->create();
     $actor = User::factory()->withRole(Role::Subdireccion, [])->create();

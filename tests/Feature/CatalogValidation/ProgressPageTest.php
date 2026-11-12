@@ -45,7 +45,7 @@ beforeEach(function () {
 
     // El periodo abierto en Presencial: C1 y C2 (M4).
     TermOpening::factory()->create(['term_id' => $this->term->id]);
-    app(CreateTermReviews::class)->handle($this->term, modalityOf('PRES'));
+    app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
     app(CreateTermLoads::class)->handle($this->term, modalityOf('PRES'));
 
     $this->jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Dra. Ana Soto']);
@@ -232,10 +232,10 @@ describe('conteos', function () {
 });
 
 describe('filtros', function () {
-    it('filtra por campus: un campus sin salones no cuenta la de salones', function () {
+    it('el filtro de campus no cambia los catálogos: son los que el admin abrió en el periodo (CV9)', function () {
         $this->c1->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
 
-        progressPage()->set('campus', $this->c1->id)->assertSee('0 de 8')->assertDontSee('0 de 10');
+        progressPage()->set('campus', $this->c1->id)->assertSee('0 de 10');
     });
 
     it('filtra por estado y por búsqueda de departamento o jefe', function () {
@@ -391,5 +391,68 @@ describe('drawer', function () {
         $this->actingAs($this->jefeSis);
         $page->call('resolveFlag', $flag->id)->assertForbidden();
         expect($flag->fresh()->resolved_at)->toBeNull();
+    });
+});
+
+describe('abrir la validación (CV9)', function () {
+    it('con la validación sin abrir, el admin ve el estado vacío con «Abrir validación» y Subdirección el motivo sin el botón', function () {
+        CatalogReview::query()->delete();
+
+        progressPage($this->admin)->assertSee('La validación de este periodo no está abierta')->assertSeeHtml('data-testid="open-validation-empty"');
+        progressPage($this->subdireccion)->assertSee('La validación de este periodo no está abierta')
+            ->assertSee('Solo el administrador abre la validación')
+            ->assertDontSeeHtml('data-testid="open-validation-empty"')
+            ->assertDontSeeHtml('data-testid="open-drawer"');
+    });
+
+    it('el drawer lista cada catálogo, con los abiertos ya marcados, y abrir agrega su columna', function () {
+        CatalogReview::query()->whereNotIn('catalog', [Catalog::Teachers->value])->delete();
+
+        progressPage($this->admin)
+            ->assertSeeHtml('data-testid="open-validation"')
+            ->assertSeeHtml('data-testid="column-teachers"')
+            ->assertDontSeeHtml('data-testid="column-subjects"')
+            ->assertSeeHtml('data-testid="open-option-subjects"')
+            ->assertSee('Ya está abierto.')
+            ->set('toOpen', [Catalog::Subjects->value])
+            ->call('openValidation')
+            ->assertHasNoErrors()
+            ->assertSeeHtml('data-testid="column-subjects"')
+            ->assertDontSeeHtml('data-testid="column-careers"');
+
+        expect(CatalogReview::query()->where('catalog', Catalog::Subjects->value)->count())->toBe(2);
+    });
+
+    it('el aviso de «nada abierto» dice la razón: ya abiertos, salones sin campus que los use', function () {
+        $page = progressPage($this->admin)->set('toOpen', [Catalog::Teachers->value])->call('openValidation');
+        expect(lastToastOf($page)['description'])->toBe('Esos catálogos ya estaban abiertos.');
+
+        CatalogReview::query()->where('catalog', Catalog::Rooms->value)->delete();
+        $this->c1->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+        $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+
+        $page = progressPage($this->admin)->set('toOpen', [Catalog::Rooms->value])->call('openValidation');
+        expect(lastToastOf($page)['description'])->toBe('Ningún campus abierto en este periodo usa salones.');
+    });
+
+    it('sin marcar ningún catálogo no abre nada y lo dice', function () {
+        CatalogReview::query()->delete();
+
+        progressPage($this->admin)->call('openValidation')->assertHasErrors('toOpen');
+
+        expect(CatalogReview::count())->toBe(0);
+    });
+
+    it('Subdirección y los demás reciben 403 al abrir', function () {
+        $page = progressPage($this->admin);
+        $this->actingAs($this->subdireccion);
+        $page->call('startOpening')->assertForbidden();
+        $page = progressPage($this->admin);
+        $this->actingAs($this->subdireccion);
+        $page->call('openValidation')->assertForbidden();
+    });
+
+    it('con todo abierto no ofrece el botón del encabezado', function () {
+        progressPage($this->admin)->assertDontSeeHtml('data-testid="open-validation"');
     });
 });

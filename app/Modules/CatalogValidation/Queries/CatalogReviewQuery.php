@@ -12,6 +12,7 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use Illuminate\Support\Collection;
 
 /**
@@ -32,6 +33,9 @@ final class CatalogReviewQuery
      * impide que otra sesión des-valide un catálogo entre la lectura y el cambio de estado. Fuera de una
      * transacción no tiene efecto.
      *
+     * Solo cuentan los catálogos que el admin abrió en el periodo, es decir, que tienen revisiones en él (CV9, HC-14,
+     * confirmado el 12 de noviembre de 2026): uno que no se abrió no se exige, y sin ninguno abierto no falta nada.
+     *
      * @return list<Catalog>
      */
     public function pendingFor(Term|string $term, Campus $campus, Department|string $department, bool $lock = false): array
@@ -50,7 +54,60 @@ final class CatalogReviewQuery
             ->pluck('catalog')
             ->all();
 
-        return array_values(array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true)));
+        $opened = array_map(fn (Catalog $catalog): string => $catalog->value, $this->openedCatalogs($termId));
+
+        return array_values(array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true)
+            && in_array($catalog->value, $opened, true)));
+    }
+
+    /**
+     * Los catálogos con revisiones abiertas en el periodo (CV9), en el orden del enum Catalog. Sin ninguno, la validación
+     * del periodo no está abierta.
+     *
+     * @return list<Catalog>
+     */
+    public function openedCatalogs(Term|string $term): array
+    {
+        $opened = CatalogReview::query()
+            ->where('term_id', $term instanceof Term ? $term->getKey() : $term)
+            ->distinct()
+            ->pluck('catalog')
+            ->all();
+
+        return array_values(array_filter(Catalog::cases(), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)));
+    }
+
+    /**
+     * Si la revisión de salones aplica al periodo: algún campus activo donde está abierto usa salones (CV9, decisión 6). El
+     * periodo está abierto en un campus si lo está en su modalidad (M4; puente `campuses.modality_id`).
+     */
+    public function roomsApply(Term|string $term): bool
+    {
+        return Campus::query()
+            ->where('is_active', true)
+            ->whereIn('modality_id', TermOpening::query()->where('term_id', $term instanceof Term ? $term->getKey() : $term)->select('modality_id'))
+            ->get()
+            ->contains(fn (Campus $campus): bool => $campus->profile->usesRooms);
+    }
+
+    /**
+     * Los catálogos del periodo para el drawer «Abrir validación»: cada uno con si ya está abierto y, si no se puede
+     * abrir, el motivo (los salones sin un campus abierto que use salones).
+     *
+     * @return list<array{catalog: Catalog, open: bool, blocked: ?string}>
+     */
+    public function openingOptions(Term $term): array
+    {
+        $opened = $this->openedCatalogs($term);
+        $roomsApply = $this->roomsApply($term);
+
+        return array_map(fn (Catalog $catalog): array => [
+            'catalog' => $catalog,
+            'open' => in_array($catalog, $opened, true),
+            'blocked' => $catalog === Catalog::Rooms && ! $roomsApply && ! in_array($catalog, $opened, true)
+                ? 'Ningún campus abierto en este periodo usa salones.'
+                : null,
+        ], Catalog::cases());
     }
 
     /**

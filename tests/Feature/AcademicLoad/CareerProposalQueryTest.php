@@ -143,6 +143,7 @@ it('en un campus que usa salones también avisa de los salones sin validar', fun
     $this->campus->update(['settings' => CampusProfile::DEFAULTS]);
     overviewRow($this->cb, 'ACF-0901', 1, 1);
     validateOverviewCatalogs($this->cb);
+    CatalogReview::factory()->rooms()->create(['term_id' => $this->proposal->term_id, 'department_id' => $this->cb->id]);
 
     expect(proposalOverview($this->proposal->fresh())->pendingCatalogs[0]['catalogs'])->toBe([Catalog::Rooms]);
 });

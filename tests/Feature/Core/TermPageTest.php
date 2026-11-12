@@ -244,7 +244,7 @@ describe('sección «Modalidades»', function () {
             ->assertDontSee('Abrir en Modalidad A');
     });
 
-    it('M4: abre el periodo en Presencial, crea cargas y revisiones y lo dice en un toast', function (string $who) {
+    it('M4: abre el periodo en Presencial, crea sus cargas y lo dice en un toast', function (string $who) {
         Department::factory()->create(['code' => 'D1']);
         Department::factory()->create(['code' => 'D2']);
 
@@ -258,10 +258,10 @@ describe('sección «Modalidades»', function () {
         $toast = lastToastOf($page);
 
         expect($toast['title'])->toBe('Periodo abierto en Presencial')
-            ->and($toast['description'])->toBe('10 revisiones de catálogo nuevas, 2 cargas académicas nuevas')
+            ->and($toast['description'])->toBe('2 cargas académicas nuevas')
             ->and(TermOpening::where('term_id', $this->term->id)->pluck('modality_id')->all())->toBe([$this->m2->id])
             ->and(AcademicLoad::count())->toBe(2)
-            ->and(CatalogReview::count())->toBe(10);
+            ->and(CatalogReview::count())->toBe(0);
     })->with(['admin', 'subdireccion']);
 
     it('«Completar apertura» crea lo que falte y la segunda vez dice que no faltaba nada', function () {

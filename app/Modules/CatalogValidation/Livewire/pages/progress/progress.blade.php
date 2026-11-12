@@ -17,13 +17,29 @@
                 Qué departamentos ya validaron sus catálogos y cuáles faltan.
             @endif
         </x-slot:subtitle>
+        @if ($canOpen && $term && $open->isNotEmpty() && collect($options)->contains(fn ($option) => ! $option['open']))
+            <x-slot:actions>
+                <x-button icon="o-lock-open" class="btn-primary" wire:click="startOpening" data-testid="open-validation">Abrir validación</x-button>
+            </x-slot:actions>
+        @endif
     </x-header>
 
     @if ($term === null || $board === null)
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="progress-empty">
             <x-icon name="o-clipboard-document-check" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
             <p class="font-semibold">{{ $term === null ? 'No hay un periodo activo.' : "{$term->name} no está abierto en ningún campus." }}</p>
-            <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">Las revisiones nacen al abrir el periodo en un campus (Periodos); mientras no haya una, no hay nada que seguir.</p>
+            <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">La validación se abre desde aquí cuando el periodo está abierto en un campus (Periodos); mientras no, no hay nada que seguir.</p>
+        </div>
+    @elseif ($board['columns'] === [])
+        <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="validation-not-open">
+            <x-icon name="o-lock-closed" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
+            <p class="font-semibold">La validación de este periodo no está abierta</p>
+            @if ($canOpen)
+                <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">Elige qué catálogos validan los jefes de departamento en {{ $term->name }}: ninguno, algunos o todos. Puedes abrir otros después.</p>
+                <x-button icon="o-lock-open" class="btn-primary mt-4" wire:click="startOpening" data-testid="open-validation-empty">Abrir validación</x-button>
+            @else
+                <p class="mx-auto mt-1 max-w-prose text-sm text-neutral" data-testid="not-open-reason">Solo el administrador abre la validación de un periodo y decide qué catálogos se validan. Cuando la abra, aquí verás el avance.</p>
+            @endif
         </div>
     @else
         @php($pendingHeads = $board['remindable']['heads'])
@@ -171,6 +187,41 @@
                 </div>
             @endif
         </div>
+    @endif
+
+    @if ($canOpen)
+        <x-drawer wire:model="showOpen" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="open-drawer-title" data-testid="open-drawer">
+            <form wire:submit="openValidation" class="flex min-h-dvh flex-col">
+                <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+                    <div class="min-w-0 flex-1">
+                        <h2 id="open-drawer-title" class="text-xl font-bold leading-tight">Abrir validación</h2>
+                        <p class="mt-1 text-sm text-neutral">{{ $term?->name }}</p>
+                    </div>
+                    <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar el panel" />
+                </header>
+                <fieldset class="flex-1 space-y-1 px-5 pt-4 pb-8">
+                    <legend class="mb-2 text-sm text-neutral">Los jefes de cada departamento revisan y validan los catálogos que abras. Un catálogo abierto no se quita del periodo.</legend>
+                    @foreach ($options as $option)
+                        <div class="rounded-box border border-base-300 px-3 py-2.5" data-testid="open-option-{{ $option['catalog']->value }}">
+                            @if ($option['open'])
+                                <x-checkbox :label="$option['catalog']->label()" checked disabled />
+                                <p class="ms-8 text-sm text-neutral">Ya está abierto.</p>
+                            @else
+                                <x-checkbox :label="$option['catalog']->label()" value="{{ $option['catalog']->value }}" wire:model="toOpen" :disabled="$option['blocked'] !== null" omit-error />
+                                @if ($option['blocked'])
+                                    <p class="ms-8 text-sm text-neutral">{{ $option['blocked'] }}</p>
+                                @endif
+                            @endif
+                        </div>
+                    @endforeach
+                    @error('toOpen')<p class="pt-1 text-sm text-error" role="alert">{{ $message }}</p>@enderror
+                </fieldset>
+                <footer class="flex justify-end gap-2 border-t border-base-300 px-5 py-3">
+                    <x-button label="Cancelar" class="btn-ghost" @click="close()" />
+                    <x-button label="Abrir" icon="o-lock-open" class="btn-primary" type="submit" spinner="openValidation" data-testid="open-submit" />
+                </footer>
+            </form>
+        </x-drawer>
     @endif
 
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="progress-drawer-title" data-testid="progress-drawer">

@@ -35,7 +35,7 @@ it('M4: abre los periodos pedidos en las modalidades pedidas, a nombre de admin'
         ->and(TermOpening::query()->pluck('opened_by')->unique()->all())->toBe([$admin->getKey()])
         ->and(TermOpening::query()->pluck('modality_id')->unique()->all())->toBe([modalityOf('PRES')->getKey()])
         ->and(AcademicLoad::count())->toBeGreaterThan(0)
-        ->and(CatalogReview::count())->toBeGreaterThan(0)
+        ->and(CatalogReview::count())->toBe(0)
         ->and(Auth::guard()->check())->toBeFalse();
 });
 

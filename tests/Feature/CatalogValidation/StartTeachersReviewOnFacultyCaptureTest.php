@@ -38,7 +38,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create();
     $this->sis = Department::factory()->create();
     $this->ele = Department::factory()->create();
-    app(CreateTermReviews::class)->handle($this->term, $this->campus->catalogModality);
+    app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
 
     $this->teacher = Teacher::factory()->create();
     TeacherDepartment::factory()->for($this->teacher)->for($this->sis)->create();
@@ -135,7 +135,7 @@ it('sin sesión y sin actor no hace nada', function () {
 
 it('con otro periodo activo en la sesión, inicia la revisión de ese periodo y no la del actual', function () {
     $active = Term::factory()->create();
-    app(CreateTermReviews::class)->handle($active, $this->campus->catalogModality);
+    app(CreateTermReviews::class)->handle($active, Catalog::cases());
     $this->withSession([Actor::ACTIVE_TERM => $active->id]);
 
     captureQualification($this->jefe);
@@ -147,7 +147,7 @@ it('con otro periodo activo en la sesión, inicia la revisión de ese periodo y 
 
 it('la disponibilidad y las horas fuera traen su periodo y ese usa', function () {
     $other = Term::factory()->create();
-    app(CreateTermReviews::class)->handle($other, $this->campus->catalogModality);
+    app(CreateTermReviews::class)->handle($other, Catalog::cases());
     $this->actingAs($this->jefe);
 
     AvailabilityChanged::dispatch($this->teacher, $other, $this->jefe);

@@ -13,6 +13,8 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Notifications\ProposalReturned;
 use App\Modules\AcademicLoad\Notifications\ProposalSubmitted;
+use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\OpenTerm;
@@ -62,6 +64,7 @@ beforeEach(function () {
     $this->c2 = Campus::query()->where('code', 'C2')->firstOrFail();
     $this->actingAs(User::query()->where('username', 'admin')->firstOrFail());
     app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
+    app(OpenCatalogValidation::class)->handle($this->term, Catalog::cases(), User::query()->where('username', 'admin')->firstOrFail());
 
     CatalogReview::query()
         ->where('term_id', $this->term->id)

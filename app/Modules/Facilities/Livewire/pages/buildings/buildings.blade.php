@@ -3,22 +3,18 @@
     barra de herramientas común (x-core::catalog-toolbar); tabla en una superficie blanca con filete, la clave
     en Mono, el estado con su insignia y «Editar» visible con lo demás en el menú «Acciones»; al pie, el rango
     y la paginación. Debajo de 768 px, renglones apilados (clave, nombre y estado; luego el detalle; luego las
-    acciones), que no repiten los data-testid de la tabla. Sin campus activo, en lugar de la tabla se pide
-    elegir uno en la credencial.
+    acciones), que no repiten los data-testid de la tabla. Muestra los edificios de todos los campus del usuario: con
+    más de un campus, una columna «Campus» y el filtro de campus con «Todos» (x-core::campus-filter); el alta
+    pide el campus en el formulario.
 --}}
 <div>
     <x-header title="Edificios" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            Los edificios del campus activo, donde están sus salones. Un edificio no se borra: se desactiva.
+            Los edificios de tus campus, donde están sus salones. Un edificio no se borra: se desactiva.
         </x-slot:subtitle>
     </x-header>
 
-    @if ($campus === null)
-        <div class="rounded-box border border-base-300 bg-base-100 px-6 py-10 text-center text-neutral" data-testid="buildings-no-campus">
-            <x-icon name="o-building-office-2" class="mx-auto mb-2 w-8 h-8" />
-            <p>Elige un campus en tu credencial para ver sus edificios.</p>
-        </div>
-    @else
+    <div>
         <x-core::catalog-toolbar>
             <x-slot:search>
                 <x-input
@@ -30,13 +26,14 @@
                 />
             </x-slot:search>
 
+            <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all compact />
             <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activos e inactivos" />
 
             <x-slot:action>
                 @if ($canCreate)
                     <x-button label="Nuevo edificio" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
                 @else
-                    <x-button label="Nuevo edificio" icon="o-plus" class="btn-primary" disabled title="Tu rol no administra este campus." />
+                    <x-button label="Nuevo edificio" icon="o-plus" class="btn-primary" disabled title="Tu rol no administra edificios." />
                 @endif
             </x-slot:action>
         </x-core::catalog-toolbar>
@@ -50,6 +47,10 @@
             >
                 @scope('cell_code', $building)
                     <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $building->is_active])>{{ $building->code }}</span>
+                @endscope
+
+                @scope('cell_campus', $building)
+                    <span class="font-mono" title="{{ $building->campus->name }}" data-testid="building-campus">{{ $building->campus->code }}</span>
                 @endscope
 
                 @scope('cell_rooms_count', $building)
@@ -79,7 +80,7 @@
                             <x-core::status-badge :tone="$building->is_active ? 'success' : 'neutral'" :label="$building->is_active ? 'Activo' : 'Inactivo'" />
                         </div>
 
-                        <div class="text-neutral">{{ trans_choice('{0} Sin salones|{1} 1 salón|[2,*] :count salones', $building->rooms_count) }}</div>
+                        <div class="text-neutral">@if ($campusOptions->count() > 1)<span class="font-mono">{{ $building->campus->code }}</span> · @endif{{ trans_choice('{0} Sin salones|{1} 1 salón|[2,*] :count salones', $building->rooms_count) }}</div>
 
                         @include('facilities::buildings.row-actions', ['building' => $building, 'inTable' => false])
                     </li>
@@ -89,7 +90,7 @@
             @if ($buildings->isNotEmpty() || $buildings->hasPages())
                 <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
                     @if ($buildings->isNotEmpty())
-                        <p>Edificios <span class="font-mono">{{ $buildings->first()->code }}</span>@if ($buildings->count() > 1) a <span class="font-mono">{{ $buildings->last()->code }}</span> · <span class="font-mono">{{ $buildings->firstItem() }}–{{ $buildings->lastItem() }}</span>@else · <span class="font-mono">{{ $buildings->firstItem() }}</span>@endif de <span class="font-mono">{{ $buildings->total() }}</span> en <span class="font-mono">{{ $campus->code }}</span></p>
+                        <p>Edificios <span class="font-mono">{{ $buildings->first()->code }}</span>@if ($buildings->count() > 1) a <span class="font-mono">{{ $buildings->last()->code }}</span> · <span class="font-mono">{{ $buildings->firstItem() }}–{{ $buildings->lastItem() }}</span>@else · <span class="font-mono">{{ $buildings->firstItem() }}</span>@endif de <span class="font-mono">{{ $buildings->total() }}</span>@if ($shownCampus !== null) en <span class="font-mono">{{ $shownCampus->code }}</span>@endif</p>
                     @endif
 
                     {{ $buildings->onEachSide(1)->links(data: ['scrollTo' => false]) }}
@@ -100,6 +101,11 @@
         <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo edificio' : 'Editar edificio'" box-class="max-w-lg" separator>
             <x-form wire:submit="save" no-separator>
                 <div class="grid gap-4 md:grid-cols-6">
+                    @if ($editingId === null)
+                        <div class="md:col-span-6">
+                            <x-select label="Campus" name="campus_id" wire:model="campus_id" :options="$creatableCampuses" placeholder="Elige el campus" />
+                        </div>
+                    @endif
                     <div class="md:col-span-2">
                         <x-input label="Clave" name="code" wire:model="code" placeholder="A" />
                     </div>
@@ -114,5 +120,5 @@
                 </x-slot:actions>
             </x-form>
         </x-modal>
-    @endif
+    </div>
 </div>

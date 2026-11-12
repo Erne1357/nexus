@@ -23,9 +23,9 @@ use Spatie\Activitylog\Models\Activity;
 /**
  * Lo que lee el tablero de avance de validación (tarea 2.5): la matriz de departamentos por catálogo de un periodo.
  *
- * El total de un departamento sigue la regla de HC-14, como CatalogReviewQuery::pendingFor: las cuatro revisiones que
- * no son salones y la de salones, una para todos los campus (decisión 6, confirmada el 12 de noviembre de 2026), si
- * algún campus del alcance usa salones. Una revisión que falta cuenta como pendiente. Todo sale de pocas consultas
+ * El total de un departamento son los catálogos que el admin abrió en el periodo (CV9; la de salones es una para
+ * todos los campus, decisión 6, confirmada el 12 de noviembre de 2026). Una revisión que falta de un catálogo abierto, por
+ * ejemplo la de un departamento nuevo, cuenta como pendiente. Todo sale de pocas consultas
  * para todos los departamentos, sin una por fila.
  */
 final class ValidationProgressQuery
@@ -33,6 +33,7 @@ final class ValidationProgressQuery
     public function __construct(
         private readonly RecipientsQuery $recipients,
         private readonly CatalogContentsQuery $contents,
+        private readonly CatalogReviewQuery $catalogReviews,
     ) {}
 
     /**
@@ -53,7 +54,7 @@ final class ValidationProgressQuery
     /**
      * La matriz del periodo para los campus dados (los abiertos, o el que filtra la pantalla).
      *
-     * `columns`: Docentes, Materias, Planes y Carreras, y al final Salones si algún campus del alcance usa salones. `rows`: cada
+     * `columns`: los catálogos abiertos en el periodo, con Salones al final (ninguno si no se abrió la validación). `rows`: cada
      * departamento activo, con sus revisiones por columna (nula si falta), cuántas lleva validadas del total, sus
      * pendientes y en revisión, cuántos registros lleva revisados de cuántos en cada una (`reviewed`, nulo si falta; CV7),
      * las observaciones abiertas, el jefe vigente, el estado de su carga por campus
@@ -77,7 +78,7 @@ final class ValidationProgressQuery
      */
     public function board(Term $term, Collection $campuses, string $search = '', string $status = '', ?string $departmentId = null): array
     {
-        $catalogs = Catalog::requiredFor($campuses->contains(fn (Campus $campus): bool => $campus->profile->usesRooms));
+        $catalogs = $this->catalogReviews->openedCatalogs($term);
         $ordered = [...array_filter($catalogs, fn (Catalog $catalog): bool => $catalog !== Catalog::Rooms), ...array_filter($catalogs, fn (Catalog $catalog): bool => $catalog === Catalog::Rooms)];
         $columns = array_map(fn (Catalog $catalog): array => ['key' => $catalog->value, 'catalog' => $catalog], $ordered);
 
@@ -185,7 +186,7 @@ final class ValidationProgressQuery
     /**
      * Las observaciones abiertas de un departamento en el periodo, de las más recientes a las más antiguas, con el
      * registro observado (aunque se haya borrado), quién la puso y su revisión. Las revisiones no son de un campus
-     * (decisión 6): `$campuses` solo decide si entran las de salones (si alguno usa salones).
+     * (decisión 6): entran las de los catálogos abiertos.
      *
      * @param  Collection<int, Campus>  $campuses
      * @return Collection<int, CatalogReviewFlag>
@@ -197,7 +198,7 @@ final class ValidationProgressQuery
             ->whereHas('review', fn ($query) => $query
                 ->where('term_id', $term->getKey())
                 ->where('department_id', $department->getKey())
-                ->whereIn('catalog', Catalog::requiredFor($campuses->contains(fn (Campus $campus): bool => $campus->profile->usesRooms))))
+                ->whereIn('catalog', $this->catalogReviews->openedCatalogs($term)))
             ->with(['review.campus', 'review.department', 'flaggable', 'flagger'])
             ->orderByDesc('created_at')
             ->get();

@@ -12,6 +12,8 @@ use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -233,6 +235,10 @@ describe('coordinador', function () {
     });
 
     it('avisa de los catálogos sin validar de un departamento pero deja enviar', function () {
+        foreach (Department::all() as $department) {
+            CatalogReview::factory()->general(Catalog::Teachers)->create(['term_id' => $this->proposal->term_id, 'department_id' => $department->id]);
+        }
+
         proposalPageAs($this->coordinator)
             ->call('confirmSubmit')
             ->assertSee('Ciencias Básicas aún no valida')
@@ -433,6 +439,12 @@ describe('solo lectura, propuesta fija y rechazos', function () {
     });
 
     it('calcula los catálogos pendientes solo al abrir la confirmación de envío', function () {
+        foreach (Department::all() as $department) {
+            foreach (Catalog::cases() as $catalog) {
+                CatalogReview::factory()->create(['catalog' => $catalog, 'term_id' => $this->proposal->term_id, 'department_id' => $department->id]);
+            }
+        }
+
         proposalPageAs($this->coordinator)
             ->assertViewHas('overview', fn ($overview): bool => $overview->pendingCatalogs === [])
             ->call('confirmSubmit')

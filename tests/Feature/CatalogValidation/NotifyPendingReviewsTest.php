@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\NotifyPendingReviews;
+use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
@@ -10,7 +11,6 @@ use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
-use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
@@ -115,11 +115,15 @@ it('no avisa a los departamentos inactivos ni a quien no es jefe de ese departam
     Notification::assertNotSentTo([$this->jefeSistemas, $jpd], CatalogReviewsPending::class);
 });
 
-it('M4: al abrir el periodo en una modalidad avisa una vez a los jefes, después de guardar la apertura', function () {
-    $this->actingAs(User::factory()->admin()->create());
-    Campus::factory()->create(['code' => 'C1']);
+it('CV9: al abrir la validación avisa a los jefes y abrir el periodo no', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
 
     app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
+
+    expect($this->jefeSistemas->notifications()->count())->toBe(0);
+
+    app(OpenCatalogValidation::class)->handle($this->term, Catalog::cases(), $admin);
 
     expect($this->jefeSistemas->notifications()->count())->toBe(1)
         ->and($this->jefeBasicas->notifications()->count())->toBe(1)
@@ -133,15 +137,6 @@ it('si la apertura falla, no avisa a nadie', function () {
     expect(fn () => app(OpenTerm::class)->handle($this->term, modalityOf('PRES')))->toThrow(ValidationException::class);
 
     expect(DatabaseNotification::query()->count())->toBe(0);
-});
-
-it('al abrir una modalidad sin campus activos no avisa: el aviso todavía es por campus', function () {
-    $this->actingAs(User::factory()->admin()->create());
-
-    app(OpenTerm::class)->handle($this->term, Modality::factory()->create());
-
-    expect(DatabaseNotification::query()->count())->toBe(0)
-        ->and(CatalogReview::query()->count())->toBeGreaterThan(0);
 });
 
 it('notify() da los usuarios avisados y handle() sigue dando cuántos', function () {

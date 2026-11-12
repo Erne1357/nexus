@@ -6,6 +6,7 @@ use App\Modules\Academic\Actions\CreateSubject;
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\FlagRecord;
 use App\Modules\CatalogValidation\Actions\MarkRecordsReviewed;
+use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
@@ -45,8 +46,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /**
  * Validación de catálogos demo y masiva (tareas 2.4 a 2.6), para revisar sus pantallas con volumen. Trabaja sobre los
- * periodos abiertos (term_openings) en orden cronológico, después de que OpenTerm creó sus revisiones; sin periodos
- * abiertos o sin revisiones, no hace nada.
+ * periodos abiertos (term_openings) en orden cronológico, después de que el admin abre su validación con todos los catálogos
+ * (OpenCatalogValidation, CV9); sin periodos abiertos, no hace nada.
  *
  * - Los periodos abiertos anteriores al último se validan completos con ValidateReview y el jefe de cada departamento,
  *   para que quede su foto. Antes de validar una revisión, el jefe marca todos sus registros como revisados
@@ -165,6 +166,7 @@ class CatalogValidationDemoSeeder extends Seeder
         $started = hrtime(true);
 
         try {
+            $this->openValidation($terms);
             $current = $terms->last();
 
             if ($mode === 'validated') {
@@ -190,6 +192,21 @@ class CatalogValidationDemoSeeder extends Seeder
         }
 
         $this->command?->info(sprintf('Validación de catálogos (%s, %s): %.1f s.', $profile, $mode, (hrtime(true) - $started) / 1e9));
+    }
+
+    /**
+     * El admin abre la validación de todos los catálogos de cada periodo abierto (CV9): ya no nace al abrir el periodo.
+     * Idempotente.
+     *
+     * @param  Collection<int, Term>  $terms
+     */
+    private function openValidation(Collection $terms): void
+    {
+        $admin = User::query()->where('username', 'admin')->first() ?? throw new RuntimeException('Falta el usuario admin (AdminUserSeeder).');
+
+        foreach ($terms as $term) {
+            app(OpenCatalogValidation::class)->handle($term, Catalog::cases(), $admin);
+        }
     }
 
     /**
