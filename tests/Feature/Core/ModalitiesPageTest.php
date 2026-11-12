@@ -12,6 +12,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -230,6 +231,33 @@ describe('admin', function () {
         expect(fn () => app(UpdateModality::class)->handle($this->pres, ['is_active' => false]))->toThrow(ValidationException::class)
             ->and($this->pres->fresh()->is_active)->toBeTrue();
     });
+
+    it('un error de bloqueo al cambiar el estado es un toast; cualquier otro error de base de datos se propaga', function (string $sqlState, bool $toast) {
+        $this->ead->update(['is_active' => true]);
+        $error = new PDOException('falla simulada');
+        $error->errorInfo = [$sqlState, 0, 'falla simulada'];
+
+        Modality::saving(function () use ($error): void {
+            throw new QueryException('pgsql', 'update modalities', [], $error);
+        });
+
+        $page = Livewire::actingAs($this->admin)->test('core::pages.modalities');
+
+        if ($toast) {
+            $page->call('toggleActive', $this->ead->id);
+            expect(lastToastOf($page))->type->toBe('error')->and(lastToastOf($page)['description'])->toContain('Otra persona está cambiando');
+        } else {
+            expect(fn () => $page->call('toggleActive', $this->ead->id))->toThrow(QueryException::class);
+        }
+
+        expect($this->ead->fresh()->is_active)->toBeTrue();
+    })->with([
+        'deadlock' => ['40P01', true],
+        'bloqueo no disponible' => ['55P03', true],
+        'serialización' => ['40001', true],
+        'violación de restricción' => ['23505', false],
+        'sintaxis' => ['42601', false],
+    ]);
 
     it('M11: no desactiva una modalidad con un periodo abierto y cargas sin publicar', function () {
         $this->ead->update(['is_active' => true]);

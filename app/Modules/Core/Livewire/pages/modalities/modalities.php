@@ -181,7 +181,12 @@ new #[Title('Modalidades')] class extends Component
             $this->error('No se cambió el estado', e(collect($e->errors())->flatten()->implode(' ')));
 
             return;
-        } catch (QueryException) {
+        } catch (QueryException $e) {
+            // Solo los errores de bloqueo son «otra persona a la vez»; cualquier otro se propaga con su causa real.
+            if (! in_array($e->errorInfo[0] ?? $e->getCode(), ['40P01', '55P03', '40001'], true)) {
+                throw $e;
+            }
+
             $this->error('No se cambió el estado', 'Otra persona está cambiando las modalidades al mismo tiempo. Vuelve a intentarlo.');
 
             return;
