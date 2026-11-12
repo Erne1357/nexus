@@ -21,8 +21,8 @@
     @if ($summary === null)
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="conflicts-no-context">
             <x-icon name="o-map-pin" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
-            <p class="font-semibold">{{ $term === null ? 'No hay un periodo activo.' : 'Elige un campus.' }}</p>
-            <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">El tablero muestra la carga de un campus en un periodo: elígelos en tu credencial, arriba a la derecha.</p>
+            <p class="font-semibold">No hay un periodo activo.</p>
+            <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">El tablero muestra la carga de un campus en un periodo: elige el periodo en tu credencial, arriba a la derecha.</p>
         </div>
     @else
         <div class="mb-4 flex flex-wrap items-center gap-3">

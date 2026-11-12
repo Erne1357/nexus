@@ -79,6 +79,11 @@ new #[Title('Cierre de la carga')] class extends Component
     public function selectCampus(string $code, Actor $context, LoadClosingQuery $query): void
     {
         $this->campus = $code;
+
+        if ($context->campuses()->contains('code', $code)) {
+            session()->put(Campus::LAST_CHOSEN_KEY, $code);
+        }
+
         $this->resolve($context, $query);
     }
 

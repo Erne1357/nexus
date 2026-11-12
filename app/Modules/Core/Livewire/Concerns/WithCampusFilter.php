@@ -27,6 +27,9 @@ trait WithCampusFilter
     #[Url(as: 'campus')]
     public ?string $campus = null;
 
+    /** El valor de `$campus` justo antes de un cambio, dentro de la misma petición (no se guarda entre peticiones). */
+    protected ?string $campusBeforeChange = null;
+
     /**
      * Los campus que la pantalla ofrece: los activos donde trabaja con su perfil, por código.
      *
@@ -46,23 +49,59 @@ trait WithCampusFilter
     }
 
     /**
-     * El campus de una pantalla que necesita uno: el elegido; si no hay, el último recordado en la sesión si sigue entre
-     * las opciones; si no, el primero. El elegido se recuerda para la siguiente pantalla.
+     * El campus de una pantalla que necesita uno: el elegido; si no hay, el de defaultCampus(), que se fija en `$campus`
+     * (y por tanto en la URL) para que las peticiones siguientes de esta página no cambien de campus si otra pestaña
+     * elige otro en la sesión.
      */
     protected function requiredCampus(): Campus
     {
-        $options = $this->campusOptions();
         $chosen = $this->campusFilter();
 
         if ($chosen !== null) {
-            session()->put(Campus::LAST_CHOSEN_KEY, $chosen->code);
-
             return $chosen;
         }
+
+        $default = $this->defaultCampus();
+        $this->campus = $default->code;
+
+        return $default;
+    }
+
+    /**
+     * El campus por omisión, sin fijarlo en la página: el último elegido en la sesión (Campus::LAST_CHOSEN_KEY) si sigue
+     * entre las opciones; si no, el primero; sin ninguna, 403.
+     */
+    protected function defaultCampus(): Campus
+    {
+        $options = $this->campusOptions();
 
         return $options->firstWhere('code', session()->get(Campus::LAST_CHOSEN_KEY))
             ?? $options->first()
             ?? abort(403, 'No trabajas en ningún campus activo.');
+    }
+
+    /**
+     * Al abrir la página con un `?campus=` válido, ese es el que el usuario eligió: se recuerda para la siguiente pantalla
+     * (AZ-02, supuesto por confirmar). Solo aquí y en reopenOnCampus(): las peticiones siguientes no escriben la sesión.
+     */
+    public function mountWithCampusFilter(): void
+    {
+        $this->rememberCampus($this->campusFilter());
+    }
+
+    /**
+     * Guarda el valor anterior de `$campus` mientras se cambia, para que reopenOnCampus() sepa si cambió.
+     */
+    public function updatingCampus(): void
+    {
+        $this->campusBeforeChange = $this->campus;
+    }
+
+    private function rememberCampus(?Campus $campus): void
+    {
+        if ($campus !== null) {
+            session()->put(Campus::LAST_CHOSEN_KEY, $campus->code);
+        }
     }
 
     /**
@@ -82,6 +121,13 @@ trait WithCampusFilter
      */
     protected function reopenOnCampus(string $route): void
     {
-        $this->redirectRoute($route, ['campus' => $this->requiredCampus()->code], navigate: true);
+        $chosen = $this->campusFilter();
+
+        if ($chosen === null || $chosen->code === $this->campusBeforeChange) {
+            return;
+        }
+
+        $this->rememberCampus($chosen);
+        $this->redirectRoute($route, ['campus' => $chosen->code], navigate: true);
     }
 }

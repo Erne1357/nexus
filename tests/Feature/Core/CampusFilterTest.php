@@ -45,6 +45,11 @@ function campusFilterPage(): Component
             ];
         }
 
+        public function updatedCampus(): void
+        {
+            $this->reopenOnCampus('login');
+        }
+
         public function render(): string
         {
             return '<div>{{ $campus }}</div>';
@@ -72,8 +77,10 @@ describe('WithCampusFilter', function () {
 
         $page = Livewire::test(campusFilterPage())->set('campus', 'C2');
 
+        session(['core.last_campus' => 'C2']);
+
         expect($page->instance()->shown()['filter'])->toBe('C2')
-            ->and($page->set('campus', null)->instance()->shown()['filter'])->toBeNull();
+            ->and($page->set('campus', null)->instance()->shown())->toBe(['options' => ['C1', 'C2'], 'filter' => null, 'required' => 'C2']);
     });
 
     it('ignora un campus que no ofrece: ajeno, inactivo o que no existe', function (string $code) {
@@ -91,6 +98,39 @@ describe('WithCampusFilter', function () {
         expect(session('core.last_campus'))->toBe('C2')
             ->and(Livewire::test(campusFilterPage())->instance()->shown()['required'])->toBe('C2')
             ->and(Livewire::withQueryParams(['campus' => 'C1'])->test(campusFilterPage())->instance()->shown()['required'])->toBe('C1');
+    });
+
+    it('AZ-02: la página queda fija en el campus que resolvió aunque otra pestaña cambie el de la sesión', function () {
+        $this->actingAs($this->jefe);
+        session(['core.last_campus' => 'C2']);
+
+        $page = Livewire::test(campusFilterPage());
+        expect($page->instance()->shown()['required'])->toBe('C2');
+
+        session(['core.last_campus' => 'C1']);
+
+        expect($page->instance()->shown()['required'])->toBe('C2')
+            ->and($page->instance()->campus)->toBe('C2')
+            ->and(session('core.last_campus'))->toBe('C1');
+    });
+
+    it('AZ-02: una petición con ?campus= ya abierto no reescribe la sesión; solo al abrir o al elegir', function () {
+        $this->actingAs($this->jefe);
+
+        $page = Livewire::withQueryParams(['campus' => 'C2'])->test(campusFilterPage());
+        session(['core.last_campus' => 'C1']);
+        $page->instance()->shown();
+
+        expect(session('core.last_campus'))->toBe('C1');
+
+        $page->set('campus', 'C1')->set('campus', 'C2')->assertRedirect(route('login', ['campus' => 'C2']));
+        expect(session('core.last_campus'))->toBe('C2');
+    });
+
+    it('elegir el campus que ya estaba no reabre la página', function () {
+        $this->actingAs($this->jefe);
+
+        Livewire::withQueryParams(['campus' => 'C2'])->test(campusFilterPage())->set('campus', 'C2')->assertNoRedirect();
     });
 
     it('AZ-02: no recuerda un campus inválido, y uno recordado que ya no ofrece se cambia por el primero', function () {

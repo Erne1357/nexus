@@ -216,7 +216,7 @@ new #[Title('Carga por docente')] class extends Component
         }
 
         /* La pantalla muestra todos los campus juntos (S6): el campus solo es el contexto del permiso, sin selector. */
-        $campus = $this->requiredCampus();
+        $campus = $this->defaultCampus();
 
         $departments = Department::query()->whereNull('deleted_at')->where('is_active', true)->orderBy('code')->get()
             ->filter(fn (Department $department): bool => $context->allows(StaffingPermission::TeacherLoadView, Target::of(campus: $campus->getKey(), unit: $department->getKey())))
