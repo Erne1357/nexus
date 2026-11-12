@@ -8,6 +8,7 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
@@ -138,6 +139,19 @@ final class TeacherQuery
             'department' => fn (BelongsTo $department) => $department->withTrashed(),
             'teacher',
         ]), $id);
+    }
+
+    /**
+     * De los usuarios dados, los que ocupan un puesto vigente o por empezar (RoleAssignmentRules::holdsStaffRole), como
+     * llaves, con una sola consulta: a sus docentes solo los quitan de un departamento o los dan de baja el admin y la
+     * Subdirección (CV-S8).
+     *
+     * @param  list<string>  $userIds
+     * @return array<string, true>
+     */
+    public function staffUserIds(array $userIds): array
+    {
+        return $userIds === [] ? [] : array_fill_keys(app(RoleAssignmentRules::class)->staffUserIds()->whereIn('user_id', $userIds)->distinct()->pluck('user_id')->all(), true);
     }
 
     /**

@@ -6,7 +6,6 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
@@ -43,11 +42,11 @@ class CatalogReviewFactory extends Factory
     }
 
     /**
-     * La revisión de salones de un campus (uno nuevo si no se da).
+     * La revisión de salones del departamento, para todos los campus (decisión 6, confirmada el 12 de noviembre de 2026).
      */
-    public function rooms(?Campus $campus = null): static
+    public function rooms(): static
     {
-        return $this->state(['catalog' => Catalog::Rooms, 'campus_id' => $campus?->getKey() ?? Campus::factory()]);
+        return $this->state(['catalog' => Catalog::Rooms, 'campus_id' => null]);
     }
 
     public function inReview(): static

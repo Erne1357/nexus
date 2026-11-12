@@ -8,6 +8,10 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\CatalogValidation\Actions\ValidateReview;
+use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
+use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\OrgTree;
@@ -75,6 +79,32 @@ function lastToastOf(Testable $component): ?array
         ->last(fn (string $expression): bool => str_starts_with($expression, 'toast('));
 
     return $expression === null ? null : json_decode(substr($expression, 6, -1), true)['toast'];
+}
+
+/**
+ * Marca como revisados todos los registros que hoy tiene la revisión (CV7), como si `$by` (o un usuario nuevo) los
+ * hubiera revisado, sin bitácora ni cambio de estado: para poder validarla en una prueba que no trata de las marcas.
+ */
+function markAllReviewed(CatalogReview $review, ?User $by = null): void
+{
+    $by ??= User::factory()->create();
+
+    foreach (app(CatalogContentsQuery::class)->records($review) as $record) {
+        CatalogReviewMark::query()->firstOrCreate(
+            ['catalog_review_id' => $review->getKey(), 'record_id' => $record['id']],
+            ['reviewed_by' => $by->getKey(), 'reviewed_at' => now()],
+        );
+    }
+}
+
+/**
+ * Valida la revisión con ValidateReview después de marcar como revisado todo lo que tiene (CV7).
+ */
+function validateAllReviewed(CatalogReview $review, User $actor): CatalogReview
+{
+    markAllReviewed($review, $actor);
+
+    return app(ValidateReview::class)->handle($review, $actor);
 }
 
 /**

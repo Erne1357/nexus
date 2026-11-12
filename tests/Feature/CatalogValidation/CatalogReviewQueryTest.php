@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 /*
 | CatalogReviewQuery::pendingFor: los catálogos que bloquean HC-14 para la carga de un departamento en un
-| campus y un periodo, en el orden del enum. forDepartment, previousValidation y summary: lo que el jefe ve
+| campus y un periodo, en el orden del enum; la revisión de salones es una para todos los campus (decisión 6). forDepartment, previousValidation y summary: lo que el jefe ve
 | de sus revisiones, con las altas y bajas contra la foto de la última validación anterior (confirmado el 2
 | de noviembre de 2026).
 */
@@ -31,7 +31,7 @@ it('sin revisiones lista todos los generales y los salones, en el orden del enum
 
 it('acepta los ids en lugar de los modelos y quita los validados', function () {
     CatalogReview::factory()->general(Catalog::Teachers)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
-    CatalogReview::factory()->rooms($this->campus)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
+    CatalogReview::factory()->rooms()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
     CatalogReview::factory()->general(Catalog::Careers)->inReview()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
     expect(app(CatalogReviewQuery::class)->pendingFor($this->term->id, $this->campus, $this->department->id))
@@ -45,14 +45,17 @@ it('no pide salones si el perfil del campus no los usa', function () {
         ->not->toContain(Catalog::Rooms);
 });
 
-it('no cuenta las revisiones de otro periodo, otro departamento ni los salones de otro campus', function () {
-    foreach (Catalog::general() as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => Term::factory()->create()->id, 'department_id' => $this->department->id]);
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->term->id, 'department_id' => Department::factory()->create()->id]);
+it('no cuenta las revisiones de otro periodo ni de otro departamento; la de salones vale en cualquier campus', function () {
+    foreach (Catalog::cases() as $catalog) {
+        CatalogReview::factory()->create(['catalog' => $catalog, 'status' => 'validated', 'term_id' => Term::factory()->create()->id, 'department_id' => $this->department->id]);
+        CatalogReview::factory()->create(['catalog' => $catalog, 'status' => 'validated', 'term_id' => $this->term->id, 'department_id' => Department::factory()->create()->id]);
     }
-    CatalogReview::factory()->rooms()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
     expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))->toHaveCount(5);
+
+    CatalogReview::factory()->rooms()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
+
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, Campus::factory()->create(), $this->department))->not->toContain(Catalog::Rooms);
 });
 
 it('con lock lee las revisiones con FOR SHARE y sin él no', function () {
@@ -70,27 +73,25 @@ it('con lock lee las revisiones con FOR SHARE y sin él no', function () {
 });
 
 describe('revisiones de un departamento', function () {
-    it('da las cuatro generales del periodo y la de salones del campus, en el orden del enum', function () {
+    it('da las del periodo y el departamento, la de salones para todos los campus, en el orden del enum', function () {
         $own = ['term_id' => $this->term->id, 'department_id' => $this->department->id];
         foreach ([Catalog::Careers, Catalog::Subjects, Catalog::Teachers, Catalog::StudyPlans] as $catalog) {
             CatalogReview::factory()->general($catalog)->create($own);
         }
-        CatalogReview::factory()->rooms($this->campus)->create($own);
         CatalogReview::factory()->rooms()->create($own);
         CatalogReview::factory()->general(Catalog::Teachers)->create(['term_id' => $this->term->id]);
         CatalogReview::factory()->general(Catalog::Teachers)->create(['department_id' => $this->department->id]);
 
-        $reviews = app(CatalogReviewQuery::class)->forDepartment($this->term, $this->campus, $this->department);
+        $reviews = app(CatalogReviewQuery::class)->forDepartment($this->term, $this->department);
 
         expect($reviews->map(fn (CatalogReview $review) => $review->catalog)->all())
-            ->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers])
-            ->and($reviews[1]->campus_id)->toBe($this->campus->id);
+            ->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
     });
 
-    it('sin revisión de salones en el campus da solo las generales', function () {
+    it('acepta los ids', function () {
         CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
-        expect(app(CatalogReviewQuery::class)->forDepartment($this->term->id, $this->campus->id, $this->department->id)->pluck('catalog')->all())
+        expect(app(CatalogReviewQuery::class)->forDepartment($this->term->id, $this->department->id)->pluck('catalog')->all())
             ->toBe([Catalog::Subjects]);
     });
 });
@@ -108,7 +109,7 @@ describe('validación anterior', function () {
         ]);
     }
 
-    it('es la última validada con foto del mismo departamento, catálogo y campus en un periodo que empieza antes', function () {
+    it('es la última validada con foto del mismo departamento y catálogo en un periodo que empieza antes', function () {
         $current = reviewInTermStarting('2027-01-18', state: 'in_review');
         reviewInTermStarting('2026-01-18');
         $latest = reviewInTermStarting('2026-08-18');
@@ -119,14 +120,6 @@ describe('validación anterior', function () {
         reviewInTermStarting('2027-08-18');
 
         expect(app(CatalogReviewQuery::class)->previousValidation($current)?->is($latest))->toBeTrue();
-    });
-
-    it('en salones cuenta solo las del mismo campus', function () {
-        $current = reviewInTermStarting('2027-01-18', ['catalog' => Catalog::Rooms, 'campus_id' => $this->campus->id], 'in_review');
-        $same = reviewInTermStarting('2026-01-18', ['catalog' => Catalog::Rooms, 'campus_id' => $this->campus->id]);
-        reviewInTermStarting('2026-08-18', ['catalog' => Catalog::Rooms, 'campus_id' => Campus::factory()->create()->id]);
-
-        expect(app(CatalogReviewQuery::class)->previousValidation($current)?->is($same))->toBeTrue();
     });
 
     it('en el primer periodo no hay', function () {

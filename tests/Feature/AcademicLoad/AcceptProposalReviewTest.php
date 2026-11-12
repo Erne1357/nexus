@@ -152,7 +152,7 @@ it('HC-14: en un campus que usa salones exige también los salones del departame
 
     expect(acceptErrors())->toBe(['catalogs' => ['HC-14: faltan por validar los catálogos de Salones.']]);
 
-    CatalogReview::factory()->rooms($this->campus)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
+    CatalogReview::factory()->rooms()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
 
     expect(acceptPart()->status)->toBe(ProposalReviewStatus::Accepted);
 });

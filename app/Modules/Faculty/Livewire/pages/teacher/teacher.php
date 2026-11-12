@@ -17,8 +17,8 @@ use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Faculty\Actions\AddExternalLoad;
 use App\Modules\Faculty\Actions\AddPosition;
+use App\Modules\Faculty\Actions\DischargeTeacherFromDepartment;
 use App\Modules\Faculty\Actions\InviteTeacherAccess;
-use App\Modules\Faculty\Actions\RemoveAdscription;
 use App\Modules\Faculty\Actions\RemoveExternalLoad;
 use App\Modules\Faculty\Actions\RemovePosition;
 use App\Modules\Faculty\Actions\RemoveQualification;
@@ -219,17 +219,21 @@ new #[Title('Ficha del docente')] class extends Component
         $record = $records->for($teacher, $context->activeTerm());
         $adscriptionCount = $record->adscriptions->count();
 
-        // «Quitar de <depto>» es de quien cubre ese departamento (y nadie a sí mismo); el motivo de lo deshabilitado
-        // se escribe junto al botón.
+        // «Quitar de <depto>» es de quien cubre ese departamento (y nadie a sí mismo); a quien ocupa un puesto solo lo
+        // quitan el admin y la Subdirección (CV-S8). El motivo de lo deshabilitado se escribe junto al botón.
         $removal = [];
         $primaryReasons = [];
+        $isSelf = $record->teacher->user_id !== null && $record->teacher->user_id === $context->user()?->getKey();
 
         foreach ($record->adscriptions as $adscription) {
             $removal[$adscription->id] = Gate::allows('removeAdscription', [Teacher::class, $adscription])
                 ? null
-                : ($context->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
-                    ? 'No te puedes quitar a ti mismo de un departamento.'
-                    : 'Solo quien administra ese departamento lo quita.');
+                : match (true) {
+                    ! $context->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id)) => 'Solo quien administra ese departamento lo quita.',
+                    $isSelf => 'No te puedes quitar a ti mismo de un departamento.',
+                    $adscriptionCount === 1 && ! $context->allows(FacultyPermission::TeacherDepartmentRemoveLast, Target::of(unit: $adscription->department_id)) => 'Es su último departamento: lo quita el jefe de departamento.',
+                    default => 'Ocupa un puesto: lo quitan el administrador o la Subdirección.',
+                };
             $primaryReasons[$adscription->id] = Gate::allows('setPrimaryAdscription', [Teacher::class, $adscription])
                 ? null
                 : 'Solo quien administra ese departamento la hace principal.';
@@ -565,7 +569,11 @@ new #[Title('Ficha del docente')] class extends Component
         $this->showRemoveAdscriptionModal = true;
     }
 
-    public function removeAdscription(TeacherQuery $teachers, TeacherRecordQuery $records, RemoveAdscription $removeAdscription): void
+    /**
+     * «Quitar de <depto>»: con la última adscripción, el docente queda dado de baja y su cuenta se inhabilita
+     * (DischargeTeacherFromDepartment, CV8, confirmado el 12 de noviembre de 2026).
+     */
+    public function removeAdscription(TeacherQuery $teachers, TeacherRecordQuery $records, DischargeTeacherFromDepartment $discharge): void
     {
         $this->showRemoveAdscriptionModal = false;
 
@@ -580,13 +588,17 @@ new #[Title('Ficha del docente')] class extends Component
         $teacher = $teachers->findOrFail($this->teacherId);
         $removal = null;
 
-        if (! $this->attempt(function () use ($removeAdscription, $adscription, &$removal): void {
-            $removal = $removeAdscription->handle($adscription);
+        if (! $this->attempt(function () use ($discharge, $adscription, &$removal): void {
+            $removal = $discharge->handle($adscription);
         }, 'No se pudo quitar de ese departamento')) {
             return;
         }
 
-        $outcome = $removal['outcome'] === null ? '' : "; {$removal['outcome']}";
+        $outcome = match (true) {
+            $removal['deactivated'] => '; queda dado de baja y su cuenta se inhabilita',
+            $removal['outcome'] === null => '',
+            default => "; {$removal['outcome']}",
+        };
         $code = Department::withTrashed()->whereKey($adscription->department_id)->value('code');
 
         // Quien quitó la última adscripción de su alcance ya no cubre al docente: vuelve a la lista en lugar de un 403.
@@ -951,13 +963,14 @@ new #[Title('Ficha del docente')] class extends Component
 
     /**
      * El aviso del modal de «Quitar de <depto>»: qué principal le queda, con la regla de RemoveAdscription (la más
-     * antigua de las que quedan; las adscripciones llegan en ese orden detrás de la principal).
+     * antigua de las que quedan; las adscripciones llegan en ese orden detrás de la principal), o que sin otra queda dado
+     * de baja (CV8).
      */
     private function removalWarning(TeacherRecord $record, TeacherDepartment $adscription): string
     {
         $rest = $record->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription))->values();
         $outcome = match (true) {
-            $rest->isEmpty() => 'Se queda sin departamento, pero sigue activo.',
+            $rest->isEmpty() => 'No le queda otro departamento: queda dado de baja y su cuenta se inhabilita.',
             $adscription->is_primary => 'Sigue activo y su adscripción principal pasa a '.$rest->first()->department?->code.'.',
             default => 'Sigue activo y su adscripción principal no cambia.',
         };
