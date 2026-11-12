@@ -273,7 +273,7 @@
         </x-slot:actions>
     </x-modal>
 
-    <x-drawer wire:model.live="showOpen" right close-on-escape class="w-full max-w-lg p-0!" role="dialog" aria-modal="true" aria-labelledby="open-drawer-title" data-testid="open-drawer">
+    <x-drawer wire:model.live="showOpen" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="open-drawer-title" data-testid="open-drawer">
         @if ($openModality !== null)
             @include('core::terms.open-panel')
         @endif

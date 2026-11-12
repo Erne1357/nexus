@@ -75,8 +75,8 @@
                 <x-core::status-badge :tone="$modality->is_active ? 'success' : 'neutral'" :label="$modality->is_active ? 'Activa' : 'Inactiva'" />
             @endscope
 
-            @scope('actions', $modality)
-                @include('core::modalities.row-actions', ['modality' => $modality, 'inTable' => true])
+            @scope('actions', $modality, $impacts)
+                @include('core::modalities.row-actions', ['modality' => $modality, 'inTable' => true, 'impacts' => $impacts])
             @endscope
 
             <x-slot:empty>
@@ -102,7 +102,7 @@
                         @endif
                     </div>
 
-                    @include('core::modalities.row-actions', ['modality' => $modality, 'inTable' => false])
+                    @include('core::modalities.row-actions', ['modality' => $modality, 'inTable' => false, 'impacts' => $impacts])
                 </li>
             @endforeach
         </ul>

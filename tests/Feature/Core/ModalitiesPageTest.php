@@ -1,13 +1,18 @@
 <?php
 
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Actions\UpdateModality;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
@@ -44,9 +49,9 @@ describe('admin', function () {
             ->assertOk()
             ->assertSeeInOrder([
                 'Clave', 'Modalidad', 'Perfil de flujo', 'Estado',
+                'PRES', 'Presencial', 'Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00', 'Activa',
                 'EAD', 'EAD', 'Salones · bloques de 60 min · lunes a sábado, 7:00 a 21:00 · asignación central', 'Inactiva',
                 'ENL', 'En línea', 'Sin salones',
-                'PRES', 'Presencial', 'Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00', 'Activa',
                 'TNMV', 'TecNM Virtual', 'docentes externos',
             ]);
     });
@@ -54,7 +59,7 @@ describe('admin', function () {
     it('busca por clave o nombre y filtra activas o inactivas', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.modalities')
-            ->assertViewHas('modalities', listsModalities(['EAD', 'ENL', 'PRES', 'TNMV']))
+            ->assertViewHas('modalities', listsModalities(['PRES', 'EAD', 'ENL', 'TNMV']))
             ->set('search', 'virtual')
             ->assertViewHas('modalities', listsModalities(['TNMV']))
             ->set('search', '')
@@ -98,9 +103,7 @@ describe('admin', function () {
             ->assertSet('showDrawer', true)
             ->assertSet('canEditData', true)
             ->assertSet('code', 'EAD')
-            ->assertSet('isActive', false)
             ->set('name', 'EaD')
-            ->set('isActive', true)
             ->set('settings.uses_rooms', false)
             ->call('save')
             ->assertHasNoErrors()
@@ -108,7 +111,7 @@ describe('admin', function () {
 
         expect($this->ead->fresh())
             ->name->toBe('EaD')
-            ->is_active->toBeTrue()
+            ->is_active->toBeFalse()
             ->profile->usesRooms->toBeFalse()
             ->and(lastToastOf($page)['title'])->toBe('Modalidad actualizada');
     });
@@ -192,6 +195,72 @@ describe('admin', function () {
             ->assertSee('El perfil de flujo guardado no es válido');
     });
 
+    it('la clave no cambia una vez creada: el panel la deshabilita con su motivo y la Action la rechaza', function () {
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.modalities')
+            ->call('edit', $this->pres->id)
+            ->assertSee('La clave no cambia una vez creada.')
+            ->assertSeeHtml('data-testid="code-input"')
+            ->set('code', 'OTRA')
+            ->call('save')
+            ->assertHasErrors('code')
+            ->assertSee('La clave de una modalidad no cambia una vez creada.');
+
+        expect($this->pres->fresh()->code)->toBe('PRES')
+            ->and(fn () => app(UpdateModality::class)->handle($this->pres, ['code' => 'otra']))->toThrow(ValidationException::class)
+            ->and(app(UpdateModality::class)->handle($this->pres, ['code' => ' pres ', 'name' => 'Presencial 2'])->code)->toBe('PRES')
+            ->and($this->c1->fresh()->modality_id)->toBe($this->pres->id);
+    });
+
+    it('M11: no desactiva la única modalidad activa', function () {
+        $page = Livewire::actingAs($this->admin)->test('core::pages.modalities')->call('toggleActive', $this->pres->id);
+
+        expect(lastToastOf($page))->type->toBe('error')
+            ->and(lastToastOf($page)['description'])->toContain('única modalidad activa')
+            ->and($this->pres->fresh()->is_active)->toBeTrue();
+    });
+
+    it('M11: no desactiva una modalidad con un periodo abierto y cargas sin publicar', function () {
+        $this->ead->update(['is_active' => true]);
+        $term = Term::factory()->create(['code' => '20271']);
+        TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
+        AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $this->c1->id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Closed]);
+
+        $page = Livewire::actingAs($this->admin)->test('core::pages.modalities')->call('toggleActive', $this->pres->id);
+
+        expect(lastToastOf($page))->type->toBe('error')
+            ->and(lastToastOf($page)['description'])->toContain('20271')->toContain('1 carga sin publicar')
+            ->and($this->pres->fresh()->is_active)->toBeTrue();
+    });
+
+    it('M11: desactiva una modalidad con periodo abierto si todas sus cargas están publicadas', function () {
+        $this->ead->update(['is_active' => true]);
+        $term = Term::factory()->create(['code' => '20271']);
+        TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
+        AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $this->c1->id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Published]);
+
+        $page = Livewire::actingAs($this->admin)->test('core::pages.modalities')->call('toggleActive', $this->pres->id);
+
+        expect(lastToastOf($page)['title'])->toBe('Modalidad desactivada')
+            ->and($this->pres->fresh()->is_active)->toBeFalse();
+    });
+
+    it('M11: el botón del panel y el del menú piden confirmación con el impacto', function () {
+        $this->ead->update(['is_active' => true]);
+        $term = Term::factory()->create(['code' => '20271']);
+        TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
+        User::factory()->withRole(Role::Coordinador, ['modality_id' => $this->pres->id, 'career_id' => careerKey(20)])->create();
+
+        $html = Livewire::actingAs($this->admin)
+            ->test('core::pages.modalities')
+            ->call('edit', $this->pres->id)
+            ->html();
+
+        expect(substr_count($html, 'data-confirm-title="¿Desactivar la modalidad Presencial?"'))->toBeGreaterThanOrEqual(2)
+            ->and($html)->toContain('data-testid="drawer-toggle-active"')
+            ->toContain('Está abierta en 20271')->toContain('1 nombramiento vigente');
+    });
+
     it('guardar el perfil de Presencial lo escribe también en los campus presenciales, en la misma operación (temporal)', function () {
         $other = Campus::factory()->create(['code' => 'XX', 'modality_id' => $this->ead->id]);
 
@@ -236,10 +305,9 @@ describe('subdirección', function () {
             ->test('core::pages.modalities')
             ->call('edit', $this->pres->id)
             ->assertSet('canEditData', false)
-            ->assertSee('Solo el administrador cambia clave, nombre y estado.')
+            ->assertSee('Solo el administrador cambia nombre y estado.')
             ->set('code', 'X1')
             ->set('name', 'Otro nombre')
-            ->set('isActive', false)
             ->set('settings.requires_subdireccion_approval', true)
             ->call('save')
             ->assertHasNoErrors();

@@ -375,7 +375,7 @@ Hay operaciones de un módulo que solo tienen sentido completas junto con lo que
 - Los listeners crean solo lo que falta (insert que ignora lo existente), así que repetir la operación es seguro, y reportan solo si crearon algo. No dejan bitácora propia por fila: la Action deja una sola entrada con el reporte.
 - Los listeners se registran en el provider del módulo que los escucha, como los de veto.
 - Ejemplo: `TermOpened`, que escucha `CreateLoadsOnTermOpened` (AcademicLoad).
-- Para decir qué se creará antes de confirmar, la pantalla pregunta con un evento hermano de solo lectura: `TermOpeningPreviewing` (lo despacha `TermQuery::openingPreview()`), que contesta `PreviewLoadsOnTermOpening` (AcademicLoad) con `add()` sin escribir nada.
+- Para decir qué se creará antes de confirmar, la pantalla pregunta con un evento hermano de solo lectura: `TermOpeningPreviewing` (lo despacha `TermQuery::openingPreview()`), que contesta `PreviewLoadsOnTermOpening` (AcademicLoad) con `add()` sin escribir nada. Igual con `ModalityDeactivating` (M11): `UpdateModality` lo despacha bajo bloqueo antes de desactivar una modalidad y `ReportUnpublishedLoadsOnModalityDeactivating` (AcademicLoad) contesta con `unpublished()` las cargas sin publicar por periodo abierto; si hay alguna, no se desactiva.
 
 ### Transiciones de la carga
 

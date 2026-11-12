@@ -79,6 +79,14 @@ new #[Title('Ficha del periodo')] class extends Component
     #[Locked]
     public ?string $openingId = null;
 
+    /**
+     * Lo que se creará al abrir, calculado una vez al abrir el panel (TermQuery::openingPreview), no en cada render.
+     *
+     * @var array{items: list<array{count: int, text: string, chips: list<string>}>, campuses: list<string>, profile: ?string, ownWindows: int, completing: bool}|null
+     */
+    #[Locked]
+    public ?array $openPreview = null;
+
     /** `showDrawer` no puede ser #[Locked]: el x-drawer lo cierra desde el navegador. */
     public bool $showDrawer = false;
 
@@ -117,7 +125,7 @@ new #[Title('Ficha del periodo')] class extends Component
         $stage = $this->stage === null ? null : Stage::from($this->stage);
         $modalityRows = $terms->modalityRows($term, $active);
         $copySources = $calendar->copySources($term);
-        $opening = $this->showOpen && $this->openingId !== null ? $modalities->findOrFail($this->openingId) : null;
+        $opening = $this->showOpen && $this->openingId !== null && $this->openPreview !== null ? $modalities->findOrFail($this->openingId) : null;
 
         return [
             'term' => $term,
@@ -128,7 +136,7 @@ new #[Title('Ficha del periodo')] class extends Component
             'pendingRows' => $modalityRows->filter(fn (array $row): bool => $row['opening'] === null && $row['actionable'])->values(),
             'canOpen' => Gate::allows('open', $term),
             'openModality' => $opening,
-            'openPreview' => $opening === null ? null : $terms->openingPreview($term, $opening),
+            'openPreview' => $opening === null ? null : $this->openPreview,
             'editing' => $stage === null ? null : [
                 'stage' => $stage,
                 'number' => array_search($stage, Stage::cases(), true) + 1,
@@ -261,6 +269,7 @@ new #[Title('Ficha del periodo')] class extends Component
         $this->authorize('open', [$term, $modality]);
 
         $this->openingId = $modality->id;
+        $this->openPreview = $terms->openingPreview($term, $modality);
         $this->showOpen = true;
     }
 

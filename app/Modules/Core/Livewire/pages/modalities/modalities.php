@@ -9,8 +9,10 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Queries\ModalityQuery;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
@@ -21,8 +23,8 @@ use Mary\Traits\Toast;
 /**
  * Modalidades (tarea 14, maqueta U4 opción A «Catálogo junto a Campus»; MS1, supuesto por confirmar): el catálogo con la
  * forma de Campus, una tabla con búsqueda y filtro y un panel lateral (x-drawer, ADR-0023) que edita la clave, el
- * nombre, el estado y el perfil de flujo con las claves de ModalityProfile. Activar o desactivar también se hace desde
- * la tabla. No hay borrar: es un catálogo.
+ * nombre, el perfil de flujo con las claves de ModalityProfile (la clave no cambia una vez creada). Activar o desactivar se hace
+ * desde la tabla o desde el botón del panel, siempre por la misma confirmación y la guarda de M11 (UpdateModality). No hay borrar: es un catálogo.
  *
  * El componente lee con ModalityQuery, autoriza con ModalityPolicy en mount() y en cada acción (una petición puede
  * llegar con una página que abrió otra sesión), valida la forma de los datos y llama a CreateModality o UpdateModality,
@@ -61,8 +63,6 @@ new #[Title('Modalidades')] class extends Component
 
     public string $name = '';
 
-    public bool $isActive = true;
-
     /** @var array<string, mixed> el perfil de flujo, con las claves de ModalityProfile::DEFAULTS */
     public array $settings = ModalityProfile::DEFAULTS;
 
@@ -82,6 +82,8 @@ new #[Title('Modalidades')] class extends Component
             default => null,
         });
 
+        $editing = $this->editingId === null ? null : $modalities->findOrFail($this->editingId);
+
         return [
             'modalities' => $page,
             'profiles' => $this->profileSummaries($page),
@@ -100,7 +102,9 @@ new #[Title('Modalidades')] class extends Component
             'days' => [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado'],
             'dayLetters' => [1 => 'L', 2 => 'M', 3 => 'Mi', 4 => 'J', 5 => 'V', 6 => 'S'],
             'summary' => $this->showDrawer ? $this->draftSummary() : null,
-            'editingName' => $this->editingId === null ? null : Modality::query()->whereKey($this->editingId)->value('name'),
+            'editingName' => $editing?->name,
+            'editingActive' => $editing?->is_active,
+            'impacts' => $this->impactTexts($modalities, $page),
         ];
     }
 
@@ -116,7 +120,7 @@ new #[Title('Modalidades')] class extends Component
         $this->authorize('create', Modality::class);
 
         $this->resetValidation();
-        $this->reset('editingId', 'canEditData', 'profileWasReset', 'code', 'name', 'isActive', 'settings');
+        $this->reset('editingId', 'canEditData', 'profileWasReset', 'code', 'name', 'settings');
         $this->showDrawer = true;
     }
 
@@ -130,7 +134,6 @@ new #[Title('Modalidades')] class extends Component
         $this->canEditData = Gate::allows('update', $modality);
         $this->code = $modality->code;
         $this->name = $modality->name;
-        $this->isActive = $modality->is_active;
         $this->showDrawer = true;
 
         try {
@@ -171,9 +174,36 @@ new #[Title('Modalidades')] class extends Component
         $modality = $modalities->findOrFail($id);
         $this->authorize('update', $modality);
 
-        $modality = $updateModality->handle($modality, ['is_active' => ! $modality->is_active]);
+        try {
+            $modality = $updateModality->handle($modality, ['is_active' => ! $modality->is_active]);
+        } catch (ValidationException $e) {
+            $this->error('No se cambió el estado', e(collect($e->errors())->flatten()->implode(' ')));
+
+            return;
+        }
 
         $this->success($modality->is_active ? 'Modalidad activada' : 'Modalidad desactivada', $this->describe($modality));
+    }
+
+    /**
+     * El texto de la confirmación de desactivar, por id de las modalidades activas de la página, con lo que deja a medias
+     * (M11): los periodos abiertos y los nombramientos vigentes en la modalidad.
+     *
+     * @param  LengthAwarePaginator<int, Modality>  $page
+     * @return array<string, string>
+     */
+    private function impactTexts(ModalityQuery $modalities, LengthAwarePaginator $page): array
+    {
+        $ids = $page->getCollection()->where('is_active', true)->pluck('id')->all();
+        $texts = [];
+
+        foreach ($modalities->deactivationImpact($ids) as $id => $impact) {
+            $terms = $impact['terms'] === [] ? 'No está abierta en ningún periodo' : 'Está abierta en '.Arr::join($impact['terms'], ', ', ' y ');
+            $appointments = $impact['appointments'];
+            $texts[$id] = $terms.' y hay '.($appointments === 0 ? 'ningún nombramiento vigente' : $appointments.' '.($appointments === 1 ? 'nombramiento vigente' : 'nombramientos vigentes')).' en esta modalidad. Los nombramientos de una modalidad inactiva no cuentan.';
+        }
+
+        return $texts;
     }
 
     /**
@@ -210,23 +240,21 @@ new #[Title('Modalidades')] class extends Component
     }
 
     /**
-     * Datos, estado y perfil, validados en forma y con los tipos que espera la Action.
+     * Datos y perfil, validados en forma y con los tipos que espera la Action.
      *
-     * @return array{code: string, name: string, is_active: bool, settings: array<string, mixed>}
+     * @return array{code: string, name: string, settings: array<string, mixed>}
      */
     private function validatedModality(): array
     {
         $validated = $this->validate([
             'code' => ['required', 'string', 'max:255'],
             'name' => ['required', 'string', 'max:255'],
-            'isActive' => ['boolean'],
             ...$this->profileRules(),
         ]);
 
         return [
             'code' => $validated['code'],
             'name' => $validated['name'],
-            'is_active' => (bool) $validated['isActive'],
             'settings' => $this->profile($validated['settings']),
         ];
     }

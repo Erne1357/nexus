@@ -37,22 +37,35 @@
             <h3 id="mod-data" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Datos</h3>
 
             <div class="grid gap-3 sm:grid-cols-2">
-                <x-input label="Clave" name="code" wire:model="code" placeholder="EAD" :disabled="! $canEditData" class="font-mono" />
+                <x-input label="Clave" name="code" wire:model="code" placeholder="EAD" :disabled="! $canEditData || $editingId !== null" :hint="$editingId !== null && $canEditData ? 'La clave no cambia una vez creada.' : null" class="font-mono" data-testid="code-input" />
                 <x-input label="Nombre" name="name" wire:model="name" :disabled="! $canEditData" />
             </div>
 
             @if ($editingId !== null)
-                <x-toggle
-                    label="Activa"
-                    hint="Solo una modalidad activa se abre en un periodo; los nombramientos de una inactiva no cuentan."
-                    wire:model="isActive"
-                    :disabled="! $canEditData"
-                    right
-                />
+                <div class="flex items-start justify-between gap-4" data-testid="active-row">
+                    <div>
+                        <p class="text-sm font-medium">Activa</p>
+                        <p class="text-sm text-neutral">Solo una modalidad activa se abre en un periodo; los nombramientos de una inactiva no cuentan.</p>
+                    </div>
+
+                    @if ($canEditData)
+                        <x-button
+                            :label="$editingActive ? 'Desactivar' : 'Activar'"
+                            class="btn-outline btn-sm shrink-0 max-md:h-11"
+                            wire:click="toggleActive('{{ $editingId }}')"
+                            x-confirm="{{ $editingActive ? ($impacts[$editingId] ?? '').' Nadie podrá abrir periodos en la modalidad '.$editingName.' hasta que se reactive.' : 'La modalidad '.$editingName.' vuelve a estar disponible para abrir periodos y trabajar.' }}"
+                            data-confirm-title="{{ $editingActive ? '¿Desactivar la modalidad '.$editingName.'?' : '¿Activar la modalidad '.$editingName.'?' }}"
+                            data-confirm-button="{{ $editingActive ? 'Desactivar' : 'Activar' }}"
+                            data-confirm-tone="{{ $editingActive ? 'error' : 'primary' }}"
+                            spinner="toggleActive('{{ $editingId }}')"
+                            data-testid="drawer-toggle-active"
+                        />
+                    @endif
+                </div>
             @endif
 
             @unless ($canEditData)
-                <p class="text-sm text-neutral">Solo el administrador cambia clave, nombre y estado.</p>
+                <p class="text-sm text-neutral">Solo el administrador cambia nombre y estado.</p>
             @endunless
         </section>
 

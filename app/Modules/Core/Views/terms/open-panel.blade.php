@@ -9,7 +9,6 @@
     $completing = $openPreview['completing'];
     $verb = $completing ? 'Completar la apertura de' : 'Abrir';
     $campuses = $openPreview['campuses'];
-    $campusNames = collect($campuses)->map(fn (string $campus): string => explode(' · ', $campus, 2)[1] ?? $campus);
 @endphp
 
 <div class="flex h-dvh flex-col" data-testid="open-panel">
@@ -81,7 +80,7 @@
 
     <footer class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-base-300 bg-base-100 py-3 ps-5 pe-4">
         <p class="text-sm text-neutral">Queda en la bitácora con tu nombre.</p>
-        <div class="flex gap-2 max-md:w-full">
+        <div class="ms-auto flex gap-2 max-md:w-full">
             <x-button label="Cancelar" class="max-md:h-11 max-md:flex-1" @click="close()" />
             <x-button
                 :label="($completing ? 'Completar apertura' : 'Abrir en '.$openModality->name)"

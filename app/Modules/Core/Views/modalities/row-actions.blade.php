@@ -20,7 +20,7 @@
             <x-core::row-menu-item
                 :label="$modality->is_active ? 'Desactivar' : 'Activar'"
                 wire:click="toggleActive('{{ $modality->id }}')"
-                x-confirm="{{ $modality->is_active ? 'Nadie podrá abrir periodos ni trabajar en la modalidad '.$modality->name.' hasta que se reactive.' : 'La modalidad '.$modality->name.' vuelve a estar disponible para abrir periodos y trabajar.' }}"
+                x-confirm="{{ $modality->is_active ? ($impacts[$modality->id] ?? '').' Nadie podrá abrir periodos en la modalidad '.$modality->name.' hasta que se reactive.' : 'La modalidad '.$modality->name.' vuelve a estar disponible para abrir periodos y trabajar.' }}"
                 data-confirm-title="{{ $modality->is_active ? '¿Desactivar la modalidad '.$modality->name.'?' : '¿Activar la modalidad '.$modality->name.'?' }}"
                 data-confirm-button="{{ $modality->is_active ? 'Desactivar' : 'Activar' }}"
                 data-confirm-tone="{{ $modality->is_active ? 'error' : 'primary' }}"

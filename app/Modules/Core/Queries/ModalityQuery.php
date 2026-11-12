@@ -5,6 +5,8 @@ namespace App\Modules\Core\Queries;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\TermOpening;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -29,8 +31,43 @@ final class ModalityQuery
             ->tap(fn (Builder $query) => $context->constrain($query, CorePermission::ModalityView, ['modality' => 'modalities.id']))
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
-            ->orderBy('code')
+            ->orderByDesc('is_active')
+            ->orderBy('name')
             ->paginate($perPage);
+    }
+
+    /**
+     * Lo que desactivar cada modalidad deja a medias, para el texto de la confirmación (M11), por id de modalidad: los
+     * códigos de los periodos abiertos en ella (`terms`) y cuántos nombramientos vigentes hoy la llevan
+     * (`appointments`).
+     *
+     * @param  list<string>  $ids
+     * @return array<string, array{terms: list<string>, appointments: int}>
+     */
+    public function deactivationImpact(array $ids): array
+    {
+        $impact = array_fill_keys($ids, ['terms' => [], 'appointments' => 0]);
+
+        TermOpening::query()
+            ->whereIn('modality_id', $ids)
+            ->with('term:id,code')
+            ->get()
+            ->each(function (TermOpening $opening) use (&$impact): void {
+                $impact[$opening->modality_id]['terms'][] = $opening->term->code;
+            });
+
+        foreach ($impact as $id => $row) {
+            sort($row['terms']);
+            $impact[$id]['terms'] = $row['terms'];
+        }
+
+        RoleAssignment::query()->current()->whereIn('modality_id', $ids)
+            ->selectRaw('modality_id, count(*) as total')->groupBy('modality_id')->get()
+            ->each(function (RoleAssignment $row) use (&$impact): void {
+                $impact[$row->modality_id]['appointments'] = (int) $row->total;
+            });
+
+        return $impact;
     }
 
     /**

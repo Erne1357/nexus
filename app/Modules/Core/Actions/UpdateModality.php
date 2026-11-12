@@ -2,9 +2,11 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Events\ModalityDeactivating;
 use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Rules\ModalityRules;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
@@ -24,6 +26,12 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * funcionan y cualquier perfil válido lo repara. Si nada cambió, no escribe, no registra ni avisa; si algo cambió,
  * guarda, deja en la bitácora el valor anterior y el nuevo de cada campo y, después del commit, avisa con
  * ModalityUpdated.
+ *
+ * La clave no cambia una vez creada (supuesto por confirmar): los campus se ligan a su modalidad por ella mientras exista
+ * el puente; una clave distinta es una ValidationException sobre `code` (la misma, con otro formato, se acepta). Desactivar
+ * una modalidad (M11, confirmado el 12 de noviembre de 2026) se rechaza, bajo bloqueo de las activas, si es la única
+ * activa o si tiene un periodo abierto con cargas sin publicar (se pregunta a los módulos de la derecha con
+ * ModalityDeactivating); si no, procede. Activar no tiene guarda.
  *
  * Temporal, hasta el paso de contracción del plan de carga por modalidad: Scheduling todavía lee el perfil de
  * `campuses.settings`, así que cuando cambia el perfil se escribe igual en cada campus liga a esta modalidad por el
@@ -59,7 +67,15 @@ final class UpdateModality
             $old = [...$modality->only(['code', 'name', 'is_active']), 'settings' => $this->storedProfile($modality)];
 
             if (array_key_exists('code', $data)) {
-                $this->rules->ensureCodeIsFree($data['code'], $modality);
+                if ($data['code'] !== $modality->code) {
+                    throw ValidationException::withMessages(['code' => 'La clave de una modalidad no cambia una vez creada.']);
+                }
+
+                unset($data['code']);
+            }
+
+            if (($data['is_active'] ?? true) === false && $modality->is_active) {
+                $this->ensureCanDeactivate($modality);
             }
 
             if (array_key_exists('settings', $data) && $data['settings'] === $old['settings']) {
@@ -96,6 +112,36 @@ final class UpdateModality
 
             return $modality;
         });
+    }
+
+    /**
+     * M11: no se desactiva la única modalidad activa ni una con un periodo abierto y cargas sin publicar.
+     *
+     * @throws ValidationException
+     */
+    private function ensureCanDeactivate(Modality $modality): void
+    {
+        $others = Modality::query()->where('is_active', true)->whereKeyNot($modality->getKey())->lockForUpdate()->pluck('id')->count();
+
+        if ($others === 0) {
+            throw ValidationException::withMessages(['is_active' => "No se puede desactivar {$modality->name}: es la única modalidad activa. Activa otra primero."]);
+        }
+
+        $event = new ModalityDeactivating($modality);
+        event($event);
+
+        if ($event->unpublishedByTerm() === []) {
+            return;
+        }
+
+        $terms = Term::query()->whereIn('id', array_keys($event->unpublishedByTerm()))->orderBy('code')->get();
+        $lines = $terms->map(function (Term $term) use ($event): string {
+            $count = $event->unpublishedByTerm()[$term->id];
+
+            return "{$term->code} ({$count} ".($count === 1 ? 'carga sin publicar' : 'cargas sin publicar').')';
+        })->implode(', ');
+
+        throw ValidationException::withMessages(['is_active' => "No se puede desactivar {$modality->name}: tiene periodos abiertos con cargas sin publicar: {$lines}. Publícalas primero."]);
     }
 
     /**

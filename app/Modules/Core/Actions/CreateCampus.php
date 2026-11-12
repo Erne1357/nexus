@@ -45,17 +45,19 @@ final class CreateCampus
             $data['modality'] instanceof Modality => $data['modality'],
             default => Modality::from($data['modality']),
         };
-        $settings = $this->rules->profile($data['settings'] ?? $this->defaultSettings($modality));
 
-        return DB::transaction(function () use ($code, $data, $settings, $modality): Campus {
+        return DB::transaction(function () use ($code, $data, $modality): Campus {
             $this->rules->ensureCodeIsFree($code);
+
+            $catalog = CatalogModality::withTrashed()->sharedLock()->where('code', $modality->catalogCode())->first();
+            $settings = $this->rules->profile($data['settings'] ?? $catalog?->settings ?? []);
 
             try {
                 $campus = Campus::create([
                     'code' => $code,
                     'name' => $data['name'],
                     'modality' => $modality,
-                    'modality_id' => CatalogModality::withTrashed()->where('code', $modality->catalogCode())->value('id'),
+                    'modality_id' => $catalog?->id,
                     'settings' => $settings,
                     'is_active' => true,
                 ]);
@@ -73,15 +75,5 @@ final class CreateCampus
 
             return $campus;
         });
-    }
-
-    /**
-     * El perfil del campus que no lo trae: el de su modalidad del catálogo, si existe; si no, el presencial por omisión.
-     *
-     * @return array<string, mixed>
-     */
-    private function defaultSettings(Modality $modality): array
-    {
-        return CatalogModality::query()->where('code', $modality->catalogCode())->first()?->settings ?? [];
     }
 }

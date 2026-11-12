@@ -23,6 +23,7 @@ use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
 use App\Modules\AcademicLoad\Listeners\PreviewLoadsOnTermOpening;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
+use App\Modules\AcademicLoad\Listeners\ReportUnpublishedLoadsOnModalityDeactivating;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
@@ -39,6 +40,7 @@ use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Events\ModalityDeactivating;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Events\TermOpeningPreviewing;
 use App\Modules\Core\Models\Campus;
@@ -73,6 +75,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         Event::listen(TermOpened::class, CreateLoadsOnTermOpened::class);
+        Event::listen(ModalityDeactivating::class, ReportUnpublishedLoadsOnModalityDeactivating::class);
         Event::listen(TermOpeningPreviewing::class, PreviewLoadsOnTermOpening::class);
         Event::listen(DepartmentDeleting::class, BlockDepartmentDeletionWithLoads::class);
         Event::listen(CatalogReviewReopening::class, BlockReviewReopeningAfterDraft::class);
