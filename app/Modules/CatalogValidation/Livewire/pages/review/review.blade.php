@@ -94,8 +94,11 @@
                     @if ($confirming['summary']['open_flags'] > 0)
                         <p>Quedan <span class="font-mono">{{ $confirming['summary']['open_flags'] }}</span> observaciones abiertas; no impiden validar.</p>
                     @endif
-                    @if ($withoutInstitutionalEmail > 0)
-                        <p data-testid="without-institutional-email"><span class="font-mono">{{ $withoutInstitutionalEmail }}</span> {{ $withoutInstitutionalEmail === 1 ? 'docente activo sin correo institucional no recibirá su acceso.' : 'docentes activos sin correo institucional no recibirán su acceso.' }} Captúralo en su ficha; al guardarlo le llega la invitación.</p>
+                    @if ($missingInvitations['email'] > 0)
+                        <p data-testid="without-institutional-email"><span class="font-mono">{{ $missingInvitations['email'] }}</span> {{ $missingInvitations['email'] === 1 ? 'docente activo sin correo institucional no recibirá su acceso.' : 'docentes activos sin correo institucional no recibirán su acceso.' }} Captúralo en su ficha; al guardarlo le llega la invitación.</p>
+                    @endif
+                    @if ($missingInvitations['user'] > 0)
+                        <p data-testid="without-user"><span class="font-mono">{{ $missingInvitations['user'] }}</span> {{ $missingInvitations['user'] === 1 ? 'docente activo no tiene un usuario activo y no recibirá su acceso' : 'docentes activos no tienen un usuario activo y no recibirán su acceso' }}; lo resuelve el administrador.</p>
                     @endif
                     <p class="text-neutral">Se guarda la foto de los registros activos: el próximo periodo se cuentan las altas y las bajas contra ella.</p>
                 @endif

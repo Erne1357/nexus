@@ -30,22 +30,31 @@ final class TeacherAccessQuery
                 ->where(fn (Builder $invited) => $invited
                     ->whereNull('access_invited_at')
                     ->orWhere('access_invited_at', '<=', now()->subDays(AccessInvitationLink::DAYS))))
+            ->with('user')
             ->orderBy('rfc')
             ->get();
     }
 
     /**
-     * Cuántos no recibirán su acceso por no tener correo institucional: sin acceso (sin usuario o sin contraseña) y sin
-     * correo institucional.
+     * Cuántos docentes sin acceso no recibirán su invitación, por qué: `email`, los de usuario activo sin contraseña a
+     * los que les falta el correo institucional (al capturarlo, les llega); `user`, los demás sin acceso, que no tienen
+     * usuario o lo tienen inactivo (lo resuelve el admin).
+     *
+     * @return array{email: int, user: int}
      */
-    public function withoutInstitutionalEmail(string $departmentId): int
+    public function missingInvitations(string $departmentId): array
     {
-        return $this->ofDepartment($departmentId)
-            ->whereNull('institutional_email')
-            ->where(fn (Builder $query) => $query
-                ->whereNull('user_id')
-                ->orWhereHas('user', fn (Builder $user) => $user->whereNull('password')))
-            ->count();
+        return [
+            'email' => $this->ofDepartment($departmentId)
+                ->whereNull('institutional_email')
+                ->whereHas('user', fn (Builder $user) => $user->whereNull('password')->where('is_active', true))
+                ->count(),
+            'user' => $this->ofDepartment($departmentId)
+                ->where(fn (Builder $query) => $query
+                    ->whereNull('user_id')
+                    ->orWhereHas('user', fn (Builder $user) => $user->whereNull('password')->where('is_active', false)))
+                ->count(),
+        ];
     }
 
     /**

@@ -146,7 +146,7 @@ new #[Title('Validación de catálogos')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(CatalogReviewQuery $reviews, CatalogRecordsQuery $records, CatalogContentsQuery $contents): array
+    public function with(CatalogReviewQuery $reviews, CatalogRecordsQuery $records, CatalogContentsQuery $contents, TeacherAccessQuery $access): array
     {
         $state = $this->state();
         $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term'], 'campus' => $state['campus']];
@@ -160,7 +160,7 @@ new #[Title('Validación de catálogos')] class extends Component
         };
 
         if ($empty !== null) {
-            return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null, 'withoutInstitutionalEmail' => 0];
+            return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null, 'missingInvitations' => ['email' => 0, 'user' => 0]];
         }
 
         $open = $this->openCatalog();
@@ -177,7 +177,7 @@ new #[Title('Validación de catálogos')] class extends Component
             : $state['reviews']->every(fn (CatalogReview $review): bool => $reviews->previousValidation($review) === null);
         $data += ['empty' => null, 'firstTerm' => $firstTerm, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status])->all(), 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
 
-        $data += $this->confirmation($cards);
+        $data += $this->confirmation($cards, $access);
 
         return [...$data, ...($current === null ? ['page' => null] : $this->list($current, $records, $contents))];
     }
@@ -504,19 +504,19 @@ new #[Title('Validación de catálogos')] class extends Component
 
     /**
      * La revisión que espera confirmación, con lo que valida, para el modal. Al validar la de docentes, cuántos docentes
-     * activos sin acceso no tienen correo institucional y no recibirán su invitación (AC-09).
+     * activos sin acceso no recibirán su invitación, por falta de correo institucional o de usuario activo (AC-09).
      *
      * @param  Collection<int, array<string, mixed>>  $cards
      * @return array<string, mixed>
      */
-    private function confirmation(Collection $cards): array
+    private function confirmation(Collection $cards, TeacherAccessQuery $access): array
     {
         $card = $this->confirmAction === '' ? null : $cards->first(fn (array $card): bool => $card['review']->catalog->value === $this->confirmCatalog);
-        $withoutEmail = $card !== null && $this->confirmAction === 'validate' && $card['review']->catalog === Catalog::Teachers
-            ? app(TeacherAccessQuery::class)->withoutInstitutionalEmail($card['review']->department_id)
-            : 0;
+        $missing = $card !== null && $this->confirmAction === 'validate' && $card['review']->catalog === Catalog::Teachers
+            ? $access->missingInvitations($card['review']->department_id)
+            : ['email' => 0, 'user' => 0];
 
-        return ['confirming' => $card, 'withoutInstitutionalEmail' => $withoutEmail];
+        return ['confirming' => $card, 'missingInvitations' => $missing];
     }
 
     /**

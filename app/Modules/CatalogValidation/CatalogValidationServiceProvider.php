@@ -8,7 +8,7 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewValidated;
 use App\Modules\CatalogValidation\Listeners\CreateReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnCampusUpdated;
-use App\Modules\CatalogValidation\Listeners\InviteTeacherOnInstitutionalEmail;
+use App\Modules\CatalogValidation\Listeners\InviteTeacherAfterValidation;
 use App\Modules\CatalogValidation\Listeners\InviteTeachersOnReviewValidated;
 use App\Modules\CatalogValidation\Listeners\NotifyPendingReviewsOnTermOpened;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
@@ -30,6 +30,7 @@ use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
+use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
 use Illuminate\Support\Facades\Event;
 
@@ -40,8 +41,8 @@ use Illuminate\Support\Facades\Event;
  * Escucha a Core, que no depende de CatalogValidation: al abrir un periodo en un campus crea las revisiones
  * que falten y avisa a los jefes que tienen catálogos por validar, y si un campus empieza a usar salones, las de
  * salones de los periodos abiertos en él. Escucha a Faculty: la captura del jefe sobre un docente suyo inicia la
- * revisión de docentes (CV-S4), y su correo institucional capturado después de validar lo invita a activar su acceso.
- * Validar la revisión de docentes invita a los docentes del departamento (AC-09).
+ * revisión de docentes (CV-S4). Validar la revisión de docentes invita a los docentes del departamento a activar su
+ * acceso, y el que queda en condiciones después (correo capturado, adscripción, usuario) se invita entonces (AC-09).
  */
 final class CatalogValidationServiceProvider extends ModuleServiceProvider
 {
@@ -54,7 +55,7 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
         Event::listen(CampusUpdated::class, CreateRoomsReviewsOnCampusUpdated::class);
 
         Event::listen(CatalogReviewValidated::class, InviteTeachersOnReviewValidated::class);
-        Event::listen(TeacherUpdated::class, InviteTeacherOnInstitutionalEmail::class);
+        Event::listen([TeacherUpdated::class, AdscriptionChanged::class, TeacherAccessChanged::class], InviteTeacherAfterValidation::class);
 
         foreach ([AvailabilityChanged::class, QualificationChanged::class, ExternalLoadChanged::class, TeacherUpdated::class, AdscriptionChanged::class, PositionChanged::class] as $event) {
             Event::listen($event, StartTeachersReviewOnFacultyCapture::class);

@@ -12,7 +12,8 @@ use RuntimeException;
  * Invita a un docente a activar su acceso (AC-07): manda a su correo institucional la invitación de Core
  * (SendAccessInvitation). Solo a un docente activo y sin borrar, con usuario sin contraseña y con correo institucional
  * (sin él no se habilita, confirmado el 11 de noviembre de 2026); si no, una ValidationException sobre `access` con el
- * motivo, sin escribir. Quién puede lo decide TeacherPolicy (`inviteAccess`) o quien la llama.
+ * motivo, sin escribir. Con `$unlessInvited`, a quien ya tiene una invitación vigente no se le manda otra. Devuelve si
+ * la mandó. Quién puede lo decide TeacherPolicy (`inviteAccess`) o quien la llama.
  */
 final class InviteTeacherAccess
 {
@@ -24,9 +25,13 @@ final class InviteTeacherAccess
      * @throws ValidationException
      * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
-    public function handle(Teacher $teacher, ?User $actor = null): User
+    public function handle(Teacher $teacher, ?User $actor = null, bool $unlessInvited = false): bool
     {
-        $user = $teacher->user_id === null ? null : $teacher->user()->first();
+        $user = match (true) {
+            $teacher->user_id === null => null,
+            $teacher->relationLoaded('user') => $teacher->user,
+            default => $teacher->user()->first(),
+        };
 
         $reason = match (true) {
             ! $teacher->is_active || $teacher->trashed() => 'El docente está inactivo.',
@@ -40,7 +45,7 @@ final class InviteTeacherAccess
             throw ValidationException::withMessages(['access' => $reason]);
         }
 
-        return $this->sendAccessInvitation->handle($user, $teacher->institutional_email, $actor);
+        return $this->sendAccessInvitation->handle($user, $teacher->institutional_email, $actor, $unlessInvited);
     }
 
     /**
@@ -50,7 +55,7 @@ final class InviteTeacherAccess
      * @throws ValidationException
      * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
-    public function resend(Teacher $teacher, ?User $actor = null): User
+    public function resend(Teacher $teacher, ?User $actor = null): bool
     {
         if ($teacher->user_id !== null && $teacher->user()->value('access_invited_at') === null) {
             throw ValidationException::withMessages(['access' => self::NOT_INVITED]);

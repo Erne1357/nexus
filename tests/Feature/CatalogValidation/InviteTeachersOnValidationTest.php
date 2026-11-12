@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Enums\Role;
@@ -10,6 +11,9 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
+use App\Modules\Faculty\Actions\AddAdscription;
+use App\Modules\Faculty\Actions\SetTeacherActive;
+use App\Modules\Faculty\Actions\SyncTeacherAccess;
 use App\Modules\Faculty\Actions\UpdateTeacher;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -136,6 +140,50 @@ it('AC-09: capturar el correo institucional después de validar manda la invitac
     expect(invitedEmails())->toBe(['ana@cdjuarez.tecnm.mx']);
 });
 
+it('AC-09: el docente que queda en condiciones después de validar se invita a nombre de quien hizo el cambio', function (Closure $after) {
+    $teacher = teacherWithoutAccess($this->cb, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
+    app(ValidateReview::class)->handle($this->review, $this->jefe);
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $after($teacher, $this);
+
+    $log = Activity::where('event', 'access-invited')->sole();
+
+    expect(invitedEmails())->toBe(['ana@cdjuarez.tecnm.mx'])
+        ->and($log->causer_id)->toBe($admin->id);
+})->with([
+    'adscrito al departamento' => [fn (Teacher $teacher, $test) => app(AddAdscription::class)->handle($teacher, $test->sc)],
+    'reactivado' => [function (Teacher $teacher) {
+        app(SetTeacherActive::class)->handle($teacher, false);
+        TeacherDepartment::factory()->for($teacher)->for(test()->sc)->create(['is_primary' => false]);
+        app(SetTeacherActive::class)->handle($teacher->fresh(), true);
+    }],
+]);
+
+it('AC-09: al docente que recibe su usuario después de validar lo invita, a nombre de quien validó', function () {
+    $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'AAAA800101AA1', 'institutional_email' => 'ana@cdjuarez.tecnm.mx']);
+    app(ValidateReview::class)->handle($this->review, $this->jefe);
+
+    Notification::assertNothingSent();
+
+    app(SyncTeacherAccess::class)->handle($teacher);
+
+    expect(invitedEmails())->toBe(['ana@cdjuarez.tecnm.mx'])
+        ->and(Activity::where('event', 'access-invited')->sole()->causer_id)->toBe($this->jefe->id);
+});
+
+it('AC-09: un periodo ya terminado no cuenta para invitar después', function () {
+    $this->term->update(['starts_on' => today()->subYear()->toDateString(), 'ends_on' => today()->subDay()->toDateString()]);
+    $teacher = teacherWithoutAccess($this->sc, 'AAAA800101AA1', null);
+    $this->review->forceFill(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()->subMonth()])->save();
+    $this->actingAs($this->jefe);
+
+    app(UpdateTeacher::class)->handle($teacher, ['institutional_email' => 'ana@cdjuarez.tecnm.mx']);
+
+    Notification::assertNothingSent();
+});
+
 it('AC-09: cambiar el correo de un docente ya invitado no le manda dos invitaciones', function () {
     $teacher = teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
     app(ValidateReview::class)->handle($this->review, $this->jefe);
@@ -146,18 +194,21 @@ it('AC-09: cambiar el correo de un docente ya invitado no le manda dos invitacio
     expect(invitedEmails())->toBe(['ana.p@cdjuarez.tecnm.mx', 'ana@cdjuarez.tecnm.mx']);
 });
 
-it('AC-09: antes de validar, el aviso dice cuántos docentes activos sin acceso no tienen correo institucional', function () {
+it('AC-09: antes de validar, el aviso dice cuántos docentes activos sin acceso no tienen correo institucional y cuántos no tienen usuario activo', function () {
     teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
     teacherWithoutAccess($this->sc, 'BBBB800101BB1', null);
     teacherWithoutAccess($this->sc, 'CCCC800101CC1', null);
     teacherWithoutAccess($this->sc, 'DDDD800101DD1', null, ['password' => 'otra-clave-123']);
     teacherWithoutAccess($this->sc, 'EEEE800101EE1', null)->update(['is_active' => false]);
+    teacherWithoutAccess($this->sc, 'FFFF800101FF1', 'fer@cdjuarez.tecnm.mx', ['is_active' => false]);
+    Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'GGGG800101GG1', 'institutional_email' => 'gil@cdjuarez.tecnm.mx']);
 
     Livewire::withQueryParams(['department' => $this->sc->id])
         ->actingAs($this->jefe)
         ->test('catalog-validation::pages.review')
         ->call('confirm', 'validate', 'teachers')
-        ->assertSeeText('2 docentes activos sin correo institucional no recibirán su acceso.');
+        ->assertSeeText('2 docentes activos sin correo institucional no recibirán su acceso.')
+        ->assertSeeText('2 docentes activos no tienen un usuario activo y no recibirán su acceso; lo resuelve el administrador.');
 });
 
 it('AC-09: con todos los correos capturados, el aviso no sale', function () {
@@ -167,7 +218,8 @@ it('AC-09: con todos los correos capturados, el aviso no sale', function () {
         ->actingAs($this->jefe)
         ->test('catalog-validation::pages.review')
         ->call('confirm', 'validate', 'teachers')
-        ->assertDontSeeText('sin correo institucional');
+        ->assertDontSeeText('sin correo institucional')
+        ->assertDontSeeText('usuario activo');
 });
 
 it('AC-09: una invitación ya enviada al validar no se repite al reenviar el mismo correo', function () {

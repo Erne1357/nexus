@@ -22,6 +22,8 @@ use RuntimeException;
  * Solo a un usuario activo y sin contraseña; si otro usuario ya tiene ese correo (sin importar mayúsculas), no
  * escribe. Sin NEXUS_DEFAULT_PASSWORD falla antes de escribir, porque el correo la lleva. En una transacción bloquea
  * al usuario y deja en la bitácora el correo, nunca la contraseña; el correo sale de la cola después del commit.
+ * Con `$unlessInvited`, si el usuario ya tiene una invitación vigente no hace nada: se revisa con el usuario
+ * bloqueado, así dos corridas a la vez no le mandan dos. Devuelve si la mandó.
  */
 final class SendAccessInvitation
 {
@@ -34,13 +36,17 @@ final class SendAccessInvitation
      * @throws ValidationException si el usuario ya tiene acceso, está inactivo o el correo es de otro usuario
      * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
-    public function handle(User $user, string $email, ?User $actor = null): User
+    public function handle(User $user, string $email, ?User $actor = null, bool $unlessInvited = false): bool
     {
         $this->defaultPassword->value();
         $email = mb_strtolower(trim($email));
 
-        return DB::transaction(function () use ($user, $email, $actor): User {
+        return DB::transaction(function () use ($user, $email, $actor, $unlessInvited): bool {
             $user = User::query()->lockForUpdate()->findOrFail($user->getKey());
+
+            if ($unlessInvited && $user->access_invited_at !== null && $this->link->expiresAt($user)->isFuture()) {
+                return false;
+            }
 
             if (! $user->is_active || $user->password !== null) {
                 throw ValidationException::withMessages(['user' => $user->is_active ? 'Ya tiene acceso.' : 'Su usuario está inactivo.']);
@@ -78,7 +84,7 @@ final class SendAccessInvitation
                 $this->link->expiresAt($user),
             ));
 
-            return $user;
+            return true;
         });
     }
 
