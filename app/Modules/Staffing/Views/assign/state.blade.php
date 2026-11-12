@@ -37,10 +37,10 @@
                 </ul>
                 <p class="flex flex-wrap gap-x-5 gap-y-1">
                     @if (\Illuminate\Support\Facades\Route::has('scheduling.conflicts'))
-                        <a href="{{ route('scheduling.conflicts') }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold md:min-h-0" data-testid="blockers-conflicts-link">Ir a Choques y avance<x-icon name="o-arrow-right" class="h-4 w-4" aria-hidden="true" /></a>
+                        <a href="{{ route('scheduling.conflicts', ['campus' => $board->campus->code]) }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold md:min-h-0" data-testid="blockers-conflicts-link">Ir a Choques y avance<x-icon name="o-arrow-right" class="h-4 w-4" aria-hidden="true" /></a>
                     @endif
                     @if (\Illuminate\Support\Facades\Route::has('scheduling.editor'))
-                        <a href="{{ route('scheduling.editor') }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold md:min-h-0">Abrir el editor de horarios<x-icon name="o-arrow-right" class="h-4 w-4" aria-hidden="true" /></a>
+                        <a href="{{ route('scheduling.editor', ['campus' => $board->campus->code]) }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold md:min-h-0">Abrir el editor de horarios<x-icon name="o-arrow-right" class="h-4 w-4" aria-hidden="true" /></a>
                     @endif
                 </p>
             </div>

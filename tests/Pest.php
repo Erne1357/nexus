@@ -81,9 +81,13 @@ function lastToastOf(Testable $component): ?array
  * null), como las manda el navegador: la primera con la consulta y las de Livewire con la página en Referer. Livewire::test
  * no manda ni una ni otro en sus llamadas, así que esto fija lo que lee el puente Actor::activeCampus() (#415) para las
  * pantallas que todavía no pasan a WithCampusFilter, en lugar del campus que antes guardaba la credencial en la sesión.
+ * Para las que ya usan WithCampusFilter::requiredCampus() también deja ese campus como el último elegido de la sesión
+ * (Campus::LAST_CHOSEN_KEY, AZ-02), porque Livewire::test tampoco lleva el `?campus=` de la URL.
  */
 function onCampusPage(?Campus $campus): void
 {
+    $campus === null ? session()->forget(Campus::LAST_CHOSEN_KEY) : session()->put(Campus::LAST_CHOSEN_KEY, $campus->code);
+
     app()->scoped(Actor::class, fn (Application $app): Actor => new Actor(
         fn (): mixed => $app['auth']->user(),
         $app->make(OrgTree::class),

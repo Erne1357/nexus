@@ -14,8 +14,9 @@ use Livewire\Attributes\Url;
  * borrado o que no existe) se ignora: es como no haber elegido.
  *
  * - campusFilter(): el campus elegido, o null para «todos»: listas y catálogos que muestran todos los campus juntos.
- * - requiredCampus(): para las pantallas que trabajan sobre un solo campus (la carga y sus pantallas): el elegido o,
- *   si no hay, el primero de las opciones; sin ninguna, 403.
+ * - requiredCampus(): para las pantallas que trabajan sobre un solo campus (la carga y sus pantallas): el elegido, o
+ *   el último que se eligió en la sesión (Campus::LAST_CHOSEN_KEY) si sigue entre las opciones, o el primero; sin ninguna, 403.
+ *   Cada vez que la petición trae un `?campus=` válido, se recuerda (supuesto por confirmar, AZ-02).
  *
  * No es alcance: lo que el usuario puede ver o hacer lo siguen decidiendo las policies y Actor::constrain(). Los
  * métodos son protegidos para que el navegador no pueda llamarlos como acciones.
@@ -45,12 +46,42 @@ trait WithCampusFilter
     }
 
     /**
-     * El campus de una pantalla que necesita uno: el elegido o, si no hay, el primero de las opciones.
+     * El campus de una pantalla que necesita uno: el elegido; si no hay, el último recordado en la sesión si sigue entre
+     * las opciones; si no, el primero. El elegido se recuerda para la siguiente pantalla.
      */
     protected function requiredCampus(): Campus
     {
-        return $this->campusFilter()
-            ?? $this->campusOptions()->first()
+        $options = $this->campusOptions();
+        $chosen = $this->campusFilter();
+
+        if ($chosen !== null) {
+            session()->put(Campus::LAST_CHOSEN_KEY, $chosen->code);
+
+            return $chosen;
+        }
+
+        return $options->firstWhere('code', session()->get(Campus::LAST_CHOSEN_KEY))
+            ?? $options->first()
             ?? abort(403, 'No trabajas en ningún campus activo.');
+    }
+
+    /**
+     * Para el `with()` de una pantalla de un solo campus: las opciones y el código del campus que muestra, que van a
+     * `<x-core::campus-filter :options="$campusOptions" :selected="$campusCode" />` (sin «Todos»).
+     *
+     * @return array{campusOptions: Collection<int, Campus>, campusCode: string}
+     */
+    protected function campusViewData(): array
+    {
+        return ['campusOptions' => $this->campusOptions(), 'campusCode' => $this->requiredCampus()->code];
+    }
+
+    /**
+     * Cambiar de campus en una pantalla que lo resolvió al abrirse (periodo, grupos, filtros del campus anterior): la
+     * abre de nuevo en `$route` con el campus elegido, sin los demás filtros.
+     */
+    protected function reopenOnCampus(string $route): void
+    {
+        $this->redirectRoute($route, ['campus' => $this->requiredCampus()->code], navigate: true);
     }
 }

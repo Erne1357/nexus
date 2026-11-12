@@ -7,12 +7,15 @@
 <div @if ($pollUntil > now()->getTimestamp()) wire:poll.3s="refreshBoard" @endif>
     <x-header title="Choques y avance" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            @if ($term && $campus)
-                Lo que le falta a la carga de {{ $campus->name }} para cerrar en {{ $term->name }}: choques duros, grupos sin horario, sin docente y sin salón.
+            @if ($term)
+                Lo que le falta a la carga de {{ $shownCampus->name }} para cerrar en {{ $term->name }}: choques duros, grupos sin horario, sin docente y sin salón.
             @else
                 Lo que le falta a cada carga para cerrar: choques duros, grupos sin horario, sin docente y sin salón.
             @endif
         </x-slot:subtitle>
+        <x-slot:actions>
+            <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" />
+        </x-slot:actions>
     </x-header>
 
     @if ($summary === null)
@@ -39,7 +42,7 @@
         @if ($summary->groups === 0)
             <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="conflicts-empty">
                 <x-icon name="o-squares-2x2" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
-                <p class="font-semibold">Todavía no hay grupos que puedas ver en {{ $campus->name }}.</p>
+                <p class="font-semibold">Todavía no hay grupos que puedas ver en {{ $shownCampus->name }}.</p>
                 <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">Los grupos nacen cuando un jefe acepta la parte de su departamento en una propuesta de carrera.</p>
             </div>
         @elseif ($view !== 'departamentos')
@@ -207,7 +210,7 @@
                         </tbody>
                         <tfoot class="border-t border-base-300 bg-base-200/60">
                             <tr class="font-semibold">
-                                <th scope="row" class="px-4 py-2.5 text-start">{{ $campus->name }} · {{ count($departments) }} {{ count($departments) === 1 ? 'departamento' : 'departamentos' }}</th>
+                                <th scope="row" class="px-4 py-2.5 text-start">{{ $shownCampus->name }} · {{ count($departments) }} {{ count($departments) === 1 ? 'departamento' : 'departamentos' }}</th>
                                 <td class="px-2 py-2.5 text-end font-mono">{{ $summary->groups }}</td>
                                 <td class="px-2 py-2.5 text-center font-mono">{{ $summary->hard }}</td>
                                 <td class="px-2 py-2.5 text-center font-mono">{{ $summary->unscheduled }}</td>

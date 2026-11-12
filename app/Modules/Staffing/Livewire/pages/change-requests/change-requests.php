@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
@@ -49,6 +50,7 @@ use Mary\Traits\Toast;
 new #[Title('Solicitudes de cambio')] class extends Component
 {
     use Toast;
+    use WithCampusFilter;
 
     /** Valores de `?estado=` y el estado que filtran. */
     private const array STATUSES = [
@@ -133,6 +135,11 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->updatedStatus();
         $this->updatedKind();
         $this->resolve($context, $query);
+    }
+
+    public function updatedCampus(): void
+    {
+        $this->reopenOnCampus('staffing.change-requests');
     }
 
     public function updatedDepartment(Actor $context, ChangeRequestsQuery $query): void
@@ -264,7 +271,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
             'reason.max' => "El motivo lleva hasta {$max} caracteres.",
         ]);
 
-        $group = $query->requestableGroup($context, (string) $context->activeTerm()?->id, (string) $context->activeCampus()?->id, $this->requestGroupId) ?? abort(404);
+        $group = $query->requestableGroup($context, (string) $context->activeTerm()?->id, $this->requiredCampus()->id, $this->requestGroupId) ?? abort(404);
         $this->authorize('create', [ChangeRequest::class, $group]);
 
         try {
@@ -292,7 +299,8 @@ new #[Title('Solicitudes de cambio')] class extends Component
     {
         $canRequest = $this->canRequest($context);
         $termId = (string) $context->activeTerm()?->id;
-        $campusId = (string) $context->activeCampus()?->id;
+        $shownCampus = $this->requiredCampus();
+        $campusId = $shownCampus->id;
         $requesting = [
             'canRequest' => $canRequest,
             'requestBlocked' => $canRequest && ! $query->hasRequestableGroups($context, $termId, $campusId) ? 'No hay grupos de tu carrera con la carga en Asignación o Ajustes.' : null,
@@ -301,7 +309,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         ];
 
         if ($this->departmentId === null) {
-            return ['requests' => null, ...$requesting];
+            return ['requests' => null, ...$this->campusViewData(), ...$requesting];
         }
 
         $requests = $query->listFor($context, (string) $this->termId, (string) $this->campusId, $this->departmentId);
@@ -320,8 +328,9 @@ new #[Title('Solicitudes de cambio')] class extends Component
             'listScope' => $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule) ? 'de tu carrera' : 'en tu lista',
             'canDecide' => $selected !== null && $selected->status === ChangeRequestStatus::Pending && Gate::allows('decide', $selected),
             'canApply' => $selected !== null && $selected->status === ChangeRequestStatus::Approved && Gate::allows('apply', $selected),
-            'editorUrl' => $selected !== null ? route('scheduling.editor', ['grupo' => $selected->group_id]) : null,
-            'campusName' => $context->activeCampus()?->name,
+            'editorUrl' => $selected !== null ? route('scheduling.editor', ['campus' => $shownCampus->code, 'grupo' => $selected->group_id]) : null,
+            'campusName' => $shownCampus->name,
+            ...$this->campusViewData(),
             'termName' => $context->activeTerm()?->name,
             ...$requesting,
         ];
@@ -356,7 +365,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
      */
     private function canRequest(Actor $context): bool
     {
-        return $context->allowsAny(StaffingPermission::ChangeRequestRequest) && $context->activeCampus() !== null && $context->activeTerm() !== null;
+        return $context->allowsAny(StaffingPermission::ChangeRequestRequest) && $context->activeTerm() !== null;
     }
 
     /**
@@ -389,11 +398,11 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->termId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
-        $campus = $context->activeCampus();
+        $campus = $this->requiredCampus();
         $term = $context->activeTerm();
 
-        if ($campus === null || $term === null) {
-            $this->message = $campus === null ? 'Elige un campus en tu credencial para ver las solicitudes de cambio.' : 'No hay un periodo activo: elige uno en tu credencial.';
+        if ($term === null) {
+            $this->message = 'No hay un periodo activo: elige uno en tu credencial.';
 
             return;
         }

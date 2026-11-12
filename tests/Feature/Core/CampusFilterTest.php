@@ -73,7 +73,7 @@ describe('WithCampusFilter', function () {
         $page = Livewire::test(campusFilterPage())->set('campus', 'C2');
 
         expect($page->instance()->shown()['filter'])->toBe('C2')
-            ->and($page->set('campus', null)->instance()->shown())->toBe(['options' => ['C1', 'C2'], 'filter' => null, 'required' => 'C1']);
+            ->and($page->set('campus', null)->instance()->shown()['filter'])->toBeNull();
     });
 
     it('ignora un campus que no ofrece: ajeno, inactivo o que no existe', function (string $code) {
@@ -82,6 +82,26 @@ describe('WithCampusFilter', function () {
         expect(Livewire::withQueryParams(['campus' => $code])->test(campusFilterPage())->instance()->shown())
             ->toBe(['options' => ['C1', 'C2'], 'filter' => null, 'required' => 'C1']);
     })->with(['ajeno' => 'C9', 'inactivo' => 'EAD', 'no existe' => 'XX', 'vacío' => '']);
+
+    it('AZ-02: recuerda el último campus elegido y lo usa cuando la URL no trae ?campus=', function () {
+        $this->actingAs($this->jefe);
+
+        Livewire::withQueryParams(['campus' => 'C2'])->test(campusFilterPage())->instance()->shown();
+
+        expect(session('core.last_campus'))->toBe('C2')
+            ->and(Livewire::test(campusFilterPage())->instance()->shown()['required'])->toBe('C2')
+            ->and(Livewire::withQueryParams(['campus' => 'C1'])->test(campusFilterPage())->instance()->shown()['required'])->toBe('C1');
+    });
+
+    it('AZ-02: no recuerda un campus inválido, y uno recordado que ya no ofrece se cambia por el primero', function () {
+        $this->actingAs($this->jefe);
+
+        Livewire::withQueryParams(['campus' => 'C9'])->test(campusFilterPage())->instance()->shown();
+        expect(session('core.last_campus'))->toBeNull();
+
+        session(['core.last_campus' => 'C9']);
+        expect(Livewire::test(campusFilterPage())->instance()->shown()['required'])->toBe('C1');
+    });
 
     it('a quien trabaja en un solo campus le da ese, aunque la URL pida otro', function () {
         $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
