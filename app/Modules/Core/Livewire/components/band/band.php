@@ -9,12 +9,13 @@ use Livewire\Component;
 /**
  * La banda del layout (DESIGN.md, "Estructura"): la liebre, que abre y cierra el menú completo;
  * «Nexus»; la ruta (área › pantalla); «Buscar o ir a…»; la campana de notificaciones, y la credencial de quien trabaja, que se abre
- * como tarjeta con el selector de campus y periodo, el tema, el cambio de contraseña y el cierre de
+ * como tarjeta con el selector de perfil y periodo, el tema, el cambio de contraseña y el cierre de
  * sesión. Abrir y cerrar lo hace el componente Alpine `nexusShell` (resources/js/app.js).
  *
  * El área de la ruta es la de la entrada del menú de la pantalla (Navigation::forRoute). La
  * credencial muestra el perfil activo (Actor::activeRole()) con su nombre para quien lo ocupa (RoleTitleQuery: el jefe
- * de Servicios Escolares, «Jefe del Departamento de Servicios Escolares», AZ-02), y el campus y el periodo activos.
+ * de Servicios Escolares, «Jefe del Departamento de Servicios Escolares», AZ-02) y el periodo activo: «Rol · Periodo».
+ * El campus no va en la credencial (#415): lo elige cada pantalla.
  */
 new class extends Component
 {
@@ -53,11 +54,7 @@ new class extends Component
             'username' => $user->username ?? '',
             'initials' => $this->initials($user->name ?? ''),
             'roleLabel' => $roleLabel,
-            'summary' => implode(' · ', array_filter([
-                $roleLabel,
-                $context->activeCampus()?->name,
-                $context->activeTerm()?->name,
-            ])),
+            'summary' => implode(' · ', array_filter([$roleLabel, $context->activeTerm()?->name])),
         ];
     }
 

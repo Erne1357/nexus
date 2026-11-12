@@ -404,7 +404,7 @@ describe('campus y periodo activos por omisión', function () {
         expect($context->activeTerm()?->is($current))->toBeTrue()
             ->and(DB::getQueryLog())->toBeEmpty();
 
-        app(SetActiveContext::class)->handle(null, $previous);
+        app(SetActiveContext::class)->handle($previous);
 
         expect($context->activeTerm()?->is($previous))->toBeTrue();
     });
@@ -437,6 +437,55 @@ describe('campus y periodo activos por omisión', function () {
     });
 });
 
+/*
+| Puente de activeCampus() (#415, A1): la credencial ya no elige campus; mientras las pantallas de los demás módulos no
+| pasen a WithCampusFilter, el campus es el de `?campus=` de la petición (en una petición de Livewire, el de la página,
+| que viene en Referer), si es de los que ofrece campuses(); si no, el único de campuses(), o ninguno.
+*/
+
+describe('puente del campus de la pantalla', function () {
+    beforeEach(function () {
+        Route::middleware('web')->match(['GET', 'POST'], '/_test/active-campus', fn (Actor $context): array => ['active' => $context->activeCampus()?->code]);
+        $this->both = User::factory()
+            ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
+            ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
+            ->create();
+    });
+
+    it('toma el campus de ?campus= si es de los que ofrece', function () {
+        $this->actingAs($this->both)->get('/_test/active-campus?campus=C2')->assertExactJson(['active' => 'C2']);
+    });
+
+    it('ignora un campus que no ofrece y cae en el único o en ninguno', function () {
+        Campus::factory()->create(['code' => 'EAD', 'is_active' => false]);
+        $onlyC2 = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
+
+        $this->actingAs($this->both)->get('/_test/active-campus?campus=EAD')->assertExactJson(['active' => null]);
+        $this->actingAs($onlyC2)->get('/_test/active-campus?campus=C1')->assertExactJson(['active' => 'C2']);
+        $this->actingAs($onlyC2)->get('/_test/active-campus')->assertExactJson(['active' => 'C2']);
+    });
+
+    it('en una petición de Livewire toma el campus de la página, que viene en Referer', function () {
+        $this->actingAs($this->both)
+            ->withHeaders(['X-Livewire' => 'true', 'Referer' => url('/scheduling/editor?carrera=ISC&campus=C1')])
+            ->post('/_test/active-campus')
+            ->assertExactJson(['active' => 'C1']);
+    });
+
+    it('fuera de Livewire no lee Referer', function () {
+        $this->actingAs($this->both)
+            ->withHeaders(['Referer' => url('/scheduling/editor?campus=C1')])
+            ->get('/_test/active-campus')
+            ->assertExactJson(['active' => null]);
+    });
+
+    it('el contexto de otro usuario (forUser) no lee el campus de la petición', function () {
+        Route::middleware('web')->get('/_test/other-campus', fn (Actor $context): array => ['other' => $context->forUser($this->both)->activeCampus()?->code]);
+
+        $this->actingAs(User::factory()->admin()->create())->get('/_test/other-campus?campus=C1')->assertExactJson(['other' => null]);
+    });
+});
+
 describe('ciclo de vida en el contenedor (Octane)', function () {
     it('se registra como scoped: una instancia por petición, no un singleton', function () {
         $first = app(Actor::class);
@@ -460,9 +509,7 @@ describe('ciclo de vida en el contenedor (Octane)', function () {
             ->create();
         $onlyC2 = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();
 
-        $this->actingAs($both);
-        app(SetActiveContext::class)->handle($this->c1, null);
-        $this->get('/_test/scoped-context')->assertExactJson(['campuses' => ['C1', 'C2'], 'active' => 'C1']);
+        $this->actingAs($both)->get('/_test/scoped-context?campus=C1')->assertExactJson(['campuses' => ['C1', 'C2'], 'active' => 'C1']);
 
         $this->actingAs($onlyC2)->get('/_test/scoped-context')->assertExactJson(['campuses' => ['C2'], 'active' => 'C2']);
     });

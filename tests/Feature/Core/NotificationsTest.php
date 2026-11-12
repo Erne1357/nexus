@@ -182,18 +182,27 @@ it('si ya no trabaja en el campus del aviso, avisa en lugar de llevarlo', functi
         ->and($target->problem)->toBe('Ya no trabajas en el campus de ese aviso.');
 });
 
-it('abrirla cambia la credencial al periodo y el campus del aviso si el usuario trabaja ahí', function () {
+it('abrirla deja la credencial en el periodo del aviso y abre la pantalla en su campus (?campus=)', function () {
+    Campus::factory()->create(['code' => 'C1']);
     $c2 = Campus::factory()->create(['code' => 'C2']);
     $term = Term::factory()->create(['is_current' => false]);
     $admin = User::factory()->admin()->create();
-    $admin->notify(notice(termId: $term->id, campusId: $c2->id));
+    $admin->notify(notice(parameters: ['tab' => 'uno'], termId: $term->id, campusId: $c2->id));
     $this->actingAs($admin);
 
-    app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'));
+    $target = app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'));
 
-    $context = app(Actor::class);
-    expect($context->activeTerm()?->id)->toBe($term->id)
-        ->and($context->activeCampus()?->id)->toBe($c2->id);
+    expect($target->url)->toBe(route('home', ['tab' => 'uno', 'campus' => 'C2']))
+        ->and(app(Actor::class)->activeTerm()?->id)->toBe($term->id)
+        ->and(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([]);
+});
+
+it('un aviso sin campus abre su pantalla sin ?campus=', function () {
+    $admin = User::factory()->admin()->create();
+    $admin->notify(notice());
+    $this->actingAs($admin);
+
+    expect(app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'))->url)->toBe(route('home'));
 });
 
 it('no abre la notificación de otro usuario', function () {
