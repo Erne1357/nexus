@@ -42,7 +42,7 @@ final class UpdateUserPassword implements UpdatesUserPasswords
     {
         $validated = Validator::make($input, [
             'current_password' => ['required', 'string', $this->currentPassword($user)],
-            'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password', $this->notTheDefaultPassword()],
+            'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password', $this->defaultPassword->rejectionRule()],
         ])->validate();
 
         DB::transaction(function () use ($user, $validated): void {
@@ -70,15 +70,6 @@ final class UpdateUserPassword implements UpdatesUserPasswords
         return function (string $attribute, mixed $value, Closure $fail) use ($user): void {
             if (! is_string($value) || $user->password === null || ! Hash::check(SiiNip::forUser($user, $value), $user->password)) {
                 $fail(__('validation.current_password'));
-            }
-        };
-    }
-
-    private function notTheDefaultPassword(): Closure
-    {
-        return function (string $attribute, mixed $value, Closure $fail): void {
-            if (is_string($value) && $this->defaultPassword->matches($value)) {
-                $fail('No puedes usar la contraseña por defecto.');
             }
         };
     }
