@@ -144,6 +144,66 @@ final class PeopleQuery
     }
 
     /**
+     * La lista con casillas de «Nombrar» al coordinador (U3; M5, MS19, AZ-S17): las carreras que se ofrecen en el campus
+     * (sin campus, en algún campus activo), por departamento, cada una con quién la coordina hoy en esa modalidad.
+     * `state` es `mine` si `$person` ya la coordina en el alcance elegido y no hace falta nombrarla otra vez (con campus,
+     * en ese campus o en todos; sin campus, solo en todos: ampliar a una coordinadora de C2 a todos los campus sí se
+     * puede), `held` si la coordina otra persona y `free` si nadie. `holders` lo dice en español («Daniel Ríos · todos
+     * los campus», «Sin coordinador en C2», «Ya la coordina en C2»). `visible` es falso para las carreras que `$search`
+     * (clave o nombre) no deja ver; la lista siempre trae todas para que los atajos y las cuentas no dependan de la
+     * búsqueda.
+     *
+     * @return list<array{id: string, code: string, name: string, careers: list<array{id: string, code: string, name: string, state: string, holders: string, visible: bool}>}>
+     */
+    public function careerChecklist(?string $campusId, ?string $modalityId, ?User $person = null, string $search = ''): array
+    {
+        $campusId = $campusId !== null && Str::isUuid($campusId) ? $campusId : null;
+        $modalityId = $modalityId !== null && Str::isUuid($modalityId) ? $modalityId : null;
+        $campusCode = $campusId === null ? null : Campus::withTrashed()->whereKey($campusId)->value('code');
+        $codes = Campus::withTrashed()->pluck('code', 'id');
+
+        $groups = $this->labels->careerGroups($campusId);
+        $careerIds = array_merge([], ...array_map(fn (array $group): array => array_column($group['careers'], 'id'), $groups));
+
+        $held = $careerIds === [] || $modalityId === null ? collect() : RoleAssignment::query()->current()
+            ->where('role', Role::Coordinador)
+            ->where('modality_id', $modalityId)
+            ->whereIn('career_id', $careerIds)
+            ->when($campusId !== null, fn (Builder $query) => $query->where(fn (Builder $campus) => $campus->where('campus_id', $campusId)->orWhereNull('campus_id')))
+            ->with('user:id,name')
+            ->orderBy('valid_from')->orderBy('id')
+            ->get()
+            ->groupBy('career_id');
+
+        $term = mb_strtolower(trim($search));
+        $result = [];
+
+        foreach ($groups as $group) {
+            $careers = [];
+
+            foreach ($group['careers'] as $career) {
+                $holders = $held->get($career['id'], collect());
+                $own = $person === null ? null : $holders->where('user_id', $person->getKey())->sortBy(fn (RoleAssignment $assignment): int => $assignment->campus_id === null ? 0 : 1)->first(
+                    fn (RoleAssignment $assignment): bool => $campusId !== null || $assignment->campus_id === null,
+                );
+                $names = $holders->map(fn (RoleAssignment $assignment): string => $assignment->user->name.' · '.($assignment->campus_id === null ? 'todos los campus' : $codes->get($assignment->campus_id, '')))->unique()->implode(', ');
+                $careers[] = [
+                    ...$career,
+                    'state' => $own !== null ? 'mine' : ($holders->isEmpty() ? 'free' : 'held'),
+                    'holders' => $own !== null
+                        ? 'Ya la coordina en '.($own->campus_id === null ? 'todos los campus' : $codes->get($own->campus_id, ''))
+                        : ($names !== '' ? $names : ($campusCode === null ? 'Sin coordinador' : "Sin coordinador en {$campusCode}")),
+                    'visible' => $term === '' || str_contains(mb_strtolower($career['code'].' '.$career['name']), $term),
+                ];
+            }
+
+            $result[] = [...$group, 'careers' => $careers];
+        }
+
+        return $result;
+    }
+
+    /**
      * Las modalidades activas, por código, para elegir una al nombrar (AZ-S17).
      *
      * @return list<array{id: string, name: string}>

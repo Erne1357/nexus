@@ -23,22 +23,53 @@ final class AcademicScopeLabels implements ScopeLabels
         return Career::withTrashed()->whereKey($careerIds)->pluck('code', 'id')->all();
     }
 
+    public function careerNames(array $careerIds): array
+    {
+        return $careerIds === [] ? [] : Career::withTrashed()->whereKey($careerIds)->pluck('name', 'id')->all();
+    }
+
     public function careerOptions(?string $campusId): array
     {
-        $offered = CareerCampus::query()
+        return Career::query()
+            ->whereIn('id', $this->offeredIn($campusId)->select('career_id'))
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name'])
+            ->mapWithKeys(fn (Career $career): array => [$career->id => "{$career->code} · {$career->name}"])
+            ->all();
+    }
+
+    public function careerGroups(?string $campusId): array
+    {
+        $careers = Career::query()
+            ->where('is_active', true)
+            ->whereIn('id', $this->offeredIn($campusId)->select('career_id'))
+            ->with(['department' => fn ($department) => $department->withTrashed()])
+            ->get(['id', 'code', 'name', 'department_id']);
+
+        return $careers->groupBy('department_id')
+            ->map(fn ($group): array => [
+                'id' => (string) $group->first()->department_id,
+                'code' => (string) $group->first()->department?->code,
+                'name' => (string) $group->first()->department?->name,
+                'careers' => $group->sortBy('code')->map(fn (Career $career): array => ['id' => $career->id, 'code' => $career->code, 'name' => $career->name])->values()->all(),
+            ])
+            ->sortBy(fn (array $department): string => $department['code'].'|'.$department['name'])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return Builder<CareerCampus>
+     */
+    private function offeredIn(?string $campusId): Builder
+    {
+        return CareerCampus::query()
             ->where('is_active', true)
             ->when(
                 $campusId === null,
                 fn (Builder $query) => $query->whereIn('campus_id', Campus::query()->where('is_active', true)->select('id')),
                 fn (Builder $query) => $query->where('campus_id', $campusId),
             );
-
-        return Career::query()
-            ->where('is_active', true)
-            ->whereIn('id', $offered->select('career_id'))
-            ->orderBy('code')
-            ->get(['id', 'code', 'name'])
-            ->mapWithKeys(fn (Career $career): array => [$career->id => "{$career->code} · {$career->name}"])
-            ->all();
     }
 }

@@ -210,14 +210,7 @@
         </div>
     </div>
 
-    <x-modal wire:model="showModal" :title="'Nombrar a '.$person->name" subtitle="El formulario pide solo el alcance que el puesto necesita." box-class="max-w-xl" separator>
-        <x-form wire:submit="appoint" no-separator>
-            @include('core::people.appoint-fields', ['roleNote' => 'El puesto de docente se maneja en la ficha del docente.', 'lockedUnit' => null])
-
-            <x-slot:actions>
-                <x-button label="Cancelar" @click="$wire.showModal = false" />
-                <x-button label="Nombrar" type="submit" icon="o-plus" class="btn-primary" spinner="appoint" data-testid="appoint-submit" />
-            </x-slot:actions>
-        </x-form>
-    </x-modal>
+    <x-drawer wire:model.live="showModal" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="appoint-title" data-testid="appoint-drawer">
+        @include('core::people.appoint-drawer', ['person' => $person, 'isCoordinator' => $isCoordinator])
+    </x-drawer>
 </div>

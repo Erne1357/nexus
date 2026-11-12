@@ -90,6 +90,6 @@ it('la pista del formulario «Nombrar» dice qué alcance pide cada puesto', fun
     [Role::Subdireccion, 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.'],
     [Role::JefeDepartamento, 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.'],
     [Role::JefeProyectoDocente, 'Este puesto pide modalidad y departamento académico. El campus es opcional: sin campus, trabaja todos los de su modalidad.'],
-    [Role::Coordinador, 'Este puesto pide modalidad y carrera. El campus es opcional: sin campus, trabaja todos los de su modalidad.'],
+    [Role::Coordinador, 'Pide una modalidad y una o varias carreras; el campus es opcional: sin campus, trabaja todos los de su modalidad. Se crea un nombramiento por carrera.'],
     [Role::Docente, null],
 ]);
