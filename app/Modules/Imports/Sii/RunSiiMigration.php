@@ -75,7 +75,7 @@ final class RunSiiMigration
             throw new InvalidArgumentException('Paso desconocido: '.implode(', ', $unknown).'. Pasos válidos: '.implode(', ', $names).'.');
         }
 
-        $migration = new SiiMigration($export, $this->curatedDir, $dryRun);
+        $migration = new SiiMigration($export, $this->curatedDir, $dryRun, $user);
         $incidents = new Incidents;
         $unreadable = 0;
         $reports = [];

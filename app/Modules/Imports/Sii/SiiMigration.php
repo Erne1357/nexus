@@ -2,12 +2,13 @@
 
 namespace App\Modules\Imports\Sii;
 
+use App\Modules\Core\Models\User;
 use Closure;
 use InvalidArgumentException;
 
 /**
- * El contexto de una corrida: la exportación abierta, los catálogos curados a mano y los mapas que un paso
- * arma una vez y otros reutilizan. Vive lo que dura la corrida; no es un singleton.
+ * El contexto de una corrida: la exportación abierta, los catálogos curados a mano, quién la corre y los mapas que un
+ * paso arma una vez y otros reutilizan. Vive lo que dura la corrida; no es un singleton.
  */
 final class SiiMigration
 {
@@ -18,11 +19,20 @@ final class SiiMigration
         private readonly SiiExport $export,
         private readonly string $curatedDir,
         private readonly bool $dryRun = false,
+        private readonly ?User $user = null,
     ) {}
 
     public function export(): SiiExport
     {
         return $this->export;
+    }
+
+    /**
+     * Quién corre la migración (`--user`), para lo que un paso deja a su nombre fuera del motor de importación.
+     */
+    public function user(): ?User
+    {
+        return $this->user;
     }
 
     /**
