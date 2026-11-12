@@ -260,11 +260,25 @@ final class RoleAssignmentRules
      */
     public function holdsStaffRole(string $userId): bool
     {
-        return RoleAssignment::query()
-            ->where('user_id', $userId)
-            ->where('role', '<>', Role::Docente)
-            ->notEnded()
-            ->exists();
+        return $this->staffAssignments()->where('user_id', $userId)->exists();
+    }
+
+    /**
+     * Los ids de los usuarios con un puesto distinto de `docente` vigente o por empezar (holdsStaffRole), como subconsulta.
+     *
+     * @return Builder<RoleAssignment>
+     */
+    public function staffUserIds(): Builder
+    {
+        return $this->staffAssignments()->select('user_id');
+    }
+
+    /**
+     * @return Builder<RoleAssignment>
+     */
+    private function staffAssignments(): Builder
+    {
+        return RoleAssignment::query()->where('role', '<>', Role::Docente)->notEnded();
     }
 
     /**
