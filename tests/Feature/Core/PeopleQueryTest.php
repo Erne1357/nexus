@@ -46,6 +46,17 @@ it('lista a todos por nombre y busca literal por nombre o usuario', function () 
         ->and($this->people->forTable('ZOE')->pluck('name')->all())->toBe(['Zoe Zárate']);
 });
 
+it('AC-15: sin búsqueda ni puesto no lista a los alumnos que solo son alumnos; salen al buscarlos o con el puesto', function () {
+    User::factory()->create(['name' => 'Ana Sin Puesto']);
+    User::factory()->withRole(Role::Alumno)->create(['name' => 'Beto Alumno', 'username' => '21110001']);
+    User::factory()->withRole(Role::Alumno)->withRole(Role::Docente)->create(['name' => 'Cris Alumna y Docente']);
+    User::factory()->withRole(Role::Alumno, ['valid_from' => '2025-01-01', 'valid_to' => '2026-10-31'])->create(['name' => 'Dora Exalumna']);
+
+    expect($this->people->forTable()->pluck('name')->all())->toBe(['Ana Sin Puesto', 'Cris Alumna y Docente', 'Dora Exalumna'])
+        ->and($this->people->forTable('21110001')->pluck('name')->all())->toBe(['Beto Alumno'])
+        ->and($this->people->forTable('', Role::Alumno)->pluck('name')->all())->toBe(['Beto Alumno', 'Cris Alumna y Docente']);
+});
+
 it('filtra por un puesto vigente y trae solo los vigentes', function () {
     $current = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id])->create(['name' => 'Ana Coordina']);
     User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->ige->id, 'valid_from' => '2025-01-01', 'valid_to' => '2026-10-31'])->create(['name' => 'Beto Terminado']);

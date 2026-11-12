@@ -4,7 +4,9 @@ use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
+use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
+use App\Modules\Faculty\Models\Teacher;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -128,6 +130,15 @@ it('todo docente activo tiene usuario con la contraseña por defecto y cambio ob
 
     expect(Hash::check(config('auth.default_password'), $user->password))->toBeTrue()
         ->and((bool) $user->must_change_password)->toBeTrue();
+});
+
+it('AC-02: solo da acceso a los docentes de su plantilla; un docente que ya estaba en la base sigue sin acceso', function () {
+    $user = User::factory()->create(['username' => 'ZZZZ800101ZZ1', 'password' => null, 'must_change_password' => true]);
+    Teacher::factory()->create(['rfc' => 'ZZZZ800101ZZ1', 'user_id' => $user->id]);
+
+    seedDemoTeachers();
+
+    expect($user->fresh()->password)->toBeNull();
 });
 
 it('dos docentes por departamento y campus son jefe de proyecto docente, con su nombramiento', function () {

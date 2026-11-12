@@ -32,15 +32,28 @@ it('allowsUnit y titularRoleOf: la Subdirección solo va en Subdirección Acadé
         ->and($rules->titularRoleOf($office))->toBeNull();
 });
 
-it('managedElsewhere: solo el docente se maneja en otra parte (AZ-S11)', function () {
+it('managedElsewhere: el docente y el alumno se manejan en otra parte (AZ-S11, AC-10)', function () {
     $rules = app(RoleAssignmentRules::class);
 
     expect($rules->managedElsewhere(Role::Docente))->toBe('El puesto de docente lo da la ficha del docente: se activa y se desactiva con el docente.')
+        ->and($rules->managedElsewhere(Role::Alumno))->toBe('El puesto de alumno lo da la migración del SII: su usuario se activa y se desactiva con su estatus.')
         ->and($rules->managedElsewhere(Role::JefeDepartamento))->toBeNull()
         ->and($rules->managedElsewhere(Role::JefeProyectoDocente))->toBeNull()
         ->and($rules->managedElsewhere(Role::Admin))->toBeNull()
         ->and($rules->managedElsewhere(Role::Subdireccion))->toBeNull()
         ->and($rules->managedElsewhere(Role::Coordinador))->toBeNull();
+});
+
+it('AC-10: ser alumno, como ser docente, no es un puesto de personal (holdsStaffRole, staffUserIds)', function () {
+    $rules = app(RoleAssignmentRules::class);
+    $student = User::factory()->withRole(Role::Alumno)->create();
+    $teacherAndStudent = User::factory()->withRole(Role::Docente)->withRole(Role::Alumno)->create();
+    $staff = User::factory()->withRole(Role::Alumno)->admin()->create();
+
+    expect($rules->holdsStaffRole($student->id))->toBeFalse()
+        ->and($rules->holdsStaffRole($teacherAndStudent->id))->toBeFalse()
+        ->and($rules->holdsStaffRole($staff->id))->toBeTrue()
+        ->and($rules->staffUserIds()->pluck('user_id')->unique()->values()->all())->toBe([$staff->id]);
 });
 
 /**

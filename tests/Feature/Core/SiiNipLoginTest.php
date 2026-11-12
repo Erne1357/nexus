@@ -8,6 +8,8 @@ use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Core\Support\SiiNip;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -74,6 +76,29 @@ it('AC-14: rehace con el costo normal el hash del NIP en el primer inicio correc
         ->and($user->password_origin)->toBe(PasswordOrigin::SiiNip);
 });
 
+it('AC-14: si el rehash falla, entra igual y lo reportado no lleva el hash', function () {
+    $user = studentWithNip('123');
+    $stored = $user->password;
+    config(['hashing.bcrypt.rounds' => 5]);
+    Hash::forgetDrivers();
+    DB::unprepared(<<<'SQL'
+        create function core_test_reject_rehash() returns trigger language plpgsql as $$ begin raise exception 'rechazado'; end $$;
+        create trigger core_test_reject_rehash before update of password on users for each row execute function core_test_reject_rehash();
+        SQL);
+    $reported = [];
+    app(ExceptionHandler::class)->reportable(function (Throwable $exception) use (&$reported): void {
+        $reported[] = (string) $exception;
+    });
+
+    $this->post('/login', ['username' => '21110001', 'password' => '123'])->assertRedirect('/');
+
+    $this->assertAuthenticatedAs($user);
+    expect($user->fresh()->password)->toBe($stored)
+        ->and($reported)->toHaveCount(1)
+        ->and($reported[0])->toContain('No se pudo rehacer el hash de una contraseña (SQLSTATE P0001).')
+        ->and($reported[0])->not->toContain('$2y$');
+});
+
 it('AC-14: guarda el NIP con costo 10, o con el configurado si es menor', function () {
     expect(SiiNip::ROUNDS)->toBe(10)
         ->and(SiiNip::rounds())->toBe(4);
@@ -111,7 +136,7 @@ it('AC-12: la contraseña actual equivocada se rechaza con el mensaje de siempre
 });
 
 it('AC-12: el alta manual, el reinicio del admin y la invitación aceptada dejan la contraseña por defecto como origen', function () {
-    $created = app(CreateStaffUser::class)->handle('ABCD800101XX1', 'Ana Pérez');
+    $created = app(CreateStaffUser::class)->handle('ABCD800101XX1', 'Ana Pérez', withAccess: true);
     $withoutAccess = app(CreateStaffUser::class)->handle('ABCD800101XX2', 'Beto Pérez', withAccess: false);
 
     $student = studentWithNip('123');

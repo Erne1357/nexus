@@ -8,9 +8,11 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\SiiNip;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Rules\InstitutionalEmail;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -32,6 +34,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * Cada usuario que cambia deja su bitácora (qué cambió, nunca el NIP ni el hash), y el bloque, una entrada con las
  * cuentas y los números de control en conflicto o con el correo de otro usuario, a nombre de `$actor`.
+ *
+ * Si una escritura falla, lanza un RuntimeException con un mensaje fijo y el SQLSTATE, sin encadenar la QueryException:
+ * su mensaje trae los valores de la consulta, entre ellos el hash del NIP, y acabaría en el log y en `failed_jobs`.
  */
 final class SyncStudentAccounts
 {
@@ -72,8 +77,22 @@ final class SyncStudentAccounts
 
     /**
      * @return array{0: 'created'|'updated'|'unchanged'|'missing'|'conflict', 1: bool}
+     *
+     * @throws RuntimeException si una escritura falla, sin los valores de la consulta
      */
     private function sync(string $controlNumber, #[\SensitiveParameter] string $nip, ?User $actor): array
+    {
+        try {
+            return $this->write($controlNumber, $nip, $actor);
+        } catch (QueryException $exception) {
+            throw new RuntimeException('No se pudo escribir la cuenta de un alumno (SQLSTATE '.$exception->getCode().').');
+        }
+    }
+
+    /**
+     * @return array{0: 'created'|'updated'|'unchanged'|'missing'|'conflict', 1: bool}
+     */
+    private function write(string $controlNumber, #[\SensitiveParameter] string $nip, ?User $actor): array
     {
         return DB::transaction(function () use ($controlNumber, $nip, $actor): array {
             $student = Student::withTrashed()->where('control_number', $controlNumber)->lockForUpdate()->first();

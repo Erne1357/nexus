@@ -61,6 +61,7 @@ const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Core/Livewire/pages/person/person.php',
     'app/Modules/Core/Notifications/NotificationMessage.php',
     'app/Modules/Core/Queries/OrgChartQuery.php',
+    'app/Modules/Core/Queries/PeopleQuery.php',
     'app/Modules/Core/Rules/RoleAssignmentRules.php',
     'app/Modules/Faculty/Actions/SyncTeacherAccess.php',
     'app/Modules/Faculty/Database/Seeders/FacultyDemoSeeder.php',

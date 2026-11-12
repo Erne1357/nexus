@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Database\Seeders;
 
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Seeder;
@@ -27,6 +28,7 @@ class AdminUserSeeder extends Seeder
             'username' => self::USERNAME,
             'name' => 'Administrador',
             'password' => $this->initialPassword(),
+            'password_origin' => PasswordOrigin::Default,
             'is_active' => true,
             'must_change_password' => true,
         ]);
