@@ -1,5 +1,8 @@
 {
     "grants": {
+        "alumno": [
+            "students.my_record.view"
+        ],
         "coordinador": [
             "academic_load.proposal.create",
             "academic_load.proposal.submit",
@@ -135,7 +138,8 @@
         "catalog_validation.review.reopen",
         "catalog_validation.review.validate",
         "staffing.my_load.view",
-        "staffing.offer.view"
+        "staffing.offer.view",
+        "students.my_record.view"
     ],
     "applies_to": {
         "codes=SERVICIOS-ESCOLARES": [

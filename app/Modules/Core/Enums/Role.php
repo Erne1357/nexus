@@ -5,7 +5,9 @@ namespace App\Modules\Core\Enums;
 use App\Modules\Core\Authorization\OrgTree;
 
 /**
- * Puestos de R1 (PROJECT.md, "Actores y roles"). El valor es el de `role_assignments.role`. R3 añade `alumno` y `servicios_escolares`.
+ * Puestos de R1 (PROJECT.md, "Actores y roles"). El valor es el de `role_assignments.role`. El de `alumno` llega antes
+ * que R3 (AC-10): lo da la migración del SII a cada alumno, sin alcance y solo con funciones personales. R3 añade
+ * `servicios_escolares`.
  */
 enum Role: string
 {
@@ -15,6 +17,7 @@ enum Role: string
     case JefeProyectoDocente = 'jefe_proyecto_docente';
     case Coordinador = 'coordinador';
     case Docente = 'docente';
+    case Alumno = 'alumno';
 
     /**
      * Los puestos que son una jefatura de departamento. Desde 3.P8 se nombran y terminan como cualquier nombramiento,
@@ -38,6 +41,7 @@ enum Role: string
             self::JefeProyectoDocente => 'Jefe de proyecto docente',
             self::Coordinador => 'Coordinador de carrera',
             self::Docente => 'Docente',
+            self::Alumno => 'Alumno',
         };
     }
 
@@ -53,6 +57,7 @@ enum Role: string
             self::JefeProyectoDocente => 'Junto con el jefe de departamento, asignas docentes a los grupos según la prioridad de base.',
             self::Coordinador => 'Analizas el avance de los alumnos de tu carrera, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre.',
             self::Docente => 'Consultas tu propia carga: los grupos que impartes y sus horarios.',
+            self::Alumno => 'Consultas tus datos escolares en «Mis datos». Entras con tu NIP del SII y puedes cambiarlo por una contraseña propia cuando quieras.',
         };
     }
 
@@ -114,7 +119,7 @@ enum Role: string
 
     /**
      * La pista del formulario «Nombrar»: qué alcance pide el puesto y si tiene un solo titular (AZ-S7). Nulo para el
-     * docente, que no se nombra ahí (AZ-S11).
+     * docente y el alumno, que no se nombran ahí (AZ-S11, AC-10).
      */
     public function appointHint(): ?string
     {
@@ -124,7 +129,7 @@ enum Role: string
             self::JefeDepartamento => 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.',
             self::JefeProyectoDocente => 'Este puesto pide campus y departamento académico.',
             self::Coordinador => 'Este puesto pide campus y carrera.',
-            self::Docente => null,
+            self::Docente, self::Alumno => null,
         };
     }
 
@@ -144,8 +149,18 @@ enum Role: string
     }
 
     /**
+     * Si el puesto es del personal: todos menos el de alumno, que no ve el calendario del periodo en Inicio (su
+     * portada es mínima mientras no haya pantallas de alumno, AC-15).
+     */
+    public function isStaff(): bool
+    {
+        return $this !== self::Alumno;
+    }
+
+    /**
      * Columnas de `role_assignments` que un nombramiento de este puesto debe llenar para contar en Actor
-     * (columna "Alcance" de PROJECT.md). Admin no necesita alcance y el docente es de todo el Tec. La Subdirección
+     * (columna "Alcance" de PROJECT.md). Admin no necesita alcance y el docente es de todo el Tec. El alumno tampoco
+     * lleva alcance: sus permisos son personales (AC-10). La Subdirección
      * va sobre su unidad (Subdirección Académica, AZ-S3) y el jefe de departamento sobre la de su departamento, los
      * dos en todo el Tec: no piden campus, y sin campus valen en todos los activos. El jefe de proyecto docente y el
      * coordinador sí piden campus. Un nombramiento con un campus que su puesto no pide sigue valiendo solo en ese
@@ -156,7 +171,7 @@ enum Role: string
     public function scopeColumns(): array
     {
         return match ($this) {
-            self::Admin, self::Docente => [],
+            self::Admin, self::Docente, self::Alumno => [],
             self::Subdireccion, self::JefeDepartamento => ['org_unit_id'],
             self::JefeProyectoDocente => ['campus_id', 'org_unit_id'],
             self::Coordinador => ['campus_id', 'career_id'],

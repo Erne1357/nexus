@@ -357,6 +357,7 @@ final class RoleAssignmentRules
     {
         return match ($role) {
             Role::Docente => 'El puesto de docente lo da la ficha del docente: se activa y se desactiva con el docente.',
+            Role::Alumno => 'El puesto de alumno lo da la migración del SII: su usuario se activa y se desactiva con su estatus.',
             default => null,
         };
     }

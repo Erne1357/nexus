@@ -5,10 +5,12 @@ namespace App\Modules\Core\Providers;
 use App\Modules\Core\Actions\RecordLogin;
 use App\Modules\Core\Actions\RequirePasswordChange;
 use App\Modules\Core\Actions\UpdateUserPassword;
+use App\Modules\Core\Actions\UpgradePasswordHash;
 use App\Modules\Core\Http\Responses\PasswordUpdateResponse;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\LoginScreenQuery;
 use App\Modules\Core\Support\DefaultPassword;
+use App\Modules\Core\Support\SiiNip;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\RedirectResponse;
@@ -113,6 +115,10 @@ final class FortifyServiceProvider extends ServiceProvider
      * credencial incorrecta. La contraseña se compara siempre, contra un hash señuelo si el username
      * no existe o no tiene contraseña, para que el tiempo de respuesta no delate si el usuario existe,
      * está inactivo o no tiene acceso; el Timebox iguala el resto.
+     *
+     * Al alumno que sigue con el NIP del SII se le completa con ceros a 4 dígitos una entrada de 1 a 3 (AC-11,
+     * SiiNip::forUser()); a nadie más. Si la contraseña coincide y su hash se guardó con un costo menor (el del NIP,
+     * AC-14), se rehace con el normal (UpgradePasswordHash).
      */
     private function authenticate(Request $request): ?User
     {
@@ -121,18 +127,20 @@ final class FortifyServiceProvider extends ServiceProvider
                 ->where('username', $request->string(Fortify::username())->value())
                 ->first();
 
-            $passwordMatches = Hash::check(
-                $request->string('password')->value(),
-                $user?->password ?? $this->decoyPasswordHash(),
-            );
+            $typed = $request->string('password')->value();
+            $password = $user === null ? $typed : SiiNip::forUser($user, $typed);
+
+            $passwordMatches = Hash::check($password, $user?->password ?? $this->decoyPasswordHash());
 
             if ($user === null || ! $user->is_active || $user->password === null || ! $passwordMatches) {
                 return null;
             }
 
-            if (app(DefaultPassword::class)->matches($request->string('password')->value())) {
+            if (app(DefaultPassword::class)->matches($typed)) {
                 app(RequirePasswordChange::class)->handle($user);
             }
+
+            app(UpgradePasswordHash::class)->handle($user, $password);
 
             $timebox->returnEarly();
 

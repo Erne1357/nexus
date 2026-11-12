@@ -2,9 +2,13 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\DefaultPassword;
+use App\Modules\Core\Support\SiiNip;
+use Closure;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -19,7 +23,9 @@ use Laravel\Fortify\Contracts\UpdatesUserPasswords;
  * A diferencia de las demás Actions, valida su entrada: el controlador de Fortify le pasa la
  * petición sin validar. Exige la contraseña actual y una nueva confirmada, distinta de la actual
  * y conforme a Password::defaults() (FortifyServiceProvider de Core). Rechaza también la contraseña
- * por defecto (DefaultPassword) como contraseña nueva. Rota el remember token, así que ninguna cookie de "recordarme" anterior vuelve a servir; las demás sesiones abiertas
+ * por defecto (DefaultPassword) como contraseña nueva. La contraseña actual de un alumno que sigue con el NIP del SII
+ * acepta las dos formas de un NIP corto, como el login (AC-11). La nueva queda como **propia** (`password_origin =
+ * user`, AC-12): una nueva corrida de la migración del SII ya no la pisa. Rota el remember token, así que ninguna cookie de "recordarme" anterior vuelve a servir; las demás sesiones abiertas
  * las cierra AuthenticateSession en su siguiente petición. La bitácora registra el cambio, nunca
  * la contraseña.
  */
@@ -35,7 +41,7 @@ final class UpdateUserPassword implements UpdatesUserPasswords
     public function update(User $user, array $input): void
     {
         $validated = Validator::make($input, [
-            'current_password' => ['required', 'string', 'current_password:'.config('fortify.guard')],
+            'current_password' => ['required', 'string', $this->currentPassword($user)],
             'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password', $this->defaultPassword->rejectionRule()],
         ])->validate();
 
@@ -43,6 +49,7 @@ final class UpdateUserPassword implements UpdatesUserPasswords
             $user->forceFill([
                 'password' => $validated['password'],
                 'must_change_password' => false,
+                'password_origin' => PasswordOrigin::User,
             ]);
             $user->setRememberToken(Str::random(60));
             $user->save();
@@ -53,5 +60,17 @@ final class UpdateUserPassword implements UpdatesUserPasswords
                 ->event('password-changed')
                 ->log('Cambió su contraseña');
         });
+    }
+
+    /**
+     * Lo mismo que la regla `current_password`, pero con la entrada normalizada como en el login (SiiNip::forUser()).
+     */
+    private function currentPassword(User $user): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail) use ($user): void {
+            if (! is_string($value) || $user->password === null || ! Hash::check(SiiNip::forUser($user, $value), $user->password)) {
+                $fail(__('validation.current_password'));
+            }
+        };
     }
 }
