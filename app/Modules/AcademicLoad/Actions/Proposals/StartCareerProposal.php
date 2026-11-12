@@ -25,7 +25,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Arma la propuesta de una carrera en un campus y un periodo (reglas-de-negocio.md, "Propuesta de carrera"), o
  * devuelve la que ya existe, esté en el estado que esté y sin tocarla: es idempotente.
  *
- * La primera vez exige el periodo abierto en el campus (`term_openings`) y la carrera ofrecida en él
+ * La primera vez exige el periodo abierto en la modalidad del campus (`term_openings`) y la carrera ofrecida en él
  * (`career_campus` activa y sin borrar, que lee con bloqueo compartido); si no, una ValidationException sobre
  * `term` o `career` (supuestos por confirmar). Crea la propuesta en borrador y una fila por cada materia activa
  * y sin borrar de la retícula de los planes activos y sin borrar de la carrera (HC-13), una sola vez por materia,

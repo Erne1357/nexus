@@ -31,7 +31,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /**
  * Seis departamentos con jefe, docentes, materias, carrera y salones en cada campus, y los periodos 20263 y 20271
- * abiertos en `$campuses` con OpenTerm.
+ * abiertos con OpenTerm en las modalidades de `$campuses` (M4; por el puente `campuses.modality_id`: Presencial).
  *
  * @param  list<string>  $campuses
  */
@@ -66,7 +66,7 @@ function seedCatalogScenario(array $campuses = ['C1', 'C2'], bool $previous = tr
             'starts_on' => $year.($code[4] === '3' ? '-08-17' : '-01-25'),
             'ends_on' => $year.($code[4] === '3' ? '-12-11' : '-06-11'),
         ]);
-        $models->each(fn (Campus $campus) => app(OpenTerm::class)->handle($term, $campus));
+        $models->map(fn (Campus $campus) => $campus->catalogModality)->unique('id')->each(fn ($modality) => app(OpenTerm::class)->handle($term, $modality));
     }
 }
 

@@ -78,13 +78,14 @@ final class CatalogReviewQuery
     }
 
     /**
-     * Si la revisión de salones aplica al periodo: algún campus activo donde está abierto usa salones (CV9, decisión 6).
+     * Si la revisión de salones aplica al periodo: algún campus activo donde está abierto usa salones (CV9, decisión 6). El
+     * periodo está abierto en un campus si lo está en su modalidad (M4; puente `campuses.modality_id`).
      */
     public function roomsApply(Term|string $term): bool
     {
         return Campus::query()
             ->where('is_active', true)
-            ->whereIn('id', TermOpening::query()->where('term_id', $term instanceof Term ? $term->getKey() : $term)->select('campus_id'))
+            ->whereIn('modality_id', TermOpening::query()->where('term_id', $term instanceof Term ? $term->getKey() : $term)->select('modality_id'))
             ->get()
             ->contains(fn (Campus $campus): bool => $campus->profile->usesRooms);
     }

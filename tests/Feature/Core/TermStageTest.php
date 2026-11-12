@@ -1,23 +1,23 @@
 <?php
 
 use App\Modules\Core\Enums\Stage;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 
-it('aplica a todos los campus una etapa sin campus y a uno solo la que tiene campus', function () {
+it('M4: aplica a todas las modalidades una etapa sin modalidad y a una sola la que tiene modalidad', function () {
     $term = Term::factory()->create();
-    $c1 = Campus::factory()->create(['code' => 'C1']);
-    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $m1 = Modality::factory()->create(['code' => 'M001']);
+    $m2 = Modality::factory()->create(['code' => 'M002']);
 
     $global = $term->stages()->create(['stage' => Stage::CatalogValidation, 'starts_on' => '2026-11-02', 'ends_on' => '2026-11-13']);
-    $onlyC2 = $term->stages()->create(['stage' => Stage::Proposal, 'campus_id' => $c2->id, 'starts_on' => '2026-11-16', 'ends_on' => '2026-11-20']);
-    $onlyC1 = $term->stages()->create(['stage' => Stage::Proposal, 'campus_id' => $c1->id, 'starts_on' => '2026-11-23', 'ends_on' => '2026-11-27']);
+    $onlyM2 = $term->stages()->create(['stage' => Stage::Proposal, 'modality_id' => $m2->id, 'starts_on' => '2026-11-16', 'ends_on' => '2026-11-20']);
+    $onlyM1 = $term->stages()->create(['stage' => Stage::Proposal, 'modality_id' => $m1->id, 'starts_on' => '2026-11-23', 'ends_on' => '2026-11-27']);
 
-    expect(TermStage::appliesTo($c2)->pluck('id')->all())->toEqualCanonicalizing([$global->id, $onlyC2->id])
-        ->and(TermStage::appliesTo($c1->id)->pluck('id')->all())->toEqualCanonicalizing([$global->id, $onlyC1->id]);
+    expect(TermStage::appliesTo($m2)->pluck('id')->all())->toEqualCanonicalizing([$global->id, $onlyM2->id])
+        ->and(TermStage::appliesTo($m1->id)->pluck('id')->all())->toEqualCanonicalizing([$global->id, $onlyM1->id]);
 });
 
 it('guarda la etapa como enum y sus fechas como fechas', function () {
@@ -30,11 +30,11 @@ it('guarda la etapa como enum y sus fechas como fechas', function () {
         ->and($stage->ends_on->toDateString())->toBe('2026-12-04');
 });
 
-it('no repite una etapa del mismo periodo para todos los campus ni para el mismo campus', function (bool $withCampus) {
+it('M4: no repite una etapa del mismo periodo para todas las modalidades ni para la misma modalidad', function (bool $withModality) {
     $term = Term::factory()->create();
     $window = [
         'stage' => Stage::Proposal,
-        'campus_id' => $withCampus ? Campus::factory()->create()->id : null,
+        'modality_id' => $withModality ? Modality::factory()->create()->id : null,
         'starts_on' => '2026-11-16',
         'ends_on' => '2026-11-20',
     ];
@@ -42,14 +42,14 @@ it('no repite una etapa del mismo periodo para todos los campus ni para el mismo
 
     expect(fn () => $term->stages()->create([...$window, 'starts_on' => '2026-11-23', 'ends_on' => '2026-11-27']))
         ->toThrow(UniqueConstraintViolationException::class);
-})->with(['para todos los campus' => false, 'para un campus' => true]);
+})->with(['para todas las modalidades' => false, 'para una modalidad' => true]);
 
-it('permite la misma etapa para todos los campus y para un campus en particular', function () {
+it('permite la misma etapa para todas las modalidades y para una modalidad en particular', function () {
     $term = Term::factory()->create();
-    $campus = Campus::factory()->create();
+    $modality = Modality::factory()->create();
 
     $term->stages()->create(['stage' => Stage::Proposal, 'starts_on' => '2026-11-16', 'ends_on' => '2026-11-20']);
-    $term->stages()->create(['stage' => Stage::Proposal, 'campus_id' => $campus->id, 'starts_on' => '2026-11-23', 'ends_on' => '2026-11-27']);
+    $term->stages()->create(['stage' => Stage::Proposal, 'modality_id' => $modality->id, 'starts_on' => '2026-11-23', 'ends_on' => '2026-11-27']);
 
     expect($term->stages()->count())->toBe(2);
 });

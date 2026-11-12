@@ -10,7 +10,7 @@ use Carbon\CarbonImmutable;
 /*
 | La línea de tiempo de las etapas de un periodo (DESIGN.md, "Línea de tiempo de etapas"): del lunes de la
 | primera semana con fechas al domingo de la última, con una columna por semana, una barra general por etapa
-| y una barra delgada por cada campus con ventana propia.
+| y una barra delgada por cada modalidad con ventana propia.
 */
 
 function timelineWindow(Stage $stage, ?string $from, ?string $to, StageSource $source = StageSource::General): StageWindow
@@ -69,22 +69,22 @@ it('una etapa sin fechas queda en su lugar, sin barra', function () {
     $timeline = StageTimeline::build(timelineGeneral(), [], CarbonImmutable::parse('2026-11-12'));
 
     expect($timeline->rows)->toHaveCount(3)
-        ->and($timeline->rows[1])->left->toBeNull()->width->toBeNull()->campuses->toBe([]);
+        ->and($timeline->rows[1])->left->toBeNull()->width->toBeNull()->modalities->toBe([]);
 });
 
-it('agrega una barra delgada por cada campus con ventana propia y ensancha el rango si hace falta', function () {
+it('agrega una barra delgada por cada modalidad con ventana propia y ensancha el rango si hace falta', function () {
     $timeline = StageTimeline::build(timelineGeneral(), [
-        'C2' => [timelineWindow(Stage::Scheduling, '2026-11-24', '2026-12-09', StageSource::Campus)],
+        'PRES' => [timelineWindow(Stage::Scheduling, '2026-11-24', '2026-12-09', StageSource::Modality)],
         'C1' => [],
     ], CarbonImmutable::parse('2026-11-12'));
 
     expect($timeline->to->toDateString())->toBe('2026-12-13')
         ->and($timeline->days)->toBe(35)
-        ->and($timeline->rows[2]['campuses'])->toHaveCount(1)
-        ->and($timeline->rows[2]['campuses'][0]['code'])->toBe('C2')
-        ->and($timeline->rows[2]['campuses'][0]['left'])->toEqualWithDelta(15 / 35 * 100, 0.001)
-        ->and($timeline->rows[2]['campuses'][0]['width'])->toEqualWithDelta(16 / 35 * 100, 0.001)
-        ->and($timeline->rows[0]['campuses'])->toBe([]);
+        ->and($timeline->rows[2]['modalities'])->toHaveCount(1)
+        ->and($timeline->rows[2]['modalities'][0]['code'])->toBe('PRES')
+        ->and($timeline->rows[2]['modalities'][0]['left'])->toEqualWithDelta(15 / 35 * 100, 0.001)
+        ->and($timeline->rows[2]['modalities'][0]['width'])->toEqualWithDelta(16 / 35 * 100, 0.001)
+        ->and($timeline->rows[0]['modalities'])->toBe([]);
 });
 
 it('ubica la marca de hoy a media columna del día cuando cae dentro del rango', function () {

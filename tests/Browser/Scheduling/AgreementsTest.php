@@ -23,7 +23,7 @@ use App\Modules\Scheduling\Models\GroupSession;
 beforeEach(function () {
     $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id]);
     $sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
     $group = Group::factory()->create([

@@ -231,15 +231,16 @@ new #[Title('Avance de validación')] class extends Component
     }
 
     /**
-     * La ventana de la etapa de validación de catálogos y cuánto de ella pasó, si tiene fechas; con un solo campus,
-     * la suya si la tiene propia.
+     * La ventana de la etapa de validación de catálogos y cuánto de ella pasó, si tiene fechas; si los campus del alcance
+     * son de una sola modalidad (por el puente `campuses.modality_id`), la de esa modalidad si la tiene propia (M4).
      *
      * @param  Collection<int, Campus>  $campuses
      * @return array{window: StageWindow, elapsed: int}|null
      */
     private function window(TermCalendarQuery $calendar, Term $term, Collection $campuses): ?array
     {
-        $window = collect($calendar->for($term, $campuses->count() === 1 ? $campuses->first() : null))
+        $modalities = $campuses->pluck('modality_id')->filter()->unique();
+        $window = collect($calendar->for($term, $modalities->count() === 1 ? $modalities->first() : null))
             ->first(fn (StageWindow $candidate): bool => $candidate->stage === Stage::CatalogValidation);
 
         if ($window === null || $window->startsOn === null) {

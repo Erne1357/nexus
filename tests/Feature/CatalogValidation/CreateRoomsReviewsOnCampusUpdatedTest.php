@@ -12,10 +12,10 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 
 /*
-| Si un campus empieza a usar salones, se completan las revisiones de salones que falten en los periodos abiertos en él
-| donde el admin ya abrió el catálogo de salones (CV9): una por departamento y periodo, sin campus (decisión 6, confirmada
-| el 12 de noviembre de 2026). Donde los salones no se abrieron, o el periodo no se abrió en ese campus, no se crea nada,
-| y repetirlo no duplica.
+| Si un campus empieza a usar salones, se completan las revisiones de salones que falten en los periodos abiertos en su
+| modalidad (M4; puente `campuses.modality_id`) donde el admin ya abrió el catálogo de salones (CV9): una por
+| departamento y periodo, sin campus (decisión 6, confirmada el 12 de noviembre de 2026). Donde los salones no se
+| abrieron, o el periodo no se abrió en esa modalidad, no se crea nada, y repetirlo no duplica.
 */
 
 beforeEach(function () {
@@ -28,9 +28,8 @@ beforeEach(function () {
     $this->notOpened = Term::factory()->create(['code' => '20272']);
     Department::factory()->create(['code' => 'D1']);
 
-    foreach ([$this->c2, $this->c1] as $campus) {
-        app(OpenTerm::class)->handle($this->opened, $campus);
-    }
+    // C1 y C2 son de Presencial: el periodo se abre una vez para los dos (M4).
+    app(OpenTerm::class)->handle($this->opened, modalityOf('PRES'));
 });
 
 function roomsReviews(Term $term): int

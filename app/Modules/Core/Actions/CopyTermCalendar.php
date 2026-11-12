@@ -11,8 +11,8 @@ use Illuminate\Validation\ValidationException;
 /**
  * Copia el calendario de etapas de un periodo a otro (ver docs/dominio/reglas-de-negocio.md, Periodo y
  * calendario): reemplaza todas las ventanas del destino por las del origen corridas un número entero de semanas
- * (TermCalendarQuery::copyPreview), así que cada ventana conserva su día de la semana. Las ventanas de campus
- * inactivos o borrados no se copian. Devuelve cuántas ventanas escribió.
+ * (TermCalendarQuery::copyPreview), así que cada ventana conserva su día de la semana. Las ventanas de modalidades
+ * inactivas o borradas no se copian. Devuelve cuántas ventanas escribió.
  *
  * Todo en UNA transacción, con el destino bloqueado: se quitan las ventanas actuales (RemoveTermStage) y se
  * escriben las nuevas (SetTermStage); sus avisos TermCalendarChanged salen hasta el commit y, si algo falla, no
@@ -53,7 +53,7 @@ final class CopyTermCalendar
             }
 
             foreach ($preview['windows'] as $window) {
-                $this->setStage->handle($target, $window['stage'], $window['campus'], $window['starts_on'], $window['ends_on']);
+                $this->setStage->handle($target, $window['stage'], $window['modality'], $window['starts_on'], $window['ends_on']);
             }
 
             $written = count($preview['windows']);

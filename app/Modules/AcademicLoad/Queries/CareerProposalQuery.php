@@ -45,11 +45,12 @@ final class CareerProposalQuery
     }
 
     /**
-     * Si el periodo está abierto en el campus: sin eso no hay propuestas (StartCareerProposal).
+     * Si el periodo está abierto en la modalidad del campus (M4; por el puente `campuses.modality_id` mientras la
+     * propuesta sea por campus): sin eso no hay propuestas (StartCareerProposal).
      */
     public function termIsOpen(Term $term, Campus $campus): bool
     {
-        return TermOpening::query()->where('term_id', $term->getKey())->where('campus_id', $campus->getKey())->exists();
+        return TermOpening::query()->where('term_id', $term->getKey())->where('modality_id', $campus->modality_id)->exists();
     }
 
     /**

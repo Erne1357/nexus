@@ -10,8 +10,8 @@ use Carbon\CarbonImmutable;
  * El acomodo de la línea de tiempo de las etapas de un periodo (DESIGN.md, "Línea de tiempo de etapas"), la misma
  * para la ficha del periodo y para el bloque «Calendario» de Inicio, que la pintan con `core::terms.timeline`. El
  * rango va del lunes de la semana del primer inicio al domingo de la semana del último fin (contando las
- * ventanas propias de los campus), con una columna por semana y los meses rotulados. Cada etapa lleva su barra
- * general y una barra delgada por cada campus con ventana propia; las posiciones son porcentajes del rango y el
+ * ventanas propias de las modalidades), con una columna por semana y los meses rotulados. Cada etapa lleva su barra
+ * general y una barra delgada por cada modalidad con ventana propia (M4); las posiciones son porcentajes del rango y el
  * último día de una ventana cuenta completo. Solo calcula: no lee la base ni guarda estado.
  */
 final readonly class StageTimeline
@@ -24,7 +24,7 @@ final readonly class StageTimeline
      * @param  list<CarbonImmutable>  $weeks  el lunes de cada semana del rango
      * @param  list<array{label: string, short: string, full: string, days: int}>  $months  cada mes del rango (rótulo «Nov 2026», corto «Nov» y completo «noviembre 2026») y los días del rango que cubre
      * @param  float|null  $today  la marca de hoy, como porcentaje del rango; null si cae fuera de él
-     * @param  list<array{window: StageWindow, left: float|null, width: float|null, campuses: list<array{code: string, window: StageWindow, left: float, width: float}>}>  $rows  una por etapa, en el orden en que llegaron
+     * @param  list<array{window: StageWindow, left: float|null, width: float|null, modalities: list<array{code: string, window: StageWindow, left: float, width: float}>}>  $rows  una por etapa, en el orden en que llegaron
      */
     private function __construct(
         public ?CarbonImmutable $from,
@@ -37,16 +37,16 @@ final readonly class StageTimeline
     ) {}
 
     /**
-     * @param  list<StageWindow>  $general  las ventanas efectivas sin campus, una por etapa
-     * @param  array<string, list<StageWindow>>  $campuses  por código de campus, solo sus ventanas propias
+     * @param  list<StageWindow>  $general  las ventanas efectivas sin modalidad, una por etapa
+     * @param  array<string, list<StageWindow>>  $modalities  por clave de modalidad, solo sus ventanas propias
      */
-    public static function build(array $general, array $campuses, CarbonImmutable $today): self
+    public static function build(array $general, array $modalities, CarbonImmutable $today): self
     {
-        $dated = array_filter([...$general, ...array_merge([], ...array_values($campuses))], fn (StageWindow $window): bool => $window->startsOn !== null);
+        $dated = array_filter([...$general, ...array_merge([], ...array_values($modalities))], fn (StageWindow $window): bool => $window->startsOn !== null);
 
         if ($dated === []) {
             return new self(null, null, 0, [], [], null, array_map(
-                fn (StageWindow $window): array => ['window' => $window, 'left' => null, 'width' => null, 'campuses' => []],
+                fn (StageWindow $window): array => ['window' => $window, 'left' => null, 'width' => null, 'modalities' => []],
                 $general,
             ));
         }
@@ -55,10 +55,10 @@ final readonly class StageTimeline
         $to = max(array_map(fn (StageWindow $window): CarbonImmutable => $window->endsOn, $dated))->endOfWeek()->startOfDay();
         $days = (int) $from->diffInDays($to) + 1;
 
-        $rows = array_map(function (StageWindow $window) use ($campuses, $from, $days): array {
+        $rows = array_map(function (StageWindow $window) use ($modalities, $from, $days): array {
             $own = [];
 
-            foreach ($campuses as $code => $windows) {
+            foreach ($modalities as $code => $windows) {
                 foreach ($windows as $candidate) {
                     if ($candidate->stage === $window->stage && $candidate->startsOn !== null) {
                         $own[] = ['code' => (string) $code, 'window' => $candidate, ...self::bar($candidate, $from, $days)];
@@ -66,7 +66,7 @@ final readonly class StageTimeline
                 }
             }
 
-            return ['window' => $window, ...($window->startsOn === null ? ['left' => null, 'width' => null] : self::bar($window, $from, $days)), 'campuses' => $own];
+            return ['window' => $window, ...($window->startsOn === null ? ['left' => null, 'width' => null] : self::bar($window, $from, $days)), 'modalities' => $own];
         }, $general);
 
         $offset = (int) $from->diffInDays($today->startOfDay(), false);

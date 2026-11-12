@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Quita la ventana de una etapa, la general o la de un campus (con lo que el campus vuelve a la
- * general). Borra físicamente: `term_stages` no es catálogo ni bitácora; la bitácora del periodo
- * guarda la ventana quitada. Después del commit avisa con TermCalendarChanged.
+ * Quita la ventana de una etapa, la general o la de una modalidad (con lo que la modalidad vuelve a la general; M4).
+ * Borra físicamente: `term_stages` no es catálogo ni bitácora; la bitácora del periodo guarda la ventana quitada.
+ * Después del commit avisa con TermCalendarChanged.
  */
 final class RemoveTermStage
 {
@@ -24,8 +24,8 @@ final class RemoveTermStage
             }
 
             $term = $window->term;
-            $campus = $window->campus;
-            $where = $campus === null ? 'general' : "de {$campus->code}";
+            $modality = $window->modality;
+            $where = $modality === null ? 'general' : "de {$modality->name}";
 
             $window->delete();
 
@@ -34,13 +34,13 @@ final class RemoveTermStage
                 ->event(ActivityEvent::Deleted)
                 ->withChanges(['old' => [
                     'stage' => $window->stage->value,
-                    'campus_id' => $window->campus_id,
+                    'modality_id' => $window->modality_id,
                     'starts_on' => $window->starts_on->toDateString(),
                     'ends_on' => $window->ends_on->toDateString(),
                 ]])
                 ->log("Quitó la etapa {$window->stage->label()} ({$where}) del periodo {$term->code}");
 
-            TermCalendarChanged::dispatch($term, $campus);
+            TermCalendarChanged::dispatch($term, $modality);
         });
     }
 }

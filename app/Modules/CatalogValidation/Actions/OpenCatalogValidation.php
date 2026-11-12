@@ -5,6 +5,7 @@ namespace App\Modules\CatalogValidation\Actions;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Jobs\NotifyPendingReviewsJob;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -72,7 +73,11 @@ final class OpenCatalogValidation
         if ($createdBy !== []) {
             NotifyPendingReviewsJob::dispatch(
                 $term->getKey(),
-                TermOpening::query()->where('term_id', $term->getKey())->pluck('campus_id')->all(),
+                // Los campus activos de las modalidades donde se abrió el periodo (M4; puente `campuses.modality_id`; MS15,
+                // supuesto por confirmar: antes, los campus donde se abrió aunque después se desactivaran).
+                Campus::query()->where('is_active', true)
+                    ->whereIn('modality_id', TermOpening::query()->where('term_id', $term->getKey())->select('modality_id'))
+                    ->pluck('id')->all(),
                 array_keys($createdBy),
             )->afterCommit();
         }

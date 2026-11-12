@@ -46,7 +46,7 @@ enum CorePermission: string implements Permission
             self::TermUpdate => 'Editar periodos',
             self::TermMakeCurrent => 'Marcar el periodo actual',
             self::TermManageCalendar => 'Manejar el calendario del periodo',
-            self::TermOpen => 'Abrir el periodo en un campus',
+            self::TermOpen => 'Abrir el periodo en una modalidad',
             self::AssignmentView => 'Ver personas y sus puestos',
             self::AssignmentAppoint => 'Nombrar puestos',
             self::AssignmentEnd => 'Terminar nombramientos',
@@ -62,7 +62,8 @@ enum CorePermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::CampusView, self::CampusUpdateProfile, self::TermOpen => [Dimension::Campus],
+            self::CampusView, self::CampusUpdateProfile => [Dimension::Campus],
+            self::TermOpen => [Dimension::Modality],
             default => [],
         };
     }
