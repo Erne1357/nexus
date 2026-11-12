@@ -2,7 +2,7 @@
 
 namespace App\Modules\Faculty\Actions;
 
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Enums\AvailabilityKind;
 use App\Modules\Faculty\Events\AvailabilityChanged;
@@ -41,7 +41,7 @@ final class SetTeacherAvailability
      *
      * @throws ValidationException
      */
-    public function handle(Teacher $teacher, Term $term, array $cells, CampusProfile $profile): array
+    public function handle(Teacher $teacher, Term $term, array $cells, ModalityProfile $profile): array
     {
         $wanted = [];
         $marked = [AvailabilityKind::Unavailable->value => 0, AvailabilityKind::Preferred->value => 0];
@@ -128,7 +128,7 @@ final class SetTeacherAvailability
      * @param  array<int, array<string, AvailabilityKind>>  $wanted
      * @return list<array{day: int, starts_at: string, ends_at: string, kind: ?AvailabilityKind}>
      */
-    private function changedBlocks(array $saved, array $wanted, CampusProfile $profile): array
+    private function changedBlocks(array $saved, array $wanted, ModalityProfile $profile): array
     {
         $changed = [];
         $blocks = AvailabilityRanges::blocks($profile->dayStart, $profile->dayEnd, $profile->blockMinutes);
@@ -156,7 +156,7 @@ final class SetTeacherAvailability
      *
      * @throws ValidationException
      */
-    private function validated(array $cells, CampusProfile $profile): array
+    private function validated(array $cells, ModalityProfile $profile): array
     {
         $start = AvailabilityRanges::minutes($profile->dayStart);
         $end = AvailabilityRanges::minutes($profile->dayEnd);
@@ -177,13 +177,13 @@ final class SetTeacherAvailability
             $dayName = AvailabilityRanges::DAY_NAMES[$day] ?? null;
 
             if ($dayName === null || ! in_array($day, $profile->days, true)) {
-                throw self::invalid('El '.mb_strtolower($dayName ?? "día {$day}")." no está en el horario del campus ({$schedule}).");
+                throw self::invalid('El '.mb_strtolower($dayName ?? "día {$day}")." no está en el horario de las modalidades activas ({$schedule}).");
             }
 
             $minutes = AvailabilityRanges::minutes($time);
 
             if ($minutes < $start || $minutes + $profile->blockMinutes > $end || ($minutes - $start) % $profile->blockMinutes !== 0) {
-                throw self::invalid('Las '.$time.' del '.mb_strtolower($dayName)." no son un bloque del horario del campus ({$schedule}, bloques de {$profile->blockMinutes} minutos).");
+                throw self::invalid('Las '.$time.' del '.mb_strtolower($dayName)." no son un bloque del horario de las modalidades activas ({$schedule}, bloques de {$profile->blockMinutes} minutos).");
             }
 
             if (isset($seen[$day][$time])) {
