@@ -3,6 +3,7 @@
 namespace App\Modules\Staffing\Models;
 
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Lugar de un docente en el ranking visible de un grupo, con su puntaje y el desglose que lo explica. Tabla derivada:
  * la reescribe el recálculo del ranking.
  */
-#[Fillable(['term_id', 'campus_id', 'group_id', 'teacher_id', 'rank', 'score', 'breakdown', 'computed_at'])]
+#[Fillable(['term_id', 'campus_id', 'modality_id', 'group_id', 'teacher_id', 'rank', 'score', 'breakdown', 'computed_at'])]
 #[UseFactory(StaffingRankingFactory::class)]
 class StaffingRanking extends Model
 {
@@ -81,5 +82,15 @@ class StaffingRanking extends Model
     public function campus(): BelongsTo
     {
         return $this->belongsTo(Campus::class);
+    }
+
+    /**
+     * Su modalidad del catálogo (ADR-0025): ampliación de la ronda 2, copia de la de su grupo; aún no la lee nadie.
+     *
+     * @return BelongsTo<Modality, $this>
+     */
+    public function modality(): BelongsTo
+    {
+        return $this->belongsTo(Modality::class);
     }
 }

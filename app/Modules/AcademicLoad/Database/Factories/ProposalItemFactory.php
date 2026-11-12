@@ -25,6 +25,7 @@ class ProposalItemFactory extends Factory
     {
         return [
             'career_proposal_id' => CareerProposal::factory(),
+            'campus_id' => fn (array $attributes): string => CareerProposal::query()->findOrFail($attributes['career_proposal_id'])->campus_id,
             'subject_id' => Subject::factory(),
             'study_plan_id' => fn (array $attributes): string => StudyPlan::factory()->create([
                 'career_id' => CareerProposal::query()->findOrFail($attributes['career_proposal_id'])->career_id,

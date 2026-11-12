@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\AcademicLoad\Database\Factories\CareerProposalFactory;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * un periodo (reglas-de-negocio.md, "Propuesta de carrera"). Una por periodo, campus y carrera. Se arma con
  * StartCareerProposal, se corrige con UpdateProposalItem y se envía con SubmitCareerProposal.
  */
-#[Fillable(['term_id', 'campus_id', 'career_id', 'eligible_students', 'status', 'submitted_by', 'submitted_at'])]
+#[Fillable(['term_id', 'campus_id', 'modality_id', 'career_id', 'eligible_students', 'status', 'submitted_by', 'submitted_at'])]
 #[UseFactory(CareerProposalFactory::class)]
 class CareerProposal extends Model
 {
@@ -54,6 +55,16 @@ class CareerProposal extends Model
     public function campus(): BelongsTo
     {
         return $this->belongsTo(Campus::class);
+    }
+
+    /**
+     * Su modalidad del catálogo (ADR-0025): ampliación de la ronda 2, la de su campus al armarla; aún no la lee nadie.
+     *
+     * @return BelongsTo<Modality, $this>
+     */
+    public function modality(): BelongsTo
+    {
+        return $this->belongsTo(Modality::class);
     }
 
     /**

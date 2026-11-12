@@ -74,6 +74,7 @@ final class RequestRoomLoan
                 $agreement = DB::transaction(fn (): InterdepartmentalAgreement => InterdepartmentalAgreement::query()->create([
                     'term_id' => $term->getKey(),
                     'campus_id' => $campus->getKey(),
+                    'modality_id' => $campus->modality_id,
                     'kind' => AgreementKind::RoomLoan,
                     'from_department_id' => $from->getKey(),
                     'to_department_id' => $room->department_id,

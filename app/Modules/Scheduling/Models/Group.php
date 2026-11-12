@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * reticular donde se acomoda, su clave del SII, su docente vigente, su capacidad y su estado. Su departamento es el
  * de la materia.
  */
-#[Fillable(['term_id', 'campus_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status', 'proposal_item_id', 'notes', 'close_justification', 'close_justified_by', 'close_justified_at'])]
+#[Fillable(['term_id', 'campus_id', 'modality_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status', 'proposal_item_id', 'notes', 'close_justification', 'close_justified_by', 'close_justified_at'])]
 #[UseFactory(GroupFactory::class)]
 class Group extends Model
 {
@@ -62,6 +63,17 @@ class Group extends Model
     public function campus(): BelongsTo
     {
         return $this->belongsTo(Campus::class);
+    }
+
+    /**
+     * Su modalidad del catálogo (ADR-0025): ampliación de la ronda 2, la de la propuesta de donde nace (la copian sus
+     * sesiones); aún no la lee nadie.
+     *
+     * @return BelongsTo<Modality, $this>
+     */
+    public function modality(): BelongsTo
+    {
+        return $this->belongsTo(Modality::class);
     }
 
     /**

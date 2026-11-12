@@ -21,6 +21,7 @@ function assignmentRow(array $overrides = []): array
     return [
         'term_id' => $group->term_id,
         'campus_id' => $group->campus_id,
+        'modality_id' => $group->modality_id,
         'group_id' => $group->id,
         'teacher_id' => Teacher::factory()->create()->id,
         'assigned_by' => User::factory()->create()->id,
