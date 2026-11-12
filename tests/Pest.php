@@ -8,6 +8,10 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\CatalogValidation\Actions\ValidateReview;
+use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
+use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\OrgTree;
@@ -77,13 +81,43 @@ function lastToastOf(Testable $component): ?array
 }
 
 /**
+ * Marca como revisados todos los registros que hoy tiene la revisión (CV7), como si `$by` (o un usuario nuevo) los
+ * hubiera revisado, sin bitácora ni cambio de estado: para poder validarla en una prueba que no trata de las marcas.
+ */
+function markAllReviewed(CatalogReview $review, ?User $by = null): void
+{
+    $by ??= User::factory()->create();
+
+    foreach (app(CatalogContentsQuery::class)->records($review) as $record) {
+        CatalogReviewMark::query()->firstOrCreate(
+            ['catalog_review_id' => $review->getKey(), 'record_id' => $record['id']],
+            ['reviewed_by' => $by->getKey(), 'reviewed_at' => now()],
+        );
+    }
+}
+
+/**
+ * Valida la revisión con ValidateReview después de marcar como revisado todo lo que tiene (CV7).
+ */
+function validateAllReviewed(CatalogReview $review, User $actor): CatalogReview
+{
+    markAllReviewed($review, $actor);
+
+    return app(ValidateReview::class)->handle($review, $actor);
+}
+
+/**
  * Las peticiones que siguen, hasta el final de la prueba, son de una página con `?campus=<código>` (o sin campus, con
  * null), como las manda el navegador: la primera con la consulta y las de Livewire con la página en Referer. Livewire::test
  * no manda ni una ni otro en sus llamadas, así que esto fija lo que lee el puente Actor::activeCampus() (#415) para las
  * pantallas que todavía no pasan a WithCampusFilter, en lugar del campus que antes guardaba la credencial en la sesión.
+ * Para las que ya usan WithCampusFilter::requiredCampus() también deja ese campus como el último elegido de la sesión
+ * (Campus::LAST_CHOSEN_KEY, AZ-02), porque Livewire::test tampoco lleva el `?campus=` de la URL.
  */
 function onCampusPage(?Campus $campus): void
 {
+    $campus === null ? session()->forget(Campus::LAST_CHOSEN_KEY) : session()->put(Campus::LAST_CHOSEN_KEY, $campus->code);
+
     app()->scoped(Actor::class, fn (Application $app): Actor => new Actor(
         fn (): mixed => $app['auth']->user(),
         $app->make(OrgTree::class),

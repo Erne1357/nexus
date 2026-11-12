@@ -12,6 +12,7 @@ use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
+use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Facilities\Queries\RoomQuery;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
@@ -197,6 +198,33 @@ describe('admin', function () {
 
         expect($this->b201->fresh())->capacity->toBe(35)->department_id->toBeNull()->features->toBe(['Proyector', 'Pizarrón'])
             ->and(Activity::where('subject_id', $this->b201->id)->where('event', 'updated')->exists())->toBeTrue();
+    });
+
+    it('al editar ofrece los edificios de todos los campus donde administra salones, agrupados, y mover el salón cambia su campus', function () {
+        $page = Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('edit', $this->b201->id)
+            ->assertViewHas('formBuildings', fn (array $groups): bool => array_keys($groups) === ['C1', 'C2'])
+            ->set('building_id', $this->edZ->id)->call('save')->assertHasNoErrors();
+
+        expect($this->b201->fresh())->building_id->toBe($this->edZ->id)->campus_id->toBe($this->c1->id)
+            ->and(lastToastOf($page)['title'])->toBe('Salón actualizado');
+    });
+
+    it('un salón en uso no se mueve a otro campus: el rechazo sale como error del edificio y no cambia nada', function () {
+        SubjectRoomDefault::factory()->create(['room_id' => $this->b201->id]);
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('edit', $this->b201->id)
+            ->set('building_id', $this->edZ->id)->call('save')
+            ->assertHasErrors('building_id')->assertSee('ya se usa en su campus');
+
+        expect($this->b201->fresh())->building_id->toBe($this->edB->id)->campus_id->toBe($this->c2->id);
+    });
+
+    it('la subdirección de C2 no ve ni puede mover un salón a un edificio de C1', function () {
+        Livewire::actingAs($this->sub)->test('facilities::pages.rooms')->call('edit', $this->b201->id)
+            ->assertViewHas('formBuildings', fn (array $groups): bool => array_keys($groups) === ['C2'])
+            ->set('building_id', $this->edZ->id)->call('save')->assertHasErrors('building_id');
+
+        expect($this->b201->fresh()->campus_id)->toBe($this->c2->id);
     });
 
     it('desactiva y activa desde la tabla', function () {

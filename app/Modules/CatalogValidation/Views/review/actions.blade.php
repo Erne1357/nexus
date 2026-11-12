@@ -1,6 +1,7 @@
 {{--
     Validar o Reabrir una revisión (`$card`, de review.php): Validar abre el modal que dice qué valida; Reabrir, si ya
-    está validada, y deshabilitado con su motivo escrito si la carga salió de borrador (CV5). Quien solo lee
+    está validada, y deshabilitado con su motivo escrito si la carga salió de borrador (CV5). Validar queda deshabilitado
+    con su motivo mientras falte revisar algún registro (CV7); el motivo escrito lo pone quien incluye este parcial. Quien solo lee
     (Subdirección, admin) los ve deshabilitados con su motivo en el tooltip y para lectores de pantalla (DESIGN.md,
     "Nada oculto"). `$grow` (por omisión sí) reparte el ancho entre los botones; `$small` los hace `btn-sm`.
 --}}
@@ -16,6 +17,8 @@
     @else
         <button type="button" class="btn btn-outline {{ $classes }}" aria-disabled="true" disabled data-testid="reopen-{{ $catalog }}"><x-icon name="o-arrow-uturn-left" class="h-4 w-4" aria-hidden="true" />Reabrir</button>
     @endif
+@elseif ($card['canValidate'] && $card['validateReason'] !== null)
+    <button type="button" class="btn btn-primary {{ $classes }}" aria-disabled="true" disabled title="{{ $card['validateReason'] }}" data-testid="validate-{{ $catalog }}"><x-icon name="o-check" class="h-4 w-4" aria-hidden="true" />Validar<span class="sr-only">: {{ $card['validateReason'] }}</span></button>
 @elseif ($card['canValidate'])
     <x-button label="Validar" icon="o-check" class="btn-primary {{ $classes }}" wire:click="confirm('validate', '{{ $catalog }}')" spinner="confirm" data-testid="validate-{{ $catalog }}" />
 @else

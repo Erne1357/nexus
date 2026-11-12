@@ -24,7 +24,7 @@
                     @php($status = $review?->status ?? \App\Modules\CatalogValidation\Enums\ReviewStatus::Pending)
                     <li class="flex items-start justify-between gap-3 py-2.5" data-testid="drawer-catalog-{{ $column['key'] }}">
                         <div class="min-w-0">
-                            <p class="font-semibold">{{ $column['catalog']->label() }}@if ($column['campus']) <span class="font-normal text-neutral">· {{ $column['campus']->name }}</span>@endif</p>
+                            <p class="font-semibold">{{ $column['catalog']->label() }}</p>
                             <p class="text-sm text-neutral">
                                 @if ($status === \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated)
                                     Validó {{ $review->validator?->name ?? 'un usuario ya dado de baja' }} · <span class="tabular-nums">{{ $review->validated_at->timezone(config('app.timezone'))->translatedFormat('j M Y, H:i') }}</span>
@@ -47,7 +47,7 @@
             @forelse ($flags->groupBy('review_id') as $catalogFlags)
                 @php($review = $catalogFlags->first()->review)
                 <div class="space-y-2" wire:key="flag-group-{{ $review->id }}" data-testid="drawer-review-flags-{{ $review->id }}">
-                    <p class="text-sm font-semibold">{{ $review->catalog->label() }}@if ($review->campus) <span class="font-normal text-neutral">· {{ $review->campus->name }}</span>@endif <span class="font-mono font-normal text-neutral tabular-nums">{{ $catalogFlags->count() }}</span></p>
+                    <p class="text-sm font-semibold">{{ $review->catalog->label() }} <span class="font-mono font-normal text-neutral tabular-nums">{{ $catalogFlags->count() }}</span></p>
                     @foreach ($catalogFlags->groupBy(fn ($flag) => $flag->flaggable_type.'|'.$flag->flaggable_id) as $recordFlags)
                         @php($record = $recordFlags->first()->flaggable)
                         <article wire:key="record-{{ $recordFlags->first()->flaggable_type }}-{{ $recordFlags->first()->flaggable_id }}" class="space-y-2 rounded-box border border-base-300 bg-base-100 p-3.5" data-testid="drawer-record-{{ \Illuminate\Support\Str::kebab(class_basename($recordFlags->first()->flaggable_type)) }}-{{ $recordFlags->first()->flaggable_id }}">

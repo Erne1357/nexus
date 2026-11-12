@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
-use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\StaffingMode;
@@ -60,27 +59,10 @@ it('siembra el perfil presencial de PROJECT.md en Campus I y Campus II', functio
         ->and($profile->requiresSubdireccionApproval)->toBeFalse();
 })->with(['C1', 'C2']);
 
-it('deja que los jefes corrijan sus salones al validar solo en Campus I', function () {
+it('ningún campus siembra heads_edit_rooms (decisión 5)', function () {
     $this->seed(DatabaseSeeder::class);
 
-    expect(Campus::orderBy('code')->get()->mapWithKeys(fn (Campus $campus) => [$campus->code => $campus->profile->headsEditRooms])->all())->toBe([
-        'C1' => true,
-        'C2' => false,
-        'EAD' => false,
-        'ENL' => false,
-        'TNMV' => false,
-    ]);
-});
-
-it('a un Campus I existente sin la clave del perfil se la agrega en true; si ya la tiene en false, la respeta', function () {
-    $c1 = Campus::factory()->create(['code' => 'C1', 'settings' => array_diff_key(CampusProfile::DEFAULTS, ['heads_edit_rooms' => 1])]);
-
-    $this->seed(CampusSeeder::class);
-    expect($c1->fresh()->profile->headsEditRooms)->toBeTrue();
-
-    $c1->update(['settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => false]]);
-    $this->seed(CampusSeeder::class);
-    expect($c1->fresh()->profile->headsEditRooms)->toBeFalse();
+    expect(Campus::all()->filter(fn (Campus $campus): bool => array_key_exists('heads_edit_rooms', $campus->settings ?? []))->all())->toBe([]);
 });
 
 it('siembra EAD con clases de lunes a sábado y docentes propios', function () {

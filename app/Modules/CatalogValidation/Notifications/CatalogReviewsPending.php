@@ -70,17 +70,13 @@ final class CatalogReviewsPending extends NexusNotification
     }
 
     /**
-     * «docentes, materias, planes de estudio, carreras y salones de Campus II»: los generales en el orden del
-     * enum y al final los salones, que son del campus.
+     * «docentes, materias, planes de estudio, carreras y salones»: los catálogos en el orden del enum, con los salones al
+     * final.
      */
     private function catalogList(): string
     {
-        $general = array_filter($this->pending, fn (Catalog $catalog): bool => $catalog->isGeneral());
-        $names = array_map(fn (Catalog $catalog): string => mb_strtolower($catalog->label()), $general);
-
-        if (in_array(Catalog::Rooms, $this->pending, true)) {
-            $names[] = mb_strtolower(Catalog::Rooms->label())." de {$this->campus->name}";
-        }
+        $ordered = [...array_filter($this->pending, fn (Catalog $catalog): bool => $catalog !== Catalog::Rooms), ...array_filter($this->pending, fn (Catalog $catalog): bool => $catalog === Catalog::Rooms)];
+        $names = array_map(fn (Catalog $catalog): string => mb_strtolower($catalog->label()), $ordered);
 
         $last = array_pop($names);
 

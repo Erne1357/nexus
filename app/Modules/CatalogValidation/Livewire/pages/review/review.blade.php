@@ -1,6 +1,7 @@
 {{--
     Validación de catálogos (DESIGN.md, "Patrones de pantalla previstos": variante C, tablero de tarjetas, decidida
-    por el usuario el 2 de noviembre de 2026). Encabezado y, en su renglón, periodo, campus y departamento; los errores
+    por el usuario el 2 de noviembre de 2026). Encabezado y, en su renglón, periodo y departamento (las revisiones no son
+    de un campus, decisión 6); los errores
     de las Actions (vetos, revisión validada); y el tablero (catalog-validation::review.board) o, con `?catalogo=`,
     la lista de un catálogo (catalog-validation::review.list) con su drawer, ambos bajo una fila de pestañas (Tablero y un
     catálogo por pestaña, con su estado; decidido por el usuario el 2 de noviembre de 2026 con datos masivos). El modal de confirmación de Validar y
@@ -18,9 +19,6 @@
         @if ($term && $current === null)
             <p><span class="text-neutral">Periodo</span> <span class="font-semibold">{{ $term->name }}</span> <span class="font-mono">{{ $term->code }}</span></p>
         @endif
-        @if ($campus && $current === null)
-            <p class="font-semibold">{{ $campus->name }}</p>
-        @endif
         @if ($departments->count() > 1)
             <div class="w-full md:w-72">
                 <x-select
@@ -37,7 +35,7 @@
     </div>
     @endif
 
-    @foreach (['status', 'record'] as $key)
+    @foreach (['status', 'record', 'records'] as $key)
         @error($key)
             <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft mb-4 text-sm" :title="$message" data-testid="review-error" />
         @enderror
@@ -50,8 +48,7 @@
                 @switch ($empty)
                     @case ('department') Elige un departamento para ver su validación. @break
                     @case ('term') No hay un periodo activo. @break
-                    @case ('campus') Elige un campus en tu credencial. @break
-                    @default Este periodo no tiene revisiones de catálogo en este campus. @break
+                    @default Este periodo no tiene revisiones de catálogo. @break
                 @endswitch
             </p>
         </div>
@@ -69,6 +66,7 @@
                 })
                 <a wire:key="tab-{{ $tabCatalog->value }}" role="tab" href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $tabCatalog->value]) }}" wire:click.prevent="$set('catalog', '{{ $tabCatalog->value }}')" aria-selected="{{ $current !== null && $current['review']->catalog === $tabCatalog ? 'true' : 'false' }}" data-testid="tab-{{ $tabCatalog->value }}" @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $current !== null && $current['review']->catalog === $tabCatalog])>
                     {{ $tabCatalog->label() }}
+                    <span class="font-mono text-xs font-normal text-neutral tabular-nums" title="Revisados" data-testid="tab-reviewed-{{ $tabCatalog->value }}">{{ $tab['reviewed']['reviewed'] }}/{{ $tab['reviewed']['total'] }}<span class="sr-only"> revisados</span></span>
                     <x-icon :name="$tabIcon" :class="'h-4 w-4 '.$tabTone" aria-hidden="true" />
                     <span class="sr-only">{{ $tab['status']->label() }}</span>
                 </a>

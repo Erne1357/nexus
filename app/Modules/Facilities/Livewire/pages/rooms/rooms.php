@@ -85,7 +85,7 @@ new #[Title('Salones')] class extends Component
     public string $features = '';
 
     /**
-     * Los edificios del campus del salón que se edita (edit() los lee una vez); el navegador no los puede cambiar.
+     * Los edificios que ofrece la edición del salón (edit() los lee una vez); el navegador no los puede cambiar.
      *
      * @var list<array{id: string, name: string, campus: string}>
      */
@@ -232,7 +232,7 @@ new #[Title('Salones')] class extends Component
 
         $this->resetValidation();
         $this->editingId = $room->id;
-        $this->editingBuildings = $buildings->options(collect([$room->campus]));
+        $this->editingBuildings = $buildings->options($this->creatableCampuses()->push($room->campus)->unique('id')->values());
         $this->building_id = $room->building_id;
         $this->code = $room->code;
         $this->name = $room->name ?? '';
@@ -257,7 +257,16 @@ new #[Title('Salones')] class extends Component
         } else {
             $room = $rooms->findOrFail($this->editingId);
             $this->authorize('update', $room);
-            $room = $updateRoom->handle($room, $this->validatedRoom());
+            $data = $this->validatedRoom();
+
+            if ($data['building_id'] !== $room->building_id) {
+                // Mover el salón: el campus sigue al edificio, que debe ser de un campus donde puede administrar salones.
+                $target = $buildings->findInCampuses($data['building_id'], $this->creatableCampuses())?->campus
+                    ?? throw ValidationException::withMessages(['building_id' => 'El edificio no es de un campus donde puedas administrar salones.']);
+                $this->authorize('create', [Room::class, $target]);
+            }
+
+            $room = $updateRoom->handle($room, $data);
             $this->success('Salón actualizado', $this->describe($room));
         }
 
@@ -361,7 +370,7 @@ new #[Title('Salones')] class extends Component
     }
 
     /**
-     * Los edificios del formulario: al editar, los del campus del salón, leídos en edit() (cambiar de campus no se hace aquí); en un
+     * Los edificios del formulario: al editar, los de los campus donde puede administrar salones y el del salón, leídos en edit() (el campus sigue al edificio, CV-S10); en un
      * alta, los de los campus donde puede dar de alta, para agruparlos por campus.
      *
      * @return list<array{id: string, name: string, campus: string}>

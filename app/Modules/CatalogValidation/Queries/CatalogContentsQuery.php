@@ -7,12 +7,16 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Query\Expression;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Los registros que el jefe revisa en el catálogo de una revisión (docs/dominio/modelo-de-datos.md,
@@ -21,9 +25,11 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * - Docentes: los que tienen una adscripción sin borrar al departamento, sea o no la principal.
  * - Materias y carreras: las del departamento.
  * - Planes: los de las carreras sin borrar del departamento.
- * - Salones: los del departamento en el campus de la revisión.
+ * - Salones: los del departamento en todos los campus (decisión 6, confirmada el 12 de noviembre de 2026).
  *
- * La clave es el RFC en los docentes y `code` en lo demás.
+ * La clave es el RFC en los docentes y `code` en lo demás. Cuántos de los activos ya marcó el jefe como revisados (CV7:
+ * solo los activos hay que revisarlos) lo dicen progress() y progressOf(); las marcas de registros que ya no están en la
+ * revisión no cuentan (CV-S7).
  */
 final class CatalogContentsQuery
 {
@@ -44,16 +50,31 @@ final class CatalogContentsQuery
     private function rows(Builder $query, Catalog $catalog): array
     {
         $model = $query->getModel();
+        $columns = [$model->qualifyColumn('id'), $model->qualifyColumn($this->codeColumn($catalog)).' as code', $model->qualifyColumn('name'), $model->qualifyColumn('is_active')];
+
+        if ($catalog === Catalog::Rooms) {
+            $query->with('campus:id,code');
+            $columns[] = $model->qualifyColumn('campus_id');
+        }
 
         return $query
-            ->get([$model->qualifyColumn('id'), $model->qualifyColumn($this->codeColumn($catalog)).' as code', $model->qualifyColumn('name'), $model->qualifyColumn('is_active')])
+            ->get($columns)
             ->map(fn (Model $record): array => [
                 'id' => $record->getKey(),
-                'code' => $record->getAttribute('code'),
+                'code' => $catalog === Catalog::Rooms ? self::roomCode($record) : $record->getAttribute('code'),
                 'name' => $record->getAttribute('name'),
                 'is_active' => (bool) $record->getAttribute('is_active'),
             ])
             ->all();
+    }
+
+    /**
+     * La clave de un salón con su campus, «C2 · A-101», porque las claves se repiten entre campus y la revisión de salones
+     * es una para todos (decisión 6): así se nombra en la foto, las altas y bajas y la bitácora.
+     */
+    public static function roomCode(Model $room): string
+    {
+        return trim(($room->campus?->code ?? '').' · '.$room->getAttribute('code'), ' ·');
     }
 
     /**
@@ -72,14 +93,84 @@ final class CatalogContentsQuery
     }
 
     /**
-     * Si el registro es del catálogo, del departamento (y del campus, si son salones) de la revisión y no está
-     * borrado.
+     * Si el registro es del catálogo y del departamento de la revisión y no está borrado.
      */
     public function contains(CatalogReview $review, Model $record): bool
     {
         $query = $this->query($review);
 
         return $record::class === $query->getModel()::class && $query->whereKey($record->getKey())->exists();
+    }
+
+    /**
+     * Si todos los ids son de registros de la revisión, sin borrar. Un id que no es uuid no es de la revisión.
+     *
+     * @param  list<string>  $ids  sin repetidos
+     */
+    public function containsAll(CatalogReview $review, array $ids): bool
+    {
+        foreach ($ids as $id) {
+            if (! Str::isUuid($id)) {
+                return false;
+            }
+        }
+
+        $query = $this->query($review);
+
+        return $query->whereKey($ids)->count() === count($ids);
+    }
+
+    /**
+     * Cuántos registros activos de la revisión quedan sin revisar (CV7): los que están en ella, activos y sin marca. Los
+     * inactivos no hace falta revisarlos (confirmado el 12 de noviembre de 2026).
+     */
+    public function unreviewedCount(CatalogReview $review): int
+    {
+        $query = $this->active($this->scoped($review->catalog, $review->department_id));
+
+        return $query->whereNotIn($query->getModel()->qualifyColumn('id'), $review->marks()->select('record_id'))->count();
+    }
+
+    /**
+     * «N de M revisados» de una revisión, solo de los registros activos (CV7).
+     *
+     * @return array{reviewed: int, total: int}
+     */
+    public function progress(CatalogReview $review): array
+    {
+        return $this->progressOf(collect([$review]))[$review->getKey()];
+    }
+
+    /**
+     * «N de M revisados» de varias revisiones, por id de revisión, con una consulta por catálogo y no una por revisión:
+     * cuenta los registros activos de cada una con una subconsulta ligada a su departamento.
+     *
+     * @param  Collection<int, CatalogReview>  $reviews
+     * @return array<string, array{reviewed: int, total: int}>
+     */
+    public function progressOf(Collection $reviews): array
+    {
+        $result = [];
+        $department = new Expression('"catalog_reviews"."department_id"');
+
+        foreach ($reviews->groupBy(fn (CatalogReview $review): string => $review->catalog->value) as $catalog => $group) {
+            $records = fn (): Builder => $this->active($this->scoped(Catalog::from($catalog), $department));
+            $model = $records()->getModel();
+            $marks = CatalogReviewMark::query()->select('record_id')->whereColumn('catalog_review_marks.catalog_review_id', 'catalog_reviews.id');
+
+            CatalogReview::query()
+                ->whereKey($group->map->getKey()->all())
+                ->select('catalog_reviews.id')
+                ->selectSub($records()->selectRaw('count(*)'), 'records_total')
+                ->selectSub($records()->whereIn($model->qualifyColumn('id'), $marks)->selectRaw('count(*)'), 'records_reviewed')
+                ->toBase()
+                ->get()
+                ->each(function (object $row) use (&$result): void {
+                    $result[$row->id] = ['reviewed' => (int) $row->records_reviewed, 'total' => (int) $row->records_total];
+                });
+        }
+
+        return $result;
     }
 
     /**
@@ -100,17 +191,37 @@ final class CatalogContentsQuery
      */
     public function query(CatalogReview $review): Builder
     {
-        $department = $review->department_id;
+        $query = $this->scoped($review->catalog, $review->department_id);
 
-        $query = match ($review->catalog) {
+        return $query->orderBy($query->getModel()->qualifyColumn($this->codeColumn($review->catalog)));
+    }
+
+    /**
+     * Solo los activos de la consulta.
+     *
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
+     */
+    private function active(Builder $query): Builder
+    {
+        return $query->where($query->getModel()->qualifyColumn('is_active'), true);
+    }
+
+    /**
+     * Los registros de un catálogo de un departamento, sin orden. `$department` es un id o la columna de la revisión de
+     * una consulta exterior (progressOf).
+     *
+     * @return Builder<Model>
+     */
+    private function scoped(Catalog $catalog, string|Expression $department): Builder
+    {
+        return match ($catalog) {
             Catalog::Teachers => Teacher::query()->whereHas('adscriptions', fn (Builder $adscription) => $adscription->where('department_id', $department)),
             Catalog::Subjects => Subject::query()->where('department_id', $department),
             Catalog::Careers => Career::query()->where('department_id', $department),
             Catalog::StudyPlans => StudyPlan::query()->whereIn('career_id', Career::query()->where('department_id', $department)->select('id')),
-            Catalog::Rooms => Room::query()->where('department_id', $department)->where('campus_id', $review->campus_id),
+            Catalog::Rooms => Room::query()->where('department_id', $department),
         };
-
-        return $query->orderBy($query->getModel()->qualifyColumn($this->codeColumn($review->catalog)));
     }
 
     private function codeColumn(Catalog $catalog): string
