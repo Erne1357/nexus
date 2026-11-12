@@ -5,24 +5,22 @@
     estado con su insignia y «Editar» visible con lo demás en el menú «Acciones» (entre ellas «Bloqueos…», que
     abre el panel lateral). Entre 768 y 1023 px se ocultan el edificio, el tipo y el dueño; debajo de 768 px,
     renglones apilados (clave, nombre y estado; luego el detalle; luego las acciones), que no repiten los
-    data-testid de la tabla. Sin campus activo, en lugar de la tabla se pide elegir uno en la credencial.
+    data-testid de la tabla. Muestra los salones de todos los campus del usuario que usan salones: con más de un
+    campus, una columna «Campus» y el campus como filtro dentro del de edificio (un grupo por campus y «Todo C2»; `?campus=` lo fija); el campus de un alta es el
+    del edificio, que el formulario agrupa por campus.
 --}}
 <div>
     <x-header title="Salones" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            Los salones del campus activo con su tipo, capacidad y departamento dueño. Un salón no se borra: se desactiva. Sus bloqueos (mantenimiento, reservas) se administran desde «Acciones».
+            Los salones de tus campus con su tipo, capacidad y departamento dueño. Un salón no se borra: se desactiva. Sus bloqueos (mantenimiento, reservas) se administran desde «Acciones».
         </x-slot:subtitle>
     </x-header>
 
-    @if ($campus === null)
-        <div class="rounded-box border border-base-300 bg-base-100 px-6 py-10 text-center text-neutral" data-testid="rooms-no-campus">
-            <x-icon name="o-building-office-2" class="mx-auto mb-2 w-8 h-8" />
-            <p>Elige un campus en tu credencial para ver sus salones.</p>
-        </div>
-    @elseif (! $usesRooms)
+    @if (! $usesRooms)
         <div class="rounded-box border border-base-300 bg-base-100 px-6 py-10 text-center text-neutral" data-testid="rooms-not-used">
             <x-icon name="o-rectangle-stack" class="mx-auto mb-2 w-8 h-8" />
-            <p>El campus {{ $campus->code }} no usa salones: sus grupos no se asignan a un salón.</p>
+            <p>{{ $shownCampus === null ? 'Ninguno de tus campus usa salones' : "El campus {$shownCampus->code} no usa salones" }}: sus grupos no se asignan a un salón.</p>
+            <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all class="mx-auto mt-4 w-fit" />
             <x-button label="Nuevo salón" icon="o-plus" class="btn-primary mt-4" disabled title="Este campus no usa salones." />
         </div>
     @else
@@ -37,7 +35,24 @@
                 />
             </x-slot:search>
 
-            <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Edificio" />
+            @if ($buildingGroups === [])
+                <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Edificio" />
+            @else
+                {{-- Con más de un campus, el campus va dentro de este filtro (un grupo por campus y «Todo C2»), no como otro control. --}}
+                <label class="select w-full">
+                    <select aria-label="Edificio" wire:change="setBuildingScope($event.target.value)" data-testid="building-scope">
+                        <option value="" @selected($buildingScope === '')>Edificio</option>
+                        @foreach ($buildingGroups as $code => $group)
+                            <optgroup label="{{ $group['name'] }}">
+                                <option value="campus:{{ $code }}" @selected($buildingScope === "campus:{$code}")>Todo {{ $code }}</option>
+                                @foreach ($group['buildings'] as $building)
+                                    <option value="{{ $building['id'] }}" @selected($buildingScope === $building['id'])>{{ $building['name'] }}</option>
+                                @endforeach
+                            </optgroup>
+                        @endforeach
+                    </select>
+                </label>
+            @endif
             <x-select wire:model.live="typeFilter" aria-label="Tipo" :options="$types" placeholder="Tipo" />
             <x-select wire:model.live="ownerFilter" aria-label="Dueño" :options="$ownerFilters" placeholder="Dueño" />
             <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
@@ -46,7 +61,7 @@
                 @if ($canCreate)
                     <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
                 @else
-                    <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" disabled title="Tu rol no administra este campus." />
+                    <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" disabled title="Tu rol no administra salones." />
                 @endif
             </x-slot:action>
         </x-core::catalog-toolbar>
@@ -64,6 +79,10 @@
 
                 @scope('cell_name', $room)
                     {{ $room->name ?? '—' }}
+                @endscope
+
+                @scope('cell_campus', $room)
+                    <span class="font-mono" title="{{ $room->campus->name }}" data-testid="room-campus">{{ $room->campus->code }}</span>
                 @endscope
 
                 @scope('cell_building', $room)
@@ -114,7 +133,7 @@
                         </div>
 
                         <div class="text-neutral">
-                            <span class="font-mono">{{ $room->building?->code }}</span> ·
+                            @if ($campusOptions->count() > 1)<span class="font-mono">{{ $room->campus->code }}</span> · @endif<span class="font-mono">{{ $room->building?->code }}</span> ·
                             {{ $room->type->label() }} ·
                             <span class="font-mono tabular-nums">{{ $room->capacity }}</span> lugares ·
                             @if ($room->department === null) Sin dueño @else <span class="font-mono">{{ $room->department->code }}</span> @endif
@@ -129,7 +148,7 @@
             @if ($rooms->isNotEmpty() || $rooms->hasPages())
                 <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
                     @if ($rooms->isNotEmpty())
-                        <p>Salones <span class="font-mono">{{ $rooms->first()->code }}</span>@if ($rooms->count() > 1) a <span class="font-mono">{{ $rooms->last()->code }}</span> · <span class="font-mono">{{ $rooms->firstItem() }}–{{ $rooms->lastItem() }}</span>@else · <span class="font-mono">{{ $rooms->firstItem() }}</span>@endif de <span class="font-mono">{{ $rooms->total() }}</span> en <span class="font-mono">{{ $campus->code }}</span></p>
+                        <p>Salones <span class="font-mono">{{ $rooms->first()->code }}</span>@if ($rooms->count() > 1) a <span class="font-mono">{{ $rooms->last()->code }}</span> · <span class="font-mono">{{ $rooms->firstItem() }}–{{ $rooms->lastItem() }}</span>@else · <span class="font-mono">{{ $rooms->firstItem() }}</span>@endif de <span class="font-mono">{{ $rooms->total() }}</span>@if ($shownCampus !== null) en <span class="font-mono">{{ $shownCampus->code }}</span>@endif</p>
                     @endif
 
                     {{ $rooms->onEachSide(1)->links(data: ['scrollTo' => false]) }}
@@ -141,7 +160,22 @@
             <x-form wire:submit="save" no-separator>
                 <div class="grid gap-4 md:grid-cols-6">
                     <div class="md:col-span-3">
-                        <x-select label="Edificio" name="building_id" wire:model="building_id" :options="$buildings" placeholder="Elige el edificio" />
+                        <fieldset class="fieldset py-0">
+                            <legend class="fieldset-legend">Edificio</legend>
+                            <label class="select w-full">
+                                <select name="building_id" wire:model="building_id" aria-label="Edificio" data-testid="room-building">
+                                    <option value="">Elige el edificio</option>
+                                    @foreach ($formBuildings as $campusCode => $group)
+                                        <optgroup label="{{ $campusCode }}">
+                                            @foreach ($group as $building)
+                                                <option value="{{ $building['id'] }}">{{ $building['name'] }}</option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endforeach
+                                </select>
+                            </label>
+                            @error('building_id') <p class="text-error text-sm">{{ $message }}</p> @enderror
+                        </fieldset>
                     </div>
                     <div class="md:col-span-3">
                         <x-input label="Clave" name="code" wire:model="code" placeholder="A-101" />

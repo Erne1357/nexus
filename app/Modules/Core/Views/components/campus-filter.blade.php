@@ -13,7 +13,7 @@
 
     <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all />
 --}}
-@props(['options', 'selected' => null, 'all' => false, 'property' => 'campus'])
+@props(['options', 'selected' => null, 'all' => false, 'property' => 'campus', 'compact' => false, 'allLabel' => 'Todos los campus'])
 
 @php
     $choices = collect($options)->map(fn ($campus): array => ['id' => $campus->code, 'name' => $campus->name])->values();
@@ -21,7 +21,7 @@
 @endphp
 
 @if ($choices->count() > 1)
-    @if (count($segments) <= 4)
+    @if (! $compact && count($segments) <= 4)
         <div {{ $attributes->class(['relative min-w-0 max-w-full overflow-x-auto overscroll-x-contain']) }}>
             <div role="group" aria-label="Campus" class="join" data-testid="campus-filter">
                 @foreach ($segments as $segment)
@@ -39,7 +39,7 @@
         <label {{ $attributes->class(['select w-full']) }}>
             <select aria-label="Campus" wire:change="$set('{{ $property }}', $event.target.value)" data-testid="campus-filter">
                 @if ($all)
-                    <option value="" @selected($selected === null)>Todos los campus</option>
+                    <option value="" @selected($selected === null)>{{ $allLabel }}</option>
                 @endif
                 @foreach ($choices as $choice)
                     <option value="{{ $choice['id'] }}" @selected($selected === $choice['id'])>{{ $choice['name'] }}</option>

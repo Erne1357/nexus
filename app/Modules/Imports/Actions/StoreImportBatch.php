@@ -26,7 +26,7 @@ use Throwable;
  * ImportBatchPolicy.
  *
  * Rechaza con una ValidationException por campo, sin guardar nada: una plantilla que no existe, un
- * archivo que SpreadsheetReader no lee, una plantilla de campus sin campus (el de la topbar), y un
+ * archivo que SpreadsheetReader no lee, una plantilla de campus sin campus y un
  * mapeo de otra plantilla, desactivado o que apunta a campos que la plantilla ya no tiene. En una
  * plantilla que no es de un campus, el campus no se guarda. Un nombre de archivo de más de 255
  * caracteres se recorta y conserva su extensión.
@@ -60,7 +60,7 @@ final class StoreImportBatch
         $definition = $this->templates->get($template);
 
         if ($definition->requiresCampus() && $campus === null) {
-            throw ValidationException::withMessages(['campus' => 'Elige en la barra superior el campus al que pertenece el archivo.']);
+            throw ValidationException::withMessages(['campus' => 'Elige el campus al que pertenece el archivo.']);
         }
 
         if ($mapping !== null) {
