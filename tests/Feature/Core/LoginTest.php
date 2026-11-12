@@ -270,10 +270,10 @@ it('frena muchos usuarios distintos desde la misma IP, sin bloquear otra IP (tar
     $this->assertAuthenticatedAs($user);
 });
 
-it('el mismo usuario desde otra IP no hereda el bloqueo', function () {
+it('el mismo usuario desde otra IP no hereda los intentos de la primera, mientras no llegue a la espera por usuario (AC-14)', function () {
     $user = User::factory()->create(['username' => '19110013']);
 
-    foreach (range(1, 5) as $attempt) {
+    foreach (range(1, 4) as $attempt) {
         $this->from('/login')->post('/login', ['username' => '19110013', 'password' => 'incorrecta']);
     }
 
