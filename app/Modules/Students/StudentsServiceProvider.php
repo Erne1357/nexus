@@ -5,6 +5,7 @@ namespace App\Modules\Students;
 use App\Modules\Academic\Events\CurriculumChanged;
 use App\Modules\Academic\Events\PlanCareerChanging;
 use App\Modules\Academic\Events\SubjectDeactivating;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoStep;
@@ -44,6 +45,8 @@ final class StudentsServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
+            new NavigationItem('Mis datos', 'students.my-record', 'o-identification', NavigationArea::MiEspacio,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StudentsPermission::MyRecordView)),
             new NavigationItem('Alumnos', 'students.index', 'o-academic-cap', NavigationArea::ServiciosEscolares,
                 ability: 'viewAny', arguments: [Student::class], childRoutes: ['students.show']),
         ];
@@ -54,13 +57,25 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         return [StudentsPermission::class];
     }
 
+    /**
+     * Consultan alumnos la Subdirección, los jefes y los coordinadores; el alumno, solo sus datos (AC-15).
+     */
     public function grants(): array
     {
         return [
+            Role::Alumno->value => [StudentsPermission::MyRecordView],
             Role::Subdireccion->value => [StudentsPermission::StudentView],
             Role::JefeDepartamento->value => [StudentsPermission::StudentView],
             Role::Coordinador->value => [StudentsPermission::StudentView],
         ];
+    }
+
+    /**
+     * «Mis datos» es del alumno sobre lo suyo: el admin no es alumno, así que no lo ve en el menú.
+     */
+    public function adminDenies(): array
+    {
+        return [StudentsPermission::MyRecordView];
     }
 
     /**

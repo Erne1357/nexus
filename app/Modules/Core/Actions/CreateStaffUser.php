@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Events\StaffUserCreated;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\DefaultPassword;
@@ -42,6 +43,7 @@ final class CreateStaffUser
                     'name' => $name,
                     'email' => $email,
                     'password' => $passwordHash,
+                    'password_origin' => $passwordHash === null ? null : PasswordOrigin::Default,
                     'is_active' => true,
                     'must_change_password' => true,
                 ]);

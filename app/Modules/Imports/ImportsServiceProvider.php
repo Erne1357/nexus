@@ -17,6 +17,7 @@ use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\PositionsStep;
 use App\Modules\Imports\Sii\Steps\RoomsStep;
 use App\Modules\Imports\Sii\Steps\SeriationStep;
+use App\Modules\Imports\Sii\Steps\StudentAccountsStep;
 use App\Modules\Imports\Sii\Steps\StudentsStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
 use App\Modules\Imports\Sii\Steps\TeacherHistoryStep;
@@ -88,6 +89,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         TeacherHistoryStep::class,
         StudentsStep::class,
         KardexStep::class,
+        StudentAccountsStep::class,
         VerificationStep::class,
     ];
 

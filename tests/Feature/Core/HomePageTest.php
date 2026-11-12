@@ -193,6 +193,17 @@ describe('calendario en Inicio', function () {
         Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
     });
 
+    it('AC-15: se oculta al alumno, cuya portada es mínima', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(User::factory()->withRole(Role::Alumno)->create());
+
+        Livewire::test('core::pages.home')
+            ->assertSee(Role::Alumno->label())
+            ->assertDontSee('Calendario')
+            ->assertDontSee('Propuesta por carrera');
+    });
+
     it('se oculta a quien no tiene un rol vigente', function () {
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
 

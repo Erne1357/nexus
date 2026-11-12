@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Database\Factories\UserFactory;
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -16,12 +17,13 @@ use Illuminate\Notifications\Notifiable;
 /**
  * Usuario de Nexus. Entra con `username` (RFC o de control del SII); el correo
  * es opcional. Sin contraseña no tiene acceso (AC-01): así nacen los de los docentes (AC-02) hasta que se les da
- * (UserAccess, AC-04). Un usuario nuevo debe cambiar su contraseña en el primer acceso (supuesto 2 de
+ * (UserAccess, AC-04). `password_origin` dice de dónde salió su contraseña (PasswordOrigin, AC-12): la del alumno es
+ * su NIP del SII (AC-10). Un usuario nuevo debe cambiar su contraseña en el primer acceso (supuesto 2 de
  * PROJECT.md). Sus puestos son sus nombramientos (`role_assignments`, ADR-0018).
  * Qué puede ver o hacer se pregunta a Actor, nunca a los roles directamente. `authz_version` la sube un
  * trigger en cada cambio de sus nombramientos; `last_role` es el último perfil que usó (AZ-S4).
  */
-#[Fillable(['username', 'name', 'email', 'password', 'is_active', 'must_change_password', 'last_login_at'])]
+#[Fillable(['username', 'name', 'email', 'password', 'password_origin', 'is_active', 'must_change_password', 'last_login_at'])]
 #[Hidden(['password', 'remember_token'])]
 #[UseFactory(UserFactory::class)]
 class User extends Authenticatable
@@ -37,6 +39,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'password_origin' => PasswordOrigin::class,
             'is_active' => 'boolean',
             'must_change_password' => 'boolean',
             'last_login_at' => 'immutable_datetime',

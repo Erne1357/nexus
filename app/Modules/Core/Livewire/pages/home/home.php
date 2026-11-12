@@ -15,6 +15,7 @@ use Livewire\Component;
  * unidad, AZ-02). A quien tiene al menos un rol le muestra además el bloque «Calendario»
  * (core::terms.mini-timeline): las etapas en curso y las dos que siguen del periodo y el campus activos, según
  * TermCalendarQuery; sin periodo activo o sin etapas por ver, no aparece. A quien puede ver el periodo (TermPolicy) le enlaza su ficha.
+ * Al alumno no: su portada es mínima, el bloque de su puesto y «Mis datos» en el menú (AC-15, supuesto por confirmar).
  */
 new #[Title('Inicio')] class extends Component
 {
@@ -25,7 +26,7 @@ new #[Title('Inicio')] class extends Component
     {
         $active = $context->activeRole();
         $roles = $active === null ? [] : [$active];
-        $term = $roles === [] ? null : $context->activeTerm();
+        $term = $active === null || ! $active->isStaff() ? null : $context->activeTerm();
         $campus = $context->activeCampus();
         $windows = $term === null ? [] : $calendar->upcoming($term, $campus);
 

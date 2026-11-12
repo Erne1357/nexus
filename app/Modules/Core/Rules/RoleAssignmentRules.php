@@ -254,9 +254,9 @@ final class RoleAssignmentRules
     }
 
     /**
-     * Si `$userId` tiene un nombramiento distinto de `docente` vigente o por empezar: es personal con puesto (un jefe,
-     * la Subdirección, un coordinador, el admin). A ellos no se les invita a activar su acceso; se lo da el admin a mano
-     * (AC-03 y AC-07).
+     * Si `$userId` tiene un nombramiento distinto de `docente` y de `alumno` vigente o por empezar: es personal con
+     * puesto (un jefe, la Subdirección, un coordinador, el admin). A ellos no se les invita a activar su acceso; se lo da
+     * el admin a mano (AC-03 y AC-07). Ser alumno no es un puesto de personal (AC-10).
      */
     public function holdsStaffRole(string $userId): bool
     {
@@ -264,7 +264,8 @@ final class RoleAssignmentRules
     }
 
     /**
-     * Los ids de los usuarios con un puesto distinto de `docente` vigente o por empezar (holdsStaffRole), como subconsulta.
+     * Los ids de los usuarios con un puesto distinto de `docente` y de `alumno` vigente o por empezar (holdsStaffRole),
+     * como subconsulta.
      *
      * @return Builder<RoleAssignment>
      */
@@ -278,7 +279,7 @@ final class RoleAssignmentRules
      */
     private function staffAssignments(): Builder
     {
-        return RoleAssignment::query()->where('role', '<>', Role::Docente)->notEnded();
+        return RoleAssignment::query()->whereNotIn('role', [Role::Docente, Role::Alumno])->notEnded();
     }
 
     /**
@@ -385,6 +386,7 @@ final class RoleAssignmentRules
     {
         return match ($role) {
             Role::Docente => 'El puesto de docente lo da la ficha del docente: se activa y se desactiva con el docente.',
+            Role::Alumno => 'El puesto de alumno lo da la migración del SII: su usuario se activa y se desactiva con su estatus.',
             default => null,
         };
     }

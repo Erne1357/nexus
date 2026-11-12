@@ -214,6 +214,7 @@ describe('columnas de alcance por puesto (role_assignments_scope_complete)', fun
             'jefe_proyecto_docente' => ['campus_id', 'org_unit_id'],
             'coordinador' => ['campus_id', 'career_id'],
             'docente' => [],
+            'alumno' => [],
         ]);
     });
 

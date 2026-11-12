@@ -697,6 +697,7 @@ El login G (tarea 1.17), elegido con maquetas de impeccable. Es la única pantal
 - **Avisos (LG-01):** tarjeta semitransparente (`rgb(236 241 246 / 0.5)` con desenfoque) arriba a la derecha de la foto, solo con el título; debajo, la cápsula de puntos, donde el del aviso actual se llena en 7 s. Un aviso sin foto va sobre azul espacio con la cola de la marca en rojo, y su texto en blanco. El carrusel se detiene con el mouse encima o con el foco dentro.
 - **Atajos (LG-02):** botón blanco translúcido «Atajos» abajo a la izquierda de la foto (en celular, sobre la orilla de abajo de la foto). Abre la lista en el lugar del formulario; las opciones caen de arriba hacia abajo una tras otra con un rebote corto, y «Iniciar sesión» al final regresa.
 - **Bienvenida:** la primera vez en el equipo la foto se abre desde la orilla, los logos suben y la marca se escribe de izquierda a derecha con un barrido inclinado (1.7 s en total); después, solo la marca, en 0.46 s. Cualquier tecla o toque la termina. Vive en `nexusLogin` (`resources/js/login.js`), que solo carga el login.
+- **¿Olvidaste tu contraseña?:** enlace bajo la contraseña, junto a «Recordarme», que lleva a la pantalla para pedir el enlace por correo (AC-16). Esa pantalla y la de elegir la contraseña nueva van en el layout de invitado centrado, en una tarjeta, como el cambio de contraseña.
 
 ## Do's and Don'ts
 

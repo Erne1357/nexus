@@ -18,11 +18,12 @@ use Symfony\Component\HttpFoundation\Response;
 final class EnsurePasswordIsChanged
 {
     /**
-     * Rutas permitidas antes de cambiar la contraseña.
+     * Rutas permitidas antes de cambiar la contraseña: también las del restablecimiento por correo (AC-17), que sirven
+     * con o sin sesión.
      *
      * @var list<string>
      */
-    private const array ALLOWED_ROUTES = ['user-password.edit', 'user-password.update', 'logout'];
+    private const array ALLOWED_ROUTES = ['user-password.edit', 'user-password.update', 'logout', 'password.request', 'password.email', 'password.reset', 'password.update'];
 
     /**
      * @param  Closure(Request): Response  $next
