@@ -19,11 +19,9 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Enums\RoomType;
@@ -694,9 +692,9 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     private function progress(array $state, array $reviewed): array
     {
-        $usesRooms = app(ValidationProgressQuery::class)->openCampuses($state['term'])->contains(fn (Campus $campus): bool => $campus->profile->usesRooms);
-        $opened = app(CatalogReviewQuery::class)->openedCatalogs($state['term']);
-        $required = array_values(array_filter(Catalog::requiredFor($usesRooms), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)));
+        $catalogReviews = app(CatalogReviewQuery::class);
+        $opened = $catalogReviews->openedCatalogs($state['term']);
+        $required = array_values(array_filter(Catalog::requiredFor($catalogReviews->roomsApply($state['term'])), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)));
         $existing = $state['reviews']->keyBy(fn (CatalogReview $review): string => $review->catalog->value);
         $pending = array_filter($required, fn (Catalog $catalog): bool => $existing->get($catalog->value)?->status !== ReviewStatus::Validated);
 
