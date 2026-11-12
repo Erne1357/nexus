@@ -65,14 +65,31 @@ describe('correo institucional', function () {
             ->toThrow(UniqueConstraintViolationException::class);
     });
 
-    it('AC-07: cambiar el correo de un docente invitado invalida su invitación', function () {
+    it('AC-07: cambiar el correo de un docente invitado le manda la invitación al correo nuevo', function () {
         $this->teacher->update(['institutional_email' => 'ana.perez@cdjuarez.tecnm.mx']);
         app(SendAccessInvitation::class)->handle($this->user, 'ana.perez@cdjuarez.tecnm.mx');
+        $first = $this->user->fresh()->access_invited_at;
 
         app(UpdateTeacher::class)->handle($this->teacher, ['institutional_email' => 'ana.perez2@cdjuarez.tecnm.mx']);
 
+        expect($this->user->fresh())->email->toBe('ana.perez2@cdjuarez.tecnm.mx')
+            ->and($this->user->fresh()->access_invited_at->gt($first))->toBeTrue();
+        Notification::assertSentOnDemand(AccessInvitation::class, fn (AccessInvitation $invitation, array $channels, AnonymousNotifiable $notifiable): bool => $notifiable->routes['mail'] === 'ana.perez2@cdjuarez.tecnm.mx');
+    });
+
+    it('AC-07: borrar el correo de un docente invitado deja sin efecto su invitación; cambiar solo mayúsculas no la toca', function () {
+        $this->teacher->update(['institutional_email' => 'ana.perez@cdjuarez.tecnm.mx']);
+        app(SendAccessInvitation::class)->handle($this->user, 'ana.perez@cdjuarez.tecnm.mx');
+
+        app(UpdateTeacher::class)->handle($this->teacher, ['institutional_email' => 'ANA.PEREZ@cdjuarez.tecnm.mx']);
+
+        expect($this->user->fresh()->access_invited_at)->not->toBeNull();
+
+        app(UpdateTeacher::class)->handle($this->teacher, ['institutional_email' => '']);
+
         expect($this->user->fresh()->access_invited_at)->toBeNull()
             ->and(Activity::where('event', 'access-invitation-cancelled')->where('subject_id', $this->user->id)->exists())->toBeTrue();
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
     });
 
     it('el jefe lo captura en «Editar datos» y la ficha lo muestra', function () {

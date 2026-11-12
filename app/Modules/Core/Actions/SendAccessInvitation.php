@@ -6,6 +6,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Core\Support\DefaultPassword;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
@@ -15,7 +16,8 @@ use RuntimeException;
  * Invita a un usuario sin acceso a activarlo (AC-07, confirmado el 11 de noviembre de 2026): su correo pasa a ser
  * `$email` (en minúsculas), sin verificar, y `access_invited_at`, ahora; luego le manda a ese correo AccessInvitation
  * con su usuario, la contraseña por defecto y el enlace (AccessInvitationLink), que vence a los 7 días. Una invitación
- * nueva deja sin efecto la anterior. Quién puede lo deciden las Actions y pantallas que la llaman.
+ * nueva deja sin efecto la anterior: su hora siempre es posterior, aunque caigan en el mismo segundo. Quién puede lo
+ * deciden las Actions y pantallas que la llaman.
  *
  * Solo a un usuario activo y sin contraseña; si otro usuario ya tiene ese correo (sin importar mayúsculas), no
  * escribe. Sin NEXUS_DEFAULT_PASSWORD falla antes de escribir, porque el correo la lleva. En una transacción bloquea
@@ -45,10 +47,21 @@ final class SendAccessInvitation
             }
 
             if (User::query()->whereRaw('lower(email) = ?', [$email])->whereKeyNot($user->getKey())->exists()) {
-                throw ValidationException::withMessages(['email' => "Otro usuario ya tiene el correo {$email}."]);
+                throw $this->emailTaken($email);
             }
 
-            $user->forceFill(['email' => $email, 'email_verified_at' => null, 'access_invited_at' => now()])->save();
+            $invitedAt = now()->startOfSecond();
+
+            if ($user->access_invited_at !== null && $invitedAt->lte($user->access_invited_at)) {
+                $invitedAt = $user->access_invited_at->addSecond();
+            }
+
+            try {
+                $user->forceFill(['email' => $email, 'email_verified_at' => null, 'access_invited_at' => $invitedAt])->save();
+            } catch (UniqueConstraintViolationException) {
+                throw $this->emailTaken($email);
+            }
+
             $user->refresh();
 
             activity()
@@ -67,5 +80,10 @@ final class SendAccessInvitation
 
             return $user;
         });
+    }
+
+    private function emailTaken(string $email): ValidationException
+    {
+        return ValidationException::withMessages(['email' => "Otro usuario ya tiene el correo {$email}."]);
     }
 }

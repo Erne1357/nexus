@@ -173,12 +173,28 @@ describe('aceptar', function () {
 
             return $link;
         }],
+        'reenviado en el mismo segundo' => [function ($test, string $link): string {
+            $test->freezeSecond();
+            invitationLink($test->user);
+
+            return $link;
+        }],
         'usuario dado de baja' => [function ($test, string $link): string {
             $test->user->forceFill(['is_active' => false])->save();
 
             return $link;
         }],
     ]);
+
+    it('AC-08: sirve aunque haya otra sesión abierta en esa computadora, y no la cambia', function () {
+        $link = invitationLink($this->user);
+
+        $this->actingAs($this->admin)->get($link)->assertOk()->assertSee('Activar mi acceso');
+        $this->post($link)->assertRedirect(route('login'));
+
+        expect($this->user->fresh()->password)->not->toBeNull();
+        $this->assertAuthenticatedAs($this->admin);
+    });
 
     it('AC-08: un enlace a un usuario que no existe responde igual que uno vencido', function () {
         $link = invitationLink($this->user);

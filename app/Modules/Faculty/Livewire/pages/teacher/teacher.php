@@ -386,13 +386,7 @@ new #[Title('Ficha del docente')] class extends Component
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('inviteAccess', $teacher);
 
-        if ($teacher->user?->access_invited_at === null) {
-            $this->error('No se pudo reenviar la invitación', 'Sale cuando su departamento valida el catálogo de docentes.');
-
-            return;
-        }
-
-        $sent = $this->attempt(fn () => $inviteTeacherAccess->handle($teacher, $context->user()), 'No se pudo reenviar la invitación');
+        $sent = $this->attempt(fn () => $inviteTeacherAccess->resend($teacher, $context->user()), 'No se pudo reenviar la invitación');
 
         if ($sent) {
             $this->success('Invitación reenviada', e("{$teacher->rfc}: a {$teacher->institutional_email}. El enlace anterior ya no sirve."));
@@ -886,7 +880,7 @@ new #[Title('Ficha del docente')] class extends Component
         return match (true) {
             ! $allowed => 'Solo su jefe de departamento o el administrador la reenvían.',
             ! $record->user->is_active => 'Su usuario está inactivo.',
-            $record->access !== UserAccess::Invited => 'Sale cuando su departamento valida el catálogo de docentes.',
+            $record->access !== UserAccess::Invited => InviteTeacherAccess::NOT_INVITED,
             $record->teacher->institutional_email === null => 'Falta su correo institucional.',
             default => '',
         };

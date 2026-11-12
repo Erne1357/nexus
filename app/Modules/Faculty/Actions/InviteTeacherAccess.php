@@ -16,6 +16,8 @@ use RuntimeException;
  */
 final class InviteTeacherAccess
 {
+    public const string NOT_INVITED = 'Sale cuando su departamento valida el catálogo de docentes.';
+
     public function __construct(private readonly SendAccessInvitation $sendAccessInvitation) {}
 
     /**
@@ -39,5 +41,21 @@ final class InviteTeacherAccess
         }
 
         return $this->sendAccessInvitation->handle($user, $teacher->institutional_email, $actor);
+    }
+
+    /**
+     * «Reenviar invitación»: solo a quien ya se invitó; la primera sale cuando su departamento valida el catálogo de
+     * docentes (AC-07, supuesto por confirmar).
+     *
+     * @throws ValidationException
+     * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
+     */
+    public function resend(Teacher $teacher, ?User $actor = null): User
+    {
+        if ($teacher->user_id !== null && $teacher->user()->value('access_invited_at') === null) {
+            throw ValidationException::withMessages(['access' => self::NOT_INVITED]);
+        }
+
+        return $this->handle($teacher, $actor);
     }
 }
