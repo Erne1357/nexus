@@ -19,7 +19,7 @@ final class RoomPolicy
     use AuthorizesActor;
 
     /**
-     * Si el usuario administra salones en algún campus; el listado se acota al campus activo.
+     * Si el usuario administra salones en algún campus; el listado se acota a los campus que cubre (Actor::constrain()).
      */
     public function viewAny(User $user): bool
     {

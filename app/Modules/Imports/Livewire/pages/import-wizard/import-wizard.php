@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Imports\Actions\CreateImportMapping;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Enums\BatchStatus;
@@ -35,7 +36,8 @@ use Mary\Traits\Toast;
  * Asistente de importación (tarea 1.2), en cuatro pasos: archivo, columnas, validación y aplicación.
  *
  * 1. El admin elige la plantilla y el archivo. El asistente lee el encabezado (SpreadsheetReader); una
- *    plantilla de un campus usa el de la barra superior.
+ *    plantilla de un campus pide, en este mismo paso, el campus al que pertenece el archivo (la credencial ya no
+ *    elige campus, #415): solo los campuses donde el usuario trabaja (Actor::campuses()); con uno solo, es ese.
  * 2. Propone qué columna va a cada campo con ColumnMatcher, por nombre o con un mapeo guardado, y avisa
  *    las columnas de ese mapeo que el archivo no trae. Si el admin cambia la propuesta, la guarda como
  *    mapeo nuevo con CreateImportMapping (pide un nombre). Al confirmar sube el lote con
@@ -81,6 +83,13 @@ new #[Title('Importaciones')] class extends Component
     /** El archivo temporal cuyas columnas se leyeron: upload() sube ese y no otro. */
     #[Locked]
     public string $readFile = '';
+
+    /** El código del campus del archivo, si la plantilla es de un campus; se pide en el paso 1. */
+    public string $campusCode = '';
+
+    /** El id del campus resuelto en continue(): el paso 2 y el lote usan este, aunque `campusCode` cambie después. */
+    #[Locked]
+    public string $lockedCampusId = '';
 
     /** '' es "por nombre de columna"; si no, el id de un mapeo guardado de la plantilla. */
     public string $mappingId = '';
@@ -171,7 +180,9 @@ new #[Title('Importaciones')] class extends Component
             'issueKinds' => array_map(fn (RowIssue $kind): array => ['id' => $kind->value, 'name' => $kind->label()], RowIssue::cases()),
             'issueRows' => $reviewing ? $batches->issues($batch, RowIssue::tryFrom($this->issues) ?? RowIssue::Errors) : null,
             'definition' => $definition,
-            'campus' => $context->activeCampus(),
+            'campus' => $this->header === [] ? $this->importCampus($context) : $this->lockedCampus($context),
+            'campusOptions' => $context->campuses(),
+            'campusChoices' => $context->campuses()->map(fn (Campus $option): array => ['id' => $option->code, 'name' => "{$option->code} · {$option->name}"])->all(),
             'templateLabels' => $labels,
             'templates' => array_map(fn (string $key, string $label): array => ['id' => $key, 'name' => $label], array_keys($labels), $labels),
             'mappings' => [
@@ -199,8 +210,8 @@ new #[Title('Importaciones')] class extends Component
 
         $definition = $templates->get($this->template);
 
-        if ($definition->requiresCampus() && $context->activeCampus() === null) {
-            $this->addError('template', 'Elige en la barra superior el campus al que pertenece el archivo.');
+        if ($definition->requiresCampus() && $this->importCampus($context) === null) {
+            $this->addError('campusCode', 'Elige el campus al que pertenece el archivo.');
 
             return;
         }
@@ -214,6 +225,7 @@ new #[Title('Importaciones')] class extends Component
         }
 
         $this->header = $header;
+        $this->lockedCampusId = $definition->requiresCampus() ? $this->importCampus($context)->getKey() : '';
         $this->readFile = $this->file->getFilename();
         $this->reset('mappingId', 'mappingName');
         $this->assignments = $this->assignmentsFrom($definition, $matcher->match($definition, $header));
@@ -308,14 +320,14 @@ new #[Title('Importaciones')] class extends Component
             $context->user(),
             $this->template,
             $this->file,
-            $context->activeCampus(),
+            $definition->requiresCampus() ? $this->lockedCampus($context) : null,
             $mapping,
         ));
 
         // El archivo ya vive en el disco `imports` con su lote. Desde aquí la página apunta al lote, para
         // que un fallo de la cola no lleve a subirlo dos veces.
         $this->discardUpload();
-        $this->reset('header', 'readFile', 'assignments', 'mappingId', 'mappingName');
+        $this->reset('header', 'readFile', 'lockedCampusId', 'assignments', 'mappingId', 'mappingName');
         $this->batchId = $batch->id;
 
         $this->queueValidation($batch);
@@ -413,7 +425,7 @@ new #[Title('Importaciones')] class extends Component
      */
     public function back(): void
     {
-        $this->reset('header', 'readFile', 'assignments', 'mappingId', 'mappingName');
+        $this->reset('header', 'readFile', 'lockedCampusId', 'assignments', 'mappingId', 'mappingName');
         $this->resetValidation();
     }
 
@@ -483,6 +495,27 @@ new #[Title('Importaciones')] class extends Component
             // Una validación fallida no deja filas; una aplicación fallida sí venía validada.
             BatchStatus::Failed => $batch->total_rows > 0 ? 4 : 3,
         };
+    }
+
+    /**
+     * El campus elegido para el archivo, si está entre los del usuario; con un solo campus, ese. Uno ajeno, inactivo
+     * o inexistente es como no haber elegido.
+     */
+    private function importCampus(Actor $context): ?Campus
+    {
+        $campuses = $context->campuses();
+
+        return ($this->campusCode === '' ? null : $campuses->firstWhere('code', $this->campusCode))
+            ?? ($campuses->count() === 1 ? $campuses->first() : null);
+    }
+
+    /**
+     * El campus que continue() fijó para el archivo, si el usuario todavía trabaja en él; si no, null y el lote se
+     * rechaza como una plantilla de campus sin campus.
+     */
+    private function lockedCampus(Actor $context): ?Campus
+    {
+        return $this->lockedCampusId === '' ? null : $context->campuses()->firstWhere('id', $this->lockedCampusId);
     }
 
     /**

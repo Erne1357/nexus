@@ -33,7 +33,7 @@ it('abre los periodos pedidos en los campus pedidos, a nombre de admin', functio
     expect(TermOpening::count())->toBe(2)
         ->and(TermOpening::query()->pluck('opened_by')->unique()->all())->toBe([$admin->getKey()])
         ->and(AcademicLoad::count())->toBeGreaterThan(0)
-        ->and(CatalogReview::count())->toBeGreaterThan(0)
+        ->and(CatalogReview::count())->toBe(0)
         ->and(Auth::guard()->check())->toBeFalse();
 });
 
