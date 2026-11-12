@@ -25,6 +25,8 @@ use Illuminate\Support\Collection;
  *   adscripción sin borrar a D, aunque su principal sea otra: ver, editar sus datos, plazas, disponibilidad, horas
  *   fuera del ITCJ, quitarlos de D y su perfil, este solo en las materias que imparte un departamento que cubre.
  * - La baja (desactivar o reactivar; desactiva su usuario y termina sus jefaturas), solo el admin y la Subdirección.
+ *   Desde el 12 de noviembre de 2026, quitar a un docente de su última adscripción también lo da de baja (CV8), y a
+ *   quien ocupa un puesto solo lo quitan o lo reactivan el admin y la Subdirección (CV-S8, CV-S9).
  *
  * Supuestos por confirmar:
  * - El jefe de proyecto docente, cuyo alcance lleva campus, administra a todos los docentes de su departamento,
@@ -115,17 +117,45 @@ final class TeacherPolicy
     }
 
     /**
-     * «Quitar de mi departamento». Gate busca la policy por el modelo, y TeacherDepartment no tiene una propia: se
-     * pregunta con `can('removeAdscription', [Teacher::class, $adscription])`.
+     * «Quitar de mi departamento», en Docentes y en la validación del catálogo de docentes («Dar de baja de <depto>»):
+     * quitar la última adscripción da de baja al docente (CV8, confirmado el 12 de noviembre de 2026;
+     * DischargeTeacherFromDepartment). A un docente cuyo usuario ocupa un puesto vigente o por empezar (un jefe, un
+     * coordinador, la Subdirección…) solo lo quitan quienes dan de baja docentes, el admin y la Subdirección (CV-S8,
+     * confirmado el 12 de noviembre de 2026 para la baja desde Docentes). La última adscripción solo la quitan el jefe de
+     * departamento, la Subdirección y el admin (`faculty.teacher_department.remove_last`); el jefe de proyecto docente,
+     * solo si al docente le queda otro departamento (confirmado el 12 de noviembre de 2026). Gate busca la policy por el
+     * modelo, y TeacherDepartment no tiene una propia: se pregunta con
+     * `can('removeAdscription', [Teacher::class, $adscription])`.
      */
     public function removeAdscription(User $user, TeacherDepartment $adscription): bool
     {
         $teacherUserId = $adscription->relationLoaded('teacher')
             ? $adscription->teacher?->user_id
             : Teacher::withTrashed()->whereKey($adscription->teacher_id)->value('user_id');
+        $scope = $this->actor($user);
 
-        return $this->actor($user)->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
-            && ! $this->isSelf($user, $teacherUserId);
+        return $scope->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $adscription->department_id))
+            && ! $this->isSelf($user, $teacherUserId)
+            && ! $this->staffOnlyForDeactivators($user, $teacherUserId)
+            && ($scope->allows(FacultyPermission::TeacherDepartmentRemoveLast, Target::of(unit: $adscription->department_id))
+                || TeacherDepartment::query()->where('teacher_id', $adscription->teacher_id)->whereKeyNot($adscription->getKey())->exists());
+    }
+
+    /**
+     * Agregar a un departamento a un docente que ya existe, activo o dado de baja (que se reactiva), al validar el
+     * catálogo de docentes (CV-S9): quien da de alta docentes en ese departamento (`create` con destino). A uno dado de
+     * baja cuyo usuario ocupa un puesto solo lo reactivan quienes dan de baja docentes, el admin y la Subdirección
+     * (confirmado el 12 de noviembre de 2026). Fuera de la validación, adscribir a uno que ya existe sigue siendo de
+     * `adscribe` (S9). Se pregunta con `can('adscribeToDepartment', [Teacher::class, $department, $teacher])`; sin
+     * docente, si puede agregar a alguno.
+     */
+    public function adscribeToDepartment(User $user, Department $department, ?Teacher $teacher = null): bool
+    {
+        if (! $this->create($user, $department)) {
+            return false;
+        }
+
+        return $teacher === null || $teacher->is_active || ! $this->staffOnlyForDeactivators($user, $teacher->user_id);
     }
 
     /**
@@ -211,6 +241,17 @@ final class TeacherPolicy
     {
         return $scope->allows(FacultyPermission::TeacherViewAll)
             || $scope->allows($permission, Target::of(unit: $this->adscriptionsOf($teacher)->pluck('department_id')->unique()->values()->all()));
+    }
+
+    /**
+     * Si el usuario del docente ocupa un puesto vigente o por empezar y quien actúa no da de baja docentes: entonces la
+     * baja, la última adscripción y la reactivación son solo del admin y la Subdirección (CV-S8).
+     */
+    private function staffOnlyForDeactivators(User $user, ?string $teacherUserId): bool
+    {
+        return $teacherUserId !== null
+            && ! $this->actor($user)->allows(FacultyPermission::TeacherDeactivate)
+            && app(RoleAssignmentRules::class)->holdsStaffRole($teacherUserId);
     }
 
     private function isSelf(User $user, int|string|null $teacherUserId): bool

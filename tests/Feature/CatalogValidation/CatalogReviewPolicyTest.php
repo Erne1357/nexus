@@ -4,24 +4,23 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\User;
 
 /*
 | CatalogReviewPolicy (reglas-de-negocio.md, "Validación de catálogos" y fila «Validar catálogos del
 | departamento»): solo el jefe del departamento corrige, valida, reabre y pone observaciones (supuesto por
 | confirmar: ni el admin ni Subdirección); ven y resuelven observaciones ese jefe, el admin y Subdirección.
-| Los salones los corrige solo si el perfil del campus de la revisión lo permite (`heads_edit_rooms`).
+| Los salones de su departamento los corrige en cualquier campus, en una sola revisión para todos los campus (CV2 y
+| decisión 6, confirmados el 12 de noviembre de 2026). Marcar un registro como revisado (CV7) es de quien valida.
 */
 
-const REVIEW_ABILITIES = ['view', 'correct', 'validate', 'reopen', 'flag', 'resolveFlag'];
+const REVIEW_ABILITIES = ['view', 'correct', 'validate', 'reopen', 'flag', 'resolveFlag', 'mark'];
 
 beforeEach(function () {
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => true]]);
+    $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->general = CatalogReview::factory()->general(Catalog::Subjects)->create(['department_id' => departmentKey(10)]);
-    $this->roomsC1 = CatalogReview::factory()->rooms($this->c1)->create(['department_id' => departmentKey(10)]);
-    $this->roomsC2 = CatalogReview::factory()->rooms($this->c2)->create(['department_id' => departmentKey(10)]);
+    $this->rooms = CatalogReview::factory()->rooms()->create(['department_id' => departmentKey(10)]);
 });
 
 /**
@@ -42,56 +41,37 @@ it('permite según el rol y su alcance en la revisión general del departamento'
 
     expect(reviewAbilitiesOf($user, $this->general))->toBe(reviewAbilities(...$expected));
 })->with([
-    'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)], [true, true, true, true, true, true]],
-    'subdirección: ve y resuelve observaciones' => [Role::Subdireccion, [], [true, false, false, false, false, true]],
-    'jefe de proyecto docente del departamento' => [Role::JefeProyectoDocente, fn () => ['campus_id' => test()->c1->id, 'department_id' => departmentKey(10)], [false, false, false, false, false, false]],
-    'coordinador' => [Role::Coordinador, fn () => ['campus_id' => test()->c1->id, 'career_id' => careerKey(20)], [false, false, false, false, false, false]],
-    'docente' => [Role::Docente, [], [false, false, false, false, false, false]],
-    'jefe de otro departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(11)], [false, false, false, false, false, false]],
+    'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)], [true, true, true, true, true, true, true]],
+    'subdirección: ve y resuelve observaciones' => [Role::Subdireccion, [], [true, false, false, false, false, true, false]],
+    'jefe de proyecto docente del departamento' => [Role::JefeProyectoDocente, fn () => ['campus_id' => test()->c1->id, 'department_id' => departmentKey(10)], [false, false, false, false, false, false, false]],
+    'coordinador' => [Role::Coordinador, fn () => ['campus_id' => test()->c1->id, 'career_id' => careerKey(20)], [false, false, false, false, false, false, false]],
+    'docente' => [Role::Docente, [], [false, false, false, false, false, false, false]],
+    'jefe de otro departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(11)], [false, false, false, false, false, false, false]],
 ]);
 
 it('al admin le deja ver y resolver observaciones, pero no corregir, validar, reabrir ni observar', function () {
     $admin = User::factory()->admin()->create();
 
-    expect(reviewAbilitiesOf($admin, $this->general))->toBe(reviewAbilities(true, false, false, false, false, true))
-        ->and(reviewAbilitiesOf($admin, $this->roomsC1))->toBe(reviewAbilities(true, false, false, false, false, true));
+    expect(reviewAbilitiesOf($admin, $this->general))->toBe(reviewAbilities(true, false, false, false, false, true, false))
+        ->and(reviewAbilitiesOf($admin, $this->rooms))->toBe(reviewAbilities(true, false, false, false, false, true, false));
 });
 
-it('el jefe corrige los salones solo si el perfil del campus de la revisión lo permite; lo demás, en cualquier campus', function () {
+it('CV2: el jefe corrige los salones de su departamento en una sola revisión para todos los campus, sin depender del perfil', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
 
-    expect(reviewAbilitiesOf($jefe, $this->roomsC1))->toBe(reviewAbilities(true, true, true, true, true, true))
-        ->and(reviewAbilitiesOf($jefe, $this->roomsC2))->toBe(reviewAbilities(true, false, true, true, true, true));
+    expect(reviewAbilitiesOf($jefe, $this->rooms))->toBe(reviewAbilities(true, true, true, true, true, true, true));
 });
 
-it('niega corregir salones en un campus sin salones aunque el perfil deje corregirlos', function () {
-    $campus = Campus::factory()->create(['code' => 'XX', 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false, 'heads_edit_rooms' => true]]);
-    $review = CatalogReview::factory()->rooms($campus)->create(['department_id' => departmentKey(10)]);
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
+it('un jefe de proyecto docente con alcance en un campus no corrige ni valida los salones', function () {
+    $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
 
-    expect($jefe->can('correct', $review))->toBeFalse();
-});
-
-it('niega los salones de un campus desactivado al jefe y a Subdirección', function (Role $role, array $scope) {
-    $this->c1->update(['is_active' => false]);
-    $user = User::factory()->withRole($role, $scope)->create();
-
-    expect(reviewAbilitiesOf($user, $this->roomsC1->fresh()))->toBe(reviewAbilities(false, false, false, false, false, false));
-})->with([
-    'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
-    'subdirección' => [Role::Subdireccion, []],
-]);
-
-it('niega al jefe con alcance en otro campus los salones de este', function () {
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
-
-    expect(reviewAbilitiesOf($jefe, $this->roomsC1))->toBe(reviewAbilities(false, false, false, false, false, false));
+    expect(reviewAbilitiesOf($jpd, $this->rooms))->toBe(reviewAbilities(false, false, false, false, false, false, false));
 });
 
 it('niega todo a un admin desactivado', function () {
     $admin = User::factory()->admin()->create(['is_active' => false]);
 
-    expect(reviewAbilitiesOf($admin, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false));
+    expect(reviewAbilitiesOf($admin, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false, false));
 });
 
 it('el tablero de avance y el recordatorio son de Subdirección y del admin (tarea 2.5, supuesto por confirmar)', function (string $who, bool $allowed) {
@@ -123,18 +103,18 @@ it('la misma persona con otro perfil activo es rechazada', function () {
     $subdireccion = User::factory()->withRole(Role::Subdireccion)->withRole(Role::Docente)->create();
 
     actingAsRole($jefe, Role::JefeDepartamento);
-    expect(reviewAbilitiesOf($jefe, $this->general))->toBe(reviewAbilities(true, true, true, true, true, true));
+    expect(reviewAbilitiesOf($jefe, $this->general))->toBe(reviewAbilities(true, true, true, true, true, true, true));
 
     actingAsRole($jefe, Role::Coordinador);
-    expect(reviewAbilitiesOf($jefe, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false));
+    expect(reviewAbilitiesOf($jefe, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false, false));
 
     actingAsRole($subdireccion, Role::Subdireccion);
-    expect(reviewAbilitiesOf($subdireccion, $this->general))->toBe(reviewAbilities(true, false, false, false, false, true))
+    expect(reviewAbilitiesOf($subdireccion, $this->general))->toBe(reviewAbilities(true, false, false, false, false, true, false))
         ->and($subdireccion->can('viewProgress', CatalogReview::class))->toBeTrue()
         ->and($subdireccion->can('remind', CatalogReview::class))->toBeTrue();
 
     actingAsRole($subdireccion, Role::Docente);
-    expect(reviewAbilitiesOf($subdireccion, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false))
+    expect(reviewAbilitiesOf($subdireccion, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false, false))
         ->and($subdireccion->can('viewProgress', CatalogReview::class))->toBeFalse()
         ->and($subdireccion->can('remind', CatalogReview::class))->toBeFalse();
 });

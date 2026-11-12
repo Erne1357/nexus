@@ -7,23 +7,25 @@ use App\Modules\Core\Enums\StatusTone;
 
 /*
 | Catálogos que el jefe valida cada periodo y estado de su revisión (docs/dominio/modelo-de-datos.md,
-| `catalog_reviews`). Los generales se revisan una vez por periodo para todo el Tec; los salones, en
-| cada campus (D2, confirmado el 1 de noviembre de 2026).
+| `catalog_reviews`). Todos se revisan una vez por periodo y departamento para todo el Tec, también los salones
+| (decisión 6, confirmada el 12 de noviembre de 2026); los salones solo se exigen donde el campus usa salones (HC-14).
 */
 
-it('cada catálogo tiene su etiqueta y dice si es general o de un campus', function (Catalog $catalog, string $label, bool $general) {
-    expect($catalog->label())->toBe($label)
-        ->and($catalog->isGeneral())->toBe($general);
+it('cada catálogo tiene su etiqueta', function (Catalog $catalog, string $label) {
+    expect($catalog->label())->toBe($label);
 })->with([
-    [Catalog::Teachers, 'Docentes', true],
-    [Catalog::Rooms, 'Salones', false],
-    [Catalog::Subjects, 'Materias', true],
-    [Catalog::StudyPlans, 'Planes de estudio', true],
-    [Catalog::Careers, 'Carreras', true],
+    [Catalog::Teachers, 'Docentes'],
+    [Catalog::Rooms, 'Salones'],
+    [Catalog::Subjects, 'Materias'],
+    [Catalog::StudyPlans, 'Planes de estudio'],
+    [Catalog::Careers, 'Carreras'],
 ]);
 
-it('los catálogos generales son los cuatro que no son salones', function () {
+it('HC-14: un campus que usa salones exige los cinco; uno sin salones, los cuatro generales', function () {
     expect(Catalog::general())->toBe([Catalog::Teachers, Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
+
+    expect(Catalog::requiredFor(usesRooms: true))->toBe(Catalog::cases())
+        ->and(Catalog::requiredFor(usesRooms: false))->toBe([Catalog::Teachers, Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
 });
 
 it('cada estado de revisión tiene su etiqueta y el tono de su insignia', function (ReviewStatus $status, string $label, StatusTone $tone) {

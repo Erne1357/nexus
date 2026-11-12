@@ -86,6 +86,7 @@ describe('ValidateReview', function () {
         $review = CatalogReview::factory()->general(Catalog::Careers)->create(['status' => $status]);
         $active = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas', 'department_id' => $review->department_id]);
         Career::factory()->inactive()->create(['department_id' => $review->department_id]);
+        markAllReviewed($review, $this->actor);
 
         app(ValidateReview::class)->handle($review, $this->actor);
 
@@ -98,6 +99,7 @@ describe('ValidateReview', function () {
 
     it('deja en la bitácora el estado anterior y el nuevo, quién validó y cuántos registros tiene la foto', function () {
         Career::factory()->count(2)->create(['department_id' => $this->review->department_id]);
+        markAllReviewed($this->review, $this->actor);
 
         app(ValidateReview::class)->handle($this->review, $this->actor);
 

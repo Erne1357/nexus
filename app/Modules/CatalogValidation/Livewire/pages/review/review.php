@@ -2,10 +2,14 @@
 
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Department;
+use App\Modules\CatalogValidation\Actions\AddReviewTeacher;
 use App\Modules\CatalogValidation\Actions\CorrectRecord;
+use App\Modules\CatalogValidation\Actions\DischargeReviewTeacher;
 use App\Modules\CatalogValidation\Actions\FlagRecord;
+use App\Modules\CatalogValidation\Actions\MarkRecordsReviewed;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
+use App\Modules\CatalogValidation\Actions\UnmarkRecordReviewed;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
@@ -15,14 +19,22 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
+use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Enums\RoomType;
+use App\Modules\Facilities\Queries\BuildingQuery;
 use App\Modules\Facilities\Rules\RoomRules;
+use App\Modules\Faculty\Enums\FacultyPermission;
+use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\TeacherAccessQuery;
+use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
+use App\Modules\Faculty\Rules\TeacherRfc;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Arr;
@@ -39,11 +51,16 @@ use Mary\Traits\Toast;
 
 /**
  * Validación de catálogos del departamento (docs/dominio/reglas-de-negocio.md, "Validación de catálogos"),
- * variante C «tablero de tarjetas» (DESIGN.md). Toma el periodo y el campus activos de la credencial y, de la URL,
+ * variante C «tablero de tarjetas» (DESIGN.md). Toma el periodo activo de la credencial y, de la URL,
  * el departamento (`?department=`) y el catálogo abierto (`?catalogo=`).
  *
  * Tablero: el avance (HC-14) y una tarjeta por revisión, con Validar o Reabrir. Lista de un catálogo: búsqueda,
  * filtros, tabla y un drawer por registro para corregirlo (CV1, CV2) y ver, poner y resolver observaciones (CV4).
+ * Las revisiones no son de un campus: la de salones cubre los de todos los campus (decisión 6), y el jefe mueve un
+ * salón a un edificio de otro campus (CV-S10). En docentes, el jefe corrige el correo institucional (CV1, AC-06), da de
+ * baja a uno de su departamento (CV8, CV-S8) y agrega por su RFC a uno que ya existe (CV-S9).
+ * Cada registro se marca como revisado desde su fila, o varios a la vez, y Validar solo se activa con todos revisados
+ * (CV7); la tarjeta, la pestaña y el renglón de la lista dicen cuántos van.
  *
  * El jefe cubre su departamento; Subdirección y el admin abren cualquiera en lectura, y solo resuelven
  * observaciones (CV-S1). Toda escritura pasa por su Action, después de autorizar con CatalogReviewPolicy en cada
@@ -78,6 +95,17 @@ new #[Title('Validación de catálogos')] class extends Component
 
     /** '' (todos), 'with' (con observación abierta) o 'without'. */
     public string $flagFilter = '';
+
+    /** '' (todos), 'reviewed' (marcados como revisados) o 'unreviewed' (CV7). */
+    public string $reviewedFilter = '';
+
+    /**
+     * Los registros elegidos para marcarlos juntos como revisados. Viven en el navegador (`wire:model` sin `.live`)
+     * hasta «Marcar como revisados»; markSelected() los valida contra la revisión.
+     *
+     * @var list<string>
+     */
+    public array $selected = [];
 
     public bool $showConfirm = false;
 
@@ -120,6 +148,15 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public string $features = '';
 
+    /** El edificio de un salón; uno de otro campus lo mueve a ese campus (CV-S10). */
+    public string $building_id = '';
+
+    /** El correo institucional de un docente (AC-06). */
+    public string $institutional_email = '';
+
+    /** El RFC del docente que se agrega al departamento (CV-S9). */
+    public string $newTeacherRfc = '';
+
     public bool $is_active = true;
 
     /** El tipo de la observación nueva. */
@@ -127,7 +164,7 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public string $comment = '';
 
-    /** Lo resuelto en esta petición: departamentos, selección, periodo, campus y revisiones. */
+    /** Lo resuelto en esta petición: departamentos, selección, periodo y revisiones. */
     private ?array $resolved = null;
 
     public function mount(): void
@@ -149,12 +186,11 @@ new #[Title('Validación de catálogos')] class extends Component
     public function with(CatalogReviewQuery $reviews, CatalogRecordsQuery $records, CatalogContentsQuery $contents, TeacherAccessQuery $access): array
     {
         $state = $this->state();
-        $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term'], 'campus' => $state['campus']];
+        $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term']];
 
         $empty = match (true) {
             $state['department'] === null => 'department',
             $state['term'] === null => 'term',
-            $state['campus'] === null => 'campus',
             $state['reviews']->isEmpty() => 'reviews',
             default => null,
         };
@@ -163,6 +199,8 @@ new #[Title('Validación de catálogos')] class extends Component
             return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null, 'missingInvitations' => ['email' => 0, 'user' => 0]];
         }
 
+        $reviewed = $contents->progressOf($state['reviews']);
+
         $open = $this->openCatalog();
         $openReview = $open === null ? null : $state['reviews']->first(fn (CatalogReview $review): bool => $review->catalog === $open);
 
@@ -170,12 +208,12 @@ new #[Title('Validación de catálogos')] class extends Component
         | El tablero arma las cinco tarjetas y el avance (HC-14); la lista, solo la revisión abierta y sin preguntar
         | por el veto de Reabrir (confirm() lo vuelve a preguntar al pedirlo).
         */
-        $current = $openReview === null ? null : $this->card($openReview, $reviews, false);
-        $cards = $current === null ? $this->byWork($state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews, true))) : collect([$current]);
+        $current = $openReview === null ? null : $this->card($openReview, $reviews, false, $reviewed[$openReview->getKey()]);
+        $cards = $current === null ? $this->byWork($state['reviews']->map(fn (CatalogReview $review): array => $this->card($review, $reviews, true, $reviewed[$review->getKey()]))) : collect([$current]);
         $firstTerm = $current === null
             ? $cards->every(fn (array $card): bool => $card['summary']['added'] === null)
             : $state['reviews']->every(fn (CatalogReview $review): bool => $reviews->previousValidation($review) === null);
-        $data += ['empty' => null, 'firstTerm' => $firstTerm, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status])->all(), 'progress' => $current === null ? $this->progress($state, $reviews) : null, 'current' => $current];
+        $data += ['empty' => null, 'firstTerm' => $firstTerm, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status, 'reviewed' => $reviewed[$review->getKey()]])->all(), 'progress' => $current === null ? $this->progress($state) : null, 'current' => $current];
 
         $data += $this->confirmation($cards, $access);
 
@@ -184,7 +222,7 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'status', 'flagFilter', 'missing', 'change', 'department', 'catalog'], true)) {
+        if (in_array($property, ['search', 'status', 'flagFilter', 'reviewedFilter', 'missing', 'change', 'department', 'catalog'], true)) {
             $this->resetPage();
         }
 
@@ -208,7 +246,7 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         if (in_array($property, ['department', 'catalog'], true)) {
-            $this->reset('search', 'status', 'flagFilter', 'missing', 'change', 'showDrawer', 'showRemoved', 'editingId');
+            $this->reset('search', 'status', 'flagFilter', 'reviewedFilter', 'missing', 'change', 'showDrawer', 'showRemoved', 'editingId', 'selected');
         }
     }
 
@@ -217,7 +255,7 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     public function clearFilters(): void
     {
-        $this->reset('search', 'status', 'flagFilter', 'missing', 'change');
+        $this->reset('search', 'status', 'flagFilter', 'reviewedFilter', 'missing', 'change');
         $this->resetPage();
     }
 
@@ -239,6 +277,7 @@ new #[Title('Validación de catálogos')] class extends Component
         } else {
             abort_unless($action === 'validate', 404);
             $this->authorize('validate', $review);
+            app(CatalogReviewRules::class)->ensureAllReviewed($review);
         }
 
         $this->confirmAction = $action;
@@ -296,12 +335,16 @@ new #[Title('Validación de catálogos')] class extends Component
     {
         $review = $this->currentReview();
         $this->authorize('correct', $review);
-        abort_if($review->catalog === Catalog::Teachers, 403, 'Los docentes se corrigen en su ficha.');
         $record = $contents->findOrFail($review, (string) $this->editingId);
+
+        if ($review->catalog === Catalog::Teachers) {
+            $this->authorize('updateInstitutionalEmail', $record);
+        }
 
         $record = $correctRecord->handle($review, $record, $this->validatedRecord($review->catalog), $this->user());
 
         $this->success(match ($review->catalog) {
+            Catalog::Teachers => 'Docente actualizado',
             Catalog::Rooms => 'Salón actualizado',
             Catalog::StudyPlans => 'Plan actualizado',
             Catalog::Careers => 'Carrera actualizada',
@@ -326,6 +369,91 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         $this->success($record->is_active ? 'Registro activado' : 'Registro desactivado', $this->describe($review, $record));
+    }
+
+    /**
+     * «Dar de baja de <depto>»: el docente sale del departamento y, sin otra adscripción, queda dado de baja (CV8). A
+     * uno que ocupa un puesto solo lo dan de baja el admin o la Subdirección (CV-S8).
+     */
+    public function dischargeTeacher(string $id, DischargeReviewTeacher $dischargeTeacher, CatalogContentsQuery $contents, CatalogRecordsQuery $records): void
+    {
+        $review = $this->currentReview();
+        $this->authorize('correct', $review);
+        abort_unless($review->catalog === Catalog::Teachers, 404);
+        $teacher = $contents->findOrFail($review, $id);
+        $this->authorize('removeAdscription', [Teacher::class, $records->teacherAdscriptions($review, [$teacher->getKey()])[$teacher->getKey()]]);
+
+        $result = $dischargeTeacher->handle($review, $teacher, $this->user());
+
+        $this->success(
+            $result['deactivated'] ? 'Docente dado de baja' : "Docente quitado de {$review->department->code}",
+            $this->describe($review, $teacher).e($result['outcome'] === null ? '' : " · {$result['outcome']}"),
+        );
+    }
+
+    /**
+     * «Agregar docente»: uno que ya existe, por su RFC, activo o dado de baja (se reactiva), al departamento (CV-S9).
+     */
+    public function addTeacher(AddReviewTeacher $addTeacher, TeacherQuery $teachers): void
+    {
+        $review = $this->currentReview();
+        $this->authorize('correct', $review);
+        abort_unless($review->catalog === Catalog::Teachers, 404);
+        $this->authorize('adscribeToDepartment', [Teacher::class, $review->department]);
+
+        $data = $this->validate(['newTeacherRfc' => ['required', 'string', 'max:20']], ['newTeacherRfc.required' => 'Escribe el RFC del docente.']);
+        $teacher = $teachers->findByRfc(TeacherRfc::normalize($data['newTeacherRfc']) ?? '')
+            ?? throw ValidationException::withMessages(['newTeacherRfc' => 'No hay un docente con ese RFC.']);
+
+        if (Gate::denies('adscribeToDepartment', [Teacher::class, $review->department, $teacher])) {
+            throw ValidationException::withMessages(['newTeacherRfc' => 'Está dado de baja y ocupa un puesto: lo reactivan el administrador o la Subdirección.']);
+        }
+
+        try {
+            $addTeacher->handle($review, $teacher, $this->user());
+        } catch (ValidationException $exception) {
+            throw ValidationException::withMessages(['newTeacherRfc' => Arr::flatten($exception->errors())]);
+        }
+
+        $this->reset('newTeacherRfc');
+        $this->success("Docente agregado a {$review->department->code}", $this->describe($review, $teacher));
+    }
+
+    /**
+     * Marca (`$reviewed`) o desmarca un registro como revisado desde su fila (CV7). El estado que se quiere viene de la
+     * pantalla, no de leer la marca aquí: así un envío repetido o una pantalla vieja no la invierten (las dos Actions no
+     * hacen nada si ya está como se pide).
+     */
+    public function setReviewed(string $id, bool $reviewed, MarkRecordsReviewed $markRecords, UnmarkRecordReviewed $unmarkRecord, CatalogContentsQuery $contents): void
+    {
+        $review = $this->currentReview();
+        $this->authorize('mark', $review);
+        $record = $contents->findOrFail($review, $id);
+
+        if ($reviewed) {
+            $markRecords->handle($review, [$record->getKey()], $this->user());
+        } else {
+            $unmarkRecord->handle($review, $record, $this->user());
+        }
+    }
+
+    /**
+     * «Marcar como revisados»: los registros elegidos, juntos (CV7). Si uno no es de la revisión, no marca ninguno.
+     */
+    public function markSelected(MarkRecordsReviewed $markRecords): void
+    {
+        $review = $this->currentReview();
+        $this->authorize('mark', $review);
+
+        $data = $this->validate(
+            ['selected' => ['required', 'array', 'max:500'], 'selected.*' => ['string']],
+            ['selected.required' => 'Elige los registros que ya revisaste.', 'selected.max' => 'Marca hasta 500 a la vez.'],
+        );
+
+        $count = $markRecords->handle($review, array_values($data['selected']), $this->user());
+        $this->selected = [];
+
+        $this->success($count === 1 ? '1 registro revisado' : "{$count} registros revisados", e($review->title));
     }
 
     public function addFlag(FlagRecord $flagRecord, CatalogContentsQuery $contents): void
@@ -375,6 +503,10 @@ new #[Title('Validación de catálogos')] class extends Component
             'features' => 'características',
             'flag' => 'tipo de observación',
             'comment' => 'comentario',
+            'selected' => 'registros elegidos',
+            'building_id' => 'edificio',
+            'institutional_email' => 'correo institucional',
+            'newTeacherRfc' => 'RFC',
         ];
     }
 
@@ -382,7 +514,7 @@ new #[Title('Validación de catálogos')] class extends Component
      * Lo resuelto de la petición, memorizado: los departamentos que el usuario abre, el seleccionado (403 si
      * `?department=` no es de los suyos o no hay ninguno), el periodo y el campus activos y las revisiones.
      *
-     * @return array{departments: Collection<int, Department>, department: ?Department, term: ?Term, campus: ?Campus, reviews: Collection<int, CatalogReview>}
+     * @return array{departments: Collection<int, Department>, department: ?Department, term: ?Term, reviews: Collection<int, CatalogReview>}
      */
     private function state(): array
     {
@@ -402,15 +534,14 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         $term = $context->activeTerm();
-        $campus = $context->activeCampus();
-        $reviews = $department === null || $term === null || $campus === null
+        $reviews = $department === null || $term === null
             ? new Collection
-            : app(CatalogReviewQuery::class)->forDepartment($term, $campus, $department)->load(['campus', 'department', 'validator'])
+            : app(CatalogReviewQuery::class)->forDepartment($term, $department)->load(['department', 'validator'])
                 ->filter(fn (CatalogReview $review): bool => Gate::allows('view', $review))
                 ->values()
                 ->each(fn (CatalogReview $review) => $review->setRelation('term', $term));
 
-        return $this->resolved = compact('departments', 'department', 'term', 'campus', 'reviews');
+        return $this->resolved = compact('departments', 'department', 'term', 'reviews');
     }
 
     private function user(): User
@@ -439,9 +570,10 @@ new #[Title('Validación de catálogos')] class extends Component
     /**
      * Lo que muestra la tarjeta de una revisión y lo que el usuario puede hacer con ella.
      *
+     * @param  array{reviewed: int, total: int}  $reviewed  cuántos registros van revisados (CV7)
      * @return array<string, mixed>
      */
-    private function card(CatalogReview $review, CatalogReviewQuery $reviews, bool $withVetoes): array
+    private function card(CatalogReview $review, CatalogReviewQuery $reviews, bool $withVetoes, array $reviewed): array
     {
         $validated = $review->status === ReviewStatus::Validated;
         $isHead = Gate::allows('flag', $review);
@@ -450,27 +582,37 @@ new #[Title('Validación de catálogos')] class extends Component
         $isTeachers = $review->catalog === Catalog::Teachers;
 
         $editReason = match (true) {
-            $isTeachers => 'Los docentes se corrigen en su ficha.',
-            ! $isHead => 'Solo el jefe del departamento corrige.',
-            ! Gate::allows('correct', $review) => 'Este campus no deja que los jefes corrijan salones; solo pueden observarlos.',
+            ! $isHead || ! Gate::allows('correct', $review) => 'Solo el jefe del departamento corrige.',
             $validated => 'La revisión ya está validada: reábrela para corregir.',
             default => null,
         };
 
+        $canMark = Gate::allows('mark', $review);
+
         return [
             'review' => $review,
             'summary' => $reviews->summary($review),
+            'reviewed' => $reviewed,
+            'canMark' => ! $validated && $canMark,
+            'markReason' => match (true) {
+                ! $canMark => 'Solo el jefe del departamento marca lo revisado.',
+                $validated => 'La revisión ya está validada: reábrela para marcar.',
+                default => null,
+            },
+            'validateReason' => CatalogReviewRules::unreviewedMessage($reviewed['total'] - $reviewed['reviewed']),
             'readiness' => $isTeachers && $withVetoes ? app(TeacherTermReadinessQuery::class)->counts($review->department, $review->term) : null,
             'canValidate' => Gate::allows('validate', $review),
             'canReopen' => $canReopen,
             'reopenVetoes' => $vetoes,
             'canResolve' => Gate::allows('resolveFlag', $review),
-            'canEdit' => ! $validated && ! $isTeachers && Gate::allows('correct', $review),
+            'canEdit' => ! $validated && Gate::allows('correct', $review),
             'canFlag' => ! $validated && $isHead,
             'canToggle' => ! $validated && in_array($review->catalog, [Catalog::Subjects, Catalog::Rooms], true) && Gate::allows('correct', $review),
-            'toggleReason' => in_array($review->catalog, [Catalog::Careers, Catalog::StudyPlans], true)
-                ? 'Carreras y planes no se activan ni se desactivan aquí: pon la observación «Debe desactivarse».'
-                : $editReason,
+            'toggleReason' => match ($review->catalog) {
+                Catalog::Careers, Catalog::StudyPlans => 'Carreras y planes no se activan ni se desactivan aquí: pon la observación «Debe desactivarse».',
+                Catalog::Teachers => "Un docente se da de baja con «Dar de baja de {$review->department?->code}».",
+                default => $editReason,
+            },
             'editReason' => $editReason,
             'flagReason' => match (true) {
                 ! $isHead => 'Solo el jefe del departamento pone observaciones.',
@@ -481,18 +623,20 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * «N de 5 validados» (HC-14): los catálogos que exige el campus (los generales y, si usa salones, los salones) y
-     * los que todavía bloquean la salida de borrador de la carga (CatalogReviewQuery::pendingFor); una revisión que
-     * falta cuenta como pendiente. `items` trae cada catálogo exigido con su revisión, si existe y el usuario la ve.
+     * «N de 5 validados» (HC-14): los catálogos que se exigen al departamento en el periodo (todos, y los salones si algún
+     * campus donde el periodo está abierto usa salones; una revisión de salones para todos los campus, decisión 6) y los
+     * que todavía bloquean la salida de borrador de sus cargas; una revisión que falta cuenta como pendiente. `items`
+     * trae cada catálogo exigido con su revisión, si existe y el usuario la ve.
      *
-     * @param  array{term: ?Term, campus: ?Campus, department: ?Department, reviews: Collection<int, CatalogReview>}  $state
+     * @param  array{term: ?Term, department: ?Department, reviews: Collection<int, CatalogReview>}  $state
      * @return array{validated: int, total: int, left: int, items: list<array{catalog: Catalog, review: ?CatalogReview}>}
      */
-    private function progress(array $state, CatalogReviewQuery $reviews): array
+    private function progress(array $state): array
     {
-        $required = array_values(array_filter(Catalog::cases(), fn (Catalog $catalog): bool => $catalog->isGeneral() || $state['campus']->profile->usesRooms));
-        $pending = $reviews->pendingFor($state['term'], $state['campus'], $state['department']);
+        $usesRooms = app(ValidationProgressQuery::class)->openCampuses($state['term'])->contains(fn (Campus $campus): bool => $campus->profile->usesRooms);
+        $required = Catalog::requiredFor($usesRooms);
         $existing = $state['reviews']->keyBy(fn (CatalogReview $review): string => $review->catalog->value);
+        $pending = array_filter($required, fn (Catalog $catalog): bool => $existing->get($catalog->value)?->status !== ReviewStatus::Validated);
 
         return [
             'validated' => count($required) - count($pending),
@@ -533,7 +677,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'active' => true,
             'inactive' => false,
             default => null,
-        }, $this->flagFilter, onlyIds: $this->onlyIds($review, $current['summary']));
+        }, $this->flagFilter, onlyIds: $this->onlyIds($review, $current['summary']), reviewed: $this->reviewedFilter);
 
         $readiness = $review->catalog === Catalog::Teachers
             ? app(TeacherTermReadinessQuery::class)->forTeachers($review->department, $review->term, $page->getCollection()->map->getKey()->all())
@@ -543,29 +687,88 @@ new #[Title('Validación de catálogos')] class extends Component
         if ($this->showDrawer && $this->editingId !== null) {
             try {
                 $record = $contents->findOrFail($review, $this->editingId);
-                $editing = ['record' => $record, 'flags' => $records->flagsOf($review, $record), 'locked' => $this->lockedOf($review, $record), 'facts' => $this->factsOf($review->catalog, $record)];
+                $editing = ['record' => $record, 'flags' => $records->flagsOf($review, $record), 'locked' => $this->lockedOf($review, $record), 'facts' => $this->factsOf($review->catalog, $record), ...$this->editableOf($current, $record)];
             } catch (ModelNotFoundException) {
                 $this->closeDrawer();
             }
         }
 
+        $headers = $this->headersOf($review->catalog);
+
+        if ($current['canMark']) {
+            array_unshift($headers, ['key' => 'select', 'label' => 'Elegir', 'class' => 'w-1']);
+        }
+
         return [
             'page' => $page,
             'readiness' => $readiness,
+            'dischargeReasons' => $review->catalog === Catalog::Teachers ? $this->dischargeReasons($current, $records, $page->getCollection()->map->getKey()->all()) : [],
+            'buildings' => $review->catalog === Catalog::Rooms && ($editing['canEdit'] ?? false) ? app(BuildingQuery::class)->optionsInActiveCampuses() : [],
+            'reviewedMap' => $records->reviewedIds($review, $page->getCollection()->map->getKey()->all()),
+            'reviewedFilters' => [['id' => 'unreviewed', 'name' => 'Sin revisar'], ['id' => 'reviewed', 'name' => 'Revisados']],
             'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin perfil']],
             'flagMap' => $records->openFlags($review, $page->getCollection()->map->getKey()),
-            'headers' => $this->headersOf($review->catalog),
+            'headers' => $headers,
             'rowDecoration' => ['text-neutral' => fn (Model $record): bool => ! $record->is_active],
             'editing' => $editing,
             'removed' => $current['summary']['removed'] ?? [],
             'changeFilters' => [['id' => 'added', 'name' => 'Altas'], ['id' => 'removed', 'name' => 'Bajas']],
-            'hasFilters' => $this->search !== '' || $this->status !== '' || $this->flagFilter !== '' || $this->missing !== '' || $this->change !== '',
+            'hasFilters' => $this->search !== '' || $this->status !== '' || $this->flagFilter !== '' || $this->reviewedFilter !== '' || $this->missing !== '' || $this->change !== '',
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
             'flagFilters' => [['id' => 'with', 'name' => 'Con observación abierta'], ['id' => 'without', 'name' => 'Sin observación abierta']],
             'flagOptions' => collect(ReviewFlag::cases())->filter(fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog))->map(fn (ReviewFlag $flag): array => ['id' => $flag->value, 'name' => $flag->label()])->values()->all(),
             'kinds' => array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases()),
             'roomTypes' => array_map(fn (RoomType $type): array => ['id' => $type->value, 'name' => $type->label()], RoomType::cases()),
         ];
+    }
+
+    /**
+     * Si el registro del drawer se corrige y, si no, por qué: lo de la tarjeta y, en docentes, quién cambia el correo
+     * institucional (AC-06: el de quien ocupa otro puesto solo lo cambia el admin).
+     *
+     * @param  array<string, mixed>  $current
+     * @return array{canEdit: bool, editReason: ?string}
+     */
+    private function editableOf(array $current, Model $record): array
+    {
+        if ($current['canEdit'] && $record instanceof Teacher && ! Gate::allows('updateInstitutionalEmail', $record)) {
+            return ['canEdit' => false, 'editReason' => 'El correo institucional de un docente que ocupa otro puesto solo lo cambia el administrador.'];
+        }
+
+        return ['canEdit' => $current['canEdit'], 'editReason' => $current['editReason']];
+    }
+
+    /**
+     * Por qué no se da de baja cada docente de la página, o null si se puede (CV8, CV-S8).
+     *
+     * @param  array<string, mixed>  $current
+     * @param  list<string>  $ids
+     * @return array<string, ?string>
+     */
+    private function dischargeReasons(array $current, CatalogRecordsQuery $records, array $ids): array
+    {
+        /*
+        | La regla de TeacherPolicy::removeAdscription para toda la página, con dos consultas y no una por docente:
+        | dischargeTeacher() vuelve a preguntar a la policy al pedirlo.
+        */
+        $adscriptions = $records->teacherAdscriptions($current['review'], $ids);
+        $staff = $records->staffUserIds(array_values(array_filter(array_map(fn ($adscription): ?string => $adscription->teacher?->user_id, $adscriptions))));
+        $context = app(Actor::class);
+        $canRemove = $context->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $current['review']->department_id));
+        $canDeactivate = $context->allows(FacultyPermission::TeacherDeactivate);
+        $me = $context->user()?->getKey();
+
+        return collect($ids)->mapWithKeys(function (string $id) use ($current, $adscriptions, $staff, $canRemove, $canDeactivate, $me): array {
+            $userId = $adscriptions[$id]->teacher?->user_id ?? null;
+
+            return [$id => match (true) {
+                ! $current['canEdit'] => $current['editReason'],
+                ! isset($adscriptions[$id]) || ! $canRemove => 'Solo quien administra el departamento da de baja a sus docentes.',
+                $userId !== null && $userId === $me => 'No te puedes dar de baja a ti mismo.',
+                $userId !== null && isset($staff[$userId]) && ! $canDeactivate => 'Ocupa un puesto: lo da de baja el administrador o la Subdirección.',
+                default => null,
+            }];
+        })->all();
     }
 
     /**
@@ -620,7 +823,7 @@ new #[Title('Validación de catálogos')] class extends Component
     private function headersOf(Catalog $catalog): array
     {
         $name = ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'];
-        $closing = [['key' => 'flags', 'label' => 'Observación', 'class' => 'max-[1023px]:hidden'], ['key' => 'is_active', 'label' => 'Estado']];
+        $closing = [['key' => 'flags', 'label' => 'Observación', 'class' => 'max-[1023px]:hidden'], ['key' => 'is_active', 'label' => 'Estado'], ['key' => 'reviewed', 'label' => 'Revisado']];
 
         return [...match ($catalog) {
             Catalog::Subjects => [
@@ -632,6 +835,7 @@ new #[Title('Validación de catálogos')] class extends Component
             ],
             Catalog::Rooms => [
                 ['key' => 'code', 'label' => 'Clave'],
+                ['key' => 'campus', 'label' => 'Campus'],
                 [...$name, 'class' => $name['class'].' max-[1199px]:hidden'],
                 ['key' => 'building', 'label' => 'Edificio', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'capacity', 'label' => 'Capacidad', 'class' => 'text-end'],
@@ -674,6 +878,7 @@ new #[Title('Validación de catálogos')] class extends Component
                 $fact('Semestres', $record->semesters_count, true), $fact('Créditos', $record->total_credits, true),
             ],
             Catalog::Rooms => [
+                $fact('Campus', $record->campus?->code), $fact('Edificio', $record->building === null ? null : "{$record->building->code} · {$record->building->name}"),
                 $fact('Tipo', $record->type->label()), $fact('Capacidad', $record->capacity, true),
                 $fact('Características', implode(', ', $record->features ?? [])),
             ],
@@ -699,7 +904,6 @@ new #[Title('Validación de catálogos')] class extends Component
             ],
             Catalog::Rooms => [
                 ['label' => 'Clave', 'value' => $record->code, 'mono' => true],
-                ['label' => 'Edificio', 'value' => $record->building?->name ?? $record->building?->code],
                 ['label' => 'Departamento', 'value' => $review->department?->name],
             ],
             Catalog::Teachers => [['label' => 'RFC', 'value' => $record->rfc, 'mono' => true]],
@@ -730,17 +934,20 @@ new #[Title('Validación de catálogos')] class extends Component
                 'valid_from' => $record->valid_from?->toDateString() ?? '',
             ],
             Catalog::Rooms => [
+                'building_id' => (string) $record->building_id,
                 'type' => $record->type->value,
                 'capacity' => (string) $record->capacity,
                 'features' => implode(', ', $record->features ?? []),
             ],
+            Catalog::Teachers => ['institutional_email' => (string) $record->institutional_email],
             default => [],
         };
     }
 
     /**
      * Los datos que acepta la Action del módulo dueño, validados en forma y con sus tipos; lo que ata el registro
-     * (clave, departamento, carrera, edificio) no se manda, y CorrectRecord lo quitaría de todos modos.
+     * (clave, departamento, carrera) no se manda, y CorrectRecord lo quitaría de todos modos. El campus de un salón sigue
+     * a su edificio (CV-S10); de un docente solo va el correo institucional.
      *
      * @return array<string, mixed>
      */
@@ -753,7 +960,7 @@ new #[Title('Validación de catálogos')] class extends Component
             Catalog::Careers => $this->validate(['name' => ['required', 'string', 'max:255']]),
             Catalog::StudyPlans => $this->planData(),
             Catalog::Rooms => $this->roomData($common),
-            Catalog::Teachers => abort(403),
+            Catalog::Teachers => ['institutional_email' => $this->validate(['institutional_email' => ['nullable', 'string', 'max:255']])['institutional_email'] ?? null],
         };
     }
 
@@ -810,6 +1017,7 @@ new #[Title('Validación de catálogos')] class extends Component
     {
         $data = $this->validate([
             'name' => ['nullable', 'string', 'max:255'],
+            'building_id' => ['required', 'string'],
             'type' => ['required', Rule::enum(RoomType::class)],
             'capacity' => ['required', 'integer', 'min:1', 'max:100000'],
             'features' => ['nullable', 'string', 'max:1000', app(RoomRules::class)->validateFeatureLength(...)],
@@ -828,7 +1036,11 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     private function describe(CatalogReview $review, Model $record): string
     {
-        $code = $review->catalog === Catalog::Teachers ? $record->rfc : $record->code;
+        $code = match ($review->catalog) {
+            Catalog::Teachers => $record->rfc,
+            Catalog::Rooms => CatalogContentsQuery::roomCode($record),
+            default => $record->code,
+        };
 
         return e("{$code} · {$record->name}");
     }

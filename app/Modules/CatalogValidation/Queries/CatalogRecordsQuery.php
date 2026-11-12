@@ -8,6 +8,8 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Core\Rules\RoleAssignmentRules;
+use App\Modules\Faculty\Models\TeacherDepartment;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -15,26 +17,31 @@ use Illuminate\Support\Collection;
 
 /**
  * Lo que muestra la lista de un catálogo de la pantalla de validación: los registros de la revisión
- * (CatalogContentsQuery) paginados, con búsqueda, filtro de estado y de observación abierta, y las
- * observaciones de un registro. Quién ve la revisión lo decide CatalogReviewPolicy.
+ * (CatalogContentsQuery) paginados, con búsqueda, filtro de estado, de observación abierta y de revisado (CV7), las
+ * observaciones de un registro y cuáles de la página ya están revisados. Quién ve la revisión lo decide CatalogReviewPolicy.
  */
 final class CatalogRecordsQuery
 {
-    public function __construct(private readonly CatalogContentsQuery $contents) {}
+    public function __construct(
+        private readonly CatalogContentsQuery $contents,
+        private readonly RoleAssignmentRules $roles,
+    ) {}
 
     /**
      * Una página de registros por clave. `$flag` es `with` (con observación abierta), `without` (sin ella) o vacío;
-     * `$onlyIds`, si no es null, deja solo esos registros (el filtro «Falta» de docentes).
+     * `$onlyIds`, si no es null, deja solo esos registros (el filtro «Falta» de docentes); `$reviewed` es `reviewed`
+     * (marcados como revisados), `unreviewed` (sin marca) o vacío.
      *
+     * @param  ?list<string>  $onlyIds
      * @return LengthAwarePaginator<int, Model>
      */
-    public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15, ?array $onlyIds = null): LengthAwarePaginator
+    public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15, ?array $onlyIds = null, string $reviewed = ''): LengthAwarePaginator
     {
         $query = $this->contents->query($review);
         $model = $query->getModel();
 
         match ($review->catalog) {
-            Catalog::Rooms => $query->with('building'),
+            Catalog::Rooms => $query->with(['building', 'campus']),
             Catalog::StudyPlans => $query->with('career'),
             default => null,
         };
@@ -52,6 +59,11 @@ final class CatalogRecordsQuery
 
         if ($onlyIds !== null) {
             $query->whereIn($model->qualifyColumn('id'), $onlyIds);
+        }
+
+        if ($reviewed === 'reviewed' || $reviewed === 'unreviewed') {
+            $marks = $review->marks()->select('record_id');
+            $reviewed === 'reviewed' ? $query->whereIn($model->qualifyColumn('id'), $marks) : $query->whereNotIn($model->qualifyColumn('id'), $marks);
         }
 
         return $query->paginate($perPage);
@@ -73,6 +85,47 @@ final class CatalogRecordsQuery
             ->groupBy('flaggable_id')
             ->map(fn (Collection $flags): array => $flags->pluck('flag')->all())
             ->all();
+    }
+
+    /**
+     * De los registros dados, los que ya están marcados como revisados (CV7), como llaves.
+     *
+     * @param  list<string>  $ids
+     * @return array<string, true>
+     */
+    public function reviewedIds(CatalogReview $review, array $ids): array
+    {
+        return array_fill_keys($review->marks()->whereIn('record_id', $ids)->pluck('record_id')->all(), true);
+    }
+
+    /**
+     * Las adscripciones sin borrar de los docentes dados al departamento de la revisión, por id de docente: con ellas
+     * TeacherPolicy::removeAdscription decide quién da de baja a cada uno (CV8, CV-S8) y DischargeReviewTeacher lo da de baja.
+     *
+     * @param  list<string>  $teacherIds
+     * @return array<string, TeacherDepartment>
+     */
+    public function teacherAdscriptions(CatalogReview $review, array $teacherIds): array
+    {
+        return TeacherDepartment::query()
+            ->with('teacher:id,user_id')
+            ->where('department_id', $review->department_id)
+            ->whereIn('teacher_id', $teacherIds)
+            ->get()
+            ->keyBy('teacher_id')
+            ->all();
+    }
+
+    /**
+     * De los usuarios dados, los que ocupan un puesto vigente o por empezar (RoleAssignmentRules::holdsStaffRole), como
+     * llaves, con una sola consulta: a sus docentes solo los dan de baja el admin y la Subdirección (CV-S8).
+     *
+     * @param  list<string>  $userIds
+     * @return array<string, true>
+     */
+    public function staffUserIds(array $userIds): array
+    {
+        return $userIds === [] ? [] : array_fill_keys($this->roles->staffUserIds()->whereIn('user_id', $userIds)->distinct()->pluck('user_id')->all(), true);
     }
 
     /**
