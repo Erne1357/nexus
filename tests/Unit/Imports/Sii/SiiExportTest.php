@@ -95,6 +95,38 @@ it('la seriación del SII trae materia, su requisito y el tipo por carrera y ret
         ->and(SiiFile::RequisitosMateria->required())->toBeFalse();
 });
 
+it('abre una exportación sin las cuentas (acceso) ni los permisos del SII, que son opcionales', function () {
+    writeExport($this->dir, skip: ['acceso', 'permisos']);
+
+    $export = SiiExport::open($this->dir);
+
+    expect($export->has(SiiFile::Acceso))->toBeFalse()
+        ->and($export->has(SiiFile::Permisos))->toBeFalse()
+        ->and(SiiFile::Acceso->required())->toBeFalse()
+        ->and(SiiFile::Permisos->required())->toBeFalse();
+});
+
+it('acceso y permisos traen los encabezados del contrato', function () {
+    writeExport($this->dir);
+
+    $export = SiiExport::open($this->dir);
+
+    expect($export->reader(SiiFile::Acceso)->header())->toBe(['usuario', 'nombre_usuario', 'contrasena', 'tipo_usuario', 'status'])
+        ->and($export->reader(SiiFile::Permisos)->header())->toBe(['usuario', 'clave_area', 'carrera', 'aplicacion']);
+});
+
+it('detiene la migración si cambia el encabezado de acceso', function () {
+    $headers = array_map(fn ($h) => $h === 'contrasena' ? 'password' : $h, SiiFile::Acceso->headers());
+    writeExport($this->dir, headers: ['acceso' => $headers]);
+
+    try {
+        SiiExport::open($this->dir);
+        $this->fail('Debió lanzar SiiContractBroken.');
+    } catch (SiiContractBroken $e) {
+        expect($e->differences['acceso'])->toBe(['missing' => ['contrasena'], 'extra' => ['password']]);
+    }
+});
+
 it('ignora los archivos que no son CSV', function () {
     writeExport($this->dir, skip: ['aulas']);
     file_put_contents($this->dir.'/aulas.txt', 'x');
