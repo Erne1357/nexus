@@ -108,7 +108,7 @@ new #[Title('Validación de catálogos')] class extends Component
     /**
      * El filtro segmentado de la lista (CV7): 'por-revisar' (activos sin revisar), 'revisados', 'con-observacion' (con
      * observación abierta) o 'todos'. Al abrir un catálogo, «Por revisar» si queda alguno y la revisión no está validada;
-     * si no, «Todos» (defaultSegment()).
+     * si no, «Todos» (segmentOrDefault()).
      */
     #[Url(as: 'revision')]
     public string $segment = '';
@@ -437,7 +437,7 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         $this->reset('showAddTeacher', 'teacherSearch');
-        $this->success("Agregaste a {$teacher->name}", e("{$teacher->rfc} · queda revisado en {$review->department->code}."));
+        $this->success(e("Agregaste a {$teacher->name}"), e("{$teacher->rfc} · queda revisado en {$review->department->code}."));
     }
 
     /**
