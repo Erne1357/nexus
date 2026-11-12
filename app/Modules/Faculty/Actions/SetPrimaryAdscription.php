@@ -7,7 +7,6 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -25,7 +24,6 @@ final class SetPrimaryAdscription
 
     /**
      * @throws ValidationException
-     * @throws RuntimeException si SyncTeacherAccess tiene que crear el usuario y falta NEXUS_DEFAULT_PASSWORD
      */
     public function handle(TeacherDepartment $adscription): void
     {

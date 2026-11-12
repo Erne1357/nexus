@@ -4,7 +4,6 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Support\DefaultPassword;
 use App\Modules\Faculty\Actions\AddAdscription;
 use App\Modules\Faculty\Actions\CreateTeacher;
 use App\Modules\Faculty\Actions\RemoveAdscription;
@@ -208,7 +207,7 @@ new #[Title('Docentes')] class extends Component
         $this->showModal = true;
     }
 
-    public function save(CreateTeacher $createTeacher, UpdateTeacher $updateTeacher, TeacherQuery $teachers, Actor $context, DefaultPassword $defaultPassword): void
+    public function save(CreateTeacher $createTeacher, UpdateTeacher $updateTeacher, TeacherQuery $teachers, Actor $context): void
     {
         if ($this->editingId !== null) {
             $teacher = $teachers->findOrFail($this->editingId);
@@ -229,11 +228,6 @@ new #[Title('Docentes')] class extends Component
 
         $data = $this->validatedData(creating: true);
         $department = $this->allowedDepartment($teachers, $context);
-
-        // El docente nuevo recibe usuario con la contraseña por defecto.
-        if ($this->defaultPasswordIsMissing($defaultPassword, 'No se pudo dar de alta al docente')) {
-            return;
-        }
 
         $teacher = $createTeacher->handle($data, $department);
 
@@ -296,15 +290,10 @@ new #[Title('Docentes')] class extends Component
         );
     }
 
-    public function toggleActive(string $id, TeacherQuery $teachers, SetTeacherActive $setTeacherActive, DefaultPassword $defaultPassword): void
+    public function toggleActive(string $id, TeacherQuery $teachers, SetTeacherActive $setTeacherActive): void
     {
         $teacher = $teachers->findOrFail($id);
         $this->authorize('deactivate', $teacher);
-
-        // Reactivar a uno sin usuario se lo crea con la contraseña por defecto.
-        if (! $teacher->is_active && $teacher->user_id === null && $this->defaultPasswordIsMissing($defaultPassword, 'No se pudo activar a '.e($teacher->rfc))) {
-            return;
-        }
 
         $teacher = $setTeacherActive->handle($teacher, ! $teacher->is_active);
 
@@ -312,16 +301,12 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * «Dar de alta usuarios»: encola la sincronización del acceso de todos los docentes, a nombre de quien la pide.
-     * Sin NEXUS_DEFAULT_PASSWORD no encola nada y dice por qué.
+     * «Dar de alta usuarios»: encola la sincronización del acceso de todos los docentes, a nombre de quien la pide. Los
+     * usuarios que crea nacen sin acceso (AC-02).
      */
-    public function provisionUsers(DefaultPassword $defaultPassword, Actor $context): void
+    public function provisionUsers(Actor $context): void
     {
         $this->authorize('provisionUsers', Teacher::class);
-
-        if ($this->defaultPasswordIsMissing($defaultPassword, 'No se puede dar de alta usuarios')) {
-            return;
-        }
 
         ProvisionTeacherUsersJob::dispatch($context->user());
 
@@ -446,24 +431,6 @@ new #[Title('Docentes')] class extends Component
         };
 
         return $outcome;
-    }
-
-    /**
-     * Si falta NEXUS_DEFAULT_PASSWORD, lo dice en un toast de error con `$title` y da true: quien llama no escribe,
-     * porque crear un usuario sin ella fallaría a media operación. Se pregunta solo cuando la operación puede crear
-     * un usuario.
-     */
-    private function defaultPasswordIsMissing(DefaultPassword $defaultPassword, string $title): bool
-    {
-        try {
-            $defaultPassword->value();
-        } catch (RuntimeException $exception) {
-            $this->error($title, e($exception->getMessage()));
-
-            return true;
-        }
-
-        return false;
     }
 
     /**

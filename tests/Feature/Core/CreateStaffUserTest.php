@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Actions\CreateStaffUser;
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\DefaultPassword;
 use Illuminate\Support\Facades\Hash;
@@ -16,12 +17,26 @@ it('crea un usuario activo con la contraseña por defecto y cambio obligatorio',
         ->and(Hash::check(app(DefaultPassword::class)->value(), $user->fresh()->password))->toBeTrue();
 });
 
-it('usa el hash dado en lugar de calcular uno', function () {
-    $hash = app(DefaultPassword::class)->hash();
+it('AC-05: el alta manual nace con la contraseña por defecto', function () {
+    $user = app(CreateStaffUser::class)->handle('personal01', 'Luis Gómez');
 
-    $user = app(CreateStaffUser::class)->handle('docente02', 'Luis Gómez', null, $hash);
+    expect(UserAccess::of($user->fresh()))->toBe(UserAccess::MustChangePassword);
+});
 
-    expect($user->fresh()->password)->toBe($hash);
+it('AC-02: sin acceso nace sin contraseña, activo y con cambio obligatorio, aunque falte NEXUS_DEFAULT_PASSWORD', function () {
+    config(['auth.default_password' => null]);
+
+    $user = app(CreateStaffUser::class)->handle('docente02', 'Luis Gómez', null, withAccess: false);
+
+    expect($user->fresh())
+        ->password->toBeNull()
+        ->is_active->toBeTrue()
+        ->must_change_password->toBeTrue()
+        ->and(UserAccess::of($user->fresh()))->toBe(UserAccess::None);
+
+    $log = Activity::where('event', 'created')->where('subject_id', $user->id)->sole();
+
+    expect($log->description)->toBe('Dio de alta al usuario docente02, sin acceso');
 });
 
 it('deja bitácora de la alta sin la contraseña', function () {

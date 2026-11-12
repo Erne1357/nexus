@@ -1,8 +1,8 @@
 {{--
     Ficha del docente (DESIGN.md, "Ficha del docente"), con la forma de la ficha del alumno: un enlace de regreso a
     Docentes, el encabezado con su nombre, número y estado, sus datos clave y a la derecha «Editar datos» y
-    «Acciones» (baja o reactivación y «Restablecer contraseña», deshabilitada con su motivo para quien no es
-    administrador); una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
+    «Acciones» (baja o reactivación y «Restablecer contraseña», o «Dar acceso» si su usuario no tiene contraseña,
+    AC-03, deshabilitada con su motivo para quien no es administrador); una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
     pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil (materias apto/preferente y «Horas fuera del
     ITCJ») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad es la vista de solo lectura
     del periodo activo con el enlace al editor (faculty::teachers.availability-tab). Agregar o editar una plaza y quitar
@@ -50,7 +50,18 @@
                 @else
                     <x-core::row-menu-item :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'" :reason="$deactivateReason" disabled data-testid="toggle-active" />
                 @endif
-                @if ($canReset)
+                @if ($canReset && $grantsAccess)
+                    <x-core::row-menu-item
+                        label="Dar acceso"
+                        wire:click="resetPassword"
+                        x-confirm="Entra con la contraseña por defecto y tendrá que cambiarla al entrar."
+                        data-confirm-title="¿Dar acceso a {{ $record->teacher->rfc }}?"
+                        data-confirm-button="Dar acceso"
+                        data-confirm-tone="primary"
+                        spinner="resetPassword"
+                        data-testid="reset-password"
+                    />
+                @elseif ($canReset)
                     <x-core::row-menu-item
                         label="Restablecer contraseña"
                         wire:click="resetPassword"
@@ -61,6 +72,8 @@
                         spinner="resetPassword"
                         data-testid="reset-password"
                     />
+                @elseif ($grantsAccess)
+                    <x-core::row-menu-item label="Dar acceso" reason="Solo el administrador da acceso." disabled data-testid="reset-password" />
                 @else
                     <x-core::row-menu-item label="Restablecer contraseña" reason="Solo el administrador restablece contraseñas." disabled data-testid="reset-password" />
                 @endif
@@ -285,9 +298,7 @@
                                 @if ($record->user)
                                     <span class="font-mono">{{ $record->user->username }}</span>
                                     <x-core::status-badge :tone="$record->user->is_active ? 'success' : 'neutral'" :label="$record->user->is_active ? 'Activo' : 'Inactivo'" />
-                                    @if ($record->user->must_change_password)
-                                        <x-core::status-badge tone="warning" label="Debe cambiar la contraseña" />
-                                    @endif
+                                    <x-core::status-badge :tone="$record->access->tone()" :label="$record->access->label()" data-testid="user-access" />
                                 @else
                                     <span class="text-neutral">Sin usuario</span>
                                 @endif
@@ -390,7 +401,7 @@
                     <x-input label="Hasta (si tiene)" name="headTo" wire:model="headTo" type="date" hint="Vacío es sin fecha de fin." />
                 </div>
                 @unless ($record->user)
-                    <p class="text-sm text-neutral">Todavía no tiene usuario: se le crea con la contraseña por defecto antes de nombrarlo.</p>
+                    <p class="text-sm text-neutral">Todavía no tiene usuario: se le crea, sin acceso, antes de nombrarlo. Después dale acceso desde «Acciones».</p>
                 @endunless
 
                 <x-slot:actions>

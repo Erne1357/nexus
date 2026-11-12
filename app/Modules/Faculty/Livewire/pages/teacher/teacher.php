@@ -56,7 +56,8 @@ use Mary\Traits\Toast;
  * activo; S16 y S17, supuestos por confirmar) e Historial (grupos por periodo y evaluaciones, de solo lectura).
  * Disponibilidad muestra la del periodo activo, de solo lectura (AvailabilityGridQuery), y lleva al editor
  * (faculty::pages.teacher-availability). «Acciones» trae darlo de baja o reactivarlo y «Restablecer contraseña», que es
- * solo del administrador.
+ * solo del administrador y se llama «Dar acceso» cuando su usuario no tiene contraseña (AC-03); Datos muestra el estado
+ * del acceso (AC-04).
  *
  * Lo ven y cambian el admin, la subdirección y los jefes, cada quien los docentes de su alcance (TeacherPolicy). El
  * componente lee con TeacherQuery y TeacherRecordQuery, autoriza en mount(), en with() y en cada método (una
@@ -256,6 +257,7 @@ new #[Title('Ficha del docente')] class extends Component
             'removingPosition' => $this->removingPositionId === null ? null : $record->positions->firstWhere('id', $this->removingPositionId),
             'positionCounts' => $this->showPositionModal ? $this->positionCountsInTerm($record->term) : false,
             'canReset' => Gate::allows('resetPassword', $teacher),
+            'grantsAccess' => $record->access?->hasAccess() === false,
             'canDeactivate' => Gate::allows('deactivate', $teacher),
             'deactivateReason' => $context->allows(FacultyPermission::TeacherDeactivate)
                 ? 'No te puedes dar de baja a ti mismo.'
@@ -312,7 +314,7 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Dar de baja o reactivar. Reactivar a uno sin usuario se lo crea con la contraseña por defecto: sin ella, un toast.
+     * Dar de baja o reactivar. Reactivar a uno sin usuario se lo crea sin acceso (AC-02); un error, en un toast.
      */
     public function toggleActive(TeacherQuery $teachers, SetTeacherActive $setTeacherActive): void
     {
@@ -331,28 +333,32 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Devuelve el usuario del docente a la contraseña por defecto y lo obliga a cambiarla. Solo el administrador.
+     * Devuelve el usuario del docente a la contraseña por defecto y lo obliga a cambiarla. Si no tenía contraseña es
+     * «Dar acceso», la habilitación manual (AC-03). Solo el administrador.
      */
     public function resetPassword(TeacherQuery $teachers, ResetUserPassword $resetUserPassword, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('resetPassword', $teacher);
+        $user = $teacher->user;
+        $granting = $user !== null && $user->password === null;
+        $failure = $granting ? 'No se pudo dar acceso' : 'No se pudo restablecer la contraseña';
 
-        if ($teacher->user === null) {
-            $this->error('No se pudo restablecer la contraseña', 'El docente no tiene usuario.');
+        if ($user === null) {
+            $this->error($failure, 'El docente no tiene usuario.');
 
             return;
         }
 
         try {
-            $resetUserPassword->handle($teacher->user, $context->user());
+            $resetUserPassword->handle($user, $context->user());
         } catch (RuntimeException $exception) {
-            $this->error('No se pudo restablecer la contraseña', e($exception->getMessage()));
+            $this->error($failure, e($exception->getMessage()));
 
             return;
         }
 
-        $this->success('Contraseña restablecida', e("{$teacher->user->username} debe cambiarla al entrar."));
+        $this->success($granting ? 'Acceso dado' : 'Contraseña restablecida', e("{$user->username} entra con la contraseña por defecto y debe cambiarla al entrar."));
     }
 
     /**

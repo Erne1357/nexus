@@ -375,17 +375,17 @@ describe('admin', function () {
         expect(lastToastOf($page))->type->toBe('success')->title->toBe('Alta de usuarios en cola');
     });
 
-    it('sin NEXUS_DEFAULT_PASSWORD, «Dar de alta usuarios» avisa con el motivo y no encola nada', function () {
+    it('AC-02: sin NEXUS_DEFAULT_PASSWORD, «Dar de alta usuarios» encola igual: los usuarios nacen sin acceso', function () {
         Queue::fake();
         config(['auth.default_password' => null]);
 
         $page = Livewire::actingAs($this->admin)->test('faculty::pages.teachers')->call('provisionUsers');
 
-        Queue::assertNothingPushed();
-        expect(lastToastOf($page))->type->toBe('error')->description->toContain('NEXUS_DEFAULT_PASSWORD');
+        Queue::assertPushed(ProvisionTeacherUsersJob::class);
+        expect(lastToastOf($page))->type->toBe('success');
     });
 
-    it('sin NEXUS_DEFAULT_PASSWORD, el alta avisa y no deja nada a medias', function () {
+    it('AC-02: sin NEXUS_DEFAULT_PASSWORD, el alta da de alta al docente con su usuario sin acceso', function () {
         config(['auth.default_password' => null]);
 
         $page = Livewire::actingAs($this->admin)
@@ -396,8 +396,10 @@ describe('admin', function () {
             ->set('department_id', $this->sc->id)
             ->call('save');
 
-        expect(Teacher::where('rfc', 'NUEV000002AB1')->exists())->toBeFalse()
-            ->and(lastToastOf($page))->type->toBe('error')->description->toContain('NEXUS_DEFAULT_PASSWORD');
+        $teacher = Teacher::where('rfc', 'NUEV000002AB1')->sole();
+
+        expect($teacher->user->password)->toBeNull()
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Docente creado');
     });
 
     it('un id que no es uuid es un docente que no existe', function () {

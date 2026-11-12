@@ -10,6 +10,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\DefaultPassword;
 use App\Modules\Faculty\Actions\ProvisionTeacherUsers;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -27,10 +28,11 @@ use RuntimeException;
  * largos. La adscripción es solo al departamento: el campus del docente es solo el de su RFC y su
  * historial.
  *
- * Al final ProvisionTeacherUsers les da usuario (contraseña por defecto, cambio obligatorio) a los activos, y unos
+ * Al final ProvisionTeacherUsers les da usuario a los activos, que nace sin acceso (AC-02); la demo se lo da con la
+ * contraseña por defecto y cambio obligatorio, para que se pueda entrar como docente (supuesto por confirmar), y unos
  * cuantos por departamento se nombran jefe de proyecto docente con AppointRole (el departamento puede
  * tener varios; los jefes ya los puso DemoStaffSeeder). Requiere el catálogo (AcademicDemoSeeder) y los periodos.
- * Sin NEXUS_DEFAULT_PASSWORD, la provisión falla.
+ * Sin NEXUS_DEFAULT_PASSWORD falla.
  *
  * Con `$forProcess` (modo proceso de la demo por puntos, docs/arquitectura/testing.md) siembra `PROCESS_ROSTER_FACTOR`
  * veces los docentes pedidos, reparte la adscripción principal por las horas que cada departamento da en los planes
@@ -98,6 +100,7 @@ class FacultyDemoSeeder extends Seeder
         $inserted = (hrtime(true) - $started) / 1e9;
         $started = hrtime(true);
         $access = app(ProvisionTeacherUsers::class)->handle();
+        $this->grantDemoAccess();
         $provisioned = (hrtime(true) - $started) / 1e9;
 
         $started = hrtime(true);
@@ -108,6 +111,18 @@ class FacultyDemoSeeder extends Seeder
             'Docentes: %d (inserción de todo %.1f s). Usuarios: %d creados, %d ligados (%.1f s). Jefes de proyecto docente: %d (%.1f s).',
             $totals['teachers'] ?? 0, $inserted, $access['created'], $access['linked'], $provisioned, $appointed, $headsTime,
         ));
+    }
+
+    /**
+     * Da acceso a los usuarios de docentes que no lo tienen, con la contraseña por defecto y cambio obligatorio: en la
+     * demo se entra como docente con su número (supuesto por confirmar); en producción lo da el admin o la invitación.
+     */
+    private function grantDemoAccess(): void
+    {
+        DB::table('users')
+            ->whereIn('id', DB::table('teachers')->whereNotNull('user_id')->select('user_id'))
+            ->whereNull('password')
+            ->update(['password' => app(DefaultPassword::class)->hash(), 'must_change_password' => true, 'updated_at' => now()]);
     }
 
     /**
