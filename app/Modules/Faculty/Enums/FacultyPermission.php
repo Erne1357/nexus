@@ -28,6 +28,7 @@ enum FacultyPermission: string implements Permission
     case TeacherDepartmentSetPrimary = 'faculty.teacher_department.set_primary';
     case TeacherUserProvision = 'faculty.teacher_user.provision';
     case TeacherUserResetPassword = 'faculty.teacher_user.reset_password';
+    case TeacherUserInvite = 'faculty.teacher_user.invite';
 
     public function label(): string
     {
@@ -46,6 +47,7 @@ enum FacultyPermission: string implements Permission
             self::TeacherDepartmentSetPrimary => 'Hacer principal una adscripción',
             self::TeacherUserProvision => 'Dar de alta los usuarios de los docentes',
             self::TeacherUserResetPassword => 'Restablecer la contraseña de un docente',
+            self::TeacherUserInvite => 'Reenviar la invitación de acceso de un docente',
         };
     }
 
@@ -60,7 +62,8 @@ enum FacultyPermission: string implements Permission
             self::TeacherManageExternalLoads,
             self::TeacherQualificationManage,
             self::TeacherDepartmentRemove,
-            self::TeacherDepartmentSetPrimary => [Dimension::Unit],
+            self::TeacherDepartmentSetPrimary,
+            self::TeacherUserInvite => [Dimension::Unit],
             default => [],
         };
     }

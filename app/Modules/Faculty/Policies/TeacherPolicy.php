@@ -32,7 +32,8 @@ use Illuminate\Support\Collection;
  * - Dar de alta (`create`) en un departamento es de quien lo cubre. Adscribir a un docente que ya existe
  *   (`adscribe`) es solo del admin y la Subdirección; a los jefes la pantalla solo les dice que el número ya está
  *   registrado (S9).
- * - Dar de alta usuarios y reiniciar contraseñas, solo el admin. Nombrar jefes ya no es de esta Policy: la ficha usa
+ * - Dar de alta usuarios y reiniciar contraseñas, solo el admin. Reenviar la invitación de acceso, el jefe de un
+ *   departamento del docente y el admin (AC-07). Nombrar jefes ya no es de esta Policy: la ficha usa
  *   RoleAssignmentPolicy de Core (3.P8).
  *
  * Se resuelve con los permisos de FacultyPermission, que el provider concede por puesto:
@@ -172,6 +173,15 @@ final class TeacherPolicy
     public function resetPassword(User $user, Teacher $teacher): bool
     {
         return $this->actor($user)->allows(FacultyPermission::TeacherUserResetPassword);
+    }
+
+    /**
+     * «Reenviar invitación» (AC-07): el jefe de un departamento del docente (`faculty.teacher_user.invite` sobre la
+     * unidad) y el admin (supuesto por confirmar). `view_all` no lo abre: la Subdirección no la reenvía.
+     */
+    public function inviteAccess(User $user, Teacher $teacher): bool
+    {
+        return $this->actor($user)->allows(FacultyPermission::TeacherUserInvite, Target::of(unit: $this->adscriptionsOf($teacher)->pluck('department_id')->unique()->values()->all()));
     }
 
     /**

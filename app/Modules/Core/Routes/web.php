@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Http\Controllers\AccessInvitationPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -8,6 +9,15 @@ use Illuminate\Support\Facades\Route;
 | (config/fortify.php); aquí, la página de inicio, la pantalla de cambio de contraseña y la lista de notificaciones, el CRUD de
 | Campus, el de Periodos, la ficha de un periodo, «Personas y puestos» con su ficha y el Organigrama. Quién entra a cada página lo decide la página con su policy, no la ruta.
 */
+
+/*
+| El enlace de la invitación de acceso (AC-08), para invitados: el GET muestra el botón y el POST, al mismo enlace
+| firmado, activa el acceso. La firma la revisa AccessInvitationPage, que responde igual a todo enlace que no sirve.
+*/
+Route::middleware(['guest', 'throttle:20,1'])->group(function () {
+    Route::get('/access/{user}/{hash}', [AccessInvitationPage::class, 'show'])->name('access.accept');
+    Route::post('/access/{user}/{hash}', [AccessInvitationPage::class, 'accept'])->name('access.accept.store');
+});
 
 Route::middleware('auth')->group(function () {
     Route::livewire('/', 'core::pages.home')->name('home');

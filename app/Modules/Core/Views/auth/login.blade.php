@@ -44,6 +44,10 @@
                 <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-4">
                     @csrf
 
+                    @if (session('status') === 'access-accepted')
+                        <x-alert title="Tu acceso quedó activo. Entra con tu RFC y la contraseña del correo; Nexus te pedirá cambiarla." icon="o-check-circle" class="alert-success" />
+                    @endif
+
                     <x-input
                         label="Usuario"
                         name="username"

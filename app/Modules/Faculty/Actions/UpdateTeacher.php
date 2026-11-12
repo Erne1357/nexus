@@ -2,19 +2,23 @@
 
 namespace App\Modules\Faculty\Actions;
 
+use App\Modules\Core\Actions\CancelAccessInvitation;
+use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Events\TeacherUpdated;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Rules\TeacherRules;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Cambia los datos de un docente: nombre, correo, grado y fecha de ingreso, solo las claves que recibe. Quién puede
- * lo decide TeacherPolicy (`update`) antes de llamarla. Hace cumplir las mismas reglas que CreateTeacher
- * (TeacherRules).
+ * Cambia los datos de un docente: nombre, correo, correo institucional (AC-06), grado y fecha de ingreso, solo las
+ * claves que recibe. Quién puede lo decide TeacherPolicy (`update`) antes de llamarla. Hace cumplir las mismas reglas
+ * que CreateTeacher (TeacherRules). Cambiar el correo institucional deja sin efecto la invitación de acceso que tenía
+ * su usuario (CancelAccessInvitation, AC-07), en la misma transacción.
  *
  * No cambia el RFC ni el estado: el RFC es el usuario del docente y la clave del SII (supuesto
  * por confirmar: no se edita), y la baja es SetTeacherActive, que además sincroniza su acceso.
@@ -27,12 +31,15 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 final class UpdateTeacher
 {
     /** Lo que se edita y se registra en la bitácora. */
-    public const array FIELDS = ['name', 'email', 'degree', 'hired_on'];
+    public const array FIELDS = ['name', 'email', 'institutional_email', 'degree', 'hired_on'];
 
-    public function __construct(private readonly TeacherRules $rules) {}
+    public function __construct(
+        private readonly TeacherRules $rules,
+        private readonly CancelAccessInvitation $cancelAccessInvitation,
+    ) {}
 
     /**
-     * @param  array{name?: string, email?: ?string, degree?: TeacherDegree|string|null, hired_on?: ?string}  $data
+     * @param  array{name?: string, email?: ?string, institutional_email?: ?string, degree?: TeacherDegree|string|null, hired_on?: ?string}  $data
      *
      * @throws ValidationException
      */
@@ -46,6 +53,10 @@ final class UpdateTeacher
 
         if (array_key_exists('degree', $data)) {
             $data['degree'] = $this->rules->degree($data['degree']);
+        }
+
+        if (array_key_exists('institutional_email', $data)) {
+            $data['institutional_email'] = $this->rules->institutionalEmail($data['institutional_email']);
         }
 
         foreach (['email', 'hired_on'] as $field) {
@@ -65,7 +76,20 @@ final class UpdateTeacher
                 return $teacher;
             }
 
-            $teacher->save();
+            if (in_array('institutional_email', $changed, true) && $teacher->institutional_email !== null) {
+                $this->rules->ensureInstitutionalEmailIsFree($teacher->institutional_email, $teacher);
+            }
+
+            try {
+                $teacher->save();
+            } catch (UniqueConstraintViolationException) {
+                throw $this->rules->institutionalEmailTaken((string) $teacher->institutional_email);
+            }
+
+            if (in_array('institutional_email', $changed, true) && $teacher->user_id !== null) {
+                $user = auth()->user();
+                $this->cancelAccessInvitation->handle($teacher->user()->firstOrFail(), $user instanceof User ? $user : null);
+            }
 
             activity()
                 ->performedOn($teacher)
