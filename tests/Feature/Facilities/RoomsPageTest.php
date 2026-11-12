@@ -19,7 +19,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | CRUD de Salones (`/facilities/rooms`, facilities::pages.rooms) con los bloqueos del salón en un panel
-| lateral. Los salones son de un campus: la pantalla trabaja con el campus activo de la credencial y, sin
+| lateral. Los salones son de un campus: la pantalla trabaja con el campus de la página (`?campus=`, #415) y, sin
 | uno, pide elegirlo. Solo el admin y la Subdirección de ese campus (RoomPolicy). Cada acción del
 | componente vuelve a autorizar.
 */

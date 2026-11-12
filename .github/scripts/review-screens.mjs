@@ -9,7 +9,7 @@
 //     materias=/academic/subjects reticula=/academic/plans/<id>
 //
 // Variables: BASE (http://127.0.0.1:8099), LOGIN (admin), PASSWORD (password), WIDTHS (390,768,1440),
-// THEMES (light,dark), CAMPUS (texto del campus que se elige en la credencial), OUT (/app/storage/app/review, ignorado por git), FULL=1 para capturar la página entera.
+// THEMES (light,dark), CAMPUS (código del campus, que se agrega a cada ruta como `?campus=<código>`), OUT (/app/storage/app/review, ignorado por git), FULL=1 para capturar la página entera.
 import { chromium } from 'playwright';
 
 const base = process.env.BASE || 'http://127.0.0.1:8099';
@@ -39,35 +39,15 @@ await page.fill('input[name="username"]', login);
 await page.fill('input[name="password"]', password);
 await Promise.all([page.waitForURL(`${base}/`), page.click('button[type="submit"]')]);
 
-// CAMPUS=<texto de la opción> elige ese campus en la credencial (jefes con varios campus no tienen uno activo).
-if (process.env.CAMPUS) {
-  const chosen = await page.evaluate((text) => {
-    const select = document.querySelector('select[name="campus"]');
-
-    if (select === null) {
-      return { error: 'No hay select[name="campus"] en la credencial: el usuario no puede elegir campus.' };
-    }
-
-    const option = [...select.options].find((candidate) => candidate.text.includes(text));
-
-    if (option === undefined) {
-      return { error: `Ningún campus de la credencial incluye «${text}». Opciones: ${[...select.options].map((candidate) => candidate.text.trim()).join(', ')}.` };
-    }
-
-    select.value = option.value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-
-    return { error: null };
-  }, process.env.CAMPUS);
-
-  if (chosen.error !== null) {
-    console.error(`CAMPUS=${process.env.CAMPUS}: ${chosen.error}`);
-    await browser.close();
-    process.exit(2);
+// CAMPUS=<código> abre cada ruta en ese campus (`?campus=<código>`): la credencial ya no elige campus (#415), cada
+// pantalla lo lleva en su URL. Una ruta que ya trae `campus=` se deja como está.
+const onCampus = (path) => {
+  if (!process.env.CAMPUS || /[?&]campus=/.test(path)) {
+    return path;
   }
 
-  await page.waitForTimeout(1500);
-}
+  return `${path}${path.includes('?') ? '&' : '?'}campus=${encodeURIComponent(process.env.CAMPUS)}`;
+};
 
 let failed = false;
 
@@ -76,7 +56,7 @@ for (const theme of themes) {
     for (const width of widths) {
       await page.setViewportSize({ width, height: 900 });
       const started = Date.now();
-      const response = await page.goto(base + path, { waitUntil: 'networkidle' });
+      const response = await page.goto(base + onCampus(path), { waitUntil: 'networkidle' });
       const ms = Date.now() - started;
 
       if (theme === 'dark') {

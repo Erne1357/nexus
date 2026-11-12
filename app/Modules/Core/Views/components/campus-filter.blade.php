@@ -8,7 +8,10 @@
     o requiredCampus()), null para «todos»; `all`: si la pantalla puede mostrar todos los campus juntos (ofrece
     «Todos»); `property`: la propiedad que fija, `campus` por omisión.
 
-    <x-core::campus-filter :options="$campusOptions" :selected="$campus?->code" all />
+    Con WithCampusFilter, `$campus` es la propiedad pública (el código que pide la URL), así que la pantalla pasa el
+    campus que muestra con otro nombre:
+
+    <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all />
 --}}
 @props(['options', 'selected' => null, 'all' => false, 'property' => 'campus'])
 

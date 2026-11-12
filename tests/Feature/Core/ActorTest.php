@@ -472,6 +472,15 @@ describe('puente del campus de la pantalla', function () {
             ->assertExactJson(['active' => 'C1']);
     });
 
+    it('en una petición de Livewire ignora un campus de Referer que no ofrece', function () {
+        Campus::factory()->create(['code' => 'C9']);
+
+        $this->actingAs($this->both)
+            ->withHeaders(['X-Livewire' => 'true', 'Referer' => url('/scheduling/editor?campus=C9')])
+            ->post('/_test/active-campus')
+            ->assertExactJson(['active' => null]);
+    });
+
     it('fuera de Livewire no lee Referer', function () {
         $this->actingAs($this->both)
             ->withHeaders(['Referer' => url('/scheduling/editor?campus=C1')])

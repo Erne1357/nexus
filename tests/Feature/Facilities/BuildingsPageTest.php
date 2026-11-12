@@ -13,7 +13,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | CRUD de Edificios (`/facilities/buildings`, facilities::pages.buildings). Los edificios son de un campus:
-| la pantalla trabaja con el campus activo de la credencial y, sin uno, pide elegirlo. Solo el admin y la
+| la pantalla trabaja con el campus de la página (`?campus=`, #415) y, sin uno, pide elegirlo. Solo el admin y la
 | Subdirección de ese campus (BuildingPolicy). Cada acción del componente vuelve a autorizar.
 */
 
@@ -76,7 +76,7 @@ describe('admin', function () {
             ->assertOk()->assertSee('Elige un campus en tu credencial')->assertDontSee('Edificio A')->assertDontSee('Nuevo edificio');
     });
 
-    it('cambia de campus con la credencial', function () {
+    it('cambia de campus con el de la página (?campus=)', function () {
         onCampusPage($this->c1);
 
         Livewire::actingAs($this->admin)->test('facilities::pages.buildings')->assertViewHas('buildings', listsBuildings(['Z']));

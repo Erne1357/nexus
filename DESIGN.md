@@ -190,7 +190,7 @@ Fondo `#0a1826`, superficies `#0f2133`, banda `#071a2b`, selección `#26384a`, f
   - **Izquierda:** la liebre en un cuadro rojo de 72 px, que es el botón del menú completo; luego «Nexus» y la ruta (área › pantalla).
   - **Derecha:** el buscador «Buscar o ir a… Ctrl K», que abre el menú con el cursor en su buscador, y **la credencial**.
   - Debajo, la **franja roja** de 3 px.
-- **La credencial** es un botón con avatar (las iniciales), nombre y, debajo, «rol · periodo»: el perfil activo, con su nombre para quien lo ocupa. No lleva ni elige campus (decidido por el usuario el 12 de noviembre de 2026, #415): cada pantalla que lo necesita lo elige en su URL con `x-core::campus-filter` (ver «Filtro segmentado»). Se abre como tarjeta, con el foco dentro (Esc, un clic fuera o salir de ella con Tab la cierran), con:
+- **La credencial** es un botón con avatar (las iniciales), nombre y, debajo, «rol · periodo»: el perfil activo, con su nombre para quien lo ocupa. No lleva ni elige campus (decidido por el usuario el 12 de noviembre de 2026, #415); cada pantalla que lo necesita lo elige en su URL con `x-core::campus-filter` (supuesto por confirmar; ver «Filtro segmentado»). Se abre como tarjeta, con el foco dentro (Esc, un clic fuera o salir de ella con Tab la cierran), con:
   - encabezado azul y su franja roja;
   - «Actuando como» (con más de un puesto) y el selector de **periodo** (los de `core::components.context-switcher`, con `SwitchRole` y `SetActiveContext`);
   - **tema** claro u oscuro;

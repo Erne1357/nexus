@@ -61,7 +61,7 @@ it('cambia el periodo activo con SetActiveContext y recarga la página', functio
         ->set('termId', $this->previous->id)
         ->call('apply')
         ->assertHasNoErrors()
-        ->assertRedirect();
+        ->assertRedirect(Livewire::originalUrl());
 
     expect(app(Actor::class)->activeTerm()?->is($this->previous))->toBeTrue();
 });
@@ -149,7 +149,7 @@ describe('sin periodo activo', function () {
         Livewire::test('core::components.context-switcher')
             ->set('termId', $this->{$term}->id)
             ->call('apply')
-            ->assertRedirect();
+            ->assertRedirect(Livewire::originalUrl());
 
         expect(app(Actor::class)->activeTerm()?->is($this->{$term}))->toBeTrue();
     })->with(['current', 'previous']);
@@ -249,7 +249,7 @@ it('cambiar el periodo nunca cambia el perfil, aunque el perfil elegido en el se
         ->set('roleValue', 'coordinador')
         ->set('termId', $this->previous->id)
         ->call('apply')
-        ->assertRedirect();
+        ->assertRedirect(Livewire::originalUrl());
 
     expect(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeProyectoDocente->value)
         ->and(session(Actor::ACTIVE_TERM))->toBe($this->previous->id)
