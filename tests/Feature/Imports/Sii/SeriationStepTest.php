@@ -91,13 +91,13 @@ function seriationStepMessages(array $run): array
 }
 
 /**
- * Las filas de `_incidencias.csv` del paso `seriacion` como `nivel|fila|mensaje`.
+ * Las filas de `_incidencias.carreras+materias+organigrama+seriacion.csv` (la corrida parcial de estas pruebas) del paso `seriacion` como `nivel|fila|mensaje`.
  *
  * @return list<string>
  */
 function seriationIncidentLines(string $dir): array
 {
-    $rows = array_map(str_getcsv(...), array_slice(file("{$dir}/_incidencias.csv", FILE_IGNORE_NEW_LINES), 1));
+    $rows = array_map(str_getcsv(...), array_slice(file("{$dir}/_incidencias.carreras+materias+organigrama+seriacion.csv", FILE_IGNORE_NEW_LINES), 1));
 
     return array_values(array_map(fn (array $row): string => "{$row[4]}|{$row[2]}|{$row[5]}", array_filter($rows, fn (array $row): bool => $row[0] === 'seriacion')));
 }
