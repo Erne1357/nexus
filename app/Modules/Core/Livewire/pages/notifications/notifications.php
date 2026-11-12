@@ -54,7 +54,7 @@ new #[Title('Notificaciones')] class extends Component
         $onlyUnread = $this->filter === 'sin-leer';
 
         if ($user === null) {
-            return ['items' => new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE), 'unread' => 0, 'total' => 0, 'onlyUnread' => $onlyUnread, 'types' => [], 'showCampus' => false, 'showRole' => false];
+            return ['items' => new LengthAwarePaginator([], 0, NotificationQuery::PER_PAGE), 'unread' => 0, 'total' => 0, 'onlyUnread' => $onlyUnread, 'types' => [], 'showRole' => false];
         }
 
         // Los tipos se calculan una vez por pintado. Un `?tipo=` que ya no es de ninguno de sus avisos (o que
@@ -66,13 +66,12 @@ new #[Title('Notificaciones')] class extends Component
         }
 
         $classes = $this->type === '' ? [] : $typeMap[$this->type]['classes'];
-        $showCampus = $context->campuses()->count() > 1;
-        $items = $notifications->paginated($user, $onlyUnread, classes: $classes, withCampus: $showCampus);
+        $items = $notifications->paginated($user, $onlyUnread, classes: $classes);
 
         // Al leer avisos con el filtro «Sin leer», la página en curso puede quedar después de la última.
         if ($items->currentPage() > max(1, $items->lastPage())) {
             $this->setPage($items->lastPage());
-            $items = $notifications->paginated($user, $onlyUnread, classes: $classes, withCampus: $showCampus);
+            $items = $notifications->paginated($user, $onlyUnread, classes: $classes);
         }
 
         return [
@@ -80,7 +79,6 @@ new #[Title('Notificaciones')] class extends Component
             ...$notifications->counts($user, $classes),
             'onlyUnread' => $onlyUnread,
             'types' => collect($typeMap)->map(fn (array $type, string $key): array => ['id' => $key, 'name' => $type['label']])->values()->all(),
-            'showCampus' => $showCampus,
             'showRole' => count($context->heldRoles()) > 1,
         ];
     }

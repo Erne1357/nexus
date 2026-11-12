@@ -3,7 +3,6 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -37,7 +36,7 @@ beforeEach(function () {
 
 function conflictsPage(User $user, array $query = [])
 {
-    session([Actor::ACTIVE_CAMPUS => test()->campus->id]);
+    onCampusPage(test()->campus);
 
     return Livewire::withQueryParams($query)->actingAs($user)->test('scheduling::pages.conflicts');
 }

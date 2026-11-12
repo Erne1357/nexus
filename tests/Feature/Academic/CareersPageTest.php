@@ -93,7 +93,7 @@ describe('admin', function () {
 
     it('con un campus activo elegido muestra su clave y la acción de ofrecer', function () {
         $c1 = Campus::factory()->create(['code' => 'C1']);
-        session([Actor::ACTIVE_CAMPUS => $c1->id]);
+        onCampusPage($c1);
 
         $this->actingAs($this->admin)->get(route('academic.careers'))
             ->assertSee('Se ofrece en C1')->assertSee('Ofrecer')->assertDontSee('Elige un campus en tu credencial');

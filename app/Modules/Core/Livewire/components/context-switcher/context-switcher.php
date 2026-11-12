@@ -4,9 +4,7 @@ use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Actions\SwitchRole;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\RoleSummaryQuery;
 use App\Modules\Core\Queries\TermQuery;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -18,23 +16,21 @@ use Livewire\Livewire;
 use Mary\Traits\Toast;
 
 /**
- * Selector de perfil, campus y periodo activos, en la tarjeta de la credencial de la banda. Quien tiene más de un
- * puesto ve «Actuando como», un renglón por puesto con su alcance (RoleSummaryQuery, armado una vez al montar: no
- * cambia mientras la página está abierta); elegir uno lo cambia con switchRole() (SwitchRole) y regresa a Inicio.
- * Con un solo puesto no hay selector (la credencial ya dice cuál es). Ofrece los campus de
- * Actor::campuses() (fijo si solo hay uno) y todos los periodos, y apply() guarda la elección con
- * SetActiveContext, que rechaza un campus ajeno; apply() nunca cambia el perfil. Elegir el periodo actual deja el
- * de omisión, para seguirlo cuando cambie. Sin periodo activo, el selector muestra "Sin periodo". Después lo
- * confirma con un toast y recarga la página para que todo lo que depende del contexto lo use. Si el campus o el
- * periodo no existen o no se permiten, avisa con un toast de error y regresa la selección al contexto vigente.
+ * Selector de perfil y periodo activos, en la tarjeta de la credencial de la banda. Quien tiene más de un puesto ve
+ * «Actuando como», un renglón por puesto con su alcance (RoleSummaryQuery, armado una vez al montar: no cambia mientras
+ * la página está abierta); elegir uno lo cambia con switchRole() (SwitchRole) y regresa a Inicio. Con un solo puesto no
+ * hay selector (la credencial ya dice cuál es). La credencial ya no elige campus (#415): lo elige cada pantalla en su
+ * URL. Ofrece todos los periodos, y apply() guarda la elección con SetActiveContext; apply() nunca cambia el perfil.
+ * Elegir el periodo actual deja el de omisión, para seguirlo cuando cambie. Sin periodo activo, el selector muestra
+ * "Sin periodo". Después lo confirma con un toast y recarga la página, con el campus que la página tenía elegido
+ * (`?campus=`), para que todo lo que depende del periodo lo use. Si el periodo no existe, avisa con un toast de error
+ * y regresa la selección al periodo vigente.
  */
 new class extends Component
 {
     use Toast;
 
     public ?string $roleValue = null;
-
-    public ?string $campusId = null;
 
     public ?string $termId = null;
 
@@ -45,7 +41,6 @@ new class extends Component
     public function mount(Actor $context, RoleSummaryQuery $summaries): void
     {
         $this->roleValue = $context->activeRole()?->value;
-        $this->campusId = $context->activeCampus()?->getKey();
         $this->termId = $context->activeTerm()?->getKey();
 
         $rows = count($context->heldRoles()) > 1 ? $summaries->forHeldRoles($context) : [];
@@ -53,12 +48,11 @@ new class extends Component
     }
 
     /**
-     * @return array{campuses: Collection<int, Campus>, terms: Collection<int, Term>}
+     * @return array{terms: Collection<int, Term>}
      */
     public function with(Actor $context, TermQuery $terms): array
     {
         return [
-            'campuses' => $context->campuses(),
             'terms' => $context->user() === null ? new Collection : $terms->selectable(),
         ];
     }
@@ -89,17 +83,16 @@ new class extends Component
     }
 
     /**
-     * Guarda el campus y el periodo elegidos. No toca el perfil: eso es de switchRole().
+     * Guarda el periodo elegido. No toca el perfil: eso es de switchRole().
      */
-    public function apply(SetActiveContext $setActiveContext, Actor $context, CampusQuery $campuses, TermQuery $terms): void
+    public function apply(SetActiveContext $setActiveContext, Actor $context, TermQuery $terms): void
     {
         try {
-            $campus = blank($this->campusId) ? null : $campuses->findOrFail($this->campusId);
             $term = blank($this->termId) ? null : $terms->findOrFail($this->termId);
 
-            $setActiveContext->handle($campus, $term?->is_current ? null : $term);
+            $setActiveContext->handle($term?->is_current ? null : $term);
         } catch (ModelNotFoundException) {
-            $this->reject('El campus o el periodo elegido ya no existe.', $context);
+            $this->reject('El periodo elegido ya no existe.', $context);
 
             return;
         } catch (AuthorizationException $exception) {
@@ -108,12 +101,20 @@ new class extends Component
             return;
         }
 
-        // El toast de MaryUI pinta título y descripción con x-html: los nombres van escapados.
-        $this->success(
-            'Contexto actualizado',
-            e(implode(' · ', array_filter([$context->activeCampus()?->name, $context->activeTerm()?->name]))),
-            redirectTo: Livewire::originalUrl(),
-        );
+        // El toast de MaryUI pinta título y descripción con x-html: el nombre va escapado.
+        $this->success('Periodo actualizado', e((string) $context->activeTerm()?->name), redirectTo: $this->pageUrl());
+    }
+
+    /**
+     * La página donde está la credencial, para recargarla: su ruta y, si la tiene, el campus que eligió (`?campus=`,
+     * que en una petición de Livewire viene en Referer). Lo demás de su consulta no, porque puede ser del otro periodo.
+     */
+    private function pageUrl(): string
+    {
+        parse_str((string) parse_url((string) request()->headers->get('referer'), PHP_URL_QUERY), $query);
+        $campus = $query['campus'] ?? null;
+
+        return Livewire::originalUrl().(is_string($campus) && $campus !== '' ? '?'.http_build_query(['campus' => $campus]) : '');
     }
 
     /**
@@ -122,9 +123,8 @@ new class extends Component
     private function reject(string $reason, Actor $context): void
     {
         $this->roleValue = $context->activeRole()?->value;
-        $this->campusId = $context->activeCampus()?->getKey();
         $this->termId = $context->activeTerm()?->getKey();
 
-        $this->error('No se cambió el campus ni el periodo', e($reason));
+        $this->error('No se cambió el periodo', e($reason));
     }
 };

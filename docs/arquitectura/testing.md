@@ -132,7 +132,7 @@ docker compose exec -T -e LOGIN=admin -w /app app node .github/scripts/review-sc
 ```
 
 - `review-screens.mjs` entra con `LOGIN` (contraseña `PASSWORD`, por omisión `password`, la de los usuarios demo), abre cada ruta a los anchos de `WIDTHS` (390, 768 y 1440 por omisión) y en claro y oscuro, guarda las capturas en `storage/app/review/` (ignorado por git) y reporta estado, tiempo de carga y desborde horizontal. Termina con error si alguna pantalla desborda, responde con error o lanza un error de JavaScript.
-- El admin, `subdir` y los `jefe.<depto>` trabajan en todos los campus activos (Campus I y Campus II lo están con `DemoSeeder` y con el masivo), así que no tienen un campus activo por omisión. Las pantallas de un campus (alumnos) se revisan con un usuario de un solo campus, como `coord.isc.c2`; las de admin (materias), con `LOGIN=admin`.
+- El admin, `subdir` y los `jefe.<depto>` trabajan en todos los campus activos (Campus I y Campus II lo están con `DemoSeeder` y con el masivo), así que eligen el campus en la pantalla (`?campus=<código>`). Las pantallas de un campus (alumnos) se revisan con un usuario de un solo campus, como `coord.isc.c2`; las de admin (materias), con `LOGIN=admin`.
 - Las capturas se miran: el script encuentra desbordes, no textos cortados ni columnas que se parten en tres renglones.
 - Al terminar, detén el servidor (`docker compose restart app` o mata el proceso de `artisan serve`) y borra la base con `dropdb`.
 - En un worktree, `.github/scripts/worktree-preview.sh` levanta el mismo servidor con su propia base y su propio puerto, sin tocar la app principal (ver CONTRIBUTING.md, «Worktrees con Docker»).
@@ -151,7 +151,7 @@ El `MassiveSeeder` siembra unos 12 000 alumnos y 600 docentes, más los datos de
 - **Captura docente en 20271:** alrededor de 25 % sin disponibilidad, 15 % sin perfil y 30 % con horas fuera del ITCJ.
 - **Propuestas, bandejas y avisos** de las carreras de C1 y C2, en distintos estados. Con los catálogos de CB, SC, II, EE y MM validados, el masivo acepta más partes (regresa una de cada 6 y deja pendiente una de cada 5; el `DemoSeeder`, una de cada 4 y una de cada 3).
 
-Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes trabajan en todo el Tec y eligen el campus en la credencial:
+Con qué usuario revisar cada pantalla (contraseña `password`). Los jefes trabajan en todo el Tec y eligen el campus en cada pantalla (`?campus=<código>`; la credencial ya no lo elige, #415):
 
 | Pantalla | Usuario y caso |
 |---|---|
@@ -256,7 +256,7 @@ python3 .github/scripts/merge-shard-timings.py tests/.pest/shards.json tests/.pe
 
 ### Qué trae el masivo de la fase 3 (horarios)
 
-`SchedulingDemoSeeder` corre después de `AcademicLoadDemoSeeder`, que acepta partes y con eso crea los grupos (3.3); en Massive tarda unos 2.5 minutos. Para revisar el tablero «Choques y avance» (`/scheduling/conflicts`, con un campus elegido en la credencial):
+`SchedulingDemoSeeder` corre después de `AcademicLoadDemoSeeder`, que acepta partes y con eso crea los grupos (3.3); en Massive tarda unos 2.5 minutos. Para revisar el tablero «Choques y avance» (`/scheduling/conflicts`, con un campus elegido en la pantalla, `?campus=C2`):
 
 - **Departamentos limpios** (`SchedulingDemoSeeder::cleanDepartments()`, lo imprime al sembrar): todos sus grupos con sesiones de horas exactas, salones sin dueño o de su departamento, sin choques duros y sin docente, para que Staffing los pase a asignación (`StartStaffing`) y los asigne.
 - **Los demás departamentos**, con casos a propósito de cada tipo: grupos sin horario, horas que no cuadran (HC-12), dos materias de grupo único empalmadas en el mismo semestre (HC-03; solo en semestres sin grupos de los departamentos limpios, porque HC-03 se revisa por semestre y vetaría también su paso a asignación), salón más chico que el grupo (HC-05), práctica de laboratorio en aula (HC-06), salón de otro departamento sin préstamo (HC-10), docente que se pasa de horas o no está disponible (HC-08, HC-09), grupos sin docente, sin salón, cancelados y confirmados. Los choques que no son a propósito quedan cerca de cero, para que la cuadrícula muestre celdas listas, con pendientes y con choques.
