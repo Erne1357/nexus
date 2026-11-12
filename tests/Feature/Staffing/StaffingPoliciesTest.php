@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Gate;
 
 /*
 | Policies de Staffing. Según reglas-de-negocio.md, "Aprobaciones y permisos": asignan el docente el jefe de
-| departamento y el jefe de proyecto docente (de su departamento y campus); ven el ranking además la Subdirección.
+| departamento y el jefe de proyecto docente (de su departamento y modalidad; con campus, asignan solo en el suyo, AZ-S17); ven el ranking además la Subdirección.
 */
 
 beforeEach(function () {
@@ -42,7 +42,7 @@ it('permite según el puesto y su alcance', function (Role $role, Closure $scope
     'jefe del departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(11)], true, true],
     'jefe de otro departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)], false, false],
     'jefe de proyecto docente del departamento y campus' => [Role::JefeProyectoDocente, fn ($t) => ['campus_id' => $t->campus->id, 'department_id' => departmentKey(11)], true, true],
-    'jefe de proyecto docente de otro campus' => [Role::JefeProyectoDocente, fn ($t) => ['campus_id' => $t->otherCampus->id, 'department_id' => departmentKey(11)], false, false],
+    'jefe de proyecto docente de otro campus de la misma modalidad (AZ-S17: ve el ranking, no asigna)' => [Role::JefeProyectoDocente, fn ($t) => ['campus_id' => $t->otherCampus->id, 'department_id' => departmentKey(11)], false, true],
     'coordinador' => [Role::Coordinador, fn ($t) => ['campus_id' => $t->campus->id, 'career_id' => Career::factory()->create()->id], false, false],
     'subdirección' => [Role::Subdireccion, fn () => [], false, true],
 ]);

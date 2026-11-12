@@ -5,6 +5,7 @@ use App\Modules\AcademicLoad\Actions\Transitions\StartStaffing;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\AssignTeacher;
@@ -544,11 +545,15 @@ new #[Title('Asignación docente')] class extends Component
     }
 
     /**
-     * El alcance de la página como un grupo sin guardar (su campus y su departamento), para las policies de Staffing.
+     * El alcance de la página como un grupo sin guardar (su modalidad, campus y departamento), para las policies de Staffing.
      */
     private function scopeGroup(): Group
     {
-        return new Group(['campus_id' => $this->campusId, 'department_id' => $this->departmentId]);
+        return new Group([
+            'modality_id' => Campus::withTrashed()->whereKey($this->campusId)->value('modality_id'),
+            'campus_id' => $this->campusId,
+            'department_id' => $this->departmentId,
+        ]);
     }
 
     private function run(Group $group, Teacher $teacher, ?string $reason, AssignTeacher $action, string $from): void
