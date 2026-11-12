@@ -174,9 +174,9 @@ it('sin el permiso en ningún alcance responde 403 antes de buscar, también par
     $this->get(route('published.export', ['periodo' => '20999', 'campus' => 'C2', 'tipo' => 'excel']))->assertForbidden();
 });
 
-it('el jefe con alcance en otro campus no descarga el exporte de este', function () {
-    $c1 = Campus::factory()->create(['code' => 'C1']);
-    $this->actingAs(staffExportsHead($this->department, $c1));
+it('AZ-S17: el jefe con alcance en otra modalidad no descarga el exporte de esta', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $this->actingAs(User::factory()->withRole(Role::JefeDepartamento, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->department->id])->create());
 
     $this->get($this->excelUrl)->assertForbidden();
     $this->get($this->pdfUrl)->assertForbidden();

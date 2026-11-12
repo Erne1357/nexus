@@ -177,8 +177,8 @@ it('un snapshot en caché con un campo faltante o de otro tipo se descarta y se 
 
     $context = nextRequestOf($user);
 
-    expect($context->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $this->c2->id, career: fakeKey(20))))->toBeTrue()
-        ->and($context->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $this->c2->id, career: careerKey(21))))->toBeFalse()
+    expect($context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: modalityOf('PRES')->id, career: fakeKey(20))))->toBeTrue()
+        ->and($context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: modalityOf('PRES')->id, career: careerKey(21))))->toBeFalse()
         ->and(Cache::get($key))->toBe(['scopes' => [[
             'role' => 'coordinador', 'campus_id' => $this->c2->id, 'org_unit_id' => null, 'career_id' => fakeKey(20), 'modality_id' => modalityOf('PRES')->id,
         ]]]);
@@ -206,7 +206,7 @@ it('un snapshot en caché que no es una lista de nombramientos se descarta y se 
     $user = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
     Cache::put(snapshotKeyOf($user), $cached, now()->addHour());
 
-    expect(nextRequestOf($user)->allows(AcademicLoadPermission::ProposalView, Target::of(campus: $this->c2->id, career: careerKey(21))))->toBeFalse()
+    expect(nextRequestOf($user)->allows(AcademicLoadPermission::ProposalView, Target::of(modality: modalityOf('PRES')->id, career: careerKey(21))))->toBeFalse()
         ->and(nextRequestOf($user)->heldRoles())->toContain(Role::Coordinador);
 })->with([
     'sin scopes' => [[]],

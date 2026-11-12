@@ -71,6 +71,6 @@ final class AcademicLoadPolicy
 
     private function can(User $user, AcademicLoadPermission $permission, AcademicLoad $load): bool
     {
-        return $this->actor($user)->allows($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
+        return $this->actor($user)->allows($permission, Target::of(modality: $load->modality_id, unit: $load->department_id));
     }
 }

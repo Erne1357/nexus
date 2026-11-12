@@ -53,7 +53,7 @@ final class NotifyLoadClosing
 
     private function send(Permission $permission, AcademicLoad $load, LoadClosingNotification $notification): int
     {
-        $holders = $this->recipients->holders($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
+        $holders = $this->recipients->holders($permission, Target::of(modality: $load->modality_id, unit: $load->department_id));
 
         return $this->notifyHolders->handle($holders, $notification)->count();
     }

@@ -37,22 +37,22 @@ final class InterdepartmentalAgreementPolicy
     {
         $actor = $this->actor($user);
 
-        return $actor->allows(AcademicLoadPermission::AgreementView, Target::of(campus: $agreement->campus_id, unit: $agreement->from_department_id))
-            || $actor->allows(AcademicLoadPermission::AgreementView, Target::of(campus: $agreement->campus_id, unit: $agreement->to_department_id));
+        return $actor->allows(AcademicLoadPermission::AgreementView, Target::of(modality: $agreement->modality_id, unit: $agreement->from_department_id))
+            || $actor->allows(AcademicLoadPermission::AgreementView, Target::of(modality: $agreement->modality_id, unit: $agreement->to_department_id));
     }
 
     public function decide(User $user, InterdepartmentalAgreement $agreement): bool
     {
-        return $this->actor($user)->allows(AcademicLoadPermission::AgreementDecide, Target::of(campus: $agreement->campus_id, unit: $agreement->to_department_id));
+        return $this->actor($user)->allows(AcademicLoadPermission::AgreementDecide, Target::of(modality: $agreement->modality_id, unit: $agreement->to_department_id));
     }
 
     public function cancel(User $user, InterdepartmentalAgreement $agreement): bool
     {
-        return $this->actor($user)->allows(AcademicLoadPermission::AgreementRequest, Target::of(campus: $agreement->campus_id, unit: $agreement->from_department_id));
+        return $this->actor($user)->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $agreement->modality_id, campus: $agreement->campus_id, unit: $agreement->from_department_id));
     }
 
     public function request(User $user, Campus $campus, Department $from): bool
     {
-        return $this->actor($user)->allows(AcademicLoadPermission::AgreementRequest, Target::of(campus: $campus->getKey(), unit: $from->getKey()));
+        return $this->actor($user)->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $campus->modality_id, campus: $campus->getKey(), unit: $from->getKey()));
     }
 }

@@ -63,8 +63,15 @@ it('al admin le permite todo', function () {
     expect(agreementAbilitiesOf(User::factory()->admin()->create()))->toBe([true, true, true, true, true]);
 });
 
-it('niega a un alcance del departamento en otro campus, salvo ver la lista', function (Role $role, array $scope) {
-    $user = User::factory()->withRole($role, ['campus_id' => $this->c2->id, ...$scope])->create();
+it('AZ-S17: un jefe de proyecto docente con otro campus ve el acuerdo de su modalidad', function () {
+    $user = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
+
+    expect(agreementAbilitiesOf($user))->toBe([true, true, false, false, false]);
+});
+
+it('AZ-S17: niega a un alcance del departamento en otra modalidad, salvo ver la lista', function (Role $role, array $scope) {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $user = User::factory()->withRole($role, ['modality_id' => modalityOf('EAD')->id, ...$scope])->create();
 
     expect(agreementAbilitiesOf($user))->toBe([true, false, false, false, false]);
 })->with([

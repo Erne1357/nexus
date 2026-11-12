@@ -393,9 +393,9 @@ describe('departamentos de la bandeja de un usuario', function () {
             ->and($codes($coordinador))->toBe([]);
     });
 
-    it('no da el departamento a un jefe de otro campus', function () {
-        $otro = Campus::factory()->create();
-        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $otro->id, 'department_id' => $this->cb->id])->create();
+    it('AZ-S17: no da el departamento a un jefe de otra modalidad', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->cb->id])->create();
 
         expect(app(DepartmentInboxQuery::class)->departmentsFor(app(Actor::class)->forUser($jefe), $this->campus))->toBeEmpty();
     });

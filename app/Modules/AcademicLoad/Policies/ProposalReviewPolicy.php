@@ -29,13 +29,13 @@ final class ProposalReviewPolicy
 
     public function viewAny(User $user, Campus $campus, Department $department): bool
     {
-        return $this->actor($user)->allows(AcademicLoadPermission::ProposalReviewView, Target::of(campus: $campus->getKey(), unit: $department->getKey()));
+        return $this->actor($user)->allows(AcademicLoadPermission::ProposalReviewView, Target::of(modality: $campus->modality_id, unit: $department->getKey()));
     }
 
     public function decide(User $user, ProposalReview $review): bool
     {
         $review->loadMissing('proposal');
 
-        return $this->actor($user)->allows(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $review->proposal->campus_id, unit: $review->department_id));
+        return $this->actor($user)->allows(AcademicLoadPermission::ProposalReviewDecide, Target::of(modality: $review->proposal->modality_id, unit: $review->department_id));
     }
 }

@@ -50,7 +50,7 @@ describe('holders()', function () {
         User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(20)])->create(['name' => 'Coord 20 C1']);
         User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(21)])->create(['name' => 'Coord 21 C2']);
 
-        expect(holderPairs(AcademicLoadPermission::ProposalUpdate, Target::of(campus: $this->c2->id, career: careerKey(20))))
+        expect(holderPairs(AcademicLoadPermission::ProposalUpdate, Target::of(modality: modalityOf('PRES')->id, campus: $this->c2->id, career: careerKey(20))))
             ->toBe([['Coord 20 C2', 'coordinador']]);
     });
 
@@ -93,10 +93,10 @@ describe('holders()', function () {
     });
 
     it('holders no avisa en un campus inactivo', function () {
-        User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(['name' => 'Jefe 10']);
+        User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(20)])->create(['name' => 'Coord 20 C1']);
         $this->c1->update(['is_active' => false]);
 
-        expect(holderPairs(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $this->c1->id, unit: departmentKey(10))))->toBe([]);
+        expect(holderPairs(AcademicLoadPermission::ProposalUpdate, Target::of(modality: modalityOf('PRES')->id, campus: $this->c1->id, career: careerKey(20))))->toBe([]);
     });
 
     it('holders: la subdirección, de todo el Tec, por cualquier campus activo', function () {

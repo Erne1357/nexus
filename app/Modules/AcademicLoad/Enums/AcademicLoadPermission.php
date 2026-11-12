@@ -10,8 +10,10 @@ use App\Modules\Core\Enums\OrgUnitKind;
 
 /**
  * Permisos del módulo AcademicLoad: la carga académica de un departamento, la propuesta de una carrera y la
- * bandeja donde el departamento decide su parte. La clave es `academic_load.<recurso>.<accion>`. La carga y la
- * bandeja declaran campus y unidad (el departamento); la propuesta, campus y carrera.
+ * bandeja donde el departamento decide su parte. La clave es `academic_load.<recurso>.<accion>`. Se lee a nivel de
+ * modalidad y se escribe con campus (AZ-S17, MS6): la carga y la bandeja declaran modalidad y unidad (el
+ * departamento); la propuesta, modalidad y carrera, y corregir una fila (de un campus, M7) también el campus; el
+ * préstamo de salón o el grupo compartido, que es de un campus, modalidad, campus y unidad.
  */
 enum AcademicLoadPermission: string implements Permission
 {
@@ -63,8 +65,10 @@ enum AcademicLoadPermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::AgreementView, self::AgreementRequest, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Campus, Dimension::Unit],
-            default => [Dimension::Campus, Dimension::Career],
+            self::AgreementRequest => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
+            self::ProposalUpdate => [Dimension::Modality, Dimension::Career, Dimension::Campus],
+            self::AgreementView, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Modality, Dimension::Unit],
+            default => [Dimension::Modality, Dimension::Career],
         };
     }
 

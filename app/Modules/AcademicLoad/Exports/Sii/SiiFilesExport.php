@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad\Exports\Sii;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Exports\Concerns\ResolvesCampusModality;
 use App\Modules\AcademicLoad\Exports\StaffExport;
 use App\Modules\AcademicLoad\Exports\StaffExports;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
@@ -29,6 +30,8 @@ use ZipArchive;
  */
 final class SiiFilesExport implements StaffExport
 {
+    use ResolvesCampusModality;
+
     /**
      * @param  list<string>  $snapshotIds
      * @param  list<string>  $departmentIds  los departamentos que publicaron, para el permiso
@@ -96,7 +99,7 @@ final class SiiFilesExport implements StaffExport
      */
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId, unit: StaffExports::units($this->departmentIds));
+        return Target::of(modality: $this->modalityId($this->campusId), unit: StaffExports::units($this->departmentIds));
     }
 
     /**

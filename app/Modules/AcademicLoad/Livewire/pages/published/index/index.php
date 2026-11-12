@@ -67,13 +67,12 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             return $entry;
         }, $schedule->careers());
 
-        $campusId = $context->campus->getKey();
         $unpublished = array_map(fn (AcademicLoad $load): array => [
             'department' => $load->department->code.' · '.$load->department->name,
             'status' => $load->status->label(),
         ], array_values(array_filter(
             $actor->user() === null ? [] : $published->unpublished($context->term, $context->campus),
-            fn (AcademicLoad $load): bool => $actor->allows(AcademicLoadPermission::LoadView, Target::of(campus: $campusId, unit: $load->department_id)),
+            fn (AcademicLoad $load): bool => $actor->allows(AcademicLoadPermission::LoadView, Target::of(modality: $load->modality_id, unit: $load->department_id)),
         )));
 
         return [

@@ -122,6 +122,15 @@ function dimensionHasCampus(Permission $permission): bool
 }
 
 /**
+ * AZ-S17: lo que se lee, y lo que actúa sobre una carga entera, declara la modalidad en lugar del campus; el
+ * nombramiento sin modalidad cubre todas las activas y uno con modalidad, solo esa, así que no queda sin límite.
+ */
+function dimensionBoundsByModality(Permission $permission, string $table): bool
+{
+    return in_array(Dimension::Modality, $permission->dimensions(), true) && Schema::hasColumn($table, 'modality_id');
+}
+
+/**
  * Concesiones (puesto, permiso) cuyo permiso no declara ninguna dimensión que el puesto lleve en su nombramiento:
  * ahí el nombramiento tendría esa dimensión vacía y cubriría cualquier valor (§7.1).
  *
@@ -193,7 +202,7 @@ it('spec §7.1: ningún permiso del módulo sobre un recurso con campus_id omite
             continue;
         }
 
-        if (Schema::hasColumn($table, 'campus_id') && ! dimensionHasCampus($permission) && ! isset(dimensionExceptions()[$permission->value])) {
+        if (Schema::hasColumn($table, 'campus_id') && ! dimensionHasCampus($permission) && ! dimensionBoundsByModality($permission, $table) && ! isset(dimensionExceptions()[$permission->value])) {
             $problems[] = "{$permission->value}: {$table}.campus_id sin la dimensión campus";
         }
     }

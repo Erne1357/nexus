@@ -64,11 +64,18 @@ it('niega todo al coordinador de otra carrera en el mismo campus', function () {
     expect(proposalAbilitiesOf($coordinador))->toBe([false, false, false, false]);
 });
 
-it('niega todo al coordinador de la misma carrera en otro campus', function () {
+it('AZ-S17: el coordinador de la misma carrera con otro campus ve y envía en la modalidad, pero solo corrige en su campus', function () {
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
 
-    expect(proposalAbilitiesOf($coordinador))->toBe([false, false, false, false])
-        ->and($coordinador->can('create', [CareerProposal::class, $this->c2, $this->career]))->toBeTrue();
+    expect(proposalAbilitiesOf($coordinador))->toBe([true, true, false, true])
+        ->and($coordinador->can('update', [CareerProposal::factory()->create(['campus_id' => $this->c2->id, 'career_id' => $this->career->id])]))->toBeTrue();
+});
+
+it('AZ-S17: el coordinador de la misma carrera en otra modalidad no ve ni corrige', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => careerKey(20)])->create();
+
+    expect(proposalAbilitiesOf($coordinador))->toBe([false, false, false, false]);
 });
 
 it('al admin le permite todo', function () {
