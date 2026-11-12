@@ -29,7 +29,7 @@ final class AvailabilityGridQuery
 
     /**
      * El perfil de la cuadrícula: la ventana que cubre a las modalidades activas, sin borrar y con bloques de tiempo
-     * (MS11 y R20, supuestos por confirmar; ModalityProfile::covering). Una modalidad sin bloques de tiempo no ensancha
+     * (MS11 y MS20, supuestos por confirmar; ModalityProfile::covering). Una modalidad sin bloques de tiempo no ensancha
      * la cuadrícula, como en SessionRules, GroupFitQuery y CampusWindow. Con solo Presencial activa es lunes a viernes,
      * de 7:00 a 21:00, bloques de 60 minutos; sin ninguna que cuente, el presencial por omisión.
      */
