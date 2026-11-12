@@ -153,14 +153,41 @@ describe('tablero', function () {
         reviewPage()->assertSee('1 de 4')->assertSee('Faltan 3 para sacar la carga de borrador');
     });
 
-    it('HC-14: si un campus abierto usa salones y falta su revisión, la carga no puede salir de borrador aunque lo demás esté validado', function () {
-        CatalogReview::query()->where('catalog', Catalog::Rooms)->delete();
+    it('HC-14: si los salones están abiertos en el periodo y a este departamento le falta su revisión, la carga no puede salir de borrador aunque lo demás esté validado', function () {
+        reviewOf(Catalog::Rooms)->delete();
         CatalogReview::query()->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
 
         reviewPage()
             ->assertSee('4 de 5')
             ->assertSee('Falta 1 para sacar la carga de borrador')
             ->assertDontSee('Todo validado');
+    });
+
+    it('CV9, HC-14: con solo Materias abierta en el periodo, el avance y las pestañas cuentan solo Materias', function () {
+        CatalogReview::query()->where('catalog', '!=', Catalog::Subjects)->delete();
+
+        reviewPage()
+            ->assertSeeHtml('data-testid="tab-subjects"')
+            ->assertDontSeeHtml('data-testid="tab-teachers"')->assertDontSeeHtml('data-testid="tab-rooms"')
+            ->assertDontSeeHtml('data-testid="tab-study_plans"')->assertDontSeeHtml('data-testid="tab-careers"')
+            ->assertSee('0 de 1')->assertDontSee('0 de 5')
+            ->assertSee('Falta 1 para sacar la carga de borrador')
+            ->assertDontSee('Docentes')->assertDontSee('Salones')->assertDontSee('Planes de estudio')->assertDontSee('Carreras');
+
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage()->assertSee('1 de 1')->assertSee('Todo validado');
+    });
+
+    it('CV9, HC-14: un catálogo abierto en el periodo cuya revisión le falta al departamento sí cuenta como pendiente', function () {
+        CatalogReview::query()->whereNotIn('catalog', [Catalog::Subjects, Catalog::Careers])->delete();
+        reviewOf(Catalog::Careers)->delete();
+
+        reviewPage()
+            ->assertDontSeeHtml('data-testid="tab-careers"')
+            ->assertSee('0 de 2')
+            ->assertSee('Sin revisión')
+            ->assertDontSee('Docentes');
     });
 
     it('con los cinco validados dice que la carga puede salir de borrador', function () {
@@ -216,7 +243,7 @@ describe('tablero', function () {
     it('muestra quién y cuándo validó, y los contadores', function () {
         reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
 
-        reviewPage()->assertSee('Validó '.$this->jefe->name)->assertSee('1 de 5')->assertSee('Inactivos');
+        reviewPage()->assertSee('Validó '.$this->jefe->name)->assertSee('1 de 5')->assertSee('inactivos');
     });
 
     it('valida desde la tarjeta con confirmación: cambia el estado y deja bitácora', function () {
@@ -275,21 +302,21 @@ describe('tablero', function () {
 });
 
 describe('lista de un catálogo', function () {
-    it('lista las materias con clave, nombre y horas, con búsqueda y filtro de estado', function () {
+    it('lista las materias con clave, nombre y horas, con búsqueda; las inactivas no se revisan y salen en «Todos»', function () {
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->assertSee('SCD-1027')->assertSee('Programación Orientada a Objetos')->assertSee('SCA-1002')
+            ->assertSet('segment', 'por-revisar')
+            ->assertSee('SCD-1027')->assertSee('Programación Orientada a Objetos')->assertDontSee('SCA-1002')
             ->assertDontSee('AEF-1009')
-            ->set('search', 'Redes')->assertSee('SCA-1002')->assertDontSee('SCD-1027')
-            ->set('search', '')->set('status', 'inactive')->assertSee('SCA-1002')->assertDontSee('SCD-1027');
+            ->set('segment', 'todos')->assertSee('SCA-1002')->assertSee('Inactivo')
+            ->set('search', 'Redes')->assertSee('SCA-1002')->assertDontSee('SCD-1027');
     });
 
-    it('filtra por observación abierta', function () {
+    it('filtra por observación abierta con «Con observación»', function () {
         CatalogReviewFlag::factory()->on($this->subject)->create(['review_id' => reviewOf(Catalog::Subjects)->id, 'flag' => ReviewFlag::MissingData]);
 
-        reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->assertSee('Faltan datos')
-            ->set('flagFilter', 'with')->assertSee('SCD-1027')->assertDontSee('SCA-1002')
-            ->set('flagFilter', 'without')->assertSee('SCA-1002')->assertDontSee('SCD-1027');
+        reviewPage($this->jefe, ['catalogo' => 'subjects', 'revision' => 'todos'])
+            ->assertSee('Faltan datos')->assertSee('SCA-1002')
+            ->set('segment', 'con-observacion')->assertSee('SCD-1027')->assertDontSee('SCA-1002');
     });
 
     it('lista las columnas propias de salones, planes, carreras y docentes', function () {
@@ -390,26 +417,25 @@ describe('corregir desde el drawer', function () {
         expect($room->fresh()->is_active)->toBeFalse();
     });
 
-    it('CV1: corrige el correo institucional de un docente; el de uno que ocupa otro puesto solo lo cambia el admin (AC-06)', function () {
-        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'AAAA800101AA1']);
+    it('CV1: captura el correo institucional de un docente en el recuadro de su fila; el de uno que ocupa otro puesto solo lo cambia el admin (AC-06)', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'AAAA800101AA1', 'institutional_email' => null]);
 
         reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->call('edit', $teacher->id)
             ->assertSeeHtml('data-testid="institutional-email"')
-            ->set('institutional_email', 'ana@cdjuarez.tecnm.mx')
-            ->call('save')
-            ->assertHasNoErrors();
+            ->assertSeeHtml('data-email-open="'.$teacher->id.'"')
+            ->call('saveEmail', $teacher->id, 'ana')
+            ->assertReturned(['saved' => true, 'error' => null]);
 
         expect($teacher->fresh()->institutional_email)->toBe('ana@cdjuarez.tecnm.mx');
 
         $staff = Teacher::factory()->adscribedTo($this->sis)->create(['user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create()->id]);
 
         reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->call('edit', $staff->id)
+            ->assertDontSeeHtml('data-email-open="'.$staff->id.'"')
             ->assertSee('solo lo cambia el administrador')
-            ->assertDontSeeHtml('data-testid="institutional-email"')
-            ->call('save')
+            ->call('saveEmail', $staff->id, 'jefe')
             ->assertForbidden();
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])->call('edit', $staff->id)->assertSee('solo lo cambia el administrador');
     });
 
     it('un coordinador no corrige, observa ni valida llamando los métodos directo sobre una página que abrió el jefe', function () {
@@ -579,19 +605,32 @@ describe('captura de docentes (2.6, CV6)', function () {
     it('un docente inactivo no sale como «Falta» ni con el 0 de perfil en advertencia, y no cuenta en los indicadores', function () {
         $inactive = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '00009', 'name' => 'Ya Baja', 'is_active' => false]);
 
-        $component = reviewPage($this->jefe, ['catalogo' => 'teachers', 'search' => '']);
+        $component = reviewPage($this->jefe, ['catalogo' => 'teachers', 'revision' => 'todos']);
         $component->set('search', 'Ya Baja')->assertSee('Ya Baja')->assertSeeHtml('Sin dato: docente inactivo')->assertSee('Docente inactivo');
 
         reviewPage()->assertSeeHtml('data-testid="missing-disponibilidad"');
         expect(app(TeacherTermReadinessQuery::class)->counts($this->sis, $this->term)['no_availability'])->toBe(2);
     });
 
-    it('«Falta» implica activos: al elegirlo Estado pasa a Activos y elegir Inactivos lo quita', function () {
-        reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->set('missing', 'perfil')->assertSet('status', 'active')
-            ->set('status', 'inactive')->assertSet('missing', '');
+    it('«Falta» deja a los activos, revisados o no: al elegirlo, y al llegar del tablero, el filtro pasa a «Todos»', function () {
+        Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '00009', 'name' => 'Ya Baja', 'is_active' => false]);
+        CatalogReviewMark::factory()->for(reviewOf(Catalog::Teachers), 'review')->on($this->bare)->create();
 
-        reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => 'perfil'])->assertSet('status', 'active');
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->assertSet('segment', 'por-revisar')
+            ->set('missing', 'perfil')->assertSet('segment', 'todos')
+            ->assertSee('Sin Nada')->assertDontSee('Ya Baja');
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => 'perfil'])->assertSet('segment', 'todos');
+    });
+
+    it('AC-06: la tarjeta cuenta a los activos sin correo institucional y «Falta: Sin correo institucional» los deja', function () {
+        $this->ready->update(['institutional_email' => 'todo@cdjuarez.tecnm.mx']);
+
+        reviewPage()->assertSee('sin correo institucional')->assertSeeHtml('data-testid="missing-correo"');
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers', 'falta' => 'correo'])
+            ->assertSee('Sin Nada')->assertSee('Solo Perfil')->assertDontSee('Con Todo');
     });
 
     it('la lista solo prepara a los docentes de la página visible', function () {
@@ -814,14 +853,12 @@ describe('marcas de revisado (CV7)', function () {
             ->and(Activity::query()->where('event', 'unreviewed')->count())->toBe(1);
     });
 
-    it('CV7: marca juntos los registros elegidos y limpia la selección', function () {
+    it('CV7: marca juntos los registros elegidos en el navegador', function () {
         $other = Subject::where('code', 'SCA-1002')->sole();
 
         $component = reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->set('selected', [$this->subject->id, $other->id])
-            ->call('markSelected')
-            ->assertHasNoErrors()
-            ->assertSet('selected', []);
+            ->call('markSelected', [$this->subject->id, $other->id])
+            ->assertHasNoErrors();
 
         expect(CatalogReviewMark::query()->pluck('record_id')->all())->toEqualCanonicalizing([$this->subject->id, $other->id])
             ->and(lastToastOf($component)['title'])->toBe('2 registros revisados');
@@ -830,10 +867,9 @@ describe('marcas de revisado (CV7)', function () {
     it('sin elegir nada pide elegir, y un registro ajeno no se marca', function () {
         $foreign = Subject::where('code', 'AEF-1009')->sole();
 
-        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('markSelected')->assertHasErrors('selected');
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('markSelected', [])->assertHasErrors('selected');
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->set('selected', [$this->subject->id, $foreign->id])
-            ->call('markSelected')
+            ->call('markSelected', [$this->subject->id, $foreign->id])
             ->assertHasErrors('record');
         reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('setReviewed', $foreign->id, true)->assertNotFound();
 
@@ -844,7 +880,7 @@ describe('marcas de revisado (CV7)', function () {
         Subject::factory()->create(['code' => 'SCD-1099', 'department_id' => $this->sis->id]);
         CatalogReviewMark::factory()->for(reviewOf(Catalog::Subjects), 'review')->on($this->subject)->create();
 
-        reviewPage()->assertSeeHtml('data-testid="reviewed-count-subjects"')->assertSee('1 de 2 revisados');
+        reviewPage()->assertSeeHtml('data-testid="reviewed-count-subjects"')->assertSee('1 de 2')->assertSee('Queda 1 por revisar');
         reviewPage($this->jefe, ['catalogo' => 'subjects'])->assertSee('1 de 2 revisados')->assertSeeHtml('data-testid="tab-reviewed-subjects"');
     });
 
@@ -863,12 +899,37 @@ describe('marcas de revisado (CV7)', function () {
         reviewPage()->assertSeeHtml("wire:click=\"confirm('validate', 'subjects')\"");
     });
 
-    it('filtra por revisados y sin revisar', function () {
+    it('filtra por revisados y por revisar, con sus cifras: «Por revisar» son los activos sin marca (CV7)', function () {
+        $pending = Subject::factory()->create(['code' => 'SCD-1099', 'name' => 'Pendiente', 'department_id' => $this->sis->id]);
         CatalogReviewMark::factory()->for(reviewOf(Catalog::Subjects), 'review')->on($this->subject)->create();
 
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->set('reviewedFilter', 'unreviewed')->assertSee('SCA-1002')->assertDontSee('SCD-1027')
-            ->set('reviewedFilter', 'reviewed')->assertSee('SCD-1027')->assertDontSee('SCA-1002');
+            ->assertSet('segment', 'por-revisar')
+            ->assertSeeHtml('data-testid="segment-por-revisar"')
+            ->assertSeeInOrder(['Por revisar', '1', 'Revisados', '1', 'Con observación', '0', 'Todos', '3'])
+            ->assertSee('SCD-1099')->assertDontSee('SCA-1002')->assertDontSee('SCD-1027')
+            ->set('segment', 'revisados')->assertSee('SCD-1027')->assertDontSee('SCA-1002')->assertDontSee('SCD-1099')
+            ->set('segment', 'nada')->assertSet('segment', 'por-revisar');
+    });
+
+    it('sin nada por revisar la lista abre en «Todos», y «Por revisar» vacío dice «Revisaste los N» con Validar catálogo', function () {
+        reviewMarkAll(Catalog::Subjects);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->assertSet('segment', 'todos')->assertSee('SCD-1027');
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects', 'revision' => 'por-revisar'])
+            ->assertSeeHtml('data-testid="all-reviewed"')
+            ->assertSee('Revisaste la única materia.')
+            ->assertSeeHtml("wire:click=\"confirm('validate', 'subjects')\"")
+            ->assertSeeHtml('data-testid="validate-subjects-done"');
+
+        Subject::factory()->create(['code' => 'SCD-1099', 'department_id' => $this->sis->id]);
+        reviewMarkAll(Catalog::Subjects);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects', 'revision' => 'por-revisar'])->assertSee('Revisaste las 2 materias.');
+        reviewPage(User::factory()->admin()->create(), ['department' => $this->sis->id, 'catalogo' => 'subjects', 'revision' => 'por-revisar'])
+            ->assertSee('Revisaste las 2 materias.')->assertSee('Lo valida el jefe del departamento.')
+            ->assertDontSeeHtml('data-testid="validate-subjects-done"');
     });
 
     it('con la revisión validada no se marca: la fila solo muestra el estado', function () {
@@ -891,9 +952,9 @@ describe('marcas de revisado (CV7)', function () {
         $this->actingAs($user);
         $page->call('setReviewed', $this->subject->id, true)->assertForbidden();
 
-        $page = reviewPage($this->jefe, ['catalogo' => 'subjects'])->set('selected', [$this->subject->id]);
+        $page = reviewPage($this->jefe, ['catalogo' => 'subjects']);
         $this->actingAs($user);
-        $page->call('markSelected')->assertForbidden();
+        $page->call('markSelected', [$this->subject->id])->assertForbidden();
 
         expect(CatalogReviewMark::count())->toBe(0);
     })->with(['admin', 'subdirección', 'coordinador']);
@@ -933,25 +994,54 @@ describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
         expect($teacher->fresh()->is_active)->toBeTrue();
     });
 
-    it('CV-S9: agrega por su RFC a un docente que ya existe, y lo dice si no hay', function () {
-        $teacher = Teacher::factory()->inactive()->create(['rfc' => 'CCCC800101CC1']);
+    it('CV-S9: «Agregar docente» busca por RFC o nombre a uno que ya existe, lo dice si no hay, y lo agrega revisado', function () {
+        $teacher = Teacher::factory()->inactive()->create(['rfc' => 'CCCC800101CC1', 'name' => 'Ricardo Peña Montoya']);
 
-        reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->set('newTeacherRfc', 'zzzz800101zz1')->call('addTeacher')->assertHasErrors('newTeacherRfc')
-            ->set('newTeacherRfc', ' cccc800101cc1 ')->call('addTeacher')->assertHasNoErrors()
-            ->assertSet('newTeacherRfc', '');
+        $component = reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->call('$set', 'showAddTeacher', true)
+            ->set('teacherSearch', 'zzzz800101zz1')->assertSeeHtml('data-testid="no-candidates"')
+            ->set('teacherSearch', ' cccc800101cc1 ')->assertSee('Ricardo Peña Montoya')->assertSee('Reactivar y agregar')
+            ->set('teacherSearch', 'peña')->assertSeeHtml('data-testid="add-CCCC800101CC1"')
+            ->call('addTeacher', $teacher->id)->assertHasNoErrors()
+            ->assertSet('showAddTeacher', false)->assertSet('teacherSearch', '');
 
         expect($teacher->fresh()->is_active)->toBeTrue()
-            ->and($teacher->adscriptions()->sole()->department_id)->toBe($this->sis->id);
+            ->and($teacher->adscriptions()->sole()->department_id)->toBe($this->sis->id)
+            ->and(CatalogReviewMark::query()->where('record_id', $teacher->id)->exists())->toBeTrue()
+            ->and(lastToastOf($component)['title'])->toBe('Agregaste a Ricardo Peña Montoya');
+    });
+
+    it('CV-S9: dice qué pasa con cada docente que encuentra: ya está, se agrega como adicional o queda como principal', function () {
+        $here = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'HERE800101AA1', 'name' => 'Norma Peña Aquí']);
+        $elsewhere = Teacher::factory()->adscribedTo($this->ele)->create(['rfc' => 'ELSE800101AA1', 'name' => 'Susana Peña Otra']);
+        Teacher::factory()->create(['rfc' => 'NONE800101AA1', 'name' => 'Pedro Peña Suelto']);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->call('$set', 'showAddTeacher', true)
+            ->set('teacherSearch', 'pe')
+            ->assertSee('Ya está en Sistemas y Computación.')
+            ->assertDontSeeHtml('data-testid="add-HERE800101AA1"')
+            ->assertSee('Principal en Eléctrica-Electrónica. Se agrega a Sistemas y Computación como adscripción adicional')
+            ->assertSee('Sin departamento. Queda con Sistemas y Computación como principal.')
+            ->call('addTeacher', $here->id)->assertHasErrors('candidate');
+
+        expect($elsewhere->adscriptions()->count())->toBe(1);
+    });
+
+    it('un id de docente que no existe no se agrega', function () {
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])->call('addTeacher', 'no-es-un-id')->assertNotFound();
     });
 
     it('a un docente dado de baja que ocupa un puesto no lo agrega: lo dice y dice quién lo reactiva', function () {
-        $teacher = Teacher::factory()->inactive()->create(['rfc' => 'FFFF800101FF1', 'user_id' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create()->id]);
+        $teacher = Teacher::factory()->inactive()->create(['rfc' => 'FFFF800101FF1', 'name' => 'Fernanda Puesto', 'user_id' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create()->id]);
 
         reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->set('newTeacherRfc', 'FFFF800101FF1')
-            ->call('addTeacher')
-            ->assertHasErrors('newTeacherRfc')
+            ->call('$set', 'showAddTeacher', true)
+            ->set('teacherSearch', 'FFFF800101FF1')
+            ->assertSee('lo reactivan el administrador o la Subdirección')
+            ->assertDontSeeHtml('data-testid="add-FFFF800101FF1"')
+            ->call('addTeacher', $teacher->id)
+            ->assertHasErrors('candidate')
             ->assertSee('lo reactivan el administrador o la Subdirección');
 
         expect($teacher->fresh()->is_active)->toBeFalse()
@@ -971,9 +1061,9 @@ describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
         $this->actingAs($user);
         $page->call('dischargeTeacher', $teacher->id)->assertForbidden();
 
-        $page = reviewPage($this->jefe, ['catalogo' => 'teachers'])->set('newTeacherRfc', 'EEEE800101EE1');
+        $page = reviewPage($this->jefe, ['catalogo' => 'teachers']);
         $this->actingAs($user);
-        $page->call('addTeacher')->assertForbidden();
+        $page->call('addTeacher', Teacher::where('rfc', 'EEEE800101EE1')->sole()->id)->assertForbidden();
 
         expect($teacher->fresh()->is_active)->toBeTrue()
             ->and(Teacher::where('rfc', 'EEEE800101EE1')->sole()->adscriptions()->count())->toBe(0);
@@ -985,5 +1075,229 @@ describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
 
         reviewPage($other, ['department' => $this->sis->id, 'catalogo' => 'teachers'])->assertForbidden();
         expect($teacher->fresh()->is_active)->toBeTrue();
+    });
+});
+
+describe('revisión por registro (opción A)', function () {
+    it('decisión 12: solo hay pestaña y tarjeta de los catálogos con revisión en el periodo, cada pestaña con «N/M»', function () {
+        CatalogReview::query()->where('catalog', Catalog::Rooms)->delete();
+        Subject::factory()->create(['code' => 'SCD-1099', 'department_id' => $this->sis->id]);
+        CatalogReviewMark::factory()->for(reviewOf(Catalog::Subjects), 'review')->on($this->subject)->create();
+
+        reviewPage()
+            ->assertDontSeeHtml('data-testid="tab-rooms"')->assertDontSeeHtml('data-testid="card-rooms"')
+            ->assertSeeHtml('data-testid="tab-subjects"')
+            ->assertSeeInOrder(['data-testid="tab-reviewed-subjects"', '1/2'], escape: false);
+    });
+
+    it('la tarjeta lleva «N de M revisados» con su barra y lo que queda; validada, quién validó y sin «N/M» en su pestaña', function () {
+        Subject::factory()->create(['code' => 'SCD-1099', 'department_id' => $this->sis->id]);
+
+        reviewPage()
+            ->assertSeeInOrder(['data-testid="card-subjects"', '0 de 2', 'revisados', '<progress', 'Quedan 2 por revisar'], escape: false);
+
+        reviewOf(Catalog::Careers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage()->assertDontSeeHtml('data-testid="tab-reviewed-careers"')->assertSee('Validó '.$this->jefe->name);
+    });
+
+    it('CV7: «Validar catálogo» deshabilitado lleva su motivo escrito y enlazado; habilitado, abre la confirmación', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSeeHtml('aria-describedby="why-subjects"')
+            ->assertSeeHtml('id="why-subjects"')
+            ->assertSee('Falta 1 registro por revisar.');
+
+        reviewMarkAll(Catalog::Subjects);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertDontSeeHtml('id="why-subjects"')
+            ->assertSee('Validar catálogo')
+            ->call('confirm', 'validate', 'subjects')
+            ->assertSet('showConfirm', true);
+    });
+
+    it('CV7: la columna «Revisión» dice quién marcó y cuándo, y «Acciones» ofrece quitar la marca con ese dato', function () {
+        $this->travelTo(now()->setDate(2026, 11, 10)->setTime(18, 40));
+        $laura = User::factory()->create(['name' => 'Laura Ramos']);
+        CatalogReviewMark::factory()->for(reviewOf(Catalog::Subjects), 'review')->on($this->subject)->create(['reviewed_by' => $laura->id, 'reviewed_at' => now()]);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects', 'revision' => 'todos'])
+            ->assertSee('Laura · 10 nov., 18:40')
+            ->assertSee('Lo marcó Laura Ramos el 10 nov. 2026, 18:40.')
+            ->assertSeeHtml("wire:click=\"setReviewed('{$this->subject->id}', false)\"")
+            ->assertSeeHtml('data-testid="unmark-SCD-1027"');
+    });
+
+    it('a quien marca, una casilla por registro sin revisar, «Marcar revisado», los atajos y la barra de selección', function () {
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSeeHtml('data-testid="select-SCD-1027"')
+            ->assertSeeHtml('data-testid="mark-SCD-1027"')
+            ->assertSeeHtml('data-testid="keyboard-hint"')
+            ->assertSeeHtml('data-testid="selection-bar"')
+            ->assertSeeHtml('data-row="'.$this->subject->id.'"');
+    });
+
+    it('CV-S1: admin y Subdirección ven el avance y las marcas, sin casillas, «Marcar revisado», atajos ni selección', function (string $who) {
+        $user = $who === 'admin' ? User::factory()->admin()->create() : User::factory()->withRole(Role::Subdireccion, [])->create();
+
+        reviewPage($user, ['department' => $this->sis->id, 'catalogo' => 'subjects'])
+            ->assertSee('Por revisar')
+            ->assertSee('Solo el jefe del departamento marca lo revisado.')
+            ->assertDontSeeHtml('data-testid="select-SCD-1027"')
+            ->assertDontSeeHtml('data-testid="mark-SCD-1027"')
+            ->assertDontSeeHtml('data-testid="keyboard-hint"')
+            ->assertDontSeeHtml('data-testid="selection-bar"');
+    })->with(['admin', 'subdirección']);
+
+    it('CV8: la confirmación de la baja dice qué pasa: sin otro departamento queda inactivo; con otro, sigue allá', function () {
+        $alone = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'ALON800101AA1', 'name' => 'Martha Ríos']);
+        $mainHere = Teacher::factory()->adscribedTo($this->sis)->adscribedTo($this->ele, primary: false)->create(['rfc' => 'MAIN800101AA1', 'name' => 'Eduardo Carrasco']);
+        $mainThere = Teacher::factory()->adscribedTo($this->ele)->adscribedTo($this->sis, primary: false)->create(['rfc' => 'ELSE800101AA1', 'name' => 'Leticia Barraza']);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->assertSee('¿Dar de baja a Martha Ríos?')
+            ->assertSee('No tiene otro departamento: su registro queda inactivo y su cuenta se desactiva.')
+            ->assertSee('¿Dar de baja a Eduardo Carrasco de Sistemas y Computación?')
+            ->assertSee('Sigue como docente de Eléctrica-Electrónica, que pasa a ser su adscripción principal.')
+            ->assertSee('También en Eléctrica-Electrónica')
+            ->assertSee('Sigue como docente de Eléctrica-Electrónica, su adscripción principal. Solo deja de aparecer en tu departamento.')
+            ->assertSee('Principal en Eléctrica-Electrónica')
+            ->call('dischargeTeacher', $mainThere->id)
+            ->assertHasNoErrors();
+
+        expect($mainThere->fresh()->is_active)->toBeTrue()
+            ->and($mainThere->adscriptions()->pluck('department_id')->all())->toBe([$this->ele->id])
+            ->and($alone->fresh()->is_active)->toBeTrue();
+    });
+
+    it('CV-S8: el motivo de la baja deshabilitada va escrito en la fila, no en un tooltip', function () {
+        Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'BBBB800101BB1', 'user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create()->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->assertSeeInOrder(['data-testid="discharge-reason-BBBB800101BB1"', 'Ocupa un puesto: lo da de baja el administrador o la Subdirección.'], escape: false);
+    });
+
+    it('AC-06: el recuadro arma el correo con el dominio institucional, acepta el correo completo y devuelve el motivo si no se guarda', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'AAAA800101AA1']);
+        Teacher::factory()->create(['institutional_email' => 'ocupado@cdjuarez.tecnm.mx']);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->call('saveEmail', $teacher->id, '  ')->assertReturned(['saved' => false, 'error' => 'Escribe el usuario de su correo institucional.'])
+            ->call('saveEmail', $teacher->id, 'ana@gmail.com')->assertReturned(fn (array $result): bool => $result['saved'] === false && str_contains($result['error'], '@cdjuarez.tecnm.mx'))
+            ->call('saveEmail', $teacher->id, 'ocupado')->assertReturned(fn (array $result): bool => $result['saved'] === false && str_contains($result['error'], 'ocupado@cdjuarez.tecnm.mx'))
+            ->call('saveEmail', $teacher->id, 'Ana.Torres@CDJUAREZ.tecnm.mx')->assertReturned(['saved' => true, 'error' => null]);
+
+        expect($teacher->fresh()->institutional_email)->toBe('ana.torres@cdjuarez.tecnm.mx')
+            ->and(CatalogReviewMark::query()->where('record_id', $teacher->id)->exists())->toBeTrue();
+    });
+
+    it('AC-06: admin y Subdirección ven la lista sin el recuadro del correo y no lo capturan', function (string $who) {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+        $user = $who === 'admin' ? User::factory()->admin()->create() : User::factory()->withRole(Role::Subdireccion, [])->create();
+
+        reviewPage($user, ['department' => $this->sis->id, 'catalogo' => 'teachers'])
+            ->assertDontSeeHtml('data-email-open="'.$teacher->id.'"')
+            ->call('saveEmail', $teacher->id, 'ana')
+            ->assertForbidden();
+
+        expect($teacher->fresh()->institutional_email)->toBeNull();
+    })->with(['admin', 'subdirección']);
+
+    it('AC-06: admin, Subdirección y el jefe de otro departamento no capturan el correo llamando el método sobre la pantalla del jefe', function (string $who) {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+        $user = match ($who) {
+            'admin' => User::factory()->admin()->create(),
+            'subdirección' => User::factory()->withRole(Role::Subdireccion, [])->create(),
+            'jefe de otro departamento' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(),
+        };
+
+        $page = reviewPage($this->jefe, ['catalogo' => 'teachers']);
+        $this->actingAs($user);
+        $page->call('saveEmail', $teacher->id, 'ana')->assertForbidden();
+
+        expect($teacher->fresh()->institutional_email)->toBeNull();
+    })->with(['admin', 'subdirección', 'jefe de otro departamento']);
+
+    it('«Por revisar» no se queda en una página vacía: al marcar los de la última, pasa a la que ahora es la última', function () {
+        Subject::factory()->count(60)->sequence(fn ($sequence) => ['code' => sprintf('PEN-%03d', $sequence->index), 'department_id' => $this->sis->id])->create();
+        $lastTen = Subject::query()->where('code', 'like', 'PEN-%')->orderByDesc('code')->limit(11)->pluck('id')->all();
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->call('gotoPage', 2)
+            ->assertSee('PEN-059')
+            ->call('markSelected', $lastTen)
+            ->assertDontSee('Ningún registro coincide.')
+            ->assertSee('PEN-000')
+            ->assertSet('paginators.page', 1);
+    });
+
+    it('CV7: un inactivo sin marca no se revisa: sin casilla, sin «Por revisar» y fuera de los pendientes', function () {
+        $inactive = Subject::where('code', 'SCA-1002')->sole();
+
+        $html = reviewPage($this->jefe, ['catalogo' => 'subjects', 'revision' => 'todos'])
+            ->assertSee('Inactivo: no se revisa')
+            ->assertDontSeeHtml('data-testid="select-SCA-1002"')
+            ->assertDontSeeHtml('data-testid="mark-SCA-1002"')
+            ->assertSee('Elegir los 1 por revisar de esta página')
+            ->html();
+
+        expect(str($html)->after('data-row="'.$inactive->id.'"')->before('>')->contains('data-pending'))->toBeFalse()
+            ->and(substr_count(str($html)->after('data-testid="record-cards"')->toString(), 'Por revisar'))->toBe(1);
+
+        reviewPage(User::factory()->admin()->create(), ['department' => $this->sis->id, 'catalogo' => 'subjects', 'revision' => 'todos'])
+            ->assertSee('Inactivo: no se revisa');
+    });
+
+    it('«Elegir los N por revisar» toma los pendientes que dejan la búsqueda y los filtros, no los de toda la revisión', function () {
+        Subject::factory()->create(['code' => 'RED-1', 'name' => 'Redes I', 'department_id' => $this->sis->id]);
+        Subject::factory()->create(['code' => 'RED-2', 'name' => 'Redes II', 'department_id' => $this->sis->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSee('Elegir los 3 por revisar')
+            ->set('search', 'Redes')
+            ->assertSee('Elegir los 2 por revisar')
+            ->assertDontSee('Elegir los 3 por revisar');
+    });
+
+    it('validar o reabrir cambia quién marca y la lista arranca de nuevo en el navegador, sin selección', function () {
+        reviewMarkAll(Catalog::Subjects);
+
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->assertSeeHtml('data-can-mark="true"')->assertSeeHtml('wire:key="review-list-subjects-marca"')
+            ->call('confirm', 'validate', 'subjects')->call('confirmed')
+            ->assertSeeHtml('data-can-mark="false"')->assertSeeHtml('wire:key="review-list-subjects-lee"')
+            ->call('confirm', 'reopen', 'subjects')->call('confirmed')
+            ->assertSeeHtml('data-can-mark="true"')->assertSeeHtml('wire:key="review-list-subjects-marca"');
+    });
+
+    it('decisión 6: los salones se filtran por campus y por edificio', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $north = Building::factory()->create(['campus_id' => $c1->id, 'code' => 'LC', 'name' => 'Laboratorio de cómputo']);
+        $south = Building::factory()->create(['campus_id' => $this->campus->id, 'code' => 'E2', 'name' => 'Edificio 2']);
+        Room::factory()->for($north)->create(['code' => 'LC-01', 'department_id' => $this->sis->id]);
+        Room::factory()->for($south)->create(['code' => 'E2-101', 'department_id' => $this->sis->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'rooms'])
+            ->assertSee('C1 · Campus I')->assertSee('C1 · LC · Laboratorio de cómputo')
+            ->set('roomCampus', $c1->id)->assertSee('LC-01')->assertDontSee('E2-101')
+            ->set('roomCampus', '')->set('roomBuilding', $south->id)->assertSee('E2-101')->assertDontSee('LC-01')
+            ->set('roomBuilding', 'no-es-un-id')->assertDontSee('E2-101')->assertDontSee('LC-01');
+    });
+
+    it('CV-S10: el edificio del salón se elige agrupado por campus y el campus lo sigue, diciendo si cambia', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id, 'code' => 'E2']))->create(['code' => 'Y-104', 'department_id' => $this->sis->id]);
+        $north = Building::factory()->create(['campus_id' => $c1->id, 'code' => 'LC', 'name' => 'Laboratorio']);
+
+        reviewPage($this->jefe, ['catalogo' => 'rooms'])
+            ->call('edit', $room->id)
+            ->assertSeeHtml('<optgroup label="C1 · Campus I">')
+            ->assertSeeHtml('data-testid="room-campus"')
+            ->assertDontSeeHtml('data-testid="room-moves"')
+            ->set('building_id', $north->id)
+            ->assertSeeHtml('data-testid="room-moves"')
+            ->assertSee('Campus I')
+            ->assertSee('con el edificio.')
+            ->assertSee('Al guardar, queda revisado.');
     });
 });
