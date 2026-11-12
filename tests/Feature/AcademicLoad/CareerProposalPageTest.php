@@ -17,6 +17,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -34,7 +35,7 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
     $this->career = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas']);
     CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $this->campus->id]);
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
@@ -299,8 +300,8 @@ describe('alcance', function () {
     });
 
     it('un coordinador de otro campus no la ve', function () {
+        // El periodo ya está abierto en C1: es de Presencial, como C2 (M4).
         $c1 = Campus::factory()->create(['code' => 'C1']);
-        TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $c1->id]);
         $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $c1->id, 'career_id' => $this->career->id])->create();
 
         proposalPageAs($coordinator)->assertDontSee('Cálculo Diferencial');
@@ -355,7 +356,8 @@ describe('alcance', function () {
     });
 
     it('AZ-02: subdirección elige el campus en la página cuando tiene varios; sin ?campus= abre el primero', function () {
-        Campus::factory()->create(['code' => 'C1']);
+        // C1, de otra modalidad, donde el periodo no se abrió (M4): así se nota que la página muestra C1.
+        Campus::factory()->create(['code' => 'C1', 'modality_id' => Modality::factory()->create()->id]);
 
         proposalPageAs($this->subdirection)->assertSeeHtml('data-testid="campus-filter-C1"')->assertSee('no está abierto en este campus');
         proposalPageAs($this->subdirection, ['campus' => 'C2', 'carrera' => $this->career->id])->assertSee('ISC')->assertSeeHtml('data-testid="campus-filter-C2"');

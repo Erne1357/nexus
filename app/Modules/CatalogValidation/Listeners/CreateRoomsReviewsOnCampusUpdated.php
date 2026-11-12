@@ -10,9 +10,10 @@ use App\Modules\Core\Queries\TermQuery;
 
 /**
  * Si un campus cambia su perfil de flujo y ahora usa salones, crea las revisiones de salones que falten en cada
- * periodo abierto en él donde el admin ya abrió el catálogo de salones (CV9): una por departamento y periodo, para todos
- * los campus (decisión 6, confirmada el 12 de noviembre de 2026; CreateTermReviews, que es idempotente). Los periodos donde
- * el campus no se abrió o donde los salones no se abrieron no se tocan. Sale
+ * periodo abierto en su modalidad (M4; por el puente `campuses.modality_id`) donde el admin ya abrió el catálogo de
+ * salones (CV9): una por departamento y periodo, para todos los campus (decisión 6, confirmada el 12 de noviembre de
+ * 2026; CreateTermReviews, que es idempotente). Los periodos que no se abrieron en su modalidad o donde los salones no
+ * se abrieron no se tocan. Sale
  * después del commit de UpdateCampus (CampusUpdated).
  */
 final class CreateRoomsReviewsOnCampusUpdated
@@ -25,11 +26,13 @@ final class CreateRoomsReviewsOnCampusUpdated
 
     public function handle(CampusUpdated $event): void
     {
-        if (! in_array('settings', $event->changed, true) || ! $event->campus->profile->usesRooms) {
+        $modality = $event->campus->catalogModality;
+
+        if (! in_array('settings', $event->changed, true) || ! $event->campus->profile->usesRooms || $modality === null) {
             return;
         }
 
-        foreach ($this->terms->openedIn($event->campus) as $term) {
+        foreach ($this->terms->openedIn($modality) as $term) {
             if (in_array(Catalog::Rooms, $this->reviews->openedCatalogs($term), true)) {
                 $this->createTermReviews->handle($term, [Catalog::Rooms]);
             }

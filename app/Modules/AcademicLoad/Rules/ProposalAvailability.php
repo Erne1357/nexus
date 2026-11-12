@@ -11,8 +11,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Cuándo existe una propuesta de carrera (reglas-de-negocio.md, "Propuesta de carrera", supuesto por confirmar):
- * el periodo está abierto en el campus (`term_openings`) y la carrera se ofrece en él (`career_campus` activa y
- * sin borrar). Se exige al armarla (StartCareerProposal) y otra vez al enviarla (SubmitCareerProposal).
+ * el periodo está abierto en la modalidad del campus (`term_openings`, M4; por el puente `campuses.modality_id`
+ * mientras la propuesta sea por campus) y la carrera se ofrece en él (`career_campus` activa y sin borrar). Se exige al armarla (StartCareerProposal) y otra vez al enviarla (SubmitCareerProposal).
  */
 final class ProposalAvailability
 {
@@ -25,7 +25,7 @@ final class ProposalAvailability
     {
         $opened = TermOpening::query()
             ->where('term_id', $term->getKey())
-            ->where('campus_id', $campus->getKey())
+            ->where('modality_id', $campus->modality_id)
             ->exists();
 
         if (! $opened) {

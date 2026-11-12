@@ -4,7 +4,7 @@ namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -38,53 +38,53 @@ final class TermQuery
     }
 
     /**
-     * En qué campus se abrió el periodo, por código de campus, con el campus (también uno desactivado
-     * o borrado después) y quién lo abrió, para la ficha del periodo.
+     * En qué modalidades se abrió el periodo (M4), por clave, con la modalidad (también una desactivada o borrada
+     * después) y quién lo abrió, para la ficha del periodo.
      *
      * @return Collection<int, TermOpening>
      */
     public function openings(Term $term): Collection
     {
         return $term->openings()
-            ->with(['campus' => fn (BelongsTo $query) => $query->withTrashed(), 'opener'])
-            ->join('campuses', 'campuses.id', '=', 'term_openings.campus_id')
-            ->orderBy('campuses.code')
+            ->with(['modality' => fn (BelongsTo $query) => $query->withTrashed(), 'opener'])
+            ->join('modalities', 'modalities.id', '=', 'term_openings.modality_id')
+            ->orderBy('modalities.code')
             ->select('term_openings.*')
             ->get();
     }
 
     /**
-     * Los renglones de la sección «Campus» de la ficha, por código: cada campus activo (`opening` es null si el
-     * periodo no se ha abierto en él) y, solo lectura (`actionable` falso), los campus donde se abrió y que ya
-     * están inactivos o borrados.
+     * Los renglones de la sección «Modalidades» de la ficha, por clave: cada modalidad activa (`opening` es null si el
+     * periodo no se ha abierto en ella) y, solo lectura (`actionable` falso), las modalidades donde se abrió y que ya
+     * están inactivas o borradas.
      *
-     * @param  Collection<int, Campus>  $active
-     * @return Collection<int, array{campus: Campus, opening: ?TermOpening, actionable: bool}>
+     * @param  Collection<int, Modality>  $active
+     * @return Collection<int, array{modality: Modality, opening: ?TermOpening, actionable: bool}>
      */
-    public function campusRows(Term $term, Collection $active): Collection
+    public function modalityRows(Term $term, Collection $active): Collection
     {
-        $openings = $this->openings($term)->keyBy('campus_id');
+        $openings = $this->openings($term)->keyBy('modality_id');
 
         return $active
-            ->map(fn (Campus $campus): array => ['campus' => $campus, 'opening' => $openings->get($campus->id), 'actionable' => true])
+            ->map(fn (Modality $modality): array => ['modality' => $modality, 'opening' => $openings->get($modality->id), 'actionable' => true])
             ->concat(
                 $openings
-                    ->reject(fn (TermOpening $opening): bool => $active->contains('id', $opening->campus_id))
-                    ->map(fn (TermOpening $opening): array => ['campus' => $opening->campus, 'opening' => $opening, 'actionable' => false])
+                    ->reject(fn (TermOpening $opening): bool => $active->contains('id', $opening->modality_id))
+                    ->map(fn (TermOpening $opening): array => ['modality' => $opening->modality, 'opening' => $opening, 'actionable' => false])
             )
-            ->sortBy(fn (array $row): string => $row['campus']->code)
+            ->sortBy(fn (array $row): string => $row['modality']->code)
             ->values();
     }
 
     /**
-     * Los periodos que se abrieron en un campus, del más reciente al más antiguo.
+     * Los periodos que se abrieron en una modalidad, del más reciente al más antiguo.
      *
      * @return Collection<int, Term>
      */
-    public function openedIn(Campus $campus): Collection
+    public function openedIn(Modality $modality): Collection
     {
         return Term::query()
-            ->whereIn('id', TermOpening::query()->where('campus_id', $campus->getKey())->select('term_id'))
+            ->whereIn('id', TermOpening::query()->where('modality_id', $modality->getKey())->select('term_id'))
             ->orderByDesc('starts_on')
             ->get();
     }
@@ -99,7 +99,7 @@ final class TermQuery
     public function forTable(Actor $context, string $search = '', int $perPage = 15): LengthAwarePaginator
     {
         return Term::query()
-            ->with(['openings.campus' => fn (BelongsTo $query) => $query->withTrashed()])
+            ->with(['openings.modality' => fn (BelongsTo $query) => $query->withTrashed()])
             ->unless($context->allowsAny(CorePermission::TermView), fn (Builder $query) => $query->whereRaw('false'))
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->orderByDesc('starts_on')

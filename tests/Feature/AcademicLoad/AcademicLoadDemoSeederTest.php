@@ -39,7 +39,7 @@ use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Event;
 
 /*
-| Propuestas y bandejas de prueba (tareas 2.7 a 2.9): el demo con el periodo 20271 abierto en C2 y los catálogos
+| Propuestas y bandejas de prueba (tareas 2.7 a 2.9): el demo con el periodo 20271 abierto en Presencial (M4) y los catálogos
 | de Ciencias Básicas y Sistemas validados, como los deja el seeder de CatalogValidation; el seeder arma una
 | propuesta por carrera ofrecida, con borrador, envíos, aceptaciones, regresos y sus avisos.
 */
@@ -63,7 +63,7 @@ beforeEach(function () {
     $this->term = Term::query()->where('code', '20271')->firstOrFail();
     $this->c2 = Campus::query()->where('code', 'C2')->firstOrFail();
     $this->actingAs(User::query()->where('username', 'admin')->firstOrFail());
-    app(OpenTerm::class)->handle($this->term, $this->c2);
+    app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
     app(OpenCatalogValidation::class)->handle($this->term, Catalog::cases(), User::query()->where('username', 'admin')->firstOrFail());
 
     CatalogReview::query()
@@ -135,8 +135,10 @@ describe('completo (punto 4 de la demo)', function () {
 
         expect(CareerProposal::query()->where('campus_id', $this->c2->id)->where('status', ProposalStatus::Accepted)->count())->toBe($offered)
             ->and(ProposalReview::query()->where('status', '!=', 'accepted')->count())->toBe(0)
-            ->and(AcademicLoad::query()->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count())->toBe(0)
-            ->and(AcademicLoad::query()->whereNotIn('department_id', $withParts)->where('status', '!=', LoadStatus::Draft)->count())->toBe(0);
+            ->and(AcademicLoad::query()->where('campus_id', $this->c2->id)->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count())->toBe(0)
+            ->and(AcademicLoad::query()->whereNotIn('department_id', $withParts)->where('status', '!=', LoadStatus::Draft)->count())->toBe(0)
+            // Abrir Presencial creó también las de C1 (M4); sin propuestas de C1, siguen en borrador.
+            ->and(AcademicLoad::query()->where('campus_id', '!=', $this->c2->id)->where('status', '!=', LoadStatus::Draft)->count())->toBe(0);
     });
 
     it('termina lo que dejó la demo mezclada: reenvía las regresadas y acepta las pendientes', function () {
@@ -154,8 +156,8 @@ describe('completo (punto 4 de la demo)', function () {
         expect(fn () => seedProposals(['complete' => true]))->toThrow(RuntimeException::class, 'no se pudo aceptar');
     });
 
-    it('se detiene si el periodo no está abierto en el campus', function () {
-        expect(fn () => seedProposals(['complete' => true, 'campuses' => ['C1']]))->toThrow(RuntimeException::class, 'no está abierto en C1');
+    it('se detiene si el periodo no está abierto en la modalidad del campus', function () {
+        expect(fn () => seedProposals(['complete' => true, 'campuses' => ['EAD']]))->toThrow(RuntimeException::class, 'no está abierto en EAD');
     });
 });
 
@@ -188,7 +190,8 @@ it('demo por puntos: una carga se compara con las partes de su campus, no con la
     seedProposals(['complete' => true]);
     $c1 = Campus::query()->where('code', 'C1')->firstOrFail();
     $teaching = ProposalReview::query()->value('department_id');
-    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'department_id' => $teaching]);
+    // Abrir Presencial creó también la carga de C1 (M4), en borrador y sin partes de C1.
+    expect(AcademicLoad::query()->where('term_id', $this->term->id)->where('campus_id', $c1->id)->where('department_id', $teaching)->sole()->status)->toBe(LoadStatus::Draft);
     $check = collect(app()->getProvider(AcademicLoadServiceProvider::class)->demoChecks())
         ->first(fn (DemoCheck $check): bool => $check->label === 'Las cargas con partes aceptadas están en propuesta');
 

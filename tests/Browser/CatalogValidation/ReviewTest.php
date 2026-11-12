@@ -29,7 +29,7 @@ it('el jefe revisa salones y docentes registro por registro, con teclado y en lo
     $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $c2->id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $c2->modality_id]);
     app(CreateTermReviews::class)->handle($term, Catalog::cases());
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['username' => 'jefe']);
 

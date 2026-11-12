@@ -1,10 +1,8 @@
 <?php
 
-use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\TermCalendarDemoSeeder;
 use App\Modules\Core\Enums\Stage;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Queries\TermCalendarQuery;
@@ -17,7 +15,7 @@ use Illuminate\Support\Facades\Cache;
 it('siembra el calendario general de 20271 con las 8 etapas', function () {
     (new DemoTermSeeder)->run();
 
-    $windows = TermStage::query()->whereNull('campus_id')->get();
+    $windows = TermStage::query()->whereNull('modality_id')->get();
 
     expect($windows)->toHaveCount(8)
         ->and($windows->pluck('stage')->map->value->sort()->values()->all())->toBe(collect(Stage::cases())->map->value->sort()->values()->all())
@@ -61,29 +59,26 @@ it('olvida la caché del calendario al sembrarlo', function () {
 | TermCalendarDemoSeeder: calendarios del masivo.
 */
 
-it('siembra el calendario general de 20263 y las ventanas de Campus I en 20271', function () {
-    $this->seed(CampusSeeder::class);
+it('M4: siembra el calendario general de 20263 y las ventanas de Presencial en 20271', function () {
     (new DemoTermSeeder)->run();
     (new TermCalendarDemoSeeder)->run();
 
-    $c1 = Campus::where('code', 'C1')->sole();
     $general = Term::where('code', '20263')->sole();
     $own = Term::where('code', '20271')->sole();
 
-    expect(TermStage::where('term_id', $general->getKey())->whereNull('campus_id')->count())->toBe(8)
-        ->and(TermStage::where('term_id', $own->getKey())->where('campus_id', $c1->getKey())->count())->toBe(3);
+    expect(TermStage::where('term_id', $general->getKey())->whereNull('modality_id')->count())->toBe(8)
+        ->and(TermStage::where('term_id', $own->getKey())->where('modality_id', modalityOf('PRES')->getKey())->count())->toBe(3);
 });
 
-it('el calendario del masivo es idempotente, no pisa y se salta un Campus I inactivo', function () {
-    $this->seed(CampusSeeder::class);
-    Campus::where('code', 'C1')->update(['is_active' => false]);
+it('el calendario del masivo es idempotente, no pisa y se salta una Presencial inactiva', function () {
+    modalityOf('PRES')->update(['is_active' => false]);
     (new DemoTermSeeder)->run();
     (new TermCalendarDemoSeeder)->run();
     TermStage::query()->where('stage', Stage::Rooms)->update(['starts_on' => '2026-06-09']);
     (new TermCalendarDemoSeeder)->run();
 
     expect(TermStage::where('term_id', Term::where('code', '20263')->value('id'))->count())->toBe(8)
-        ->and(TermStage::whereNotNull('campus_id')->count())->toBe(0)
+        ->and(TermStage::whereNotNull('modality_id')->count())->toBe(0)
         ->and(TermStage::where('stage', Stage::Rooms)->where('starts_on', '2026-06-09')->exists())->toBeTrue();
 });
 

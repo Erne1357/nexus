@@ -76,7 +76,7 @@ class DemoTermSeeder extends Seeder
         foreach (self::CALENDAR_20271 as $stage => [$startsOn, $endsOn]) {
             TermStage::query()->create([
                 'term_id' => $term->getKey(),
-                'campus_id' => null,
+                'modality_id' => null,
                 'stage' => Stage::from($stage),
                 'starts_on' => $startsOn,
                 'ends_on' => $endsOn,

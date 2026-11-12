@@ -73,7 +73,7 @@ class MassiveSeeder extends Seeder
 
         $started = hrtime(true);
         $this->call([TermHistorySeeder::class, TermCalendarDemoSeeder::class]);
-        $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C1', 'C2'], '20263' => ['C1', 'C2']]]);
+        $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES'], '20263' => ['PRES']]]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'massive']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'massive']);
 

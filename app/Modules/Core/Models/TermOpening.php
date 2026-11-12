@@ -11,10 +11,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Apertura de un periodo en un campus (D1, confirmado el 1 de noviembre de 2026): una por periodo y
- * campus, con quién y cuándo la hizo. La escribe OpenTerm.
+ * Apertura de un periodo en una modalidad (M4, confirmado el 12 de noviembre de 2026: Presencial se abre una vez para
+ * C1 y C2): una por periodo y modalidad, con quién y cuándo la hizo. La escribe OpenTerm.
  */
-#[Fillable(['term_id', 'campus_id', 'opened_by', 'opened_at'])]
+#[Fillable(['term_id', 'modality_id', 'opened_by', 'opened_at'])]
 #[UseFactory(TermOpeningFactory::class)]
 class TermOpening extends Model
 {
@@ -38,15 +38,15 @@ class TermOpening extends Model
     }
 
     /**
-     * @return BelongsTo<Campus, $this>
+     * @return BelongsTo<Modality, $this>
      */
-    public function campus(): BelongsTo
+    public function modality(): BelongsTo
     {
-        return $this->belongsTo(Campus::class);
+        return $this->belongsTo(Modality::class);
     }
 
     /**
-     * Quién abrió el periodo en el campus.
+     * Quién abrió el periodo en la modalidad.
      *
      * @return BelongsTo<User, $this>
      */

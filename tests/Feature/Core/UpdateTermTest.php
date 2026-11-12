@@ -2,7 +2,7 @@
 
 use App\Modules\Core\Actions\UpdateTerm;
 use App\Modules\Core\Events\TermUpdated;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -84,13 +84,13 @@ it('usa el valor confirmado como anterior aunque el modelo llegue viejo', functi
     expect(Activity::sole()->attribute_changes['old'])->toBe(['name' => 'B']);
 });
 
-it('rechaza cambiar el código de un periodo ya abierto, nombrando los campus, y deja cambiar lo demás', function () {
+it('rechaza cambiar el código de un periodo ya abierto, nombrando las modalidades, y deja cambiar lo demás', function () {
     $term = Term::factory()->create(['code' => '20271', 'name' => 'Viejo']);
-    TermOpening::factory()->for($term)->for(Campus::factory()->create(['code' => 'C2']))->create();
-    TermOpening::factory()->for($term)->for(Campus::factory()->create(['code' => 'C1']))->create();
+    TermOpening::factory()->for($term)->create();
+    TermOpening::factory()->for($term)->for(Modality::factory()->create(['code' => 'A1', 'name' => 'Modalidad A']))->create();
 
     expect(fn () => app(UpdateTerm::class)->handle($term, ['code' => '20272']))
-        ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['code' => ['El código ya no se puede cambiar: el periodo se abrió en C1 y C2.']]));
+        ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['code' => ['El código ya no se puede cambiar: el periodo se abrió en Modalidad A y Presencial.']]));
 
     app(UpdateTerm::class)->handle($term, ['code' => '20271', 'name' => 'Nuevo']);
 

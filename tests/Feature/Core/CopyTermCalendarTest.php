@@ -4,7 +4,7 @@ use App\Modules\Core\Actions\CopyTermCalendar;
 use App\Modules\Core\Actions\SetTermStage;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Events\TermCalendarChanged;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
 use Illuminate\Support\Facades\Event;
@@ -19,16 +19,16 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->source = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
     $this->target = Term::factory()->create(['code' => '20271', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
-    $this->c1 = Campus::factory()->create(['code' => 'C1']);
+    $this->m1 = Modality::factory()->create(['code' => 'M001']);
     app(SetTermStage::class)->handle($this->source, Stage::Proposal, null, '2026-08-31', '2026-09-11');
-    app(SetTermStage::class)->handle($this->source, Stage::Rooms, $this->c1, '2026-10-05', '2026-10-16');
+    app(SetTermStage::class)->handle($this->source, Stage::Rooms, $this->m1, '2026-10-05', '2026-10-16');
 });
 
 it('copia las ventanas conservando el día de la semana, también al cruzar de año', function () {
     $written = app(CopyTermCalendar::class)->handle($this->target, $this->source);
 
-    $general = TermStage::where('term_id', $this->target->id)->whereNull('campus_id')->sole();
-    $own = TermStage::where('term_id', $this->target->id)->where('campus_id', $this->c1->id)->sole();
+    $general = TermStage::where('term_id', $this->target->id)->whereNull('modality_id')->sole();
+    $own = TermStage::where('term_id', $this->target->id)->where('modality_id', $this->m1->id)->sole();
 
     expect($written)->toBe(2)
         ->and($general->starts_on->toDateString())->toBe('2027-02-08')
@@ -43,7 +43,7 @@ it('corre por semanas completas entre semestres del mismo año', function () {
 
     app(CopyTermCalendar::class)->handle($other, $this->source);
 
-    expect(TermStage::where('term_id', $other->id)->whereNull('campus_id')->sole()->starts_on->toDateString())->toBe('2026-02-09');
+    expect(TermStage::where('term_id', $other->id)->whereNull('modality_id')->sole()->starts_on->toDateString())->toBe('2026-02-09');
 });
 
 it('reemplaza las ventanas que ya tenía el destino', function () {
@@ -56,15 +56,15 @@ it('reemplaza las ventanas que ya tenía el destino', function () {
         ->and(TermStage::where('term_id', $this->source->id)->count())->toBe(2);
 });
 
-it('no copia las ventanas de un campus inactivo y rechaza un origen que solo tiene de esas', function () {
-    $this->c1->update(['is_active' => false]);
+it('no copia las ventanas de una modalidad inactiva y rechaza un origen que solo tiene de esas', function () {
+    $this->m1->update(['is_active' => false]);
     $onlyInactive = Term::factory()->create();
-    TermStage::factory()->for($onlyInactive)->create(['stage' => Stage::Rooms, 'campus_id' => $this->c1->id]);
+    TermStage::factory()->for($onlyInactive)->create(['stage' => Stage::Rooms, 'modality_id' => $this->m1->id]);
 
     expect(fn () => app(CopyTermCalendar::class)->handle($this->target, $onlyInactive))->toThrow(ValidationException::class);
 
     expect(app(CopyTermCalendar::class)->handle($this->target, $this->source))->toBe(1)
-        ->and(TermStage::where('term_id', $this->target->id)->whereNotNull('campus_id')->count())->toBe(0);
+        ->and(TermStage::where('term_id', $this->target->id)->whereNotNull('modality_id')->count())->toBe(0);
 });
 
 it('rechaza el mismo periodo y un origen sin ventanas', function () {
@@ -80,7 +80,7 @@ it('es atómico: si una escritura falla, el destino conserva su calendario', fun
     $activity = Activity::count();
 
     TermStage::creating(function (TermStage $window): void {
-        if ($window->campus_id !== null) {
+        if ($window->modality_id !== null) {
             throw new RuntimeException('falla');
         }
     });

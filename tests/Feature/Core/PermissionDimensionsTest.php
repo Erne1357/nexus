@@ -21,8 +21,9 @@ use Tests\Fixtures\Authorization\FakePermission;
 | Spec §7.1 (Autorización por permisos): un nombramiento con una dimensión vacía cubre cualquier valor, así que un
 | permiso sobre un recurso con `campus_id` que no declara `Dimension::Campus` se concedería "en todos los campus"
 | aunque el puesto sea de uno. Esta prueba lo impide (§14) y fija D4 a D6 del plan 3.P9:
-| D4: `core.term.open` declara campus; D5: `core.assignment.*` e `imports.batch.*`, solo del admin;
-| D6: `core.term.manage_calendar` y `catalog_validation.progress.*`, solo de puestos de todo el Tec.
+| D4: `core.term.open` declaraba campus y desde M4 declara modalidad (`term_openings` ya no tiene campus); D5:
+| `core.assignment.*` e `imports.batch.*`, solo del admin; D6: `catalog_validation.progress.*`, solo de puestos de todo
+| el Tec (`core.term.manage_calendar` dejó de ser excepción: `term_stages` ya no tiene campus, M4).
 */
 
 /**
@@ -92,7 +93,6 @@ function dimensionExceptions(): array
         'imports.batch.view' => $admin,
         'imports.batch.create' => $admin,
         'imports.batch.apply' => $admin,
-        'core.term.manage_calendar' => $tec,
         'catalog_validation.progress.view' => $tec,
         'catalog_validation.progress.remind' => $tec,
         'catalog_validation.review.open' => $admin,

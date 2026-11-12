@@ -27,7 +27,7 @@ use Throwable;
  * otro departamento (ProposalReviewRules; confirmado el 2 de noviembre de 2026). Exige HC-14, los catálogos del
  * departamento validados en el periodo y el campus de la propuesta (CatalogsValidated, con bloqueo compartido),
  * como ValidationException sobre `catalogs`; y la carga del departamento en ese periodo y campus, que bloquea,
- * sobre `load` (supuesto por confirmar: volver a abrir el periodo en el campus la crea). Marca la parte aceptada
+ * sobre `load` (supuesto por confirmar: completar la apertura del periodo en la modalidad del campus la crea, M4). Marca la parte aceptada
  * con quién y cuándo: desde ahí el coordinador ya no cambia sus materias, aunque la propuesta siga regresada. Si la
  * propuesta está enviada y ya no queda ninguna parte sin aceptar, queda aceptada; regresada, sigue regresada,
  * porque tiene una parte regresada. Si la carga sigue en borrador, la propone con ProposeLoad en la misma transacción
@@ -88,7 +88,9 @@ final class AcceptProposalReview
                 ->first();
 
             if ($load === null) {
-                throw ValidationException::withMessages(['load' => "{$department->code} no tiene carga en {$proposal->campus->code} para el periodo {$proposal->term->code}: vuelve a abrir el periodo en el campus para crearla."]);
+                $modality = $proposal->campus->catalogModality?->name ?? 'la modalidad del campus';
+
+                throw ValidationException::withMessages(['load' => "{$department->code} no tiene carga en {$proposal->campus->code} para el periodo {$proposal->term->code}: completa la apertura del periodo en {$modality} para crearla."]);
             }
 
             $review->update(['status' => ProposalReviewStatus::Accepted, 'decided_by' => $actor->getKey(), 'decided_at' => now()]);
