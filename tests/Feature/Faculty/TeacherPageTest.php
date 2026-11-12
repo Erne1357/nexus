@@ -156,14 +156,25 @@ describe('adscripciones', function () {
             ->and(lastToastOf($page))->type->toBe('success')->description->toContain('principal pasa a SC');
     });
 
-    it('quitar la única adscripción deja al docente activo y sin departamento', function () {
+    it('CV8: quitar la única adscripción da de baja al docente, y el aviso lo dice', function () {
         $page = teacherRecord($this->admin, $this->beto)->call('confirmRemoveAdscription', $this->beto->adscriptions()->sole()->id)
-            ->assertSee('Se queda sin departamento, pero sigue activo.')
+            ->assertSee('No le queda otro departamento: queda dado de baja y su cuenta se inhabilita.')
             ->call('removeAdscription');
 
-        expect($this->beto->fresh()->is_active)->toBeTrue()
+        expect($this->beto->fresh()->is_active)->toBeFalse()
             ->and($this->beto->adscriptions()->count())->toBe(0)
-            ->and(lastToastOf($page))->description->toContain('queda sin departamento');
+            ->and(lastToastOf($page))->description->toContain('queda dado de baja y su cuenta se inhabilita');
+    });
+
+    it('CV-S8: a quien ocupa un puesto solo lo quitan el admin o la Subdirección', function () {
+        $this->ana->update(['user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ii->id])->create()->id]);
+        $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
+
+        teacherRecord($this->jefe, $this->ana)
+            ->assertSee('Ocupa un puesto: lo quitan el administrador o la Subdirección.')
+            ->call('confirmRemoveAdscription', $sc->id)
+            ->assertForbidden();
+        teacherRecord($this->admin, $this->ana)->call('confirmRemoveAdscription', $sc->id)->assertSet('showRemoveAdscriptionModal', true);
     });
 
     it('nadie se quita a sí mismo de un departamento (supuesto por confirmar)', function () {

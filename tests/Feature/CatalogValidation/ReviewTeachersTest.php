@@ -9,6 +9,7 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -17,6 +18,7 @@ use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Docentes en la revisión de su catálogo: el jefe corrige su correo institucional (CV1, con las reglas de AC-06), los
@@ -84,10 +86,13 @@ describe('dar de baja (CV8)', function () {
             ->and($this->review->fresh()->status)->toBe(ReviewStatus::InReview);
     });
 
-    it('CV8: con otra adscripción solo sale de este departamento y sigue activo', function () {
+    it('CV8: con otra adscripción solo sale de este departamento y sigue activo; su marca se quita (CV-S7)', function () {
         $teacher = Teacher::factory()->adscribedTo($this->sc)->adscribedTo($this->ii, primary: false)->create();
+        CatalogReviewMark::factory()->for($this->review, 'review')->on($teacher)->create();
 
         $result = app(DischargeReviewTeacher::class)->handle($this->review, $teacher, $this->jefe);
+
+        expect(CatalogReviewMark::query()->where('record_id', $teacher->id)->exists())->toBeFalse();
 
         expect($result['deactivated'])->toBeFalse()
             ->and(inTeachersReview($teacher))->toBeFalse()
@@ -136,6 +141,31 @@ describe('agregar docente (CV-S9)', function () {
         expect($teacher->fresh()->is_active)->toBeTrue()
             ->and($user->fresh()->is_active)->toBeTrue()
             ->and($teacher->adscriptions()->sole()->is_primary)->toBeTrue();
+    });
+
+    it('CV-S9: al reactivarlo le quita la contraseña que tenía: vuelve a entrar solo con una invitación nueva (confirmado)', function () {
+        $user = User::factory()->create(['is_active' => false, 'password' => 'una-clave-vieja-123', 'password_origin' => PasswordOrigin::User, 'access_invited_at' => now()->subDay()]);
+        $teacher = Teacher::factory()->inactive()->create(['user_id' => $user->id]);
+
+        app(AddReviewTeacher::class)->handle($this->review, $teacher, $this->jefe);
+
+        expect($user->fresh())
+            ->is_active->toBeTrue()
+            ->password->toBeNull()
+            ->password_origin->toBeNull()
+            ->must_change_password->toBeFalse()
+            ->access_invited_at->toBeNull()
+            ->and(Activity::query()->where('event', 'access-revoked')->where('subject_id', $user->id)->sole()->causer->is($this->jefe))->toBeTrue();
+    });
+
+    it('a uno activo de otro departamento no le toca la contraseña', function () {
+        $user = User::factory()->create(['password' => 'una-clave-vieja-123', 'password_origin' => PasswordOrigin::User]);
+        $teacher = Teacher::factory()->adscribedTo($this->ii)->create(['user_id' => $user->id]);
+
+        app(AddReviewTeacher::class)->handle($this->review, $teacher, $this->jefe);
+
+        expect($user->fresh()->password)->not->toBeNull()
+            ->and($user->fresh()->password_origin)->toBe(PasswordOrigin::User);
     });
 
     it('rechaza a uno que ya está en el departamento, y con la revisión validada', function () {

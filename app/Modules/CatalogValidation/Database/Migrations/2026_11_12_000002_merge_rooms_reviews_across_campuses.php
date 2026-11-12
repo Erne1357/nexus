@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -8,21 +9,24 @@ use Illuminate\Support\Facades\DB;
  * noviembre de 2026; docs/dominio/modelo-de-datos.md, "CatalogValidation"). Antes había una por campus (D2).
  *
  * Cómo se funden las que ya existen (CV-S11, supuesto por confirmar), por periodo y departamento:
- * - Se queda la de estado más avanzado (validada, luego en revisión, luego pendiente) y, a igual estado, la de id menor
- *   (la más antigua). Conserva su estado, quién y cuándo la validó.
+ * - Gana el estado menos avanzado: se queda la pendiente, si no la en revisión, si no una validada; a igual estado, la de
+ *   id menor (la más antigua). Así nada queda validado si no lo estaba en todos los campus. Conserva su estado y, solo si
+ *   queda validada, quién y cuándo la validó; si no, se quedan vacíos.
  * - Las observaciones y las marcas de revisado de las demás pasan a la que queda; una marca del mismo registro que ya
  *   estaba en la que queda no se repite.
  * - La foto es la unión de las fotos de todas (sin repetir registros), porque ahora la revisión cubre los salones de
  *   todos los campus; las notas se juntan, una por renglón, empezando por las de la que queda.
- * - Las demás se borran: una revisión no es catálogo. Su bitácora se queda como está.
+ * - Las demás se borran: una revisión no es catálogo. Su bitácora se queda como está, y la de la que queda registra la
+ *   fusión (evento `merged`): de cada fundida su id, su campus, su estado y quién y cuándo la validó.
  * - La que queda pierde su campus, y el CHECK `catalog_reviews_campus_check` ahora exige que ninguna revisión lo tenga.
  *
- * Es una corrección de esquema y no deja bitácora. down() regresa el CHECK de antes solo si ninguna revisión de salones
- * quedó sin campus, porque no hay de dónde sacarlo.
+ * down() no tiene reversa útil: regresa el CHECK de antes solo si ninguna revisión de salones quedó sin campus, y si
+ * alguna quedó, lanza una excepción, porque no hay de dónde sacar el campus.
  */
 return new class extends Migration
 {
-    private const array RANK = ['validated' => 0, 'in_review' => 1, 'pending' => 2];
+    /** El menos avanzado primero: gana la fusión. */
+    private const array RANK = ['pending' => 0, 'in_review' => 1, 'validated' => 2];
 
     public function up(): void
     {
@@ -63,7 +67,8 @@ return new class extends Migration
             ->values();
 
         $kept = $reviews->first();
-        $others = $reviews->slice(1)->pluck('id')->all();
+        $absorbed = $reviews->slice(1)->values();
+        $others = $absorbed->pluck('id')->all();
         $snapshot = $this->unionOfSnapshots($reviews->pluck('snapshot')->all());
         $notes = $reviews->pluck('notes')->filter(fn (?string $note): bool => $note !== null && trim($note) !== '')->unique()->implode("\n");
 
@@ -82,11 +87,32 @@ return new class extends Migration
             DB::table('catalog_reviews')->whereIn('id', $others)->delete();
         }
 
+        $validated = $kept->status === 'validated';
+
         DB::table('catalog_reviews')->where('id', $kept->id)->update([
             'campus_id' => null,
             'snapshot' => $snapshot === null ? null : json_encode($snapshot),
             'notes' => $notes === '' ? null : $notes,
+            'validated_by' => $validated ? $kept->validated_by : null,
+            'validated_at' => $validated ? $kept->validated_at : null,
         ]);
+
+        if ($absorbed->isNotEmpty()) {
+            $campuses = DB::table('campuses')->whereIn('id', $reviews->pluck('campus_id')->filter()->all())->pluck('code', 'id');
+            $describe = fn (object $review): array => [
+                'id' => $review->id,
+                'campus' => $campuses[$review->campus_id] ?? null,
+                'status' => $review->status,
+                'validated_by' => $review->validated_by,
+                'validated_at' => $review->validated_at,
+            ];
+
+            activity()
+                ->performedOn(CatalogReview::query()->findOrFail($kept->id))
+                ->event('merged')
+                ->withProperties(['kept' => $describe($kept), 'absorbed' => $absorbed->map($describe)->all()])
+                ->log('Fundió las revisiones de salones de cada campus en una para todos los campus (CV-S11)');
+        }
     }
 
     /**

@@ -50,16 +50,31 @@ final class CatalogContentsQuery
     private function rows(Builder $query, Catalog $catalog): array
     {
         $model = $query->getModel();
+        $columns = [$model->qualifyColumn('id'), $model->qualifyColumn($this->codeColumn($catalog)).' as code', $model->qualifyColumn('name'), $model->qualifyColumn('is_active')];
+
+        if ($catalog === Catalog::Rooms) {
+            $query->with('campus:id,code');
+            $columns[] = $model->qualifyColumn('campus_id');
+        }
 
         return $query
-            ->get([$model->qualifyColumn('id'), $model->qualifyColumn($this->codeColumn($catalog)).' as code', $model->qualifyColumn('name'), $model->qualifyColumn('is_active')])
+            ->get($columns)
             ->map(fn (Model $record): array => [
                 'id' => $record->getKey(),
-                'code' => $record->getAttribute('code'),
+                'code' => $catalog === Catalog::Rooms ? self::roomCode($record) : $record->getAttribute('code'),
                 'name' => $record->getAttribute('name'),
                 'is_active' => (bool) $record->getAttribute('is_active'),
             ])
             ->all();
+    }
+
+    /**
+     * La clave de un salón con su campus, «C2 · A-101», porque las claves se repiten entre campus y la revisión de salones
+     * es una para todos (decisión 6): así se nombra en la foto, las altas y bajas y la bitácora.
+     */
+    public static function roomCode(Model $room): string
+    {
+        return trim(($room->campus?->code ?? '').' · '.$room->getAttribute('code'), ' ·');
     }
 
     /**

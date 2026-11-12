@@ -88,15 +88,15 @@ it('lista los docentes con una adscripción sin borrar al departamento, aunque n
         ->and($records[1]['name'])->toBe('Ana');
 });
 
-it('lista los salones del departamento en todos los campus (decisión 6)', function () {
-    $campus = Campus::factory()->create();
+it('lista los salones del departamento en todos los campus, con el campus en la clave (decisión 6)', function () {
+    $campus = Campus::factory()->create(['code' => 'C2']);
     roomIn($campus, ['code' => 'A-2', 'department_id' => $this->department->id]);
     roomIn($campus, ['code' => 'A-1', 'department_id' => $this->department->id, 'is_active' => false]);
     roomIn($campus, ['code' => 'A-3', 'department_id' => $this->other->id]);
     roomIn($campus, ['code' => 'A-4']);
-    roomIn(Campus::factory()->create(), ['code' => 'A-5', 'department_id' => $this->department->id]);
+    roomIn(Campus::factory()->create(['code' => 'C1']), ['code' => 'A-1', 'department_id' => $this->department->id]);
 
-    expect(contentsCodes(contentsReview(Catalog::Rooms, $this->department)))->toBe(['A-1', 'A-2', 'A-5']);
+    expect(contentsCodes(contentsReview(Catalog::Rooms, $this->department)))->toEqualCanonicalizing(['C2 · A-1', 'C1 · A-1', 'C2 · A-2']);
 });
 
 it('la foto lleva solo los activos, con id, clave y nombre', function () {

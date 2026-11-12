@@ -4,6 +4,8 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
@@ -26,6 +28,7 @@ use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Queries\TeacherTermReadinessQuery;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Validación de catálogos (`/catalog-validation`, catalog-validation::pages.review), variante C «tablero de
@@ -940,6 +943,19 @@ describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
 
         expect($teacher->fresh()->is_active)->toBeTrue()
             ->and($teacher->adscriptions()->sole()->department_id)->toBe($this->sis->id);
+    });
+
+    it('a un docente dado de baja que ocupa un puesto no lo agrega: lo dice y dice quién lo reactiva', function () {
+        $teacher = Teacher::factory()->inactive()->create(['rfc' => 'FFFF800101FF1', 'user_id' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create()->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->set('newTeacherRfc', 'FFFF800101FF1')
+            ->call('addTeacher')
+            ->assertHasErrors('newTeacherRfc')
+            ->assertSee('lo reactivan el administrador o la Subdirección');
+
+        expect($teacher->fresh()->is_active)->toBeFalse()
+            ->and($teacher->adscriptions()->count())->toBe(0);
     });
 
     it('admin, Subdirección y coordinador no dan de baja ni agregan, ni llamando los métodos directo', function (string $who) {

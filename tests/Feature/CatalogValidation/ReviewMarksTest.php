@@ -13,7 +13,10 @@ use App\Modules\CatalogValidation\Events\CatalogReviewStarted;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -144,6 +147,16 @@ describe('MarkRecordsReviewed', function () {
 });
 
 describe('UnmarkRecordReviewed', function () {
+    it('en salones la bitácora nombra el salón con su campus, porque las claves se repiten entre campus', function () {
+        $rooms = CatalogReview::factory()->rooms()->create();
+        $room = Room::factory()->for(Building::factory()->for(Campus::factory()->create(['code' => 'C1'])))->create(['code' => 'A-1', 'department_id' => $rooms->department_id]);
+        app(MarkRecordsReviewed::class)->handle($rooms, [$room->id], $this->actor);
+
+        app(UnmarkRecordReviewed::class)->handle($rooms, $room, $this->actor);
+
+        expect(Activity::query()->where('event', 'unreviewed')->sole()->description)->toContain('C1 · A-1');
+    });
+
     it('quita la marca de un registro y deja bitácora', function () {
         app(MarkRecordsReviewed::class)->handle($this->review, [$this->first->id, $this->second->id], $this->actor);
 

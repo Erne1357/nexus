@@ -6,7 +6,7 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Faculty\Actions\AddAdscription;
 use App\Modules\Faculty\Actions\CreateTeacher;
-use App\Modules\Faculty\Actions\RemoveAdscription;
+use App\Modules\Faculty\Actions\DischargeTeacherFromDepartment;
 use App\Modules\Faculty\Actions\SetTeacherActive;
 use App\Modules\Faculty\Actions\UpdateTeacher;
 use App\Modules\Faculty\Enums\FacultyPermission;
@@ -40,7 +40,8 @@ use Mary\Traits\Toast;
  * alta: el jefe, el suyo, sin elegirlo; el admin y la Subdirección lo eligen. Si el número ya existe, no se da de
  * alta otra vez: al admin y a la Subdirección se les ofrece adscribirlo a ese departamento sin cambiar sus datos; a
  * un jefe solo se le dice que ya está registrado (S9, supuesto por confirmar). La baja es solo del admin y la
- * Subdirección; los jefes quitan al docente de su departamento (RemoveAdscription). El admin además encola «Dar de
+ * Subdirección; los jefes quitan al docente de su departamento y, con la última adscripción, queda dado de baja
+ * (DischargeTeacherFromDepartment, CV8). El admin además encola «Dar de
  * alta usuarios» (ProvisionTeacherUsersJob) desde «Más acciones».
  *
  * El componente lee con TeacherQuery, autoriza en mount() y en cada acción (una petición puede llegar con una página
@@ -274,18 +275,19 @@ new #[Title('Docentes')] class extends Component
 
     /**
      * «Quitar de mi departamento»: quita una adscripción del docente; si era la principal, la principal pasa a la más
-     * antigua que le quede, y sin ninguna el docente sigue activo (RemoveAdscription).
+     * antigua que le quede, y sin ninguna el docente queda dado de baja y su cuenta se inhabilita
+     * (DischargeTeacherFromDepartment, CV8, confirmado el 12 de noviembre de 2026).
      */
-    public function removeAdscription(string $id, TeacherQuery $teachers, RemoveAdscription $removeAdscription): void
+    public function removeAdscription(string $id, TeacherQuery $teachers, DischargeTeacherFromDepartment $discharge): void
     {
         $adscription = $teachers->findAdscriptionOrFail($id);
         $this->authorize('removeAdscription', [Teacher::class, $adscription]);
 
         $teacher = $adscription->teacher ?? abort(404);
-        $removal = $removeAdscription->handle($adscription);
+        $removal = $discharge->handle($adscription);
 
         $this->success(
-            e("Docente quitado de {$adscription->department?->code}"),
+            e($removal['deactivated'] ? "Docente dado de baja de {$adscription->department?->code}" : "Docente quitado de {$adscription->department?->code}"),
             $this->describe($teacher).($removal['outcome'] === null ? '' : e("; {$removal['outcome']}")),
         );
     }
@@ -376,8 +378,9 @@ new #[Title('Docentes')] class extends Component
     /**
      * Las acciones de cada fila del menú «Acciones», ya decididas con TeacherPolicy: «Quitar de <depto>» por cada
      * adscripción a un departamento que cubre (las de otros departamentos no se muestran), con el aviso de qué
-     * principal queda; y «Desactivar/Activar», deshabilitado con su motivo si no le toca. Sin consultas: las
-     * adscripciones ya vienen con la página.
+     * principal queda o de que queda dado de baja (CV8), deshabilitado con su motivo si es él mismo o si ocupa un puesto
+     * (CV-S8); y «Desactivar/Activar», deshabilitado con su motivo si no le toca. Las adscripciones ya vienen con la
+     * página; los puestos salen de una sola consulta.
      *
      * @param  LengthAwarePaginator<int, Teacher>  $teachers
      * @return array<string, array{removals: list<array{id: string, label: string, confirm: string, reason: ?string}>, deactivateReason: ?string}>
@@ -385,6 +388,8 @@ new #[Title('Docentes')] class extends Component
     private function rowActions(LengthAwarePaginator $teachers, Actor $context): array
     {
         $actions = [];
+        $staff = app(TeacherQuery::class)->staffUserIds($teachers->getCollection()->pluck('user_id')->filter()->values()->all());
+        $canDeactivate = $context->allows(FacultyPermission::TeacherDeactivate);
 
         foreach ($teachers as $teacher) {
             $removals = [];
@@ -400,7 +405,11 @@ new #[Title('Docentes')] class extends Component
                     'label' => 'Quitar de '.$adscription->department?->code,
                     'title' => "¿Quitar al docente {$teacher->rfc} de {$adscription->department?->code}?",
                     'confirm' => $this->removalWarning($adscription, $teacher),
-                    'reason' => Gate::allows('removeAdscription', [Teacher::class, $adscription]) ? null : 'No te puedes quitar a ti mismo de un departamento.',
+                    'reason' => match (true) {
+                        $teacher->user_id !== null && $teacher->user_id === $context->user()?->getKey() => 'No te puedes quitar a ti mismo de un departamento.',
+                        $teacher->user_id !== null && isset($staff[$teacher->user_id]) && ! $canDeactivate => 'Ocupa un puesto: lo quitan el administrador o la Subdirección.',
+                        default => null,
+                    },
                 ];
             }
 
@@ -425,7 +434,7 @@ new #[Title('Docentes')] class extends Component
     {
         $rest = $teacher->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription));
         $outcome = match (true) {
-            $rest->isEmpty() => 'Se queda sin departamento, pero sigue activo.',
+            $rest->isEmpty() => 'No le queda otro departamento: queda dado de baja y su cuenta se inhabilita.',
             $adscription->is_primary => 'Sigue activo y su adscripción principal pasa a '.$rest->first()->department?->code.'.',
             default => 'Sigue activo y su adscripción principal no cambia.',
         };

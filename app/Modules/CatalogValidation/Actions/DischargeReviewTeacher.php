@@ -16,8 +16,9 @@ use Illuminate\Validation\ValidationException;
  * «Dar de baja de <depto>» en la revisión de docentes (CV8, confirmado el 12 de noviembre de 2026): el jefe da de baja
  * al docente de su departamento con DischargeTeacherFromDepartment (si no le queda otra adscripción, queda dado de baja
  * y su cuenta se inhabilita; si le queda, solo sale de este departamento y, si hacía falta, tiene otra principal). El
- * docente sale de la revisión, así que ya no queda por revisar (CV7). Quién puede lo deciden
- * CatalogReviewPolicy::correct y TeacherPolicy::discharge (CV-S8) antes de llamarla.
+ * docente sale de la revisión, así que ya no queda por revisar (CV7), y se le quita la marca: si vuelve a la revisión, vuelve
+ * sin revisar (CV-S7). Quién puede lo deciden
+ * CatalogReviewPolicy::correct y TeacherPolicy::removeAdscription (CV-S8) antes de llamarla.
  *
  * En una transacción relee la revisión con bloqueo, exige que no esté validada y que el docente sea suyo (solo la de
  * docentes lo contiene), lo da de baja y pasa la revisión a en revisión (StartReview, CV-S4). Devuelve lo de
@@ -46,6 +47,7 @@ final class DischargeReviewTeacher
             $this->rules->ensureContains($review, $teacher);
 
             $result = $this->discharge->handle($this->records->teacherAdscriptions($review, [$teacher->getKey()])[$teacher->getKey()]);
+            $review->marks()->where('record_id', $teacher->getKey())->delete();
             $this->startReview->handle($review, $actor);
 
             return $result;

@@ -4,6 +4,7 @@ namespace App\Modules\CatalogValidation\Actions;
 
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Model;
@@ -36,7 +37,11 @@ final class UnmarkRecordReviewed
                 return;
             }
 
-            $code = $record->getAttribute($review->catalog === Catalog::Teachers ? 'rfc' : 'code');
+            $code = match ($review->catalog) {
+                Catalog::Teachers => $record->getAttribute('rfc'),
+                Catalog::Rooms => CatalogContentsQuery::roomCode($record),
+                default => $record->getAttribute('code'),
+            };
 
             activity()
                 ->performedOn($review)

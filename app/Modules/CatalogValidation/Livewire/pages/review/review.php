@@ -22,12 +22,14 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Queries\BuildingQuery;
 use App\Modules\Facilities\Rules\RoomRules;
+use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\TeacherAccessQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
@@ -379,7 +381,7 @@ new #[Title('Validación de catálogos')] class extends Component
         $this->authorize('correct', $review);
         abort_unless($review->catalog === Catalog::Teachers, 404);
         $teacher = $contents->findOrFail($review, $id);
-        $this->authorize('discharge', [Teacher::class, $records->teacherAdscriptions($review, [$teacher->getKey()])[$teacher->getKey()]]);
+        $this->authorize('removeAdscription', [Teacher::class, $records->teacherAdscriptions($review, [$teacher->getKey()])[$teacher->getKey()]]);
 
         $result = $dischargeTeacher->handle($review, $teacher, $this->user());
 
@@ -402,6 +404,10 @@ new #[Title('Validación de catálogos')] class extends Component
         $data = $this->validate(['newTeacherRfc' => ['required', 'string', 'max:20']], ['newTeacherRfc.required' => 'Escribe el RFC del docente.']);
         $teacher = $teachers->findByRfc(TeacherRfc::normalize($data['newTeacherRfc']) ?? '')
             ?? throw ValidationException::withMessages(['newTeacherRfc' => 'No hay un docente con ese RFC.']);
+
+        if (Gate::denies('adscribeToDepartment', [Teacher::class, $review->department, $teacher])) {
+            throw ValidationException::withMessages(['newTeacherRfc' => 'Está dado de baja y ocupa un puesto: lo reactivan el administrador o la Subdirección.']);
+        }
 
         try {
             $addTeacher->handle($review, $teacher, $this->user());
@@ -741,13 +747,28 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     private function dischargeReasons(array $current, CatalogRecordsQuery $records, array $ids): array
     {
+        /*
+        | La regla de TeacherPolicy::removeAdscription para toda la página, con dos consultas y no una por docente:
+        | dischargeTeacher() vuelve a preguntar a la policy al pedirlo.
+        */
         $adscriptions = $records->teacherAdscriptions($current['review'], $ids);
+        $staff = $records->staffUserIds(array_values(array_filter(array_map(fn ($adscription): ?string => $adscription->teacher?->user_id, $adscriptions))));
+        $context = app(Actor::class);
+        $canRemove = $context->allows(FacultyPermission::TeacherDepartmentRemove, Target::of(unit: $current['review']->department_id));
+        $canDeactivate = $context->allows(FacultyPermission::TeacherDeactivate);
+        $me = $context->user()?->getKey();
 
-        return collect($ids)->mapWithKeys(fn (string $id): array => [$id => match (true) {
-            ! $current['canEdit'] => $current['editReason'],
-            ! isset($adscriptions[$id]) || ! Gate::allows('discharge', [Teacher::class, $adscriptions[$id]]) => 'Ocupa un puesto: lo da de baja el administrador o la Subdirección.',
-            default => null,
-        }])->all();
+        return collect($ids)->mapWithKeys(function (string $id) use ($current, $adscriptions, $staff, $canRemove, $canDeactivate, $me): array {
+            $userId = $adscriptions[$id]->teacher?->user_id ?? null;
+
+            return [$id => match (true) {
+                ! $current['canEdit'] => $current['editReason'],
+                ! isset($adscriptions[$id]) || ! $canRemove => 'Solo quien administra el departamento da de baja a sus docentes.',
+                $userId !== null && $userId === $me => 'No te puedes dar de baja a ti mismo.',
+                $userId !== null && isset($staff[$userId]) && ! $canDeactivate => 'Ocupa un puesto: lo da de baja el administrador o la Subdirección.',
+                default => null,
+            }];
+        })->all();
     }
 
     /**
@@ -1015,7 +1036,11 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     private function describe(CatalogReview $review, Model $record): string
     {
-        $code = $review->catalog === Catalog::Teachers ? $record->rfc : $record->code;
+        $code = match ($review->catalog) {
+            Catalog::Teachers => $record->rfc,
+            Catalog::Rooms => CatalogContentsQuery::roomCode($record),
+            default => $record->code,
+        };
 
         return e("{$code} · {$record->name}");
     }

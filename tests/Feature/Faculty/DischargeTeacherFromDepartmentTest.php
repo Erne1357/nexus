@@ -10,11 +10,12 @@ use App\Modules\Faculty\Models\TeacherDepartment;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| La baja del docente por el jefe (CV8, confirmado el 12 de noviembre de 2026): se da de baja de ese departamento y,
-| si ya no está adscrito a otro, su cuenta se inhabilita (queda dado de baja, SetTeacherActive); si sí, solo se quita
-| de ese departamento y, si hacía falta, tiene un nuevo departamento principal (RemoveAdscription). El jefe no da de
-| baja a un docente que ocupa un puesto: eso es de admin o Subdirección (CV-S8, supuesto por confirmar). Agregar a un
-| docente que ya existe a su departamento es del jefe que da de alta ahí (CV-S9, supuesto por confirmar).
+| La baja del docente por el jefe (CV8, confirmado el 12 de noviembre de 2026), en la validación y en «Quitar de mi
+| departamento»: se da de baja de ese departamento y, si ya no está adscrito a otro, su cuenta se inhabilita (queda dado
+| de baja, SetTeacherActive); si sí, solo se quita de ese departamento y, si hacía falta, tiene un nuevo departamento
+| principal (RemoveAdscription). A un docente que ocupa un puesto solo lo quitan el admin o la Subdirección (CV-S8).
+| Agregar a un docente que ya existe a su departamento es del jefe que da de alta ahí (CV-S9); a uno dado de baja que
+| ocupa un puesto solo lo reactivan el admin o la Subdirección (confirmado el 12 de noviembre de 2026).
 */
 
 beforeEach(function () {
@@ -73,17 +74,17 @@ describe('quién da de baja y quién agrega', function () {
     it('CV8: el jefe del departamento da de baja a un docente de su departamento; el de otro, no', function () {
         $other = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ii->id])->create();
 
-        expect($this->jefe->can('discharge', [Teacher::class, $this->adscription]))->toBeTrue()
-            ->and($other->can('discharge', [Teacher::class, $this->adscription]))->toBeFalse();
+        expect($this->jefe->can('removeAdscription', [Teacher::class, $this->adscription]))->toBeTrue()
+            ->and($other->can('removeAdscription', [Teacher::class, $this->adscription]))->toBeFalse();
     });
 
     it('CV-S8: a un docente que ocupa un puesto solo lo dan de baja el admin o la Subdirección', function (Closure $staff) {
         $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['user_id' => $staff($this)->id]);
         $adscription = $teacher->adscriptions()->sole();
 
-        expect($this->jefe->can('discharge', [Teacher::class, $adscription]))->toBeFalse()
-            ->and(User::factory()->admin()->create()->can('discharge', [Teacher::class, $adscription]))->toBeTrue()
-            ->and(User::factory()->withRole(Role::Subdireccion)->create()->can('discharge', [Teacher::class, $adscription]))->toBeTrue();
+        expect($this->jefe->can('removeAdscription', [Teacher::class, $adscription]))->toBeFalse()
+            ->and(User::factory()->admin()->create()->can('removeAdscription', [Teacher::class, $adscription]))->toBeTrue()
+            ->and(User::factory()->withRole(Role::Subdireccion)->create()->can('removeAdscription', [Teacher::class, $adscription]))->toBeTrue();
     })->with([
         'jefe de otro departamento' => fn ($test) => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $test->ii->id])->create(),
         'coordinador' => fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(21)])->create(),
@@ -92,7 +93,17 @@ describe('quién da de baja y quién agrega', function () {
     it('nadie se da de baja a sí mismo', function () {
         $own = Teacher::factory()->adscribedTo($this->sc)->create(['user_id' => $this->jefe->id]);
 
-        expect($this->jefe->can('discharge', [Teacher::class, $own->adscriptions()->sole()]))->toBeFalse();
+        expect($this->jefe->can('removeAdscription', [Teacher::class, $own->adscriptions()->sole()]))->toBeFalse();
+    });
+
+    it('CV-S9: a un docente dado de baja que ocupa un puesto solo lo reactivan el admin o la Subdirección', function () {
+        $staff = Teacher::factory()->inactive()->create(['user_id' => User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(22)])->create()->id]);
+        $plain = Teacher::factory()->inactive()->create(['user_id' => User::factory()->create()->id]);
+
+        expect($this->jefe->can('adscribeToDepartment', [Teacher::class, $this->sc, $staff]))->toBeFalse()
+            ->and($this->jefe->can('adscribeToDepartment', [Teacher::class, $this->sc, $plain]))->toBeTrue()
+            ->and(User::factory()->admin()->create()->can('adscribeToDepartment', [Teacher::class, $this->sc, $staff]))->toBeTrue()
+            ->and(User::factory()->withRole(Role::Subdireccion)->create()->can('adscribeToDepartment', [Teacher::class, $this->sc, $staff]))->toBeTrue();
     });
 
     it('CV-S9: agregar a un docente que ya existe es del jefe de ese departamento, no de otro ni del coordinador', function () {

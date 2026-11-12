@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\UpdateRoom;
@@ -186,6 +187,17 @@ describe('mover a otro campus (CV-S10)', function () {
 
         expect($room->fresh())->campus_id->toBe($this->c1->id)->code->toBe('A-201');
     });
+
+    it('rechaza un edificio de un campus inactivo o que no usa salones', function (Closure $campus) {
+        $room = newRoom($this->c2, $this->edificioA);
+        $building = Building::factory()->for($campus())->create();
+
+        expect(fn () => app(UpdateRoom::class)->handle($room, ['building_id' => $building->id]))->toThrow(ValidationException::class, 'campus inactivo o que no usa salones')
+            ->and($room->fresh()->campus_id)->toBe($this->c2->id);
+    })->with([
+        'inactivo' => fn () => Campus::factory()->inactive()->create(),
+        'sin salones' => fn () => Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]),
+    ]);
 
     it('rechaza moverlo si ya se usa en su campus (sesiones, acuerdos o materias que lo tienen por omisión)', function () {
         $room = newRoom($this->c2, $this->edificioA);

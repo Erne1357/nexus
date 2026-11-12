@@ -120,15 +120,21 @@ final class RoomRules
     }
 
     /**
-     * Un edificio sin borrar, de cualquier campus; el id llega del navegador. Al editar un salón, el de otro campus lo
-     * mueve a ese campus (UpdateRoom, CV-S10).
+     * Un edificio sin borrar, de cualquier campus activo y sin borrar cuyo perfil usa salones; el id llega del navegador.
+     * Al editar un salón, el de otro campus lo mueve a ese campus (UpdateRoom, CV-S10).
      *
      * @throws ValidationException
      */
     public function existingBuilding(string $buildingId): Building
     {
-        return KeyLookup::find(Building::query(), $buildingId)
+        $building = KeyLookup::find(Building::query()->with('campus'), $buildingId)
             ?? throw ValidationException::withMessages(['building_id' => 'El edificio no existe.']);
+
+        if ($building->campus === null || ! $building->campus->is_active || ! $building->campus->profile->usesRooms) {
+            throw ValidationException::withMessages(['building_id' => 'El edificio es de un campus inactivo o que no usa salones.']);
+        }
+
+        return $building;
     }
 
     /**
