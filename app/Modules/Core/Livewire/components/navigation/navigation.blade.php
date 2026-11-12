@@ -39,6 +39,8 @@
     <nav
         id="nexus-menu"
         aria-label="Navegación principal"
+        data-grid-first-row="{{ $grid['firstRow'] }}"
+        data-grid-column-rows="{{ $grid['columnRows'] }}"
         class="fixed top-(--shell-top) bottom-0 left-0 z-[24] w-(--menu-w) [display:var(--menu-display)] grid-cols-(--menu-cols) grid-rows-[minmax(0,1fr)] [--current-icon:var(--color-base-100)] [--home-bg:transparent] [--home-current-bg:var(--color-base-100)] [--menu-cols-open:repeat(5,minmax(0,1fr))] [--menu-cols:64px_224px] [--menu-display:grid] max-desktop:[--menu-cols-open:repeat(3,minmax(0,1fr))] max-desktop:[--menu-cols:64px] max-md:[--menu-display:none] in-data-[menu=open]:grid in-data-[menu=open]:w-(--panel-w) in-data-[menu=open]:grid-cols-(--menu-cols-open) in-data-[menu=open]:grid-rows-none in-data-[menu=open]:auto-rows-[36px] in-data-[menu=open]:content-start in-data-[menu=open]:gap-x-[18px] in-data-[menu=open]:overflow-y-auto in-data-[menu=open]:overscroll-contain in-data-[menu=open]:px-5 in-data-[menu=open]:pt-[18px] in-data-[menu=open]:pb-8 in-data-[menu=open]:[--current-icon:transparent] in-data-[menu=open]:[--home-bg:var(--color-base-100)] in-data-[menu=open]:[--home-current-bg:var(--color-secondary)] max-md:grid-cols-1 max-md:auto-rows-auto max-md:gap-y-0.5 max-md:px-3.5 max-md:pt-3.5 max-md:pb-8 max-md:[--home-bg:transparent]"
     >
         <label
@@ -115,8 +117,8 @@
         {{-- La columna: cerrada, el área actual, que se desplaza sola; abierta, todas las áreas. --}}
         <div
             data-menu-column
-            x-on:scroll.passive="fadeColumn()"
-            x-on:resize.window="fadeColumn()"
+            x-on:scroll.passive="fadeColumn($el)"
+            x-on:resize.window="fadeColumn($el)"
             class="isolate col-start-2 row-start-1 min-h-0 [display:var(--column-display)] flex-col overflow-y-auto overscroll-contain pt-3.5 pb-7 [--column-display:flex] [scrollbar-color:var(--color-base-300)_transparent] [scrollbar-width:thin] data-fade:[mask-image:linear-gradient(to_bottom,transparent,black_var(--fade-top),black_calc(100%_-_var(--fade-bottom)),transparent)] max-desktop:[--column-display:none] in-data-[menu=open]:contents"
         >
             @foreach ($areas as $area)

@@ -96,9 +96,14 @@ const numberFrom = (element, property) => Number(element.style.getPropertyValue(
 const DESKTOP_COLUMNS = 5;
 const TABLET_COLUMNS = 3;
 
-/** Renglón del nombre de la primera área y renglones de una columna: los de MenuGrid. */
-const FIRST_ROW = 3;
-const COLUMN_ROWS = 12;
+/**
+ * Renglón del nombre de la primera área y renglones de una columna: los de MenuGrid, que el menú trae en
+ * data-grid-first-row y data-grid-column-rows para que no haya dos copias de las constantes.
+ */
+const gridRows = (menu) => ({
+    firstRow: Number(menu.dataset.gridFirstRow) || 3,
+    columnRows: Number(menu.dataset.gridColumnRows) || 12,
+});
 
 /**
  * La retícula del menú abierto: el mismo algoritmo que App\Modules\Core\Navigation\MenuGrid::place, para
@@ -107,7 +112,7 @@ const COLUMN_ROWS = 12;
  * `headings` y sus grupos ({ heading, entries }: si se ve su encabezado y cuántas entradas tiene), y da
  * por área { icon, name, groups: [{ heading, entries }] } con { column, row, span } en cada lugar.
  */
-const packMenu = (areas, columns) => {
+const packMenu = (areas, columns, { firstRow, columnRows }) => {
     const units = areas.map((area) => {
         const blocks = area.groups.map((group, index) => [
             ...(group.heading ? [[index, true]] : []),
@@ -123,7 +128,7 @@ const packMenu = (areas, columns) => {
         blocks.forEach((block) => {
             const current = split[split.length - 1];
 
-            if (current.length > 0 && current.length + block.length > COLUMN_ROWS - 1) {
+            if (current.length > 0 && current.length + block.length > columnRows - 1) {
                 split.push([...block]);
             } else {
                 current.push(...block);
@@ -138,11 +143,11 @@ const packMenu = (areas, columns) => {
         return { columns: split, stacks: false };
     });
 
-    const tallest = Math.max(COLUMN_ROWS, ...units.map((unit) => (unit.columns.length === 1 ? unit.columns[0].length + 1 : 0)));
+    const tallest = Math.max(columnRows, ...units.map((unit) => (unit.columns.length === 1 ? unit.columns[0].length + 1 : 0)));
     const cell = (column, row, span = 1) => ({ column, row, span });
-    let top = FIRST_ROW;
+    let top = firstRow;
     let column = 0;
-    let bandBottom = FIRST_ROW;
+    let bandBottom = firstRow;
     let last = null;
 
     return areas.map((area, index) => {
@@ -529,9 +534,7 @@ document.addEventListener('alpine:init', () => {
          * La columna cerrada se desvanece arriba si hay más arriba, y abajo si hay más abajo. Abierta (o
          * en tableta, donde no se ve) no se desvanece.
          */
-        fadeColumn() {
-            const column = document.querySelector('#nexus-menu [data-menu-column]');
-
+        fadeColumn(column = document.querySelector('#nexus-menu [data-menu-column]')) {
             if (!column) {
                 return;
             }
@@ -539,7 +542,14 @@ document.addEventListener('alpine:init', () => {
             const scrolls = !this.menuOpen && column.clientHeight > 0;
             const above = scrolls && column.scrollTop > 4;
             const below = scrolls && column.scrollHeight - column.scrollTop - column.clientHeight > 4;
+            const state = `${above ? 'top' : ''}${below ? 'bottom' : ''}`;
 
+            // Al desplazar llega un evento tras otro: solo se escribe cuando cambia qué orilla se desvanece.
+            if (column.dataset.fadeState === state) {
+                return;
+            }
+
+            column.dataset.fadeState = state;
             column.style.setProperty('--fade-top', above ? `${FADE_TOP_PX}px` : '0px');
             column.style.setProperty('--fade-bottom', below ? `${FADE_BOTTOM_PX}px` : '0px');
             column.toggleAttribute('data-fade', above || below);
@@ -640,12 +650,16 @@ document.addEventListener('alpine:init', () => {
                 }
             });
 
-            menu.querySelector('[data-menu-home]')?.toggleAttribute('hidden', needle !== '');
+            // Inicio no es de ningún área, pero también se busca: «inicio» y Enter llevan a él.
+            const home = menu.querySelector('[data-menu-home]');
+            const homeMatches = needle === '' || normalize(home?.getAttribute('aria-label') ?? '').includes(needle);
+
+            home?.toggleAttribute('hidden', !homeMatches);
 
             const empty = menu.querySelector('[data-menu-empty]');
 
             if (empty) {
-                empty.hidden = areas.length > 0;
+                empty.hidden = areas.length > 0 || (home !== null && homeMatches);
             }
 
             this.placeMenu(areas);
@@ -657,8 +671,9 @@ document.addEventListener('alpine:init', () => {
                 headings,
                 groups: groups.map(({ heading, entries }) => ({ heading: heading !== null, entries: entries.length })),
             }));
-            const wide = packMenu(shape, DESKTOP_COLUMNS);
-            const narrow = packMenu(shape, TABLET_COLUMNS);
+            const rows = gridRows(document.getElementById('nexus-menu'));
+            const wide = packMenu(shape, DESKTOP_COLUMNS, rows);
+            const narrow = packMenu(shape, TABLET_COLUMNS, rows);
 
             areas.forEach(({ area, icon, groups }, index) => {
                 const name = area.querySelector('[data-menu-flip="name"]');
@@ -691,11 +706,11 @@ document.addEventListener('alpine:init', () => {
             this.filterMenu('');
         },
 
-        /** Enter en el buscador abre la primera entrada que quedó. */
+        /** Enter en el buscador abre lo primero que quedó: Inicio, si coincide, o la primera entrada. */
         openFirstMatch() {
-            const entries = document.querySelectorAll('#nexus-menu [data-menu-entry]');
+            const links = document.querySelectorAll('#nexus-menu [data-menu-home], #nexus-menu [data-menu-entry]');
 
-            [...entries].find((entry) => !entry.closest('[hidden]'))?.click();
+            [...links].find((link) => !link.closest('[hidden]'))?.click();
         },
 
         /** Cierra todo sin animar, antes de que Livewire cambie de página. */

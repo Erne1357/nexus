@@ -149,6 +149,24 @@ it('Ctrl K abre el menú y Enter en el buscador abre la primera entrada que qued
         ->assertNoJavaScriptErrors();
 });
 
+it('Inicio también se busca: «inicio» lo deja a la vista y Enter lleva a él', function () {
+    // A Importaciones por el buscador, como en la prueba de Ctrl K: así Alpine ya está listo al buscar Inicio.
+    signInToShell()
+        ->keys('@hare', 'Control+k')
+        ->type('#nexus-menu-search', 'impor')
+        ->keys('#nexus-menu-search', 'Enter')
+        ->assertPathIs('/imports')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->keys('@hare', 'Control+k')
+        ->assertScript('document.activeElement.id', 'nexus-menu-search')
+        ->type('#nexus-menu-search', 'inicio')
+        ->assertVisible('#nexus-menu [data-menu-home]')
+        ->assertScript("document.querySelector('#nexus-menu [data-menu-empty]').hidden", true)
+        ->keys('#nexus-menu-search', 'Enter')
+        ->assertPathIs('/')
+        ->assertNoJavaScriptErrors();
+});
+
 it('la credencial se abre como tarjeta con el campus y el periodo, y Esc la cierra', function () {
     signInToShell()
         ->assertMissing('select[name="campus"]')

@@ -120,6 +120,7 @@ new class extends Component
         return [
             'home' => ['href' => route('home'), 'current' => $onHome],
             'areas' => $areas,
+            'grid' => ['firstRow' => MenuGrid::FIRST_ROW, 'columnRows' => MenuGrid::COLUMN_ROWS],
         ];
     }
 

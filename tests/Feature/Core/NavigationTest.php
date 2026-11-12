@@ -773,6 +773,20 @@ describe('iconos de área', function () {
         expect(app(RecentPages::class)->last(NavigationArea::Administracion))->toBe('/campus?search=norte');
     });
 
+    it('MN-01: una página anotada en un área de la que su entrada ya salió no se ofrece en esa área', function () {
+        $this->get(route('home'))->assertOk();
+        session()->put('core.recent_pages.academico', ['route' => 'core.campuses', 'uri' => '/campus']);
+
+        expect(app(RecentPages::class)->last(NavigationArea::Academico))->toBeNull();
+    });
+
+    it('lo que se anotó como texto, antes de guardar la ruta, se ignora', function () {
+        $this->get(route('home'))->assertOk();
+        session()->put('core.recent_pages.administracion', '/campus');
+
+        expect(app(RecentPages::class)->last(NavigationArea::Administracion))->toBeNull();
+    });
+
     it('una pantalla hija cuenta como página de su área: la ficha de un alumno, con su pestaña', function () {
         $uri = route('students.show', ['student' => Student::factory()->create(), 'tab' => 'kardex'], false);
         $this->get($uri)->assertOk();
