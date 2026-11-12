@@ -265,6 +265,7 @@ new #[Title('Ficha del docente')] class extends Component
             'grantsAccess' => $record->access?->hasPassword() === false,
             'inviteReason' => $record->access?->hasPassword() === false ? $this->inviteReason($record, Gate::allows('inviteAccess', $teacher)) : null,
             'institutionalDomain' => config('nexus.institutional_email_domain'),
+            'institutionalEmailReason' => $this->showDataModal && Gate::denies('updateInstitutionalEmail', $teacher) ? $this->institutionalEmailReason($teacher) : null,
             'canDeactivate' => Gate::allows('deactivate', $teacher),
             'deactivateReason' => $context->allows(FacultyPermission::TeacherDeactivate)
                 ? 'No te puedes dar de baja a ti mismo.'
@@ -311,13 +312,24 @@ new #[Title('Ficha del docente')] class extends Component
             'hired_on' => ['nullable', 'date_format:Y-m-d'],
         ]);
 
-        $teacher = $updateTeacher->handle($teacher, [
+        $changes = [
             'name' => $data['name'],
             'email' => (string) $data['email'],
-            'institutional_email' => (string) $data['institutional_email'],
             'degree' => (string) $data['degree'],
             'hired_on' => (string) $data['hired_on'],
-        ]);
+        ];
+
+        if (mb_strtolower(trim((string) $data['institutional_email'])) !== (string) $teacher->institutional_email) {
+            if (Gate::denies('updateInstitutionalEmail', $teacher)) {
+                $this->addError('institutional_email', $this->institutionalEmailReason($teacher));
+
+                return;
+            }
+
+            $changes['institutional_email'] = (string) $data['institutional_email'];
+        }
+
+        $teacher = $updateTeacher->handle($teacher, $changes);
 
         $this->success('Datos actualizados', e("{$teacher->rfc} · {$teacher->name}"));
         $this->showDataModal = false;
@@ -870,6 +882,17 @@ new #[Title('Ficha del docente')] class extends Component
         abort_unless($load->term_id === $this->activeTermOrFail($context)->id, 404);
 
         return $load;
+    }
+
+    /**
+     * Por qué no puede cambiar el correo institucional (AC-06): de un docente con otro puesto, solo el admin; si no, solo
+     * el jefe de su departamento y el admin.
+     */
+    private function institutionalEmailReason(Teacher $teacher): string
+    {
+        return Gate::allows('inviteAccess', $teacher)
+            ? 'Tiene otro puesto: su correo institucional solo lo cambia el administrador.'
+            : 'Solo su jefe de departamento o el administrador lo capturan.';
     }
 
     /**

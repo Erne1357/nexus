@@ -4,6 +4,7 @@ namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
+use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Core\Support\DefaultPassword;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -19,17 +20,21 @@ use RuntimeException;
  * nueva deja sin efecto la anterior: su hora siempre es posterior, aunque caigan en el mismo segundo. Quién puede lo
  * deciden las Actions y pantallas que la llaman.
  *
- * Solo a un usuario activo y sin contraseña; si otro usuario ya tiene ese correo (sin importar mayúsculas), no
- * escribe. Sin NEXUS_DEFAULT_PASSWORD falla antes de escribir, porque el correo la lleva. En una transacción bloquea
+ * Solo a un usuario activo, sin contraseña y sin un puesto distinto de docente vigente o por empezar: a los jefes y
+ * demás personal con puesto los habilita el admin a mano (AC-03), así que nadie puede llevar su invitación a otro
+ * buzón. Si otro usuario ya tiene ese correo (sin importar mayúsculas), no escribe. Sin NEXUS_DEFAULT_PASSWORD falla antes de escribir, porque el correo la lleva. En una transacción bloquea
  * al usuario y deja en la bitácora el correo, nunca la contraseña; el correo sale de la cola después del commit.
  * Con `$unlessInvited`, si el usuario ya tiene una invitación vigente no hace nada: se revisa con el usuario
  * bloqueado, así dos corridas a la vez no le mandan dos. Devuelve si la mandó.
  */
 final class SendAccessInvitation
 {
+    public const string STAFF = 'Tiene un puesto además de docente: le da acceso el administrador.';
+
     public function __construct(
         private readonly DefaultPassword $defaultPassword,
         private readonly AccessInvitationLink $link,
+        private readonly RoleAssignmentRules $rules,
     ) {}
 
     /**
@@ -50,6 +55,10 @@ final class SendAccessInvitation
 
             if (! $user->is_active || $user->password !== null) {
                 throw ValidationException::withMessages(['user' => $user->is_active ? 'Ya tiene acceso.' : 'Su usuario está inactivo.']);
+            }
+
+            if ($this->rules->holdsStaffRole($user->getKey())) {
+                throw ValidationException::withMessages(['user' => self::STAFF]);
             }
 
             if (User::query()->whereRaw('lower(email) = ?', [$email])->whereKeyNot($user->getKey())->exists()) {
