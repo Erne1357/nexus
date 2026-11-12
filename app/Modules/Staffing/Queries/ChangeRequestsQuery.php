@@ -27,8 +27,9 @@ use Illuminate\Support\Facades\DB;
  * departamento.
  *
  * Quién ve una solicitud es ChangeRequestPolicy::view en SQL (visible()): quien la pidió; quien tiene ver, decidir o
- * aplicar las de salón sobre el campus y el departamento del grupo (jefes, jefe de proyecto docente, Subdirección), y
- * el coordinador de la carrera dueña del grupo en su campus, solo las de horario (las aplica él). También da los grupos
+ * aplicar las de salón sobre la modalidad y el departamento del grupo (jefes, jefe de proyecto docente, Subdirección;
+ * el campus del nombramiento no limita la lectura), y el coordinador de la carrera dueña del grupo en su modalidad (y
+ * en su campus, si el nombramiento lo tiene; AZ-S17, MS6), solo las de horario (las aplica él). También da los grupos
  * en que el coordinador puede pedir una nueva. Un número constante de consultas.
  */
 final class ChangeRequestsQuery
@@ -151,7 +152,8 @@ final class ChangeRequestsQuery
     public function visible(Actor $context, Builder $query): Builder
     {
         $userId = $context->user()?->getKey();
-        $unit = ['campus' => 'campus_id', 'unit' => 'department_id'];
+        $unit = ['modality' => 'modality_id', 'unit' => 'department_id'];
+        $room = ['modality' => 'modality_id', 'campus' => 'campus_id', 'unit' => 'department_id'];
 
         if ($userId === null) {
             return $query->whereRaw('false');
@@ -161,8 +163,9 @@ final class ChangeRequestsQuery
             ->where('requested_by', $userId)
             ->orWhere(fn (Builder $clause) => $context->constrain($clause->whereRaw('true'), StaffingPermission::ChangeRequestView, $unit))
             ->orWhere(fn (Builder $clause) => $context->constrain($clause->whereRaw('true'), StaffingPermission::ChangeRequestDecide, $unit))
-            ->orWhere(fn (Builder $clause) => $context->constrain($clause->where('kind', ChangeRequestKind::Room), StaffingPermission::ChangeRequestApplyRoom, $unit))
+            ->orWhere(fn (Builder $clause) => $context->constrain($clause->where('kind', ChangeRequestKind::Room), StaffingPermission::ChangeRequestApplyRoom, $room))
             ->orWhere(fn (Builder $clause) => $context->constrain($clause->where('kind', ChangeRequestKind::Schedule), StaffingPermission::ChangeRequestApplySchedule, [
+                'modality' => 'modality_id',
                 'campus' => 'campus_id',
                 'career' => fn (Builder $groups, array $careers) => $groups->whereIn('group_id', Group::query()->select('id')->whereIn('owner_career_id', $careers)),
             ])));
@@ -183,7 +186,7 @@ final class ChangeRequestsQuery
                 ->whereColumn('academic_loads.department_id', 'groups.department_id')
                 ->whereIn('academic_loads.status', [LoadStatus::Staffing->value, LoadStatus::Adjusting->value]));
 
-        return $context->constrain($groups, StaffingPermission::ChangeRequestRequest, ['campus' => 'groups.campus_id', 'career' => 'groups.owner_career_id']);
+        return $context->constrain($groups, StaffingPermission::ChangeRequestRequest, ['modality' => 'groups.modality_id', 'campus' => 'groups.campus_id', 'career' => 'groups.owner_career_id']);
     }
 
     /**
@@ -195,14 +198,16 @@ final class ChangeRequestsQuery
     }
 
     /**
-     * Si ve las solicitudes de todo el departamento en el campus: ver, decidir o aplicar las de salón.
+     * Si ve las solicitudes de todo el departamento en la modalidad del campus: ver, decidir o aplicar las de salón (esta
+     * última, con el campus del nombramiento si lo tiene).
      */
     private function overseesUnit(Actor $context, string $campusId, string $departmentId): bool
     {
-        $target = Target::of(campus: $campusId, unit: $departmentId);
+        $modalityId = Campus::withTrashed()->whereKey($campusId)->value('modality_id');
+        $target = Target::of(modality: $modalityId, unit: $departmentId);
 
         return $context->allows(StaffingPermission::ChangeRequestView, $target)
             || $context->allows(StaffingPermission::ChangeRequestDecide, $target)
-            || $context->allows(StaffingPermission::ChangeRequestApplyRoom, $target);
+            || $context->allows(StaffingPermission::ChangeRequestApplyRoom, Target::of(modality: $modalityId, campus: $campusId, unit: $departmentId));
     }
 }

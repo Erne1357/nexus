@@ -219,7 +219,7 @@ new #[Title('Carga por docente')] class extends Component
         $campus = $this->defaultCampus();
 
         $departments = Department::query()->whereNull('deleted_at')->where('is_active', true)->orderBy('code')->get()
-            ->filter(fn (Department $department): bool => $context->allows(StaffingPermission::TeacherLoadView, Target::of(campus: $campus->getKey(), unit: $department->getKey())))
+            ->filter(fn (Department $department): bool => $context->allows(StaffingPermission::TeacherLoadView, Target::of(modality: $campus->modality_id, unit: $department->getKey())))
             ->values();
 
         $chosen = $this->department === '' ? $departments->first() : $departments->first(fn (Department $department): bool => $department->code === $this->department);
