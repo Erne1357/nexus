@@ -3,7 +3,6 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -46,20 +45,20 @@ function listsStudents(array $controlNumbers): Closure
 function studentsPageAs(User $user, ?Campus $campus = null): Testable
 {
     if ($campus !== null) {
-        session([Actor::ACTIVE_CAMPUS => $campus->id]);
+        onCampusPage($campus);
     }
 
     return Livewire::actingAs($user)->test('students::pages.students');
 }
 
 describe('admin', function () {
-    it('sin campus en la credencial, pide elegir uno', function () {
+    it('sin campus en la página, pide elegir uno', function () {
         studentsPageAs($this->admin)
             ->assertSee('Elige un campus en tu credencial para ver a sus alumnos.')
             ->assertViewHas('students', null);
     });
 
-    it('lista a los alumnos del campus de la credencial, con su estatus, y no los de otro campus', function () {
+    it('lista a los alumnos del campus de la página, con su estatus, y no los de otro campus', function () {
         studentsPageAs($this->admin, $this->campus)
             ->assertViewHas('students', listsStudents(['24111234', '24111241', '24111258']))
             ->assertSee('Daniela Ortiz')
@@ -93,7 +92,7 @@ describe('admin', function () {
             ->assertViewHas('students', fn ($students): bool => $students->total() === 26);
     });
 
-    it('olvida un filtro que no aplica en el campus de la credencial, en lugar de dejar la lista vacía sin decir por qué', function () {
+    it('olvida un filtro que no aplica en el campus de la página, en lugar de dejar la lista vacía sin decir por qué', function () {
         studentsPageAs($this->admin, $this->other)
             ->set('career', $this->ind->id)
             ->assertSet('career', '')
@@ -125,7 +124,7 @@ describe('admin', function () {
 });
 
 describe('coordinador', function () {
-    it('ve solo a los alumnos de su carrera, y su campus es el de la credencial sin elegirlo', function () {
+    it('ve solo a los alumnos de su carrera, y su campus es el único donde trabaja, sin elegirlo', function () {
         studentsPageAs($this->coordinator)
             ->assertViewHas('students', listsStudents(['24111234', '24111241']))
             ->assertDontSee('María Carrillo');

@@ -4,7 +4,6 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -51,9 +50,9 @@ function seedCatalogRow(string $route, string $code): void
         'faculty.teachers' => Teacher::factory()->adscribedTo(Department::factory()->create())->create(['rfc' => $code]),
     };
 
-    // Edificios y salones son de un campus: el admin, que no tiene uno por omisión, elige el de la fila.
+    // Edificios y salones son de un campus: el admin, que trabaja en varios, abre la pantalla en el de la fila (#415).
     if (str_starts_with($route, 'facilities.')) {
-        session([Actor::ACTIVE_CAMPUS => ($route === 'facilities.rooms' ? Room::query() : Building::query())->where('code', $code)->value('campus_id')]);
+        onCampusPage(Campus::query()->find(($route === 'facilities.rooms' ? Room::query() : Building::query())->where('code', $code)->value('campus_id')));
     }
 }
 

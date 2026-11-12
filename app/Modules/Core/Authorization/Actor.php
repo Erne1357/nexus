@@ -12,13 +12,14 @@ use Closure;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use LogicException;
 
 /**
- * La persona en esta petición (ADR-0018, spec §7): sus nombramientos, el campus y el
- * periodo activos y lo que puede hacer. Toda policy (con el trait AuthorizesActor) y toda pantalla filtrada por
- * alcance le preguntan a esta clase.
+ * La persona en esta petición (ADR-0018, spec §7): sus nombramientos, el periodo activo de su credencial y lo que
+ * puede hacer. Toda policy (con el trait AuthorizesActor) y toda pantalla filtrada por alcance le preguntan a esta
+ * clase. La credencial ya no elige campus (#415): lo elige cada pantalla en su URL (WithCampusFilter).
  *
  * Los nombramientos salen del snapshot cacheado (AuthorizationSnapshots): los vigentes hoy que llenan lo que su
  * puesto pide (Role::scopeColumns). Aquí se descartan los de un campus desactivado o borrado, para todo: no cuentan
@@ -63,10 +64,8 @@ use LogicException;
 final class Actor
 {
     /**
-     * Claves de sesión del campus y periodo elegidos en la credencial; las escribe SetActiveContext.
+     * Clave de sesión del periodo elegido en la credencial; la escribe SetActiveContext.
      */
-    public const string ACTIVE_CAMPUS = 'core.active_campus_id';
-
     public const string ACTIVE_TERM = 'core.active_term_id';
 
     /**
@@ -113,6 +112,8 @@ final class Actor
     /**
      * @param  Closure(): mixed  $resolveUser  usuario de esta petición; sin sesión, el contexto
      *                                         activo es siempre el de omisión
+     * @param  (Closure(): mixed)|null  $resolveRequest  la petición en curso, de donde el puente activeCampus() lee
+     *                                                   `?campus=`; sin ella, no lo lee
      */
     public function __construct(
         private readonly Closure $resolveUser,
@@ -120,11 +121,12 @@ final class Actor
         private readonly AuthorizationSnapshots $snapshots,
         private readonly PermissionRegistry $permissions,
         private readonly ?Session $session = null,
+        private readonly ?Closure $resolveRequest = null,
     ) {}
 
     /**
      * Este mismo contexto si `$user` es el autenticado; si no, uno nuevo de `$user`, sin el
-     * campus, el periodo ni el perfil que eligió en su sesión: cuenta todos sus puestos.
+     * periodo ni el perfil que eligió en su sesión ni el campus de la petición: cuenta todos sus puestos.
      */
     public function forUser(User $user): self
     {
@@ -144,8 +146,8 @@ final class Actor
     /**
      * El contexto de esta misma persona actuando con `$role`, sin tocar la sesión: responde lo que respondería esta
      * sesión después de cambiar a ese perfil, para preguntar antes de cambiar (OpenNotification). Sus puestos
-     * efectivos son solo `$role` si lo tiene, y ninguno si no; no tiene campus, periodo ni perfil elegidos en sesión,
-     * así que campuses() son los de ese perfil. Comparte con este los campus activos.
+     * efectivos son solo `$role` si lo tiene, y ninguno si no; no tiene periodo ni perfil elegidos en sesión ni lee el
+     * campus de la petición, así que campuses() son los de ese perfil. Comparte con este los campus activos.
      */
     public function asRole(Role $role): self
     {
@@ -414,10 +416,10 @@ final class Actor
     }
 
     /**
-     * Campus activos donde trabaja con sus puestos efectivos, por código: lo que ofrece el selector de la credencial.
-     * Salen de los nombramientos efectivos; con uno sin campus, todos los activos. Así, con Coordinación activa, un
-     * coordinador de C2 que también es docente de todo el Tec ve solo C2, y con Docente activa, todos. El admin
-     * efectivo, todos los activos. Se recuerdan por perfil activo.
+     * Campus activos donde trabaja con sus puestos efectivos, por código: lo que ofrece el campus de una pantalla
+     * (WithCampusFilter). Salen de los nombramientos efectivos; con uno sin campus, todos los activos. Así, con
+     * Coordinación activa, un coordinador de C2 que también es docente de todo el Tec ve solo C2, y con Docente activa,
+     * todos. El admin efectivo, todos los activos. Se recuerdan por perfil activo.
      *
      * @return Collection<int, Campus>
      */
@@ -447,19 +449,46 @@ final class Actor
     }
 
     /**
-     * El campus elegido si todavía está en campuses(); si no, el único de campuses(), o ninguno.
+     * Puente mientras las pantallas de los demás módulos pasan al campus de la pantalla (#415): el campus que nombra
+     * `?campus=<código>` de la petición, si está en campuses(); si no, el único de campuses(), o ninguno. En una
+     * petición de Livewire, que no trae la consulta de la página, lo lee de su Referer, como Livewire lee `#[Url]`. Los
+     * contextos de forUser() y asRole() no leen la petición. No es alcance: allows() y constrain() no lo usan.
+     *
+     * @deprecated Usa el concern Core\Livewire\Concerns\WithCampusFilter (campusFilter() o requiredCampus()) en la
+     *             pantalla; este puente se borra cuando ninguna lo use.
      */
     public function activeCampus(): ?Campus
     {
         $campuses = $this->campuses();
-        $selected = $this->session?->get(self::ACTIVE_CAMPUS);
+        $code = $this->requestedCampusCode();
 
-        return ($selected === null ? null : $campuses->firstWhere('id', $selected))
+        return ($code === null ? null : $campuses->firstWhere('code', $code))
             ?? ($campuses->count() === 1 ? $campuses->first() : null);
     }
 
     /**
-     * El periodo elegido o, por omisión, el actual (`is_current`). Se recuerda por elección.
+     * El código de `?campus=` de la petición; en una de Livewire, el de la página que la manda (Referer).
+     */
+    private function requestedCampusCode(): ?string
+    {
+        $request = $this->resolveRequest === null ? null : ($this->resolveRequest)();
+
+        if (! $request instanceof Request) {
+            return null;
+        }
+
+        $code = $request->query('campus');
+
+        if ($code === null && $request->hasHeader('X-Livewire')) {
+            parse_str((string) parse_url((string) $request->headers->get('referer'), PHP_URL_QUERY), $query);
+            $code = $query['campus'] ?? null;
+        }
+
+        return is_string($code) && $code !== '' ? $code : null;
+    }
+
+    /**
+     * El periodo elegido en la credencial o, por omisión, el actual (`is_current`). Se recuerda por elección.
      */
     public function activeTerm(): ?Term
     {

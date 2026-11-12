@@ -188,6 +188,87 @@ describe('tablero', function () {
         actingAsRole($jefe, Role::Coordinador);
         reviewPage($jefe)->assertForbidden();
     });
+
+    it('en el primer periodo en Nexus lo dice y no muestra altas ni bajas', function () {
+        $html = reviewPage()->assertSee('Primer periodo en Nexus')->assertDontSee('altas')->html();
+
+        expect(substr_count($html, 'Primer periodo en Nexus'))->toBe(1);
+    });
+
+    it('con la foto de un periodo anterior cuenta las altas y las bajas con su lista', function () {
+        $previous = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-01', 'ends_on' => '2026-12-15']);
+        $gone = Subject::factory()->create(['code' => 'OLD-1', 'name' => 'Materia que se fue', 'department_id' => $this->sis->id]);
+        CatalogReview::factory()->general(Catalog::Subjects)->validated()->create([
+            'term_id' => $previous->id, 'department_id' => $this->sis->id,
+            'snapshot' => [['id' => $this->subject->id, 'code' => 'SCD-1027', 'name' => 'x'], ['id' => $gone->id, 'code' => 'OLD-1', 'name' => 'Materia que se fue']],
+        ]);
+        $gone->update(['is_active' => false]);
+        Subject::factory()->create(['code' => 'NEW-1', 'name' => 'Materia nueva', 'department_id' => $this->sis->id]);
+        $this->term->update(['starts_on' => '2027-01-15', 'ends_on' => '2027-06-10']);
+
+        reviewPage()->assertSeeInOrder(['+1', 'alta', '−1', 'baja'])->assertDontSee('Materia que se fue');
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->set('showRemoved', true)->assertSee('Materia que se fue');
+    });
+
+    it('muestra quién y cuándo validó, y los contadores', function () {
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage()->assertSee('Validó '.$this->jefe->name)->assertSee('1 de 5')->assertSee('Inactivos');
+    });
+
+    it('valida desde la tarjeta con confirmación: cambia el estado y deja bitácora', function () {
+        reviewMarkAll(Catalog::Subjects);
+
+        reviewPage()
+            ->call('confirm', 'validate', 'subjects')
+            ->assertSee('Vas a validar')
+            ->call('confirmed')
+            ->assertHasNoErrors();
+
+        $review = reviewOf(Catalog::Subjects);
+
+        expect($review->status)->toBe(ReviewStatus::Validated)
+            ->and($review->validated_by)->toBe($this->jefe->id)
+            ->and(Activity::query()->where('event', 'validated')->where('subject_id', $review->id)->exists())->toBeTrue();
+    });
+
+    it('reabre una revisión validada y deja bitácora', function () {
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage()->call('confirm', 'reopen', 'subjects')->call('confirmed')->assertHasNoErrors();
+
+        expect(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::InReview)
+            ->and(Activity::query()->where('event', 'reopened')->exists())->toBeTrue();
+    });
+
+    it('CV5: con la carga fuera de borrador, Reabrir queda deshabilitado con su motivo y no reabre', function () {
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+        AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->sis->id, 'status' => LoadStatus::Proposed]);
+
+        reviewPage()
+            ->assertSee('La carga académica de SIS ya salió de borrador en C2.')
+            ->call('confirm', 'reopen', 'subjects')
+            ->assertHasErrors('status')
+            ->assertSee('La carga académica de SIS ya salió de borrador en C2.')
+            ->assertSet('showConfirm', false);
+
+        expect(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::Validated);
+    });
+
+    it('Subdirección y el admin no validan ni reabren, ni llamando los métodos directo', function (string $who) {
+        $user = $who === 'admin' ? User::factory()->admin()->create() : User::factory()->withRole(Role::Subdireccion, [])->create();
+
+        reviewPage($user, ['department' => $this->sis->id])->call('confirm', 'validate', 'subjects')->assertForbidden();
+        reviewPage($user, ['department' => $this->sis->id])->call('confirm', 'reopen', 'subjects')->assertForbidden();
+
+        expect(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::Pending);
+    })->with(['admin', 'subdirección']);
+
+    it('otro jefe no valida el departamento de otro llamando el método directo', function () {
+        $otro = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create();
+
+        reviewPage($otro, ['department' => $this->sis->id])->assertForbidden();
+    });
 });
 
 describe('lista de un catálogo', function () {
@@ -703,16 +784,31 @@ describe('periodo anterior por revisión', function () {
 describe('marcas de revisado (CV7)', function () {
     it('CV7: el jefe marca y desmarca un registro desde su fila, y la revisión pasa a en revisión', function () {
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->assertSeeHtml("wire:click=\"toggleReviewed('{$this->subject->id}')\"")
-            ->call('toggleReviewed', $this->subject->id)
+            ->assertSeeHtml("wire:click=\"setReviewed('{$this->subject->id}', true)\"")
+            ->call('setReviewed', $this->subject->id, true)
             ->assertHasNoErrors();
 
         expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeTrue()
             ->and(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::InReview);
 
-        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('toggleReviewed', $this->subject->id)->assertHasNoErrors();
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->assertSeeHtml("wire:click=\"setReviewed('{$this->subject->id}', false)\"")->call('setReviewed', $this->subject->id, false)->assertHasNoErrors();
 
         expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeFalse();
+    });
+
+    it('CV7: un envío repetido o de una pantalla vieja no invierte la marca: pide el estado, no lo alterna', function () {
+        $page = reviewPage($this->jefe, ['catalogo' => 'subjects']);
+
+        $page->call('setReviewed', $this->subject->id, true)->call('setReviewed', $this->subject->id, true);
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('setReviewed', $this->subject->id, true);
+
+        expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->count())->toBe(1)
+            ->and(Activity::query()->where('event', 'reviewed')->count())->toBe(1);
+
+        $page->call('setReviewed', $this->subject->id, false)->call('setReviewed', $this->subject->id, false);
+
+        expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeFalse()
+            ->and(Activity::query()->where('event', 'unreviewed')->count())->toBe(1);
     });
 
     it('CV7: marca juntos los registros elegidos y limpia la selección', function () {
@@ -736,7 +832,7 @@ describe('marcas de revisado (CV7)', function () {
             ->set('selected', [$this->subject->id, $foreign->id])
             ->call('markSelected')
             ->assertHasErrors('record');
-        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('toggleReviewed', $foreign->id)->assertNotFound();
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])->call('setReviewed', $foreign->id, true)->assertNotFound();
 
         expect(CatalogReviewMark::count())->toBe(0);
     });
@@ -776,8 +872,8 @@ describe('marcas de revisado (CV7)', function () {
         reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
 
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
-            ->assertDontSeeHtml("wire:click=\"toggleReviewed('{$this->subject->id}')\"")
-            ->call('toggleReviewed', $this->subject->id)
+            ->assertDontSeeHtml("wire:click=\"setReviewed('{$this->subject->id}'")
+            ->call('setReviewed', $this->subject->id, true)
             ->assertHasErrors('status');
     });
 
@@ -790,7 +886,7 @@ describe('marcas de revisado (CV7)', function () {
 
         $page = reviewPage($this->jefe, ['catalogo' => 'subjects']);
         $this->actingAs($user);
-        $page->call('toggleReviewed', $this->subject->id)->assertForbidden();
+        $page->call('setReviewed', $this->subject->id, true)->assertForbidden();
 
         $page = reviewPage($this->jefe, ['catalogo' => 'subjects'])->set('selected', [$this->subject->id]);
         $this->actingAs($user);
@@ -802,7 +898,7 @@ describe('marcas de revisado (CV7)', function () {
     it('CV7: en salones, el jefe marca los de su departamento de cualquier campus', function () {
         $room = Room::factory()->for(Building::factory()->create(['campus_id' => Campus::factory()->create()->id]))->create(['department_id' => $this->sis->id]);
 
-        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('toggleReviewed', $room->id)->assertHasNoErrors();
+        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('setReviewed', $room->id, true)->assertHasNoErrors();
 
         expect(CatalogReviewMark::query()->where('record_id', $room->id)->exists())->toBeTrue();
     });

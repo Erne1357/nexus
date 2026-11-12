@@ -32,7 +32,7 @@ beforeEach(function () {
  */
 function scopedAssignPage(User $user, array $query = []): Testable
 {
-    test()->withSession([Actor::ACTIVE_CAMPUS => test()->world->campus->id]);
+    onCampusPage(test()->world->campus);
 
     return Livewire::withQueryParams($query)->actingAs($user)->test('staffing::pages.assign');
 }
@@ -69,7 +69,7 @@ it('el coordinador y el docente no entran', function (Role $role) {
         : User::factory()->withRole($role)->create();
 
     scopedAssignPage($user)->assertForbidden();
-    $this->withSession([Actor::ACTIVE_CAMPUS => $this->world->campus->id])->actingAs($user)->get(route('staffing.assign'))->assertForbidden();
+    $this->actingAs($user)->get(route('staffing.assign', ['campus' => $this->world->campus->code]))->assertForbidden();
 })->with([
     'coordinador' => [Role::Coordinador],
     'docente' => [Role::Docente],
