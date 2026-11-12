@@ -5,6 +5,7 @@ namespace App\Modules\Faculty\Actions;
 use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
@@ -15,6 +16,10 @@ use RuntimeException;
  * los habilita el admin); si no, una ValidationException sobre `access` con el motivo, sin escribir. Con
  * `$unlessInvited`, a quien ya tiene una invitación vigente no se le manda otra. Devuelve si la mandó. Quién puede lo
  * decide TeacherPolicy (`inviteAccess`) o quien la llama.
+ *
+ * En una transacción vuelve a leer al docente con bloqueo y después SendAccessInvitation bloquea a su usuario, en el
+ * mismo orden que UpdateTeacher: la invitación va al correo que el docente tiene en la base, aunque `$teacher` llegue
+ * viejo o alguien lo esté cambiando.
  */
 final class InviteTeacherAccess
 {
@@ -28,25 +33,24 @@ final class InviteTeacherAccess
      */
     public function handle(Teacher $teacher, ?User $actor = null, bool $unlessInvited = false): bool
     {
-        $user = match (true) {
-            $teacher->user_id === null => null,
-            $teacher->relationLoaded('user') => $teacher->user,
-            default => $teacher->user()->first(),
-        };
+        return DB::transaction(function () use ($teacher, $actor, $unlessInvited): bool {
+            $locked = Teacher::withTrashed()->lockForUpdate()->findOrFail($teacher->getKey());
+            $user = $locked->user_id === null ? null : $locked->user()->first();
 
-        $reason = match (true) {
-            ! $teacher->is_active || $teacher->trashed() => 'El docente está inactivo.',
-            $user === null => 'El docente no tiene usuario.',
-            $user->password !== null => 'Ya tiene acceso.',
-            $teacher->institutional_email === null => 'Falta su correo institucional.',
-            default => null,
-        };
+            $reason = match (true) {
+                ! $locked->is_active || $locked->trashed() => 'El docente está inactivo.',
+                $user === null => 'El docente no tiene usuario.',
+                $user->password !== null => 'Ya tiene acceso.',
+                $locked->institutional_email === null => 'Falta su correo institucional.',
+                default => null,
+            };
 
-        if ($reason !== null) {
-            throw ValidationException::withMessages(['access' => $reason]);
-        }
+            if ($reason !== null) {
+                throw ValidationException::withMessages(['access' => $reason]);
+            }
 
-        return $this->sendAccessInvitation->handle($user, $teacher->institutional_email, $actor, $unlessInvited);
+            return $this->sendAccessInvitation->handle($user, $locked->institutional_email, $actor, $unlessInvited);
+        });
     }
 
     /**

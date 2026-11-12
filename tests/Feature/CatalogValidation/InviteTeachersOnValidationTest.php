@@ -8,10 +8,12 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Faculty\Actions\AddAdscription;
+use App\Modules\Faculty\Actions\InviteTeacherAccess;
 use App\Modules\Faculty\Actions\SetTeacherActive;
 use App\Modules\Faculty\Actions\SyncTeacherAccess;
 use App\Modules\Faculty\Actions\UpdateTeacher;
@@ -72,7 +74,7 @@ function invitedEmails(): array
     return $emails;
 }
 
-it('AC-09: validar la revisión de docentes invita a los activos del departamento sin acceso ni invitación vigente, con correo institucional', function () {
+it('AC-09: validar la revisión de docentes invita a los activos del departamento sin acceso ni invitación vigente, con correo institucional y sin otro puesto (AC-07)', function () {
     teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
     teacherWithoutAccess($this->sc, 'BBBB800101BB1', null);
     teacherWithoutAccess($this->sc, 'CCCC800101CC1', 'cora@cdjuarez.tecnm.mx', ['password' => 'otra-clave-123']);
@@ -80,6 +82,8 @@ it('AC-09: validar la revisión de docentes invita a los activos del departament
     teacherWithoutAccess($this->cb, 'EEEE800101EE1', 'eli@cdjuarez.tecnm.mx');
     teacherWithoutAccess($this->sc, 'FFFF800101FF1', 'fer@cdjuarez.tecnm.mx', ['access_invited_at' => now()->subDays(2)]);
     teacherWithoutAccess($this->sc, 'GGGG800101GG1', 'gil@cdjuarez.tecnm.mx', ['access_invited_at' => now()->subDays(8)]);
+    $head = teacherWithoutAccess($this->sc, 'HHHH800101HH1', 'hugo@cdjuarez.tecnm.mx');
+    RoleAssignment::factory()->for($head->user)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => Department::factory()->create()->id, 'valid_from' => today()->addMonth()->toDateString()]);
 
     app(ValidateReview::class)->handle($this->review, $this->jefe);
 
@@ -88,7 +92,8 @@ it('AC-09: validar la revisión de docentes invita a los activos del departament
     expect(invitedEmails())->toBe(['ana@cdjuarez.tecnm.mx', 'gil@cdjuarez.tecnm.mx'])
         ->and($log->subject->is($this->review))->toBeTrue()
         ->and($log->causer_id)->toBe($this->jefe->id)
-        ->and($log->properties['invited'])->toBe(2);
+        ->and($log->properties['invited'])->toBe(2)
+        ->and($log->properties['failed'])->toBe([]);
 });
 
 it('AC-09: validar otro catálogo no invita a nadie', function () {
@@ -173,6 +178,16 @@ it('AC-09: al docente que recibe su usuario después de validar lo invita, a nom
         ->and(Activity::where('event', 'access-invited')->sole()->causer_id)->toBe($this->jefe->id);
 });
 
+it('AC-07: la invitación va al correo que tiene el docente en la base, aunque el modelo que llega sea viejo', function () {
+    $teacher = teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
+    $stale = Teacher::query()->find($teacher->id);
+    $teacher->update(['institutional_email' => 'ana.nueva@cdjuarez.tecnm.mx']);
+
+    app(InviteTeacherAccess::class)->handle($stale);
+
+    expect(invitedEmails())->toBe(['ana.nueva@cdjuarez.tecnm.mx']);
+});
+
 it('AC-09: un periodo ya terminado no cuenta para invitar después', function () {
     $this->term->update(['starts_on' => today()->subYear()->toDateString(), 'ends_on' => today()->subDay()->toDateString()]);
     $teacher = teacherWithoutAccess($this->sc, 'AAAA800101AA1', null);
@@ -194,7 +209,7 @@ it('AC-09: cambiar el correo de un docente ya invitado no le manda dos invitacio
     expect(invitedEmails())->toBe(['ana.p@cdjuarez.tecnm.mx', 'ana@cdjuarez.tecnm.mx']);
 });
 
-it('AC-09: antes de validar, el aviso dice cuántos docentes activos sin acceso no tienen correo institucional y cuántos no tienen usuario activo', function () {
+it('AC-09: antes de validar, el aviso dice cuántos docentes activos sin acceso no tienen correo institucional y cuántos le tocan al administrador', function () {
     teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
     teacherWithoutAccess($this->sc, 'BBBB800101BB1', null);
     teacherWithoutAccess($this->sc, 'CCCC800101CC1', null);
@@ -202,13 +217,15 @@ it('AC-09: antes de validar, el aviso dice cuántos docentes activos sin acceso 
     teacherWithoutAccess($this->sc, 'EEEE800101EE1', null)->update(['is_active' => false]);
     teacherWithoutAccess($this->sc, 'FFFF800101FF1', 'fer@cdjuarez.tecnm.mx', ['is_active' => false]);
     Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'GGGG800101GG1', 'institutional_email' => 'gil@cdjuarez.tecnm.mx']);
+    $head = teacherWithoutAccess($this->sc, 'HHHH800101HH1', 'hugo@cdjuarez.tecnm.mx');
+    RoleAssignment::factory()->for($head->user)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => Department::factory()->create()->id, 'valid_from' => today()->toDateString()]);
 
     Livewire::withQueryParams(['department' => $this->sc->id])
         ->actingAs($this->jefe)
         ->test('catalog-validation::pages.review')
         ->call('confirm', 'validate', 'teachers')
         ->assertSeeText('2 docentes activos sin correo institucional no recibirán su acceso.')
-        ->assertSeeText('2 docentes activos no tienen un usuario activo y no recibirán su acceso; lo resuelve el administrador.');
+        ->assertSeeText('3 docentes activos no recibirán su invitación porque no tienen un usuario activo o tienen otro puesto: les da acceso el administrador.');
 });
 
 it('AC-09: con todos los correos capturados, el aviso no sale', function () {
@@ -219,7 +236,7 @@ it('AC-09: con todos los correos capturados, el aviso no sale', function () {
         ->test('catalog-validation::pages.review')
         ->call('confirm', 'validate', 'teachers')
         ->assertDontSeeText('sin correo institucional')
-        ->assertDontSeeText('usuario activo');
+        ->assertDontSeeText('les da acceso el administrador');
 });
 
 it('AC-09: una invitación ya enviada al validar no se repite al reenviar el mismo correo', function () {
