@@ -5,14 +5,13 @@ namespace App\Modules\AcademicLoad\Listeners;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 
 /**
  * Veta reabrir una revisión de catálogo validada si alguna carga del departamento en el periodo ya salió de
- * borrador (CV5, confirmado el 2 de noviembre de 2026; reglas-de-negocio.md, "Validación de catálogos"): en
- * cualquier campus si la revisión es general, en el campus de la revisión si son salones. «La carga académica
- * de SIS ya salió de borrador en C1 y C2.»
+ * borrador en cualquier campus (CV5, confirmado el 2 de noviembre de 2026; reglas-de-negocio.md, "Validación de
+ * catálogos"), también la de salones, que es una para todos los campus (decisión 6, confirmada el 12 de noviembre de
+ * 2026). «La carga académica de SIS ya salió de borrador en C1 y C2.»
  *
  * Corre dentro de la transacción de ReopenReview, que ya bloqueó la revisión con FOR UPDATE. ProposeLoad lee
  * las revisiones validadas con FOR SHARE (CatalogsValidated, HC-14), así que las dos operaciones se
@@ -30,7 +29,6 @@ final class BlockReviewReopeningAfterDraft
             ->where('academic_loads.term_id', $review->term_id)
             ->where('academic_loads.department_id', $review->department_id)
             ->where('academic_loads.status', '!=', LoadStatus::Draft)
-            ->unless($review->catalog->isGeneral(), fn (Builder $query) => $query->where('academic_loads.campus_id', $review->campus_id))
             ->orderBy('campuses.code')
             ->pluck('campuses.code')
             ->all();

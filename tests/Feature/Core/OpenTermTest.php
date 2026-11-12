@@ -181,8 +181,7 @@ describe('con los módulos que lo escuchan (AcademicLoad y CatalogValidation)', 
 
         expect($loads->map(fn (AcademicLoad $load): string => $load->department->code)->sort()->values()->all())->toBe(['D1', 'D2', 'D3'])
             ->and($loads->every(fn (AcademicLoad $load): bool => $load->campus_id === $this->c2->id && $load->status === LoadStatus::Draft))->toBeTrue()
-            ->and($reviews->where('campus_id', null)->count())->toBe(12)
-            ->and($reviews->where('catalog', Catalog::Rooms)->pluck('campus_id')->unique()->all())->toBe([$this->c2->id])
+            ->and($reviews->where('campus_id', null)->count())->toBe(15)
             ->and($reviews->pluck('department.code')->unique()->sort()->values()->all())->toBe(['D1', 'D2', 'D3'])
             ->and(Activity::sole()->properties['report'])->toBe(['15 revisiones de catálogo nuevas', '3 cargas académicas nuevas']);
     });
@@ -202,14 +201,14 @@ describe('con los módulos que lo escuchan (AcademicLoad y CatalogValidation)', 
         expect(openTerm($this->term, $this->c2))->toBe(['5 revisiones de catálogo nuevas', '1 carga académica nueva']);
     });
 
-    it('abrir después en C1 crea las cargas y los salones de C1, sin repetir las revisiones generales', function () {
+    it('abrir después en C1 crea sus cargas sin repetir revisiones: la de salones es una para todos los campus', function () {
         openTerm($this->term, $this->c2);
         $c1 = Campus::factory()->create(['code' => 'C1']);
 
-        expect(openTerm($this->term, $c1))->toBe(['3 revisiones de catálogo nuevas', '3 cargas académicas nuevas'])
+        expect(openTerm($this->term, $c1))->toBe(['3 cargas académicas nuevas'])
             ->and(AcademicLoad::query()->where('campus_id', $c1->id)->count())->toBe(3)
-            ->and(CatalogReview::query()->where('campus_id', $c1->id)->where('catalog', Catalog::Rooms)->count())->toBe(3)
-            ->and(CatalogReview::query()->whereNull('campus_id')->count())->toBe(12);
+            ->and(CatalogReview::query()->where('catalog', Catalog::Rooms)->count())->toBe(3)
+            ->and(CatalogReview::count())->toBe(15);
     });
 
     it('en un campus cuyo perfil no usa salones no crea revisiones de salones', function () {

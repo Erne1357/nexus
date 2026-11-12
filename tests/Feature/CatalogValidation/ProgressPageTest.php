@@ -10,10 +10,12 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
@@ -70,10 +72,10 @@ describe('quién entra', function () {
         progressPage($who === 'admin' ? $this->admin : $this->subdireccion)
             ->assertOk()
             ->assertSee('Avance de validación')
-            ->assertSee('0 de 12')
+            ->assertSee('0 de 10')
             ->assertSee('Sistemas y Computación')
             ->assertSee('Dra. Ana Soto')
-            ->assertSee('Salones')->assertSee('Campus I')->assertSee('Campus II')
+            ->assertSee('Salones')
             ->assertSee('Total del Tec');
     })->with(['admin', 'subdirección']);
 
@@ -111,31 +113,22 @@ describe('quién entra', function () {
 });
 
 describe('salones en una sola columna', function () {
-    it('con dos campus abiertos hay una columna «Salones» con una insignia por campus', function () {
+    it('una columna «Salones» con la revisión de salones del departamento, una para todos los campus (decisión 6)', function () {
         $html = progressPage()->html();
 
         expect(substr_count($html, 'data-testid="column-rooms"'))->toBe(1)
-            ->and($html)->toContain('data-testid="cell-SIS-rooms:'.$this->c1->id.'"')
-            ->and($html)->toContain('data-testid="cell-SIS-rooms:'.$this->c2->id.'"')
-            ->and($html)->toContain('title="Campus I: Pendiente"');
+            ->and(substr_count($html, 'data-testid="cell-SIS-rooms"'))->toBe(1)
+            ->and($html)->not->toContain('room-badge-');
     });
 
-    it('con un campus filtrado la columna lleva una sola insignia', function () {
-        $html = progressPage()->set('campus', $this->c1->id)->html();
-
-        expect(substr_count($html, 'data-testid="column-rooms"'))->toBe(1)
-            ->and($html)->toContain('data-testid="cell-SIS-rooms:'.$this->c1->id.'"')
-            ->and($html)->not->toContain('data-testid="cell-SIS-rooms:'.$this->c2->id.'"');
+    it('con un campus filtrado la columna sigue siendo la misma', function () {
+        expect(substr_count(progressPage()->set('campus', $this->c1->id)->html(), 'data-testid="cell-SIS-rooms"'))->toBe(1);
     });
 
-    it('el total de Salones cuenta por campus', function () {
-        CatalogReview::query()->where('campus_id', $this->c1->id)->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+    it('el total de Salones cuenta los departamentos', function () {
+        CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
 
-        $html = progressPage()->html();
-
-        expect($html)->toContain('data-testid="total-rooms:'.$this->c1->id.'"')
-            ->and($html)->toContain('data-testid="total-rooms:'.$this->c2->id.'"');
-        progressPage()->assertSeeInOrder(['C1', '1 de 2', 'C2', '0 de 2']);
+        expect(progressPage()->html())->toMatch('/data-testid="total-rooms".*?1 de 2/s');
     });
 
     it('trae una leyenda de símbolos debajo de la matriz', function () {
@@ -144,10 +137,6 @@ describe('salones en una sola columna', function () {
 });
 
 describe('accesibilidad y renglones', function () {
-    it('la mini insignia de Salones dice su estado en texto, sin depender del tooltip', function () {
-        expect(progressPage()->html())->toMatch('/room-badge-C1.*?sr-only[^>]*>, pendiente/s');
-    });
-
     it('en el celular la fecha del último cambio va visible en los catálogos que faltan', function () {
         CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
 
@@ -191,17 +180,32 @@ describe('recordar a todos', function () {
 });
 
 describe('conteos', function () {
+    it('CV7: cada catálogo sin validar dice cuántos registros van revisados, también Salones', function () {
+        $subject = Subject::factory()->create(['department_id' => $this->sis->id]);
+        Subject::factory()->create(['department_id' => $this->sis->id]);
+        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Subjects)->sole();
+        CatalogReviewMark::factory()->for($review, 'review')->on($subject)->create();
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['department_id' => $this->sis->id]);
+
+        progressPage()
+            ->assertSeeHtml('1/2<span class="sr-only"> revisados</span>')
+            ->assertSeeHtml('0/1<span class="sr-only"> revisados</span>')
+            ->assertSee('Pendiente · 0 de 1 revisados');
+
+        expect($room->department_id)->toBe($this->sis->id);
+    });
+
     it('cuenta las validadas y en revisión del periodo activo, y las observaciones abiertas', function () {
-        CatalogReview::query()->where('department_id', $this->sis->id)->whereNull('campus_id')->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+        CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', '!=', Catalog::Rooms)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
         CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
         progressMakeFlag($this->sis);
 
         progressPage()
-            ->assertSee('4 de 12')
+            ->assertSee('4 de 10')
             ->assertSee('1 en revisión')
-            ->assertSee('7 pendientes')
+            ->assertSee('5 pendientes')
             ->assertSeeInOrder(['Observaciones abiertas', '1', 'en 1 departamento'])
-            ->assertSee('4 de 6');
+            ->assertSee('4 de 5');
     });
 
     it('muestra la ventana de validación de catálogos con los días que quedan, y nada si no existe', function () {
@@ -229,8 +233,10 @@ describe('conteos', function () {
 });
 
 describe('filtros', function () {
-    it('filtra por campus: solo sus salones', function () {
-        progressPage()->set('campus', $this->c2->id)->assertSee('0 de 10')->assertDontSee('0 de 12');
+    it('filtra por campus: un campus sin salones no cuenta la de salones', function () {
+        $this->c1->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+
+        progressPage()->set('campus', $this->c1->id)->assertSee('0 de 8')->assertDontSee('0 de 10');
     });
 
     it('filtra por estado y por búsqueda de departamento o jefe', function () {
@@ -318,7 +324,7 @@ describe('drawer', function () {
     it('un salón sin nombre se muestra con su clave y no como un registro que ya no está', function () {
         $building = Building::factory()->create(['campus_id' => $this->c2->id]);
         $room = Room::factory()->create(['building_id' => $building->id, 'code' => 'NEE1', 'name' => null, 'department_id' => $this->sis->id]);
-        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->where('campus_id', $this->c2->id)->sole();
+        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->sole();
         CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar la clave.', 'flagged_by' => $this->jefeSis->id]);
 
         progressPage()->call('open', $this->sis->id)->assertSee('NEE1')->assertDontSee('Registro ya no disponible');
@@ -342,23 +348,18 @@ describe('drawer', function () {
             ->and($html)->not->toContain('Sin abrir');
     });
 
-    it('agrupa por revisión: los salones de cada campus van en su propio grupo con el campus en el título', function () {
-        $reviews = [];
+    it('agrupa por revisión: los salones de todos los campus van en un solo grupo', function () {
+        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->sole();
 
         foreach ([$this->c1, $this->c2] as $i => $campus) {
-            $building = Building::factory()->create(['campus_id' => $campus->id]);
-            $room = Room::factory()->create(['building_id' => $building->id, 'code' => 'SAL'.$i, 'department_id' => $this->sis->id]);
-            $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->where('campus_id', $campus->id)->sole();
+            $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $campus->id])->id, 'code' => 'SAL'.$i, 'department_id' => $this->sis->id]);
             CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar.', 'flagged_by' => $this->jefeSis->id]);
-            $reviews[$campus->code] = $review;
         }
 
         $html = progressPage()->call('open', $this->sis->id)->html();
 
-        expect($html)->toContain('data-testid="drawer-review-flags-'.$reviews['C1']->id.'"')
-            ->and($html)->toContain('data-testid="drawer-review-flags-'.$reviews['C2']->id.'"')
-            ->and(preg_match('/drawer-review-flags-'.$reviews['C1']->id.'.*?Campus I\b/s', $html))->toBe(1)
-            ->and(preg_match('/drawer-review-flags-'.$reviews['C2']->id.'.*?Campus II/s', $html))->toBe(1);
+        expect(substr_count($html, 'data-testid="drawer-review-flags-'))->toBe(1)
+            ->and($html)->toContain('SAL0')->toContain('SAL1');
     });
 
     it('la fecha de validación se ve en el drawer sin tooltip', function () {

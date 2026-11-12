@@ -79,10 +79,11 @@ final class FacultyServiceProvider extends ModuleServiceProvider
             Role::Subdireccion->value => [
                 FacultyPermission::TeacherViewAll,
                 ...$byDepartment,
+                FacultyPermission::TeacherDepartmentRemoveLast,
                 FacultyPermission::TeacherAdscribe,
                 FacultyPermission::TeacherDeactivate,
             ],
-            Role::JefeDepartamento->value => [...$byDepartment, FacultyPermission::TeacherUserInvite],
+            Role::JefeDepartamento->value => [...$byDepartment, FacultyPermission::TeacherDepartmentRemoveLast, FacultyPermission::TeacherUserInvite],
             Role::JefeProyectoDocente->value => $byDepartment,
         ];
     }

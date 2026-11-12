@@ -1,19 +1,20 @@
 {{--
     El drawer de un registro de la lista (catalog-validation::review.list): como el panel de la retícula del plan,
     a la derecha y a pantalla completa en celular. Encabezado con la clave, el estado y el nombre; «Datos» con lo que
-    ata el registro (clave, departamento, carrera, edificio; CV-S3) como texto, nunca como campos deshabilitados, y los
-    campos que el jefe corrige (CV1, CV2); «Estado»; y «Observaciones» del registro con «Marcar como resuelta» y el
-    formulario para poner una (CV4). Los docentes no se editan aquí: solo sus observaciones y el enlace a su ficha.
+    ata el registro (clave, departamento, carrera; CV-S3) como texto, nunca como campos deshabilitados, y los
+    campos que el jefe corrige (CV1, CV2: en un salón, también el edificio, de cualquier campus; CV-S10); «Estado»; y
+    «Observaciones» del registro con «Marcar como resuelta» y el formulario para poner una (CV4). De un docente solo se
+    corrige aquí el correo institucional (AC-06); lo demás, en su ficha.
 
-    `$card` es el de la revisión (review.php) y `$editing`, el registro con sus observaciones, lo bloqueado y sus datos
-    en texto. Sin permiso para corregir, los datos van como lista de texto legible, con las observaciones primero y el
-    motivo una sola vez, en la alerta; `close()` es del x-drawer.
+    `$card` es el de la revisión (review.php) y `$editing`, el registro con sus observaciones, lo bloqueado, sus datos
+    en texto y si se corrige (`canEdit`, `editReason`). Sin permiso para corregir, los datos van como lista de texto
+    legible, con las observaciones primero y el motivo una sola vez, en la alerta; `close()` es del x-drawer.
 --}}
 @php($review = $card['review'])
 @php($record = $editing['record'])
 @php($catalog = $review->catalog)
 @php($isTeacher = $catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers)
-@php($locked = ! $card['canEdit'])
+@php($locked = ! $editing['canEdit'])
 <div class="flex min-h-dvh flex-col" data-testid="record-panel">
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
         <div class="min-w-0 flex-1">
@@ -34,8 +35,8 @@
             @enderror
         @endforeach
 
-        @if ($locked && $card['editReason'] !== null)
-            <x-alert icon="o-lock-closed" class="alert-soft text-sm" :title="$card['editReason']" data-testid="read-only-reason" />
+        @if ($locked && $editing['editReason'] !== null)
+            <x-alert icon="o-lock-closed" class="alert-soft text-sm" :title="$editing['editReason']" data-testid="read-only-reason" />
         @endif
 
         @if ($locked)
@@ -54,6 +55,13 @@
             </dl>
 
             @if ($isTeacher)
+                @if (! $locked)
+                    <form id="review-record-form" wire:submit="save" class="space-y-3">
+                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" data-testid="institutional-email" />
+                    </form>
+                @else
+                    <p class="text-sm"><span class="text-neutral">Correo institucional</span> <span class="font-mono">{{ $record->institutional_email ?? '—' }}</span></p>
+                @endif
                 <p class="text-sm"><a href="{{ route('faculty.teachers.show', $record->id) }}" wire:navigate class="font-medium text-primary underline underline-offset-4" data-testid="teacher-record-link">Abrir la ficha de {{ $record->name }}</a></p>
             @elseif (! $locked)
                 <form id="review-record-form" wire:submit="save" class="space-y-3">
@@ -75,6 +83,7 @@
                             <x-input label="Créditos" name="total_credits" wire:model="total_credits" type="number" min="0" inputmode="numeric" class="font-mono" />
                         </div>
                     @elseif ($catalog === \App\Modules\CatalogValidation\Enums\Catalog::Rooms)
+                        <x-select label="Edificio" name="building_id" wire:model="building_id" :options="$buildings" hint="Uno de otro campus mueve el salón a ese campus." data-testid="room-building" />
                         <div class="grid grid-cols-2 gap-3">
                             <x-select label="Tipo" name="type" wire:model="type" :options="$roomTypes" />
                             <x-input label="Capacidad" name="capacity" wire:model="capacity" type="number" min="1" inputmode="numeric" class="font-mono" />
@@ -107,8 +116,8 @@
 
     <footer class="sticky bottom-0 flex items-center justify-between gap-3 border-t border-base-300 bg-base-100 px-5 py-3">
         <div class="ms-auto flex gap-2">
-            <x-button label="{{ $card['canEdit'] ? 'Cancelar' : 'Cerrar' }}" @click="close()" />
-            @if ($card['canEdit'])
+            <x-button label="{{ $editing['canEdit'] ? 'Cancelar' : 'Cerrar' }}" @click="close()" />
+            @if ($editing['canEdit'])
                 <x-button label="Guardar" type="submit" form="review-record-form" icon="o-check" class="btn-primary" spinner="save" data-testid="save-record" />
             @endif
         </div>

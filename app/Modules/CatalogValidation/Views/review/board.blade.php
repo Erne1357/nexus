@@ -53,8 +53,8 @@
                         <a href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $review->catalog->value]) }}" wire:click.prevent="$set('catalog', '{{ $review->catalog->value }}')" class="after:absolute after:inset-0 focus-visible:outline-none" data-testid="open-{{ $review->catalog->value }}">{{ $review->catalog->label() }}</a>
                     </h2>
                     <p class="mt-1 flex items-center gap-1.5 text-sm text-neutral">
-                        <x-icon :name="$review->catalog->isGeneral() ? 'o-building-library' : 'o-map-pin'" class="h-4 w-4" aria-hidden="true" />
-                        {{ $review->catalog->isGeneral() ? 'General · todo el Tec' : $review->campus?->name }}
+                        <x-icon name="o-building-library" class="h-4 w-4" aria-hidden="true" />
+                        {{ $review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Rooms ? 'Todos los campus' : 'General · todo el Tec' }}
                     </p>
                 </div>
                 <x-core::status-badge :tone="$review->status->tone()" :label="$review->status->label()" />
@@ -62,6 +62,7 @@
 
             @include('catalog-validation::review.who', ['review' => $review])
             @include('catalog-validation::review.counters', ['summary' => $card['summary'], 'firstTerm' => $firstTerm])
+            @include('catalog-validation::review.reviewed-count', ['card' => $card])
 
             @if ($card['readiness'] !== null)
                 @include('catalog-validation::review.readiness', ['counts' => $card['readiness'], 'term' => $term, 'department' => $department])
@@ -74,6 +75,9 @@
             @foreach ($card['reopenVetoes'] as $veto)
                 <p class="relative z-10 text-xs text-neutral" data-testid="reopen-veto-{{ $review->catalog->value }}">{{ $veto }}</p>
             @endforeach
+            @if ($card['canValidate'] && $card['validateReason'] !== null && $review->status !== \App\Modules\CatalogValidation\Enums\ReviewStatus::Validated)
+                <p class="relative z-10 text-xs text-neutral" data-testid="validate-reason-{{ $review->catalog->value }}">{{ $card['validateReason'] }}</p>
+            @endif
         </article>
     @endforeach
 </div>

@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
@@ -85,7 +84,7 @@ it('AC-09: validar la revisión de docentes invita a los activos del departament
     $head = teacherWithoutAccess($this->sc, 'HHHH800101HH1', 'hugo@cdjuarez.tecnm.mx');
     RoleAssignment::factory()->for($head->user)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => Department::factory()->create()->id, 'valid_from' => today()->addMonth()->toDateString()]);
 
-    app(ValidateReview::class)->handle($this->review, $this->jefe);
+    validateAllReviewed($this->review, $this->jefe);
 
     $log = Activity::where('event', 'teachers-invited')->sole();
 
@@ -100,7 +99,7 @@ it('AC-09: validar otro catálogo no invita a nadie', function () {
     teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
     $subjects = CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id]);
 
-    app(ValidateReview::class)->handle($subjects, $this->jefe);
+    validateAllReviewed($subjects, $this->jefe);
 
     Notification::assertNothingSent();
 });
@@ -111,8 +110,8 @@ it('AC-09: un docente en dos departamentos se invita con la primera validación'
     $jefeCb = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
     $other = CatalogReview::factory()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id, 'catalog' => Catalog::Teachers]);
 
-    app(ValidateReview::class)->handle($this->review, $this->jefe);
-    app(ValidateReview::class)->handle($other, $jefeCb);
+    validateAllReviewed($this->review, $this->jefe);
+    validateAllReviewed($other, $jefeCb);
 
     Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
 });
@@ -122,7 +121,7 @@ it('AC-09: si una invitación falla, sigue con los demás y la falla queda en la
     teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
     teacherWithoutAccess($this->sc, 'BBBB800101BB1', 'beto@cdjuarez.tecnm.mx');
 
-    app(ValidateReview::class)->handle($this->review, $this->jefe);
+    validateAllReviewed($this->review, $this->jefe);
 
     $log = Activity::where('event', 'teachers-invited')->sole();
 
@@ -139,7 +138,7 @@ it('AC-09: capturar el correo institucional después de validar manda la invitac
     Notification::assertNothingSent();
 
     app(UpdateTeacher::class)->handle($teacher, ['institutional_email' => '']);
-    app(ValidateReview::class)->handle($this->review, $this->jefe);
+    validateAllReviewed($this->review, $this->jefe);
     app(UpdateTeacher::class)->handle($teacher, ['institutional_email' => 'ana@cdjuarez.tecnm.mx']);
 
     expect(invitedEmails())->toBe(['ana@cdjuarez.tecnm.mx']);
@@ -147,7 +146,7 @@ it('AC-09: capturar el correo institucional después de validar manda la invitac
 
 it('AC-09: el docente que queda en condiciones después de validar se invita a nombre de quien hizo el cambio', function (Closure $after) {
     $teacher = teacherWithoutAccess($this->cb, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
-    app(ValidateReview::class)->handle($this->review, $this->jefe);
+    validateAllReviewed($this->review, $this->jefe);
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -168,7 +167,7 @@ it('AC-09: el docente que queda en condiciones después de validar se invita a n
 
 it('AC-09: al docente que recibe su usuario después de validar lo invita, a nombre de quien validó', function () {
     $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'AAAA800101AA1', 'institutional_email' => 'ana@cdjuarez.tecnm.mx']);
-    app(ValidateReview::class)->handle($this->review, $this->jefe);
+    validateAllReviewed($this->review, $this->jefe);
 
     Notification::assertNothingSent();
 
@@ -201,7 +200,7 @@ it('AC-09: un periodo ya terminado no cuenta para invitar después', function ()
 
 it('AC-09: cambiar el correo de un docente ya invitado no le manda dos invitaciones', function () {
     $teacher = teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
-    app(ValidateReview::class)->handle($this->review, $this->jefe);
+    validateAllReviewed($this->review, $this->jefe);
     $this->actingAs($this->jefe);
 
     app(UpdateTeacher::class)->handle($teacher, ['institutional_email' => 'ana.p@cdjuarez.tecnm.mx']);
@@ -219,6 +218,7 @@ it('AC-09: antes de validar, el aviso dice cuántos docentes activos sin acceso 
     Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'GGGG800101GG1', 'institutional_email' => 'gil@cdjuarez.tecnm.mx']);
     $head = teacherWithoutAccess($this->sc, 'HHHH800101HH1', 'hugo@cdjuarez.tecnm.mx');
     RoleAssignment::factory()->for($head->user)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => Department::factory()->create()->id, 'valid_from' => today()->toDateString()]);
+    markAllReviewed($this->review, $this->jefe);
 
     Livewire::withQueryParams(['department' => $this->sc->id])
         ->actingAs($this->jefe)
@@ -230,11 +230,13 @@ it('AC-09: antes de validar, el aviso dice cuántos docentes activos sin acceso 
 
 it('AC-09: con todos los correos capturados, el aviso no sale', function () {
     teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
+    markAllReviewed($this->review, $this->jefe);
 
     Livewire::withQueryParams(['department' => $this->sc->id])
         ->actingAs($this->jefe)
         ->test('catalog-validation::pages.review')
         ->call('confirm', 'validate', 'teachers')
+        ->assertSet('showConfirm', true)
         ->assertDontSeeText('sin correo institucional')
         ->assertDontSeeText('les da acceso el administrador');
 });
@@ -243,7 +245,7 @@ it('AC-09: una invitación ya enviada al validar no se repite al reenviar el mis
     $teacher = teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
     app(SendAccessInvitation::class)->handle($teacher->user, 'ana@cdjuarez.tecnm.mx');
 
-    app(ValidateReview::class)->handle($this->review, $this->jefe);
+    validateAllReviewed($this->review, $this->jefe);
 
     Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
     expect(Activity::where('event', 'teachers-invited')->exists())->toBeFalse();
