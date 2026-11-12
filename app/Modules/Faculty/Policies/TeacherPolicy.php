@@ -8,6 +8,7 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\AuthorizesActor;
+use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -32,7 +33,8 @@ use Illuminate\Support\Collection;
  * - Dar de alta (`create`) en un departamento es de quien lo cubre. Adscribir a un docente que ya existe
  *   (`adscribe`) es solo del admin y la Subdirección; a los jefes la pantalla solo les dice que el número ya está
  *   registrado (S9).
- * - Dar de alta usuarios y reiniciar contraseñas, solo el admin. Nombrar jefes ya no es de esta Policy: la ficha usa
+ * - Dar de alta usuarios y reiniciar contraseñas, solo el admin. Reenviar la invitación de acceso, el jefe de un
+ *   departamento del docente y el admin (AC-07). Nombrar jefes ya no es de esta Policy: la ficha usa
  *   RoleAssignmentPolicy de Core (3.P8).
  *
  * Se resuelve con los permisos de FacultyPermission, que el provider concede por puesto:
@@ -172,6 +174,33 @@ final class TeacherPolicy
     public function resetPassword(User $user, Teacher $teacher): bool
     {
         return $this->actor($user)->allows(FacultyPermission::TeacherUserResetPassword);
+    }
+
+    /**
+     * «Reenviar invitación» (AC-07): el jefe de un departamento del docente (`faculty.teacher_user.invite` sobre la
+     * unidad) y el admin (supuesto por confirmar). `view_all` no lo abre: ni la Subdirección ni el jefe de proyecto
+     * docente la reenvían.
+     */
+    public function inviteAccess(User $user, Teacher $teacher): bool
+    {
+        return $this->actor($user)->allows(FacultyPermission::TeacherUserInvite, Target::of(unit: $this->adscriptionsOf($teacher)->pluck('department_id')->unique()->values()->all()));
+    }
+
+    /**
+     * Cambiar el correo institucional (AC-06): como la invitación va a ese correo, solo quien la puede reenviar
+     * (`inviteAccess`). Si el usuario del docente tiene otro puesto vigente o por empezar (un jefe, la Subdirección…),
+     * solo el admin (`faculty.teacher_user.update_staff_email`, que no se concede a nadie), aunque a él no se le invite:
+     * así nadie lleva a su buzón el acceso de un jefe (supuestos por confirmar).
+     */
+    public function updateInstitutionalEmail(User $user, Teacher $teacher): bool
+    {
+        if (! $this->update($user, $teacher) || ! $this->inviteAccess($user, $teacher)) {
+            return false;
+        }
+
+        return $teacher->user_id === null
+            || ! app(RoleAssignmentRules::class)->holdsStaffRole($teacher->user_id)
+            || $this->actor($user)->allows(FacultyPermission::TeacherStaffEmailUpdate);
     }
 
     /**

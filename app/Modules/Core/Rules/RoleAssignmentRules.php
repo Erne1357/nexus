@@ -254,6 +254,34 @@ final class RoleAssignmentRules
     }
 
     /**
+     * Si `$userId` tiene un nombramiento distinto de `docente` vigente o por empezar: es personal con puesto (un jefe,
+     * la Subdirección, un coordinador, el admin). A ellos no se les invita a activar su acceso; se lo da el admin a mano
+     * (AC-03 y AC-07).
+     */
+    public function holdsStaffRole(string $userId): bool
+    {
+        return $this->staffAssignments()->where('user_id', $userId)->exists();
+    }
+
+    /**
+     * Los ids de los usuarios con un puesto distinto de `docente` vigente o por empezar (holdsStaffRole), como subconsulta.
+     *
+     * @return Builder<RoleAssignment>
+     */
+    public function staffUserIds(): Builder
+    {
+        return $this->staffAssignments()->select('user_id');
+    }
+
+    /**
+     * @return Builder<RoleAssignment>
+     */
+    private function staffAssignments(): Builder
+    {
+        return RoleAssignment::query()->where('role', '<>', Role::Docente)->notEnded();
+    }
+
+    /**
      * AZ-S12 y P3 (confirmado el 3 de noviembre de 2026): el primer día sin admin vigente si se desactiva `$user`; nulo
      * si no tiene nombramientos `admin` sin terminar o si, sin ellos, otros admin activos cubren todos los días desde
      * `max(hoy, el menor inicio de los suyos)`. Se llama bajo ADMIN_SEATS_LOCK.

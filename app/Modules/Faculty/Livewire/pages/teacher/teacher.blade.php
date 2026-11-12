@@ -79,6 +79,20 @@
                 @else
                     <x-core::row-menu-item label="Restablecer contraseña" reason="Solo el administrador restablece contraseñas." disabled data-testid="reset-password" />
                 @endif
+                @if ($inviteReason === '')
+                    <x-core::row-menu-item
+                        label="Reenviar invitación"
+                        wire:click="resendInvitation"
+                        x-confirm="Se manda un enlace nuevo a {{ $record->teacher->institutional_email }}; el anterior deja de servir."
+                        data-confirm-title="¿Reenviar la invitación de {{ $record->teacher->rfc }}?"
+                        data-confirm-button="Reenviar"
+                        data-confirm-tone="primary"
+                        spinner="resendInvitation"
+                        data-testid="resend-invitation"
+                    />
+                @elseif ($inviteReason !== null)
+                    <x-core::row-menu-item label="Reenviar invitación" :reason="$inviteReason" disabled data-testid="resend-invitation" />
+                @endif
             </x-core::row-menu>
         </div>
     </div>
@@ -286,6 +300,7 @@
                             ['RFC', '<span class="font-mono">'.e($record->teacher->rfc).'</span>'],
                             ['Nombre', e($record->teacher->name)],
                             ['Correo', $record->teacher->email ? e($record->teacher->email) : '<span class="text-neutral">Sin correo</span>'],
+                            ['Correo institucional', $record->teacher->institutional_email ? e($record->teacher->institutional_email) : '<span class="text-neutral">Sin correo institucional</span>'],
                             ['Grado', $record->teacher->degree ? e($record->teacher->degree->label()) : '<span class="text-neutral">Sin grado</span>'],
                             ['Fecha de ingreso', $record->teacher->hired_on ? e($record->teacher->hired_on->format('d/m/Y')) : '<span class="text-neutral">Sin fecha</span>'],
                         ] as [$term, $value])
@@ -435,13 +450,20 @@
                 <div class="md:col-span-4">
                     <x-input label="Nombre" name="name" wire:model="name" />
                 </div>
-                <div class="md:col-span-4">
+                <div class="md:col-span-3">
                     <x-input label="Correo" name="email" wire:model="email" type="email" />
                 </div>
-                <div class="md:col-span-2">
+                <div class="md:col-span-3">
+                    @if ($institutionalEmailReason === null)
+                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" :hint="'@'.$institutionalDomain.'. A él va su invitación de acceso.'" />
+                    @else
+                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" disabled :hint="$institutionalEmailReason" />
+                    @endif
+                </div>
+                <div class="md:col-span-3">
                     <x-select label="Grado" name="degree" wire:model="degree" :options="$degrees" placeholder="Sin grado" />
                 </div>
-                <div class="md:col-span-2">
+                <div class="md:col-span-3">
                     <x-input label="Fecha de ingreso" name="hired_on" wire:model="hired_on" type="date" />
                 </div>
             </div>
