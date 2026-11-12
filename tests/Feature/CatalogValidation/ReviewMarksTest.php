@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CorrectRecord;
 use App\Modules\CatalogValidation\Actions\MarkRecordsReviewed;
@@ -11,6 +12,7 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewStarted;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
+use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -20,8 +22,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Marca de revisado por registro (CV7, confirmado el 12 de noviembre de 2026): el jefe marca cada registro de la
-| revisión como revisado, varios a la vez, y la revisión solo se valida con todos revisados. Corregir un registro lo
-| marca. La marca es de la revisión (periodo, departamento y catálogo): un registro que entra después nace sin
+| revisión como revisado, varios a la vez, y la revisión solo se valida con todos los activos revisados; los inactivos
+| no hace falta marcarlos. Corregir un registro lo marca. La marca es de la revisión (periodo, departamento y catálogo): un registro que entra después nace sin
 | revisar, reabrir conserva las marcas y una corrección hecha fuera de la revisión no la quita (CV-S7, supuesto por
 | confirmar).
 */
@@ -173,24 +175,29 @@ describe('UnmarkRecordReviewed', function () {
 });
 
 describe('validar con todo revisado', function () {
-    it('CV7: no valida mientras quede un registro sin revisar, y dice cuántos faltan', function () {
-        app(MarkRecordsReviewed::class)->handle($this->review, [$this->first->id], $this->actor);
+    it('CV7: no valida mientras quede un registro activo sin revisar, y dice cuántos faltan', function () {
+        app(MarkRecordsReviewed::class)->handle($this->review, [$this->second->id], $this->actor);
 
         expect(markErrors(fn () => app(ValidateReview::class)->handle($this->review, $this->actor)))
             ->toBe(['status' => ['Falta 1 registro por revisar.']])
             ->and($this->review->fresh()->status)->not->toBe(ReviewStatus::Validated);
     });
 
-    it('CV7: con todos revisados, activos e inactivos, valida', function () {
-        app(MarkRecordsReviewed::class)->handle($this->review, [$this->first->id, $this->second->id], $this->actor);
+    it('CV7: con todos los activos revisados valida; los inactivos no hace falta marcarlos', function () {
+        app(MarkRecordsReviewed::class)->handle($this->review, [$this->first->id], $this->actor);
 
         app(ValidateReview::class)->handle($this->review, $this->actor);
 
         expect($this->review->fresh()->status)->toBe(ReviewStatus::Validated);
     });
 
-    it('CV7: una revisión sin registros se valida', function () {
+    it('CV7: un inactivo también se puede marcar', function () {
+        expect(app(MarkRecordsReviewed::class)->handle($this->review, [$this->second->id], $this->actor))->toBe(1);
+    });
+
+    it('CV7: una revisión sin registros activos se valida', function () {
         $empty = CatalogReview::factory()->general(Catalog::Careers)->create();
+        Career::factory()->inactive()->create(['department_id' => $empty->department_id]);
 
         app(ValidateReview::class)->handle($empty, $this->actor);
 
@@ -206,12 +213,11 @@ describe('validar con todo revisado', function () {
     });
 
     it('CV-S7: la marca de un registro que salió de la revisión no cuenta', function () {
-        app(MarkRecordsReviewed::class)->handle($this->review, [$this->first->id, $this->second->id], $this->actor);
-        $this->second->delete();
+        $gone = Subject::factory()->create(['department_id' => $this->review->department_id]);
+        app(MarkRecordsReviewed::class)->handle($this->review, [$gone->id], $this->actor);
+        $gone->delete();
 
-        app(ValidateReview::class)->handle($this->review, $this->actor);
-
-        expect($this->review->fresh()->status)->toBe(ReviewStatus::Validated);
+        expect(app(CatalogContentsQuery::class)->progress($this->review))->toBe(['reviewed' => 0, 'total' => 1]);
     });
 
     it('CV-S7: reabrir conserva las marcas', function () {
