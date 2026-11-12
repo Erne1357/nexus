@@ -9,7 +9,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
 /**
  * Permisos del módulo Staffing (docs/dominio/reglas-de-negocio.md, "Aprobaciones y permisos"): ver el ranking de un
  * grupo lo hacen los jefes, el jefe de proyecto docente y la Subdirección; asignar el docente, los jefes. La clave es
- * `staffing.<recurso>.<accion>`. El objetivo de los de gestión es un grupo: su campus y su departamento (unidad).
+ * `staffing.<recurso>.<accion>`. El objetivo de los de gestión es un grupo: su modalidad y su departamento (unidad); lo que escribe sobre un grupo
+ * (asignar el docente, pedir o aplicar un cambio) declara además su campus (AZ-S17, MS6; supuesto por confirmar).
  */
 enum StaffingPermission: string implements Permission
 {
@@ -49,8 +50,10 @@ enum StaffingPermission: string implements Permission
         }
 
         return match ($this) {
-            self::ChangeRequestRequest, self::ChangeRequestApplySchedule => [Dimension::Campus, Dimension::Career],
-            default => [Dimension::Campus, Dimension::Unit],
+            self::RankingView, self::TeacherLoadView, self::ChangeRequestView, self::ChangeRequestDecide => [Dimension::Modality, Dimension::Unit],
+            self::TeacherAssign, self::ChangeRequestApplyRoom => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
+            self::ChangeRequestRequest, self::ChangeRequestApplySchedule => [Dimension::Modality, Dimension::Campus, Dimension::Career],
+            self::OfferView, self::MyLoadView, self::ChangeRequestRequestOwn => [],
         };
     }
 
