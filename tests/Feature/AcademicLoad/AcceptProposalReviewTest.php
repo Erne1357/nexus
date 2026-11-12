@@ -141,7 +141,7 @@ it('HC-14: aceptar queda bloqueado sin los catálogos del departamento validados
 
 it('HC-14: también bloquea con la carga ya en propuesta', function () {
     $this->load->update(['status' => LoadStatus::Proposed]);
-    CatalogReview::query()->where('department_id', $this->cb->id)->delete();
+    CatalogReview::query()->where('department_id', $this->cb->id)->update(['status' => 'pending']);
 
     expect(acceptErrors())->toBe(['catalogs' => ['HC-14: faltan por validar los catálogos de Docentes, Materias, Planes de estudio y Carreras.']])
         ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending);
@@ -149,10 +149,11 @@ it('HC-14: también bloquea con la carga ya en propuesta', function () {
 
 it('HC-14: en un campus que usa salones exige también los salones del departamento', function () {
     $this->campus->update(['settings' => CampusProfile::DEFAULTS]);
+    CatalogReview::factory()->rooms()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
 
     expect(acceptErrors())->toBe(['catalogs' => ['HC-14: faltan por validar los catálogos de Salones.']]);
 
-    CatalogReview::factory()->rooms()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
+    CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::Rooms)->update(['status' => 'validated']);
 
     expect(acceptPart()->status)->toBe(ProposalReviewStatus::Accepted);
 });

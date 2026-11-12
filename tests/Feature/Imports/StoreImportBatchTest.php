@@ -148,7 +148,7 @@ it('rechaza sin guardar nada lo que no se puede importar', function (Closure $at
     ],
     'plantilla de campus sin campus' => [
         fn (User $admin) => storeImportBatch($admin, 'test-campus-scoped'),
-        'campus', 'Elige en la barra superior el campus al que pertenece el archivo.',
+        'campus', 'Elige el campus al que pertenece el archivo.',
     ],
     'mapeo de otra plantilla' => [
         fn (User $admin) => storeImportBatch($admin, mapping: ImportMapping::factory()->create(['template' => 'test-campus-scoped'])),

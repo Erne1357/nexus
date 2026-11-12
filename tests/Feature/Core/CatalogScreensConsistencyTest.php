@@ -49,11 +49,6 @@ function seedCatalogRow(string $route, string $code): void
         'facilities.rooms' => Room::factory()->create(['code' => $code]),
         'faculty.teachers' => Teacher::factory()->adscribedTo(Department::factory()->create())->create(['rfc' => $code]),
     };
-
-    // Edificios y salones son de un campus: el admin, que trabaja en varios, abre la pantalla en el de la fila (#415).
-    if (str_starts_with($route, 'facilities.')) {
-        onCampusPage(Campus::query()->find(($route === 'facilities.rooms' ? Room::query() : Building::query())->where('code', $code)->value('campus_id')));
-    }
 }
 
 it('usa la barra de herramientas común: búsqueda, filtros a la izquierda y la acción principal a la derecha, fuera del encabezado', function (string $route, string $code, string $action, string $searchLabel) {
@@ -121,11 +116,6 @@ it('en el menú, lo deshabilitado se queda con su motivo escrito en un segundo r
     }],
     'Carreras: borrar con planes' => ['Carreras', 'Borrar', 'Solo se borra una carrera sin planes de estudio.', function (): string {
         StudyPlan::factory()->create();
-
-        return 'academic.careers';
-    }],
-    'Carreras: ofrecer sin campus activo' => ['Carreras', 'Ofrecer en el campus', 'Elige un campus en tu credencial.', function (): string {
-        Career::factory()->create();
 
         return 'academic.careers';
     }],

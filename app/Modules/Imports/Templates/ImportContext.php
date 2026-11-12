@@ -7,7 +7,7 @@ use App\Modules\Core\Models\User;
 
 /**
  * Lo que una plantilla sabe del lote que procesa: quién lo sube o lo aplica y, para las plantillas
- * de un campus (`requiresCampus()`), el campus del lote, que sale del campus activo de la topbar.
+ * de un campus (`requiresCampus()`), el campus del lote, que el asistente pide en su primer paso.
  */
 final readonly class ImportContext
 {

@@ -1,10 +1,13 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Stage;
@@ -48,6 +51,12 @@ new #[Title('Avance de validación')] class extends Component
 
     public bool $showDrawer = false;
 
+    /** El drawer «Abrir validación» (CV9) y los catálogos que se marcaron para abrir. */
+    public bool $showOpen = false;
+
+    /** @var list<string> */
+    public array $toOpen = [];
+
     /** El departamento del drawer; el navegador no lo puede cambiar. */
     #[Locked]
     public ?string $detailId = null;
@@ -60,16 +69,17 @@ new #[Title('Avance de validación')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(ValidationProgressQuery $progress, TermCalendarQuery $calendar, Actor $context): array
+    public function with(ValidationProgressQuery $progress, TermCalendarQuery $calendar, CatalogReviewQuery $reviews, Actor $context): array
     {
         Gate::authorize('viewProgress', CatalogReview::class);
 
         $term = $context->activeTerm();
         $open = $term === null ? new Collection : $progress->openCampuses($term);
         $campuses = $this->scope($open);
+        $canOpen = Gate::allows('open', CatalogReview::class);
 
         if ($term === null || $open->isEmpty()) {
-            return ['term' => $term, 'open' => $open, 'campuses' => $campuses, 'board' => null, 'window' => null, 'detail' => null];
+            return ['term' => $term, 'open' => $open, 'campuses' => $campuses, 'board' => null, 'window' => null, 'detail' => null, 'canOpen' => $canOpen, 'options' => []];
         }
 
         $board = $progress->board($term, $campuses, $this->search, $this->status);
@@ -81,6 +91,8 @@ new #[Title('Avance de validación')] class extends Component
             'board' => $board,
             'window' => $this->window($calendar, $term, $campuses),
             'detail' => $this->showDrawer && $this->detailId !== null ? $this->detail($progress, $term, $campuses, $board) : null,
+            'canOpen' => $canOpen,
+            'options' => $reviews->openingOptions($term),
         ];
     }
 
@@ -89,6 +101,51 @@ new #[Title('Avance de validación')] class extends Component
         if ($property === 'campus') {
             $this->reset('showDrawer', 'detailId');
         }
+    }
+
+    /**
+     * Abre el drawer «Abrir validación»: solo el admin (CatalogReviewPolicy::open, CV9).
+     */
+    public function startOpening(): void
+    {
+        Gate::authorize('open', CatalogReview::class);
+
+        $this->toOpen = [];
+        $this->showOpen = true;
+    }
+
+    /**
+     * Abre la validación de los catálogos marcados en el periodo activo (OpenCatalogValidation).
+     */
+    public function openValidation(OpenCatalogValidation $open, CatalogReviewQuery $reviews, Actor $context): void
+    {
+        Gate::authorize('open', CatalogReview::class);
+
+        $term = $context->activeTerm() ?? abort(404);
+        $catalogs = array_values(array_filter(array_map(fn (string $value): ?Catalog => Catalog::tryFrom($value), $this->toOpen)));
+
+        if ($catalogs === []) {
+            $this->addError('toOpen', 'Marca al menos un catálogo.');
+
+            return;
+        }
+
+        $created = $open->handle($term, $catalogs, $this->user());
+
+        $this->showOpen = false;
+        $this->toOpen = [];
+        if ($created > 0) {
+            $this->success('Validación abierta', e($term->name).': se avisó a los jefes.');
+
+            return;
+        }
+
+        $chosen = collect($reviews->openingOptions($term))->filter(fn (array $option): bool => in_array($option['catalog'], $catalogs, true));
+        $this->info('No se abrió nada', match (true) {
+            $chosen->every(fn (array $option): bool => $option['open']) => 'Esos catálogos ya estaban abiertos.',
+            $chosen->contains(fn (array $option): bool => $option['blocked'] !== null) => 'Ningún campus abierto en este periodo usa salones.',
+            default => 'No hay departamentos activos a los que abrirles la validación.',
+        });
     }
 
     /**
