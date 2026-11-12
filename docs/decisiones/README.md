@@ -11,8 +11,8 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0005](0005-importacion-por-archivos.md) | Carga inicial por importación de archivos del SII | Aceptada | 2026-10-26 |
 | [0006](0006-cupos-por-carrera.md) | Cupos por carrera en lugar de paralelos | Aceptada | 2026-10-26 |
 | [0007](0007-motor-en-dos-pasos.md) | Motor de horarios: heurística PHP y luego OR-Tools CP-SAT en Python | Aceptada | 2026-10-26 |
-| [0008](0008-cierre-por-departamento.md) | Unidad de cierre = departamento en un campus; visto bueno de Subdirección configurable | Aceptada | 2026-10-26 |
-| [0009](0009-modalidad-como-perfil-de-campus.md) | Modalidad como perfil de flujo del campus | Aceptada | 2026-10-26 |
+| [0008](0008-cierre-por-departamento.md) | Unidad de cierre = departamento en un campus; visto bueno de Subdirección configurable | Aceptada; unidad de cierre actualizada por [0025](0025-modalidad-como-catalogo.md) (departamento × modalidad) | 2026-10-26 |
+| [0009](0009-modalidad-como-perfil-de-campus.md) | Modalidad como perfil de flujo del campus | Reemplazada por [0025](0025-modalidad-como-catalogo.md) | 2026-10-26 |
 | [0010](0010-alcance-y-fecha-de-r1.md) | R1 sin motor de sugerencia, fecha 4 de diciembre de 2026 | Aceptada | 2026-10-26 |
 | [0011](0011-pest-5.md) | Pest 5 (PHPUnit 13) para todas las pruebas; reemplaza la versión de Pest de 0002 | Aceptada | 2026-10-27 |
 | [0012](0012-dependencias-base.md) | Dependencias base de la fundación: activitylog, openspout y Boost | Aceptada | 2026-10-27 |
@@ -28,5 +28,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0022](0022-esquemas-de-postgresql-por-modulo.md) | Un esquema de PostgreSQL por módulo (`core`, `academic`, `scheduling`, …) con `search_path`; `public` para la plomería de Laravel; el SII original en `sii_archivo` y la verificación en `sii_verificacion`; las tablas existentes se mueven al cerrar la fase 4 | Aceptada | 2026-11-10 |
 | [0023](0023-sin-dialogos-nativos-del-navegador.md) | Sin diálogos nativos del navegador (`confirm()`, `alert()`, `prompt()`, `wire:confirm`): modal de MaryUI para lo corto, drawer para lo largo (el preferido); solo queda el aviso de `beforeunload`; el reemplazo va en #374 | Aceptada | 2026-11-10 |
 | [0024](0024-mailpit-para-el-correo-en-desarrollo-y-demo.md) | Mailpit, servicio de `compose.override.yaml`, atrapa todo el correo en desarrollo y en la demo (bandeja en `127.0.0.1:8025`); no es dependencia de la app y producción usa su propio SMTP | Aceptada | 2026-11-11 |
+| [0025](0025-modalidad-como-catalogo.md) | Modalidad como catálogo de Core (`modalities`, con el perfil de flujo `ModalityProfile`) y unidad de la carga; el campus queda como lugar; migración en tres pasos (ampliar, cambiar lectores, contraer) con el puente temporal `campuses.modality_id`; reemplaza a 0009 y a las decisiones de modelado 1 y 4 | Aceptada; supuestos por confirmar (MS1 a MS3) | 2026-11-12 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.

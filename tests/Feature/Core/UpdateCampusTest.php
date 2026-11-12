@@ -203,3 +203,21 @@ it('registra como valor anterior el confirmado en la base, leído con bloqueo de
             'old' => ['name' => 'Campus 2'],
         ]);
 });
+
+it('al cambiar la modalidad cambia también la del catálogo (puente hasta contraer, ADR-0025)', function () {
+    updateCampus($this->campus, ['modality' => Modality::EnLinea]);
+
+    expect($this->campus->fresh()->catalogModality->code)->toBe('ENL');
+});
+
+it('liga a su modalidad del catálogo un campus que no la tenía al guardar otro cambio, sin anotarla en la bitácora', function () {
+    $this->campus->forceFill(['modality_id' => null])->saveQuietly();
+
+    updateCampus($this->campus, ['name' => 'Campus Dos']);
+
+    expect($this->campus->fresh()->catalogModality->code)->toBe('PRES')
+        ->and(Activity::sole()->attribute_changes->toArray())->toBe([
+            'attributes' => ['name' => 'Campus Dos'],
+            'old' => ['name' => 'Campus II'],
+        ]);
+});

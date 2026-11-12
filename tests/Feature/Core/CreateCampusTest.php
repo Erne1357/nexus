@@ -141,3 +141,10 @@ it('avisa con CampusCreated solo después del commit', function () {
 
     expect($heard)->toBe(['C3']);
 });
+
+it('liga el campus a su modalidad del catálogo (puente hasta contraer, ADR-0025)', function (Modality|string $modality, string $code) {
+    expect(newCampus(['modality' => $modality])->fresh()->catalogModality->code)->toBe($code);
+})->with([
+    'presencial' => [Modality::Presencial, 'PRES'],
+    'mixta como texto' => ['mixta', 'EAD'],
+]);

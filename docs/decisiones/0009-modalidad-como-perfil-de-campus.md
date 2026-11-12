@@ -1,6 +1,6 @@
 # ADR-0009 — Modalidad como perfil de flujo del campus
 
-**Estado:** Aceptada · **Fecha:** 2026-10-26
+**Estado:** Reemplazada por [ADR-0025](0025-modalidad-como-catalogo.md) · **Fecha:** 2026-10-26
 
 ## Contexto
 Además de Campus I y II (presencial) existen EAD (mixta), EnLínea y TecNM Virtual, con flujos distintos que aún no se han levantado. La modalidad puede cambiar la mayoría de los pasos.

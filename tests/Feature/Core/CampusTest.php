@@ -57,3 +57,9 @@ it('lee el perfil nuevo en la misma instancia después de cambiar settings', fun
 
     expect($campus->profile->usesRooms)->toBeFalse();
 });
+
+it('la factory liga el campus a su modalidad del catálogo (puente hasta contraer, ADR-0025)', function () {
+    expect(Campus::factory()->create()->catalogModality->code)->toBe('PRES')
+        ->and(Campus::factory()->create(['modality' => Modality::Mixta])->catalogModality->code)->toBe('EAD')
+        ->and(Campus::factory()->create(['modality' => 'virtual_tecnm'])->catalogModality->code)->toBe('TNMV');
+});

@@ -5,6 +5,7 @@ namespace App\Modules\Core\Actions;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Events\CampusCreated;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality as CatalogModality;
 use App\Modules\Core\Rules\CampusRules;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * En una transacción revisa el código, escribe y deja bitácora; si otra sesión guarda el mismo código
  * entre la revisión y el insert, la restricción única de la base responde con el mismo error de
  * código. Después del commit avisa con CampusCreated.
+ *
+ * Liga el campus a su modalidad del catálogo por el puente `modality_id` (ADR-0025; se quita al contraer). El puente no
+ * va a la bitácora: sale de `modality`, que sí va.
  */
 final class CreateCampus
 {
@@ -34,15 +38,17 @@ final class CreateCampus
     {
         $code = $this->rules->normalizeCode($data['code']);
         $settings = $this->rules->profile($data['settings']);
+        $modality = $data['modality'] instanceof Modality ? $data['modality'] : Modality::from($data['modality']);
 
-        return DB::transaction(function () use ($code, $data, $settings): Campus {
+        return DB::transaction(function () use ($code, $data, $settings, $modality): Campus {
             $this->rules->ensureCodeIsFree($code);
 
             try {
                 $campus = Campus::create([
                     'code' => $code,
                     'name' => $data['name'],
-                    'modality' => $data['modality'],
+                    'modality' => $modality,
+                    'modality_id' => CatalogModality::withTrashed()->where('code', $modality->catalogCode())->value('id'),
                     'settings' => $settings,
                     'is_active' => true,
                 ]);

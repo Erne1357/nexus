@@ -5,6 +5,7 @@ namespace App\Modules\Core\Actions;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Events\CampusUpdated;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality as CatalogModality;
 use App\Modules\Core\Rules\CampusRules;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
@@ -24,6 +25,10 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * guardado inválido no estorba: los demás cambios funcionan y cualquier perfil válido lo repara. Si
  * nada cambió, no escribe, no registra ni avisa; si algo cambió, guarda, deja en la bitácora el valor
  * anterior y el nuevo de cada campo y, después del commit, avisa con CampusUpdated.
+ *
+ * Al escribir, deja el puente `modality_id` en la modalidad del catálogo que corresponde a `modality` (ADR-0025; se
+ * quita al contraer), también en un campus que no lo tenía. El puente no cuenta como cambio ni va a la bitácora: sale
+ * de `modality`, que sí va.
  */
 final class UpdateCampus
 {
@@ -64,6 +69,8 @@ final class UpdateCampus
             if ($changed === []) {
                 return $campus;
             }
+
+            $campus->modality_id = CatalogModality::withTrashed()->where('code', $campus->modality->catalogCode())->value('id');
 
             try {
                 $campus->save();
