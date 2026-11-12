@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
-    $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_12_200001_create_modalities_table.php');
+    $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210001_create_modalities_table.php');
     $this->migration->down();
 });
 

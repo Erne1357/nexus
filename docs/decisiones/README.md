@@ -11,7 +11,7 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0005](0005-importacion-por-archivos.md) | Carga inicial por importación de archivos del SII | Aceptada | 2026-10-26 |
 | [0006](0006-cupos-por-carrera.md) | Cupos por carrera en lugar de paralelos | Aceptada | 2026-10-26 |
 | [0007](0007-motor-en-dos-pasos.md) | Motor de horarios: heurística PHP y luego OR-Tools CP-SAT en Python | Aceptada | 2026-10-26 |
-| [0008](0008-cierre-por-departamento.md) | Unidad de cierre = departamento en un campus; visto bueno de Subdirección configurable | Aceptada | 2026-10-26 |
+| [0008](0008-cierre-por-departamento.md) | Unidad de cierre = departamento en un campus; visto bueno de Subdirección configurable | Aceptada; unidad de cierre actualizada por [0025](0025-modalidad-como-catalogo.md) (departamento × modalidad) | 2026-10-26 |
 | [0009](0009-modalidad-como-perfil-de-campus.md) | Modalidad como perfil de flujo del campus | Reemplazada por [0025](0025-modalidad-como-catalogo.md) | 2026-10-26 |
 | [0010](0010-alcance-y-fecha-de-r1.md) | R1 sin motor de sugerencia, fecha 4 de diciembre de 2026 | Aceptada | 2026-10-26 |
 | [0011](0011-pest-5.md) | Pest 5 (PHPUnit 13) para todas las pruebas; reemplaza la versión de Pest de 0002 | Aceptada | 2026-10-27 |

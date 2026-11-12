@@ -1,5 +1,7 @@
 # ADR-0008 — Unidad de cierre = departamento en un campus; visto bueno de Subdirección configurable
 
+> Actualizada por [ADR-0025](0025-modalidad-como-catalogo.md): la unidad de cierre pasa a departamento × modalidad.
+
 **Estado:** Aceptada · **Fecha:** 2026-10-26
 
 ## Contexto
