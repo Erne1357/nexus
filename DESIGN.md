@@ -195,16 +195,20 @@ Fondo `#0a1826`, superficies `#0f2133`, banda `#071a2b`, selección `#26384a`, f
   - selectores de **campus** y **periodo** (los de `core::components.context-switcher`, con `SetActiveContext`);
   - **tema** claro u oscuro;
   - **Cambiar contraseña** y **Cerrar sesión**.
-- **Menú cerrado** de 288 px: franja de iconos de área (64 px, gris polvo) y las secciones del área actual (224 px, blanco). Solo aparecen las áreas con al menos una entrada visible para el usuario.
+- **Menú cerrado** de 288 px, en dos partes:
+  - la **franja** de iconos (64 px, gris polvo), fija: arriba **Inicio** (la casa) con un filete debajo y luego un icono por área;
+  - la **columna** del área actual (224 px, blanco): su nombre, los encabezados de sus grupos si los lleva y sus entradas. Si no cabe, solo ella se desplaza, y se desvanece arriba o abajo donde hay más.
+
+  Solo aparecen las áreas con al menos una entrada visible para el usuario.
 - **Contenido** a la derecha del menú, sobre platino, con un margen de 32 px. Llega hasta 1680 px de ancho; en monitores más anchos queda alineado al menú y el resto es fondo.
 - **Dónde vive:** `resources/views/layouts/app.blade.php` con `core::components.band` (banda y credencial) y `core::components.navigation` (menú); el detalle está en `docs/arquitectura/arquitectura.md`, "Layout (shell)".
 
 ### Responsivo
 | Ancho | Banda | Menú | Tabla |
 |---|---|---|---|
-| ≥ 1200 px (`desktop:`) | Completa; el buscador crece de 260 a 520 px | Iconos + secciones; abierto en 5 columnas (hasta 1480 px) | Todas las columnas |
-| 768–1199 px (`max-desktop:`) | Sin el área en la ruta; credencial con avatar y nombre | Solo iconos (64 px); abierto en 3 columnas, y las áreas de la cuarta en adelante debajo de la más larga | Se ocultan las columnas descriptivas largas; las acciones secundarias quedan como icono con nombre accesible |
-| < 768 px (`max-md:`) | 56 px: liebre, «Nexus», lupa y avatar | Oculto; la liebre lo baja como hoja con buscador y todas las áreas en una columna (renglones de 44 px) | Renglones apilados: clave, nombre y estado; luego el detalle; luego las acciones |
+| ≥ 1200 px (`desktop:`) | Completa; el buscador crece de 260 a 520 px | Franja fija + columna del área actual; abierto en una retícula de 5 columnas (hasta 1480 px) | Todas las columnas |
+| 768–1199 px (`max-desktop:`) | Sin el área en la ruta; credencial con avatar y nombre | Solo la franja (64 px); abierto en una retícula de 3 columnas: el área que ya no cabe baja, un renglón debajo de la más larga | Se ocultan las columnas descriptivas largas; las acciones secundarias quedan como icono con nombre accesible |
+| < 768 px (`max-md:`) | 56 px: liebre, «Nexus», lupa y avatar | Oculto; la liebre lo baja como hoja: el buscador, Inicio y todas las áreas en una columna, cada nombre con su icono, los encabezados de grupo y las entradas (renglones de 44 px) | Renglones apilados: clave, nombre y estado; luego el detalle; luego las acciones |
 
 La captura pesada (editor de horarios, asignación) se diseña para escritorio, pero ninguna pantalla se rompe en celular. Se revisa sin desbordes a 390, 768, 1024, 1440, 1920 y 2560 px. El corte de 1200 px es el breakpoint `desktop` de `resources/css/app.css`; el de 768 px es `md` de Tailwind.
 
@@ -652,18 +656,25 @@ Los de MaryUI: 40 px en barras de herramientas y 44 px en la credencial y en cel
 
 ### Navigation
 - **Entrada de menú:** su nombre, como en la pantalla de referencia; el icono de la entrada no se pinta (lo llevan las áreas). La activa lleva fondo gris polvo, peso 700, el punto rojo y `aria-current="page"`. Las cifras de registros irán a la derecha en Mono cuando haya de dónde salgan; hoy no se muestran.
-- **Áreas:** Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos. Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; una pantalla hija sin entrada propia (la ficha de un alumno, `students.show`) se declara en `childRoutes` de la entrada de su listado, que la ubica con `aria-current="true"` (la página misma lleva `"page"`); si la pantalla no está en el menú, la primera.
-- **Iconos de área:** son enlaces, para ir rápido de un área a otra sin abrir el menú. El de otra área lleva a la última página que visitaste de ella en tu sesión (con su consulta: `/students/<id>?tab=kardex`), o a su primera entrada si no has visitado ninguna; el del área actual, a su primera entrada (la principal). Cuenta como visita cada página completa cuya entrada (o pantalla hija) ves; al cambiar el campus o el periodo se olvidan, porque una ficha de otro campus ya no se abriría. Con el menú cerrado, al pasar el cursor se ve el nombre del área en un tooltip a la derecha. El menú completo lo abren solo la liebre, Ctrl K y el buscador de la banda.
+- **Áreas** (opción B «Áreas y etapas», elegida por el usuario el 12 de noviembre de 2026; MN-01): Mi espacio, Académico, Servicios escolares, Recursos humanos, Recursos financieros y Administración (icono `o-cog-6-tooth`). Cada una con su icono; el orden lo define el enum `NavigationArea` (ADR-0015). El **área actual** es la de la pantalla; una pantalla hija sin entrada propia (la ficha de un alumno, `students.show`) se declara en `childRoutes` de la entrada de su listado, que la ubica con `aria-current="true"` (la página misma lleva `"page"`); si la pantalla no está en el menú, la primera.
+- **Grupos** (`NavigationGroup`): Académico va por etapa del semestre (Validación, Propuesta, Horarios, Asignación, Cierre y publicación) y Administración por propósito (Institución, Catálogos, Datos). Un área muestra el **encabezado** de sus grupos solo si ve al menos dos grupos con nombre y al menos ocho entradas; si no, es una lista plana en el orden de los grupos. El encabezado va en mayúsculas de 11.5 px, peso 500, espaciado 0.09em y gris tenue, como las etiquetas de tabla.
+- **Inicio** no es de ninguna área: es el primer icono de la franja (la casa), con un filete debajo que lo separa de las áreas. Lo ve cualquier usuario activo y en Inicio lleva `aria-current="page"` y el fondo de seleccionado. En Inicio, la columna cerrada muestra la primera área que ve el usuario, pero su icono no se marca como actual.
+- **Iconos de área:** son enlaces, para ir rápido de un área a otra sin abrir el menú. El de otra área lleva a la última página que visitaste de ella en tu sesión (con su consulta: `/students/<id>?tab=kardex`), o a su primera entrada si no has visitado ninguna; el del área actual, a su primera entrada (la principal), y se marca con fondo blanco. Cuenta como visita cada página completa cuya entrada (o pantalla hija) ves; al cambiar el campus o el periodo se olvidan, porque una ficha de otro campus ya no se abriría. Con el menú cerrado, al pasar el cursor se ve el nombre del área en un tooltip a la derecha. El menú completo lo abren solo la liebre, Ctrl K y el buscador de la banda.
 
 ### El menú que se transforma (firma)
 Un solo menú, no dos:
+- **Cerrado:** la franja de iconos se queda fija y solo la columna del área actual se desplaza. Al cargar, la entrada activa queda a la vista (si quedó fuera, la columna la centra), y la columna se desvanece 32 px arriba y 56 px abajo donde hay más.
+- **Abierto,** todo va en una retícula de 5 columnas (3 en tableta) con renglones de 36 px: arriba, Inicio (un cuadro de 50 px con borde) a la izquierda del buscador; debajo, las áreas de izquierda a derecha, cada una con su icono y su nombre subrayado con un filete y, abajo, sus grupos y entradas.
+  - Un área con encabezados ocupa las columnas que necesita, sin partir un grupo, y su nombre las abarca. Una columna lleva hasta doce renglones, contando el del nombre.
+  - Las áreas de una sola columna sin encabezados se apilan, con un renglón libre de por medio, mientras quepan en la columna más alta.
+  - Cuando las columnas se acaban, la siguiente área baja a la izquierda, un renglón debajo de la más larga.
 - **Al abrir** (la liebre, Ctrl K o el buscador de la banda):
   1. el panel se despliega como cortina;
   2. el buscador entra de inmediato, con el cursor;
-  3. los iconos de área viajan a los encabezados de sus columnas y las secciones del área actual a la suya;
-  4. cuando cada icono aterriza, aparecen su nombre y sus secciones.
-- **Al cerrar** (Esc, la liebre o un clic fuera), en un solo tiempo: la cortina se recoge, lo que se queda (los iconos y el área actual) regresa a su lugar junto con ella y lo de las otras áreas se desvanece a la vez, sin salir de la cortina. El foco regresa a la liebre.
-- **El buscador** filtra las entradas por su nombre, sin importar mayúsculas ni acentos; las que quedan suben en su columna, las áreas sin ninguna se ocultan y, si no queda nada, dice «Sin resultados». Enter abre la primera. Por ahora solo busca pantallas del menú, así que dice «Busca una pantalla…».
+  3. Inicio y los iconos de área viajan a su lugar en la retícula y las entradas del área actual a su columna;
+  4. cuando cada icono aterriza, aparecen su nombre, sus encabezados y sus entradas.
+- **Al cerrar** (Esc, la liebre o un clic fuera), en un solo tiempo: la cortina se recoge, lo que se queda (Inicio, los iconos y el área actual) regresa a su lugar junto con ella y lo de las otras áreas se desvanece a la vez, sin salir de la cortina. La columna regresa a donde estaba y el foco, a la liebre.
+- **El buscador** filtra las entradas por su nombre, sin importar mayúsculas ni acentos. Esconde Inicio, los encabezados de los grupos sin coincidencias y las áreas sin ninguna (su icono y su nombre), y lo que queda se vuelve a acomodar en la retícula, sin huecos. Si no queda nada, dice «Sin resultados». Las flechas ↓ y ↑ recorren las entradas que quedan, en el orden del menú y dando la vuelta; Enter en el buscador abre la primera. Por ahora solo busca pantallas del menú, así que dice «Busca una pantalla…».
 - **Al ir a otra pantalla** desde el menú, la página nueva llega con el menú cerrado.
 
 Detalle en "Movimiento", abajo, y en la pantalla de referencia.
@@ -671,7 +682,7 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 ### Movimiento
 | Momento | Curva | Duración |
 |---|---|---|
-| Abrir (menú, credencial) | `cubic-bezier(.3, 1.06, .5, 1)`, rebote apenas perceptible | 0.55 s; elementos nuevos 0.32 s en cascada |
+| Abrir (menú, credencial) | `cubic-bezier(.3, 1.06, .5, 1)`, rebote apenas perceptible | 0.55 s; elementos nuevos 0.32 s en cascada por columna y renglón, y ninguno espera más de 0.4 s |
 | Cerrar y regresar | `cubic-bezier(.22, 1, .36, 1)`, sin rebote | 0.42 s, todo junto y sin cascada; lo que se va se desvanece en 0.12 s a la vez |
 | Salto de la liebre al abrir | la misma de abrir | 0.5 s, 4 px |
 
@@ -679,7 +690,7 @@ Detalle en "Movimiento", abajo, y en la pantalla de referencia.
 - Con `prefers-reduced-motion`, todo cambia sin animar.
 - Lo que se mueve lleva el punto que el ojo sigue (el centro del icono, el principio del texto), no el borde de su caja, y lo que espera para moverse se queda en su lugar inicial mientras espera (`fill: 'backwards'`): nada brinca al empezar.
 - Nunca dos movimientos del menú encimados: lo que se pide mientras uno corre (Esc justo después de abrir) se hace al terminar. Esc cierra solo la capa de arriba: la credencial si está abierta sobre el menú; si no, el menú.
-- **Implementación:** el componente Alpine `nexusShell` (`resources/js/app.js`) hace el FLIP del menú con la Web Animations API (al cerrar, lo que se va se desvanece en una copia del menú abierto, sin nada interactivo, que se quita al terminar); la cortina, el velo y la tarjeta son transiciones de utilidades de Tailwind. El estado vive en `<body data-menu>` y las utilidades lo leen con `in-data-[menu=open]:`; la geometría por ancho son variables que declara `<body>`. La única regla del shell escrita a mano en `resources/css/app.css` bloquea el desplazamiento con el menú abierto (el candado de daisyUI vive en `:root`, donde no llega una utilidad).
+- **Implementación:** el componente Alpine `nexusShell` (`resources/js/app.js`) hace el FLIP del menú con la Web Animations API (al cerrar, lo que se va se desvanece en una copia del menú abierto, sin nada interactivo, que se quita al terminar); la cortina, el velo y la tarjeta son transiciones de utilidades de Tailwind. La retícula del menú abierto la calcula `MenuGrid` (Core) en el servidor y `packMenu` en el navegador cuando el buscador la reacomoda: son el mismo algoritmo y, con el buscador vacío, dan lo mismo (lo revisa una prueba de navegador). Cerrado, la franja (`data-menu-rail`) y la columna (`data-menu-column`) son dos contenedores; abierto pasan a `display: contents` para que todo sea hijo de la retícula. El estado vive en `<body data-menu>` y las utilidades lo leen con `in-data-[menu=open]:`; la geometría por ancho son variables que declara `<body>`. La única regla del shell escrita a mano en `resources/css/app.css` bloquea el desplazamiento con el menú abierto (el candado de daisyUI vive en `:root`, donde no llega una utilidad).
 - La palabra gigante y los mosaicos vivos son para los inicios por rol, nunca para pantallas de captura.
 
 ### La liebre

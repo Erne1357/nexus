@@ -47,6 +47,7 @@ function signInToOrgChart(string $username)
 
 it('el admin crea, mueve y desactiva una unidad', function () {
     $page = signInToOrgChart('admin')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Organigrama"]')
         ->assertPathIs('/org-chart')
         ->resize(1440, 900)

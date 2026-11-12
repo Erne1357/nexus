@@ -11,6 +11,10 @@ use Illuminate\Contracts\Session\Session;
  * del área (DESIGN.md, "Navigation"). La anota el menú al pintarse en una página completa; la olvida
  * SetActiveContext al cambiar el campus o el periodo, porque una ficha de otro campus ya no se abriría.
  *
+ * Guarda la ruta junto con la página: last() solo la da si la entrada de esa ruta sigue en el área. Así una
+ * página anotada antes de que su entrada cambiara de área (el menú por áreas y etapas, MN-01) no se ofrece
+ * en el área equivocada, y lo anotado antes de guardar la ruta se ignora.
+ *
  * No se registra en el contenedor: cada petición arma la suya con su sesión y su contexto (Octane).
  */
 final readonly class RecentPages
@@ -35,7 +39,7 @@ final readonly class RecentPages
         $item = $this->navigation->forRoute($route);
 
         if ($item !== null && $item->isVisibleTo($this->context)) {
-            $this->session->put(self::KEY.'.'.$item->area->value, '/'.ltrim($uri, '/'));
+            $this->session->put(self::KEY.'.'.$item->area->value, ['route' => $route, 'uri' => '/'.ltrim($uri, '/')]);
         }
     }
 
@@ -44,9 +48,13 @@ final readonly class RecentPages
      */
     public function last(NavigationArea $area): ?string
     {
-        $uri = $this->session->get(self::KEY.'.'.$area->value);
+        $page = $this->session->get(self::KEY.'.'.$area->value);
 
-        return is_string($uri) ? $uri : null;
+        if (! is_array($page) || ! is_string($page['route'] ?? null) || ! is_string($page['uri'] ?? null)) {
+            return null;
+        }
+
+        return $this->navigation->forRoute($page['route'])?->area === $area ? $page['uri'] : null;
     }
 
     public function forget(): void

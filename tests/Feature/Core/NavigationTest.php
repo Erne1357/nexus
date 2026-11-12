@@ -433,7 +433,8 @@ it('se arma una vez para toda la aplicación, no por petición', function () {
 });
 
 /**
- * Las áreas del menú de un componente o una página, con el texto de sus entradas, en orden.
+ * Las áreas del menú de un componente o una página, con el texto de sus entradas, en orden. Cada área es
+ * el grupo con su nombre en la columna del menú (sus entradas); Inicio va aparte, en la franja.
  *
  * @return array<string, list<string>>
  */
@@ -441,13 +442,26 @@ function menuAreasIn(HTMLDocument $page): array
 {
     $areas = [];
 
-    foreach ($page->querySelectorAll('#nexus-menu [data-menu-area]') as $group) {
+    foreach ($page->querySelectorAll('#nexus-menu [role="group"][data-menu-area]') as $group) {
         foreach ($group->querySelectorAll('a[data-menu-entry]') as $entry) {
             $areas[$group->getAttribute('aria-label')][] = textOf($entry);
         }
     }
 
     return $areas;
+}
+
+/**
+ * El texto de los encabezados de grupo y de las entradas de un área, en el orden de la página.
+ *
+ * @return list<string>
+ */
+function menuRowsIn(HTMLDocument $page, string $area): array
+{
+    return array_map(
+        fn (Element $row): string => textOf($row),
+        iterator_to_array($page->querySelectorAll("#nexus-menu [data-menu-area=\"{$area}\"] [data-menu-group], #nexus-menu [data-menu-area=\"{$area}\"] a[data-menu-entry]")),
+    );
 }
 
 describe('menú', function () {
@@ -457,29 +471,71 @@ describe('menú', function () {
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuAreasIn($page))->toBe(['Académico' => ['Inicio', 'Propuesta de carrera', 'Horarios publicados', 'Horarios', 'Choques y avance', 'Solicitudes de cambio'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
+        expect(menuAreasIn($page))->toBe(['Académico' => ['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
             ->and($page->querySelector('a[data-menu-entry][href="'.route('demo-catalog.greeting').'"]')?->hasAttribute('wire:navigate'))->toBeTrue()
             ->and($page->querySelector('a[href="'.route('demo-catalog.ping').'"]'))->toBeNull();
     });
 
-    it('muestra al admin todas las entradas', function () {
+    it('muestra al admin todas las entradas, con los catálogos y las importaciones en Administración', function () {
         withDemoCatalogNavigation();
         $this->actingAs(User::factory()->admin()->create());
 
         expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))
-            ->{'Académico'}->toContain('Inicio', 'Campus', 'Periodos')
+            ->{'Académico'}->toContain('Validar catálogos', 'Horarios publicados')->not->toContain('Campus', 'Materias')
             ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
-            ->{'Recursos humanos'}->toContain('Elementos')
-            ->{'Datos'}->toContain('Importaciones');
+            ->{'Recursos humanos'}->toContain('Docentes', 'Elementos')
+            ->{'Administración'}->toBe(['Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones']);
     });
 
-    it('muestra al docente Inicio y su «Mi espacio»', function () {
+    it('muestra al docente su «Mi espacio»', function () {
         withDemoCatalogNavigation();
         $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
         Teacher::factory()->create(['user_id' => $docente->id]);
         $this->actingAs($docente);
 
-        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Mi carga', 'Oferta'], 'Académico' => ['Inicio']]);
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Mi carga', 'Oferta']]);
+    });
+
+    it('Inicio va aparte, primero en la franja y fuera de las áreas, para cualquier usuario activo', function () {
+        $this->actingAs(User::factory()->create());
+
+        $page = domOf(Livewire::test('core::components.navigation', ['route' => 'core.campuses']));
+        $home = $page->querySelector('#nexus-menu [data-menu-home]');
+
+        expect(menuAreasIn($page))->toBe([])
+            ->and($home?->localName)->toBe('a')
+            ->and($home->getAttribute('href'))->toBe(route('home'))
+            ->and($home->getAttribute('aria-label'))->toBe('Inicio')
+            ->and($home->getAttribute('data-tip'))->toBe('Inicio')
+            ->and($home->getAttribute('data-menu-flip'))->toBe('icon')
+            ->and($home->hasAttribute('wire:navigate'))->toBeTrue()
+            ->and($home->hasAttribute('aria-current'))->toBeFalse()
+            ->and($home->closest('[data-menu-area]'))->toBeNull()
+            ->and($page->querySelector('#nexus-menu [data-menu-flip="icon"]'))->toBe($home);
+    });
+
+    it('en Inicio, Inicio lleva aria-current y la columna muestra la primera área sin marcar su icono', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $page = domOf(Livewire::test('core::components.navigation', ['route' => 'home']));
+        $current = $page->querySelectorAll('#nexus-menu [aria-current]');
+
+        expect($current)->toHaveCount(1)
+            ->and($current->item(0)->hasAttribute('data-menu-home'))->toBeTrue()
+            ->and($current->item(0)->getAttribute('aria-current'))->toBe('page')
+            ->and($page->querySelector('#nexus-menu [role="group"][data-current]')->getAttribute('data-menu-area'))->toBe('academico')
+            ->and($page->querySelector('#nexus-menu [data-menu-flip="icon"][data-area-current]'))->toBeNull();
+    });
+
+    it('fuera de Inicio, se marca el icono del área de la pantalla y solo ese', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $page = domOf(Livewire::test('core::components.navigation', ['route' => 'core.campuses']));
+        $marked = $page->querySelectorAll('#nexus-menu [data-menu-flip="icon"][data-area-current]');
+
+        expect($marked)->toHaveCount(1)
+            ->and($marked->item(0)->getAttribute('aria-label'))->toBe('Administración')
+            ->and($page->querySelector('#nexus-menu [data-menu-home]')->hasAttribute('aria-current'))->toBeFalse();
     });
 
     it('en la página, el coordinador no ve las entradas de Campus ni de Importaciones', function () {
@@ -488,6 +544,7 @@ describe('menú', function () {
         $menu = domOf($this->get('/')->assertOk())->getElementById('nexus-menu');
 
         expect(textOf($menu))->toContain('Inicio')->not->toContain('Campus')->not->toContain('Importaciones')
+            ->and($menu->querySelector('[data-menu-area="administracion"]'))->toBeNull()
             ->and($menu->querySelector('a[href="'.route('core.campuses').'"]'))->toBeNull()
             ->and($menu->querySelector('a[href="'.route('imports.wizard').'"]'))->toBeNull();
     });
@@ -499,22 +556,53 @@ describe('menú', function () {
         $page = domOf(Livewire::test('core::components.navigation'));
 
         expect(menuAreasIn($page))->toBe([
-            'Académico' => ['Propuestas', 'Inicio'],
+            'Académico' => ['Propuestas', 'Avisos'],
             'Recursos humanos' => ['Plantilla'],
-            'Datos' => ['Cargas'],
+            'Administración' => ['Cargas'],
         ])
             ->and(array_map(fn (Element $name): string => textOf($name), iterator_to_array($page->querySelectorAll('[data-menu-area] [data-menu-flip="name"]'))))
-            ->toBe(['Académico', 'Recursos humanos', 'Datos']);
+            ->toBe(['Académico', 'Recursos humanos', 'Administración'])
+            ->and(array_map(fn (Element $icon): string => $icon->getAttribute('aria-label'), iterator_to_array($page->querySelectorAll('[data-menu-area] [data-menu-flip="icon"]'))))
+            ->toBe(['Académico', 'Recursos humanos', 'Administración']);
     });
 
     it('no muestra el área de las entradas que el rol no ve', function () {
         app()->instance(Navigation::class, handBuiltNavigation());
         $this->actingAs(User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create());
 
-        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe([
-            'Académico' => ['Inicio'],
-            'Datos' => ['Cargas'],
-        ]);
+        $page = domOf(Livewire::test('core::components.navigation'));
+
+        expect(menuAreasIn($page))->toBe([
+            'Académico' => ['Avisos'],
+            'Administración' => ['Cargas'],
+        ])
+            ->and($page->querySelector('[data-menu-area="recursos_humanos"]'))->toBeNull();
+    });
+
+    it('MN-01: con dos grupos o más y ocho entradas o más, cada grupo lleva su encabezado antes de sus entradas', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $page = domOf(Livewire::test('core::components.navigation'));
+
+        expect(menuRowsIn($page, 'academico'))->toBe([
+            'Validación', 'Validar catálogos', 'Avance de validación',
+            'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento',
+            'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos',
+            'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
+            'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados',
+        ])
+            ->and(array_map(fn (Element $heading): string => $heading->getAttribute('data-menu-group'), iterator_to_array($page->querySelectorAll('[data-menu-area="administracion"] [data-menu-group]'))))
+            ->toBe(['institucion', 'catalogos', 'datos'])
+            ->and($page->querySelector('[data-menu-group="datos"]')->getAttribute('data-menu-flip'))->toBe('heading');
+    });
+
+    it('MN-01: con menos entradas, el área es una lista plana en el orden de sus grupos, sin encabezados', function () {
+        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
+
+        $page = domOf(Livewire::test('core::components.navigation'));
+
+        expect($page->querySelector('#nexus-menu [data-menu-group]'))->toBeNull()
+            ->and(menuRowsIn($page, 'academico'))->toBe(['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Horarios publicados']);
     });
 
     it('marca la entrada de la pantalla actual con aria-current y solo a ella', function () {
@@ -551,14 +639,15 @@ describe('menú', function () {
         $this->actingAs(User::factory()->admin()->create());
 
         $current = domOf(Livewire::test('core::components.navigation', ['route' => $route]))
-            ->querySelectorAll('#nexus-menu [data-menu-area][data-current]');
+            ->querySelectorAll('#nexus-menu [role="group"][data-menu-area][data-current]');
 
         expect($current)->toHaveCount(1)
             ->and($current->item(0)->getAttribute('aria-label'))->toBe($area);
     })->with([
-        'Campus' => ['core.campuses', 'Académico'],
-        'Periodos' => ['core.terms', 'Académico'],
-        'Importaciones' => ['imports.wizard', 'Datos'],
+        'Campus' => ['core.campuses', 'Administración'],
+        'Materias' => ['academic.subjects', 'Administración'],
+        'Importaciones' => ['imports.wizard', 'Administración'],
+        'Horarios' => ['scheduling.editor', 'Académico'],
         'Alumnos' => ['students.index', 'Servicios escolares'],
         'la ficha de un alumno, hija de Alumnos' => ['students.show', 'Servicios escolares'],
         'fuera del menú' => ['user-password.edit', 'Académico'],
@@ -567,12 +656,12 @@ describe('menú', function () {
     it('si el área de la pantalla no es visible para el usuario, el área actual es la primera que ve', function () {
         $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
 
-        $current = domOf(Livewire::test('core::components.navigation', ['route' => 'imports.wizard']))
-            ->querySelectorAll('#nexus-menu [data-menu-area][data-current]');
+        $page = domOf(Livewire::test('core::components.navigation', ['route' => 'imports.wizard']));
+        $current = $page->querySelectorAll('#nexus-menu [role="group"][data-menu-area][data-current]');
 
         expect($current)->toHaveCount(1)
             ->and($current->item(0)->getAttribute('aria-label'))->toBe('Académico')
-            ->and(domOf(Livewire::test('core::components.navigation', ['route' => 'imports.wizard']))->querySelector('[aria-current="page"]'))->toBeNull();
+            ->and($page->querySelector('[aria-current="page"]'))->toBeNull();
     });
 
     it('trae el buscador y el aviso de «Sin resultados», oculto mientras no se busca', function () {
@@ -586,27 +675,48 @@ describe('menú', function () {
             ->and($empty->hasAttribute('hidden'))->toBeTrue();
     });
 
-    it('acomoda las áreas en cinco columnas y, en tableta, en tres, con las demás debajo de la más larga', function () {
+    it('la franja y la columna son dos contenedores: los iconos en la franja y lo demás en la columna', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $page = domOf(Livewire::test('core::components.navigation'));
+        $rail = $page->querySelector('#nexus-menu [data-menu-rail]');
+        $column = $page->querySelector('#nexus-menu [data-menu-column]');
+
+        expect($rail->querySelectorAll('[data-menu-flip]')->length)->toBe($rail->querySelectorAll('[data-menu-flip="icon"]')->length)
+            ->and($column->querySelector('[data-menu-flip="icon"]'))->toBeNull()
+            ->and($column->querySelectorAll('a[data-menu-entry]')->length)->toBe($page->querySelectorAll('#nexus-menu a[data-menu-entry]')->length);
+    });
+
+    it('da a cada elemento su lugar en la retícula de cinco columnas y en la de tres', function () {
+        $group = fn (string $prefix, NavigationGroup $group, int $count): array => array_map(
+            fn (int $index): NavigationItem => testEntry($prefix.$index, $group->area(), $group),
+            range(1, $count),
+        );
+
         app()->instance(Navigation::class, new Navigation([
-            new NavigationItem('A1', 'home', 'o-home', NavigationArea::Academico),
-            new NavigationItem('A2', 'home', 'o-home', NavigationArea::Academico),
-            new NavigationItem('S1', 'home', 'o-home', NavigationArea::ServiciosEscolares),
-            new NavigationItem('S2', 'home', 'o-home', NavigationArea::ServiciosEscolares),
-            new NavigationItem('S3', 'home', 'o-home', NavigationArea::ServiciosEscolares),
-            new NavigationItem('H1', 'home', 'o-home', NavigationArea::RecursosHumanos),
-            new NavigationItem('D1', 'home', 'o-home', NavigationArea::Datos),
+            ...$group('V', NavigationGroup::Validacion, 2),
+            ...$group('P', NavigationGroup::Propuesta, 2),
+            ...$group('H', NavigationGroup::Horarios, 2),
+            ...$group('A', NavigationGroup::Asignacion, 2),
+            testEntry('S1', NavigationArea::ServiciosEscolares),
+            testEntry('R1', NavigationArea::RecursosHumanos),
+            ...$group('I', NavigationGroup::Institucion, 4),
+            ...$group('C', NavigationGroup::Catalogos, 4),
         ]));
         $this->actingAs(User::factory()->admin()->create());
 
         $page = domOf(Livewire::test('core::components.navigation', ['route' => 'login']));
-        $styleOf = fn (string $label): string => $page->querySelector('a[data-label="'.$label.'"]')->getAttribute('style');
+        $styleOf = fn (string $selector): string => $page->querySelector("#nexus-menu {$selector}")->getAttribute('style');
 
-        // Datos es la cuarta área visible: cuarta columna en escritorio y, en tableta, la primera,
-        // debajo de la más larga de las tres de arriba (Servicios escolares, tres entradas): 3 + 3 + 2.
-        expect($styleOf('A2'))->toBe('--c: 1; --i: 2; --col-t: 1; --base-t: 3')
-            ->and($styleOf('S3'))->toBe('--c: 2; --i: 3; --col-t: 2; --base-t: 3')
-            ->and($styleOf('H1'))->toBe('--c: 3; --i: 1; --col-t: 3; --base-t: 3')
-            ->and($styleOf('D1'))->toBe('--c: 4; --i: 1; --col-t: 1; --base-t: 8');
+        // Académico abarca dos columnas; Servicios escolares y Recursos humanos se apilan en la tercera.
+        // Administración va en la cuarta con cinco columnas y, con tres, baja a la primera, en el renglón 14.
+        expect($styleOf('[data-menu-area="academico"] [data-menu-flip="name"]'))->toBe('--oc: 1; --or: 3; --os: 2; --oc3: 1; --or3: 3; --os3: 2')
+            ->and($styleOf('[data-menu-area="academico"] [data-menu-flip="icon"]'))->toBe('--oc: 1; --or: 3; --os: 1; --oc3: 1; --or3: 3; --os3: 1')
+            ->and($styleOf('[data-menu-group="asignacion"]'))->toBe('--oc: 2; --or: 4; --os: 1; --oc3: 2; --or3: 4; --os3: 1')
+            ->and($styleOf('a[data-label="R1"]'))->toBe('--oc: 3; --or: 7; --os: 1; --oc3: 3; --or3: 7; --os3: 1')
+            ->and($styleOf('[data-menu-area="administracion"] [data-menu-flip="icon"]'))->toBe('--oc: 4; --or: 3; --os: 1; --oc3: 1; --or3: 14; --os3: 1')
+            ->and($styleOf('[data-menu-group="catalogos"]'))->toBe('--oc: 4; --or: 9; --os: 1; --oc3: 1; --or3: 20; --os3: 1')
+            ->and($styleOf('a[data-label="C4"]'))->toBe('--oc: 4; --or: 13; --os: 1; --oc3: 1; --or3: 24; --os3: 1');
     });
 });
 
@@ -630,11 +740,11 @@ describe('iconos de área', function () {
 
     it('cada icono es un enlace con el nombre de su área, que navega y no abre el menú', function () {
         $page = domOf($this->get(route('home'))->assertOk());
-        $icon = areaIconIn($page, 'datos');
+        $icon = areaIconIn($page, 'administracion');
 
         expect($icon?->localName)->toBe('a')
-            ->and($icon->getAttribute('aria-label'))->toBe('Datos')
-            ->and($icon->getAttribute('data-tip'))->toBe('Datos')
+            ->and($icon->getAttribute('aria-label'))->toBe('Administración')
+            ->and($icon->getAttribute('data-tip'))->toBe('Administración')
             ->and($icon->hasAttribute('wire:navigate'))->toBeTrue()
             ->and($icon->hasAttribute('aria-hidden'))->toBeFalse()
             ->and($page->saveHtml($icon))->not->toContain('openMenu');
@@ -644,23 +754,37 @@ describe('iconos de área', function () {
         $page = domOf($this->get(route('home'))->assertOk());
 
         expect(areaIconIn($page, 'servicios_escolares')->getAttribute('href'))->toBe(route('students.index'))
-            ->and(areaIconIn($page, 'datos')->getAttribute('href'))->toBe(route('imports.wizard'));
+            ->and(areaIconIn($page, 'administracion')->getAttribute('href'))->toBe(route('core.campuses'));
     });
 
     it('desde otra área, el icono lleva a la última página que visitaste del área, con su consulta', function () {
         $this->get(route('core.campuses', ['search' => 'norte']))->assertOk();
         $this->get(route('academic.subjects', ['search' => 'cal']))->assertOk();
 
-        $page = domOf($this->get(route('imports.wizard'))->assertOk());
+        $page = domOf($this->get(route('students.index'))->assertOk());
 
-        expect(areaIconIn($page, 'academico')->getAttribute('href'))->toBe(route('academic.subjects', ['search' => 'cal'], false));
+        expect(areaIconIn($page, 'administracion')->getAttribute('href'))->toBe(route('academic.subjects', ['search' => 'cal'], false));
     });
 
     it('guarda la página con una sola barra al inicio: una petición a //campus no deja un enlace a otro host', function () {
         $this->get(route('home'))->assertOk();
         app(RecentPages::class)->remember('core.campuses', '//campus?search=norte');
 
-        expect(app(RecentPages::class)->last(NavigationArea::Academico))->toBe('/campus?search=norte');
+        expect(app(RecentPages::class)->last(NavigationArea::Administracion))->toBe('/campus?search=norte');
+    });
+
+    it('MN-01: una página anotada en un área de la que su entrada ya salió no se ofrece en esa área', function () {
+        $this->get(route('home'))->assertOk();
+        session()->put('core.recent_pages.academico', ['route' => 'core.campuses', 'uri' => '/campus']);
+
+        expect(app(RecentPages::class)->last(NavigationArea::Academico))->toBeNull();
+    });
+
+    it('lo que se anotó como texto, antes de guardar la ruta, se ignora', function () {
+        $this->get(route('home'))->assertOk();
+        session()->put('core.recent_pages.administracion', '/campus');
+
+        expect(app(RecentPages::class)->last(NavigationArea::Administracion))->toBeNull();
     });
 
     it('una pantalla hija cuenta como página de su área: la ficha de un alumno, con su pestaña', function () {
@@ -673,36 +797,36 @@ describe('iconos de área', function () {
     });
 
     it('el icono del área actual lleva a su primera entrada, aunque estés en otra página del área', function () {
-        $page = domOf($this->get(route('core.campuses', ['search' => 'norte']))->assertOk());
+        $page = domOf($this->get(route('academic.subjects', ['search' => 'cal']))->assertOk());
 
-        expect(areaIconIn($page, 'academico')->getAttribute('href'))->toBe(route('home'));
+        expect(areaIconIn($page, 'administracion')->getAttribute('href'))->toBe(route('core.campuses'));
     });
 
     it('no recuerda una página cuya entrada el usuario no ve', function () {
         app()->instance(Navigation::class, new Navigation([
-            new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
-            new NavigationItem('Oculta', 'core.campuses', 'o-eye-slash', NavigationArea::Datos,
+            new NavigationItem('Alumnos', 'students.index', 'o-academic-cap', NavigationArea::ServiciosEscolares),
+            new NavigationItem('Oculta', 'core.campuses', 'o-eye-slash', NavigationArea::Administracion,
                 visible: static fn (): bool => false),
-            new NavigationItem('Importaciones', 'imports.wizard', 'o-arrow-up-tray', NavigationArea::Datos),
+            new NavigationItem('Importaciones', 'imports.wizard', 'o-arrow-up-tray', NavigationArea::Administracion),
         ]));
 
         $this->get(route('core.campuses'))->assertOk();
 
         $page = domOf($this->get(route('home'))->assertOk());
 
-        expect(areaIconIn($page, 'datos')->getAttribute('href'))->toBe(route('imports.wizard'));
+        expect(areaIconIn($page, 'administracion')->getAttribute('href'))->toBe(route('imports.wizard'));
     });
 
     it('al cambiar el campus o el periodo activo, olvida las páginas que visitaste', function () {
-        $this->get(route('core.campuses', ['search' => 'norte']))->assertOk();
+        $this->get(route('academic.subjects', ['search' => 'cal']))->assertOk();
 
         Livewire::test('core::components.context-switcher')
             ->set('campusId', $this->campus->id)
             ->call('apply')
             ->assertHasNoErrors();
 
-        $page = domOf($this->get(route('imports.wizard'))->assertOk());
+        $page = domOf($this->get(route('students.index'))->assertOk());
 
-        expect(areaIconIn($page, 'academico')->getAttribute('href'))->toBe(route('home'));
+        expect(areaIconIn($page, 'administracion')->getAttribute('href'))->toBe(route('core.campuses'));
     });
 });
