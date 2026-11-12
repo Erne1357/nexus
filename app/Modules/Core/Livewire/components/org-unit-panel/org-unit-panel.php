@@ -274,9 +274,9 @@ new class extends Component
         $person = $people->findOrFail($this->appointUserId);
         $offered = $this->offeredOn($unit, $rules->rolesForUnit($unit));
 
-        $assignment = $this->appointPerson($appointRole, $people, $person, $offered, $unit);
+        $assignments = $this->appointPerson($appointRole, $people, $person, $offered, $unit);
 
-        $this->success('Nombramiento creado', e($labels->one($assignment)->summary));
+        $this->success('Nombramiento creado', e($labels->one($assignments[0])->summary));
         $this->closeAppoint();
         $this->dispatch('org-chart-changed', id: $unit->id);
     }
