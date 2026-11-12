@@ -77,6 +77,7 @@ final class SyncScheduleConflicts
                 ScheduleConflict::query()->create([
                     'term_id' => $term->id,
                     'campus_id' => $campus->id,
+                    'modality_id' => $campus->modality_id,
                     'department_id' => $group->department_id,
                     'career_id' => $group->owner_career_id,
                     'group_id' => $group->id,

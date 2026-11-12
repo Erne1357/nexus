@@ -74,6 +74,7 @@ final class AssignTeacher
             $assignment = GroupTeacherAssignment::query()->create([
                 'term_id' => $group->term_id,
                 'campus_id' => $group->campus_id,
+                'modality_id' => $group->modality_id,
                 'group_id' => $group->id,
                 'teacher_id' => $teacher->id,
                 'assigned_by' => $actor->getKey(),

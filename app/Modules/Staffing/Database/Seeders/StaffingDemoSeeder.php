@@ -999,6 +999,7 @@ final class StaffingDemoSeeder extends Seeder
                 GroupTeacherAssignment::query()->create([
                     'term_id' => $group->term_id,
                     'campus_id' => $group->campus_id,
+                    'modality_id' => $group->modality_id,
                     'group_id' => $group->id,
                     'teacher_id' => $teacherId,
                     'assigned_by' => $head->getKey(),

@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\CreateTermLoads;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Enums\Modality as CampusModality;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -38,6 +39,16 @@ it('crea en borrador la carga de cada departamento activo en el campus', functio
     expect(createTermLoads($term, Campus::factory()->create(['code' => 'C2'])))->toBe(2)
         ->and(loadKeysOf($term))->toBe(['D1 C2', 'D2 C2'])
         ->and(AcademicLoad::query()->pluck('status')->unique()->all())->toBe([LoadStatus::Draft]);
+});
+
+it('cada carga nace con la modalidad del catálogo de su campus (ampliación de la ronda 2)', function () {
+    $term = Term::factory()->create();
+    Department::factory()->count(2)->create();
+    $campus = Campus::factory()->create(['code' => 'EAD', 'modality' => CampusModality::Mixta]);
+
+    createTermLoads($term, $campus);
+
+    expect(AcademicLoad::query()->with('modality')->get()->map(fn (AcademicLoad $load): string => $load->modality->code)->all())->toBe(['EAD', 'EAD']);
 });
 
 it('no crea cargas de departamentos inactivos ni borrados', function () {

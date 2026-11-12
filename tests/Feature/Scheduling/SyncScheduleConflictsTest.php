@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -50,6 +51,16 @@ it('guarda los choques nuevos con su grupo, departamento y carrera dueña', func
         ->subject_type->toBe('room')
         ->subject_id->toBe($this->room->id)
         ->and($capacity->related)->toMatchArray(['room_capacity' => 20, 'group_capacity' => 35]);
+});
+
+it('cada choque nace con la modalidad del catálogo del campus que se recalcula (ampliación de la ronda 2)', function () {
+    $this->campus->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+    GroupSession::factory()->for(syncGroup())->inRoom($this->room)->on(1, '07:00', '12:00')->create();
+
+    syncConflicts();
+
+    expect(ScheduleConflict::query()->count())->toBeGreaterThan(0)
+        ->and(ScheduleConflict::query()->pluck('modality_id')->unique()->all())->toBe([$this->campus->modality_id]);
 });
 
 it('conserva lo vigente y marca resuelto lo que ya no aparece', function () {

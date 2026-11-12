@@ -12,6 +12,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -102,6 +103,17 @@ it('arma la propuesta en borrador con una fila por materia, sus elegibles y la p
             'SCD-1015' => ['ISIC-2010-224', 5, 36, 36, 2],
         ])
         ->and($proposal->eligible_students)->toBe(71);
+});
+
+it('la propuesta nace con la modalidad del catálogo de su campus y cada fila con el campus de la propuesta (ampliación de la ronda 2)', function () {
+    $this->campus->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'ACF-0901']), 1);
+    placeInPlan($this->plan, Subject::factory()->create(['code' => 'SCD-1015']), 5);
+
+    $proposal = startProposal();
+
+    expect($proposal->fresh()->modality->code)->toBe('EAD')
+        ->and($proposal->items()->pluck('campus_id')->all())->toBe([$this->campus->id, $this->campus->id]);
 });
 
 it('HC-13: deja fuera las materias inactivas o borradas, las quitadas de la retícula y las de planes inactivos, borrados o de otra carrera', function () {
@@ -273,7 +285,7 @@ it('si otra sesión la arma entre la revisión y la escritura, devuelve la suya 
     DB::listen(function (QueryExecuted $query) use (&$rivalInserted) {
         if (! $rivalInserted && str_contains($query->sql, 'career_campus')) {
             $rivalInserted = true;
-            DB::table('career_proposals')->insert(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'career_id' => $this->career->id]);
+            DB::table('career_proposals')->insert(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'modality_id' => $this->campus->modality_id, 'career_id' => $this->career->id]);
         }
     });
 

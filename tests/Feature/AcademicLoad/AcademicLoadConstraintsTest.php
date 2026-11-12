@@ -16,9 +16,11 @@ use Illuminate\Support\Facades\DB;
 */
 
 it('nace en borrador y en la versión 0, y conoce su periodo, campus y departamento', function () {
+    $campus = Campus::factory()->create();
     $load = AcademicLoad::query()->create([
         'term_id' => Term::factory()->create()->id,
-        'campus_id' => Campus::factory()->create()->id,
+        'campus_id' => $campus->id,
+        'modality_id' => $campus->modality_id,
         'department_id' => Department::factory()->create()->id,
     ])->fresh();
 

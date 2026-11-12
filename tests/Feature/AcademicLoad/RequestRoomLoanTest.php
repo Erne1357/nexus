@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -79,6 +80,12 @@ it('crea un préstamo propuesto dirigido al dueño del salón', function () {
         ->and($loan->ends_at)->toBe('11:00:00')
         ->and($loan->requested_by)->toBe($this->actor->id)
         ->and($loan->decided_at)->toBeNull();
+});
+
+it('el préstamo nace con la modalidad del catálogo de su campus (ampliación de la ronda 2)', function () {
+    $this->campus->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+
+    expect(requestLoan()->fresh()->modality->code)->toBe('EAD');
 });
 
 it('deja bitácora con quién lo pidió y qué pidió', function () {

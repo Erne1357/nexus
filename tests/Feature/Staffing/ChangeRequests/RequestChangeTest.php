@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -44,6 +45,13 @@ it('el docente del grupo lo pide: queda pendiente con su docente y la foto de la
         ->and($request->proposed['description'])->toBe('Los martes de 7 a 9')
         ->and($request->current)->toHaveCount(1)
         ->and($request->current[0])->toMatchArray(['day' => 2, 'room' => 'A-101']);
+});
+
+it('la solicitud copia la modalidad de su grupo (ampliación de la ronda 2)', function () {
+    $s = changeScenario();
+    $s['group']->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+
+    expect(askChange($s)->fresh()->modality->code)->toBe('EAD');
 });
 
 it('el coordinador lo pide sin docente y sin el límite de una abierta', function () {

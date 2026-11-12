@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Models\Teacher;
@@ -82,6 +83,17 @@ it('Ranking docente: ordena a los candidatos de cada grupo del departamento como
             'remaining_after_hours' => 5,
             'remaining_hours' => 10,
         ]);
+});
+
+it('cada fila del ranking copia la modalidad de su grupo (ampliación de la ronda 2)', function () {
+    $group = ($this->group)(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+    ($this->teacher)('Ana', 10);
+    ($this->teacher)('Beatriz', 10);
+
+    ($this->rank)();
+
+    expect(StaffingRanking::query()->where('group_id', $group->id)->count())->toBe(2)
+        ->and(StaffingRanking::query()->pluck('modality_id')->unique()->all())->toBe([$group->modality_id]);
 });
 
 it('HC-08: un candidato sin horas para el grupo queda marcado «sin horas» y baja al bloque final', function () {

@@ -21,8 +21,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Crea los grupos de la parte de una propuesta de carrera que el departamento acaba de aceptar (reglas-de-negocio.md,
  * "Grupos y horarios"; tarea 3.3; confirmado el 7 de noviembre de 2026): por cada fila de la propuesta cuya materia es
- * del departamento y pide grupos, uno por grupo pedido, con la carrera de la propuesta como dueña, el periodo y campus
- * de la propuesta, y la materia, plan y semestre de la fila.
+ * del departamento y pide grupos, uno por grupo pedido, con la carrera de la propuesta como dueña, el periodo, campus
+ * y modalidad de la propuesta (la modalidad, ampliación de la ronda 2; aún no la lee nadie), y la materia, plan y
+ * semestre de la fila.
  *
  * Es idempotente porque lo aceptado ya no cambia: por fila cuenta los grupos que ya nacieron de ella, en cualquier
  * estado (un jefe pudo cancelar uno a propósito), y crea solo los que faltan. En una transacción bloquea las filas que
@@ -95,6 +96,7 @@ final class CreateGroupsFromProposal
             $group = Group::query()->create([
                 'term_id' => $proposal->term_id,
                 'campus_id' => $proposal->campus_id,
+                'modality_id' => $proposal->modality_id,
                 'subject_id' => $subject->getKey(),
                 'department_id' => $subject->department_id,
                 'owner_career_id' => $proposal->career_id,
