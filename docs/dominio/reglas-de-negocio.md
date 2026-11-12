@@ -446,6 +446,14 @@ Supuestos por confirmar:
 - En la oferta, las fichas de una carga publicada son sus grupos de esa versión, con el docente, la carrera dueña, el semestre, el horario y los salones que se congelaron. El ranking sigue vivo («tu lugar», «tu mejor lugar» y el desglose) y se une por el id del grupo; si el grupo publicado ya no tiene ranking, no hay lugar. «Choca con tu horario» del panel explica la marca del ranking, así que sigue calculándose con los grupos vivos.
 - Las dos pantallas dicen «Publicado el 8 dic. 2026 · v2» en una línea discreta, una por carga publicada de las que se ven. Si se ven varias cargas, cada línea dice de cuál: el departamento si se ven varios y el campus si se ven varios («C2: publicado el …»).
 
+## Menú
+
+Tarea 1.20 (#417): el menú por áreas y etapas, la opción B que eligió el usuario entre las maquetas el 12 de noviembre de 2026 (DESIGN.md, "Navigation"; `Core\Navigation\Navigation`).
+
+| Id | Regla | Módulo | Entrega |
+|---|---|---|---|
+| MN-01 | El menú va por áreas (Mi espacio, Académico, Servicios escolares, Recursos humanos, Recursos financieros y Administración) y, dentro de un área, por grupos. Académico agrupa el trabajo del semestre por etapa, en el orden del proceso: Validación, Propuesta, Horarios (con Acuerdos), Asignación, y Cierre y publicación (con Horarios publicados al final). Administración agrupa la configuración: Institución (Campus, Periodos, Organigrama, Personas y puestos), Catálogos (Departamentos, Carreras, Materias, Planes de estudio, Edificios, Salones) y Datos (Importaciones). Un área muestra los nombres de sus grupos solo si el usuario ve al menos dos grupos y al menos ocho entradas; si no, ve una lista plana en el mismo orden. Inicio no es de ningún área: es el primer icono de la franja (confirmado el 12 de noviembre de 2026). | Core y todos los módulos | R1 |
+
 ## Pantalla de acceso
 
 Tarea 1.17: el login G (DESIGN.md, "Pantalla de acceso"). Avisos y atajos se capturan en tablas propias (`login_notices`, `login_shortcuts`); sus pantallas de administración son otra tarea, mientras tanto llegan por el demo o a mano.
