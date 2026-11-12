@@ -54,17 +54,17 @@ final class ProposalReturned extends NexusNotification
     public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
     {
         $career = KeyLookup::find(Career::query()->withTrashed(), $message->parameters['carrera'] ?? null);
-        $exists = $career !== null && $message->termId !== null && $message->campusId !== null && CareerProposal::query()
+        $proposal = $career !== null && $message->termId !== null && $message->campusId !== null ? CareerProposal::query()
             ->where('term_id', $message->termId)
             ->where('campus_id', $message->campusId)
             ->where('career_id', $career->getKey())
-            ->exists();
+            ->first() : null;
 
-        if (! $exists) {
+        if ($proposal === null) {
             return 'Esa propuesta ya no existe.';
         }
 
-        if (! $context->allows(AcademicLoadPermission::ProposalUpdate, Target::of(campus: $message->campusId, career: $career->getKey()))) {
+        if (! $context->allows(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $message->campusId, career: $career->getKey()))) {
             return "Ya no coordinas {$career->name} en ese campus.";
         }
 

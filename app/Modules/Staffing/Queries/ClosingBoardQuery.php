@@ -112,9 +112,9 @@ final class ClosingBoardQuery
     public function heads(array $rows): array
     {
         $targets = collect($rows)->mapWithKeys(function (array $row): array {
-            $campuses = array_values(array_unique(array_map(fn (LoadProgress $load): string => $load->load->campus_id, $row['loads'])));
+            $modalities = array_values(array_unique(array_map(fn (LoadProgress $load): string => $load->load->modality_id, $row['loads'])));
 
-            return [$row['department']->id => Target::of(campus: $campuses === [] ? null : $campuses, unit: $row['department']->id)];
+            return [$row['department']->id => Target::of(modality: $modalities === [] ? null : $modalities, unit: $row['department']->id)];
         })->all();
 
         return array_map(

@@ -291,12 +291,12 @@ final class AcademicLoadDemoSeeder extends Seeder
 
     private function coordinatorOf(Campus $campus, Career $career): ?User
     {
-        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(campus: $campus->getKey(), career: $career->getKey()))[0]['user'] ?? null;
+        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $campus->modality_id, campus: $campus->getKey(), career: $career->getKey()))[0]['user'] ?? null;
     }
 
     private function headOf(Campus $campus, Department $department): ?User
     {
-        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $campus->getKey(), unit: $department->getKey()))[0]['user'] ?? null;
+        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(modality: $campus->modality_id, unit: $department->getKey()))[0]['user'] ?? null;
     }
 
     /**

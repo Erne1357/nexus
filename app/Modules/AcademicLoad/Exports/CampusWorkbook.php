@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad\Exports;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Exports\Concerns\ResolvesCampusModality;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Authorization\Target;
@@ -24,6 +25,8 @@ use OpenSpout\Writer\XLSX\Writer;
  */
 final class CampusWorkbook implements StaffExport
 {
+    use ResolvesCampusModality;
+
     public const array HEADER = ['Departamento', 'Clave', 'Materia', 'Grupo', 'Créditos', 'Capacidad', 'Docente', 'Carrera', 'Retícula', 'Semestre', 'Día', 'Inicio', 'Fin', 'Tipo', 'Salón', 'Edificio', 'Préstamo'];
 
     /**
@@ -78,7 +81,7 @@ final class CampusWorkbook implements StaffExport
 
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId, unit: StaffExports::units($this->departmentIds));
+        return Target::of(modality: $this->modalityId($this->campusId), unit: StaffExports::units($this->departmentIds));
     }
 
     public function build(): string

@@ -20,7 +20,7 @@ final class NotifyAgreementAnswered
 
     public function handle(InterdepartmentalAgreement $agreement): int
     {
-        $requesters = $this->recipients->holders(AcademicLoadPermission::AgreementRequest, Target::of(campus: $agreement->campus_id, unit: $agreement->from_department_id));
+        $requesters = $this->recipients->holders(AcademicLoadPermission::AgreementRequest, Target::of(modality: $agreement->modality_id, campus: $agreement->campus_id, unit: $agreement->from_department_id));
 
         return $this->notifyHolders->handle($requesters, new AgreementAnswered($agreement))->count();
     }

@@ -990,3 +990,19 @@ describe('retícula con estados, filtro de grupos y marcas (maqueta C)', functio
             ->call('focusChain', 9)->assertSet('chain', null)->assertSet('groupsFilter', 'sin')->assertSee('Ciencias Básicas (CB), sin grupos: 0 materias.');
     });
 });
+
+it('AZ-S17: un coordinador con campus no guarda ni usa lo sugerido en una fila de otro campus', function () {
+    $this->calculus->update(['campus_id' => Campus::factory()->create(['code' => 'C1'])->id]);
+
+    proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+        ->call('saveCell', $this->calculus->id, 'requested_groups', '9')->assertForbidden();
+
+    proposalPageAs($this->coordinator)
+        ->call('edit', $this->calculus->id)
+        ->call('save')->assertForbidden();
+
+    expect($this->calculus->fresh()->requested_groups)->toBe(2);
+
+    proposalPageAs($this->coordinator, ['vista' => 'tabla'])
+        ->call('saveCell', $this->networks->id, 'requested_groups', '2')->assertOk();
+});

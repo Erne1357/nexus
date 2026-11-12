@@ -7,6 +7,7 @@ use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 
@@ -14,7 +15,8 @@ use App\Modules\Core\Models\RoleAssignment;
  * El renglón de cada puesto en la credencial: «Coordinador de carrera · ISC, IGE (C2)». El nombre del puesto para quien
  * lo ocupa (Role::titleOn() con las unidades de sus nombramientos: «Jefe del Departamento de Servicios Escolares», AZ-02)
  * y, si sus nombramientos lo tienen, los nombres de sus unidades (se omite el que el nombre del puesto ya dice), los
- * códigos de sus carreras (los pone ScopeLabels; sin ellos, «N carreras») y sus campus entre paréntesis. Un puesto sin
+ * códigos de sus carreras (los pone ScopeLabels; sin ellos, «N carreras»), sus modalidades y sus campus entre
+ * paréntesis. Un puesto sin
  * alcance es solo su nombre.
  */
 final class RoleSummaryQuery
@@ -32,13 +34,14 @@ final class RoleSummaryQuery
         $units = OrgUnit::query()->whereKey($scopes->pluck('org_unit_id')->filter()->unique()->all())->get(['id', 'kind', 'code', 'name'])
             ->mapWithKeys(fn (OrgUnit $unit): array => [$unit->id => ['kind' => $unit->kind, 'code' => $unit->code, 'name' => $unit->name]]);
         $campuses = Campus::query()->whereKey($scopes->pluck('campus_id')->filter()->unique()->all())->pluck('code', 'id');
+        $modalities = Modality::withTrashed()->whereKey($scopes->pluck('modality_id')->filter()->unique()->all())->pluck('name', 'id');
         $careers = $this->labels->careers($scopes->pluck('career_id')->filter()->unique()->values()->all());
 
         $rows = [];
 
         foreach ($context->heldRoles() as $role) {
             $own = $scopes->where('role', $role);
-            $rows[$role->value] = $this->summarize($role, $own->all(), $units->all(), $campuses->all(), $careers);
+            $rows[$role->value] = $this->summarize($role, $own->all(), $units->all(), $campuses->all(), $careers, $modalities->all());
         }
 
         return $rows;
@@ -49,8 +52,9 @@ final class RoleSummaryQuery
      * @param  array<string, array{kind: OrgUnitKind, code: string, name: string}>  $units
      * @param  array<string, string>  $campuses
      * @param  array<string, string>  $careers
+     * @param  array<string, string>  $modalities
      */
-    private function summarize(Role $role, array $assignments, array $units, array $campuses, array $careers): string
+    private function summarize(Role $role, array $assignments, array $units, array $campuses, array $careers, array $modalities): string
     {
         $own = collect($assignments)->map(fn (RoleAssignment $a): ?array => $units[$a->org_unit_id] ?? null)->filter()->values();
         $title = $role->titleOn($own->all());
@@ -61,12 +65,18 @@ final class RoleSummaryQuery
         $careerText = $careerIds->isEmpty() ? null : ($careerCodes->contains(null)
             ? $careerIds->count().($careerIds->count() === 1 ? ' carrera' : ' carreras')
             : $careerCodes->sort()->implode(', '));
+        $modalityNames = collect($assignments)->map(fn (RoleAssignment $a): ?string => $modalities[$a->modality_id] ?? null)
+            ->filter()->unique()->sort()->values();
         $campusCodes = collect($assignments)->map(fn (RoleAssignment $a): ?string => $campuses[$a->campus_id] ?? null)
             ->filter()->unique()->sort()->values();
 
-        $parts = array_filter([
+        $scope = implode(' · ', array_filter([
             $unitNames->implode(', '),
             $careerText,
+            $modalityNames->implode(', '),
+        ]));
+        $parts = array_filter([
+            $scope,
             $campusCodes->isEmpty() ? null : '('.$campusCodes->implode(', ').')',
         ]);
 

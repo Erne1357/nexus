@@ -20,7 +20,7 @@ final class NotifyProposalReturned
 
     public function handle(CareerProposal $proposal, Department $department, string $comment): int
     {
-        $coordinators = $this->recipients->holders(AcademicLoadPermission::ProposalUpdate, Target::of(campus: $proposal->campus_id, career: $proposal->career_id));
+        $coordinators = $this->recipients->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $proposal->campus_id, career: $proposal->career_id));
 
         return $this->notifyHolders->handle($coordinators, new ProposalReturned($proposal, $department, $comment))->count();
     }

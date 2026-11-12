@@ -65,7 +65,7 @@ final class DepartmentPdf extends PublishedPdf implements StaffExport
 
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId, unit: StaffExports::units($this->departmentIds));
+        return Target::of(modality: $this->modalityId($this->campusId), unit: StaffExports::units($this->departmentIds));
     }
 
     public function filename(): string

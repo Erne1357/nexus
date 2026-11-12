@@ -54,11 +54,12 @@ it('niega todo al jefe de otro departamento', function () {
     expect(inboxAbilitiesOf($jefe))->toBe([false, false]);
 });
 
-it('niega todo a un alcance del departamento en otro campus', function (Role $role) {
-    $user = User::factory()->withRole($role, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
+it('AZ-S17: niega todo a un alcance del departamento en otra modalidad', function (Role $role) {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $user = User::factory()->withRole($role, ['modality_id' => modalityOf('EAD')->id, 'department_id' => departmentKey(10)])->create();
 
     expect(inboxAbilitiesOf($user))->toBe([false, false])
-        ->and($user->can('viewAny', [ProposalReview::class, $this->c2, $this->department]))->toBeTrue();
+        ->and($user->can('viewAny', [ProposalReview::class, $this->c2, $this->department]))->toBeFalse();
 })->with([Role::JefeDepartamento, Role::JefeProyectoDocente]);
 
 it('el jefe de departamento de todo el Tec decide la parte de su departamento en cualquier campus', function () {

@@ -128,7 +128,7 @@ enum Role: string
             self::Subdireccion => 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.',
             self::JefeDepartamento => 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.',
             self::JefeProyectoDocente => 'Este puesto pide modalidad y departamento académico. El campus es opcional: sin campus, trabaja todos los de su modalidad.',
-            self::Coordinador => 'Este puesto pide modalidad y carrera. El campus es opcional: sin campus, trabaja todos los de su modalidad.',
+            self::Coordinador => 'Pide una modalidad y una o varias carreras; el campus es opcional: sin campus, trabaja todos los de su modalidad. Se crea un nombramiento por carrera.',
             self::Docente, self::Alumno => null,
         };
     }

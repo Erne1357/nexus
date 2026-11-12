@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad\Exports;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Exports\Concerns\ResolvesCampusModality;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
@@ -26,6 +27,8 @@ use Dompdf\Options;
  */
 abstract class PublishedPdf implements PublishedExport
 {
+    use ResolvesCampusModality;
+
     /** Los tokens `chain-N` del tema claro de DESIGN.md: el PDF no carga `app.css`. */
     public const array CHAINS = ['#6d4fc2', '#0f7c8c', '#b0457f', '#c2661a', '#3b56b8', '#6b7a1f', '#1f86c7', '#8a5a3c', '#4d6b7a', '#9c4fd1', '#2f8f5b', '#c24f9b'];
 
@@ -71,7 +74,7 @@ abstract class PublishedPdf implements PublishedExport
 
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId);
+        return Target::of(modality: $this->modalityId($this->campusId));
     }
 
     public function build(): string

@@ -174,11 +174,15 @@ it('quien no puede publicar no abre la confirmación', function () {
         ->assertSet('confirming', false);
 });
 
-it('no lo ve otro departamento, otro campus ni otro rol', function (Closure $user) {
+it('no lo ve otro departamento, otra modalidad ni otro rol', function (Closure $user) {
     Livewire::actingAs($user())->test(PUBLISH_COMPONENT, ['load' => $this->load])->assertForbidden();
 })->with([
     'jefe de otro departamento' => [fn () => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(11)])->create()],
-    'jefe de proyecto docente de otro campus' => [fn () => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => Campus::factory()->create()->id, 'department_id' => departmentKey(10)])->create()],
+    'jefe de proyecto docente de otra modalidad' => [function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+
+        return User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('EAD')->id, 'department_id' => departmentKey(10)])->create();
+    }],
     'coordinador' => [fn () => User::factory()->withRole(Role::Coordinador, ['campus_id' => test()->campus->id, 'career_id' => careerKey(20)])->create()],
     'docente' => [fn () => User::factory()->withRole(Role::Docente)->create()],
 ]);
