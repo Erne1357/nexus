@@ -46,6 +46,8 @@
 
                     @if (session('status') === 'access-accepted')
                         <x-alert title="Tu acceso quedó activo. Entra con tu RFC y la contraseña del correo; Nexus te pedirá cambiarla." icon="o-check-circle" class="alert-success" />
+                    @elseif (session('status') === 'password-reset')
+                        <x-alert title="Tu contraseña quedó lista. Entra con ella." icon="o-check-circle" class="alert-success" />
                     @endif
 
                     <x-input
@@ -72,18 +74,9 @@
                     />
 
                     <div class="flex flex-wrap items-center justify-between gap-x-3.5 gap-y-2">
-                        <button
-                            type="button"
-                            class="link text-[14.5px] underline-offset-3"
-                            x-on:click="forgotOpen = ! forgotOpen"
-                            x-bind:aria-expanded="forgotOpen"
-                            aria-controls="login-forgot"
-                        >¿Olvidaste tu contraseña?</button>
+                        <a href="{{ route('password.request') }}" class="link text-[14.5px] underline-offset-3">¿Olvidaste tu contraseña?</a>
                         <x-checkbox label="Recordarme" name="remember" value="1" :checked="(bool) old('remember')" />
                     </div>
-                    <p id="login-forgot" x-show="forgotOpen" x-cloak class="-mt-1.5 text-[14.5px] text-neutral">
-                        Pídele al administrador del sistema que la restablezca.
-                    </p>
 
                     <x-button label="Entrar" type="submit" class="btn-accent mt-7 h-[50px] text-[16.5px]" />
                 </form>

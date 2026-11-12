@@ -4,7 +4,6 @@ namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\DefaultPassword;
-use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -37,7 +36,7 @@ final class UpdateUserPassword implements UpdatesUserPasswords
     {
         $validated = Validator::make($input, [
             'current_password' => ['required', 'string', 'current_password:'.config('fortify.guard')],
-            'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password', $this->notTheDefaultPassword()],
+            'password' => ['required', 'string', Password::defaults(), 'confirmed', 'different:current_password', $this->defaultPassword->rejectionRule()],
         ])->validate();
 
         DB::transaction(function () use ($user, $validated): void {
@@ -54,14 +53,5 @@ final class UpdateUserPassword implements UpdatesUserPasswords
                 ->event('password-changed')
                 ->log('Cambió su contraseña');
         });
-    }
-
-    private function notTheDefaultPassword(): Closure
-    {
-        return function (string $attribute, mixed $value, Closure $fail): void {
-            if (is_string($value) && $this->defaultPassword->matches($value)) {
-                $fail('No puedes usar la contraseña por defecto.');
-            }
-        };
     }
 }

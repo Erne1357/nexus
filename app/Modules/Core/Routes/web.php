@@ -1,12 +1,14 @@
 <?php
 
 use App\Modules\Core\Http\Controllers\AccessInvitationPage;
+use App\Modules\Core\Http\Controllers\ForgotPasswordPage;
+use App\Modules\Core\Http\Controllers\ResetPasswordPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
 | Rutas de Core. El login, el logout y `PUT /user/password` los registra Fortify
-| (config/fortify.php); aquí, la página de inicio, la pantalla de cambio de contraseña y la lista de notificaciones, el CRUD de
+| (config/fortify.php); aquí, la invitación de acceso, el restablecimiento de contraseña por correo, la página de inicio, la pantalla de cambio de contraseña y la lista de notificaciones, el CRUD de
 | Campus, el de Periodos, la ficha de un periodo, «Personas y puestos» con su ficha y el Organigrama. Quién entra a cada página lo decide la página con su policy, no la ruta.
 */
 
@@ -19,6 +21,20 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('/access/{user}/{hash}', [AccessInvitationPage::class, 'show'])->name('access.accept');
     Route::post('/access/{user}/{hash}', [AccessInvitationPage::class, 'accept'])->name('access.accept.store');
+});
+
+/*
+| «¿Olvidaste tu contraseña?» por el correo institucional (AC-16 a AC-18): pedir el enlace (con el usuario, no el correo)
+| y, con el enlace, elegir la contraseña nueva; el GET del enlace solo muestra el formulario. Como el de la invitación,
+| sirve con o sin sesión y no inicia ninguna. Pedir el enlace tiene su límite por usuario y por IP
+| (`password-reset-link`, FortifyServiceProvider); lo demás, el mismo límite holgado por IP.
+*/
+Route::post('/forgot-password', [ForgotPasswordPage::class, 'send'])->middleware('throttle:password-reset-link')->name('password.email');
+
+Route::middleware('throttle:60,1')->group(function () {
+    Route::get('/forgot-password', [ForgotPasswordPage::class, 'show'])->name('password.request');
+    Route::get('/reset-password', [ResetPasswordPage::class, 'show'])->name('password.reset');
+    Route::post('/reset-password', [ResetPasswordPage::class, 'update'])->name('password.update');
 });
 
 Route::middleware('auth')->group(function () {

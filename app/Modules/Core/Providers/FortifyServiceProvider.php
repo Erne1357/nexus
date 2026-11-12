@@ -40,6 +40,14 @@ final class FortifyServiceProvider extends ServiceProvider
     public const int LOGIN_ATTEMPTS_PER_MINUTE = 5;
 
     /**
+     * Enlaces para restablecer la contraseña que se pueden pedir para un mismo usuario, desde cualquier IP, en
+     * RESET_LINK_USERNAME_DECAY_MINUTES minutos (AC-17, supuesto por confirmar).
+     */
+    public const int RESET_LINK_REQUESTS_PER_USERNAME = 3;
+
+    public const int RESET_LINK_USERNAME_DECAY_MINUTES = 15;
+
+    /**
      * Microsegundos mínimos de un intento fallido, para que la respuesta no delate si el
      * username existe o está inactivo (lo mismo que hace SessionGuard::attempt()).
      */
@@ -81,6 +89,15 @@ final class FortifyServiceProvider extends ServiceProvider
             Limit::perMinute((int) config('fortify.ip_attempts_per_minute', 60))
                 ->by('ip|'.$request->ip())
                 ->response($this->lockedOut(...)),
+        ]);
+
+        RateLimiter::for('password-reset-link', fn (Request $request): array => [
+            Limit::perMinutes(self::RESET_LINK_USERNAME_DECAY_MINUTES, self::RESET_LINK_REQUESTS_PER_USERNAME)
+                ->by('username|'.Str::transliterate(Str::lower($request->string('username')->value())))
+                ->response($this->resetLinkLockedOut(...)),
+            Limit::perMinute((int) config('fortify.password_reset_ip_requests_per_minute', 10))
+                ->by('ip|'.$request->ip())
+                ->response($this->resetLinkLockedOut(...)),
         ]);
 
         Event::listen(function (Login $event): void {
@@ -139,5 +156,20 @@ final class FortifyServiceProvider extends ServiceProvider
         return back()
             ->withInput($request->only(Fortify::username(), 'remember'))
             ->withErrors([Fortify::username() => __('auth.throttle', ['seconds' => $headers['Retry-After'] ?? 60])]);
+    }
+
+    /**
+     * Respuesta al exceder el límite de enlaces (AC-17): de vuelta a la pantalla con el aviso, el mismo para el límite
+     * por usuario y por IP, y para un usuario que exista o no.
+     *
+     * @param  array<string, int|string>  $headers
+     */
+    private function resetLinkLockedOut(Request $request, array $headers): RedirectResponse
+    {
+        $minutes = max(1, (int) ceil(((int) ($headers['Retry-After'] ?? 60)) / 60));
+
+        return redirect()->route('password.request')
+            ->withInput($request->only('username'))
+            ->withErrors(['username' => 'Ya se pidieron varios enlaces. Intenta de nuevo en '.$minutes.($minutes === 1 ? ' minuto.' : ' minutos.')]);
     }
 }

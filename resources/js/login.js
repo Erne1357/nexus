@@ -41,7 +41,6 @@ const storage = {
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('nexusLogin', ({ total }) => ({
         view: 'login',
-        forgotOpen: false,
         current: 0,
         held: false,
         progress: null,
