@@ -48,7 +48,13 @@ final class ArchiveSiiExport
      * @var array<string, list<string>>
      */
     public const array EXCLUDED = [
-        SiiFile::Docentes->value => ['foto', 'firma'],
+        SiiFile::Docentes->value => [
+            'foto', 'firma',
+            'pigmentacion', 'pelo', 'frente', 'cejas', 'ojos', 'nariz', 'boca', 'estaturamts', 'pesokg', 'senas_visibles',
+            'padre', 'madre', 'conyuge', 'hijos',
+            'num_cartilla_smn', 'ano_clase',
+            'domicilio_empleado', 'colonia_empleado', 'codigo_postal_empleado',
+        ],
         SiiFile::Alumnos->value => ['foto', 'firma', 'nip'],
         SiiFile::Acceso->value => ['contrasena'],
     ];
