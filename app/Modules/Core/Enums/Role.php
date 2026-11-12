@@ -57,7 +57,7 @@ enum Role: string
             self::JefeProyectoDocente => 'Junto con el jefe de departamento, asignas docentes a los grupos según la prioridad de base.',
             self::Coordinador => 'Analizas el avance de los alumnos de tu carrera, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre.',
             self::Docente => 'Consultas tu propia carga: los grupos que impartes y sus horarios.',
-            self::Alumno => 'Consultas tus datos escolares en «Mis datos». Entras con tu NIP del SII y puedes cambiarlo por una contraseña propia cuando quieras.',
+            self::Alumno => 'Consultas tus datos escolares en «Mis datos», y ahí mismo puedes cambiar tu contraseña cuando quieras.',
         };
     }
 
