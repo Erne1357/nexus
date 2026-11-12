@@ -9,6 +9,7 @@ use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 
 /*
@@ -21,6 +22,7 @@ it('el jefe abre Materias, corrige una materia, la observa, regresa y valida', f
     $term = Term::factory()->current()->create();
     $campus = Campus::factory()->create();
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
+    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
     app(CreateTermReviews::class)->handle($term, $campus);
     Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Programación Orientada a Objetos', 'department_id' => $sis->id]);
     Subject::factory()->create(['code' => 'SCD-1028', 'name' => 'Redes de Computadoras', 'department_id' => $sis->id]);

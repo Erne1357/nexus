@@ -18,6 +18,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -39,9 +40,10 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
-    $this->campus = Campus::factory()->create(['code' => 'C2', 'settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => true]]);
+    $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica-Electrónica']);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
     app(CreateTermReviews::class)->handle($this->term, $this->campus);
 
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
@@ -143,7 +145,7 @@ describe('estados vacíos', function () {
 });
 
 describe('tablero', function () {
-    it('cuenta los validados y el total baja a 4 si el campus no usa salones', function () {
+    it('cuenta los validados y el total baja a 4 si ningún campus abierto usa salones', function () {
         $this->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
         CatalogReview::query()->where('catalog', Catalog::Rooms)->delete();
         reviewOf(Catalog::Careers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
@@ -151,7 +153,7 @@ describe('tablero', function () {
         reviewPage()->assertSee('1 de 4')->assertSee('Faltan 3 para sacar la carga de borrador');
     });
 
-    it('HC-14: si el campus usa salones y falta su revisión, la carga no puede salir de borrador aunque lo demás esté validado', function () {
+    it('HC-14: si un campus abierto usa salones y falta su revisión, la carga no puede salir de borrador aunque lo demás esté validado', function () {
         CatalogReview::query()->where('catalog', Catalog::Rooms)->delete();
         CatalogReview::query()->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
 
@@ -167,48 +169,26 @@ describe('tablero', function () {
         reviewPage()->assertSee('5 de 5')->assertSee('Todo validado');
     });
 
-    it('la revisión de salones de un campus donde el alcance del jefe no vale no se muestra (CatalogReviewPolicy::view)', function () {
-        /*
-        | El jefe es de SIS solo en C1 y de ELE en C2, así que C2 está en su credencial y puede ser su campus
-        | activo. En C2 su alcance de jefe de SIS no vale: las revisiones generales de SIS siguen visibles (son de
-        | todo el Tec) y la de salones de C2, no.
-        */
-        $c1 = Campus::factory()->create(['code' => 'C1']);
-        vacate(Role::JefeDepartamento, $this->sis->id);
-        vacate(Role::JefeDepartamento, $this->ele->id);
-        $jefe = User::factory()
-            ->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'campus_id' => $c1->id, 'valid_from' => today()->toDateString()])
-            ->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id, 'campus_id' => $this->campus->id, 'valid_from' => today()->toDateString()])
-            ->create();
-        onCampusPage($this->campus);
+    it('decisión 6: la revisión de salones es una para todos los campus, sin campus en la credencial', function () {
+        Campus::factory()->create(['code' => 'C1', 'name' => 'Campus Norte']);
 
-        reviewPage($jefe, ['department' => $this->sis->id])
-            ->assertSee($this->campus->name)
-            ->assertSeeHtml('data-testid="card-subjects"')
-            ->assertDontSeeHtml('data-testid="card-rooms"');
+        reviewPage()
+            ->assertSeeHtml('data-testid="card-rooms"')
+            ->assertSee('Todos los campus')
+            ->assertDontSee('Elige un campus');
     });
 
-    it('con varios puestos responde al perfil activo: como jefe no trae el campus de su coordinación, y como coordinador no entra', function () {
-        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus Norte']);
+    it('con varios puestos responde al perfil activo: como coordinador no entra', function () {
         vacate(Role::JefeDepartamento, $this->sis->id);
         $jefe = User::factory()
-            ->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'campus_id' => $c1->id, 'valid_from' => today()->toDateString()])
+            ->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'valid_from' => today()->toDateString()])
             ->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])
             ->create();
 
-        // C2 quedó en la sesión, pero solo lo trae la Coordinación: con Jefatura activa, su campus es C1.
         actingAsRole($jefe, Role::JefeDepartamento);
-        onCampusPage($this->campus);
-
-        reviewPage($jefe)
-            ->assertOk()
-            ->assertSee('Campus Norte')
-            ->assertDontSee($this->campus->name)
-            ->assertSeeHtml('data-testid="card-subjects"')
-            ->assertDontSeeHtml('data-testid="card-rooms"');
+        reviewPage($jefe)->assertOk()->assertSeeHtml('data-testid="card-rooms"');
 
         actingAsRole($jefe, Role::Coordinador);
-
         reviewPage($jefe)->assertForbidden();
     });
 
@@ -389,36 +369,47 @@ describe('corregir desde el drawer', function () {
         expect($career->fresh())->name->toBe('Ingeniería en Sistemas')->is_active->toBeTrue();
     });
 
-    it('CV2: los salones se corrigen solo si el campus deja que los jefes los editen', function () {
-        $building = Building::factory()->create(['campus_id' => $this->campus->id]);
-        $room = Room::factory()->for($building)->create(['code' => 'K-201', 'capacity' => 38, 'department_id' => $this->sis->id]);
-
-        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('edit', $room->id)->set('capacity', '40')->call('save')->assertHasNoErrors();
-        expect($room->fresh()->capacity)->toBe(40);
-
-        $this->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => false]]);
-
-        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('edit', $room->id)->set('capacity', '50')->call('save')->assertForbidden();
-        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('toggleActive', $room->id)->assertForbidden();
-        expect($room->fresh()->capacity)->toBe(40);
-    });
-
-    it('sin heads_edit_rooms el drawer de un salón solo deja observar', function () {
-        $this->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => false]]);
-        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['department_id' => $this->sis->id]);
+    it('CV2: el jefe corrige los salones de su departamento en cualquier campus y los mueve a un edificio de otro (CV-S10)', function () {
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['code' => 'K-201', 'capacity' => 38, 'department_id' => $this->sis->id]);
+        $c1 = Campus::factory()->create(['code' => 'C1']);
+        $building = Building::factory()->create(['campus_id' => $c1->id, 'code' => 'ED-N']);
 
         reviewPage($this->jefe, ['catalogo' => 'rooms'])
             ->call('edit', $room->id)
-            ->assertSee('Este campus no deja que los jefes corrijan salones')
-            ->set('flag', 'wrong_capacity')->call('addFlag')->assertHasNoErrors();
+            ->assertSet('building_id', $room->building_id)
+            ->assertSee('C1 · ED-N')
+            ->set('capacity', '40')
+            ->set('building_id', $building->id)
+            ->call('save')
+            ->assertHasNoErrors();
 
-        expect(CatalogReviewFlag::where('flaggable_id', $room->id)->count())->toBe(1);
+        expect($room->fresh())->capacity->toBe(40)->building_id->toBe($building->id)->campus_id->toBe($c1->id)
+            ->and(CatalogReviewMark::query()->where('record_id', $room->id)->exists())->toBeTrue();
+
+        reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('toggleActive', $room->id)->assertHasNoErrors();
+        expect($room->fresh()->is_active)->toBeFalse();
     });
 
-    it('los docentes no se editan aquí: guardar es 403', function () {
-        $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+    it('CV1: corrige el correo institucional de un docente; el de uno que ocupa otro puesto solo lo cambia el admin (AC-06)', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'AAAA800101AA1']);
 
-        reviewPage($this->jefe, ['catalogo' => 'teachers'])->call('edit', $teacher->id)->call('save')->assertForbidden();
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->call('edit', $teacher->id)
+            ->assertSeeHtml('data-testid="institutional-email"')
+            ->set('institutional_email', 'ana@cdjuarez.tecnm.mx')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        expect($teacher->fresh()->institutional_email)->toBe('ana@cdjuarez.tecnm.mx');
+
+        $staff = Teacher::factory()->adscribedTo($this->sis)->create(['user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create()->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->call('edit', $staff->id)
+            ->assertSee('solo lo cambia el administrador')
+            ->assertDontSeeHtml('data-testid="institutional-email"')
+            ->call('save')
+            ->assertForbidden();
     });
 
     it('un coordinador no corrige, observa ni valida llamando los métodos directo sobre una página que abrió el jefe', function () {
@@ -907,12 +898,92 @@ describe('marcas de revisado (CV7)', function () {
         expect(CatalogReviewMark::count())->toBe(0);
     })->with(['admin', 'subdirección', 'coordinador']);
 
-    it('CV7: en salones de un campus que no deja corregirlos, el jefe sí marca', function () {
-        $this->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'heads_edit_rooms' => false]]);
-        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['department_id' => $this->sis->id]);
+    it('CV7: en salones, el jefe marca los de su departamento de cualquier campus', function () {
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => Campus::factory()->create()->id]))->create(['department_id' => $this->sis->id]);
 
         reviewPage($this->jefe, ['catalogo' => 'rooms'])->call('setReviewed', $room->id, true)->assertHasNoErrors();
 
         expect(CatalogReviewMark::query()->where('record_id', $room->id)->exists())->toBeTrue();
+    });
+});
+
+describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
+    it('CV8: el jefe da de baja a un docente de su departamento desde la fila, con confirmación', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'AAAA800101AA1']);
+
+        $component = reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->assertSeeHtml("wire:click=\"dischargeTeacher('{$teacher->id}')\"")
+            ->assertSeeHtml('data-testid="discharge-AAAA800101AA1"')
+            ->call('dischargeTeacher', $teacher->id)
+            ->assertHasNoErrors();
+
+        expect($teacher->fresh()->is_active)->toBeFalse()
+            ->and(lastToastOf($component)['title'])->toBe('Docente dado de baja');
+    });
+
+    it('CV-S8: a un docente que ocupa un puesto la baja se ve deshabilitada con su motivo, y llamarla es 403', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'BBBB800101BB1', 'user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create()->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->assertDontSeeHtml("wire:click=\"dischargeTeacher('{$teacher->id}')\"")
+            ->assertSee('Ocupa un puesto: lo da de baja el administrador o la Subdirección.')
+            ->call('dischargeTeacher', $teacher->id)
+            ->assertForbidden();
+
+        expect($teacher->fresh()->is_active)->toBeTrue();
+    });
+
+    it('CV-S9: agrega por su RFC a un docente que ya existe, y lo dice si no hay', function () {
+        $teacher = Teacher::factory()->inactive()->create(['rfc' => 'CCCC800101CC1']);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->set('newTeacherRfc', 'zzzz800101zz1')->call('addTeacher')->assertHasErrors('newTeacherRfc')
+            ->set('newTeacherRfc', ' cccc800101cc1 ')->call('addTeacher')->assertHasNoErrors()
+            ->assertSet('newTeacherRfc', '');
+
+        expect($teacher->fresh()->is_active)->toBeTrue()
+            ->and($teacher->adscriptions()->sole()->department_id)->toBe($this->sis->id);
+    });
+
+    it('a un docente dado de baja que ocupa un puesto no lo agrega: lo dice y dice quién lo reactiva', function () {
+        $teacher = Teacher::factory()->inactive()->create(['rfc' => 'FFFF800101FF1', 'user_id' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create()->id]);
+
+        reviewPage($this->jefe, ['catalogo' => 'teachers'])
+            ->set('newTeacherRfc', 'FFFF800101FF1')
+            ->call('addTeacher')
+            ->assertHasErrors('newTeacherRfc')
+            ->assertSee('lo reactivan el administrador o la Subdirección');
+
+        expect($teacher->fresh()->is_active)->toBeFalse()
+            ->and($teacher->adscriptions()->count())->toBe(0);
+    });
+
+    it('admin, Subdirección y coordinador no dan de baja ni agregan, ni llamando los métodos directo', function (string $who) {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'DDDD800101DD1']);
+        Teacher::factory()->create(['rfc' => 'EEEE800101EE1']);
+        $user = match ($who) {
+            'admin' => User::factory()->admin()->create(),
+            'subdirección' => User::factory()->withRole(Role::Subdireccion, [])->create(),
+            'coordinador' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create(),
+        };
+
+        $page = reviewPage($this->jefe, ['catalogo' => 'teachers']);
+        $this->actingAs($user);
+        $page->call('dischargeTeacher', $teacher->id)->assertForbidden();
+
+        $page = reviewPage($this->jefe, ['catalogo' => 'teachers'])->set('newTeacherRfc', 'EEEE800101EE1');
+        $this->actingAs($user);
+        $page->call('addTeacher')->assertForbidden();
+
+        expect($teacher->fresh()->is_active)->toBeTrue()
+            ->and(Teacher::where('rfc', 'EEEE800101EE1')->sole()->adscriptions()->count())->toBe(0);
+    })->with(['admin', 'subdirección', 'coordinador']);
+
+    it('el jefe de otro departamento no da de baja a un docente de este', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+        $other = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create();
+
+        reviewPage($other, ['department' => $this->sis->id, 'catalogo' => 'teachers'])->assertForbidden();
+        expect($teacher->fresh()->is_active)->toBeTrue();
     });
 });

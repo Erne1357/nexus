@@ -53,8 +53,8 @@
                         <a href="{{ route('catalog-validation.review', ['department' => $department->id, 'catalogo' => $review->catalog->value]) }}" wire:click.prevent="$set('catalog', '{{ $review->catalog->value }}')" class="after:absolute after:inset-0 focus-visible:outline-none" data-testid="open-{{ $review->catalog->value }}">{{ $review->catalog->label() }}</a>
                     </h2>
                     <p class="mt-1 flex items-center gap-1.5 text-sm text-neutral">
-                        <x-icon :name="$review->catalog->isGeneral() ? 'o-building-library' : 'o-map-pin'" class="h-4 w-4" aria-hidden="true" />
-                        {{ $review->catalog->isGeneral() ? 'General · todo el Tec' : $review->campus?->name }}
+                        <x-icon name="o-building-library" class="h-4 w-4" aria-hidden="true" />
+                        {{ $review->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Rooms ? 'Todos los campus' : 'General · todo el Tec' }}
                     </p>
                 </div>
                 <x-core::status-badge :tone="$review->status->tone()" :label="$review->status->label()" />

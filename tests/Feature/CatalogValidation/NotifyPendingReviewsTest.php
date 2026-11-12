@@ -41,7 +41,7 @@ function reviewsFor(Term $term, Campus $campus, Department $department, ReviewSt
     foreach (Catalog::cases() as $catalog) {
         CatalogReview::factory()->create([
             'term_id' => $term->id,
-            'campus_id' => $catalog->isGeneral() ? null : $campus->id,
+            'campus_id' => null,
             'department_id' => $department->id,
             'catalog' => $catalog,
             'status' => $status,
@@ -61,7 +61,7 @@ it('avisa al jefe de cada departamento con catálogos pendientes y dice cuáles'
         $message = $notification->message($this->jefeSistemas);
 
         return $message->title === 'Tienes catálogos por validar'
-            && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes, materias, planes de estudio, carreras y salones de Campus II'
+            && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes, materias, planes de estudio, carreras y salones'
             && $message->route === 'catalog-validation.review'
             && $message->parameters === ['department' => $this->sistemas->id]
             && $message->termId === $this->term->id

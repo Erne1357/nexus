@@ -8,6 +8,8 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Core\Rules\RoleAssignmentRules;
+use App\Modules\Faculty\Models\TeacherDepartment;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -20,7 +22,10 @@ use Illuminate\Support\Collection;
  */
 final class CatalogRecordsQuery
 {
-    public function __construct(private readonly CatalogContentsQuery $contents) {}
+    public function __construct(
+        private readonly CatalogContentsQuery $contents,
+        private readonly RoleAssignmentRules $roles,
+    ) {}
 
     /**
      * Una página de registros por clave. `$flag` es `with` (con observación abierta), `without` (sin ella) o vacío;
@@ -36,7 +41,7 @@ final class CatalogRecordsQuery
         $model = $query->getModel();
 
         match ($review->catalog) {
-            Catalog::Rooms => $query->with('building'),
+            Catalog::Rooms => $query->with(['building', 'campus']),
             Catalog::StudyPlans => $query->with('career'),
             default => null,
         };
@@ -91,6 +96,36 @@ final class CatalogRecordsQuery
     public function reviewedIds(CatalogReview $review, array $ids): array
     {
         return array_fill_keys($review->marks()->whereIn('record_id', $ids)->pluck('record_id')->all(), true);
+    }
+
+    /**
+     * Las adscripciones sin borrar de los docentes dados al departamento de la revisión, por id de docente: con ellas
+     * TeacherPolicy::removeAdscription decide quién da de baja a cada uno (CV8, CV-S8) y DischargeReviewTeacher lo da de baja.
+     *
+     * @param  list<string>  $teacherIds
+     * @return array<string, TeacherDepartment>
+     */
+    public function teacherAdscriptions(CatalogReview $review, array $teacherIds): array
+    {
+        return TeacherDepartment::query()
+            ->with('teacher:id,user_id')
+            ->where('department_id', $review->department_id)
+            ->whereIn('teacher_id', $teacherIds)
+            ->get()
+            ->keyBy('teacher_id')
+            ->all();
+    }
+
+    /**
+     * De los usuarios dados, los que ocupan un puesto vigente o por empezar (RoleAssignmentRules::holdsStaffRole), como
+     * llaves, con una sola consulta: a sus docentes solo los dan de baja el admin y la Subdirección (CV-S8).
+     *
+     * @param  list<string>  $userIds
+     * @return array<string, true>
+     */
+    public function staffUserIds(array $userIds): array
+    {
+        return $userIds === [] ? [] : array_fill_keys($this->roles->staffUserIds()->whereIn('user_id', $userIds)->distinct()->pluck('user_id')->all(), true);
     }
 
     /**

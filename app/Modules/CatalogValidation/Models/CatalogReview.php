@@ -19,8 +19,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Revisión de un catálogo de un departamento en un periodo. Sin campus si el catálogo es general (una vez
- * por periodo para todo el Tec); con el campus si son los salones (D2, confirmado el 1 de noviembre de 2026).
+ * Revisión de un catálogo de un departamento en un periodo, una vez por periodo para todo el Tec y sin campus, también
+ * los salones de todos los campus (decisión 6, confirmada el 12 de noviembre de 2026; antes, D2, los salones eran por
+ * campus). `campus_id` queda en la tabla, siempre nulo (CHECK `catalog_reviews_campus_check`).
  * `snapshot` es la foto de los registros activos al validarla: `list<array{id: string, code: string, name: ?string}>`,
  * nula hasta la primera validación.
  */
@@ -53,7 +54,7 @@ class CatalogReview extends Model
     }
 
     /**
-     * El campus de la revisión de salones; nulo en las generales.
+     * Siempre nulo desde la decisión 6 (una revisión de salones para todos los campus).
      *
      * @return BelongsTo<Campus, $this>
      */
@@ -101,12 +102,12 @@ class CatalogReview extends Model
     }
 
     /**
-     * «Materias de SIS» o «Salones de SIS en C2», para la bitácora.
+     * «Materias de SIS», para la bitácora.
      *
      * @return Attribute<string, never>
      */
     protected function title(): Attribute
     {
-        return Attribute::get(fn (): string => "{$this->catalog->label()} de {$this->department?->code}".($this->campus_id === null ? '' : " en {$this->campus?->code}"));
+        return Attribute::get(fn (): string => "{$this->catalog->label()} de {$this->department?->code}");
     }
 }

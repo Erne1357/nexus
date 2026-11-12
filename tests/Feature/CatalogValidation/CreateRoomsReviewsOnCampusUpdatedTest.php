@@ -12,8 +12,9 @@ use App\Modules\Core\Models\User;
 
 /*
 | Si un campus empieza a usar salones, se crean solas las revisiones de salones que falten en los periodos abiertos
-| en él (reglas-de-negocio.md, "Periodo y calendario"; supuesto por confirmar). No se crean en periodos que no se
-| abrieron en ese campus, y repetirlo no duplica nada.
+| en él (reglas-de-negocio.md, "Periodo y calendario"; supuesto por confirmar): una por departamento y periodo, sin
+| campus (decisión 6, confirmada el 12 de noviembre de 2026). No se crean en periodos que no se abrieron en ese campus,
+| y repetirlo no duplica nada.
 */
 
 beforeEach(function () {
@@ -40,7 +41,7 @@ it('crea las revisiones de salones de los periodos abiertos cuando el campus emp
 
     expect(roomsReviews($this->opened))->toBe(2)
         ->and(roomsReviews($this->notOpened))->toBe(0)
-        ->and(CatalogReview::query()->where('catalog', Catalog::Rooms->value)->pluck('campus_id')->unique()->all())->toBe([$this->campus->id]);
+        ->and(CatalogReview::query()->where('catalog', Catalog::Rooms->value)->pluck('campus_id')->unique()->all())->toBe([null]);
 });
 
 it('no duplica si se vuelve a guardar el perfil, y no crea nada si el campus no usa salones', function () {

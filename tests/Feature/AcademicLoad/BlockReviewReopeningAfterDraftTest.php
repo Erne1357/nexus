@@ -17,8 +17,8 @@ use Illuminate\Validation\ValidationException;
 
 /*
 | AcademicLoad veta reabrir una revisión validada (CatalogReviewReopening) si alguna carga del departamento en
-| el periodo ya salió de borrador: en cualquier campus si la revisión es general, en el campus de la revisión
-| si son salones (CV5, confirmado el 2 de noviembre de 2026).
+| el periodo ya salió de borrador en cualquier campus (CV5, confirmado el 2 de noviembre de 2026), también la de salones,
+| que es una para todos los campus (decisión 6, confirmada el 12 de noviembre de 2026).
 */
 
 beforeEach(function () {
@@ -40,9 +40,9 @@ function reopeningLoad(Campus $campus, LoadStatus $status, array $attributes = [
     ]);
 }
 
-function reopeningReview(Catalog $catalog, ?Campus $campus = null): CatalogReview
+function reopeningReview(Catalog $catalog): CatalogReview
 {
-    $factory = $catalog === Catalog::Rooms ? CatalogReview::factory()->rooms($campus) : CatalogReview::factory()->general($catalog);
+    $factory = $catalog === Catalog::Rooms ? CatalogReview::factory()->rooms() : CatalogReview::factory()->general($catalog);
 
     return $factory->validated()->create(['term_id' => test()->term->id, 'department_id' => test()->department->id]);
 }
@@ -84,15 +84,11 @@ it('CV5: con todas las cargas del departamento en borrador, se reabre', function
     expect($review->fresh()->status)->toBe(ReviewStatus::InReview);
 });
 
-it('CV5: en salones solo cuenta la carga del campus de la revisión', function () {
+it('CV5: la de salones, una para todos los campus, se veta si la carga salió de borrador en cualquier campus', function () {
+    reopeningLoad($this->c1, LoadStatus::Draft);
     reopeningLoad($this->c2, LoadStatus::Proposed);
-    $c1Rooms = reopeningReview(Catalog::Rooms, $this->c1);
-    $c2Rooms = reopeningReview(Catalog::Rooms, $this->c2);
 
-    app(ReopenReview::class)->handle($c1Rooms, $this->actor);
-
-    expect($c1Rooms->fresh()->status)->toBe(ReviewStatus::InReview)
-        ->and(reopeningErrors($c2Rooms))->toBe(['status' => ['La carga académica de SIS ya salió de borrador en C2.']]);
+    expect(reopeningErrors(reopeningReview(Catalog::Rooms)))->toBe(['status' => ['La carga académica de SIS ya salió de borrador en C2.']]);
 });
 
 it('no cuentan las cargas de otro departamento ni de otro periodo', function () {
@@ -109,7 +105,7 @@ describe('en secuencia con ProposeLoad', function () {
     beforeEach(function () {
         $this->load = reopeningLoad($this->c1, LoadStatus::Draft);
         $this->reviews = collect(Catalog::general())->map(fn (Catalog $catalog) => reopeningReview($catalog))
-            ->push(reopeningReview(Catalog::Rooms, $this->c1));
+            ->push(reopeningReview(Catalog::Rooms));
         // HC-20: la carga sale de borrador con al menos una parte de propuesta aceptada del departamento.
         ProposalReview::factory()->accepted()->create([
             'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->load->campus_id])->id,

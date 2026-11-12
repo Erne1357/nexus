@@ -75,13 +75,12 @@ function runCatalogDemoSeeder(string $profile = 'demo', string $mode = 'mixed'):
     (new DatabaseSeeder)->setContainer(app())->callWith(CatalogValidationDemoSeeder::class, ['profile' => $profile, 'mode' => $mode]);
 }
 
-function cvReview(string $term, string $department, Catalog $catalog, ?string $campus = null): CatalogReview
+function cvReview(string $term, string $department, Catalog $catalog): CatalogReview
 {
     return CatalogReview::query()
         ->whereRelation('term', 'code', $term)
         ->whereRelation('department', 'code', $department)
         ->where('catalog', $catalog)
-        ->when($campus !== null, fn ($query) => $query->whereRelation('campus', 'code', $campus))
         ->sole();
 }
 
@@ -116,8 +115,8 @@ it('deja el periodo actual con los estados fijos por departamento (HC-14)', func
     }
 
     expect($pending('CEA', 'C2'))->toBe(['rooms', 'study_plans', 'careers'])
-        ->and(cvReview('20271', 'CEA', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::InReview)
-        ->and(cvReview('20271', 'EE', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'CEA', Catalog::Rooms)->status)->toBe(ReviewStatus::InReview)
+        ->and(cvReview('20271', 'EE', Catalog::Rooms)->status)->toBe(ReviewStatus::Validated)
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::Validated)
         ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::InReview)
         ->and(cvReview('20271', 'CEA', Catalog::Careers)->validated_by)->toBeNull()
@@ -136,8 +135,8 @@ it('con el perfil demo deja CEA y EE validados y MM reabierto con salones en rev
 
     expect($pending('EE'))->toBe([])
         ->and($pending('CEA'))->toBe([])
-        ->and(cvReview('20271', 'CEA', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::Validated)
-        ->and(cvReview('20271', 'MM', Catalog::Rooms, 'C2')->status)->toBe(ReviewStatus::InReview)
+        ->and(cvReview('20271', 'CEA', Catalog::Rooms)->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'MM', Catalog::Rooms)->status)->toBe(ReviewStatus::InReview)
         ->and(CatalogReviewFlag::query()->whereRelation('review', 'catalog', Catalog::Rooms)->whereRelation('review.department', 'code', 'MM')->exists())->toBeTrue()
         ->and($pending('MM'))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::InReview)
@@ -174,8 +173,8 @@ it('valida el periodo anterior con la foto y el actual cuenta altas y bajas cont
         ->and($previous->snapshot)->not->toBeEmpty()
         ->and($previous->validator->name)->toBe('Jefe CB');
 
-    foreach ([[Catalog::Teachers, null], [Catalog::Subjects, null], [Catalog::Rooms, 'C2']] as [$catalog, $campus]) {
-        $summary = $query->summary(cvReview('20271', 'CB', $catalog, $campus));
+    foreach ([Catalog::Teachers, Catalog::Subjects, Catalog::Rooms] as $catalog) {
+        $summary = $query->summary(cvReview('20271', 'CB', $catalog));
 
         expect($summary['added'])->not->toBeEmpty("altas de {$catalog->value}");
 

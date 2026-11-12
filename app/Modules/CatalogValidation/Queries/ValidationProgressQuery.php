@@ -23,9 +23,10 @@ use Spatie\Activitylog\Models\Activity;
 /**
  * Lo que lee el tablero de avance de validación (tarea 2.5): la matriz de departamentos por catálogo de un periodo.
  *
- * El total de un departamento sigue la regla de HC-14, como CatalogReviewQuery::pendingFor: las cuatro revisiones
- * generales y la de salones de cada campus que está en el alcance y usa salones. Una revisión que falta cuenta como
- * pendiente. Todo sale de pocas consultas para todos los departamentos, sin una por fila.
+ * El total de un departamento sigue la regla de HC-14, como CatalogReviewQuery::pendingFor: las cuatro revisiones que
+ * no son salones y la de salones, una para todos los campus (decisión 6, confirmada el 12 de noviembre de 2026), si
+ * algún campus del alcance usa salones. Una revisión que falta cuenta como pendiente. Todo sale de pocas consultas
+ * para todos los departamentos, sin una por fila.
  */
 final class ValidationProgressQuery
 {
@@ -51,8 +52,7 @@ final class ValidationProgressQuery
     /**
      * La matriz del periodo para los campus dados (los abiertos, o el que filtra la pantalla).
      *
-     * `columns`: Docentes, Materias, Planes y Carreras, y una de Salones por campus que usa salones; `general_columns` y
-     * `room_columns` las traen ya separadas (la pantalla pinta Salones en una sola columna con una insignia por campus). `rows`: cada
+     * `columns`: Docentes, Materias, Planes y Carreras, y al final Salones si algún campus del alcance usa salones. `rows`: cada
      * departamento activo, con sus revisiones por columna (nula si falta), cuántas lleva validadas del total, sus
      * pendientes y en revisión, cuántos registros lleva revisados de cuántos en cada una (`reviewed`, nulo si falta; CV7),
      * las observaciones abiertas, el jefe vigente, el estado de su carga por campus
@@ -66,9 +66,7 @@ final class ValidationProgressQuery
      * @param  Collection<int, Campus>  $campuses
      *                                             Con `$departmentId`, solo ese departamento (para el drawer de uno que los filtros dejaron fuera).
      * @return array{
-     *     columns: list<array{key: string, catalog: Catalog, campus: ?Campus}>,
-     *     general_columns: list<array{key: string, catalog: Catalog, campus: ?Campus}>,
-     *     room_columns: list<array{key: string, catalog: Catalog, campus: ?Campus}>,
+     *     columns: list<array{key: string, catalog: Catalog}>,
      *     rows: list<array<string, mixed>>,
      *     totals: array<string, array{validated: int, in_review: int, total: int}>,
      *     global: array{validated: int, in_review: int, pending: int, total: int, percent: int},
@@ -78,26 +76,19 @@ final class ValidationProgressQuery
      */
     public function board(Term $term, Collection $campuses, string $search = '', string $status = '', ?string $departmentId = null): array
     {
-        $columns = [];
-
-        foreach (Catalog::general() as $catalog) {
-            $columns[] = ['key' => $catalog->value, 'catalog' => $catalog, 'campus' => null];
-        }
-
-        foreach ($campuses->filter(fn (Campus $campus): bool => $campus->profile->usesRooms) as $campus) {
-            $columns[] = ['key' => 'rooms:'.$campus->getKey(), 'catalog' => Catalog::Rooms, 'campus' => $campus];
-        }
+        $catalogs = Catalog::requiredFor($campuses->contains(fn (Campus $campus): bool => $campus->profile->usesRooms));
+        $ordered = [...array_filter($catalogs, fn (Catalog $catalog): bool => $catalog !== Catalog::Rooms), ...array_filter($catalogs, fn (Catalog $catalog): bool => $catalog === Catalog::Rooms)];
+        $columns = array_map(fn (Catalog $catalog): array => ['key' => $catalog->value, 'catalog' => $catalog], $ordered);
 
         $departments = Department::query()->where('is_active', true)->when($departmentId !== null, fn ($query) => $query->whereKey($departmentId))->orderBy('code')->get();
-        $roomCampusIds = collect($columns)->pluck('campus.id')->filter()->all();
 
         $reviews = CatalogReview::query()
             ->where('term_id', $term->getKey())
             ->whereIn('department_id', $departments->modelKeys())
-            ->where(fn ($query) => $query->whereNull('campus_id')->orWhereIn('campus_id', $roomCampusIds))
+            ->whereIn('catalog', $catalogs)
             ->with('validator')
             ->get()
-            ->keyBy(fn (CatalogReview $review): string => $review->department_id.'|'.($review->campus_id === null ? $review->catalog->value : 'rooms:'.$review->campus_id));
+            ->keyBy(fn (CatalogReview $review): string => $review->department_id.'|'.$review->catalog->value);
 
         $reviewed = $this->contents->progressOf($reviews->values());
 
@@ -105,7 +96,7 @@ final class ValidationProgressQuery
             ->join('catalog_reviews', 'catalog_reviews.id', '=', 'catalog_review_flags.review_id')
             ->where('catalog_reviews.term_id', $term->getKey())
             ->whereIn('catalog_reviews.department_id', $departments->modelKeys())
-            ->where(fn ($query) => $query->whereNull('catalog_reviews.campus_id')->orWhereIn('catalog_reviews.campus_id', $roomCampusIds))
+            ->whereIn('catalog_reviews.catalog', $catalogs)
             ->selectRaw('catalog_reviews.department_id, count(*) filter (where catalog_review_flags.resolved_at is null) as open, count(*) filter (where catalog_review_flags.resolved_at is not null) as resolved')
             ->groupBy('catalog_reviews.department_id')
             ->get()
@@ -187,12 +178,13 @@ final class ValidationProgressQuery
             ];
         }
 
-        return ['columns' => $columns, 'general_columns' => array_values(array_filter($columns, fn (array $column): bool => $column['campus'] === null)), 'room_columns' => array_values(array_filter($columns, fn (array $column): bool => $column['campus'] !== null)), 'rows' => $rows, 'totals' => $totals, 'global' => $global, 'flags' => $summary, 'remindable' => $remindableHeads];
+        return ['columns' => $columns, 'rows' => $rows, 'totals' => $totals, 'global' => $global, 'flags' => $summary, 'remindable' => $remindableHeads];
     }
 
     /**
-     * Las observaciones abiertas de un departamento en el alcance, de las más recientes a las más antiguas, con el
-     * registro observado (aunque se haya borrado), quién la puso y su revisión.
+     * Las observaciones abiertas de un departamento en el periodo, de las más recientes a las más antiguas, con el
+     * registro observado (aunque se haya borrado), quién la puso y su revisión. Las revisiones no son de un campus
+     * (decisión 6): `$campuses` solo decide si entran las de salones (si alguno usa salones).
      *
      * @param  Collection<int, Campus>  $campuses
      * @return Collection<int, CatalogReviewFlag>
@@ -204,7 +196,7 @@ final class ValidationProgressQuery
             ->whereHas('review', fn ($query) => $query
                 ->where('term_id', $term->getKey())
                 ->where('department_id', $department->getKey())
-                ->where(fn ($scope) => $scope->whereNull('campus_id')->orWhereIn('campus_id', $campuses->pluck('id')->all())))
+                ->whereIn('catalog', Catalog::requiredFor($campuses->contains(fn (Campus $campus): bool => $campus->profile->usesRooms))))
             ->with(['review.campus', 'review.department', 'flaggable', 'flagger'])
             ->orderByDesc('created_at')
             ->get();
