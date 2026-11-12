@@ -21,7 +21,7 @@ use Tests\Fixtures\Authorization\FakePermission;
 /*
 | AZ-S17: el alcance por modalidad, con el campus opcional (M5, M7 y M9, confirmados el 12 de noviembre de 2026; MS6 y
 | MS8, supuestos por confirmar). Un nombramiento sin modalidad cubre todas las activas; uno con modalidad, solo esa y
-| solo si está activa y sin borrar. Lo que se lee declara la modalidad sin el campus; lo que se escribe sobre algo con
+| solo si está activa y sin borrar (MS8); uno sin modalidad cubre también las inactivas . Lo que se lee declara la modalidad sin el campus; lo que se escribe sobre algo con
 | campus declara también el campus. Permisos de prueba: FakePermission::ViewModality*. Carreras X (20) e Y (21),
 | departamento 10. EAD se activa en estas pruebas; En línea sigue inactiva.
 */
@@ -193,4 +193,18 @@ it('un snapshot cacheado sin modality_id se descarta y se vuelve a leer de la ba
         ->and(AuthorizationSnapshots::FORMAT)->toBe(3)
         ->and($snapshot->scopes())->toEqual([new AssignmentScope(Role::Coordinador, $this->c2->id, null, $this->x, $this->pres->id)])
         ->and(AuthorizationSnapshot::fromArray($snapshot->toArray()))->toEqual($snapshot);
+});
+
+it('MS8: con EAD inactiva, quien fija EAD o PRES no la cubre con un permiso de gestión, y el jefe sin modalidad tampoco', function () {
+    $this->ead->update(['is_active' => false]);
+    $onEad = Target::of(modality: $this->ead->id, unit: departmentKey(10), career: $this->x);
+
+    $head = modalityActor(User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => departmentKey(10)])->create());
+    $headCovers = $head->allows(FakePermission::ViewModalityUnit, $onEad);
+    $ofEad = modalityActor(User::factory()->withRole(Role::Coordinador, ['modality_id' => $this->ead->id, 'career_id' => $this->x])->create());
+    $ofEadCovers = $ofEad->allows(FakePermission::ViewModalityCareer, $onEad);
+    $ofPres = modalityActor(User::factory()->withRole(Role::Coordinador, ['modality_id' => $this->pres->id, 'career_id' => $this->x])->create());
+    $ofPresCovers = $ofPres->allows(FakePermission::ViewModalityCareer, $onEad);
+
+    expect($headCovers)->toBeFalse()->and($ofEadCovers)->toBeFalse()->and($ofPresCovers)->toBeFalse();
 });

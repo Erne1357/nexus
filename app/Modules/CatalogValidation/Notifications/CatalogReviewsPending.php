@@ -62,7 +62,7 @@ final class CatalogReviewsPending extends NexusNotification
             return 'Ese departamento ya no existe.';
         }
 
-        if ($message->campusId !== null && ! $context->allows(CatalogValidationPermission::ReviewValidate, Target::of(campus: $message->campusId, unit: $department->getKey()))) {
+        if (! $context->allows(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey()))) {
             return "Ya no eres jefe de {$department->name}.";
         }
 

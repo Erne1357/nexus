@@ -118,3 +118,10 @@ it('la misma persona con otro perfil activo es rechazada', function () {
         ->and($subdireccion->can('viewProgress', CatalogReview::class))->toBeFalse()
         ->and($subdireccion->can('remind', CatalogReview::class))->toBeFalse();
 });
+
+it('AZ-S17: el jefe del departamento sigue revisando y validando su departamento, general y de salones', function () {
+    $boss = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
+
+    expect(reviewAbilitiesOf($boss, $this->general))->toBe(reviewAbilities(true, true, true, true, true, true, true))
+        ->and(reviewAbilitiesOf($boss, $this->rooms)['validate'])->toBeTrue();
+});
