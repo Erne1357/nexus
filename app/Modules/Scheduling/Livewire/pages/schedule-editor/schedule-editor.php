@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekGrid;
@@ -38,6 +39,7 @@ use Mary\Traits\Toast;
 new #[Title('Horarios')] class extends Component
 {
     use Toast;
+    use WithCampusFilter;
 
     private const array VIEWS = ['semestre', 'docente', 'salon'];
 
@@ -82,11 +84,11 @@ new #[Title('Horarios')] class extends Component
         abort_unless($context->allowsAny(SchedulingPermission::ScheduleView), 403);
 
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'semestre';
-        $campus = $context->activeCampus();
+        $campus = $this->requiredCampus();
         $term = $context->activeTerm();
 
-        if ($campus === null || $term === null) {
-            $this->message = $campus === null ? 'Elige un campus en tu credencial para ver los horarios.' : 'No hay un periodo activo: elige uno en tu credencial.';
+        if ($term === null) {
+            $this->message = 'No hay un periodo activo: elige uno en tu credencial.';
 
             return;
         }
@@ -102,6 +104,11 @@ new #[Title('Horarios')] class extends Component
             $this->planId = $entry['plan'];
             $this->semester = $entry['semester'];
         }
+    }
+
+    public function updatedCampus(): void
+    {
+        $this->reopenOnCampus('scheduling.editor');
     }
 
     public function updatedCareerId(): void
@@ -217,7 +224,7 @@ new #[Title('Horarios')] class extends Component
     public function with(): array
     {
         if ($this->termId === null) {
-            return ['term' => null, 'careers' => [], 'career' => null, 'message' => $this->message];
+            return ['term' => null, 'careers' => [], 'career' => null, 'message' => $this->message, ...$this->campusViewData()];
         }
 
         [$term, $campus, $editor, $context] = $this->context();
@@ -235,7 +242,8 @@ new #[Title('Horarios')] class extends Component
         return [
             ...$data,
             'term' => $term,
-            'campus' => $campus,
+            'shownCampus' => $campus,
+            ...$this->campusViewData(),
             'firstDay' => $days[0],
             'mobileDay' => in_array((int) $this->day, $days, true) ? (int) $this->day : $days[0],
             'chainClasses' => WeekGrid::CHAINS,

@@ -28,6 +28,9 @@ class Campus extends Model
     /** @use HasFactory<CampusFactory> */
     use HasFactory, HasUuids, SoftDeletes;
 
+    /** La llave de sesión del código del último campus elegido en una pantalla de un solo campus (AZ-02). */
+    public const string LAST_CHOSEN_KEY = 'core.last_campus';
+
     /**
      * @return array<string, string>
      */
