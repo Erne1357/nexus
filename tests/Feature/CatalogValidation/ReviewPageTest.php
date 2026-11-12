@@ -153,14 +153,41 @@ describe('tablero', function () {
         reviewPage()->assertSee('1 de 4')->assertSee('Faltan 3 para sacar la carga de borrador');
     });
 
-    it('HC-14: si un campus abierto usa salones y falta su revisión, la carga no puede salir de borrador aunque lo demás esté validado', function () {
-        CatalogReview::query()->where('catalog', Catalog::Rooms)->delete();
+    it('HC-14: si los salones están abiertos en el periodo y a este departamento le falta su revisión, la carga no puede salir de borrador aunque lo demás esté validado', function () {
+        reviewOf(Catalog::Rooms)->delete();
         CatalogReview::query()->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
 
         reviewPage()
             ->assertSee('4 de 5')
             ->assertSee('Falta 1 para sacar la carga de borrador')
             ->assertDontSee('Todo validado');
+    });
+
+    it('CV9, HC-14: con solo Materias abierta en el periodo, el avance y las pestañas cuentan solo Materias', function () {
+        CatalogReview::query()->where('catalog', '!=', Catalog::Subjects)->delete();
+
+        reviewPage()
+            ->assertSeeHtml('data-testid="tab-subjects"')
+            ->assertDontSeeHtml('data-testid="tab-teachers"')->assertDontSeeHtml('data-testid="tab-rooms"')
+            ->assertDontSeeHtml('data-testid="tab-study_plans"')->assertDontSeeHtml('data-testid="tab-careers"')
+            ->assertSee('0 de 1')->assertDontSee('0 de 5')
+            ->assertSee('Falta 1 para sacar la carga de borrador')
+            ->assertDontSee('Docentes')->assertDontSee('Salones')->assertDontSee('Planes de estudio')->assertDontSee('Carreras');
+
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
+
+        reviewPage()->assertSee('1 de 1')->assertSee('Todo validado');
+    });
+
+    it('CV9, HC-14: un catálogo abierto en el periodo cuya revisión le falta al departamento sí cuenta como pendiente', function () {
+        CatalogReview::query()->whereNotIn('catalog', [Catalog::Subjects, Catalog::Careers])->delete();
+        reviewOf(Catalog::Careers)->delete();
+
+        reviewPage()
+            ->assertDontSeeHtml('data-testid="tab-careers"')
+            ->assertSee('0 de 2')
+            ->assertSee('Sin revisión')
+            ->assertDontSee('Docentes');
     });
 
     it('con los cinco validados dice que la carga puede salir de borrador', function () {

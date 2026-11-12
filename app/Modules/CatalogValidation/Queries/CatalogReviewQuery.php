@@ -54,6 +54,23 @@ final class CatalogReviewQuery
     }
 
     /**
+     * Los catálogos con revisiones abiertas en el periodo (CV9), en el orden del enum Catalog. Sin ninguno, la validación
+     * del periodo no está abierta.
+     *
+     * @return list<Catalog>
+     */
+    public function openedCatalogs(Term|string $term): array
+    {
+        $opened = CatalogReview::query()
+            ->where('term_id', $term instanceof Term ? $term->getKey() : $term)
+            ->distinct()
+            ->pluck('catalog')
+            ->all();
+
+        return array_values(array_filter(Catalog::cases(), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)));
+    }
+
+    /**
      * Los departamentos cuya revisión puede abrir el usuario, por clave: los que cubre como jefe y, en lectura, todos
      * si es Subdirección o admin (CatalogReviewPolicy::view, CV-S1).
      *

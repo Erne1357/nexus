@@ -682,10 +682,11 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * «N de 5 validados» (HC-14): los catálogos que se exigen al departamento en el periodo (todos, y los salones si algún
-     * campus donde el periodo está abierto usa salones; una revisión de salones para todos los campus, decisión 6) y los
-     * que todavía bloquean la salida de borrador de sus cargas; una revisión que falta cuenta como pendiente. `items`
-     * trae cada catálogo exigido con su revisión, si existe y el usuario la ve.
+     * «N de M validados» (HC-14, CV9): los catálogos que el admin abrió en el periodo (los que tienen revisiones en él) y
+     * que se exigen al departamento (los salones, si algún campus donde el periodo está abierto usa salones; una revisión
+     * de salones para todos los campus, decisión 6), y los que todavía bloquean la salida de borrador de sus cargas. Uno
+     * que no se abrió no cuenta ni se menciona; uno abierto cuya revisión le falta al departamento cuenta como pendiente.
+     * `items` trae cada catálogo contado con su revisión, si existe y el usuario la ve.
      *
      * @param  array{term: ?Term, department: ?Department, reviews: Collection<int, CatalogReview>}  $state
      * @param  array<string, array{reviewed: int, total: int}>  $reviewed  cuántos registros van revisados en cada revisión (CV7)
@@ -694,7 +695,8 @@ new #[Title('Validación de catálogos')] class extends Component
     private function progress(array $state, array $reviewed): array
     {
         $usesRooms = app(ValidationProgressQuery::class)->openCampuses($state['term'])->contains(fn (Campus $campus): bool => $campus->profile->usesRooms);
-        $required = Catalog::requiredFor($usesRooms);
+        $opened = app(CatalogReviewQuery::class)->openedCatalogs($state['term']);
+        $required = array_values(array_filter(Catalog::requiredFor($usesRooms), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)));
         $existing = $state['reviews']->keyBy(fn (CatalogReview $review): string => $review->catalog->value);
         $pending = array_filter($required, fn (Catalog $catalog): bool => $existing->get($catalog->value)?->status !== ReviewStatus::Validated);
 
