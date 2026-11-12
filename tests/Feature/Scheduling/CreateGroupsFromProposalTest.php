@@ -13,6 +13,7 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -98,6 +99,16 @@ it('crea tantos grupos como se pidieron en cada materia del departamento, con la
         ->and($group->status)->toBe(GroupStatus::Planned)
         ->and($group->proposal_item_id)->toBe($item->id)
         ->and($group->teacher_id)->toBeNull();
+});
+
+it('los grupos nacen con la modalidad de la propuesta (ampliación de la ronda 2)', function () {
+    $this->proposal->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+    createGroupsItem(createGroupsSubject($this->cb), 2);
+
+    $groups = createGroupsFor();
+
+    expect($groups->pluck('modality_id')->unique()->all())->toBe([$this->proposal->modality_id])
+        ->and(Group::query()->with('modality')->get()->map(fn (Group $group): string => $group->modality->code)->unique()->all())->toBe(['EAD']);
 });
 
 it('solo crea los grupos de las materias del departamento que acepta', function () {

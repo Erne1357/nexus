@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Models;
 
+use App\Modules\Core\Models\Modality;
 use App\Modules\Scheduling\Database\Factories\ScheduleConflictFactory;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * (`group`, `teacher` o `room` con su id), el grupo, el departamento y la carrera dueña para contarlo en el tablero,
  * el detalle y el mensaje en español. Tabla derivada: la reescribe el recálculo del periodo.
  */
-#[Fillable(['term_id', 'campus_id', 'department_id', 'career_id', 'group_id', 'rule', 'severity', 'subject_type', 'subject_id', 'related', 'message', 'resolved_at'])]
+#[Fillable(['term_id', 'campus_id', 'modality_id', 'department_id', 'career_id', 'group_id', 'rule', 'severity', 'subject_type', 'subject_id', 'related', 'message', 'resolved_at'])]
 #[UseFactory(ScheduleConflictFactory::class)]
 class ScheduleConflict extends Model
 {
@@ -57,6 +58,16 @@ class ScheduleConflict extends Model
     public function group(): BelongsTo
     {
         return $this->belongsTo(Group::class);
+    }
+
+    /**
+     * Su modalidad del catálogo (ADR-0025): ampliación de la ronda 2, la del campus que se recalcula; aún no la lee nadie.
+     *
+     * @return BelongsTo<Modality, $this>
+     */
+    public function modality(): BelongsTo
+    {
+        return $this->belongsTo(Modality::class);
     }
 
     /**

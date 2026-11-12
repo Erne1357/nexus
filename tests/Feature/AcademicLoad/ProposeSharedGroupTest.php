@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +70,12 @@ it('crea el acuerdo propuesto dirigido al departamento de la carrera', function 
         ->and($agreement->group_id)->toBe($this->groupId)
         ->and($agreement->room_id)->toBeNull()
         ->and($agreement->requested_by)->toBe($this->actor->id);
+});
+
+it('el acuerdo nace con la modalidad del catálogo de su campus (ampliación de la ronda 2)', function () {
+    $this->campus->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+
+    expect(proposeShared()->fresh()->modality->code)->toBe('EAD');
 });
 
 it('deja bitácora proposed con quién lo propuso', function () {

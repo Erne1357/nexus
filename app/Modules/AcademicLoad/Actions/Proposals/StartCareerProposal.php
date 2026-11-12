@@ -35,6 +35,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * sus materias (confirmado el 4 de noviembre de 2026). Deja bitácora de la propuesta, con sus alumnos posibles, y,
  * después del commit, avisa con CareerProposalStarted.
  *
+ * La propuesta lleva la modalidad del catálogo del campus, y cada fila el campus de la propuesta (ampliación de la
+ * ronda 2, ADR-0025; aún no los lee nadie).
+ *
  * La propuesta se inserta ignorando la que ya exista (la unicidad por periodo, campus y carrera): si otra sesión
  * la armó entre la revisión y la escritura, devuelve esa sin agregarle filas. Quién puede armarla lo decide
  * CareerProposalPolicy::create antes de llamarla; quien la arma se recibe como parámetro.
@@ -68,6 +71,7 @@ final class StartCareerProposal
             $inserted = CareerProposal::query()->insertOrIgnore([
                 'term_id' => $term->getKey(),
                 'campus_id' => $campus->getKey(),
+                'modality_id' => $campus->modality_id,
                 'career_id' => $career->getKey(),
                 'status' => ProposalStatus::Draft->value,
                 'created_at' => $now,
@@ -138,6 +142,7 @@ final class StartCareerProposal
 
                 return [
                     'career_proposal_id' => $proposal->getKey(),
+                    'campus_id' => $proposal->campus_id,
                     'subject_id' => $placement->subject_id,
                     'study_plan_id' => $placement->study_plan_id,
                     'semester' => (int) $placement->semester,

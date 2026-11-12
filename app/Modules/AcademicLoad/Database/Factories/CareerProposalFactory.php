@@ -27,6 +27,7 @@ class CareerProposalFactory extends Factory
         return [
             'term_id' => Term::factory(),
             'campus_id' => Campus::factory(),
+            'modality_id' => fn (array $attributes): ?string => Campus::withTrashed()->whereKey($attributes['campus_id'])->value('modality_id'),
             'career_id' => Career::factory(),
             'eligible_students' => 0,
             'status' => ProposalStatus::Draft,
