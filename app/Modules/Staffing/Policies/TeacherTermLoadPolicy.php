@@ -22,6 +22,6 @@ final class TeacherTermLoadPolicy
 
     public function viewAny(User $user, Department $department, ?Campus $campus = null): bool
     {
-        return $this->actor($user)->allows(StaffingPermission::TeacherLoadView, Target::of(campus: $campus?->getKey(), unit: $department->getKey()));
+        return $this->actor($user)->allows(StaffingPermission::TeacherLoadView, Target::of(modality: $campus?->modality_id, unit: $department->getKey()));
     }
 }

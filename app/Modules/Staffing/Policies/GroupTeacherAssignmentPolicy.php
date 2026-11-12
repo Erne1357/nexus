@@ -20,6 +20,7 @@ final class GroupTeacherAssignmentPolicy
     public function create(User $user, Group $group): bool
     {
         return $this->actor($user)->allows(StaffingPermission::TeacherAssign, Target::of(
+            modality: $group->modality_id,
             campus: $group->campus_id,
             unit: $group->department_id,
         ));

@@ -142,7 +142,7 @@ final class AssignmentBoardQuery
             ->where('is_active', true)
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => $actor->allows(StaffingPermission::RankingView, Target::of(campus: $campus->getKey(), unit: $department->getKey())))
+            ->filter(fn (Department $department): bool => $actor->allows(StaffingPermission::RankingView, Target::of(modality: $campus->modality_id, unit: $department->getKey())))
             ->values();
     }
 

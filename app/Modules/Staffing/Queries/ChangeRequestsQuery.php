@@ -151,7 +151,8 @@ final class ChangeRequestsQuery
     public function visible(Actor $context, Builder $query): Builder
     {
         $userId = $context->user()?->getKey();
-        $unit = ['campus' => 'campus_id', 'unit' => 'department_id'];
+        $unit = ['modality' => 'modality_id', 'unit' => 'department_id'];
+        $room = ['modality' => 'modality_id', 'campus' => 'campus_id', 'unit' => 'department_id'];
 
         if ($userId === null) {
             return $query->whereRaw('false');
@@ -161,8 +162,9 @@ final class ChangeRequestsQuery
             ->where('requested_by', $userId)
             ->orWhere(fn (Builder $clause) => $context->constrain($clause->whereRaw('true'), StaffingPermission::ChangeRequestView, $unit))
             ->orWhere(fn (Builder $clause) => $context->constrain($clause->whereRaw('true'), StaffingPermission::ChangeRequestDecide, $unit))
-            ->orWhere(fn (Builder $clause) => $context->constrain($clause->where('kind', ChangeRequestKind::Room), StaffingPermission::ChangeRequestApplyRoom, $unit))
+            ->orWhere(fn (Builder $clause) => $context->constrain($clause->where('kind', ChangeRequestKind::Room), StaffingPermission::ChangeRequestApplyRoom, $room))
             ->orWhere(fn (Builder $clause) => $context->constrain($clause->where('kind', ChangeRequestKind::Schedule), StaffingPermission::ChangeRequestApplySchedule, [
+                'modality' => 'modality_id',
                 'campus' => 'campus_id',
                 'career' => fn (Builder $groups, array $careers) => $groups->whereIn('group_id', Group::query()->select('id')->whereIn('owner_career_id', $careers)),
             ])));
@@ -183,7 +185,7 @@ final class ChangeRequestsQuery
                 ->whereColumn('academic_loads.department_id', 'groups.department_id')
                 ->whereIn('academic_loads.status', [LoadStatus::Staffing->value, LoadStatus::Adjusting->value]));
 
-        return $context->constrain($groups, StaffingPermission::ChangeRequestRequest, ['campus' => 'groups.campus_id', 'career' => 'groups.owner_career_id']);
+        return $context->constrain($groups, StaffingPermission::ChangeRequestRequest, ['modality' => 'groups.modality_id', 'campus' => 'groups.campus_id', 'career' => 'groups.owner_career_id']);
     }
 
     /**
@@ -199,10 +201,11 @@ final class ChangeRequestsQuery
      */
     private function overseesUnit(Actor $context, string $campusId, string $departmentId): bool
     {
-        $target = Target::of(campus: $campusId, unit: $departmentId);
+        $modalityId = Campus::withTrashed()->whereKey($campusId)->value('modality_id');
+        $target = Target::of(modality: $modalityId, unit: $departmentId);
 
         return $context->allows(StaffingPermission::ChangeRequestView, $target)
             || $context->allows(StaffingPermission::ChangeRequestDecide, $target)
-            || $context->allows(StaffingPermission::ChangeRequestApplyRoom, $target);
+            || $context->allows(StaffingPermission::ChangeRequestApplyRoom, Target::of(modality: $modalityId, campus: $campusId, unit: $departmentId));
     }
 }

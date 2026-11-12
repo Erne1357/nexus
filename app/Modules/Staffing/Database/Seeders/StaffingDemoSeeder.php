@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Transitions\StartStaffing;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Enums\SettingScope;
@@ -1235,7 +1236,7 @@ final class StaffingDemoSeeder extends Seeder
         $key = "{$permission->value}|{$campusId}|{$unit}|{$career}";
 
         if (! array_key_exists($key, $this->holders)) {
-            $this->holders[$key] = app(RecipientsQuery::class)->holders($permission, Target::of(campus: $campusId, unit: $unit, career: $career))[0]['user'] ?? null;
+            $this->holders[$key] = app(RecipientsQuery::class)->holders($permission, Target::of(modality: Campus::withTrashed()->whereKey($campusId)->value('modality_id'), campus: in_array(Dimension::Campus, $permission->dimensions(), true) ? $campusId : null, unit: $unit, career: $career))[0]['user'] ?? null;
         }
 
         return $this->holders[$key];

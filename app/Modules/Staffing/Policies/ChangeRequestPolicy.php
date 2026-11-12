@@ -35,7 +35,7 @@ final class ChangeRequestPolicy
             return true;
         }
 
-        return $this->actor($user)->allows(StaffingPermission::ChangeRequestRequest, Target::of(campus: $group->campus_id, career: $group->owner_career_id));
+        return $this->actor($user)->allows(StaffingPermission::ChangeRequestRequest, Target::of(modality: $group->modality_id, campus: $group->campus_id, career: $group->owner_career_id));
     }
 
     public function view(User $user, ChangeRequest $request): bool
@@ -54,16 +54,16 @@ final class ChangeRequestPolicy
     public function apply(User $user, ChangeRequest $request): bool
     {
         if ($request->kind === ChangeRequestKind::Room) {
-            return $this->actor($user)->allows(StaffingPermission::ChangeRequestApplyRoom, $this->unitTarget($request));
+            return $this->actor($user)->allows(StaffingPermission::ChangeRequestApplyRoom, Target::of(modality: $request->modality_id, campus: $request->campus_id, unit: $request->department_id));
         }
 
         $request->loadMissing('group');
 
-        return $this->actor($user)->allows(StaffingPermission::ChangeRequestApplySchedule, Target::of(campus: $request->campus_id, career: $request->group->owner_career_id));
+        return $this->actor($user)->allows(StaffingPermission::ChangeRequestApplySchedule, Target::of(modality: $request->modality_id, campus: $request->campus_id, career: $request->group->owner_career_id));
     }
 
     private function unitTarget(ChangeRequest $request): Target
     {
-        return Target::of(campus: $request->campus_id, unit: $request->department_id);
+        return Target::of(modality: $request->modality_id, unit: $request->department_id);
     }
 }
