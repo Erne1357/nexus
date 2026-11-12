@@ -92,8 +92,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
      */
     public function navigation(): array
     {
-        // MN-04: una sola closure para las entradas de la carga, así el menú consulta una vez. Horarios publicados se ve siempre.
-        $loadInProgress = static fn (Actor $context): ?string => app(LoadProgressQuery::class)->whyUnavailable($context->activeTerm());
+        // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
+        $loadInProgress = LoadProgressQuery::menuCondition();
 
         return [
             new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,

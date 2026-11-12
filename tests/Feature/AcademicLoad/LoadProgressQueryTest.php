@@ -42,7 +42,3 @@ it('MN-04: solo cuentan las cargas del periodo', function () {
 
     expect(app(LoadProgressQuery::class)->inProgress($this->term))->toBeFalse();
 });
-
-it('MN-04: sin periodo elegido no está disponible', function () {
-    expect(app(LoadProgressQuery::class)->whyUnavailable(null))->toBe('No hay un periodo elegido');
-});

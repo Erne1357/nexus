@@ -71,8 +71,8 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
      */
     public function navigation(): array
     {
-        // MN-03: una sola closure para las dos entradas, así el menú consulta una vez.
-        $validationOpen = static fn (Actor $context): ?string => app(OpenValidationQuery::class)->whyUnavailable($context->activeTerm());
+        // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
+        $validationOpen = OpenValidationQuery::menuCondition();
 
         return [
             new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,

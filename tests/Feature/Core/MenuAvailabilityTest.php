@@ -11,6 +11,9 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\MenuEntry;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Navigation\TermAvailability;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 
 /*
 | El menú sigue al periodo activo de la credencial (MN-02 a MN-04, confirmados el 12 de noviembre de 2026): sin
@@ -99,4 +102,40 @@ it('MN-02: el admin ve todo, y lo que los demás no ven lleva su motivo', functi
         ->and($reasons->only(LOAD_SCREENS)->keys()->all())->toBe(LOAD_SCREENS)
         ->and($reasons['Horarios publicados'])->toBeNull()
         ->and($reasons['Campus'])->toBeNull();
+});
+
+it('MN-04: la condición de la carga se consulta una vez por menú, aunque la declaren tres módulos', function () {
+    AcademicLoad::factory()->for($this->term)->create();
+    $this->actingAs(subdireccion());
+    app(Actor::class)->activeTerm();
+
+    $queries = 0;
+    DB::listen(function (QueryExecuted $query) use (&$queries): void {
+        if (str_contains($query->sql, 'academic_loads')) {
+            $queries++;
+        }
+    });
+
+    app(Navigation::class)->visibleByArea(app(Actor::class));
+
+    expect($queries)->toBe(1);
+});
+
+it('MN-02: sin periodo elegido, lo que depende del periodo no está disponible y lo dice Core', function () {
+    $this->term->update(['is_current' => false]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $condition = TermAvailability::of(static fn (Term $term): ?string => null);
+
+    expect(app(Actor::class)->activeTerm())->toBeNull()
+        ->and($condition(app(Actor::class)))->toBe(TermAvailability::NO_TERM)
+        ->and(TermAvailability::NO_TERM)->toBe('No hay un periodo elegido');
+});
+
+it('MN-02: con periodo, la condición responde por ese periodo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $condition = TermAvailability::of(static fn (Term $term): ?string => "Nada en {$term->name}");
+
+    expect($condition(app(Actor::class)))->toBe('Nada en Ene-Jun 2027');
 });

@@ -115,8 +115,8 @@ final class StaffingServiceProvider extends ModuleServiceProvider
      */
     public function navigation(): array
     {
-        // MN-04: sin carga en curso en el periodo activo, solo el admin las ve. Mi carga y Oferta se ven siempre.
-        $loadInProgress = static fn (Actor $context): ?string => app(LoadProgressQuery::class)->whyUnavailable($context->activeTerm());
+        // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
+        $loadInProgress = LoadProgressQuery::menuCondition();
 
         return [
             new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::Academico, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,

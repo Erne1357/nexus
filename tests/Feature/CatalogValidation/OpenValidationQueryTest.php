@@ -37,7 +37,3 @@ it('MN-03: solo cuentan las revisiones del periodo', function () {
 
     expect(app(OpenValidationQuery::class)->existsIn($this->term))->toBeFalse();
 });
-
-it('MN-03: sin periodo elegido no está disponible', function () {
-    expect(app(OpenValidationQuery::class)->whyUnavailable(null))->toBe('No hay un periodo elegido');
-});
