@@ -44,25 +44,39 @@ final class OpenCatalogValidation
             return 0;
         }
 
-        $created = DB::transaction(function () use ($term, $applicable, $actor): int {
-            $created = $this->createTermReviews->handle($term, $applicable);
+        $createdBy = DB::transaction(function () use ($term, $applicable, $actor): array {
+            $createdBy = [];
 
-            if ($created > 0) {
+            foreach ($applicable as $catalog) {
+                $count = $this->createTermReviews->handle($term, [$catalog]);
+
+                if ($count > 0) {
+                    $createdBy[$catalog->value] = $count;
+                }
+            }
+
+            if ($createdBy !== []) {
+                $labels = array_map(fn (string $value): string => mb_strtolower(Catalog::from($value)->label()), array_keys($createdBy));
+
                 activity()
                     ->performedOn($term)
                     ->causedBy($actor)
                     ->event('validation_opened')
-                    ->withProperties(['catalogs' => array_map(fn (Catalog $catalog): string => $catalog->value, $applicable), 'reviews' => $created])
-                    ->log('Abrió la validación de '.implode(', ', array_map(fn (Catalog $catalog): string => mb_strtolower($catalog->label()), $applicable))." en {$term->name}");
+                    ->withProperties(['catalogs' => array_keys($createdBy), 'reviews' => array_sum($createdBy)])
+                    ->log('Abrió la validación de '.implode(', ', $labels)." en {$term->name}");
             }
 
-            return $created;
+            return $createdBy;
         });
 
-        if ($created > 0) {
-            NotifyPendingReviewsJob::dispatch($term->getKey(), TermOpening::query()->where('term_id', $term->getKey())->pluck('campus_id')->all());
+        if ($createdBy !== []) {
+            NotifyPendingReviewsJob::dispatch(
+                $term->getKey(),
+                TermOpening::query()->where('term_id', $term->getKey())->pluck('campus_id')->all(),
+                array_keys($createdBy),
+            )->afterCommit();
         }
 
-        return $created;
+        return array_sum($createdBy);
     }
 }

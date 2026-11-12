@@ -424,6 +424,18 @@ describe('abrir la validación (CV9)', function () {
         expect(CatalogReview::query()->where('catalog', Catalog::Subjects->value)->count())->toBe(2);
     });
 
+    it('el aviso de «nada abierto» dice la razón: ya abiertos, salones sin campus que los use', function () {
+        $page = progressPage($this->admin)->set('toOpen', [Catalog::Teachers->value])->call('openValidation');
+        expect(lastToastOf($page)['description'])->toBe('Esos catálogos ya estaban abiertos.');
+
+        CatalogReview::query()->where('catalog', Catalog::Rooms->value)->delete();
+        $this->c1->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+        $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+
+        $page = progressPage($this->admin)->set('toOpen', [Catalog::Rooms->value])->call('openValidation');
+        expect(lastToastOf($page)['description'])->toBe('Ningún campus abierto en este periodo usa salones.');
+    });
+
     it('sin marcar ningún catálogo no abre nada y lo dice', function () {
         CatalogReview::query()->delete();
 

@@ -3,6 +3,7 @@
 namespace App\Modules\CatalogValidation\Actions;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
@@ -37,6 +38,48 @@ final class NotifyPendingReviews
     public function handle(Term $term, Campus $campus, ?string $departmentId = null): int
     {
         return $this->notify($term, $campus, $departmentId)->count();
+    }
+
+    /**
+     * El aviso de que el admin abrió la validación (CV9): un aviso por jefe y departamento, aunque el jefe cubra varios de
+     * los campus dados (los jefes son de todo el Tec), con solo los catálogos recién abiertos que le faltan en ese
+     * departamento. Da los usuarios avisados.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     * @param  list<Catalog>  $catalogs
+     * @return Collection<int, User>
+     */
+    public function notifyOpened(Term $term, Collection $campuses, array $catalogs): Collection
+    {
+        $notified = new Collection;
+
+        foreach (Department::query()->where('is_active', true)->orderBy('code')->get() as $department) {
+            $reached = [];
+
+            foreach ($campuses as $campus) {
+                $pending = array_values(array_filter(
+                    $this->reviews->pendingFor($term, $campus, $department),
+                    fn (Catalog $catalog): bool => in_array($catalog, $catalogs, true),
+                ));
+
+                if ($pending === []) {
+                    continue;
+                }
+
+                $heads = array_values(array_filter(
+                    $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $department->getKey())),
+                    fn (array $holder): bool => ! isset($reached[$holder['user']->getKey()]),
+                ));
+
+                foreach ($heads as $holder) {
+                    $reached[$holder['user']->getKey()] = true;
+                }
+
+                $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $campus, $department, $pending)));
+            }
+        }
+
+        return $notified;
     }
 
     /**

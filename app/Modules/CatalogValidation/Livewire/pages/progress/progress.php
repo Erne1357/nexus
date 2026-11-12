@@ -117,7 +117,7 @@ new #[Title('Avance de validación')] class extends Component
     /**
      * Abre la validación de los catálogos marcados en el periodo activo (OpenCatalogValidation).
      */
-    public function openValidation(OpenCatalogValidation $open, Actor $context): void
+    public function openValidation(OpenCatalogValidation $open, CatalogReviewQuery $reviews, Actor $context): void
     {
         Gate::authorize('open', CatalogReview::class);
 
@@ -134,7 +134,18 @@ new #[Title('Avance de validación')] class extends Component
 
         $this->showOpen = false;
         $this->toOpen = [];
-        $this->success('Validación abierta', $created === 0 ? 'Esos catálogos ya estaban abiertos.' : e($term->name).': se avisó a los jefes.');
+        if ($created > 0) {
+            $this->success('Validación abierta', e($term->name).': se avisó a los jefes.');
+
+            return;
+        }
+
+        $chosen = collect($reviews->openingOptions($term))->filter(fn (array $option): bool => in_array($option['catalog'], $catalogs, true));
+        $this->info('No se abrió nada', match (true) {
+            $chosen->every(fn (array $option): bool => $option['open']) => 'Esos catálogos ya estaban abiertos.',
+            $chosen->contains(fn (array $option): bool => $option['blocked'] !== null) => 'Ningún campus abierto en este periodo usa salones.',
+            default => 'No hay departamentos activos a los que abrirles la validación.',
+        });
     }
 
     /**

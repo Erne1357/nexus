@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Academic\Actions\CreateDepartment;
+use App\Modules\Academic\Actions\UpdateDepartment;
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Enums\Catalog;
@@ -131,4 +133,69 @@ it('CatalogValidation ya no escucha TermOpened', function () {
     event($event);
 
     expect(array_values(array_filter($event->lines(), fn (string $line): bool => str_contains($line, 'revisi'))))->toBe([]);
+});
+
+it('CV9: la bitácora lista solo los catálogos que de verdad crearon revisiones', function () {
+    openValidation([Catalog::Teachers]);
+    openValidation([Catalog::Teachers, Catalog::Careers]);
+
+    $logs = Activity::query()->where('event', 'validation_opened')->orderBy('created_at')->get();
+
+    expect($logs)->toHaveCount(2)
+        ->and($logs->last()->properties['catalogs'])->toBe(['careers'])
+        ->and($logs->last()->description)->toContain('carreras')->not->toContain('docentes');
+});
+
+it('CV9: manda el aviso en cola después del commit, con los catálogos recién abiertos', function () {
+    Queue::fake();
+
+    openValidation([Catalog::Subjects]);
+
+    Queue::assertPushed(NotifyPendingReviewsJob::class, fn (NotifyPendingReviewsJob $job) => $job->catalogs === ['subjects'] && $job->afterCommit === true);
+});
+
+it('CV9: un jefe de todo el Tec recibe un solo aviso aunque haya varios campus abiertos, con solo los catálogos recién abiertos', function () {
+    Notification::fake();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->d1->id])->create();
+    app(OpenTerm::class)->handle($this->term, Campus::factory()->create(['code' => 'C1']));
+    openValidation([Catalog::Teachers]);
+    Notification::fake();
+
+    openValidation([Catalog::Careers, Catalog::Subjects]);
+
+    Notification::assertSentToTimes($jefe, CatalogReviewsPending::class, 1);
+    Notification::assertSentTo($jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $n) => str_ends_with($n->message($jefe)->body, ': materias y carreras'));
+});
+
+describe('CV-S12: un departamento nuevo o reactivado', function () {
+    it('al darse de alta recibe las revisiones de los catálogos ya abiertos en el periodo abierto, y nada si no hay ninguno abierto', function () {
+        app(CreateDepartment::class)->handle(['code' => 'D7', 'name' => 'Nuevo']);
+        expect(CatalogReview::count())->toBe(0);
+
+        openValidation([Catalog::Teachers, Catalog::Careers]);
+        $new = app(CreateDepartment::class)->handle(['code' => 'D8', 'name' => 'Otro nuevo']);
+
+        expect(CatalogReview::query()->where('department_id', $new->id)->pluck('catalog')->map->value->sort()->values()->all())->toBe(['careers', 'teachers']);
+    });
+
+    it('al reactivarse recibe las suyas; desactivar o cambiar el nombre no crea nada, y un periodo ya terminado no se toca', function () {
+        $inactive = Department::factory()->inactive()->create(['code' => 'D9']);
+        openValidation([Catalog::Teachers]);
+        $past = Term::factory()->create(['code' => '20201', 'starts_on' => '2020-01-20', 'ends_on' => '2020-06-10']);
+        app(OpenTerm::class)->handle($past, $this->c2);
+        CatalogReview::factory()->general(Catalog::Teachers)->create(['term_id' => $past->id, 'department_id' => $this->d1->id]);
+
+        app(UpdateDepartment::class)->handle($inactive, ['name' => 'Renombrado']);
+        expect(CatalogReview::query()->where('department_id', $inactive->id)->count())->toBe(0);
+
+        app(UpdateDepartment::class)->handle($inactive, ['is_active' => true]);
+
+        expect(CatalogReview::query()->where('department_id', $inactive->id)->where('term_id', $this->term->id)->count())->toBe(1)
+            ->and(CatalogReview::query()->where('department_id', $inactive->id)->where('term_id', $past->id)->count())->toBe(0);
+
+        app(UpdateDepartment::class)->handle($inactive, ['is_active' => false]);
+        app(UpdateDepartment::class)->handle($inactive, ['is_active' => true]);
+
+        expect(CatalogReview::query()->where('department_id', $inactive->id)->count())->toBe(1);
+    });
 });
