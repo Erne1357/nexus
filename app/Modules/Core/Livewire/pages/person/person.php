@@ -85,7 +85,7 @@ new #[Title('Ficha de la persona')] class extends Component
             'offered' => $this->offeredOptions($rules),
             'roleCase' => $role,
             'options' => $role === null ? ['campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus)),
-            'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente)),
+            'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente && $role !== Role::Alumno)),
             'whoRoleCase' => $whoRole,
             'whoOptions' => $whoRole === null ? ['campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($whoRole, $this->uuid($this->whoCampus)),
             'who' => $whoRole === null ? null : $this->who($people, $labels, $whoRole),

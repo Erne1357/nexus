@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Support\AccessInvitationLink;
@@ -39,7 +40,7 @@ final class AcceptAccessInvitation
                 return null;
             }
 
-            $user->forceFill(['password' => $password, 'must_change_password' => true, 'email_verified_at' => now()]);
+            $user->forceFill(['password' => $password, 'password_origin' => PasswordOrigin::Default, 'must_change_password' => true, 'email_verified_at' => now()]);
             $user->setRememberToken(Str::random(60));
             $user->save();
 

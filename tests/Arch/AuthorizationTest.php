@@ -67,6 +67,7 @@ const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Faculty/Livewire/pages/teacher/teacher.blade.php',
     'app/Modules/Faculty/Livewire/pages/teacher/teacher.php',
     'app/Modules/Faculty/Queries/TeacherRecordQuery.php',
+    'app/Modules/Students/Actions/SyncStudentAccounts.php',
 ];
 
 /**
