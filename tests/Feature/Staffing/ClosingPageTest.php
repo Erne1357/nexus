@@ -178,6 +178,8 @@ describe('pestañas por campus', function () {
         $page->call('selectCampus', 'C1')
             ->assertSet('campus', 'C1')
             ->assertSee('La carga ya pasó el cierre.');
+
+        expect(session('core.last_campus'))->toBe('C1');
     });
 
     it('sin pestaña elegida abre la del campus que da Actor::activeCampus() (puente de #415), no la primera', function () {
