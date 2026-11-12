@@ -82,7 +82,7 @@ new #[Title('Carreras')] class extends Component
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'department', 'label' => 'Departamento', 'sortable' => false, 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'study_plans_count', 'label' => 'Planes', 'class' => 'max-[1023px]:hidden'],
-                ['key' => 'offering', 'label' => 'Se ofrece en', 'sortable' => false],
+                ['key' => 'offering', 'label' => 'Se ofrece en', 'sortable' => false, 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
             // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.

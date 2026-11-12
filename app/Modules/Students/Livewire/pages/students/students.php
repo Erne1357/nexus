@@ -98,7 +98,7 @@ new #[Title('Alumnos')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'career', 'plan', 'semester', 'status'], true)) {
+        if (in_array($property, ['search', 'campus', 'career', 'plan', 'semester', 'status'], true)) {
             $this->resetPage();
         }
     }

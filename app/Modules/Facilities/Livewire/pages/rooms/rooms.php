@@ -84,6 +84,14 @@ new #[Title('Salones')] class extends Component
     /** Las características en una línea, separadas por comas. */
     public string $features = '';
 
+    /**
+     * Los edificios del campus del salón que se edita (edit() los lee una vez); el navegador no los puede cambiar.
+     *
+     * @var list<array{id: string, name: string, campus: string}>
+     */
+    #[Locked]
+    public array $editingBuildings = [];
+
     /** Si el panel de bloqueos está abierto. */
     public bool $showDrawer = false;
 
@@ -116,6 +124,7 @@ new #[Title('Salones')] class extends Component
         $shown = $this->campusFilter();
         $roomCampuses = ($shown === null ? $options : collect([$shown]))->filter(fn (Campus $campus): bool => $campus->profile->usesRooms)->values();
         $buildings = $buildingQuery->options($roomCampuses);
+        $buildingGroups = $this->buildingGroups($buildingQuery, $options);
         $departments = $departmentQuery->options();
         $types = $rooms->typeOptions();
         $ownerFilters = [['id' => RoomQuery::WITHOUT_OWNER, 'name' => 'Sin dueño'], ...$departments];
@@ -143,6 +152,8 @@ new #[Title('Salones')] class extends Component
             'canCreate' => $this->creatableCampuses()->isNotEmpty(),
             'formBuildings' => collect($this->formBuildings($buildingQuery))->groupBy('campus')->all(),
             'ownerOptions' => $rooms->ownerOptions($this->department_id === '' ? null : $this->department_id),
+            'buildingGroups' => $buildingGroups,
+            'buildingScope' => $this->buildingFilter !== '' ? $this->buildingFilter : ($shown === null ? '' : "campus:{$shown->code}"),
             'buildings' => $options->count() > 1 ? array_map(fn (array $building): array => [...$building, 'name' => "{$building['campus']} · {$building['name']}"], $buildings) : $buildings,
             'types' => $types,
             'departments' => $departments,
@@ -174,9 +185,28 @@ new #[Title('Salones')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'buildingFilter', 'typeFilter', 'ownerFilter', 'status'], true)) {
+        if (in_array($property, ['search', 'campus', 'buildingFilter', 'typeFilter', 'ownerFilter', 'status'], true)) {
             $this->resetPage();
         }
+    }
+
+    /**
+     * El filtro «Edificio» con más de un campus: un solo select con un grupo por campus. «Todo C2» (`campus:C2`) fija
+     * el campus, un edificio fija el edificio y la opción vacía lo quita todo, así la barra no gana otro control.
+     */
+    public function setBuildingScope(string $value): void
+    {
+        $this->buildingFilter = '';
+        $this->campus = null;
+
+        if (str_starts_with($value, 'campus:')) {
+            $code = substr($value, 7);
+            $this->campus = $this->campusOptions()->contains('code', $code) ? $code : null;
+        } else {
+            $this->buildingFilter = $value;
+        }
+
+        $this->resetPage();
     }
 
     public function updatedShowDrawer(bool $open): void
@@ -191,17 +221,18 @@ new #[Title('Salones')] class extends Component
         abort_if($this->creatableCampuses()->isEmpty(), 403);
 
         $this->resetValidation();
-        $this->reset('editingId', 'building_id', 'code', 'name', 'type', 'capacity', 'department_id', 'features');
+        $this->reset('editingId', 'editingBuildings', 'building_id', 'code', 'name', 'type', 'capacity', 'department_id', 'features');
         $this->showModal = true;
     }
 
-    public function edit(string $id, RoomQuery $rooms): void
+    public function edit(string $id, RoomQuery $rooms, BuildingQuery $buildings): void
     {
         $room = $rooms->findOrFail($id);
         $this->authorize('update', $room);
 
         $this->resetValidation();
         $this->editingId = $room->id;
+        $this->editingBuildings = $buildings->options(collect([$room->campus]));
         $this->building_id = $room->building_id;
         $this->code = $room->code;
         $this->name = $room->name ?? '';
@@ -302,6 +333,21 @@ new #[Title('Salones')] class extends Component
     }
 
     /**
+     * Los edificios de los campus que usan salones, agrupados por campus, para el filtro «Edificio» de la barra.
+     *
+     * @param  Collection<int, Campus>  $options
+     * @return array<string, array{name: string, buildings: list<array{id: string, name: string}>}>
+     */
+    private function buildingGroups(BuildingQuery $buildingQuery, Collection $options): array
+    {
+        $campuses = $options->filter(fn (Campus $campus): bool => $campus->profile->usesRooms)->values();
+
+        return $campuses->count() < 2 ? [] : collect($buildingQuery->options($campuses))->groupBy('campus')
+            ->map(fn (Collection $group, string $code): array => ['name' => $campuses->firstWhere('code', $code)->name, 'buildings' => $group->map(fn (array $building): array => ['id' => $building['id'], 'name' => $building['name']])->all()])
+            ->all();
+    }
+
+    /**
      * Los campus donde el usuario puede dar de alta un salón: los que usan salones y donde RoomPolicy::create lo
      * permite.
      *
@@ -315,7 +361,7 @@ new #[Title('Salones')] class extends Component
     }
 
     /**
-     * Los edificios del formulario: al editar, los del campus del salón (cambiar de campus no se hace aquí); en un
+     * Los edificios del formulario: al editar, los del campus del salón, leídos en edit() (cambiar de campus no se hace aquí); en un
      * alta, los de los campus donde puede dar de alta, para agruparlos por campus.
      *
      * @return list<array{id: string, name: string, campus: string}>
@@ -330,13 +376,7 @@ new #[Title('Salones')] class extends Component
             return $buildings->options($this->creatableCampuses());
         }
 
-        try {
-            $room = app(RoomQuery::class)->findOrFail($this->editingId);
-        } catch (ModelNotFoundException) {
-            return [];
-        }
-
-        return $buildings->options(collect([$room->campus]));
+        return $this->editingBuildings;
     }
 
     /**

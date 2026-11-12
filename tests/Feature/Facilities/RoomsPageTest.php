@@ -95,6 +95,31 @@ describe('admin', function () {
             ->set('campus', null)->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1', 'Z-900']));
     });
 
+    it('al cambiar de campus vuelve a la primera página', function () {
+        Room::factory()->for($this->edA)->count(20)->create();
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->call('gotoPage', 2)->assertSet('paginators.page', 2)
+            ->set('campus', 'C1')->assertSet('paginators.page', 1)->assertViewHas('rooms', listsRooms(['Z-900']));
+    });
+
+    it('con dos campus, el campus va dentro del filtro de edificio (un grupo por campus), sin otro control en la barra', function () {
+        $dom = domOf($this->actingAs($this->admin)->get(route('facilities.rooms')));
+        $select = $dom->querySelector('[data-testid="catalog-filters"] select[data-testid="building-scope"]');
+
+        expect($select)->not->toBeNull()->and(count($select->querySelectorAll('optgroup')))->toBe(2)
+            ->and(textOf($select->querySelector('optgroup option')))->toBe('Todo C1')
+            ->and($dom->querySelector('[data-testid="catalog-filters"] select[aria-label="Campus"]'))->toBeNull();
+    });
+
+    it('elegir «Todo C1» fija el campus, un edificio fija el edificio y la opción vacía lo quita', function () {
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->call('setBuildingScope', 'campus:C1')->assertSet('campus', 'C1')->assertSet('buildingFilter', '')->assertViewHas('rooms', listsRooms(['Z-900']))
+            ->call('setBuildingScope', $this->edB->id)->assertSet('campus', null)->assertSet('buildingFilter', $this->edB->id)->assertViewHas('rooms', listsRooms(['B-201', 'OLD-1']))
+            ->call('setBuildingScope', 'campus:C99')->assertSet('campus', null)->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1', 'Z-900']))
+            ->call('setBuildingScope', '')->assertSet('buildingFilter', '');
+    });
+
     it('busca por clave o nombre y filtra por edificio, tipo, dueño y estado', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
             ->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1', 'Z-900']))

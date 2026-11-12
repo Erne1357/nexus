@@ -14,7 +14,9 @@
                 <div class="w-full md:w-64">
                     <x-input wire:model.live.debounce.300ms="search" placeholder="Número de control o nombre" aria-label="Buscar alumnos" icon="o-magnifying-glass" clearable />
                 </div>
-                <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all class="w-full md:w-auto" />
+                <div class="w-full md:w-44">
+                    <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all compact class="w-full" />
+                </div>
                 <div class="w-full md:w-48">
                     <x-select wire:model.live="career" aria-label="Carrera" :options="$options['careers']" placeholder="Todas las carreras" />
                 </div>

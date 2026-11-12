@@ -86,6 +86,14 @@ describe('admin', function () {
             ->assertSet('campus', 'C1')->assertViewHas('buildings', listsBuildings(['Z']));
     });
 
+    it('al cambiar de campus vuelve a la primera página', function () {
+        Building::factory()->for($this->c2)->count(20)->create();
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.buildings')
+            ->call('gotoPage', 2)->assertSet('paginators.page', 2)
+            ->set('campus', 'C1')->assertSet('paginators.page', 1)->assertViewHas('buildings', listsBuildings(['Z']));
+    });
+
     it('busca por clave o nombre y filtra por estado', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.buildings')
             ->assertViewHas('buildings', listsBuildings(['A', 'B', 'OLD', 'Z']))

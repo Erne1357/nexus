@@ -116,6 +116,17 @@ describe('admin', function () {
             ->assertSee('Ningún alumno coincide con la búsqueda.');
     });
 
+    it('al cambiar de campus vuelve a la primera página', function () {
+        $plan = StudyPlan::factory()->for($this->isc)->create(['code' => 'ISC-2020']);
+        foreach (range(1, 30) as $i) {
+            Student::factory()->for($plan)->create(['control_number' => sprintf('2412%04d', $i), 'campus_id' => $this->campus->id]);
+        }
+
+        studentsPageAs($this->admin)
+            ->call('gotoPage', 2)->assertSet('paginators.page', 2)
+            ->set('campus', 'C1')->assertSet('paginators.page', 1)->assertViewHas('students', listsStudents(['24119999']));
+    });
+
     it('busca por número de control o nombre', function () {
         studentsPageAs($this->admin, $this->campus)
             ->set('search', 'ávila')

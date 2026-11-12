@@ -136,6 +136,19 @@ describe('admin', function () {
         Queue::assertPushed(ValidateQueuedBatch::class, fn (ValidateQueuedBatch $job): bool => $job->batch->is($batch));
     });
 
+    it('el campus del lote queda fijo al continuar: cambiar el código después no lo cambia', function () {
+        Queue::fake();
+        $c1 = Campus::factory()->create(['code' => 'C1']);
+
+        Livewire::actingAs($this->admin)->test('imports::pages.import-wizard')
+            ->set('template', 'test-campus-scoped')->set('campusCode', 'C2')
+            ->set('file', campusCsv())->call('continue')->assertSet('step', 2)
+            ->set('campusCode', 'C1')->assertSee('C2 · Campus II')
+            ->call('upload')->assertHasNoErrors();
+
+        expect(ImportBatch::sole()->campus_id)->toBe($this->c2->id)->and($this->c2->id)->not->toBe($c1->id);
+    });
+
     it('con un solo campus, la plantilla de campus usa ese sin preguntar', function () {
         Queue::fake();
 

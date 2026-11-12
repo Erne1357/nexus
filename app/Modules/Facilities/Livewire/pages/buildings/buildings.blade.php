@@ -26,7 +26,7 @@
                 />
             </x-slot:search>
 
-            <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all />
+            <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all compact />
             <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Activos e inactivos" />
 
             <x-slot:action>

@@ -6,7 +6,7 @@
     abre el panel lateral). Entre 768 y 1023 px se ocultan el edificio, el tipo y el dueño; debajo de 768 px,
     renglones apilados (clave, nombre y estado; luego el detalle; luego las acciones), que no repiten los
     data-testid de la tabla. Muestra los salones de todos los campus del usuario que usan salones: con más de un
-    campus, una columna «Campus» y el filtro de campus con «Todos» (x-core::campus-filter); el campus de un alta es el
+    campus, una columna «Campus» y el campus como filtro dentro del de edificio (un grupo por campus y «Todo C2»; `?campus=` lo fija); el campus de un alta es el
     del edificio, que el formulario agrupa por campus.
 --}}
 <div>
@@ -35,8 +35,24 @@
                 />
             </x-slot:search>
 
-            <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all />
-            <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Edificio" />
+            @if ($buildingGroups === [])
+                <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Edificio" />
+            @else
+                {{-- Con más de un campus, el campus va dentro de este filtro (un grupo por campus y «Todo C2»), no como otro control. --}}
+                <label class="select w-full">
+                    <select aria-label="Edificio" wire:change="setBuildingScope($event.target.value)" data-testid="building-scope">
+                        <option value="" @selected($buildingScope === '')>Edificio</option>
+                        @foreach ($buildingGroups as $code => $group)
+                            <optgroup label="{{ $group['name'] }}">
+                                <option value="campus:{{ $code }}" @selected($buildingScope === "campus:{$code}")>Todo {{ $code }}</option>
+                                @foreach ($group['buildings'] as $building)
+                                    <option value="{{ $building['id'] }}" @selected($buildingScope === $building['id'])>{{ $building['name'] }}</option>
+                                @endforeach
+                            </optgroup>
+                        @endforeach
+                    </select>
+                </label>
+            @endif
             <x-select wire:model.live="typeFilter" aria-label="Tipo" :options="$types" placeholder="Tipo" />
             <x-select wire:model.live="ownerFilter" aria-label="Dueño" :options="$ownerFilters" placeholder="Dueño" />
             <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />

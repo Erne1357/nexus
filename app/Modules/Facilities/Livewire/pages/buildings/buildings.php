@@ -93,7 +93,7 @@ new #[Title('Edificios')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'status'], true)) {
+        if (in_array($property, ['search', 'campus', 'status'], true)) {
             $this->resetPage();
         }
     }

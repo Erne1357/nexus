@@ -87,6 +87,10 @@ new #[Title('Importaciones')] class extends Component
     /** El código del campus del archivo, si la plantilla es de un campus; se pide en el paso 1. */
     public string $campusCode = '';
 
+    /** El id del campus resuelto en continue(): el paso 2 y el lote usan este, aunque `campusCode` cambie después. */
+    #[Locked]
+    public string $lockedCampusId = '';
+
     /** '' es "por nombre de columna"; si no, el id de un mapeo guardado de la plantilla. */
     public string $mappingId = '';
 
@@ -176,7 +180,7 @@ new #[Title('Importaciones')] class extends Component
             'issueKinds' => array_map(fn (RowIssue $kind): array => ['id' => $kind->value, 'name' => $kind->label()], RowIssue::cases()),
             'issueRows' => $reviewing ? $batches->issues($batch, RowIssue::tryFrom($this->issues) ?? RowIssue::Errors) : null,
             'definition' => $definition,
-            'campus' => $this->importCampus($context),
+            'campus' => $this->header === [] ? $this->importCampus($context) : $this->lockedCampus($context),
             'campusOptions' => $context->campuses(),
             'campusChoices' => $context->campuses()->map(fn (Campus $option): array => ['id' => $option->code, 'name' => "{$option->code} · {$option->name}"])->all(),
             'templateLabels' => $labels,
@@ -221,6 +225,7 @@ new #[Title('Importaciones')] class extends Component
         }
 
         $this->header = $header;
+        $this->lockedCampusId = $definition->requiresCampus() ? $this->importCampus($context)->getKey() : '';
         $this->readFile = $this->file->getFilename();
         $this->reset('mappingId', 'mappingName');
         $this->assignments = $this->assignmentsFrom($definition, $matcher->match($definition, $header));
@@ -315,14 +320,14 @@ new #[Title('Importaciones')] class extends Component
             $context->user(),
             $this->template,
             $this->file,
-            $definition->requiresCampus() ? $this->importCampus($context) : null,
+            $definition->requiresCampus() ? $this->lockedCampus($context) : null,
             $mapping,
         ));
 
         // El archivo ya vive en el disco `imports` con su lote. Desde aquí la página apunta al lote, para
         // que un fallo de la cola no lleve a subirlo dos veces.
         $this->discardUpload();
-        $this->reset('header', 'readFile', 'assignments', 'mappingId', 'mappingName');
+        $this->reset('header', 'readFile', 'lockedCampusId', 'assignments', 'mappingId', 'mappingName');
         $this->batchId = $batch->id;
 
         $this->queueValidation($batch);
@@ -420,7 +425,7 @@ new #[Title('Importaciones')] class extends Component
      */
     public function back(): void
     {
-        $this->reset('header', 'readFile', 'assignments', 'mappingId', 'mappingName');
+        $this->reset('header', 'readFile', 'lockedCampusId', 'assignments', 'mappingId', 'mappingName');
         $this->resetValidation();
     }
 
@@ -493,11 +498,6 @@ new #[Title('Importaciones')] class extends Component
     }
 
     /**
-     * Plantilla y archivo, en continue() y otra vez en upload(): llegan del navegador.
-     *
-     * @return array<string, list<mixed>>
-     */
-    /**
      * El campus elegido para el archivo, si está entre los del usuario; con un solo campus, ese. Uno ajeno, inactivo
      * o inexistente es como no haber elegido.
      */
@@ -509,6 +509,20 @@ new #[Title('Importaciones')] class extends Component
             ?? ($campuses->count() === 1 ? $campuses->first() : null);
     }
 
+    /**
+     * El campus que continue() fijó para el archivo, si el usuario todavía trabaja en él; si no, null y el lote se
+     * rechaza como una plantilla de campus sin campus.
+     */
+    private function lockedCampus(Actor $context): ?Campus
+    {
+        return $this->lockedCampusId === '' ? null : $context->campuses()->firstWhere('id', $this->lockedCampusId);
+    }
+
+    /**
+     * Plantilla y archivo, en continue() y otra vez en upload(): llegan del navegador.
+     *
+     * @return array<string, list<mixed>>
+     */
     private function fileRules(TemplateRegistry $templates): array
     {
         return [
