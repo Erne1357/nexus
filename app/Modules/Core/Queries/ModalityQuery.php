@@ -33,6 +33,7 @@ final class ModalityQuery
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
             ->orderByDesc('is_active')
             ->orderBy('name')
+            ->orderBy('code')
             ->paginate($perPage);
     }
 

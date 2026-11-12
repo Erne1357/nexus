@@ -110,7 +110,7 @@
         @if ($modalities->isNotEmpty() || $modalities->hasPages())
             <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
                 @if ($modalities->isNotEmpty())
-                    <p>Modalidades <span class="font-mono">{{ $modalities->first()->code }}</span>@if ($modalities->count() > 1) a <span class="font-mono">{{ $modalities->last()->code }}</span> · <span class="font-mono">{{ $modalities->firstItem() }}–{{ $modalities->lastItem() }}</span>@else · <span class="font-mono">{{ $modalities->firstItem() }}</span>@endif de <span class="font-mono">{{ $modalities->total() }}</span></p>
+                    <p><span class="font-mono">{{ $modalities->total() }}</span> {{ $modalities->total() === 1 ? 'modalidad' : 'modalidades' }}@if ($modalities->hasPages()) · <span class="font-mono">{{ $modalities->firstItem() }}–{{ $modalities->lastItem() }}</span>@endif</p>
                 @endif
 
                 {{ $modalities->onEachSide(1)->links(data: ['scrollTo' => false]) }}

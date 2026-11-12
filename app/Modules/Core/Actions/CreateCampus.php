@@ -22,7 +22,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * entre la revisión y el insert, la restricción única de la base responde con el mismo error de
  * código. Después del commit avisa con CampusCreated.
  *
- * El campus es solo el lugar (MS3), así que la pantalla pide únicamente código y nombre: sin `modality` ni `settings`
+ * El campus es solo el lugar (MS3; nace presencial, MS21), así que la pantalla pide únicamente código y nombre: sin `modality` ni `settings`
  * nace presencial, ligado a Presencial por el puente `modality_id` (ADR-0025; se quita al contraer), con el perfil de
  * esa modalidad en `settings` para que Scheduling, que todavía lo lee ahí, no vea una jornada distinta (supuesto por
  * confirmar). Quien llame con `modality` o `settings` (sembradores, pruebas) los conserva. El puente no va a la

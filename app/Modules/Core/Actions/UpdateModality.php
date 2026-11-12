@@ -63,6 +63,15 @@ final class UpdateModality
         }
 
         return DB::transaction(function () use ($modality, $data): Modality {
+            $activeOthers = null;
+
+            if (($data['is_active'] ?? true) === false) {
+                // Al desactivar se bloquea todo de una vez y en un orden fijo (la propia y las activas, por id): dos
+                // desactivaciones a la vez se forman una tras otra en lugar de bloquearse entre sí.
+                $locked = Modality::query()->whereKey($modality->getKey())->orWhere('is_active', true)->orderBy('id')->lockForUpdate()->get();
+                $activeOthers = $locked->where('is_active', true)->reject(fn (Modality $row): bool => $row->getKey() === $modality->getKey())->count();
+            }
+
             $modality->setRawAttributes($modality->newQuery()->lockForUpdate()->findOrFail($modality->getKey())->getAttributes(), sync: true);
             $old = [...$modality->only(['code', 'name', 'is_active']), 'settings' => $this->storedProfile($modality)];
 
@@ -75,7 +84,7 @@ final class UpdateModality
             }
 
             if (($data['is_active'] ?? true) === false && $modality->is_active) {
-                $this->ensureCanDeactivate($modality);
+                $this->ensureCanDeactivate($modality, $activeOthers ?? 0);
             }
 
             if (array_key_exists('settings', $data) && $data['settings'] === $old['settings']) {
@@ -119,10 +128,8 @@ final class UpdateModality
      *
      * @throws ValidationException
      */
-    private function ensureCanDeactivate(Modality $modality): void
+    private function ensureCanDeactivate(Modality $modality, int $others): void
     {
-        $others = Modality::query()->where('is_active', true)->whereKeyNot($modality->getKey())->lockForUpdate()->pluck('id')->count();
-
         if ($others === 0) {
             throw ValidationException::withMessages(['is_active' => "No se puede desactivar {$modality->name}: es la única modalidad activa. Activa otra primero."]);
         }

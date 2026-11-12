@@ -9,6 +9,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Queries\ModalityQuery;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -178,6 +179,10 @@ new #[Title('Modalidades')] class extends Component
             $modality = $updateModality->handle($modality, ['is_active' => ! $modality->is_active]);
         } catch (ValidationException $e) {
             $this->error('No se cambió el estado', e(collect($e->errors())->flatten()->implode(' ')));
+
+            return;
+        } catch (QueryException) {
+            $this->error('No se cambió el estado', 'Otra persona está cambiando las modalidades al mismo tiempo. Vuelve a intentarlo.');
 
             return;
         }

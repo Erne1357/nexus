@@ -53,7 +53,8 @@ describe('admin', function () {
                 'EAD', 'EAD', 'Salones · bloques de 60 min · lunes a sábado, 7:00 a 21:00 · asignación central', 'Inactiva',
                 'ENL', 'En línea', 'Sin salones',
                 'TNMV', 'TecNM Virtual', 'docentes externos',
-            ]);
+            ])
+            ->assertSeeText('4 modalidades');
     });
 
     it('busca por clave o nombre y filtra activas o inactivas', function () {
@@ -217,6 +218,16 @@ describe('admin', function () {
 
         expect(lastToastOf($page))->type->toBe('error')
             ->and(lastToastOf($page)['description'])->toContain('única modalidad activa')
+            ->and($this->pres->fresh()->is_active)->toBeTrue();
+    });
+
+    it('M11: con el bloqueo en orden fijo sigue rechazando la última activa, y desactiva otra si queda una', function () {
+        $this->ead->update(['is_active' => true]);
+
+        app(UpdateModality::class)->handle($this->ead, ['is_active' => false]);
+        expect($this->ead->fresh()->is_active)->toBeFalse();
+
+        expect(fn () => app(UpdateModality::class)->handle($this->pres, ['is_active' => false]))->toThrow(ValidationException::class)
             ->and($this->pres->fresh()->is_active)->toBeTrue();
     });
 
