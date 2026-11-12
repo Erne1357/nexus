@@ -48,13 +48,24 @@ final readonly class RecentPages
      */
     public function last(NavigationArea $area): ?string
     {
+        return $this->lastPage($area)['uri'] ?? null;
+    }
+
+    /**
+     * La última página que el usuario visitó del área con su ruta, para que el menú la ofrezca solo si una entrada
+     * que hoy ve la declara (MN-02: lo no disponible en el periodo se le esconde); null si no ha visitado ninguna.
+     *
+     * @return array{route: string, uri: string}|null
+     */
+    public function lastPage(NavigationArea $area): ?array
+    {
         $page = $this->session->get(self::KEY.'.'.$area->value);
 
         if (! is_array($page) || ! is_string($page['route'] ?? null) || ! is_string($page['uri'] ?? null)) {
             return null;
         }
 
-        return $this->navigation->forRoute($page['route'])?->area === $area ? $page['uri'] : null;
+        return $this->navigation->forRoute($page['route'])?->area === $area ? ['route' => $page['route'], 'uri' => $page['uri']] : null;
     }
 
     public function forget(): void

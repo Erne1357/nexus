@@ -95,6 +95,9 @@ const numberFrom = (element, property) => Number(element.style.getPropertyValue(
 /** El motivo flotante de lo oculto para los demás: uno solo, junto al menú (MN-02). */
 const whyTip = () => document.querySelector('[data-menu-why-tip]');
 
+/** Lo que lleva motivo (data-why) en lo que tocó el cursor o el foco, o null. */
+const whySourceOf = (target) => (target instanceof Element ? target.closest('[data-why]') : null);
+
 /**
  * Los renglones con el motivo escrito de un encabezado o una entrada, que solo se ven en la hoja del celular
  * (data-menu-note): van justo después de él, antes del siguiente elemento del menú. El buscador los esconde
@@ -235,6 +238,9 @@ document.addEventListener('alpine:init', () => {
         queued: null,
         timers: [],
 
+        /** Quién abrió el motivo flotante: 'pointer', 'focus' o null. */
+        whyOwner: null,
+
         /** Dónde estaba la columna cerrada al abrir el menú, para regresarla ahí al cerrar. */
         columnScroll: 0,
 
@@ -307,14 +313,18 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        /** Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el motivo flotante; si no, el menú. */
+        /**
+         * Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el motivo flotante que abrió el foco;
+         * si no, el menú (y con él el motivo que abrió el cursor).
+         */
         onKeydown(event) {
             if (event.key === 'Escape') {
                 if (this.cardOpen) {
                     this.closeCard();
-                } else if (whyTip()?.hasAttribute('data-on')) {
+                } else if (this.whyOwner === 'focus') {
                     this.hideWhy();
                 } else {
+                    this.hideWhy();
                     this.closeMenu();
                 }
             }
@@ -402,24 +412,43 @@ document.addEventListener('alpine:init', () => {
         },
 
         /**
-         * El motivo flotante de lo oculto para los demás (MN-02): al pasar el cursor o enfocar algo con data-why,
-         * lo muestra junto a su entrada, su encabezado o el nombre de su área. Con el menú cerrado va a la derecha;
-         * abierto o en el celular, debajo. Fuera de lo que lleva motivo, se esconde.
+         * El motivo flotante de lo oculto para los demás (MN-02) tiene dueño: el cursor o el foco, el que lo abrió, y
+         * solo ese lo cierra. Lo abierto por el foco manda: mientras lo tenga, el cursor no lo mueve ni lo cierra.
          */
-        showWhy(target) {
-            const source = target instanceof Element ? target.closest('[data-why]') : null;
-            const tip = whyTip();
-
-            if (!source || !tip) {
-                this.hideWhy();
-
+        onWhyPointer(target) {
+            if (this.whyOwner === 'focus') {
                 return;
             }
 
+            const source = whySourceOf(target);
+
+            if (source) {
+                this.showWhy(source, 'pointer');
+            } else {
+                this.hideWhy('pointer');
+            }
+        },
+
+        onWhyFocus(target) {
+            const source = whySourceOf(target);
+
+            if (source) {
+                this.showWhy(source, 'focus');
+            } else {
+                this.hideWhy('focus');
+            }
+        },
+
+        /**
+         * Muestra el motivo de algo con data-why junto a su entrada, su encabezado o el nombre de su área: a la
+         * derecha con el menú cerrado; abierto o en el celular, debajo, o arriba si abajo no cabe.
+         */
+        showWhy(source, owner) {
+            const tip = whyTip();
             const anchor = source.closest('[data-menu-entry], [data-menu-group], [data-menu-flip="name"]') ?? source;
             const box = anchor.getBoundingClientRect();
 
-            if (box.width === 0) {
+            if (!tip || box.width === 0) {
                 this.hideWhy();
 
                 return;
@@ -430,21 +459,36 @@ document.addEventListener('alpine:init', () => {
             const size = tip.getBoundingClientRect();
             const below = this.menuOpen || isPhone();
             const left = below ? Math.min(box.left + 10, window.innerWidth - size.width - 12) : box.right + 10;
-            const top = below ? box.bottom + 4 : box.top + box.height / 2 - size.height / 2;
+            let top = below ? box.bottom + 4 : box.top + box.height / 2 - size.height / 2;
+
+            if (below && top + size.height > window.innerHeight - 8) {
+                top = box.top - size.height - 4;
+            }
+
             const shellTop = parseFloat(getComputedStyle(document.body).getPropertyValue('--shell-top')) || 0;
 
             tip.style.left = `${Math.max(8, left)}px`;
             tip.style.top = `${Math.max(shellTop + 4, top)}px`;
             tip.toggleAttribute('data-on', true);
+            this.whyOwner = owner;
         },
 
-        /** Esconde el motivo flotante: al salir, al desplazar, al mover el menú y con Esc. */
-        hideWhy() {
+        /**
+         * Esconde el motivo flotante. Con dueño, solo si es suyo (el cursor al salir, el foco al irse); sin dueño,
+         * siempre: al desplazar, al mover el menú y con Esc.
+         */
+        hideWhy(owner = null) {
+            if (owner !== null && this.whyOwner !== owner) {
+                return;
+            }
+
             const tip = whyTip();
 
             if (tip?.hasAttribute('data-on')) {
                 tip.removeAttribute('data-on');
             }
+
+            this.whyOwner = null;
         },
 
         /** Termina un movimiento y hace el que se pidió mientras corría, si cambia algo. */

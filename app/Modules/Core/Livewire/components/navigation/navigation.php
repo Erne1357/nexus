@@ -24,8 +24,8 @@ use Livewire\Component;
  * en Inicio, donde la columna muestra la primera área sin marcarla. La entrada activa es la de la pantalla.
  *
  * El icono de cada área es un enlace: el del área actual lleva a su primera entrada (la principal); el de
- * las demás, a la última página que el usuario visitó de esa área (RecentPages) o, si no ha visitado
- * ninguna, a su primera entrada. Al pintarse en una página completa, el menú anota esa página como la
+ * las demás, a la última página que el usuario visitó de esa área (RecentPages) si una entrada que hoy ve en
+ * el área la declara (lo no disponible en el periodo se le esconde, MN-02) o, si no, a su primera entrada. Al pintarse en una página completa, el menú anota esa página como la
  * última de su área.
  *
  * Cada icono, nombre, encabezado de grupo y entrada lleva su lugar en la retícula del menú abierto:
@@ -61,7 +61,7 @@ new class extends Component
     }
 
     /**
-     * @return array{home: array{href: string, current: bool}, areas: list<array{area: NavigationArea, current: bool, marked: bool, headings: bool, href: string, iconStyle: string, nameStyle: string, hidden: ?array{why: string, id: string}, groups: list<array{group: ?NavigationGroup, style: ?string, hidden: ?array{why: string, reasons: string, note: ?string}, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string, hidden: ?array{why: string, id: string, badge: bool, note: ?string}}>}>}>, grid: array{firstRow: int, columnRows: int}}
+     * @return array{home: array{href: string, current: bool}, areas: list<array{area: NavigationArea, current: bool, marked: bool, headings: bool, href: string, iconStyle: string, nameStyle: string, hidden: ?array{why: string, id: string, note: ?string}, groups: list<array{group: ?NavigationGroup, style: ?string, hidden: ?array{why: string, reasons: string, note: ?string}, entries: list<array{item: NavigationItem, active: bool, page: bool, style: string, hidden: ?array{why: string, id: string, badge: bool, note: ?string}}>}>}>, grid: array{firstRow: int, columnRows: int}}
      */
     public function with(Navigation $navigation, Actor $context, RecentPages $recentPages): array
     {
@@ -86,6 +86,10 @@ new class extends Component
 
         foreach ($menu as $index => $area) {
             $groups = [];
+            $areaEntries = array_merge(...array_column($area['groups'], 'entries'));
+            $areaReasons = $this->reasonsIfAllHidden($areaEntries);
+            // Sin encabezados y oculta entera por un solo motivo, el área lo escribe una vez en la hoja, bajo su nombre.
+            $areaCovered = ! $area['headings'] && $areaReasons !== null && count($areaReasons) === 1;
 
             foreach ($area['groups'] as $position => $group) {
                 $heading = $wide[$index]['groups'][$position]['heading'];
@@ -105,7 +109,7 @@ new class extends Component
                             'why' => "Oculta para los demás: {$entry->hiddenReason}",
                             'id' => "nexus-menu-why-{$area['area']->value}-{$position}-{$order}",
                             'badge' => ! $covered,
-                            'note' => $covered ? null : $entry->hiddenReason,
+                            'note' => $covered || $areaCovered ? null : $entry->hiddenReason,
                         ],
                     ];
                 }
@@ -122,22 +126,24 @@ new class extends Component
                 ];
             }
 
-            $areaReasons = $this->reasonsIfAllHidden(array_merge(...array_column($area['groups'], 'entries')));
-
             $current = $area['area'] === $currentArea;
             $main = route($area['groups'][0]['entries'][0]->item->route);
+            // La última página del área, solo si una entrada que el usuario ve hoy en ella la declara.
+            $last = $current ? null : $recentPages->lastPage($area['area']);
+            $lastIsShown = $last !== null && array_any($areaEntries, fn (MenuEntry $entry): bool => $entry->item->owns($last['route']));
 
             $areas[] = [
                 'area' => $area['area'],
                 'current' => $current,
                 'marked' => $current && ! $onHome,
                 'headings' => $area['headings'],
-                'href' => $current ? $main : ($recentPages->last($area['area']) ?? $main),
+                'href' => $lastIsShown ? $last['uri'] : $main,
                 'iconStyle' => $this->placeOf($wide[$index]['icon'], $narrow[$index]['icon']),
                 'nameStyle' => $this->placeOf($wide[$index]['name'], $narrow[$index]['name']),
                 'hidden' => $areaReasons === null ? null : [
                     'why' => 'Oculta para los demás: '.implode('. ', $areaReasons),
                     'id' => "nexus-menu-why-{$area['area']->value}",
+                    'note' => $areaCovered ? $areaReasons[0] : null,
                 ],
                 'groups' => $groups,
             ];

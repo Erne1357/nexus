@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
@@ -9,6 +11,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Navigation\RecentPages;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Livewire\Livewire;
@@ -29,7 +32,8 @@ beforeEach(function () {
  * Un registro hecho a mano con motivos fijos:
  * - Académico lleva encabezados (cuatro grupos, nueve entradas). Validación está oculta entera por un motivo (A);
  *   Propuesta, entera por dos (B y C); Horarios está disponible, y en Asignación solo A1 está oculta (B).
- * - Recursos humanos, con una sola entrada oculta (A): el área entera.
+ * - Servicios escolares, sin encabezados, oculta entera por dos motivos (S1 por A y S2 por B).
+ * - Recursos humanos, sin encabezados, oculta entera por un solo motivo (A).
  * - Administración, disponible.
  */
 function markedNavigation(): Navigation
@@ -49,7 +53,10 @@ function markedNavigation(): Navigation
         $entry('H3', NavigationArea::Academico, NavigationGroup::Horarios),
         $entry('A1', NavigationArea::Academico, NavigationGroup::Asignacion, 'Motivo B'),
         $entry('A2', NavigationArea::Academico, NavigationGroup::Asignacion),
+        $entry('S1', NavigationArea::ServiciosEscolares, reason: 'Motivo A'),
+        $entry('S2', NavigationArea::ServiciosEscolares, reason: 'Motivo B'),
         $entry('R1', NavigationArea::RecursosHumanos, reason: 'Motivo A'),
+        $entry('R2', NavigationArea::RecursosHumanos, reason: 'Motivo A'),
         $entry('C1', NavigationArea::Administracion, NavigationGroup::Institucion),
     ]);
 }
@@ -158,9 +165,22 @@ describe('MN-02: la marca del admin', function () {
         $notes = array_map(fn (Element $note): string => textOf($note), iterator_to_array($this->page->querySelectorAll('#nexus-menu [data-menu-note]')));
         $validation = $this->page->querySelector('[data-menu-group="validacion"]');
 
-        expect($notes)->toBe(['Motivo A', 'Motivo B', 'Motivo C', 'Motivo B', 'Motivo A'])
+        expect($notes)->toBe(['Motivo A', 'Motivo B', 'Motivo C', 'Motivo B', 'Motivo A', 'Motivo B', 'Motivo A'])
             ->and($validation->nextElementSibling->hasAttribute('data-menu-note'))->toBeTrue()
             ->and($validation->nextElementSibling->getAttribute('aria-hidden'))->toBe('true');
+    });
+
+    it('en la hoja, un área sin encabezados oculta entera por un solo motivo lo dice una vez, bajo su nombre', function () {
+        $name = $this->page->querySelector('[data-menu-area="recursos_humanos"] [data-menu-flip="name"]');
+        $followedByNote = fn (string $label): bool => menuEntryIn($this->page, $label)->nextElementSibling?->hasAttribute('data-menu-note') ?? false;
+
+        expect($name->nextElementSibling->hasAttribute('data-menu-note'))->toBeTrue()
+            ->and(textOf($name->nextElementSibling))->toBe('Motivo A')
+            ->and($followedByNote('R1'))->toBeFalse()
+            ->and($followedByNote('R2'))->toBeFalse()
+            // Con dos motivos, cada entrada lleva el suyo.
+            ->and($followedByNote('S1'))->toBeTrue()
+            ->and($this->page->querySelector('[data-menu-area="servicios_escolares"] [data-menu-flip="name"]')->nextElementSibling->hasAttribute('data-menu-note'))->toBeFalse();
     });
 });
 
@@ -197,6 +217,44 @@ describe('MN-02: el motivo de una entrada para quien la ve marcada', function ()
         app(Actor::class)->refresh();
         expect($navigation->hiddenReasonFor($forbidden, app(Actor::class)))->toBeNull();
     });
+});
+
+it('MN-02: el icono de un área no lleva a una página que el menú ya le esconde: la del coordinador, sin carga en curso, va a la principal', function () {
+    $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    $load = AcademicLoad::factory()->for($term)->create(['campus_id' => $this->campus->id]);
+    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
+    app(RecentPages::class)->remember('academic-load.proposal', '/propuesta?carrera=x');
+
+    $load->update(['status' => LoadStatus::Published]);
+    $icon = domOf(Livewire::test('core::components.navigation', ['route' => 'students.index']))
+        ->querySelector('#nexus-menu [data-menu-area="academico"] [data-menu-flip="icon"]');
+
+    expect($icon->getAttribute('href'))->toBe(route('published.index'));
+});
+
+it('MN-02: el aviso no evalúa la disponibilidad para quien no ve lo no disponible; para el admin, una vez', function () {
+    $calls = 0;
+    app()->instance(Navigation::class, new Navigation([
+        new NavigationItem('Contada', 'core.campuses', 'o-home', NavigationArea::Administracion, group: NavigationGroup::Institucion,
+            whyUnavailable: static function () use (&$calls): string {
+                $calls++;
+
+                return 'Motivo A';
+            }),
+    ]));
+
+    $this->actingAs(User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create());
+    $silent = Livewire::test('core::components.hidden-notice', ['route' => 'core.campuses']);
+
+    expect($calls)->toBe(0)
+        ->and(domOf($silent)->querySelector('[role="note"]'))->toBeNull();
+
+    $this->actingAs(User::factory()->admin()->create());
+    app(Actor::class)->refresh();
+    $note = Livewire::test('core::components.hidden-notice', ['route' => 'core.campuses']);
+
+    expect($calls)->toBe(1)
+        ->and(textOf(domOf($note)->querySelector('[role="note"]')))->toContain('Motivo A');
 });
 
 /*

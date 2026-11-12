@@ -110,3 +110,50 @@ it('el coordinador no ve nada de la carga ni ninguna marca: de Académico, solo 
         ->assertNotPresent('[data-why]')
         ->assertNoJavaScriptErrors();
 });
+
+it('el motivo flotante es de quien lo abrió: el cursor no cierra el del foco, el foco no cierra el del cursor y Esc solo se come el del foco', function () {
+    $why = 'Oculta para los demás: No hay carga en curso en Ene-Jun 2027';
+    $page = signInToHiddenMenu('admin')->click('@hare')->assertScript('Alpine.$data(document.body).busy === false');
+
+    // Abierto por el foco: pasar el cursor por otra parte no lo cierra.
+    $page->script('document.querySelector(\'a[data-label="Asignación docente"]\').focus()');
+    $page->assertScript(MENU_WHY_TIP.'?.text', $why)
+        ->hover('a[data-label="Campus"]')
+        ->assertScript(MENU_WHY_TIP.'?.text', $why)
+        ->hover('a[data-label="Cierre de la carga"]')
+        ->assertScript('Alpine.$data(document.body).whyOwner', 'focus');
+
+    // Abierto por el cursor: un foco que entra y sale de otra parte no lo cierra.
+    $page->script('document.activeElement.blur()');
+    $page->hover('a[data-label="Campus"]')
+        ->assertScript(MENU_WHY_TIP, null)
+        ->hover('a[data-label="Cierre de la carga"]')
+        ->assertScript(MENU_WHY_TIP.'?.text', $why)
+        ->assertScript('Alpine.$data(document.body).whyOwner', 'pointer');
+
+    $page->script('(() => { const search = document.getElementById("nexus-menu-search"); search.focus(); search.blur(); })()');
+    $page->assertScript(MENU_WHY_TIP.'?.text', $why)
+        // Esc no se lo come: cierra el menú como siempre, y el motivo se va con él. Lo manda el buscador, que no
+        // lleva motivo, sin mover el cursor.
+        ->keys('#nexus-menu-search', 'Escape')
+        ->assertScript('document.body.dataset.menu', 'closed')
+        ->assertScript(MENU_WHY_TIP, null)
+        ->assertNoJavaScriptErrors();
+});
+
+it('abierto, si el motivo no cabe debajo de su entrada, sale arriba', function () {
+    $page = signInToHiddenMenu('admin')
+        ->resize(1440, 420)
+        ->click('@hare')
+        ->assertScript('Alpine.$data(document.body).busy === false');
+
+    // Enfocarla la deja a la vista en la orilla de abajo del menú abierto.
+    $page->script('document.querySelector(\'a[data-label="Acuerdos"]\').focus()');
+    $page->assertScript('(() => {
+        const entry = document.querySelector(\'a[data-label="Acuerdos"]\').getBoundingClientRect();
+        const tip = document.querySelector("[data-menu-why-tip]").getBoundingClientRect();
+
+        return entry.bottom + 4 + tip.height > window.innerHeight - 8 && tip.bottom <= entry.top && tip.top >= 0;
+    })()', true)
+        ->assertNoJavaScriptErrors();
+});

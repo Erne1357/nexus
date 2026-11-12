@@ -41,10 +41,10 @@
         aria-label="Navegación principal"
         data-grid-first-row="{{ $grid['firstRow'] }}"
         data-grid-column-rows="{{ $grid['columnRows'] }}"
-        x-on:mouseover="showWhy($event.target)"
-        x-on:mouseleave="hideWhy()"
-        x-on:focusin="showWhy($event.target)"
-        x-on:focusout="hideWhy()"
+        x-on:mouseover="onWhyPointer($event.target)"
+        x-on:mouseleave="hideWhy('pointer')"
+        x-on:focusin="onWhyFocus($event.target)"
+        x-on:focusout="hideWhy('focus')"
         x-on:scroll.passive="hideWhy()"
         class="fixed top-(--shell-top) bottom-0 left-0 z-[24] w-(--menu-w) [display:var(--menu-display)] grid-cols-(--menu-cols) grid-rows-[minmax(0,1fr)] [--current-icon:var(--color-base-100)] [--home-bg:transparent] [--home-current-bg:var(--color-base-100)] [--menu-cols-open:repeat(5,minmax(0,1fr))] [--menu-cols:64px_224px] [--menu-display:grid] max-desktop:[--menu-cols-open:repeat(3,minmax(0,1fr))] max-desktop:[--menu-cols:64px] max-md:[--menu-display:none] in-data-[menu=open]:grid in-data-[menu=open]:w-(--panel-w) in-data-[menu=open]:grid-cols-(--menu-cols-open) in-data-[menu=open]:grid-rows-none in-data-[menu=open]:auto-rows-[36px] in-data-[menu=open]:content-start in-data-[menu=open]:gap-x-[18px] in-data-[menu=open]:overflow-y-auto in-data-[menu=open]:overscroll-contain in-data-[menu=open]:px-5 in-data-[menu=open]:pt-[18px] in-data-[menu=open]:pb-8 in-data-[menu=open]:[--current-icon:transparent] in-data-[menu=open]:[--home-bg:var(--color-base-100)] in-data-[menu=open]:[--home-current-bg:var(--color-secondary)] max-md:grid-cols-1 max-md:auto-rows-auto max-md:gap-y-0.5 max-md:px-3.5 max-md:pt-3.5 max-md:pb-8 max-md:[--home-bg:transparent]"
     >
@@ -163,6 +163,11 @@
                             <x-core::menu-hidden-badge label="Oculta" :why="$area['hidden']['why']" class="pointer-events-auto ms-1 tracking-[.01em] normal-case" />
                         @endif
                     </span>
+
+                    {{-- En la hoja, el motivo del área sin encabezados oculta entera por uno solo, una vez. --}}
+                    @if ($area['hidden']['note'] ?? null)
+                        <span data-menu-note aria-hidden="true" class="hidden ps-[34px] pe-1 pb-1.5 text-[12.5px]/4 text-neutral max-md:block">{{ $area['hidden']['note'] }}</span>
+                    @endif
 
                     @foreach ($area['groups'] as $group)
                         {{-- Encabezado del grupo, solo si el área los lleva (MN-01). --}}
