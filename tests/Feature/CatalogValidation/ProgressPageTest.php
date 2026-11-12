@@ -43,11 +43,10 @@ beforeEach(function () {
     $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica y Electrónica']);
 
-    foreach ([$this->c2, $this->c1] as $campus) {
-        TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $campus->id]);
-        app(CreateTermReviews::class)->handle($this->term, $campus);
-        app(CreateTermLoads::class)->handle($this->term, $campus);
-    }
+    // El periodo abierto en Presencial: C1 y C2 (M4).
+    TermOpening::factory()->create(['term_id' => $this->term->id]);
+    app(CreateTermReviews::class)->handle($this->term, modalityOf('PRES'));
+    app(CreateTermLoads::class)->handle($this->term, modalityOf('PRES'));
 
     $this->jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Dra. Ana Soto']);
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion, [])->create();

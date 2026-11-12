@@ -10,6 +10,7 @@ use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
@@ -114,10 +115,11 @@ it('no avisa a los departamentos inactivos ni a quien no es jefe de ese departam
     Notification::assertNotSentTo([$this->jefeSistemas, $jpd], CatalogReviewsPending::class);
 });
 
-it('al abrir el periodo en un campus avisa a los jefes, después de guardar la apertura', function () {
+it('M4: al abrir el periodo en una modalidad avisa una vez a los jefes, después de guardar la apertura', function () {
     $this->actingAs(User::factory()->admin()->create());
+    Campus::factory()->create(['code' => 'C1']);
 
-    app(OpenTerm::class)->handle($this->term, $this->c2);
+    app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
 
     expect($this->jefeSistemas->notifications()->count())->toBe(1)
         ->and($this->jefeBasicas->notifications()->count())->toBe(1)
@@ -126,11 +128,20 @@ it('al abrir el periodo en un campus avisa a los jefes, después de guardar la a
 
 it('si la apertura falla, no avisa a nadie', function () {
     $this->actingAs(User::factory()->admin()->create());
-    $this->c2->update(['is_active' => false]);
+    modalityOf('PRES')->update(['is_active' => false]);
 
-    expect(fn () => app(OpenTerm::class)->handle($this->term, $this->c2))->toThrow(ValidationException::class);
+    expect(fn () => app(OpenTerm::class)->handle($this->term, modalityOf('PRES')))->toThrow(ValidationException::class);
 
     expect(DatabaseNotification::query()->count())->toBe(0);
+});
+
+it('al abrir una modalidad sin campus activos no avisa: el aviso todavía es por campus', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    app(OpenTerm::class)->handle($this->term, Modality::factory()->create());
+
+    expect(DatabaseNotification::query()->count())->toBe(0)
+        ->and(CatalogReview::query()->count())->toBeGreaterThan(0);
 });
 
 it('notify() da los usuarios avisados y handle() sigue dando cuántos', function () {

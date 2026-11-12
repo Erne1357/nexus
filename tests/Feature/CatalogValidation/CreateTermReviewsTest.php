@@ -5,21 +5,20 @@ use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
-use App\Modules\Core\Events\TermOpened;
-use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 
 /*
-| Al abrir un periodo en un campus, CatalogValidation crea las revisiones que falten (S-A6, supuesto por
-| confirmar): las cinco de cada departamento activo, una vez por periodo para todo el Tec, sin campus; la de salones
-| solo si el perfil del campus que se abre usa salones, y es una para todos los campus (decisión 6, confirmada el 12 de
-| noviembre de 2026). Todas nacen pendientes.
+| Al abrir un periodo en una modalidad (M4), CatalogValidation crea las revisiones que falten (supuesto por confirmar;
+| hasta que el admin elija qué catálogos se validan, MS15): las cinco de cada departamento activo, una vez por periodo
+| para todo el Tec, sin campus; la de salones solo si el perfil de la modalidad que se abre usa salones, y es una para
+| todos los campus (decisión 6, confirmada el 12 de noviembre de 2026). Todas nacen pendientes.
 */
 
-function createTermReviews(Term $term, Campus $campus): int
+function createTermReviews(Term $term, Modality $modality): int
 {
-    return app(CreateTermReviews::class)->handle($term, $campus);
+    return app(CreateTermReviews::class)->handle($term, $modality);
 }
 
 /**
@@ -34,18 +33,21 @@ function reviewKeysOf(Term $term): array
         ->sort()->values()->all();
 }
 
-function campusWithoutRooms(string $code): Campus
+function modalityWithoutRooms(): Modality
 {
-    return Campus::factory()->create(['code' => $code, 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+    return Modality::factory()->create(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
 }
+
+beforeEach(function () {
+    $this->presencial = modalityOf('PRES');
+});
 
 it('crea las cinco revisiones de cada departamento activo, sin campus, pendientes', function () {
     $term = Term::factory()->create();
-    $c2 = Campus::factory()->create(['code' => 'C2']);
     Department::factory()->create(['code' => 'D1']);
     Department::factory()->create(['code' => 'D2']);
 
-    expect(createTermReviews($term, $c2))->toBe(10)
+    expect(createTermReviews($term, $this->presencial))->toBe(10)
         ->and(reviewKeysOf($term))->toBe([
             'D1 careers -', 'D1 rooms -', 'D1 study_plans -', 'D1 subjects -', 'D1 teachers -',
             'D2 careers -', 'D2 rooms -', 'D2 study_plans -', 'D2 subjects -', 'D2 teachers -',
@@ -59,88 +61,62 @@ it('no crea revisiones de departamentos inactivos ni borrados', function () {
     Department::factory()->inactive()->create();
     Department::factory()->create()->delete();
 
-    expect(createTermReviews($term, Campus::factory()->create(['code' => 'C2'])))->toBe(5)
+    expect(createTermReviews($term, $this->presencial))->toBe(5)
         ->and(reviewKeysOf($term))->each->toStartWith('D1 ');
 });
 
 it('es idempotente: la segunda vez no crea nada; un departamento nuevo recibe solo las suyas', function () {
     $term = Term::factory()->create();
-    $c2 = Campus::factory()->create(['code' => 'C2']);
     Department::factory()->create(['code' => 'D1']);
-    createTermReviews($term, $c2);
+    createTermReviews($term, $this->presencial);
 
-    expect(createTermReviews($term, $c2))->toBe(0);
+    expect(createTermReviews($term, $this->presencial))->toBe(0);
 
     Department::factory()->create(['code' => 'D2']);
 
-    expect(createTermReviews($term, $c2))->toBe(5)
+    expect(createTermReviews($term, $this->presencial))->toBe(5)
         ->and(CatalogReview::count())->toBe(10);
 });
 
-it('en un segundo campus con salones no crea otra de salones: es una por departamento y periodo', function () {
+it('en otra modalidad con salones no crea otra de salones: es una por departamento y periodo', function () {
     $term = Term::factory()->create();
     Department::factory()->create(['code' => 'D1']);
-    createTermReviews($term, Campus::factory()->create(['code' => 'C2']));
+    createTermReviews($term, $this->presencial);
 
-    expect(createTermReviews($term, Campus::factory()->create(['code' => 'C1'])))->toBe(0)
+    expect(createTermReviews($term, Modality::factory()->create()))->toBe(0)
         ->and(reviewKeysOf($term))->toBe(['D1 careers -', 'D1 rooms -', 'D1 study_plans -', 'D1 subjects -', 'D1 teachers -']);
 });
 
-it('la de salones se crea con el primer campus abierto que usa salones', function () {
+it('la de salones se crea con la primera modalidad abierta que usa salones', function () {
     $term = Term::factory()->create();
     Department::factory()->create(['code' => 'D1']);
-    createTermReviews($term, campusWithoutRooms('EAD'));
+    createTermReviews($term, modalityWithoutRooms());
 
-    expect(createTermReviews($term, Campus::factory()->create(['code' => 'C2'])))->toBe(1)
+    expect(createTermReviews($term, $this->presencial))->toBe(1)
         ->and(reviewKeysOf($term))->toContain('D1 rooms -');
 });
 
-it('en un campus cuyo perfil no usa salones crea solo las generales', function () {
+it('en una modalidad cuyo perfil no usa salones crea solo las generales', function () {
     $term = Term::factory()->create();
     Department::factory()->create(['code' => 'D1']);
 
-    expect(createTermReviews($term, campusWithoutRooms('EAD')))->toBe(4)
+    expect(createTermReviews($term, modalityWithoutRooms()))->toBe(4)
         ->and(CatalogReview::query()->where('catalog', Catalog::Rooms)->exists())->toBeFalse();
+});
+
+it('handleRooms crea solo la de salones de cada departamento activo que no la tenga', function () {
+    $term = Term::factory()->create();
+    Department::factory()->create(['code' => 'D1']);
+    createTermReviews($term, modalityWithoutRooms());
+
+    expect(app(CreateTermReviews::class)->handleRooms($term))->toBe(1)
+        ->and(app(CreateTermReviews::class)->handleRooms($term))->toBe(0)
+        ->and(reviewKeysOf($term))->toContain('D1 rooms -');
 });
 
 it('no toca las revisiones de otro periodo', function () {
     Department::factory()->create();
-    $campus = Campus::factory()->create();
-    createTermReviews(Term::factory()->create(), $campus);
+    createTermReviews(Term::factory()->create(), $this->presencial);
 
-    expect(createTermReviews(Term::factory()->create(), $campus))->toBe(5);
-});
-
-describe('al oír TermOpened', function () {
-    it('reporta cuántas revisiones creó, en plural', function () {
-        Department::factory()->count(2)->create();
-        $event = new TermOpened(Term::factory()->create(), Campus::factory()->create());
-
-        event($event);
-
-        expect($event->lines())->toContain('10 revisiones de catálogo nuevas');
-    });
-
-    it('reporta «1 revisión de catálogo nueva» en singular', function () {
-        $term = Term::factory()->create();
-        Department::factory()->create();
-        createTermReviews($term, campusWithoutRooms('EAD'));
-        $event = new TermOpened($term, Campus::factory()->create());
-
-        event($event);
-
-        expect($event->lines())->toContain('1 revisión de catálogo nueva');
-    });
-
-    it('no reporta nada si no faltaba ninguna', function () {
-        $term = Term::factory()->create();
-        $campus = Campus::factory()->create();
-        Department::factory()->create();
-        createTermReviews($term, $campus);
-        $event = new TermOpened($term, $campus);
-
-        event($event);
-
-        expect(array_values(array_filter($event->lines(), fn (string $line): bool => str_contains($line, 'revisi'))))->toBe([]);
-    });
+    expect(createTermReviews(Term::factory()->create(), $this->presencial))->toBe(5);
 });

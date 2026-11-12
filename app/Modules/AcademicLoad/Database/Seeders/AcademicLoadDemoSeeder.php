@@ -97,7 +97,7 @@ final class AcademicLoadDemoSeeder extends Seeder
             foreach ($campuses as $code) {
                 $campus = Campus::query()->where('code', $code)->firstOrFail();
 
-                if (! TermOpening::query()->where('term_id', $termModel->id)->where('campus_id', $campus->id)->exists()) {
+                if (! TermOpening::query()->where('term_id', $termModel->id)->where('modality_id', $campus->modality_id)->exists()) {
                     if ($complete) {
                         throw new RuntimeException("El periodo {$term} no está abierto en {$code}: no se pueden enviar sus propuestas.");
                     }

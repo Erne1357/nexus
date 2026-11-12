@@ -1,6 +1,6 @@
 <?php
 
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Rules\TermRules;
@@ -71,16 +71,16 @@ it('acepta una fecha Y-m-d o un DateTimeInterface', function () {
         ->and(app(TermRules::class)->date('starts_on', new DateTimeImmutable('2027-03-01 10:00')))->toBe('2027-03-01');
 });
 
-it('explica por qué el código no cambia, con los campus donde se abrió, también uno desactivado', function () {
+it('M4: explica por qué el código no cambia, con las modalidades donde se abrió, también una desactivada', function () {
     $term = Term::factory()->create();
     $rules = app(TermRules::class);
 
     expect($rules->codeLockReason($term))->toBeNull();
 
-    TermOpening::factory()->for($term)->for(Campus::factory()->create(['code' => 'C2']))->create();
-    expect($rules->codeLockReason($term))->toBe('El código ya no se puede cambiar: el periodo se abrió en C2.');
+    TermOpening::factory()->for($term)->create();
+    expect($rules->codeLockReason($term))->toBe('El código ya no se puede cambiar: el periodo se abrió en Presencial.');
 
-    TermOpening::factory()->for($term)->for(Campus::factory()->inactive()->create(['code' => 'C1']))->create();
-    TermOpening::factory()->for($term)->for(Campus::factory()->create(['code' => 'EAD']))->create();
-    expect($rules->codeLockReason($term))->toBe('El código ya no se puede cambiar: el periodo se abrió en C1, C2 y EAD.');
+    TermOpening::factory()->for($term)->for(Modality::factory()->inactive()->create(['code' => 'A1', 'name' => 'Modalidad A']))->create();
+    TermOpening::factory()->for($term)->for(Modality::factory()->create(['code' => 'Z1', 'name' => 'Modalidad Z']))->create();
+    expect($rules->codeLockReason($term))->toBe('El código ya no se puede cambiar: el periodo se abrió en Modalidad A, Presencial y Modalidad Z.');
 });

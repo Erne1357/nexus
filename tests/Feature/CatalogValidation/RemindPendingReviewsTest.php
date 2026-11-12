@@ -30,7 +30,7 @@ beforeEach(function () {
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion, [])->create();
 
     foreach ([$this->c2, $this->c1] as $campus) {
-        app(CreateTermReviews::class)->handle($this->term, $campus);
+        app(CreateTermReviews::class)->handle($this->term, $campus->catalogModality);
     }
 
     CatalogReview::query()->where('department_id', $this->ele->id)->update(['status' => ReviewStatus::Validated]);

@@ -45,7 +45,7 @@ class Term extends Model
     }
 
     /**
-     * En qué campus se abrió (D1).
+     * En qué modalidades se abrió (M4).
      *
      * @return HasMany<TermOpening, $this>
      */
@@ -55,15 +55,15 @@ class Term extends Model
     }
 
     /**
-     * Los códigos de los campus donde se abrió, ordenados; pide `openings.campus` cargado (también con el campus
-     * desactivado o borrado después) para no consultar por periodo.
+     * Las claves de las modalidades donde se abrió, ordenadas; pide `openings.modality` cargado (también con la
+     * modalidad desactivada o borrada después) para no consultar por periodo.
      *
      * @return Attribute<list<string>, never>
      */
-    protected function openedCampusCodes(): Attribute
+    protected function openedModalityCodes(): Attribute
     {
         return Attribute::get(fn (): array => $this->openings
-            ->map(fn (TermOpening $opening): ?string => $opening->campus?->code)
+            ->map(fn (TermOpening $opening): ?string => $opening->modality?->code)
             ->filter()
             ->sort()
             ->values()

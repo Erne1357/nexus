@@ -36,7 +36,8 @@ final class ValidationProgressQuery
     ) {}
 
     /**
-     * Los campus donde el periodo está abierto, activos y sin borrar, por código.
+     * Los campus donde el periodo está abierto, activos y sin borrar, por código: los de las modalidades donde se abrió
+     * (M4; por el puente `campuses.modality_id` mientras el tablero sea por campus).
      *
      * @return Collection<int, Campus>
      */
@@ -44,7 +45,7 @@ final class ValidationProgressQuery
     {
         return Campus::query()
             ->where('is_active', true)
-            ->whereIn('id', TermOpening::query()->where('term_id', $term->getKey())->select('campus_id'))
+            ->whereIn('modality_id', TermOpening::query()->where('term_id', $term->getKey())->select('modality_id'))
             ->orderBy('code')
             ->get();
     }

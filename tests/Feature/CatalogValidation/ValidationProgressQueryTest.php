@@ -15,6 +15,7 @@ use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -37,10 +38,9 @@ beforeEach(function () {
     $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica']);
     Department::factory()->inactive()->create(['code' => 'OLD']);
 
-    foreach ([$this->c2, $this->c1, $this->online] as $campus) {
-        TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $campus->id]);
-        app(CreateTermReviews::class)->handle($this->term, $campus);
-    }
+    // El periodo abierto en Presencial (M4): los tres campus son de ella por el puente `campuses.modality_id`.
+    TermOpening::factory()->create(['term_id' => $this->term->id]);
+    app(CreateTermReviews::class)->handle($this->term, modalityOf('PRES'));
 
     $this->progress = fn (?Collection $campuses = null, string $search = '', string $status = '') => app(ValidationProgressQuery::class)
         ->board($this->term, $campuses ?? app(ValidationProgressQuery::class)->openCampuses($this->term), $search, $status);
@@ -55,9 +55,9 @@ function progressValidate(Department $department, Catalog $catalog, ReviewStatus
         ->update(['status' => $status, 'validated_at' => $status === ReviewStatus::Validated ? now() : null]);
 }
 
-it('lista los campus donde el periodo está abierto, por código', function () {
-    $inactive = Campus::factory()->inactive()->create(['code' => 'AA']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $inactive->id]);
+it('M4: lista los campus activos de las modalidades donde el periodo está abierto, por código', function () {
+    Campus::factory()->inactive()->create(['code' => 'AA']);
+    Campus::factory()->create(['code' => 'ZZ', 'modality_id' => Modality::factory()->create()->id]);
 
     expect(app(ValidationProgressQuery::class)->openCampuses($this->term)->pluck('code')->all())->toBe(['C1', 'C2', 'EL']);
 });
@@ -195,9 +195,7 @@ it('filtra por departamento o jefe y por estado', function () {
 });
 
 it('reporta el estado de la carga de cada departamento y campus mediante el evento con reporte', function () {
-    foreach ([$this->c2, $this->c1] as $campus) {
-        app(CreateTermLoads::class)->handle($this->term, $campus);
-    }
+    app(CreateTermLoads::class)->handle($this->term, modalityOf('PRES'));
 
     AcademicLoad::query()->where('department_id', $this->sis->id)->where('campus_id', $this->c2->id)->update(['status' => LoadStatus::Proposed]);
 

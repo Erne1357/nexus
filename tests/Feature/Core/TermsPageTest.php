@@ -3,6 +3,7 @@
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -52,17 +53,17 @@ describe('admin y subdirección', function () {
             ->assertSeeInOrder(['20271', 'Ene-Jun 2027', '18/01/2027', '11/06/2027', 'Actual', '20263', 'Ago-Dic 2026', '17/08/2026']);
     })->with(['admin', 'subdireccion']);
 
-    it('muestra en «Abierto en» los códigos de los campus donde se abrió, también uno desactivado, sin consultar por periodo', function () {
-        $c2 = Campus::factory()->create(['code' => 'C2']);
-        $ead = Campus::factory()->create(['code' => 'EAD']);
-        TermOpening::factory()->for($this->t1)->for($ead)->create();
-        TermOpening::factory()->for($this->t1)->for($c2)->create();
-        TermOpening::factory()->for($this->t2)->for($this->campus)->create();
-        $ead->update(['is_active' => false]);
+    it('M4: muestra en «Abierto en» las claves de las modalidades donde se abrió, también una desactivada, sin consultar por periodo', function () {
+        $pres = modalityOf('PRES');
+        $other = Modality::factory()->create(['code' => 'ZZ']);
+        TermOpening::factory()->for($this->t1)->for($other)->create();
+        TermOpening::factory()->for($this->t1)->for($pres)->create();
+        TermOpening::factory()->for($this->t2)->for($pres)->create();
+        $other->update(['is_active' => false]);
 
         $this->actingAs($this->admin)
             ->get(route('core.terms'))
-            ->assertSeeInOrder(['Abierto en', '20271', 'C2', 'EAD', '20263', 'C1']);
+            ->assertSeeInOrder(['Abierto en', '20271', 'PRES', 'ZZ', '20263', 'PRES']);
 
         $queries = 0;
         DB::listen(function () use (&$queries): void {
@@ -71,7 +72,7 @@ describe('admin y subdirección', function () {
         Livewire::actingAs($this->admin)->test('core::pages.terms');
         $withThree = $queries;
 
-        Term::factory()->count(5)->create()->each(fn (Term $term) => TermOpening::factory()->for($term)->for($c2)->create());
+        Term::factory()->count(5)->create()->each(fn (Term $term) => TermOpening::factory()->for($term)->for($pres)->create());
         $queries = 0;
         Livewire::actingAs($this->admin)->test('core::pages.terms');
 
@@ -79,13 +80,13 @@ describe('admin y subdirección', function () {
     });
 
     it('deshabilita el código con su motivo al editar un periodo abierto, y no al dar de alta', function () {
-        TermOpening::factory()->for($this->t1)->for($this->campus)->create();
+        TermOpening::factory()->for($this->t1)->create();
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.terms')
             ->call('edit', $this->t1->id)
             ->assertSee('data-testid="term-code-locked"', false)
-            ->assertSee('El código ya no se puede cambiar: el periodo se abrió en C1.')
+            ->assertSee('El código ya no se puede cambiar: el periodo se abrió en Presencial.')
             ->call('edit', $this->t2->id)
             ->assertDontSee('data-testid="term-code-locked"', false)
             ->call('create')
@@ -150,14 +151,14 @@ describe('admin y subdirección', function () {
             ->assertSee('El código lleva el año y el periodo');
     });
 
-    it('recorta «Abierto en» a tres códigos y «+N» con la lista completa', function () {
-        foreach (['C2', 'C3', 'C4', 'C5'] as $code) {
-            TermOpening::factory()->for($this->t1)->for(Campus::factory()->create(['code' => $code]))->create();
+    it('recorta «Abierto en» a tres claves y «+N» con la lista completa', function () {
+        foreach (['M2', 'M3', 'M4', 'M5'] as $code) {
+            TermOpening::factory()->for($this->t1)->for(Modality::factory()->create(['code' => $code]))->create();
         }
 
         $this->actingAs($this->admin)
             ->get(route('core.terms'))
-            ->assertSee('title="C2, C3, C4, C5">+1</span>', false);
+            ->assertSee('title="M2, M3, M4, M5">+1</span>', false);
     });
 
     it('al editar, escribir encima del código no borra el nombre guardado', function () {

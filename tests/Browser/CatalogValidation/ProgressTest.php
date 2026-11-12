@@ -17,7 +17,7 @@ use Illuminate\Notifications\DatabaseNotification;
 it('Subdirección abre el tablero, el drawer de un departamento y le recuerda al jefe', function () {
     $term = Term::factory()->current()->create();
     $campus = Campus::factory()->create(['name' => 'Campus II']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id]);
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     app(CreateTermReviews::class)->handle($term, $campus);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['name' => 'Dra. Ana Soto']);

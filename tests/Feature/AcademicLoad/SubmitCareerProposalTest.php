@@ -36,7 +36,7 @@ beforeEach(function () {
         'campus_id' => Campus::factory()->create(['code' => 'C2'])->id,
         'career_id' => Career::factory()->create(['code' => 'ISC'])->id,
     ]);
-    TermOpening::factory()->create(['term_id' => $this->proposal->term_id, 'campus_id' => $this->proposal->campus_id]);
+    TermOpening::factory()->create(['term_id' => $this->proposal->term_id, 'modality_id' => $this->proposal->modality_id]);
     CareerCampus::factory()->create(['career_id' => $this->proposal->career_id, 'campus_id' => $this->proposal->campus_id]);
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->sc = Department::factory()->create(['code' => 'SC']);

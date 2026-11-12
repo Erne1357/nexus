@@ -14,9 +14,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Ventana de fechas de una etapa del periodo. Sin campus aplica a todos los campus.
+ * Ventana de fechas de una etapa del periodo (M4, confirmado el 12 de noviembre de 2026: el calendario es por
+ * modalidad). Sin modalidad es la general y aplica a todas; la de una modalidad la reemplaza en ella.
  */
-#[Fillable(['term_id', 'campus_id', 'stage', 'starts_on', 'ends_on'])]
+#[Fillable(['term_id', 'modality_id', 'stage', 'starts_on', 'ends_on'])]
 #[UseFactory(TermStageFactory::class)]
 class TermStage extends Model
 {
@@ -44,23 +45,23 @@ class TermStage extends Model
     }
 
     /**
-     * @return BelongsTo<Campus, $this>
+     * @return BelongsTo<Modality, $this>
      */
-    public function campus(): BelongsTo
+    public function modality(): BelongsTo
     {
-        return $this->belongsTo(Campus::class);
+        return $this->belongsTo(Modality::class);
     }
 
     /**
-     * Etapas que aplican a un campus: las suyas y las de todos los campus (`campus_id` nulo).
+     * Etapas que aplican a una modalidad: las suyas y las generales (`modality_id` nulo).
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
-    protected function appliesTo(Builder $query, Campus|string $campus): void
+    protected function appliesTo(Builder $query, Modality|string $modality): void
     {
-        $campusId = $campus instanceof Campus ? $campus->getKey() : $campus;
+        $modalityId = $modality instanceof Modality ? $modality->getKey() : $modality;
 
-        $query->where(fn (Builder $query) => $query->whereNull('campus_id')->orWhere('campus_id', $campusId));
+        $query->where(fn (Builder $query) => $query->whereNull('modality_id')->orWhere('modality_id', $modalityId));
     }
 }

@@ -4,7 +4,7 @@ namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Events\TermCalendarChanged;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Rules\TermRules;
@@ -13,13 +13,14 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Crea o cambia la ventana de fechas de una etapa del periodo: la general (`$campus` nulo) o la de un
- * campus, que reemplaza a la general en él (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por confirmar). Es un upsert por periodo,
- * campus y etapa. Las fechas solo informan (D4): no se comparan con las del periodo.
+ * Crea o cambia la ventana de fechas de una etapa del periodo: la general (`$modality` nula) o la de una modalidad, que
+ * reemplaza a la general en ella (M4, confirmado el 12 de noviembre de 2026; ver docs/dominio/reglas-de-negocio.md,
+ * Periodo y calendario). Es un upsert por periodo, modalidad y etapa. Las fechas solo informan (D4): no se comparan con
+ * las del periodo.
  *
- * El campus debe estar activo y no borrado. En una transacción, con el periodo bloqueado para
- * serializar el upsert, escribe y deja bitácora con las fechas anteriores y nuevas; si la ventana ya
- * tenía esas fechas no hace nada. Después del commit avisa con TermCalendarChanged.
+ * La modalidad debe estar activa y no borrada. En una transacción, con el periodo bloqueado para serializar el upsert,
+ * escribe y deja bitácora con las fechas anteriores y nuevas; si la ventana ya tenía esas fechas no hace nada. Después
+ * del commit avisa con TermCalendarChanged.
  */
 final class SetTermStage
 {
@@ -28,20 +29,20 @@ final class SetTermStage
     /**
      * @throws ValidationException
      */
-    public function handle(Term $term, Stage $stage, ?Campus $campus, mixed $startsOn, mixed $endsOn): TermStage
+    public function handle(Term $term, Stage $stage, ?Modality $modality, mixed $startsOn, mixed $endsOn): TermStage
     {
         [$startsOn, $endsOn] = $this->rules->dates($startsOn, $endsOn);
 
-        return DB::transaction(function () use ($term, $stage, $campus, $startsOn, $endsOn): TermStage {
+        return DB::transaction(function () use ($term, $stage, $modality, $startsOn, $endsOn): TermStage {
             $term->newQuery()->whereKey($term->getKey())->lockForUpdate()->firstOrFail();
 
-            if ($campus !== null && ! Campus::query()->whereKey($campus->getKey())->where('is_active', true)->exists()) {
-                throw ValidationException::withMessages(['campus_id' => 'El campus debe estar activo.']);
+            if ($modality !== null && ! Modality::query()->whereKey($modality->getKey())->where('is_active', true)->exists()) {
+                throw ValidationException::withMessages(['modality_id' => 'La modalidad debe estar activa.']);
             }
 
             $window = TermStage::query()
                 ->where('term_id', $term->getKey())
-                ->where('campus_id', $campus?->getKey())
+                ->where('modality_id', $modality?->getKey())
                 ->where('stage', $stage->value)
                 ->first();
 
@@ -54,11 +55,11 @@ final class SetTermStage
                 return $window;
             }
 
-            $window ??= new TermStage(['term_id' => $term->getKey(), 'campus_id' => $campus?->getKey(), 'stage' => $stage]);
+            $window ??= new TermStage(['term_id' => $term->getKey(), 'modality_id' => $modality?->getKey(), 'stage' => $stage]);
             $window->fill(['starts_on' => $startsOn, 'ends_on' => $endsOn])->save();
 
-            $where = $campus === null ? 'general' : "de {$campus->code}";
-            $changes = ['attributes' => ['stage' => $stage->value, 'campus_id' => $campus?->getKey(), 'starts_on' => $startsOn, 'ends_on' => $endsOn]];
+            $where = $modality === null ? 'general' : "de {$modality->name}";
+            $changes = ['attributes' => ['stage' => $stage->value, 'modality_id' => $modality?->getKey(), 'starts_on' => $startsOn, 'ends_on' => $endsOn]];
 
             if ($old !== null) {
                 $changes['old'] = $old;
@@ -70,7 +71,7 @@ final class SetTermStage
                 ->withChanges($changes)
                 ->log(($old === null ? 'Fijó' : 'Cambió')." la etapa {$stage->label()} ({$where}) del periodo {$term->code}");
 
-            TermCalendarChanged::dispatch($term, $campus);
+            TermCalendarChanged::dispatch($term, $modality);
 
             return $window;
         });

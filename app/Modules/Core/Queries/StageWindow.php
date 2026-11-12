@@ -8,7 +8,7 @@ use App\Modules\Core\Enums\StageStatus;
 use Carbon\CarbonImmutable;
 
 /**
- * La ventana efectiva de una etapa para un campus (TermCalendarQuery), con su estado respecto a hoy.
+ * La ventana efectiva de una etapa para una modalidad (TermCalendarQuery), con su estado respecto a hoy.
  * `daysLeft`: en curso, días que faltan para `endsOn` (el último día vale 0); próxima, días que faltan
  * para `startsOn`; terminada o sin fecha, null.
  */

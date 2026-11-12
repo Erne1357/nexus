@@ -471,7 +471,7 @@ class CatalogValidationDemoSeeder extends Seeder
      */
     private function openedCampuses(Term $term): Collection
     {
-        return Campus::query()->whereIn('id', DB::table('term_openings')->where('term_id', $term->getKey())->select('campus_id'))->orderBy('code')->get();
+        return Campus::query()->where('is_active', true)->whereIn('modality_id', DB::table('term_openings')->where('term_id', $term->getKey())->select('modality_id'))->orderBy('code')->get();
     }
 
     /**

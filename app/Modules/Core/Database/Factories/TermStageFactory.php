@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Ventana general (sin campus) de la propuesta de un periodo nuevo.
+ * Ventana general (sin modalidad) de la propuesta de un periodo nuevo.
  *
  * @extends Factory<TermStage>
  */
@@ -23,7 +23,7 @@ class TermStageFactory extends Factory
     {
         return [
             'term_id' => Term::factory(),
-            'campus_id' => null,
+            'modality_id' => null,
             'stage' => Stage::Proposal,
             'starts_on' => '2026-11-02',
             'ends_on' => '2026-11-13',
