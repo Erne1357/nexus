@@ -21,4 +21,12 @@ interface ScopeLabels
      * @return array<string, string> id de carrera → «ISC · Ingeniería en Sistemas Computacionales», por código
      */
     public function careerOptions(?string $campusId): array;
+
+    /**
+     * Las mismas carreras que careerOptions(), agrupadas por el departamento que las coordina y en el orden de su
+     * código (las carreras, por código dentro del departamento), para la lista con casillas de «Nombrar».
+     *
+     * @return list<array{id: string, code: string, name: string, careers: list<array{id: string, code: string, name: string}>}>
+     */
+    public function careerGroups(?string $campusId): array;
 }

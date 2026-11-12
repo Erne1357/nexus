@@ -2,13 +2,16 @@
 
 namespace App\Modules\Core\Livewire\Concerns;
 
+use App\Modules\Core\Actions\AppointCareerCoordinator;
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\PeopleQuery;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -17,7 +20,8 @@ use Illuminate\Validation\ValidationException;
  * puestos» y en el panel del Organigrama: limpia lo que dependía del puesto o del campus anterior, valida y llama a
  * AppointRole. La vista es `core::people.appoint-fields`. La unidad puede venir fija (el Organigrama) y entonces no se
  * elige. La modalidad (AZ-S17) viene elegida si hay una sola activa; el campus del coordinador y del jefe de proyecto
- * docente es opcional. El diseño final de este formulario es de la tarea T13 (U3).
+ * docente es opcional. El coordinador se nombra sobre varias carreras a la vez (T13, U3 opción A: `careers`, las casillas
+ * del cajón; M5, MS19) con AppointCareerCoordinator; sin casillas elegidas usa `career` (el Organigrama).
  */
 trait AppointsRoles
 {
@@ -35,6 +39,12 @@ trait AppointsRoles
 
     public string $career = '';
 
+    /** @var list<string> las carreras marcadas en el cajón del coordinador */
+    public array $careers = [];
+
+    /** Búsqueda dentro de la lista de carreras del cajón. */
+    public string $careerSearch = '';
+
     public string $from = '';
 
     public string $to = '';
@@ -45,7 +55,7 @@ trait AppointsRoles
     protected function resetAppointFields(Role $role, ?OrgUnit $lockedUnit = null): void
     {
         $this->resetValidation();
-        $this->reset('campus', 'career', 'to');
+        $this->reset('campus', 'career', 'careers', 'careerSearch', 'to');
         $this->role = $role->value;
         $this->modality = app(PeopleQuery::class)->defaultModalityId() ?? '';
         $this->unit = $lockedUnit?->getKey() ?? '';
@@ -60,21 +70,85 @@ trait AppointsRoles
     {
         if ($property === 'role') {
             $this->resetValidation();
-            $this->reset('campus', 'career');
+            $this->reset('campus', 'career', 'careers', 'careerSearch');
             $this->modality = app(PeopleQuery::class)->defaultModalityId() ?? '';
 
             if (! $unitLocked) {
                 $this->reset('unit');
             }
         } elseif ($property === 'campus') {
-            $this->reset('career');
+            $this->reset('career', 'careers');
         }
     }
 
     /**
-     * @param  list<array{id: string, name: string}>  $offered  los puestos que el formulario ofrece
+     * La persona a la que se nombra, para no marcar las carreras que ya coordina; sin ella (el Organigrama), ninguna.
      */
-    protected function appointPerson(AppointRole $appointRole, PeopleQuery $people, User $person, array $offered, ?OrgUnit $lockedUnit = null): RoleAssignment
+    protected function appointee(): ?User
+    {
+        return null;
+    }
+
+    /**
+     * «Todas las de la modalidad en el campus»: marca las carreras que se ofrecen en el campus elegido y que la persona
+     * no coordina ya. Sin un campus que exista, no marca nada.
+     */
+    public function selectAllInCampus(PeopleQuery $people): void
+    {
+        $this->authorize('create', RoleAssignment::class);
+
+        $this->careers = $people->campus($this->campus) === null ? [] : $this->selectableCareerIds($people, $this->campus);
+    }
+
+    /**
+     * «Todas las de la modalidad»: sin campus, marca todas las que se ofrecen en algún campus activo.
+     */
+    public function selectAllInModality(PeopleQuery $people): void
+    {
+        $this->authorize('create', RoleAssignment::class);
+
+        $this->campus = '';
+        $this->careers = $this->selectableCareerIds($people, null);
+    }
+
+    /**
+     * Marca las carreras de un departamento o, si ya están todas, las desmarca.
+     */
+    public function toggleDepartment(PeopleQuery $people, string $departmentId): void
+    {
+        $this->authorize('create', RoleAssignment::class);
+
+        $group = collect($people->careerChecklist($this->campus, $this->modality, $this->appointee()))->firstWhere('id', $departmentId);
+        $ids = $group === null ? [] : array_column(array_filter($group['careers'], fn (array $career): bool => $career['state'] !== 'mine'), 'id');
+
+        $this->careers = array_values($ids !== [] && array_diff($ids, $this->careers) === []
+            ? array_diff($this->careers, $ids)
+            : array_unique([...$this->careers, ...$ids]));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function selectableCareerIds(PeopleQuery $people, ?string $campusId): array
+    {
+        $ids = [];
+
+        foreach ($people->careerChecklist($campusId, $this->modality, $this->appointee()) as $group) {
+            foreach ($group['careers'] as $career) {
+                if ($career['state'] !== 'mine') {
+                    $ids[] = $career['id'];
+                }
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  list<array{id: string, name: string}>  $offered  los puestos que el formulario ofrece
+     * @return list<RoleAssignment> uno por carrera para el coordinador; uno solo para los demás puestos
+     */
+    protected function appointPerson(AppointRole $appointRole, PeopleQuery $people, User $person, array $offered, ?OrgUnit $lockedUnit = null): array
     {
         $this->validate([
             'role' => ['required', Rule::in(array_column($offered, 'id'))],
@@ -98,7 +172,11 @@ trait AppointsRoles
             throw ValidationException::withMessages(['campus' => 'Elige el campus.']);
         }
 
-        return $appointRole->handle(
+        if ($role === Role::Coordinador) {
+            return $this->appointCoordinator($people, $person, $campus);
+        }
+
+        return [$appointRole->handle(
             $person,
             $role,
             $campus,
@@ -107,6 +185,31 @@ trait AppointsRoles
             CarbonImmutable::parse($this->from),
             $this->to === '' ? null : CarbonImmutable::parse($this->to),
             in_array('modality_id', $columns, true) ? $people->modality($this->modality) : null,
+        )];
+    }
+
+    /**
+     * El coordinador sobre las carreras marcadas (o la única de `career`), en una sola transacción.
+     *
+     * @return list<RoleAssignment>
+     */
+    private function appointCoordinator(PeopleQuery $people, User $person, ?Campus $campus): array
+    {
+        $modality = $people->modality($this->modality);
+
+        if ($modality === null) {
+            throw ValidationException::withMessages(['modality' => 'Elige la modalidad.', 'career' => 'Elige al menos una carrera.']);
+        }
+
+        $careers = $this->careers !== [] ? $this->careers : ($this->career === '' ? [] : [$this->career]);
+
+        return app(AppointCareerCoordinator::class)->handle(
+            $person,
+            $modality,
+            $campus,
+            array_values(array_filter($careers, fn (string $id): bool => Str::isUuid($id))),
+            CarbonImmutable::parse($this->from),
+            $this->to === '' ? null : CarbonImmutable::parse($this->to),
         );
     }
 }

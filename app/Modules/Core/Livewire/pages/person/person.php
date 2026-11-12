@@ -8,6 +8,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Livewire\Concerns\AppointsRoles;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\AssignmentLabels;
 use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Core\Queries\PersonRecordQuery;
@@ -95,6 +96,8 @@ new #[Title('Ficha de la persona')] class extends Component
             'canAppoint' => $person->is_active,
             'offered' => $this->offeredOptions($rules),
             'roleCase' => $role,
+            'isCoordinator' => $role === Role::Coordinador,
+            'careerGroups' => $role === Role::Coordinador && $this->showModal ? $people->careerChecklist($this->uuid($this->campus), $this->uuid($this->modality), $person, $this->careerSearch) : [],
             'options' => $role === null ? ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus)),
             'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente && $role !== Role::Alumno)),
             'whoRoleCase' => $whoRole,
@@ -168,10 +171,39 @@ new #[Title('Ficha de la persona')] class extends Component
 
         $person = $people->findOrFail($this->personId);
 
-        $assignment = $this->appointPerson($appointRole, $people, $person, $this->offeredOptions($rules));
+        $assignments = $this->appointPerson($appointRole, $people, $person, $this->offeredOptions($rules));
 
-        $this->success('Nombramiento creado', e($labels->one($assignment)->summary));
+        if (count($assignments) === 1) {
+            $this->success('Nombramiento creado', e($labels->one($assignments[0])->summary));
+        } else {
+            $this->success('Nombramientos creados', e($this->severalSummary($labels, $assignments)));
+        }
+
         $this->showModal = false;
+    }
+
+    /**
+     * La persona de la ficha, para no volver a nombrarla en las carreras que ya coordina.
+     */
+    protected function appointee(): ?User
+    {
+        return app(PeopleQuery::class)->findOrFail($this->personId);
+    }
+
+    /**
+     * «Coordinador de carrera · 2 carreras (ISC, IIND) · Presencial · Campus II»: el resumen de varios nombramientos
+     * del mismo puesto, modalidad y campus.
+     *
+     * @param  list<RoleAssignment>  $assignments
+     */
+    private function severalSummary(AssignmentLabels $labels, array $assignments): string
+    {
+        $described = $labels->describe($assignments);
+        $first = $described[$assignments[0]->getKey()];
+        $codes = collect($assignments)->flatMap(fn (RoleAssignment $assignment): array => array_column(array_filter($described[$assignment->getKey()]->chips, fn (array $chip): bool => $chip['label'] === 'Carrera'), 'value'));
+        $rest = array_column(array_filter($first->chips, fn (array $chip): bool => $chip['label'] !== 'Carrera'), 'value');
+
+        return implode(' · ', [$first->title, count($assignments).' carreras ('.$codes->implode(', ').')', ...$rest]);
     }
 
     /**
