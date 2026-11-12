@@ -316,7 +316,7 @@ public function navigation(): array
 
 1. `core::components.band`: la banda con la liebre (el botón del menú completo), «Nexus», la ruta (el área de `forRoute()` y el `#[Title]` de la página, que el layout le pasa), «Buscar o ir a… Ctrl K» y la credencial. La credencial muestra el nombre, las iniciales, el perfil activo (`Actor::activeRole()`) con `Role::label()`, y el campus y el periodo activos; se abre como tarjeta con `core::components.context-switcher`, el tema (el `x-theme-toggle` de MaryUI, que lo aplica y lo recuerda en `localStorage`; los botones Claro y Oscuro solo le piden cambiarlo), «Cambiar contraseña» y «Cerrar sesión».
 2. `core::components.navigation`: el menú (ver "Navegación"). Cerrado, la franja de iconos es fija y solo la columna del área actual se desplaza (`overflow-y-auto`), con la entrada activa a la vista al cargar y desvanecida (`mask-image`, con `data-fade`) donde hay más; abierto, los dos contenedores pasan a `display: contents` y todo va en la retícula.
-3. `<main id="nexus-content">`, el contenido, y los toasts de MaryUI (`<x-toast />`).
+3. `<main id="nexus-content">`, el contenido, con el aviso de la pantalla oculta para los demás arriba (`core::components.hidden-notice`, MN-02: al admin, con `Navigation::hiddenReasonFor()` de la entrada de la ruta), y los toasts de MaryUI (`<x-toast />`).
 
 Sin sesión, solo el contenido. El layout ya no usa `x-nav` ni el cajón de `x-main` de MaryUI.
 
