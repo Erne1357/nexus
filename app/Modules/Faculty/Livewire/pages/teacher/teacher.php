@@ -239,7 +239,7 @@ new #[Title('Ficha del docente')] class extends Component
             'perfil' => $this->profileData($teacher, $records, $teachers, $context, $record->term),
             'historial' => ['history' => $records->history($teacher)],
             'disponibilidad' => [
-                'availability' => $record->term === null ? null : $grids->for($teacher, $record->term, $grids->profile($context->activeCampus())),
+                'availability' => $record->term === null ? null : $grids->for($teacher, $record->term, $grids->profile()),
                 'availabilityReason' => Gate::allows('manageAvailability', $teacher) ? null : 'Solo quien administra al docente edita su disponibilidad.',
             ],
             default => [],

@@ -18,6 +18,7 @@ use App\Modules\AcademicLoad\Queries\ProposalOverview;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Support\SemesterGrid;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -47,6 +48,7 @@ use Mary\Traits\Toast;
 new #[Title('Propuesta de carrera')] class extends Component
 {
     use Toast;
+    use WithCampusFilter;
 
     private const array VIEWS = ['reticula', 'tabla'];
 
@@ -147,6 +149,11 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'reticula';
         $this->groupsFilter = in_array($this->groupsFilter, self::GROUP_FILTERS, true) ? $this->groupsFilter : '';
         $this->resolve($context, $proposals);
+    }
+
+    public function updatedCampus(): void
+    {
+        $this->reopenOnCampus('academic-load.proposal');
     }
 
     /**
@@ -376,7 +383,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     public function with(CareerProposalQuery $proposals): array
     {
         if ($this->proposalId === null) {
-            return ['proposal' => null, 'overview' => null];
+            return ['proposal' => null, 'overview' => null, ...$this->campusViewData()];
         }
 
         $proposal = $this->authorizedProposal('view', $proposals);
@@ -413,6 +420,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $highlight = $this->highlight($gridSemesters, $chains, $departments);
 
         return [
+            ...$this->campusViewData(),
             'proposal' => $proposal,
             'overview' => $overview,
             'departments' => $departments,
@@ -456,13 +464,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->proposalId = null;
         $this->careers = [];
 
-        $campus = $context->activeCampus();
-
-        if ($campus === null) {
-            $this->message = 'Elige un campus en tu credencial para ver la propuesta de carrera.';
-
-            return;
-        }
+        $campus = $this->requiredCampus();
 
         $term = $context->activeTerm();
 

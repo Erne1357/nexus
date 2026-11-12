@@ -51,7 +51,8 @@ it('con grupos sin horario el botón sale deshabilitado con el motivo y la liga 
         ->assertDontSeeHtml('data-testid="start-staffing"')
         ->assertSeeHtml('data-testid="staffing-blockers"')
         ->assertSeeText('2 grupos no tienen horario.')
-        ->assertSeeHtml('href="'.route('scheduling.conflicts').'"')
+        ->assertSeeHtml('href="'.route('scheduling.conflicts', ['campus' => $this->world->campus->code]).'"')
+        ->assertSeeHtml('href="'.route('scheduling.editor', ['campus' => $this->world->campus->code]).'"')
         ->assertDontSeeText('HC-');
 });
 

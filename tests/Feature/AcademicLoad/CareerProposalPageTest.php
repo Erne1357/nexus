@@ -348,10 +348,17 @@ describe('alcance', function () {
         expect(CareerProposal::query()->where('career_id', $other->id)->exists())->toBeFalse();
     });
 
-    it('subdirección elige campus cuando tiene varios', function () {
+    it('AZ-02: subdirección elige el campus en la página cuando tiene varios; sin ?campus= abre el primero', function () {
         Campus::factory()->create(['code' => 'C1']);
 
-        proposalPageAs($this->subdirection)->assertSee('Elige un campus en tu credencial');
+        proposalPageAs($this->subdirection)->assertSeeHtml('data-testid="campus-filter-C1"')->assertSee('no está abierto en este campus');
+        proposalPageAs($this->subdirection, ['campus' => 'C2', 'carrera' => $this->career->id])->assertSee('ISC')->assertSeeHtml('data-testid="campus-filter-C2"');
+    });
+
+    it('AZ-02: el coordinador de un campus no abre el de otro aunque la URL lo pida', function () {
+        Campus::factory()->create(['code' => 'C1']);
+
+        proposalPageAs($this->coordinator, ['campus' => 'C1'])->assertSee('ISC')->assertDontSeeHtml('data-testid="campus-filter-C1"');
     });
 });
 

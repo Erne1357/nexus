@@ -5,6 +5,7 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Rules\AgreementRules;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
@@ -49,6 +50,7 @@ use Mary\Traits\Toast;
 new #[Title('Acuerdos')] class extends Component
 {
     use Toast;
+    use WithCampusFilter;
 
     /** Cuántos acuerdos se aceptan juntos a lo más (confirmado el 8 de noviembre de 2026). */
     private const int MAX_BULK = 50;
@@ -100,6 +102,11 @@ new #[Title('Acuerdos')] class extends Component
 
     /** @var array{decide: list<array<string, mixed>>, sent: list<array<string, mixed>>, done: list<array<string, mixed>>}|null La bandeja de esta petición. */
     protected ?array $inbox = null;
+
+    public function updatedCampus(): void
+    {
+        $this->reopenOnCampus('scheduling.agreements');
+    }
 
     public function mount(Actor $context, AgreementsInboxQuery $query): void
     {
@@ -346,7 +353,7 @@ new #[Title('Acuerdos')] class extends Component
     public function with(Actor $context, AgreementsInboxQuery $query): array
     {
         if ($this->termId === null) {
-            return ['groups' => null];
+            return ['groups' => null, ...$this->campusViewData()];
         }
 
         $groups = $this->inbox($context, $query);
@@ -358,7 +365,8 @@ new #[Title('Acuerdos')] class extends Component
         return [
             'groups' => $groups,
             'term' => $this->term(),
-            'campus' => $this->campus(),
+            'shownCampus' => $this->campus(),
+            ...$this->campusViewData(),
             'labels' => ['decide' => 'Por decidir', 'sent' => 'Enviados', 'done' => 'Decididos'],
             'selectedId' => $detail['id'] ?? null,
             'detail' => $detail,
@@ -532,13 +540,7 @@ new #[Title('Acuerdos')] class extends Component
      */
     private function resolve(Actor $context): void
     {
-        $campus = $context->activeCampus();
-
-        if ($campus === null) {
-            $this->message = 'Elige un campus en tu credencial para ver los acuerdos.';
-
-            return;
-        }
+        $campus = $this->requiredCampus();
 
         $term = $context->activeTerm();
 

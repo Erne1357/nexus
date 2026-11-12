@@ -127,10 +127,31 @@ it('cerrar el drawer con Esc o el velo olvida el departamento', function () {
         ->assertSet('departmentId', null);
 });
 
-it('sin campus activo pide elegir uno', function () {
-    Campus::factory()->create();
+it('sin ningún campus activo donde trabaje, responde 403', function () {
+    Campus::query()->update(['is_active' => false]);
 
-    Livewire::actingAs($this->admin)->test('scheduling::pages.conflicts')->assertSee('Elige un campus.');
+    Livewire::actingAs($this->admin)->test('scheduling::pages.conflicts')->assertForbidden();
+});
+
+it('AZ-02: el campus de la página es el de ?campus=, con selector si trabaja en varios, y Recalcular encola ese', function () {
+    $other = Campus::factory()->create(['code' => 'ZZ', 'name' => 'Campus Z']);
+    Queue::fake([RecomputeScheduleConflicts::class]);
+
+    $page = Livewire::withQueryParams(['campus' => 'ZZ'])->actingAs($this->admin)->test('scheduling::pages.conflicts')
+        ->assertSee('Campus Z')
+        ->assertSeeHtml('data-testid="campus-filter-ZZ"')
+        ->call('recompute');
+
+    Queue::assertPushed(RecomputeScheduleConflicts::class, fn ($job): bool => $job->campusId === $other->id);
+    expect(session('core.last_campus'))->toBe('ZZ');
+});
+
+it('AZ-02: quien no trabaja en el campus pedido no lo ve: se abre en el suyo', function () {
+    $other = Campus::factory()->create(['code' => 'ZZ']);
+    $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
+
+    Livewire::withQueryParams(['campus' => $other->code])->actingAs($coordinator)->test('scheduling::pages.conflicts')
+        ->assertSee($this->campus->name)->assertDontSee($other->name);
 });
 
 it('Recalcular encola el recálculo de la carga del campus', function () {
