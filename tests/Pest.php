@@ -18,6 +18,7 @@ use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
@@ -157,24 +158,38 @@ function registerDemoCatalog(): void
  * Cambia el registro de permisos por uno con solo los de prueba (FakePermission) y olvida los servicios de la petición
  * para que Actor lo use. Lo que concede: Subdirección, jefe de proyecto docente y Coordinación, todos los de gestión
  * (Coordinación también el personal); el jefe de departamento, los de gestión que no declaran carrera, más
- * ViewCampusUnitCareer; Docente, solo el personal. El admin tiene todos menos ViewCampusCareer, su excepción.
+ * ViewCampusUnitCareer (de los de modalidad, ViewModality y ViewModalityUnit); Docente, solo el personal. El admin tiene todos menos ViewCampusCareer, su excepción.
  */
 function useFakePermissions(): void
 {
     $management = [
         FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCareer, FakePermission::ViewCampusUnit,
         FakePermission::ViewCampusCareer, FakePermission::ViewCampusUnitCareer, FakePermission::ViewAny,
+        FakePermission::ViewModality, FakePermission::ViewModalityUnit, FakePermission::ViewModalityCareer,
+        FakePermission::ViewModalityCampusCareer,
     ];
 
     app()->instance(PermissionRegistry::class, PermissionRegistry::fromDeclarations([FakePermission::class], [
         Role::Subdireccion->value => $management,
-        Role::JefeDepartamento->value => [FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCampusUnit, FakePermission::ViewCampusUnitCareer, FakePermission::ViewAny],
+        Role::JefeDepartamento->value => [
+            FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCampusUnit, FakePermission::ViewCampusUnitCareer,
+            FakePermission::ViewAny, FakePermission::ViewModality, FakePermission::ViewModalityUnit,
+        ],
         Role::JefeProyectoDocente->value => $management,
         Role::Coordinador->value => [...$management, FakePermission::ViewOwn],
         Role::Docente->value => [FakePermission::ViewOwn],
     ], [FakePermission::ViewCampusCareer]));
 
     app()->forgetScopedInstances();
+}
+
+/**
+ * La modalidad del catálogo con esa clave (`PRES`, `EAD`, `ENL` o `TNMV`), aunque esté inactiva o borrada: la siembra
+ * la migración del catálogo.
+ */
+function modalityOf(string $code): Modality
+{
+    return Modality::withTrashed()->where('code', $code)->sole();
 }
 
 /**

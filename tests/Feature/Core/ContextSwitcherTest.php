@@ -268,7 +268,7 @@ it('arma los renglones de perfil una vez al montar, no en cada pintado', functio
             return [];
         }
 
-        public function careerOptions(string $campusId): array
+        public function careerOptions(?string $campusId): array
         {
             return [];
         }

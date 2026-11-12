@@ -85,19 +85,40 @@ describe('nombrar', function () {
             ->assertHasNoErrors();
 
         expect(RoleAssignment::where('role', Role::JefeProyectoDocente)->sole())
-            ->user_id->toBe($user->id)->campus_id->toBe($this->c2->id)->valid_to->toDateString()->toBe(today()->addMonths(6)->toDateString());
+            ->user_id->toBe($user->id)->modality_id->toBe(modalityOf('PRES')->id)->campus_id->toBe($this->c2->id)->valid_to->toDateString()->toBe(today()->addMonths(6)->toDateString());
     });
 
-    it('el jefe de proyecto docente exige campus y el jefe no lo lleva: el error sale en el campo', function () {
+    it('AZ-S17: el jefe de proyecto docente exige modalidad y su campus es opcional: el error sale en el campo', function () {
+        $page = headshipRecord($this->admin, $this->ana)
+            ->call('createHeadship')
+            ->assertSet('headModalityId', modalityOf('PRES')->id)
+            ->set('headKind', 'jefe_proyecto_docente')
+            ->set('headDepartmentId', $this->sc->id)
+            ->set('headModalityId', '')
+            ->set('headFrom', today()->toDateString())
+            ->call('saveHeadship')
+            ->assertHasErrors(['headModalityId' => 'Elige la modalidad.']);
+
+        expect(RoleAssignment::where('role', Role::JefeProyectoDocente)->count())->toBe(0);
+
+        $page->set('headModalityId', modalityOf('PRES')->id)->call('saveHeadship')->assertHasNoErrors();
+
+        expect(RoleAssignment::where('role', Role::JefeProyectoDocente)->sole())
+            ->modality_id->toBe(modalityOf('PRES')->id)
+            ->campus_id->toBeNull();
+    });
+
+    it('AZ-S17: un campus que no existe es un error del campo, no un jefe de proyecto docente de todos los campus', function () {
         headshipRecord($this->admin, $this->ana)
             ->call('createHeadship')
             ->set('headKind', 'jefe_proyecto_docente')
             ->set('headDepartmentId', $this->sc->id)
+            ->set('headCampusId', fakeKey(999_999))
             ->set('headFrom', today()->toDateString())
             ->call('saveHeadship')
             ->assertHasErrors(['headCampusId' => 'Elige el campus.']);
 
-        expect(RoleAssignment::where('role', Role::JefeProyectoDocente)->count())->toBe(0);
+        expect(RoleAssignment::where('role', Role::JefeProyectoDocente)->exists())->toBeFalse();
     });
 
     it('un segundo jefe vigente del departamento muestra el error en su campo y no escribe nada', function () {
@@ -129,7 +150,7 @@ describe('nombrar', function () {
             ->set('headCampusId', $this->c2->id)
             ->set('headFrom', today()->toDateString())
             ->call('saveHeadship')
-            ->assertHasErrors(['headDepartmentId' => 'Ana Pérez ya es Jefe de proyecto docente · Sistemas y Computación · C2 en esas fechas.']);
+            ->assertHasErrors(['headDepartmentId' => 'Ana Pérez ya es Jefe de proyecto docente · Sistemas y Computación · Presencial · Campus II en esas fechas.']);
 
         expect(RoleAssignment::where('role', Role::JefeProyectoDocente)->count())->toBe(1);
     });

@@ -705,10 +705,11 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
     $groupDrawer = editorDrawerAs($this->coordinator, GROUP_DRAWER);
     $openGroup = $queries(fn () => $groupDrawer->call('open', $this->calcGroup->id));
 
+    // Cada petición lee una vez las modalidades activas para el alcance del coordinador (Actor, MS8).
     expect($many)->toBe($few)
-        ->and($many)->toBeLessThanOrEqual(31)
-        ->and($pick)->toBeLessThanOrEqual(33)
+        ->and($many)->toBeLessThanOrEqual(32)
+        ->and($pick)->toBeLessThanOrEqual(34)
         ->and($place)->toBeLessThanOrEqual(100)
-        ->and($openSession)->toBeLessThanOrEqual(37) // con la sección del salón y sus sugerencias (tarea 3.7)
-        ->and($openGroup)->toBeLessThanOrEqual(15);
+        ->and($openSession)->toBeLessThanOrEqual(38) // con la sección del salón y sus sugerencias (tarea 3.7)
+        ->and($openGroup)->toBeLessThanOrEqual(16);
 });

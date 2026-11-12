@@ -20,11 +20,12 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
-    // Las tablas de la carga y la modalidad del alumno apuntan al catálogo: sus migraciones, posteriores, se deshacen
-    // primero, de la última a la primera.
+    // Las tablas de la carga, los nombramientos y la modalidad del alumno apuntan al catálogo: sus migraciones,
+    // posteriores, se deshacen primero, de la última a la primera.
     (require base_path('app/Modules/Staffing/Database/Migrations/2026_11_12_210403_add_modality_to_staffing_tables.php'))->down();
     (require base_path('app/Modules/Scheduling/Database/Migrations/2026_11_12_210402_add_modality_to_groups.php'))->down();
     (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210401_add_modality_to_load_tables.php'))->down();
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210201_add_modality_to_role_assignments.php'))->down();
     (require base_path('app/Modules/Students/Database/Migrations/2026_11_12_210101_replace_student_modality_with_modality_id.php'))->down();
     $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210001_create_modalities_table.php');
     $this->migration->down();

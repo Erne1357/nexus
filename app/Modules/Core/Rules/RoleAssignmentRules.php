@@ -7,6 +7,7 @@ use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
@@ -18,8 +19,14 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Reglas de un nombramiento que comparten AppointRole y las pantallas de Personas y puestos: qué columnas de alcance
- * lleva cada puesto (Role::scopeColumns()) y que lo elegido siga sirviendo. Una columna que el puesto no lleva debe
- * venir nula.
+ * lleva cada puesto (Role::scopeColumns()) y que lo elegido siga sirviendo. Una columna que el puesto no pide ni admite
+ * (Role::optionalScopeColumns()) debe venir nula.
+ *
+ * - AZ-S17 (M5 y M9, confirmados el 12 de noviembre de 2026): el coordinador va sobre su carrera y una modalidad; el
+ *   jefe de proyecto docente, sobre su departamento y una modalidad. La modalidad debe estar activa y sin borrar (MS8).
+ *   El campus es opcional: si se elige, debe estar activo y la carrera del coordinador debe ofrecerse ahí; sin campus,
+ *   la carrera debe ofrecerse en algún campus activo (supuesto por confirmar: la oferta de las modalidades sin salones
+ *   se define en la fase 10, MS5).
  *
  * - AZ-S10 (confirmado el 3 de noviembre de 2026): el puesto Subdirección Académica solo va sobre la unidad
  *   Subdirección Académica.
@@ -32,8 +39,8 @@ use Illuminate\Validation\ValidationException;
  *   queda otro vigente; el último nunca se termina, y ningún día se queda sin admin vigente (`adminGap()`).
  * - AZ-S7: el titular de una unidad es quien ocupa su puesto exclusivo (`titularRoleOf()`).
  *
- * El campus y la unidad se releen de la base, borrados incluidos, para que un modal abierto con opciones viejas
- * reciba un error en español y no un 500.
+ * El campus, la unidad y la modalidad se releen de la base, borrados incluidos, para que un modal abierto con opciones
+ * viejas reciba un error en español y no un 500.
  */
 final class RoleAssignmentRules
 {
@@ -43,20 +50,34 @@ final class RoleAssignmentRules
     ) {}
 
     /**
-     * @throws ValidationException con las llaves `campus`, `unit` y `career`, todos los errores juntos
+     * @throws ValidationException con las llaves `modality`, `campus`, `unit` y `career`, todos los errores juntos
      */
-    public function ensureScopeFits(Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId): void
+    public function ensureScopeFits(Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId, ?Modality $modality = null): void
     {
         $columns = $role->scopeColumns();
+        $optional = $role->optionalScopeColumns();
         $errors = [];
 
         $campus = $campus === null ? null : Campus::withTrashed()->find($campus->getKey());
         $unit = $unit === null ? null : OrgUnit::withTrashed()->find($unit->getKey());
+        $modality = $modality === null ? null : Modality::withTrashed()->find($modality->getKey());
         $campusUsable = false;
 
-        if (in_array('campus_id', $columns, true)) {
+        if (in_array('modality_id', $columns, true)) {
+            if ($modality === null) {
+                $errors['modality'] = 'Elige la modalidad.';
+            } elseif ($modality->trashed() || ! $modality->is_active) {
+                $errors['modality'] = "La modalidad {$modality->name} está inactiva.";
+            }
+        } elseif ($modality !== null) {
+            $errors['modality'] = 'Este puesto no lleva modalidad.';
+        }
+
+        if (in_array('campus_id', $columns, true) || in_array('campus_id', $optional, true)) {
             if ($campus === null) {
-                $errors['campus'] = 'Elige el campus.';
+                if (in_array('campus_id', $columns, true)) {
+                    $errors['campus'] = 'Elige el campus.';
+                }
             } elseif ($campus->trashed() || ! $campus->is_active) {
                 $errors['campus'] = "El campus {$campus->code} está inactivo.";
             } else {
@@ -93,6 +114,8 @@ final class RoleAssignmentRules
                 $errors['career'] = 'Elige la carrera.';
             } elseif ($campusUsable && ! array_key_exists($careerId, $this->labels->careerOptions($campus->getKey()))) {
                 $errors['career'] = "Esa carrera no se ofrece en {$campus->code}.";
+            } elseif ($campus === null && ! array_key_exists($careerId, $this->labels->careerOptions(null))) {
+                $errors['career'] = 'Esa carrera no se ofrece en ningún campus.';
             }
         } elseif ($careerId !== null) {
             $errors['career'] = 'Este puesto no lleva carrera.';
@@ -392,12 +415,12 @@ final class RoleAssignmentRules
     }
 
     /**
-     * La misma persona no ocupa dos veces el mismo puesto y alcance con fechas que se traslapan. Del jefe de proyecto
-     * docente lo garantiza también la base (`role_assignments_jpd_no_duplicate`).
+     * La misma persona no ocupa dos veces el mismo puesto y alcance (modalidad incluida) con fechas que se traslapan.
+     * Del jefe de proyecto docente lo garantiza también la base (`role_assignments_jpd_no_duplicate`).
      *
      * @throws ValidationException sobre `role`
      */
-    public function ensureNotDuplicated(User $user, Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId, string $from, ?string $to): void
+    public function ensureNotDuplicated(User $user, Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId, string $from, ?string $to, ?Modality $modality = null): void
     {
         $exists = $this->overlapping(RoleAssignment::query(), $from, $to)
             ->where('user_id', $user->getKey())
@@ -405,10 +428,11 @@ final class RoleAssignmentRules
             ->where(fn (Builder $query) => $this->sameOrNull($query, 'campus_id', $campus?->getKey()))
             ->where(fn (Builder $query) => $this->sameOrNull($query, 'org_unit_id', $unit?->getKey()))
             ->where(fn (Builder $query) => $this->sameOrNull($query, 'career_id', $careerId))
+            ->where(fn (Builder $query) => $this->sameOrNull($query, 'modality_id', $modality?->getKey()))
             ->exists();
 
         if ($exists) {
-            throw $this->duplicated($user, $role, $campus, $unit, $careerId);
+            throw $this->duplicated($user, $role, $campus, $unit, $careerId, $modality);
         }
     }
 
@@ -416,13 +440,14 @@ final class RoleAssignmentRules
      * El error de la misma persona dos veces en el mismo puesto y alcance: lo lanza `ensureNotDuplicated()` y, si otra
      * sesión escribió el duplicado entre la revisión y la escritura (SQLSTATE 23P01), AppointRole.
      */
-    public function duplicated(User $user, Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId): ValidationException
+    public function duplicated(User $user, Role $role, ?Campus $campus, ?OrgUnit $unit, ?string $careerId, ?Modality $modality = null): ValidationException
     {
         $summary = $this->assignmentLabels->one(new RoleAssignment([
             'role' => $role,
             'campus_id' => $campus?->getKey(),
             'org_unit_id' => $unit?->getKey(),
             'career_id' => $careerId,
+            'modality_id' => $modality?->getKey(),
         ]))->summary;
 
         return ValidationException::withMessages(['role' => "{$user->name} ya es {$summary} en esas fechas."]);

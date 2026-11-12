@@ -5,6 +5,7 @@ namespace App\Modules\Core\Queries;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
@@ -80,13 +81,14 @@ final class PeopleQuery
 
     /**
      * Los nombramientos vigentes del puesto sobre ese alcance, con su persona. Compara solo las columnas que el
-     * puesto lleva (`Role::scopeColumns()`); si falta alguna, ninguno.
+     * puesto lleva (`Role::scopeColumns()`); si falta alguna, ninguno. El campus opcional (AZ-S17), si se elige, deja
+     * a los de ese campus y a los de todos los campus de la modalidad (los que no fijan campus); si no, a todos.
      *
      * @return Collection<int, RoleAssignment>
      */
-    public function holders(Role $role, ?string $campusId, ?string $unitId, ?string $careerId): Collection
+    public function holders(Role $role, ?string $campusId, ?string $unitId, ?string $careerId, ?string $modalityId = null): Collection
     {
-        $values = ['campus_id' => $campusId, 'org_unit_id' => $unitId, 'career_id' => $careerId];
+        $values = ['campus_id' => $campusId, 'org_unit_id' => $unitId, 'career_id' => $careerId, 'modality_id' => $modalityId];
         $query = RoleAssignment::query()->current()->where('role', $role)->with('user')->orderBy('valid_from')->orderBy('id');
 
         foreach ($role->scopeColumns() as $column) {
@@ -97,17 +99,25 @@ final class PeopleQuery
             $query->where($column, $values[$column]);
         }
 
+        if (in_array('campus_id', $role->optionalScopeColumns(), true) && $campusId !== null && Str::isUuid($campusId)) {
+            $query->where(fn (Builder $campus) => $campus->where('campus_id', $campusId)->orWhereNull('campus_id'));
+        }
+
         return $query->get();
     }
 
     /**
-     * Lo que se elige al nombrar o al preguntar quién ocupa un puesto: los campus activos («C2 · Campus II»), las
-     * unidades activas que el puesto admite y las carreras que se ofrecen en el campus (ninguna sin campus).
+     * Lo que se elige al nombrar o al preguntar quién ocupa un puesto: las modalidades activas («Presencial»), los
+     * campus activos («C2 · Campus II»), las unidades activas que el puesto admite y las carreras que se ofrecen en el
+     * campus. Sin campus, ninguna carrera, salvo al puesto que pide carrera con el campus opcional (el coordinador,
+     * AZ-S17): las que se ofrecen en algún campus activo.
      *
-     * @return array{campuses: list<array{id: string, name: string}>, units: list<array{id: string, name: string}>, careers: list<array{id: string, name: string}>}
+     * @return array{modalities: list<array{id: string, name: string}>, campuses: list<array{id: string, name: string}>, units: list<array{id: string, name: string}>, careers: list<array{id: string, name: string}>}
      */
     public function scopeOptions(Role $role, ?string $campusId): array
     {
+        $modalities = $this->modalityOptions();
+
         $campuses = Campus::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name'])
             ->map(fn (Campus $campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])
             ->all();
@@ -122,14 +132,46 @@ final class PeopleQuery
             ->all();
 
         $careers = [];
+        $campusId = $campusId !== null && Str::isUuid($campusId) ? $campusId : null;
 
-        if ($campusId !== null && Str::isUuid($campusId)) {
+        if ($campusId !== null || (in_array('career_id', $role->scopeColumns(), true) && in_array('campus_id', $role->optionalScopeColumns(), true))) {
             foreach ($this->labels->careerOptions($campusId) as $id => $name) {
                 $careers[] = ['id' => (string) $id, 'name' => $name];
             }
         }
 
-        return ['campuses' => $campuses, 'units' => $units, 'careers' => $careers];
+        return ['modalities' => $modalities, 'campuses' => $campuses, 'units' => $units, 'careers' => $careers];
+    }
+
+    /**
+     * Las modalidades activas, por código, para elegir una al nombrar (AZ-S17).
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function modalityOptions(): array
+    {
+        return Modality::query()->where('is_active', true)->orderBy('code')->get(['id', 'name'])
+            ->map(fn (Modality $modality): array => ['id' => $modality->id, 'name' => $modality->name])
+            ->all();
+    }
+
+    /**
+     * La modalidad que el formulario propone: la única activa; si hay varias o ninguna, ninguna (se elige).
+     */
+    public function defaultModalityId(): ?string
+    {
+        $options = $this->modalityOptions();
+
+        return count($options) === 1 ? $options[0]['id'] : null;
+    }
+
+    /**
+     * Una modalidad, borradas incluidas, para que Actions y reglas respondan en español si ya no sirve; nula si el id
+     * no es de una.
+     */
+    public function modality(?string $id): ?Modality
+    {
+        return $id === null || $id === '' ? null : KeyLookup::find(Modality::withTrashed(), $id);
     }
 
     /**

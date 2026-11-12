@@ -55,16 +55,16 @@ it('muestra la ficha: cifras, línea de vigencias, nombramientos y bitácora', f
     $coordinador = assign($this->rosa, Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id, 'valid_to' => '2027-07-31']);
     assign($this->rosa, Role::Docente, ['valid_from' => '2015-08-17']);
     assign($this->rosa, Role::JefeProyectoDocente, ['valid_from' => '2023-08-17', 'valid_to' => '2026-07-31', 'campus_id' => $this->c2->id, 'org_unit_id' => $this->systems->id]);
-    activity()->performedOn($this->rosa)->causedBy($this->admin)->event('created')->withProperties(['role_assignment_id' => $coordinador->id])->log('Nombró a Rosa Ruiz Almanza como Coordinador de carrera · ISC · C2');
+    activity()->performedOn($this->rosa)->causedBy($this->admin)->event('created')->withProperties(['role_assignment_id' => $coordinador->id])->log('Nombró a Rosa Ruiz Almanza como Coordinador de carrera · ISC · Presencial · Campus II');
 
     $this->get(route('core.people.show', $this->rosa->id))
         ->assertOk()
         ->assertSee('<title>Ficha de la persona · Nexus</title>', false)
         ->assertSeeInOrder(['Personas y puestos', 'RR', 'Rosa Ruiz Almanza', 'usuario', '19110001', 'Con 2 puestos vigentes', 'Nombrar'])
         ->assertSeeInOrder(['Buscar otra persona', 'Último nombramiento: ', '03/11/2026', ', por Ada Admin'])
-        ->assertSeeInOrder(['Puestos vigentes', 'Anteriores', 'Con nombramiento desde', '17/08/2015', 'Próximo vencimiento', '31/07/2027', 'Coordinador de carrera · ISC · C2'])
+        ->assertSeeInOrder(['Puestos vigentes', 'Anteriores', 'Con nombramiento desde', '17/08/2015', 'Próximo vencimiento', '31/07/2027', 'Coordinador de carrera · ISC · Presencial · Campus II'])
         ->assertSeeInOrder(['Línea de vigencias', 'Hoy', 'Nombramientos', 'Coordinador de carrera', 'Vigente', 'Faltan', '270', 'días', 'Docente', 'Sin alcance', 'Jefe de proyecto docente', 'Terminado'])
-        ->assertSeeInOrder(['Quién ocupa un puesto?', 'Bitácora de sus puestos', 'Nombró a Rosa Ruiz Almanza como Coordinador de carrera · ISC · C2', 'por Ada Admin'])
+        ->assertSeeInOrder(['Quién ocupa un puesto?', 'Bitácora de sus puestos', 'Nombró a Rosa Ruiz Almanza como Coordinador de carrera · ISC · Presencial · Campus II', 'por Ada Admin'])
         ->assertSeeHtml('data-testid="vigencias"')
         ->assertSeeHtml('data-testid="vigencias-hoy"');
 });
@@ -85,14 +85,17 @@ it('una persona inactiva no se nombra, con el motivo escrito', function () {
     personPage($this->beto)->assertDontSeeHtml('data-testid="appoint-blocker"');
 });
 
-it('nombra coordinador pidiendo solo campus y carrera', function () {
+it('AZ-S17: nombra coordinador pidiendo modalidad y carrera, con el campus opcional', function () {
     $page = personPage($this->beto)->call('openAppoint')
         ->assertSet('role', 'coordinador')
+        ->assertSet('modality', modalityOf('PRES')->id)
         ->assertSet('from', '2026-11-03')
+        ->assertSeeHtml('data-testid="field-modality"')
         ->assertSeeHtml('data-testid="field-campus"')
         ->assertSeeHtml('data-testid="field-career"')
         ->assertDontSeeHtml('data-testid="field-unit"')
-        ->assertSee('Este puesto pide campus y carrera.');
+        ->assertSee('Este puesto pide modalidad y carrera. El campus es opcional: sin campus, trabaja todos los de su modalidad.')
+        ->assertViewHas('options', fn (array $options): bool => array_column($options['careers'], 'id') === [$this->ind->id, $this->isc->id]);
 
     $page->set('campus', $this->c2->id)
         ->assertViewHas('options', fn (array $options): bool => array_column($options['careers'], 'id') === [$this->isc->id])
@@ -105,12 +108,36 @@ it('nombra coordinador pidiendo solo campus y carrera', function () {
         ->assertHasNoErrors()
         ->assertSet('showModal', false);
 
-    expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Nombramiento creado', 'description' => 'Coordinador de carrera · ISC · C2'])
+    expect(lastToastOf($page))->toMatchArray(['type' => 'success', 'title' => 'Nombramiento creado', 'description' => 'Coordinador de carrera · ISC · Presencial · Campus II'])
         ->and(RoleAssignment::where('user_id', $this->beto->id)->sole())
         ->role->toBe(Role::Coordinador)
+        ->modality_id->toBe(modalityOf('PRES')->id)
         ->campus_id->toBe($this->c2->id)
         ->career_id->toBe($this->isc->id)
         ->org_unit_id->toBeNull();
+});
+
+it('AZ-S17: un campus que no existe es un error del campo, no «Todos los campus»', function () {
+    personPage($this->beto)->call('openAppoint')
+        ->set('campus', fakeKey(999_999))
+        ->set('career', $this->isc->id)
+        ->call('appoint')
+        ->assertHasErrors(['campus' => 'Elige el campus.'])
+        ->assertSet('showModal', true);
+
+    expect(RoleAssignment::where('user_id', $this->beto->id)->exists())->toBeFalse();
+});
+
+it('AZ-S17: sin campus, el coordinador queda en todos los campus de su modalidad', function () {
+    $page = personPage($this->beto)->call('openAppoint')
+        ->set('career', $this->isc->id)
+        ->call('appoint')
+        ->assertHasNoErrors();
+
+    expect(lastToastOf($page)['description'])->toBe('Coordinador de carrera · ISC · Presencial · Todos los campus')
+        ->and(RoleAssignment::where('user_id', $this->beto->id)->sole())
+        ->modality_id->toBe(modalityOf('PRES')->id)
+        ->campus_id->toBeNull();
 });
 
 it('Administración no pide alcance y Subdirección pide su unidad', function () {
@@ -142,9 +169,11 @@ it('muestra en español los errores de la Action junto al campo', function () {
         ->assertHasErrors(['unit'])
         ->assertSee('ya tiene titular en esas fechas: Rosa Ruiz Almanza (desde 01/01/2026)', false)
         ->set('role', 'coordinador')
+        ->set('modality', '')
         ->call('appoint')
-        ->assertHasErrors(['campus', 'career'])
-        ->assertSee('Elige el campus.')
+        ->assertHasErrors(['modality', 'career'])
+        ->assertSee('Elige la modalidad.')
+        ->set('modality', modalityOf('PRES')->id)
         ->set('campus', $this->c2->id)
         ->set('career', $this->isc->id)
         ->set('to', '2026-01-01')
@@ -159,7 +188,7 @@ it('muestra en español los errores de la Action junto al campo', function () {
     expect(RoleAssignment::count())->toBe($before);
 });
 
-it('P1: nombra jefe de departamento pidiendo solo el departamento académico, y jefe de proyecto docente con campus y departamento', function () {
+it('P1: nombra jefe de departamento pidiendo solo el departamento académico, y jefe de proyecto docente con modalidad, campus y departamento', function () {
     $page = personPage($this->beto)->call('openAppoint')
         ->set('role', 'jefe_departamento')
         ->assertSee('Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.')
@@ -178,7 +207,8 @@ it('P1: nombra jefe de departamento pidiendo solo el departamento académico, y 
 
     $page->call('openAppoint')
         ->set('role', 'jefe_proyecto_docente')
-        ->assertSee('Este puesto pide campus y departamento académico.')
+        ->assertSee('Este puesto pide modalidad y departamento académico. El campus es opcional: sin campus, trabaja todos los de su modalidad.')
+        ->assertSeeHtml('data-testid="field-modality"')
         ->assertSeeHtml('data-testid="field-campus"')
         ->assertSeeHtml('data-testid="field-unit"')
         ->set('campus', $this->c2->id)
@@ -187,6 +217,7 @@ it('P1: nombra jefe de departamento pidiendo solo el departamento académico, y 
         ->assertHasNoErrors();
 
     expect(RoleAssignment::where('user_id', $this->beto->id)->where('role', Role::JefeProyectoDocente)->sole())
+        ->modality_id->toBe(modalityOf('PRES')->id)
         ->campus_id->toBe($this->c2->id)
         ->org_unit_id->toBe($this->systems->id);
 });
@@ -401,7 +432,7 @@ it('¿Quién ocupa un puesto? da el titular o dice que no hay', function () {
         ->set('whoCampus', $this->c1->id)
         ->set('whoCareer', $this->ind->id)
         ->assertSee('Sin coordinador de carrera vigente')
-        ->assertSee('Nadie ocupa Coordinador de carrera · IND · C1 hoy.')
+        ->assertSee('Nadie ocupa Coordinador de carrera · IND · Presencial · Campus I hoy.')
         ->set('whoRole', 'admin')
         ->assertSee('Ada Admin')
         ->assertViewHas('whoRoles', fn (array $roles): bool => ! in_array('docente', array_column($roles, 'id'), true));

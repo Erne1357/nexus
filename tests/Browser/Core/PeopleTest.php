@@ -54,7 +54,7 @@ it('el admin nombra coordinadora a una persona y luego termina el nombramiento',
         ->fill('from', today()->subDays(10)->toDateString())
         ->click('@appoint-submit')
         ->assertSee('Nombramiento creado')
-        ->assertSee('Coordinador de carrera · ISC · C2')
+        ->assertSee('Coordinador de carrera · ISC · Presencial · Campus II')
         ->assertSee('Con 1 puesto vigente')
         ->assertNoJavaScriptErrors();
 

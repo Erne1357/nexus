@@ -25,7 +25,7 @@ beforeEach(function () {
 
     $this->admin = User::factory()->admin()->create(['name' => 'Ada Admin']);
     $this->rosa = User::factory()->create(['name' => 'Rosa Ruiz']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
     CareerCampus::factory()->create(['career_id' => $this->isc->id, 'campus_id' => $this->c2->id]);
     $this->systems = Department::factory()->create(['name' => 'Sistemas y Computación']);
@@ -51,14 +51,14 @@ it('ordena vigentes, programados y terminados, y calcula las cifras', function (
         ->toBe([$coordinador->id, $docente->id, $futuro->id, $viejo->id, $masViejo->id])
         ->and(array_map(fn (array $row): AssignmentStatus => $row['status'], $record->assignments))
         ->toBe([AssignmentStatus::Current, AssignmentStatus::Current, AssignmentStatus::Scheduled, AssignmentStatus::Ended, AssignmentStatus::Ended])
-        ->and($record->assignments[0]['label']->summary)->toBe('Coordinador de carrera · ISC · C2')
+        ->and($record->assignments[0]['label']->summary)->toBe('Coordinador de carrera · ISC · Presencial · Campus II')
         ->and($record->assignments[0]['daysLeft'])->toBe(270)
         ->and($record->assignments[1]['daysLeft'])->toBeNull()
         ->and($record->current)->toBe(2)
         ->and($record->past)->toBe(2)
         ->and($record->since->toDateString())->toBe('2015-08-17')
         ->and($record->nextExpiry['on']->toDateString())->toBe('2027-07-31')
-        ->and($record->nextExpiry['summary'])->toBe('Coordinador de carrera · ISC · C2')
+        ->and($record->nextExpiry['summary'])->toBe('Coordinador de carrera · ISC · Presencial · Campus II')
         ->and($record->timeline->hasRange())->toBeTrue()
         ->and($record->timeline->rows)->toHaveCount(5)
         ->and($record->initials())->toBe('RR');
@@ -77,7 +77,7 @@ it('una persona sin nombramientos no tiene cifras', function () {
 });
 
 it('sabe quién terminó un nombramiento por su entrada de bitácora', function () {
-    $assignment = app(AppointRole::class)->handle($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-11-03'));
+    $assignment = app(AppointRole::class)->handle($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-11-03'), modality: modalityOf('PRES'));
     $this->travelTo('2026-11-10 10:00:00');
     app(EndRoleAssignment::class)->handle($assignment, CarbonImmutable::parse('2026-11-12'));
     $this->travelTo('2026-11-20 10:00:00');
@@ -92,8 +92,8 @@ it('sabe quién terminó un nombramiento por su entrada de bitácora', function 
     expect($record->lastAppointment['by'])->toBe('Ada Admin')
         ->and($record->lastAppointment['on']->toDateString())->toBe('2026-11-03')
         ->and(array_column($record->log, 'description'))->toBe([
-            'Terminó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · C2',
-            'Nombró a Rosa Ruiz como Coordinador de carrera · ISC · C2',
+            'Terminó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Campus II',
+            'Nombró a Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Campus II',
         ]);
 });
 
@@ -123,12 +123,12 @@ it('AZ-S11 y AZ-S12: el docente y el último admin vigente no se terminan aquí;
 });
 
 it('la bitácora solo trae entradas de nombramientos', function () {
-    app(AppointRole::class)->handle($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-11-03'));
+    app(AppointRole::class)->handle($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-11-03'), modality: modalityOf('PRES'));
     activity()->performedOn($this->rosa)->event('updated')->withProperties(['switch' => true])->log('Cambió de perfil');
 
     $log = app(PersonRecordQuery::class)->for($this->rosa)->log;
 
-    expect(array_column($log, 'description'))->toBe(['Nombró a Rosa Ruiz como Coordinador de carrera · ISC · C2']);
+    expect(array_column($log, 'description'))->toBe(['Nombró a Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Campus II']);
 });
 
 it('la bitácora trae las jefaturas nombradas antes de 3.P8', function () {
@@ -145,7 +145,7 @@ it('la bitácora trae las jefaturas nombradas antes de 3.P8', function () {
 
 it('«Último nombramiento» también cuenta las jefaturas nombradas antes de 3.P8', function () {
     $this->travelTo('2026-09-01 10:00:00');
-    app(AppointRole::class)->handle($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-09-01'));
+    app(AppointRole::class)->handle($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, CarbonImmutable::parse('2026-09-01'), modality: modalityOf('PRES'));
     $this->travelTo('2026-10-15 10:00:00');
     activity()->performedOn($this->rosa)->causedBy($this->admin)->event('created')
         ->withChanges(['attributes' => ['department_head_id' => fakeKey(1), 'kind' => 'jefe', 'department_id' => $this->systems->id]])

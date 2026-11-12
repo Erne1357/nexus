@@ -9,7 +9,8 @@
 @php
     $person = $record->person;
     $whoUnitLabel = $whoRoleCase?->unitLabel() ?? 'Departamento académico';
-    $whoColumns = $whoRoleCase?->scopeColumns() ?? [];
+    $whoOptionalColumns = $whoRoleCase?->optionalScopeColumns() ?? [];
+    $whoColumns = [...($whoRoleCase?->scopeColumns() ?? []), ...$whoOptionalColumns];
 @endphp
 
 <div class="space-y-5">
@@ -147,8 +148,12 @@
 
                     @if ($whoColumns !== [])
                         <div class="grid gap-3 sm:grid-cols-2 min-[1200px]:grid-cols-1 min-[1400px]:grid-cols-2">
+                            @if (in_array('modality_id', $whoColumns, true))
+                                <x-select label="Modalidad" wire:model.live="whoModality" :options="$whoOptions['modalities']" placeholder="Elige" />
+                            @endif
+
                             @if (in_array('campus_id', $whoColumns, true))
-                                <x-select label="Campus" wire:model.live="whoCampus" :options="$whoOptions['campuses']" placeholder="Elige" />
+                                <x-select label="Campus" wire:model.live="whoCampus" :options="$whoOptions['campuses']" :placeholder="in_array('campus_id', $whoOptionalColumns, true) ? 'Todos los campus' : 'Elige'" />
                             @endif
 
                             @if (in_array('career_id', $whoColumns, true))

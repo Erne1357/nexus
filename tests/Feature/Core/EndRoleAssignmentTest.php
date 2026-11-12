@@ -25,7 +25,7 @@ beforeEach(function () {
 
     $this->admin = User::factory()->admin()->create(['name' => 'Ada Admin']);
     $this->rosa = User::factory()->create(['name' => 'Rosa Ruiz']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->isc = Career::factory()->create(['code' => 'ISC']);
     CareerCampus::factory()->create(['career_id' => $this->isc->id, 'campus_id' => $this->c2->id]);
 
@@ -81,7 +81,7 @@ it('termina un nombramiento vigente en el último día, con bitácora y evento d
 
     expect($entry->subject->is($this->rosa))->toBeTrue()
         ->and($entry->causer->is($this->admin))->toBeTrue()
-        ->and($entry->description)->toBe('Terminó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · C2')
+        ->and($entry->description)->toBe('Terminó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Campus II')
         ->and($entry->properties['role_assignment_id'])->toBe($assignment->id)
         ->and($entry->attribute_changes['attributes'])->toBe(['valid_to' => '2026-12-15'])
         ->and($entry->attribute_changes['old'])->toBe(['valid_to' => null]);
@@ -96,7 +96,7 @@ it('quita uno que todavía no empieza si termina antes de su inicio', function (
 
     $entry = activitySince()->where('event', 'deleted')->sole();
 
-    expect($entry->description)->toBe('Quitó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · C2, que todavía no empezaba')
+    expect($entry->description)->toBe('Quitó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Campus II, que todavía no empezaba')
         ->and($entry->properties['role_assignment_id'])->toBe($assignment->id)
         ->and($entry->attribute_changes['old'])->toBe([
             'role' => 'coordinador',
@@ -127,7 +127,7 @@ it('quita uno que empieza hoy si el último día es anterior a su inicio (regla 
 
     expect(endOn($assignment, '2026-11-02'))->toBe(AssignmentEnding::Removed)
         ->and(RoleAssignment::query()->whereKey($assignment->id)->exists())->toBeFalse()
-        ->and(activitySince()->where('event', 'deleted')->sole()->description)->toBe('Quitó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · C2, que empezaba hoy');
+        ->and(activitySince()->where('event', 'deleted')->sole()->description)->toBe('Quitó el nombramiento de Rosa Ruiz como Coordinador de carrera · ISC · Presencial · Campus II, que empezaba hoy');
 });
 
 it('rechaza un último día anterior al inicio de uno que ya empezó', function () {

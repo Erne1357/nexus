@@ -19,7 +19,8 @@ use Tests\Fixtures\Authorization\FakePermission;
 /*
 | Regla de decisión de la spec 7.1 (ADR-0018) sobre los permisos de prueba: allows(), allowsAny() y constrain().
 | Campus C1 y C2 activos, C3 desactivado. Departamentos D1 (con una oficina debajo) y D2 bajo Subdirección
-| Académica; D3 movido bajo otra subdirección. Carreras X e Y. "Hoy" es el 3 de noviembre de 2026.
+| Académica; D3 movido bajo otra subdirección. Carreras X e Y. Modalidades Presencial y EAD activas, En línea
+| inactiva (AZ-S17). "Hoy" es el 3 de noviembre de 2026.
 */
 
 beforeEach(function () {
@@ -41,14 +42,19 @@ beforeEach(function () {
         'planeacion' => $planeacion->id,
         'x' => careerKey(20),
         'y' => careerKey(21),
+        'pres' => modalityOf('PRES')->id,
+        'ead' => modalityOf('EAD')->id,
+        'enl' => modalityOf('ENL')->id,
     ];
 
+    modalityOf('EAD')->update(['is_active' => true]);
     useFakePermissions();
 });
 
 /**
  * Un usuario de cada forma. «dos puestos»: jefe de D2 y coordinador de Y en C1, más una coordinación de X en C3
- * (desactivado), que no cuenta.
+ * (desactivado) y otra de Y en En línea (inactiva), que no cuentan. Los coordinadores y jefes de proyecto docente van en
+ * Presencial; «coordinador sin campus», en todos los campus de EAD.
  *
  * @param  array<string, string>  $f
  */
@@ -58,6 +64,7 @@ function authorizationUser(string $kind, array $f): User
         'jefe' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $f['d1']])->create(),
         'jefe de proyecto docente' => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $f['c2'], 'department_id' => $f['d2']])->create(),
         'coordinador' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $f['c2'], 'career_id' => $f['x']])->create(),
+        'coordinador sin campus' => User::factory()->withRole(Role::Coordinador, ['modality_id' => $f['ead'], 'career_id' => $f['x']])->create(),
         'subdirección' => User::factory()->withRole(Role::Subdireccion)->create(),
         'admin' => User::factory()->admin()->create(),
         'docente' => User::factory()->withRole(Role::Docente)->create(),
@@ -65,6 +72,7 @@ function authorizationUser(string $kind, array $f): User
             ->withRole(Role::JefeDepartamento, ['department_id' => $f['d2']])
             ->withRole(Role::Coordinador, ['campus_id' => $f['c1'], 'career_id' => $f['y']])
             ->withRole(Role::Coordinador, ['campus_id' => $f['c3'], 'career_id' => $f['x']])
+            ->withRole(Role::Coordinador, ['modality_id' => $f['enl'], 'career_id' => $f['y']])
             ->create(),
     };
 }
@@ -79,28 +87,32 @@ function authorizationActor(User $user): Actor
 
 /**
  * Tabla de prueba: una fila por cada combinación de campus (C1, C2, C3 o ninguno), unidad (D1, la oficina de
- * D1, D2, D3 o ninguna), carrera (X, Y o ninguna) y dueño (`$owner`, otro o ninguno): 180 filas.
+ * D1, D2, D3 o ninguna), carrera (X, Y o ninguna) y dueño (`$owner`, otro o ninguno): 180 filas, sin modalidad. Con
+ * `$withModalities`, cada una en Presencial, EAD, En línea y sin modalidad: 720.
  *
  * @param  array<string, string>  $f
  */
-function authorizationProbe(array $f, string $owner): Model
+function authorizationProbe(array $f, string $owner, bool $withModalities = false): Model
 {
     Schema::create('authorization_probes', function (Blueprint $table): void {
         $table->id();
         $table->uuid('campus_id')->nullable();
         $table->uuid('department_id')->nullable();
         $table->uuid('career_id')->nullable();
+        $table->uuid('modality_id')->nullable();
         $table->uuid('owner_id')->nullable();
     });
 
     $other = User::factory()->create()->id;
     $rows = [];
 
-    foreach ([$f['c1'], $f['c2'], $f['c3'], null] as $campus) {
-        foreach ([$f['d1'], $f['office'], $f['d2'], $f['d3'], null] as $department) {
-            foreach ([$f['x'], $f['y'], null] as $career) {
-                foreach ([$owner, $other, null] as $ownerId) {
-                    $rows[] = ['campus_id' => $campus, 'department_id' => $department, 'career_id' => $career, 'owner_id' => $ownerId];
+    foreach ($withModalities ? [$f['pres'], $f['ead'], $f['enl'], null] : [null] as $modality) {
+        foreach ([$f['c1'], $f['c2'], $f['c3'], null] as $campus) {
+            foreach ([$f['d1'], $f['office'], $f['d2'], $f['d3'], null] as $department) {
+                foreach ([$f['x'], $f['y'], null] as $career) {
+                    foreach ([$owner, $other, null] as $ownerId) {
+                        $rows[] = ['campus_id' => $campus, 'department_id' => $department, 'career_id' => $career, 'modality_id' => $modality, 'owner_id' => $ownerId];
+                    }
                 }
             }
         }
@@ -119,7 +131,7 @@ function authorizationProbe(array $f, string $owner): Model
 /** @return array<string, string> */
 function probeColumns(): array
 {
-    return ['campus' => 'campus_id', 'unit' => 'department_id', 'career' => 'career_id', 'owner' => 'owner_id'];
+    return ['campus' => 'campus_id', 'unit' => 'department_id', 'career' => 'career_id', 'modality' => 'modality_id', 'owner' => 'owner_id'];
 }
 
 function probeTarget(FakePermission $permission, object $row): Target
@@ -128,7 +140,7 @@ function probeTarget(FakePermission $permission, object $row): Target
         return $row->owner_id === null ? Target::of() : Target::ownedBy($row->owner_id);
     }
 
-    return Target::of(campus: $row->campus_id, unit: $row->department_id, career: $row->career_id);
+    return Target::of(campus: $row->campus_id, unit: $row->department_id, career: $row->career_id, modality: $row->modality_id);
 }
 
 describe('allows()', function () {
@@ -287,7 +299,7 @@ describe('allowsAny()', function () {
 describe('constrain()', function () {
     it('constrain filtra en SQL igual que allows', function (string $kind, FakePermission $permission) {
         $user = authorizationUser($kind, $this->f);
-        $probe = authorizationProbe($this->f, $user->id);
+        $probe = authorizationProbe($this->f, $user->id, withModalities: true);
         $actor = authorizationActor($user);
 
         $allowed = DB::table('authorization_probes')->orderBy('id')->get()
@@ -296,7 +308,7 @@ describe('constrain()', function () {
         $constrained = $actor->constrain($probe->newQuery(), $permission, probeColumns())->orderBy('id')->pluck('id')->all();
 
         expect($constrained)->toBe($allowed);
-    })->with(['jefe', 'jefe de proyecto docente', 'coordinador', 'subdirección', 'admin', 'docente', 'dos puestos'])
+    })->with(['jefe', 'jefe de proyecto docente', 'coordinador', 'coordinador sin campus', 'subdirección', 'admin', 'docente', 'dos puestos'])
         ->with(FakePermission::cases());
 
     it('deja fuera lo de un campus desactivado y deja dentro lo general a un nombramiento sin campus', function () {

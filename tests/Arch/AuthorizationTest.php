@@ -50,6 +50,7 @@ it('RecipientsQuery no conserva for()', function () {
 const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Academic/Database/Seeders/DemoStaffSeeder.php',
     'app/Modules/CatalogValidation/Database/Seeders/CatalogValidationDemoSeeder.php',
+    'app/Modules/Core/Actions/AppointCareerCoordinator.php',
     'app/Modules/Core/Actions/EndRoleAssignment.php',
     'app/Modules/Core/Database/Factories/RoleAssignmentFactory.php',
     'app/Modules/Core/Database/Factories/UserFactory.php',

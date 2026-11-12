@@ -7,8 +7,8 @@ use UnexpectedValueException;
 
 /**
  * Lo que una persona tiene (spec 7 y 9): sus nombramientos vigentes hoy que llenan lo que su puesto pide
- * (Role::scopeColumns), el de admin incluido, como datos planos que se guardan en caché. No sabe qué campus están
- * activos: ese filtro lo aplica Actor en cada petición, así que desactivar un campus no lo invalida.
+ * (Role::scopeColumns), el de admin incluido, como datos planos que se guardan en caché. No sabe qué campus ni qué
+ * modalidades están activos: ese filtro lo aplica Actor en cada petición, así que desactivar uno no lo invalida.
  * Inmutable.
  */
 final readonly class AuthorizationSnapshot
@@ -43,7 +43,7 @@ final readonly class AuthorizationSnapshot
     }
 
     /**
-     * @return array{scopes: list<array{role: string, campus_id: ?string, org_unit_id: ?string, career_id: ?string}>}
+     * @return array{scopes: list<array{role: string, campus_id: ?string, org_unit_id: ?string, career_id: ?string, modality_id: ?string}>}
      */
     public function toArray(): array
     {

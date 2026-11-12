@@ -15,9 +15,10 @@ interface ScopeLabels
     public function careers(array $careerIds): array;
 
     /**
-     * Las carreras que se ofrecen activas en el campus, para elegir una al nombrar a un coordinador.
+     * Las carreras que se ofrecen activas en el campus, para elegir una al nombrar a un coordinador; sin campus (el
+     * coordinador de todos los campus de su modalidad, AZ-S17), las que se ofrecen activas en algún campus activo.
      *
      * @return array<string, string> id de carrera → «ISC · Ingeniería en Sistemas Computacionales», por código
      */
-    public function careerOptions(string $campusId): array;
+    public function careerOptions(?string $campusId): array;
 }
