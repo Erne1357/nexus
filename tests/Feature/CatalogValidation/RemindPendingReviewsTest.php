@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
@@ -30,7 +31,7 @@ beforeEach(function () {
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion, [])->create();
 
     foreach ([$this->c2, $this->c1] as $campus) {
-        app(CreateTermReviews::class)->handle($this->term, $campus);
+        app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
     }
 
     CatalogReview::query()->where('department_id', $this->ele->id)->update(['status' => ReviewStatus::Validated]);

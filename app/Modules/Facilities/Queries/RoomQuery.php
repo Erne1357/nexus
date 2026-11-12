@@ -14,13 +14,15 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
- * Lecturas de salones y de sus bloqueos para las pantallas. Son de un campus, el activo de la credencial,
- * y los ve quien lo cubre según RoomPolicy: el admin y la Subdirección de ese campus.
+ * Lecturas de salones y de sus bloqueos para las pantallas. Cada salón es de un campus y la pantalla los muestra de
+ * todos los campus que el usuario ve (#415, la credencial ya no elige campus). Los ve quien los cubre según
+ * RoomPolicy: el admin y la Subdirección de ese campus.
  */
 final class RoomQuery
 {
@@ -28,16 +30,17 @@ final class RoomQuery
     public const string WITHOUT_OWNER = 'sin_dueno';
 
     /**
-     * La tabla de salones del campus, por clave y sin los borrados, con su edificio, su dueño y cuántos
+     * La tabla de salones de los campus de `$campuses`, por clave y sin los borrados, con su edificio, su dueño y cuántos
      * bloqueos tiene (`blocks_count`). Busca `$search` en la clave o el nombre con TextSearch; filtra por
      * edificio, tipo, dueño (un id o WITHOUT_OWNER) y estado. Los filtros llegan del navegador: uno que no
      * es uuid o no es un tipo no encuentra a nadie, en lugar de tronar en PostgreSQL (ADR-0014).
      *
+     * @param  Collection<int, Campus>  $campuses
      * @return LengthAwarePaginator<int, Room>
      */
     public function forTable(
         Actor $context,
-        Campus $campus,
+        Collection $campuses,
         string $search = '',
         ?string $building = null,
         ?string $type = null,
@@ -46,9 +49,9 @@ final class RoomQuery
         int $perPage = 15,
     ): LengthAwarePaginator {
         return Room::query()
-            ->where('campus_id', $campus->getKey())
+            ->whereIn('campus_id', $campuses->pluck('id')->all())
             ->tap(fn (Builder $query) => $context->constrain($query, FacilitiesPermission::RoomView, ['campus' => 'rooms.campus_id']))
-            ->with(['building:id,code,name', 'department:id,code,name'])
+            ->with(['campus:id,code,name', 'building:id,code,name', 'department:id,code,name'])
             ->withCount('blocks')
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->when($building, fn (Builder $query, string $id) => Str::isUuid($id) ? $query->where('building_id', $id) : $query->whereRaw('false'))
@@ -113,9 +116,9 @@ final class RoomQuery
     /**
      * Los bloqueos del salón, por día y hora, con su periodo.
      *
-     * @return Collection<int, RoomBlock>
+     * @return EloquentCollection<int, RoomBlock>
      */
-    public function blocksOf(Room $room): Collection
+    public function blocksOf(Room $room): EloquentCollection
     {
         return $room->blocks()->with('term:id,code,name')->orderBy('day')->orderBy('starts_at')->get();
     }

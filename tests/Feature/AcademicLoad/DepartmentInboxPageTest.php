@@ -545,7 +545,7 @@ describe('textos de la sugerencia de paralelos y del detalle', function () {
 
 describe('HC-14: aceptar bloqueado sin validación', function () {
     beforeEach(function () {
-        CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::Teachers)->delete();
+        CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::Teachers)->update(['status' => 'pending']);
     });
 
     it('avisa de los catálogos pendientes con el enlace, y deshabilita aceptar con su motivo', function () {

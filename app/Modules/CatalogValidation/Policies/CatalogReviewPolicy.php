@@ -55,6 +55,15 @@ final class CatalogReviewPolicy
         return $this->actor($user)->allows(CatalogValidationPermission::ProgressRemind);
     }
 
+    /**
+     * Abrir la validación de catálogos de un periodo (OpenCatalogValidation, CV9): solo el admin, porque el permiso no se
+     * concede a ningún puesto.
+     */
+    public function open(User $user): bool
+    {
+        return $this->actor($user)->allows(CatalogValidationPermission::ReviewOpen);
+    }
+
     public function view(User $user, CatalogReview $review): bool
     {
         return $this->can($user, CatalogValidationPermission::ReviewView, $review);

@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
@@ -23,7 +24,7 @@ it('el jefe abre Materias, corrige una materia, la observa, regresa y valida', f
     $campus = Campus::factory()->create();
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
-    app(CreateTermReviews::class)->handle($term, $campus);
+    app(CreateTermReviews::class)->handle($term, Catalog::cases());
     Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Programación Orientada a Objetos', 'department_id' => $sis->id]);
     Subject::factory()->create(['code' => 'SCD-1028', 'name' => 'Redes de Computadoras', 'department_id' => $sis->id]);
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['username' => 'jefe']);

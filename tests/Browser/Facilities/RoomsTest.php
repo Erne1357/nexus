@@ -87,3 +87,16 @@ it('a 1440 px la búsqueda, los cuatro filtros y la acción de Salones caben en 
         ->assertScript(catalogToolbarInOneRowScript(), true)
         ->assertNoJavaScriptErrors();
 });
+
+it('con dos campus, Edificios y Salones siguen en un renglón a 1440 px con el filtro de campus sin cortar', function (string $path, string $label) {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->c2->update(['name' => 'Campus II']);
+    User::factory()->admin()->create(['username' => 'admin', 'name' => 'Ana Admin']);
+
+    signInToRooms('admin')
+        ->resize(1440, 900)
+        ->navigate($path)
+        ->assertScript(catalogToolbarInOneRowScript(), true)
+        ->assertScript("(() => { const select = document.querySelector('[data-testid=catalog-filters] select[aria-label={$label}]'); return select !== null && [...select.options].every((option) => option.text.length > 0) && select.scrollWidth <= select.clientWidth; })()", true)
+        ->assertNoJavaScriptErrors();
+})->with(['salones' => ['/facilities/rooms', 'Edificio'], 'edificios' => ['/facilities/buildings', 'Campus']]);

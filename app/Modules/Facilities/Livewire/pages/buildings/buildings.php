@@ -1,11 +1,15 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Facilities\Actions\CreateBuilding;
 use App\Modules\Facilities\Actions\UpdateBuilding;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Queries\BuildingQuery;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
@@ -15,10 +19,11 @@ use Mary\Traits\Toast;
 
 /**
  * CRUD de Edificios, con la forma de Campus: tabla con búsqueda y filtro de estado; alta y edición en un
- * modal; activar o desactivar desde la tabla. Los edificios no se borran. Es de un campus, el activo de la
- * credencial (Actor::activeCampus()): el listado y el alta usan ese campus, el formulario no lleva
- * un select de campus y, sin uno elegido, la pantalla pide elegirlo. Lo administran el admin y la
- * Subdirección del campus (BuildingPolicy).
+ * modal; activar o desactivar desde la tabla. Los edificios no se borran. Cada edificio es de un campus; la
+ * credencial ya no lo elige (#415): el listado muestra los de todos los campus del usuario, con su campus en una
+ * columna y un filtro de campus con «Todos» (WithCampusFilter), y el alta pide el campus en el formulario, entre
+ * los campus donde el usuario puede dar de alta. Lo administran el admin y la Subdirección del campus
+ * (BuildingPolicy).
  *
  * El componente lee con BuildingQuery, autoriza con BuildingPolicy en mount() y en cada acción (una
  * petición puede llegar con una página que abrió otra sesión), valida la forma de los datos y llama a
@@ -27,7 +32,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Edificios')] class extends Component
 {
-    use Toast, WithPagination;
+    use Toast, WithCampusFilter, WithPagination;
 
     /** Búsqueda por clave o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
     #[Session]
@@ -47,6 +52,9 @@ new #[Title('Edificios')] class extends Component
 
     public string $name = '';
 
+    /** El campus del alta (su id): se pide en el formulario. */
+    public string $campus_id = '';
+
     public function mount(): void
     {
         $this->authorize('viewAny', Building::class);
@@ -57,20 +65,24 @@ new #[Title('Edificios')] class extends Component
      */
     public function with(BuildingQuery $buildings, Actor $context): array
     {
-        $campus = $context->activeCampus();
+        $shown = $this->campusFilter();
+        $options = $this->campusOptions();
 
         return [
-            'campus' => $campus,
-            'buildings' => $campus === null ? null : $buildings->forTable($context, $campus, $this->search, match ($this->status) {
+            'campusOptions' => $options,
+            'shownCampus' => $shown,
+            'creatableCampuses' => $this->creatableCampuses()->map(fn (Campus $campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])->all(),
+            'buildings' => $buildings->forTable($context, $shown === null ? $options : collect([$shown]), $this->search, match ($this->status) {
                 'active' => true,
                 'inactive' => false,
                 default => null,
             }),
-            'canCreate' => $campus !== null && auth()->user()->can('create', [Building::class, $campus]),
+            'canCreate' => $this->creatableCampuses()->isNotEmpty(),
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
+                ...($options->count() > 1 ? [['key' => 'campus', 'label' => 'Campus']] : []),
                 ['key' => 'rooms_count', 'label' => 'Salones', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
@@ -81,17 +93,19 @@ new #[Title('Edificios')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'status'], true)) {
+        if (in_array($property, ['search', 'campus', 'status'], true)) {
             $this->resetPage();
         }
     }
 
-    public function create(Actor $context): void
+    public function create(): void
     {
-        $this->authorize('create', [Building::class, $this->campus($context)]);
+        $creatable = $this->creatableCampuses();
+        abort_if($creatable->isEmpty(), 403);
 
         $this->resetValidation();
         $this->reset('editingId', 'code', 'name');
+        $this->campus_id = ($this->campusFilter() ?? ($creatable->count() === 1 ? $creatable->first() : null))?->id ?? '';
         $this->showModal = true;
     }
 
@@ -107,17 +121,20 @@ new #[Title('Edificios')] class extends Component
         $this->showModal = true;
     }
 
-    public function save(CreateBuilding $createBuilding, UpdateBuilding $updateBuilding, BuildingQuery $buildings, Actor $context): void
+    public function save(CreateBuilding $createBuilding, UpdateBuilding $updateBuilding, BuildingQuery $buildings): void
     {
         if ($this->editingId === null) {
-            $campus = $this->campus($context);
+            $creatable = $this->creatableCampuses();
+            abort_if($creatable->isEmpty(), 403);
+            $data = $this->validatedBuilding($creatable);
+            $campus = $creatable->firstWhere('id', $data['campus_id']);
             $this->authorize('create', [Building::class, $campus]);
-            $building = $createBuilding->handle($campus, $this->validatedBuilding());
+            $building = $createBuilding->handle($campus, ['code' => $data['code'], 'name' => $data['name']]);
             $this->success('Edificio creado', $this->describe($building));
         } else {
             $building = $buildings->findOrFail($this->editingId);
             $this->authorize('update', $building);
-            $building = $updateBuilding->handle($building, $this->validatedBuilding());
+            $building = $updateBuilding->handle($building, Arr::only($this->validatedBuilding(), ['code', 'name']));
             $this->success('Edificio actualizado', $this->describe($building));
         }
 
@@ -139,23 +156,30 @@ new #[Title('Edificios')] class extends Component
      */
     protected function validationAttributes(): array
     {
-        return ['code' => 'clave', 'name' => 'nombre'];
+        return ['code' => 'clave', 'name' => 'nombre', 'campus_id' => 'campus'];
     }
 
     /**
-     * El campus activo de la credencial; sin uno no hay dónde dar de alta (403).
+     * Los campus donde el usuario puede dar de alta un edificio (BuildingPolicy::create): los del formulario.
+     *
+     * @return Collection<int, Campus>
      */
-    private function campus(Actor $context): Campus
+    private function creatableCampuses(): Collection
     {
-        return $context->activeCampus() ?? abort(403, 'Elige un campus en tu credencial.');
+        return $this->campusOptions()->filter(fn (Campus $campus): bool => auth()->user()->can('create', [Building::class, $campus]))->values();
     }
 
     /**
-     * @return array{code: string, name: string}
+     * Clave y nombre validados en forma y, en un alta, el campus elegido entre `$creatable`; un campus que no está
+     * ahí (ajeno, inactivo, inexistente) es un error del campo, no un 403.
+     *
+     * @param  Collection<int, Campus>|null  $creatable
+     * @return array{code: string, name: string, campus_id: string}
      */
-    private function validatedBuilding(): array
+    private function validatedBuilding(?Collection $creatable = null): array
     {
         return $this->validate([
+            'campus_id' => $creatable === null ? ['nullable'] : ['required', Rule::in($creatable->pluck('id')->all())],
             'code' => ['required', 'string', 'max:20'],
             'name' => ['required', 'string', 'max:255'],
         ]);

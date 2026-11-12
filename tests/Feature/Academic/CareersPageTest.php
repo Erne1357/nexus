@@ -58,19 +58,19 @@ function seesCareersMenu(User $user): bool
 }
 
 describe('admin', function () {
-    it('ve la tabla con clave, nombre, departamento, planes sin borrar, oferta en C2 y estado', function () {
+    it('ve la tabla con clave, nombre, departamento, planes sin borrar, oferta por campus y estado', function () {
         $response = $this->actingAs($this->admin)->get(route('academic.careers'));
 
         $response->assertOk()
-            ->assertSeeInOrder(['Clave', 'Nombre', 'Departamento', 'Planes', 'Se ofrece en C2', 'Estado'])
+            ->assertSeeInOrder(['Clave', 'Nombre', 'Departamento', 'Planes', 'Se ofrece en', 'Estado'])
             ->assertSeeInOrder(['IEL', 'Ingeniería Eléctrica', 'ISC', 'OLD', 'Carrera Antigua', 'Inactiva']);
 
         $rows = collect(domOf($response)->querySelectorAll('table tbody tr'))
             ->mapWithKeys(fn ($row) => [textOf($row->querySelector('td')) => textOf($row)]);
 
-        expect($rows['ISC'])->toContain('SIS 2 Sí Activa')
-            ->and($rows['IEL'])->toContain('ELE 0 No Activa')
-            ->and($rows['OLD'])->toContain('SIS 0 No Inactiva');
+        expect($rows['ISC'])->toContain('SIS 2 C2 Activa')
+            ->and($rows['IEL'])->toContain('ELE 0 C2 Activa')
+            ->and($rows['OLD'])->toContain('SIS 0 C2 Inactiva');
     });
 
     it('en el celular apila cada carrera en data-testid="career-cards"', function () {
@@ -79,24 +79,22 @@ describe('admin', function () {
 
         expect(count($cards))->toBe(3)
             ->and(textOf($cards[1]))->toContain('ISC Ingeniería en Sistemas Computacionales Activa')
-            ->and(textOf($cards[1]))->toContain('SIS · 2 planes · Se ofrece en C2');
+            ->and(textOf($cards[1]))->toContain('SIS · 2 planes')->toContain('C2');
     });
 
-    it('sin campus activo pide elegirlo en lugar de la acción de ofrecer', function () {
-        Campus::factory()->create(['code' => 'C1']);
-
-        $response = $this->actingAs($this->admin)->get(route('academic.careers'));
-
-        $response->assertOk()->assertSee('Se ofrece en el campus')->assertSee('Elige un campus en tu credencial')
-            ->assertDontSee('Dejar de ofrecer');
-    });
-
-    it('con un campus activo elegido muestra su clave y la acción de ofrecer', function () {
+    it('muestra la oferta de todos los campus a la vez, sin pedir uno en la credencial', function () {
         $c1 = Campus::factory()->create(['code' => 'C1']);
-        onCampusPage($c1);
+        CareerCampus::factory()->create(['career_id' => $this->isc->id, 'campus_id' => $c1->id]);
 
-        $this->actingAs($this->admin)->get(route('academic.careers'))
-            ->assertSee('Se ofrece en C1')->assertSee('Ofrecer')->assertDontSee('Elige un campus en tu credencial');
+        $response = $this->actingAs($this->admin)->get(route('academic.careers'))
+            ->assertOk()->assertSee('Se ofrece en')->assertDontSee('Elige un campus en tu credencial');
+
+        $dom = domOf($response);
+        $pressed = fn (string $career, string $campus): ?string => $dom->querySelector("[data-testid=\"offering-{$career}-{$campus}\"]")?->getAttribute('aria-pressed');
+
+        expect($pressed('ISC', 'C2'))->toBe('true')->and($pressed('ISC', 'C1'))->toBe('true')
+            ->and($pressed('IEL', 'C2'))->toBe('false')->and($pressed('IEL', 'C1'))->toBe('false')
+            ->and($pressed('OLD', 'C2'))->toBe('false');
     });
 
     it('busca por clave o nombre y filtra por departamento y estado', function () {
@@ -188,22 +186,38 @@ describe('admin', function () {
             ->and(lastToastOf($page)['title'])->toBe('Carrera activada');
     });
 
-    it('ofrece la carrera en el campus activo y deja de ofrecerla', function () {
+    it('ofrece la carrera en un campus y deja de ofrecerla', function () {
         $page = Livewire::actingAs($this->admin)->test('academic::pages.careers');
 
-        $page->call('toggleOffering', $this->iel->id);
+        $page->call('toggleOffering', $this->iel->id, 'C2');
         expect(CareerCampus::where('career_id', $this->iel->id)->where('campus_id', $this->c2->id)->sole()->is_active)->toBeTrue()
             ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Carrera ofrecida')->description->toBe('IEL · C2');
 
-        $page->call('toggleOffering', $this->iel->id);
+        $page->call('toggleOffering', $this->iel->id, 'C2');
         expect(CareerCampus::where('career_id', $this->iel->id)->sole()->is_active)->toBeFalse()
             ->and(lastToastOf($page)['title'])->toBe('Carrera fuera de la oferta');
     });
 
+    it('ofrece en un campus sin tocar la oferta de los demás', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1']);
+
+        Livewire::actingAs($this->admin)->test('academic::pages.careers')->call('toggleOffering', $this->iel->id, 'C1');
+
+        expect(CareerCampus::where('career_id', $this->iel->id)->sole()->campus_id)->toBe($c1->id);
+    });
+
+    it('un campus que no está entre los del usuario, inactivo o inexistente es 403 y no escribe nada', function (string $code) {
+        Campus::factory()->inactive()->create(['code' => 'C7']);
+
+        Livewire::actingAs($this->admin)->test('academic::pages.careers')->call('toggleOffering', $this->iel->id, $code)->assertForbidden();
+
+        expect(CareerCampus::where('career_id', $this->iel->id)->count())->toBe(0);
+    })->with(['inactivo' => 'C7', 'inexistente' => 'C99']);
+
     it('ofrecer una carrera inactiva avisa que la oferta nace inactiva', function () {
         $this->iel->update(['is_active' => false]);
 
-        $page = Livewire::actingAs($this->admin)->test('academic::pages.careers')->call('toggleOffering', $this->iel->id);
+        $page = Livewire::actingAs($this->admin)->test('academic::pages.careers')->call('toggleOffering', $this->iel->id, 'C2');
 
         expect(CareerCampus::where('career_id', $this->iel->id)->sole()->is_active)->toBeFalse()
             ->and(lastToastOf($page))->type->toBe('warning')->title->toBe('Oferta registrada, inactiva');
@@ -213,18 +227,9 @@ describe('admin', function () {
         $this->iel->update(['is_active' => false]);
         CareerCampus::factory()->inactive()->create(['career_id' => $this->iel->id, 'campus_id' => $this->c2->id]);
 
-        $page = Livewire::actingAs($this->admin)->test('academic::pages.careers')->call('toggleOffering', $this->iel->id);
+        $page = Livewire::actingAs($this->admin)->test('academic::pages.careers')->call('toggleOffering', $this->iel->id, 'C2');
 
         expect(lastToastOf($page))->type->toBe('info')->title->toBe('Sin cambios');
-    });
-
-    it('sin campus activo no ofrece nada y lo dice', function () {
-        Campus::factory()->create(['code' => 'C1']);
-
-        $page = Livewire::actingAs($this->admin)->test('academic::pages.careers')->call('toggleOffering', $this->iel->id);
-
-        expect(CareerCampus::where('career_id', $this->iel->id)->count())->toBe(0)
-            ->and(lastToastOf($page))->type->toBe('error')->title->toBe('Elige un campus');
     });
 
     it('borra una carrera sin planes', function () {
@@ -288,7 +293,11 @@ describe('otros roles e invitados', function () {
         }
 
         $this->actingAs($user);
-        $page->call($method, ...(in_array($method, ['edit', 'toggleActive', 'toggleOffering', 'delete'], true) ? [$this->iel->id] : []))->assertForbidden();
+        $page->call($method, ...match ($method) {
+            'edit', 'toggleActive', 'delete' => [$this->iel->id],
+            'toggleOffering' => [$this->iel->id, 'C2'],
+            default => [],
+        })->assertForbidden();
 
         expect(Career::count())->toBe($careers)
             ->and(CareerCampus::count())->toBe($offerings)
