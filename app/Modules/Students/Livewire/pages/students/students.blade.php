@@ -10,11 +10,11 @@
             Los alumnos que llegan del SII, con su avance en la retícula. Solo lectura: se actualizan con cada importación de alumnos y de kárdex.
         </x-slot:subtitle>
 
-        @if ($campus !== null)
-            <x-slot:actions class="w-full flex-wrap md:w-auto">
+        <x-slot:actions class="w-full flex-wrap md:w-auto">
                 <div class="w-full md:w-64">
                     <x-input wire:model.live.debounce.300ms="search" placeholder="Número de control o nombre" aria-label="Buscar alumnos" icon="o-magnifying-glass" clearable />
                 </div>
+                <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all class="w-full md:w-auto" />
                 <div class="w-full md:w-48">
                     <x-select wire:model.live="career" aria-label="Carrera" :options="$options['careers']" placeholder="Todas las carreras" />
                 </div>
@@ -28,15 +28,9 @@
                     <x-select wire:model.live="status" aria-label="Estatus" :options="$statuses" placeholder="Todos los estatus" />
                 </div>
             </x-slot:actions>
-        @endif
     </x-header>
 
-    @if ($campus === null)
-        <div class="rounded-box border border-base-300 bg-base-100 px-6 py-10 text-center text-neutral" data-testid="students-no-campus">
-            <x-icon name="o-building-office-2" class="mx-auto mb-2 w-8 h-8" />
-            <p>Elige un campus en tu credencial para ver a sus alumnos.</p>
-        </div>
-    @else
+    <div>
         <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
             <x-table
                 :headers="$headers"
@@ -46,6 +40,10 @@
             >
                 @scope('cell_control_number', $student)
                     <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $student->is_active])>{{ $student->control_number }}</span>
+                @endscope
+
+                @scope('cell_campus', $student)
+                    <span class="font-mono" title="{{ $student->campus->name }}" data-testid="student-campus">{{ $student->campus->code }}</span>
                 @endscope
 
                 @scope('cell_career', $student)
@@ -77,7 +75,7 @@
                 @endscope
 
                 <x-slot:empty>
-                    <x-icon name="o-academic-cap" :label="$filtered ? 'Ningún alumno coincide con la búsqueda.' : 'Este campus todavía no tiene alumnos: llegan con la importación de alumnos del SII.'" />
+                    <x-icon name="o-academic-cap" :label="$filtered ? 'Ningún alumno coincide con la búsqueda.' : 'Todavía no hay alumnos: llegan con la importación de alumnos del SII.'" />
                 </x-slot:empty>
             </x-table>
 
@@ -98,7 +96,7 @@
                         </a>
                     </li>
                 @empty
-                    <li class="px-4 py-6 text-center text-neutral">{{ $filtered ? 'Ningún alumno coincide con la búsqueda.' : 'Este campus todavía no tiene alumnos: llegan con la importación de alumnos del SII.' }}</li>
+                    <li class="px-4 py-6 text-center text-neutral">{{ $filtered ? 'Ningún alumno coincide con la búsqueda.' : 'Todavía no hay alumnos: llegan con la importación de alumnos del SII.' }}</li>
                 @endforelse
             </ul>
 
@@ -111,5 +109,5 @@
                 </div>
             @endif
         </div>
-    @endif
+    </div>
 </div>

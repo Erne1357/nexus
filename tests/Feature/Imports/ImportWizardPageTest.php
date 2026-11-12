@@ -103,22 +103,28 @@ describe('admin', function () {
             ->assertSet('step', 1);
     });
 
-    it('una plantilla de campus pide elegir el campus en la barra superior si no hay uno activo', function () {
+    it('una plantilla de campus pide elegir el campus en el propio asistente si el usuario trabaja en varios', function () {
         Campus::factory()->create(['code' => 'C1']);
 
-        wizardWithFile($this->admin, 'test-campus-scoped')
-            ->assertHasErrors('template')
-            ->assertSee('Elige en la barra superior el campus al que pertenece el archivo.')
+        Livewire::actingAs($this->admin)->test('imports::pages.import-wizard')
+            ->set('template', 'test-campus-scoped')->assertSee('Campus del archivo')->assertSee('C1 · ')->assertSee('C2 · Campus II')
+            ->assertDontSee('barra superior')
+            ->set('file', campusCsv())->call('continue')
+            ->assertHasErrors('campusCode')
+            ->assertSee('Elige el campus al que pertenece el archivo.')
             ->assertSet('step', 1);
+
+        expect(ImportBatch::count())->toBe(0);
     });
 
-    it('una plantilla de campus usa el campus de la barra superior', function () {
+    it('una plantilla de campus usa el campus que el usuario elige en el asistente', function () {
         // La plantilla de prueba por campus no tiene catálogo real que validar: basta ver que se encola.
         Queue::fake();
         Campus::factory()->create(['code' => 'C1']);
-        onCampusPage($this->c2);
 
-        wizardWithFile($this->admin, 'test-campus-scoped')
+        Livewire::actingAs($this->admin)->test('imports::pages.import-wizard')
+            ->set('template', 'test-campus-scoped')->set('campusCode', 'C2')
+            ->set('file', campusCsv())->call('continue')
             ->assertSet('step', 2)
             ->assertSee('C2 · Campus II')
             ->call('upload')
@@ -129,6 +135,26 @@ describe('admin', function () {
         expect($batch->campus_id)->toBe($this->c2->id);
         Queue::assertPushed(ValidateQueuedBatch::class, fn (ValidateQueuedBatch $job): bool => $job->batch->is($batch));
     });
+
+    it('con un solo campus, la plantilla de campus usa ese sin preguntar', function () {
+        Queue::fake();
+
+        wizardWithFile($this->admin, 'test-campus-scoped')->assertSet('step', 2)->call('upload')->assertHasNoErrors();
+
+        expect(ImportBatch::sole()->campus_id)->toBe($this->c2->id);
+    });
+
+    it('un campus inactivo o inexistente no cuenta como elegido', function (string $code) {
+        Campus::factory()->create(['code' => 'C1']);
+        Campus::factory()->inactive()->create(['code' => 'C8']);
+
+        Livewire::actingAs($this->admin)->test('imports::pages.import-wizard')
+            ->set('template', 'test-campus-scoped')->set('campusCode', $code)
+            ->set('file', campusCsv())->call('continue')
+            ->assertHasErrors('campusCode')->assertSet('step', 1);
+
+        expect(ImportBatch::count())->toBe(0);
+    })->with(['inactivo' => 'C8', 'inexistente' => 'C99']);
 
     it('sin cambios a la propuesta por nombre sube el lote sin mapeo y lo valida en la cola', function () {
         $component = wizardWithFile($this->admin)->call('upload')->assertHasNoErrors();

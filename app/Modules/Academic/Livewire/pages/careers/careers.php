@@ -18,14 +18,15 @@ use Mary\Traits\Toast;
 
 /**
  * CRUD de Carreras: tabla con búsqueda y filtros por departamento y estado, alta y edición en un
- * modal, activar o desactivar, ofrecer o dejar de ofrecer en el campus activo y borrar (solo sin
+ * modal, activar o desactivar, ofrecer o dejar de ofrecer en cada campus y borrar (solo sin
  * planes). Es del admin; copia la forma de Departamentos.
  *
  * El componente lee con CareerQuery, autoriza con CareerPolicy en mount() y en cada acción (una
  * petición puede llegar con una página que abrió otra sesión), valida la forma de los datos y llama
  * a CreateCareer, UpdateCareer, SetCareerOffering o DeleteCareer, que hacen cumplir las reglas. La
- * oferta es del campus activo de la credencial (Actor::activeCampus()), nunca de un campo del
- * formulario.
+ * credencial ya no elige campus (#415): la columna «Se ofrece en» muestra la oferta de todos los campus del
+ * usuario a la vez, con un botón por campus que ofrece o deja de ofrecer; el campus llega como código y se busca
+ * entre los de Actor::campuses(), nunca de un campo del formulario.
  */
 new #[Title('Carreras')] class extends Component
 {
@@ -65,23 +66,23 @@ new #[Title('Carreras')] class extends Component
      */
     public function with(CareerQuery $careers, DepartmentQuery $departmentQuery, Actor $context): array
     {
-        $campus = $context->activeCampus();
+        $campuses = $context->campuses();
         $departments = $departmentQuery->options();
         $filter = in_array($this->department, array_column($departments, 'id'), true) ? $this->department : null;
 
         return [
-            'careers' => $careers->forTable($campus, $this->search, $filter, match ($this->status) {
+            'careers' => $careers->forTable($campuses, $this->search, $filter, match ($this->status) {
                 'active' => true,
                 'inactive' => false,
                 default => null,
             }),
-            'campus' => $campus,
+            'campuses' => $campuses,
             'headers' => [
                 ['key' => 'code', 'label' => 'Clave'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'department', 'label' => 'Departamento', 'sortable' => false, 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'study_plans_count', 'label' => 'Planes', 'class' => 'max-[1023px]:hidden'],
-                ['key' => 'offered_here', 'label' => $campus === null ? 'Se ofrece en el campus' : "Se ofrece en {$campus->code}", 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'offering', 'label' => 'Se ofrece en', 'sortable' => false],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
             // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
@@ -147,20 +148,15 @@ new #[Title('Carreras')] class extends Component
     }
 
     /**
-     * Ofrece la carrera en el campus activo o deja de ofrecerla, según lo que haga hoy.
+     * Ofrece la carrera en el campus de ese código o deja de ofrecerla, según lo que haga hoy. El campus debe estar
+     * entre los del usuario (Actor::campuses()); uno ajeno, inactivo o inexistente es un 403.
      */
-    public function toggleOffering(string $id, CareerQuery $careers, Actor $context, SetCareerOffering $setCareerOffering): void
+    public function toggleOffering(string $id, string $campusCode, CareerQuery $careers, Actor $context, SetCareerOffering $setCareerOffering): void
     {
         $career = $careers->findOrFail($id);
         $this->authorize('update', $career);
 
-        $campus = $context->activeCampus();
-
-        if ($campus === null) {
-            $this->error('Elige un campus', 'Elige un campus en tu credencial para ofrecer carreras.');
-
-            return;
-        }
+        $campus = $context->campuses()->firstWhere('code', $campusCode) ?? abort(403, 'No trabajas en ese campus.');
 
         $existing = $career->offerings()->where('campus_id', $campus->id)->pluck('is_active');
         $offeredNow = $existing->contains(true);

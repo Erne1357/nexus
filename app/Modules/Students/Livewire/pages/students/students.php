@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Queries\StudentQuery;
@@ -10,14 +11,14 @@ use Livewire\Component;
 use Livewire\WithPagination;
 
 /**
- * Listado de alumnos (tarea 1.6): solo lectura, de un campus, el activo de la credencial. Lee con StudentQuery,
+ * Listado de alumnos (tarea 1.6): solo lectura, de todos los campus del usuario (la credencial ya no elige campus, #415), con una columna «Campus» y un filtro de campus con «Todos» cuando trabaja en más de uno (WithCampusFilter). Lee con StudentQuery,
  * que deja ver lo mismo que StudentPolicy, y autoriza `viewAny` en mount(). Los filtros se recuerdan en la
  * sesión del usuario y vuelven a la primera página al cambiar (DESIGN.md, "Anatomía de una pantalla de
  * catálogo"). No hay acción principal: los alumnos llegan de la importación del SII.
  */
 new #[Title('Alumnos')] class extends Component
 {
-    use WithPagination;
+    use WithCampusFilter, WithPagination;
 
     /** Número de control o nombre. */
     #[Session]
@@ -49,14 +50,15 @@ new #[Title('Alumnos')] class extends Component
      */
     public function with(StudentQuery $students, Actor $context): array
     {
-        $campus = $context->activeCampus();
-        $options = $campus === null ? ['careers' => [], 'plans' => [], 'semesters' => []] : $students->filterOptions($context, $campus);
+        $campus = $this->campusFilter();
+        $options = $students->filterOptions($context, $campus);
         $this->forgetFiltersOutside($options);
         $filters = array_filter(['career' => $this->career, 'plan' => $this->plan, 'semester' => $this->semester, 'status' => $this->status], fn (string $value): bool => $value !== '');
 
         return [
-            'campus' => $campus,
-            'students' => $campus === null ? null : $students->forTable($context, $campus, $filters, $this->search),
+            'campusOptions' => $this->campusOptions(),
+            'shownCampus' => $campus,
+            'students' => $students->forTable($context, $campus, $filters, $this->search),
             'options' => $options,
             'filtered' => $filters !== [] || trim($this->search) !== '',
             'statuses' => [
@@ -67,6 +69,7 @@ new #[Title('Alumnos')] class extends Component
             'headers' => [
                 ['key' => 'control_number', 'label' => 'Control'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-[1200px]:min-w-48 min-[1800px]:whitespace-nowrap'],
+                ...($this->campusOptions()->count() > 1 ? [['key' => 'campus', 'label' => 'Campus', 'class' => 'max-[1200px]:hidden']] : []),
                 ['key' => 'career', 'label' => 'Carrera'],
                 ['key' => 'plan', 'label' => 'Plan', 'class' => 'max-[1200px]:hidden'],
                 ['key' => 'current_semester', 'label' => 'Semestre', 'class' => 'text-right'],
@@ -79,7 +82,7 @@ new #[Title('Alumnos')] class extends Component
     }
 
     /**
-     * Olvida la carrera, el plan o el semestre que no están entre las opciones del campus de la credencial: los
+     * Olvida la carrera, el plan o el semestre que no están entre las opciones de los campus a la vista: los
      * filtros se recuerdan en la sesión, y uno de otro campus dejaría la lista vacía sin mostrarse en su select.
      *
      * @param  array{careers: list<array{id: string, name: string}>, plans: list<array{id: string, name: string}>, semesters: list<array{id: int, name: string}>}  $options

@@ -9,7 +9,7 @@
 <div>
     <x-header title="Carreras" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            Las carreras y los campus donde se ofrecen. La oferta es la del campus activo de tu credencial. Una carrera solo se borra si no tiene planes de estudio.
+            Las carreras y los campus donde se ofrecen. La oferta se muestra por campus y se cambia con el botón de cada uno. Una carrera solo se borra si no tiene planes de estudio.
         </x-slot:subtitle>
     </x-header>
 
@@ -51,20 +51,16 @@
                 <span class="font-mono tabular-nums">{{ $career->study_plans_count }}</span>
             @endscope
 
-            @scope('cell_offered_here', $career)
-                @if ($career->offered_here === null)
-                    <span class="text-neutral">—</span>
-                @else
-                    <x-core::status-badge :tone="$career->offered_here ? 'success' : 'neutral'" :label="$career->offered_here ? 'Sí' : 'No'" />
-                @endif
+            @scope('cell_offering', $career, $campuses)
+                @include('academic::careers.offering', ['career' => $career, 'campuses' => $campuses, 'inTable' => true])
             @endscope
 
             @scope('cell_is_active', $career)
                 <x-core::status-badge :tone="$career->is_active ? 'success' : 'neutral'" :label="$career->is_active ? 'Activa' : 'Inactiva'" />
             @endscope
 
-            @scope('actions', $career, $campus)
-                @include('academic::careers.row-actions', ['career' => $career, 'campus' => $campus, 'inTable' => true])
+            @scope('actions', $career)
+                @include('academic::careers.row-actions', ['career' => $career, 'inTable' => true])
             @endscope
 
             <x-slot:empty>
@@ -85,12 +81,11 @@
                     <div class="text-neutral">
                         {{ $career->department->code }} ·
                         {{ $career->study_plans_count }} {{ $career->study_plans_count === 1 ? 'plan' : 'planes' }}
-                        @if ($campus !== null)
-                            · {{ $career->offered_here ? "Se ofrece en {$campus->code}" : "No se ofrece en {$campus->code}" }}
-                        @endif
                     </div>
 
-                    @include('academic::careers.row-actions', ['career' => $career, 'campus' => $campus, 'inTable' => false])
+                    @include('academic::careers.offering', ['career' => $career, 'campuses' => $campuses, 'inTable' => false])
+
+                    @include('academic::careers.row-actions', ['career' => $career, 'inTable' => false])
                 </li>
             @endforeach
         </ul>

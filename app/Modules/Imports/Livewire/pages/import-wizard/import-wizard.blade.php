@@ -23,14 +23,20 @@
                             </div>
 
                             @if ($definition?->requiresCampus())
-                                <p class="text-sm" data-testid="import-campus">
-                                    Campus:
-                                    @if ($campus)
-                                        <span class="font-medium">{{ $campus->code }} · {{ $campus->name }}</span>, el de la barra superior.
+                                <div class="md:w-1/2" data-testid="import-campus">
+                                    @if ($campusOptions->count() === 1)
+                                        <p class="text-sm">Campus: <span class="font-medium">{{ $campus->code }} · {{ $campus->name }}</span></p>
                                     @else
-                                        elige en la barra superior el campus al que pertenece el archivo.
+                                        <x-select
+                                            label="Campus del archivo"
+                                            name="campus"
+                                            wire:model.live="campusCode"
+                                            :options="$campusChoices"
+                                            placeholder="Elige el campus"
+                                            hint="Solo los campus donde puedes importar."
+                                        />
                                     @endif
-                                </p>
+                                </div>
                             @endif
 
                             <x-slot:actions>
@@ -90,7 +96,7 @@
                             <span class="font-medium">{{ $definition->label() }}</span>
                             desde <span class="font-medium">{{ $file?->getClientOriginalName() }}</span>
                             @if ($definition->requiresCampus() && $campus)
-                                · Campus <span class="font-medium" data-testid="import-campus">{{ $campus->code }} · {{ $campus->name }}</span>
+                                · Campus <span class="font-medium" data-testid="import-campus-chosen">{{ $campus->code }} · {{ $campus->name }}</span>
                             @endif
                         </p>
 
