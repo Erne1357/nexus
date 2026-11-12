@@ -131,6 +131,12 @@ return [
     */
     'password_reset_ip_requests_per_minute' => (int) env('PASSWORD_RESET_IP_REQUESTS_PER_MINUTE', 10),
 
+    /*
+    | Tope de intentos de acceso por minuto desde una misma red (/24 en IPv4, /64 en IPv6), sin importar el usuario ni la
+    | IP (AC-14): contra repartir los intentos entre las IP de una red. Supuesto por confirmar.
+    */
+    'network_attempts_per_minute' => (int) env('LOGIN_NETWORK_ATTEMPTS_PER_MINUTE', 120),
+
     'limiters' => [
         'login' => 'login',
     ],
