@@ -28,7 +28,9 @@ final class PeopleQuery
 
     /**
      * La tabla de personas, por nombre, con sus nombramientos vigentes. Busca `$search` en el nombre o el usuario con
-     * TextSearch; `$role` deja a quienes tienen ese puesto vigente.
+     * TextSearch; `$role` deja a quienes tienen ese puesto vigente. Sin búsqueda ni puesto no salen los alumnos que no
+     * tienen otro puesto vigente (AC-15, supuesto por confirmar): son decenas de miles y la lista es del personal; salen
+     * al buscarlos o con el puesto «Alumno».
      *
      * @return LengthAwarePaginator<int, User>
      */
@@ -40,6 +42,9 @@ final class PeopleQuery
                 'roleAssignments',
                 fn (Builder $assignments) => $assignments->current()->where('role', $role),
             ))
+            ->when($role === null && trim($search) === '', fn (Builder $query) => $query->where(fn (Builder $staff) => $staff
+                ->whereDoesntHave('roleAssignments', fn (Builder $assignments) => $assignments->current()->where('role', Role::Alumno))
+                ->orWhereHas('roleAssignments', fn (Builder $assignments) => $assignments->current()->where('role', '<>', Role::Alumno))))
             ->with(['roleAssignments' => fn ($assignments) => $assignments->current()->orderBy('valid_from')])
             ->orderBy('name')
             ->orderBy('id')

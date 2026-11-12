@@ -6,6 +6,7 @@ use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
@@ -124,7 +125,7 @@ class FacultyDemoSeeder extends Seeder
         DB::table('users')
             ->whereIn('id', DB::table('teachers')->whereNotNull('user_id')->where('is_active', true)->whereNull('deleted_at')->select('user_id'))
             ->whereNull('password')
-            ->update(['password' => app(DefaultPassword::class)->hash(), 'must_change_password' => true, 'updated_at' => now()]);
+            ->update(['password' => app(DefaultPassword::class)->hash(), 'password_origin' => PasswordOrigin::Default->value, 'must_change_password' => true, 'updated_at' => now()]);
     }
 
     /**

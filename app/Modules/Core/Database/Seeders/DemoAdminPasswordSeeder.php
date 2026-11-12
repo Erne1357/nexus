@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Database\Seeders;
 
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -24,6 +25,7 @@ final class DemoAdminPasswordSeeder extends Seeder
 
         User::query()->where('username', 'admin')->update([
             'password' => Hash::make(self::PASSWORD),
+            'password_origin' => PasswordOrigin::User->value,
             'must_change_password' => false,
         ]);
     }

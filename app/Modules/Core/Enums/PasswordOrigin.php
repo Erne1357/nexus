@@ -9,7 +9,8 @@ namespace App\Modules\Core\Enums;
  *   o la invitación aceptada; obliga a cambiarla.
  * - **NIP del SII**: la del alumno, que trae la migración del SII (AC-10). Solo con este origen el login completa con
  *   ceros un NIP corto (AC-11) y una nueva corrida la pone al día.
- * - **Propia**: la eligió el usuario al cambiarla (o al restablecerla por correo); nadie la pisa.
+ * - **Propia**: la eligió el usuario al cambiarla (UpdateUserPassword; también al restablecerla por correo, cuando
+ *   exista); nadie la pisa.
  */
 enum PasswordOrigin: string
 {
