@@ -92,6 +92,26 @@ const placeOf = (item) => {
 
 const numberFrom = (element, property) => Number(element.style.getPropertyValue(property)) || 0;
 
+/** El motivo flotante de lo oculto para los demás: uno solo, junto al menú (MN-02). */
+const whyTip = () => document.querySelector('[data-menu-why-tip]');
+
+/**
+ * Los renglones con el motivo escrito de un encabezado o una entrada, que solo se ven en la hoja del celular
+ * (data-menu-note): van justo después de él, antes del siguiente elemento del menú. El buscador los esconde
+ * junto con lo suyo.
+ */
+const notesOf = (row) => {
+    const notes = [];
+
+    for (let next = row.nextElementSibling; next && !next.hasAttribute('data-menu-flip'); next = next.nextElementSibling) {
+        if (next.hasAttribute('data-menu-note')) {
+            notes.push(next);
+        }
+    }
+
+    return notes;
+};
+
 /** Columnas del menú abierto en escritorio y en tableta (las de --menu-cols-open del menú). */
 const DESKTOP_COLUMNS = 5;
 const TABLET_COLUMNS = 3;
@@ -287,11 +307,13 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        /** Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el menú. */
+        /** Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el motivo flotante; si no, el menú. */
         onKeydown(event) {
             if (event.key === 'Escape') {
                 if (this.cardOpen) {
                     this.closeCard();
+                } else if (whyTip()?.hasAttribute('data-on')) {
+                    this.hideWhy();
                 } else {
                     this.closeMenu();
                 }
@@ -341,6 +363,7 @@ document.addEventListener('alpine:init', () => {
 
             this.busy = true;
             this.menuTarget = open;
+            this.hideWhy();
             this.cardOpen = false;
 
             const reduce = reducedMotion();
@@ -376,6 +399,52 @@ document.addEventListener('alpine:init', () => {
             }
 
             this.later(() => this.settle(), reduce ? 0 : SETTLE_MS);
+        },
+
+        /**
+         * El motivo flotante de lo oculto para los demás (MN-02): al pasar el cursor o enfocar algo con data-why,
+         * lo muestra junto a su entrada, su encabezado o el nombre de su área. Con el menú cerrado va a la derecha;
+         * abierto o en el celular, debajo. Fuera de lo que lleva motivo, se esconde.
+         */
+        showWhy(target) {
+            const source = target instanceof Element ? target.closest('[data-why]') : null;
+            const tip = whyTip();
+
+            if (!source || !tip) {
+                this.hideWhy();
+
+                return;
+            }
+
+            const anchor = source.closest('[data-menu-entry], [data-menu-group], [data-menu-flip="name"]') ?? source;
+            const box = anchor.getBoundingClientRect();
+
+            if (box.width === 0) {
+                this.hideWhy();
+
+                return;
+            }
+
+            tip.querySelector('[data-menu-why-text]').textContent = source.dataset.why;
+
+            const size = tip.getBoundingClientRect();
+            const below = this.menuOpen || isPhone();
+            const left = below ? Math.min(box.left + 10, window.innerWidth - size.width - 12) : box.right + 10;
+            const top = below ? box.bottom + 4 : box.top + box.height / 2 - size.height / 2;
+            const shellTop = parseFloat(getComputedStyle(document.body).getPropertyValue('--shell-top')) || 0;
+
+            tip.style.left = `${Math.max(8, left)}px`;
+            tip.style.top = `${Math.max(shellTop + 4, top)}px`;
+            tip.toggleAttribute('data-on', true);
+        },
+
+        /** Esconde el motivo flotante: al salir, al desplazar, al mover el menú y con Esc. */
+        hideWhy() {
+            const tip = whyTip();
+
+            if (tip?.hasAttribute('data-on')) {
+                tip.removeAttribute('data-on');
+            }
         },
 
         /** Termina un movimiento y hace el que se pidió mientras corría, si cambia algo. */
@@ -630,13 +699,19 @@ document.addEventListener('alpine:init', () => {
                     const match = needle === '' || searchableLabel(row).includes(needle);
 
                     row.hidden = !match;
+                    notesOf(row).forEach((note) => { note.hidden = !match; });
 
                     if (match) {
                         group.entries.push(row);
                     }
                 });
 
-                groups.forEach(({ heading, entries }) => heading?.toggleAttribute('hidden', entries.length === 0));
+                groups.forEach(({ heading, entries }) => {
+                    if (heading) {
+                        heading.hidden = entries.length === 0;
+                        notesOf(heading).forEach((note) => { note.hidden = entries.length === 0; });
+                    }
+                });
 
                 const kept = groups.filter(({ entries }) => entries.length > 0);
                 const slot = menu.querySelector(`[data-menu-rail] [data-menu-area="${area.dataset.menuArea}"]`);

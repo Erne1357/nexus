@@ -38,7 +38,7 @@ beforeEach(function () {
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
     // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto.
     CatalogReview::factory()->for($term)->create();
-    AcademicLoad::factory()->for($term)->create();
+    AcademicLoad::factory()->for($term)->create(['campus_id' => $this->c2->id]);
     $this->services = OrgUnit::factory()->create([
         'code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento,
         'parent_id' => app(OrgTree::class)->idOf(OrgTree::ACADEMIC),

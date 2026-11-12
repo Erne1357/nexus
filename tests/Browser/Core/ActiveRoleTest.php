@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -14,7 +15,9 @@ use App\Modules\Core\Models\User;
 
 it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos', function () {
     $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    // Carga en curso (MN-04): sin ella, nadie más que el admin ve la bandeja ni la propuesta en el menú.
+    AcademicLoad::factory()->for($term)->create(['campus_id' => $c2->id]);
     $department = Department::factory()->create(['name' => 'Sistemas y Computación']);
     $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
 
