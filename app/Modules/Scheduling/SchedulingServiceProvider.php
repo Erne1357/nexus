@@ -152,8 +152,8 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Quienes ven la carga ven los horarios y el tablero, y el coordinador los de su carrera en su campus (confirmado
-     * el 7 de noviembre de 2026). Crear grupos y editar sesiones es del coordinador de la carrera dueña y del jefe del
+     * Quienes ven la carga ven los horarios y el tablero, y el coordinador los de su carrera, de toda la modalidad
+     * aunque el puesto tenga un campus (MS6; confirmado el 7 de noviembre de 2026). Crear grupos y editar sesiones es del coordinador de la carrera dueña y del jefe del
      * departamento; asignar salón y repartir cupos, del jefe del departamento que imparte.
      */
     public function grants(): array

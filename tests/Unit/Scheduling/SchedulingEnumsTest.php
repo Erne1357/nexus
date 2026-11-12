@@ -21,9 +21,11 @@ it('los permisos de Scheduling tienen nombre, son de gestión y el objetivo es u
         expect($permission->label())->not->toBe('')
             ->and($permission->isPersonal())->toBeFalse()
             ->and($permission->appliesTo())->not->toBeNull()
-            ->and($permission->dimensions())->toContain(Dimension::Campus, Dimension::Unit);
+            ->and($permission->dimensions())->toContain(Dimension::Modality, Dimension::Unit);
     }
 
-    expect(SchedulingPermission::RoomAssign->dimensions())->not->toContain(Dimension::Career)
+    expect(SchedulingPermission::ScheduleView->dimensions())->not->toContain(Dimension::Campus)
+        ->and(SchedulingPermission::RoomAssign->dimensions())->toContain(Dimension::Campus)
+        ->and(SchedulingPermission::RoomAssign->dimensions())->not->toContain(Dimension::Career)
         ->and(SchedulingPermission::SessionEdit->dimensions())->toContain(Dimension::Career);
 });

@@ -220,8 +220,9 @@ it('un jefe que pierde el permiso después de montar recibe 403 al asignar o qui
     expect($this->session->fresh()->room_id)->toBeNull();
 });
 
-it('el coordinador de la carrera en otro campus no ve la sesión', function () {
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => $this->career->id])->create();
+it('AZ-S17: el coordinador de la carrera en otra modalidad no ve la sesión', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => $this->career->id])->create();
 
     sessionRoomAs($coordinador)->assertForbidden();
 });
