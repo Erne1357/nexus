@@ -12,7 +12,7 @@
 ## Decisión
 | Tema | Decisión |
 |---|---|
-| Estructura | **La credencial con áreas.** Arriba, una banda con la identidad de la sesión; a la izquierda, un menú por áreas (Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos). Las pantallas de trabajo son tablas densas y formularios de MaryUI. |
+| Estructura | **La credencial con áreas.** Arriba, una banda con la identidad de la sesión; a la izquierda, un menú por áreas (Académico, Servicios escolares, Recursos humanos, Recursos financieros, Datos; desde el 12 de noviembre de 2026, las de la adenda). Las pantallas de trabajo son tablas densas y formularios de MaryUI. |
 | Banda | Cuadro rojo con la liebre (botón del menú), «Nexus», la ruta (área › pantalla), el buscador «Buscar o ir a… Ctrl K» y, a la derecha, **la credencial**: un botón con nombre, rol, campus y periodo que se abre como tarjeta para cambiar campus y periodo, el tema, la contraseña y cerrar sesión. Reemplaza los selectores sueltos y el menú de usuario. Se eligió entre tres bandas (credencial, buscador al centro, una frase). |
 | Menú | **Un solo menú que se transforma.** Cerrado (288 px): franja de iconos de área y las secciones del área actual. Al tocar la liebre o Ctrl K se expande en su lugar: los iconos se vuelven encabezados, las secciones viajan a su columna, aparecen las demás áreas y el cursor queda en el buscador. Esc, la liebre o un clic fuera lo cierran. Solo aparecen las áreas con al menos una entrada visible para el usuario. En celular, la liebre baja el menú como una hoja con el buscador. |
 | Marca | La liebre, mascota del Tec (`Liebre Solida.png`, silueta), usada como máscara para que tome el color del lugar: blanca sobre el cuadro rojo. Sin otro logo en la banda. |
@@ -43,3 +43,17 @@
 - **Cartelera y retícula:** sirven con pocos registros, no con 550 docentes o miles de alumnos.
 - **Dos menús** (barra lateral más un mapa encimado): se leía como dos navegaciones distintas. Se cambió por un solo menú que se transforma.
 - **Ciruela o petróleo como marca:** la ciruela cae en el violeta típico de las interfaces hechas con IA. El petróleo funcionaba, pero el equipo prefirió los colores institucionales.
+
+## Adenda (12 de noviembre de 2026): áreas y etapas (#417, tarea 1.20)
+
+**Contexto.** Con las fases 2 a 4 el menú creció y el admin veía en Académico los catálogos, la carga y la publicación revueltos, con Inicio como una entrada más. Se exploraron cuatro opciones con impeccable (`.impeccable/mocks/decision/menu-2026-11/`) y el usuario eligió la B, «Áreas y etapas», sin extras.
+
+**Decisión.** Sigue siendo un solo menú que se transforma; cambia lo que lleva y cómo se acomoda, así que no hace falta un ADR nuevo.
+
+1. **Áreas:** Mi espacio, Académico, Servicios escolares, Recursos humanos, Recursos financieros y Administración. Datos desaparece: los catálogos, la institución y las importaciones van a Administración.
+2. **Grupos:** Académico por etapa del semestre y Administración por propósito. Un área muestra los encabezados de sus grupos solo con dos grupos o más y ocho entradas o más; si no, es una lista plana (MN-01).
+3. **Inicio sale de las áreas:** es el primer icono de la franja, con un filete debajo; abierto, va a la izquierda del buscador, y en la hoja del celular es el primer renglón debajo del buscador.
+4. **Cerrado,** la franja de iconos se queda fija y solo la columna del área actual se desplaza, con la entrada activa a la vista y desvanecida donde hay más.
+5. **Abierto,** las áreas se acomodan en una retícula (5 columnas, 3 en tableta) que calcula `MenuGrid` (Core): un área con encabezados ocupa las columnas que necesita sin partir un grupo, y las de una columna se apilan. El buscador esconde los grupos y las áreas sin coincidencias y vuelve a acomodar lo que queda con el mismo algoritmo en el navegador; las flechas recorren los resultados.
+
+**Consecuencias.** `NavigationArea` cambia sus casos y entra `NavigationGroup`; `NavigationItem` lleva `group` y `order`. El componente `core::components.navigation` y `nexusShell` se reescriben para la retícula, y `DESIGN.md` («Estructura», «Responsivo», «Navigation» y «El menú que se transforma») describe lo construido. La cascada del movimiento al abrir no pasa de 0.4 s: con un área larga, las últimas entradas esperaban más de 0.8 s.
