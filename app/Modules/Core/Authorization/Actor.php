@@ -49,7 +49,7 @@ use LogicException;
  * - allows(): un permiso personal lo da cualquier puesto que tenga y lo conceda, aunque no sea el activo, solo sobre
  *   lo suyo (el dueño del objetivo es el usuario). Uno de gestión, alguno de sus puestos efectivos que lo conceda: el
  *   admin, sobre todo; otro, si alguno de los nombramientos que lo aportan cubre el objetivo en cada dimensión que el
- *   permiso declara. Un nombramiento que no fija una dimensión la cubre (en campus y en modalidad, solo los activos; un
+ *   permiso declara. Un nombramiento que no fija una dimensión la cubre (en campus y en modalidad, solo los activos, y en modalidad también los inactivos si el permiso es ReachesInactiveModalities, M10; un
  *   objetivo sin campus o sin modalidad también); uno que la fija cubre si algún valor del objetivo coincide (en
  *   unidad, la unidad o una descendiente, OrgTree) y no cubre un objetivo sin valor. Las dimensiones que el permiso no
  *   declara no se revisan. Así se lee a nivel de modalidad y se escribe con campus (AZ-S17, MS6): un permiso de lectura
@@ -235,21 +235,6 @@ final class Actor
     }
 
     /**
-     * allows() para trabajar la carga de una modalidad (escribir, abrir): sobre una modalidad inactiva solo el admin
-     * puede. Un nombramiento sin modalidad la cubre para ver (M10), no para trabajarla (MS8).
-     */
-    public function allowsWorking(Permission $permission, Target $target): bool
-    {
-        $inactive = array_any($target->values(Dimension::Modality) ?? [], fn (string $modality): bool => ! $this->isActiveModality($modality));
-
-        if ($inactive && ! $this->isAdmin()) {
-            return false;
-        }
-
-        return $this->allows($permission, $target);
-    }
-
-    /**
      * Los puestos que tiene (todos, no solo el activo; sin el admin) que conceden `$permission` y tienen algún
      * nombramiento que lo aporta y cubre `$target` en cada dimensión que el permiso declara: la regla de allows() sin el atajo
      * del admin, para saber a quién y con qué puesto le toca un aviso. En el orden del enum. Solo permisos de gestión.
@@ -297,9 +282,9 @@ final class Actor
      * dimensiones ampliaría el alcance.
      * - `campus` es siempre una columna: todo recurso de un campus tiene `campus_id`. Un nombramiento sin campus deja
      *   los campus activos y los registros sin campus (lo general), como allows().
-     * - `modality` es siempre una columna, igual que el campus (AZ-S17): un nombramiento sin modalidad deja todas las
-     *   modalidades no borradas, activas o no (M10: una modalidad inactiva solo bloquea trabajar su carga, no ver a sus
-     *   alumnos), y los registros sin modalidad; uno con modalidad, solo esa y solo si sigue activa (MS8).
+     * - `modality` es siempre una columna, igual que el campus (AZ-S17): un nombramiento sin modalidad deja las
+     *   modalidades activas y, solo si el permiso es ReachesInactiveModalities (M10: ver a los alumnos de una modalidad
+     *   inactiva), también las inactivas no borradas, y los registros sin modalidad; uno con modalidad, solo esa y solo si sigue activa (MS8).
      * - `unit` y `career` son una columna o una Closure(Builder, list<string>): void, para cuando la dimensión sale de
      *   una relación. Un nombramiento que no las fija no agrega nada (también quedan los registros sin valor); uno que
      *   las fija pide los valores que cubre (en unidad, la unidad y sus descendientes) con whereIn, o se los pasa a la
@@ -363,7 +348,7 @@ final class Actor
                     $clause->whereRaw('true');
 
                     foreach ($permission->dimensions() as $dimension) {
-                        $this->constrainDimension($clause, $scope, $dimension, $mappings[$dimension->value]);
+                        $this->constrainDimension($clause, $scope, $permission, $dimension, $mappings[$dimension->value]);
                     }
                 });
             }
@@ -659,23 +644,24 @@ final class Actor
      */
     private function coversTarget(AssignmentScope $scope, Permission $permission, Target $target): bool
     {
-        return array_all($permission->dimensions(), fn (Dimension $dimension): bool => $this->coversValues($scope, $dimension, $target->values($dimension)));
+        return array_all($permission->dimensions(), fn (Dimension $dimension): bool => $this->coversValues($scope, $permission, $dimension, $target->values($dimension)));
     }
 
     /**
-     * Un nombramiento sin campus cubre los campus activos; uno sin modalidad cubre todas las no borradas, activas o no
-     * (M10); uno que fija campus o modalidad solo cubre ese valor si sigue activo (MS8).
+     * Un nombramiento sin campus cubre los campus activos; uno sin modalidad cubre las modalidades activas y, solo si el
+     * permiso es ReachesInactiveModalities (M10, la lectura de alumnos), también las inactivas no borradas; uno que
+     * fija campus o modalidad solo cubre ese valor si sigue activo (MS8).
      *
      * @param  list<string>|null  $values  los del objetivo en la dimensión; null si no tiene
      */
-    private function coversValues(AssignmentScope $scope, Dimension $dimension, ?array $values): bool
+    private function coversValues(AssignmentScope $scope, Permission $permission, Dimension $dimension, ?array $values): bool
     {
         $fixed = $scope->value($dimension);
 
         if ($fixed === null) {
             return match ($dimension) {
                 Dimension::Campus => $values === null || array_any($values, fn (string $campus): bool => $this->isActiveCampus($campus)),
-                Dimension::Modality => $values === null || array_any($values, fn (string $modality): bool => $this->existingModalities()->contains(fn (Modality $existing): bool => $existing->getKey() === $modality)),
+                Dimension::Modality => $values === null || array_any($values, fn (string $modality): bool => $this->modalitiesReachedBy($permission)->contains(fn (Modality $reached): bool => $reached->getKey() === $modality)),
                 default => true,
             };
         }
@@ -726,7 +712,7 @@ final class Actor
      *
      * @param  Builder<covariant Model>  $clause
      */
-    private function constrainDimension(Builder $clause, AssignmentScope $scope, Dimension $dimension, string|Closure $mapping): void
+    private function constrainDimension(Builder $clause, AssignmentScope $scope, Permission $permission, Dimension $dimension, string|Closure $mapping): void
     {
         $fixed = $scope->value($dimension);
 
@@ -742,7 +728,7 @@ final class Actor
 
         if ($dimension === Dimension::Modality && is_string($mapping)) {
             if ($fixed === null) {
-                $clause->where(fn (Builder $modality) => $modality->whereIn($mapping, $this->existingModalities()->modelKeys())->orWhereNull($mapping));
+                $clause->where(fn (Builder $modality) => $modality->whereIn($mapping, $this->modalitiesReachedBy($permission)->modelKeys())->orWhereNull($mapping));
             } else {
                 $this->whereValues($clause, $mapping, $this->isActiveModality($fixed) ? [$fixed] : []);
             }
@@ -813,8 +799,21 @@ final class Actor
     }
 
     /**
-     * Todas las modalidades no borradas, activas o no (M10): las que cubre un nombramiento sin modalidad. Como
-     * activeModalities(), la comparten los contextos derivados.
+     * Las modalidades que cubre un nombramiento sin modalidad para `$permission`: las activas y, si el permiso alcanza
+     * a las inactivas (M10), todas las no borradas.
+     *
+     * @return Collection<int, Modality>
+     */
+    private function modalitiesReachedBy(Permission $permission): Collection
+    {
+        return $permission instanceof ReachesInactiveModalities && $permission->reachesInactiveModalities()
+            ? $this->existingModalities()
+            : $this->activeModalities();
+    }
+
+    /**
+     * Todas las modalidades no borradas, activas o no (M10). Como activeModalities(), la comparten los contextos
+     * derivados.
      *
      * @return Collection<int, Modality>
      */

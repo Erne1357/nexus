@@ -4,13 +4,14 @@ namespace App\Modules\Students\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReachesInactiveModalities;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
  * Permisos del módulo Students: consulta de alumnos y, del alumno sobre lo suyo, «Mis datos» (AC-15). La clave es
  * `students.<recurso>.<accion>`.
  */
-enum StudentsPermission: string implements Permission
+enum StudentsPermission: string implements Permission, ReachesInactiveModalities
 {
     case StudentView = 'students.student.view';
     case MyRecordView = 'students.my_record.view';
@@ -33,6 +34,15 @@ enum StudentsPermission: string implements Permission
             self::StudentView => [Dimension::Modality, Dimension::Campus, Dimension::Unit, Dimension::Career],
             self::MyRecordView => [],
         };
+    }
+
+    /**
+     * Una modalidad inactiva solo bloquea trabajar su carga, no ver a sus alumnos (M10): quien no fija modalidad sigue
+     * viendo a los de las inactivas.
+     */
+    public function reachesInactiveModalities(): bool
+    {
+        return $this === self::StudentView;
     }
 
     public function isPersonal(): bool
