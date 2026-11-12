@@ -99,6 +99,7 @@ it('AC-14: un fallo contra una cuenta con NIP cuenta para el tope global; contra
 });
 
 it('AC-14: limita los intentos por red, /24 en IPv4 y /64 en IPv6, sin importar el usuario ni la IP', function (array $sameNetwork, string $otherNetwork) {
+    $this->freezeTime();
     config(['fortify.network_attempts_per_minute' => 3]);
     $last = array_pop($sameNetwork);
 
