@@ -18,11 +18,13 @@ use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Activitylog\Models\Activity;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| `imports:migrate-sii` con los doce pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
+| `imports:migrate-sii` con los trece pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
 | una exportación sintética pequeña que toca cada paso: corre sin filas con error, la verificación contra el SII no
 | encuentra diferencias y repetirla no da ni altas ni cambios en ningún lote.
 */
@@ -53,6 +55,7 @@ beforeEach(function () {
     $student = fn (string $control, string $grid, string $status, string $campus, string $intake): string => SiiFixtures::line(SiiFile::Alumnos, [
         'no_de_control' => "'{$control}'", 'carrera' => "'A'", 'reticula' => "'{$grid}'", 'estatus_alumno' => "'{$status}'", 'campus' => "'{$campus}'",
         'semestre' => '3', 'nombre_alumno' => "'ANA'", 'apellido_paterno' => "'LOPEZ'", 'apellido_materno' => "'RUIZ'", 'periodo_ingreso_it' => "'{$intake}'",
+        'nip' => '123',
     ]);
     SiiFixtures::write($this->dir.'/alumnos_todos.csv', SiiFile::Alumnos, [
         $student('S1', '1', 'ACT', '1', '20263'),
@@ -115,9 +118,9 @@ afterEach(function () {
     File::deleteDirectory($this->curated);
 });
 
-it('corre los doce pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
+it('corre los trece pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
     expect(app()->bound('sii.steps'))->toBeFalse()
-        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(12);
+        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(13);
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful()
         ->doesntExpectOutputToContain('con diferencias');
@@ -147,6 +150,9 @@ it('corre los doce pasos de producción sin errores ni diferencias y repetirla n
             ['20263', 'cursando', null, 2],
         ]);
 
+    $accounts = Student::query()->orderBy('control_number')->get()->map(fn (Student $student): array => [$student->user->username, $student->user->is_active, Hash::check('0123', $student->user->password)])->all();
+    expect($accounts)->toBe([['S1', true, true], ['S2', false, true]]);
+
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
 
     $second = ImportBatch::query()->whereNotIn('id', $first->modelKeys())->get();
@@ -156,5 +162,6 @@ it('corre los doce pasos de producción sin errores ni diferencias y repetirla n
         ->and($second->sum('error_rows'))->toBe(0)
         ->and(StudyPlanSubjectPending::query()->count())->toBe(1)
         ->and(SubjectPrerequisite::query()->count())->toBe(1)
-        ->and(StudyPlanPrerequisitePending::query()->count())->toBe(1);
+        ->and(StudyPlanPrerequisitePending::query()->count())->toBe(1)
+        ->and(Activity::query()->where('event', 'student-accounts-synced')->orderByDesc('id')->first()->properties['unchanged'])->toBe(2);
 });
