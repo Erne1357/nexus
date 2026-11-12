@@ -1,10 +1,11 @@
 <?php
 
 use App\Modules\Core\Actions\SendPasswordResetLink;
+use App\Modules\Core\Enums\PasswordOrigin;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Jobs\SendPasswordResetLinkJob;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\PasswordResetLink;
-use App\Modules\Core\Rules\PasswordResetRules;
 use App\Modules\Core\Support\DefaultPassword;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Auth;
@@ -118,11 +119,11 @@ describe('pedir el enlace', function () {
                 && str_contains($text, '60 minutos');
         });
 
-        $log = Activity::where('event', 'password-reset-link-sent')->sole();
+        $log = Activity::where('event', 'password-reset-link-issued')->sole();
 
         expect($log->subject_id)->toBe($this->staff->id)
             ->and($log->causer_id)->toBeNull()
-            ->and($log->description)->toBe('Se mandó a ana.perez@cdjuarez.tecnm.mx un enlace para restablecer la contraseña de PEAA800101XX1')
+            ->and($log->description)->toBe('Se generó un enlace para restablecer la contraseña de PEAA800101XX1, que va a ana.perez@cdjuarez.tecnm.mx')
             ->and(json_encode($log->getAttributes()))->not->toContain(resetFormFields($link)['token']);
 
         $this->get(route('password.request'))->assertSee('te llegará un enlace');
@@ -144,7 +145,7 @@ describe('pedir el enlace', function () {
         Notification::assertCount(1);
         Notification::assertNotSentTo($this->staff, PasswordResetLink::class);
 
-        expect(Activity::where('event', 'password-reset-link-sent')->where('subject_id', $this->staff->id)->exists())->toBeFalse();
+        expect(Activity::where('event', 'password-reset-link-issued')->where('subject_id', $this->staff->id)->exists())->toBeFalse();
     })->with([
         'usuario que no existe' => [[], 'NOEXISTE'],
         'usuario inactivo' => [['is_active' => false], 'PEAA800101XX1'],
@@ -216,15 +217,14 @@ describe('pedir el enlace', function () {
         Notification::assertSentToTimes($this->staff, PasswordResetLink::class, 2);
     });
 
-    it('AC-16: si las reglas aceptan el correo institucional sin confirmar de un usuario (el alumno), le llega el enlace y al restablecer queda confirmado', function () {
-        app()->instance(PasswordResetRules::class, new class extends PasswordResetRules
-        {
-            public function acceptsUnverifiedInstitutionalEmail(User $user): bool
-            {
-                return $user->username === 'L21110001';
-            }
-        });
-        $student = User::factory()->create(['username' => 'L21110001', 'email' => 'l21110001@cdjuarez.tecnm.mx', 'email_verified_at' => null]);
+    it('AC-16: al alumno le basta su correo institucional sin confirmar; al restablecer queda confirmado y la contraseña pasa a ser propia', function () {
+        $student = User::factory()->withRole(Role::Alumno)->create([
+            'username' => '21110001',
+            'email' => 'l21110001@cdjuarez.tecnm.mx',
+            'email_verified_at' => null,
+            'password' => '1234',
+            'password_origin' => PasswordOrigin::SiiNip,
+        ]);
         $this->staff->forceFill(['email_verified_at' => null])->save();
 
         Notification::fake();
@@ -234,8 +234,50 @@ describe('pedir el enlace', function () {
         $link = resetLinkFor($student);
         submitNewPassword($link)->assertRedirect(route('login'));
 
-        expect($student->fresh()->email_verified_at)->not->toBeNull()
-            ->and(Hash::check('Nueva-clave-2027', $student->fresh()->password))->toBeTrue();
+        $student = $student->fresh();
+
+        expect($student->email_verified_at)->not->toBeNull()
+            ->and($student->password_origin)->toBe(PasswordOrigin::User)
+            ->and(Hash::check('Nueva-clave-2027', $student->password))->toBeTrue();
+    });
+
+    it('AC-16: quien es alumno y también tiene un puesto del personal necesita su correo confirmado', function () {
+        User::factory()->withRole(Role::Alumno)->withRole(Role::Docente)->create([
+            'username' => '21110003',
+            'email' => 'l21110003@cdjuarez.tecnm.mx',
+            'email_verified_at' => null,
+        ]);
+        Notification::fake();
+
+        expect(app(SendPasswordResetLink::class)->handle('21110003'))->toBeFalse();
+
+        Notification::assertNothingSent();
+    });
+
+    it('AC-16: el alumno sin acceso (sin NIP) no recibe enlace', function () {
+        User::factory()->withRole(Role::Alumno)->create([
+            'username' => '21110002',
+            'email' => 'l21110002@cdjuarez.tecnm.mx',
+            'email_verified_at' => null,
+            'password' => null,
+            'password_origin' => null,
+        ]);
+        Notification::fake();
+
+        expect(app(SendPasswordResetLink::class)->handle('21110002'))->toBeFalse();
+
+        Notification::assertNothingSent();
+    });
+
+    it('AC-17: un usuario que no es texto se rechaza como dato inválido, sin error del servidor', function () {
+        Queue::fake();
+
+        $this->from(route('password.request'))
+            ->post(route('password.email'), ['username' => ['PEAA800101XX1']])
+            ->assertRedirect(route('password.request'))
+            ->assertSessionHasErrors('username');
+
+        Queue::assertNothingPushed();
     });
 });
 
@@ -255,8 +297,8 @@ describe('restablecer', function () {
         submitNewPassword($link)->assertRedirect(route('login'));
     });
 
-    it('AC-18: pone la contraseña nueva, quita el cambio obligatorio, conserva el correo confirmado, rota recordarme y lleva al login con un aviso', function () {
-        $this->staff->forceFill(['must_change_password' => true])->save();
+    it('AC-18: pone la contraseña nueva como propia, quita el cambio obligatorio, conserva el correo confirmado, rota recordarme y lleva al login con un aviso', function () {
+        $this->staff->forceFill(['must_change_password' => true, 'password_origin' => PasswordOrigin::Default])->save();
         $before = $this->staff->fresh();
         $link = resetLinkFor($this->staff);
 
@@ -268,6 +310,7 @@ describe('restablecer', function () {
 
         expect(Hash::check('Nueva-clave-2027', $user->password))->toBeTrue()
             ->and($user->must_change_password)->toBeFalse()
+            ->and($user->password_origin)->toBe(PasswordOrigin::User)
             ->and($user->email_verified_at->equalTo($before->email_verified_at))->toBeTrue()
             ->and($user->getRememberToken())->not->toBe($before->getRememberToken())
             ->and(DB::table('password_reset_tokens')->count())->toBe(0);
@@ -315,7 +358,8 @@ describe('restablecer', function () {
 
         submitNewPassword($link, $password, $confirmation)
             ->assertRedirect($link)
-            ->assertSessionHasErrors('password');
+            ->assertSessionHasErrors('password')
+            ->assertSessionMissing('_old_input');
 
         expect(Hash::check('Vieja-clave-2026', $this->staff->fresh()->password))->toBeTrue()
             ->and(Activity::where('event', 'password-reset-with-link')->exists())->toBeFalse();
@@ -329,7 +373,7 @@ describe('restablecer', function () {
         'la contraseña por defecto' => [fn (): array => [app(DefaultPassword::class)->value(), app(DefaultPassword::class)->value()]],
     ]);
 
-    it('AC-17: un enlace vencido, usado, reemplazado, alterado o que ya no es de ese usuario muestra la misma página y no cambia la contraseña', function (Closure $spoil) {
+    it('AC-17: un enlace vencido, usado, reemplazado, alterado o que ya no es de ese usuario muestra la misma página, aun con una contraseña inválida, y no cambia la contraseña', function (Closure $spoil) {
         $link = $spoil($this, resetLinkFor($this->staff));
 
         $this->get($link)
@@ -337,10 +381,12 @@ describe('restablecer', function () {
             ->assertSee('Este enlace ya no sirve')
             ->assertDontSee('PEAA800101XX1');
 
-        submitNewPassword($link, 'Otra-clave-2028')
-            ->assertForbidden()
-            ->assertSee('Este enlace ya no sirve')
-            ->assertDontSee('PEAA800101XX1');
+        foreach (['Otra-clave-2028', 'corta'] as $password) {
+            submitNewPassword($link, $password)
+                ->assertForbidden()
+                ->assertSee('Este enlace ya no sirve')
+                ->assertDontSee('PEAA800101XX1');
+        }
 
         expect(Hash::check('Otra-clave-2028', $this->staff->fresh()->password))->toBeFalse()
             ->and(Activity::where('event', 'password-reset-with-link')->count())->toBeLessThanOrEqual(1);
@@ -384,6 +430,23 @@ describe('restablecer', function () {
             return $link;
         }],
     ]);
+
+    it('AC-17: un enlace con el token o el usuario que no son texto muestra la misma página, sin error del servidor', function () {
+        $this->get(route('password.reset').'?token[]=a&username=PEAA800101XX1')->assertForbidden()->assertSee('Este enlace ya no sirve');
+        $this->post(route('password.update'), ['token' => ['a'], 'username' => ['PEAA800101XX1'], 'password' => 'Nueva-clave-2027', 'password_confirmation' => 'Nueva-clave-2027'])
+            ->assertForbidden()
+            ->assertSee('Este enlace ya no sirve');
+    });
+
+    it('AC-17: sirve con la sesión abierta de quien todavía debe cambiar su contraseña', function () {
+        $this->staff->forceFill(['must_change_password' => true])->save();
+        $link = resetLinkFor($this->staff);
+
+        $this->actingAs($this->staff)->get($link)->assertOk()->assertSee('Elige una contraseña nueva');
+        submitNewPassword($link)->assertRedirect(route('login'));
+
+        expect($this->staff->fresh()->must_change_password)->toBeFalse();
+    });
 
     it('AC-17: sirve aunque haya otra sesión abierta en esa computadora, y no la cambia', function () {
         $admin = User::factory()->admin()->create();

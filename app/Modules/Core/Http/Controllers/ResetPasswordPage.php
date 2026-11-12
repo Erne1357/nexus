@@ -8,14 +8,17 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Timebox;
+use Illuminate\Validation\ValidationException;
 
 /**
  * El enlace para restablecer la contraseña (AC-17 y AC-18). Abrirlo (GET) solo muestra el formulario, porque los
  * filtros de correo abren los enlaces solos; guardarlo (POST, con el token y el usuario escondidos) llama a
  * ResetForgottenPassword y manda al login con un aviso. Un enlace vencido, usado, reemplazado, alterado o de un
  * usuario que no existe o ya no puede restablecer muestra la misma página (403), sin decir cuál de esas fue; esa
- * respuesta tarda al menos lo mismo que un login fallido (Timebox). La página del formulario no manda el enlace como
- * Referer a ningún lado.
+ * respuesta tarda al menos lo mismo que un login fallido (Timebox). Una contraseña que no pasa la validación regresa
+ * al formulario del mismo enlace con los errores, sin guardar en la sesión lo escrito (el token incluido). La página
+ * del formulario no manda el enlace como Referer a ningún lado. Lo que no es texto en la consulta o el formulario
+ * cuenta como vacío.
  */
 final class ResetPasswordPage
 {
@@ -26,8 +29,8 @@ final class ResetPasswordPage
 
     public function show(Request $request, PasswordResetTokens $tokens): Response
     {
-        $username = $request->string('username')->value();
-        $token = $request->string('token')->value();
+        $username = $this->text($request, 'username');
+        $token = $this->text($request, 'token');
 
         return (new Timebox)->call(function (Timebox $timebox) use ($tokens, $username, $token): Response {
             if ($tokens->userFor($username, $token) === null) {
@@ -44,12 +47,20 @@ final class ResetPasswordPage
 
     public function update(Request $request, ResetForgottenPassword $resetForgottenPassword): RedirectResponse|Response
     {
-        $username = $request->string('username')->value();
-        $token = $request->string('token')->value();
+        $username = $this->text($request, 'username');
+        $token = $this->text($request, 'token');
         $input = $request->only('password', 'password_confirmation');
 
         return (new Timebox)->call(function (Timebox $timebox) use ($resetForgottenPassword, $username, $token, $input): RedirectResponse|Response {
-            if ($resetForgottenPassword->handle($username, $token, $input) === null) {
+            try {
+                $user = $resetForgottenPassword->handle($username, $token, $input);
+            } catch (ValidationException $exception) {
+                $timebox->returnEarly();
+
+                return redirect()->route('password.reset', ['token' => $token, 'username' => $username])->withErrors($exception->errors());
+            }
+
+            if ($user === null) {
                 return $this->closed();
             }
 
@@ -57,6 +68,13 @@ final class ResetPasswordPage
 
             return redirect()->route('login')->with('status', 'password-reset');
         }, self::CLOSED_LINK_MICROSECONDS);
+    }
+
+    private function text(Request $request, string $key): string
+    {
+        $value = $request->input($key);
+
+        return is_string($value) ? $value : '';
     }
 
     private function closed(): Response

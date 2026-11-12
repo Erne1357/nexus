@@ -14,9 +14,10 @@ use Throwable;
  * dejan (PasswordResetRules) y no se le mandó otro hace menos de un minuto (AC-17); si no, no hace nada ni dice por
  * qué. Corre en la cola (SendPasswordResetLinkJob), así que la pantalla responde igual, exista o no el usuario.
  *
- * Crea el token con el usuario bloqueado, para que dos peticiones a la vez no le manden dos, y manda el correo después
- * del commit. Si el correo falla, borra el token y deja pasar el error, para que el reintento mande uno nuevo. La
- * bitácora registra a qué correo se mandó, nunca el token. Devuelve si lo mandó.
+ * Crea el token y deja la bitácora (a qué correo va, nunca el token) con el usuario bloqueado, para que dos peticiones
+ * a la vez no le manden dos, y manda el correo después del commit: si el correo sale, ya no queda nada que pueda fallar
+ * y hacer que el reintento mande otro enlace que deje sin efecto al primero. Si el correo falla, borra el token y deja
+ * pasar el error, para que el reintento mande uno nuevo. Devuelve si lo mandó.
  */
 final class SendPasswordResetLink
 {
@@ -36,7 +37,17 @@ final class SendPasswordResetLink
 
             $token = $this->tokens->create($user);
 
-            return $token === null ? null : [$user, $token];
+            if ($token === null) {
+                return null;
+            }
+
+            activity()
+                ->performedOn($user)
+                ->event('password-reset-link-issued')
+                ->withProperties(['email' => $user->email])
+                ->log("Se generó un enlace para restablecer la contraseña de {$user->username}, que va a {$user->email}");
+
+            return [$user, $token];
         });
 
         if ($issued === null) {
@@ -52,12 +63,6 @@ final class SendPasswordResetLink
 
             throw $exception;
         }
-
-        activity()
-            ->performedOn($user)
-            ->event('password-reset-link-sent')
-            ->withProperties(['email' => $user->email])
-            ->log("Se mandó a {$user->email} un enlace para restablecer la contraseña de {$user->username}");
 
         return true;
     }

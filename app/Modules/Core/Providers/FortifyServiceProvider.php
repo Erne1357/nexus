@@ -95,7 +95,7 @@ final class FortifyServiceProvider extends ServiceProvider
 
         RateLimiter::for('password-reset-link', fn (Request $request): array => [
             Limit::perMinutes(self::RESET_LINK_USERNAME_DECAY_MINUTES, self::RESET_LINK_REQUESTS_PER_USERNAME)
-                ->by('username|'.Str::transliterate(Str::lower($request->string('username')->value())))
+                ->by('username|'.Str::transliterate(Str::lower(is_string($request->input('username')) ? $request->input('username') : '')))
                 ->response($this->resetLinkLockedOut(...)),
             Limit::perMinute((int) config('fortify.password_reset_ip_requests_per_minute', 10))
                 ->by('ip|'.$request->ip())
@@ -177,7 +177,7 @@ final class FortifyServiceProvider extends ServiceProvider
         $minutes = max(1, (int) ceil(((int) ($headers['Retry-After'] ?? 60)) / 60));
 
         return redirect()->route('password.request')
-            ->withInput($request->only('username'))
+            ->withInput(is_string($request->input('username')) ? $request->only('username') : [])
             ->withErrors(['username' => 'Ya se pidieron varios enlaces. Intenta de nuevo en '.$minutes.($minutes === 1 ? ' minuto.' : ' minutos.')]);
     }
 }

@@ -2,19 +2,22 @@
 
 namespace App\Modules\Core\Rules;
 
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 
 /**
  * AC-16 (confirmado el 11 de noviembre de 2026): quién puede restablecer su contraseña por su correo institucional.
  * Un usuario activo, con acceso (con contraseña: el restablecimiento no da acceso a quien no lo tiene, AC-01; supuesto
  * por confirmar) y con correo del dominio `nexus.institutional_email_domain`. El del personal tiene que estar
- * confirmado (`email_verified_at`, lo deja la invitación de AC-08); el de quien acceptsUnverifiedInstitutionalEmail()
- * acepte, no. Lo preguntan SendPasswordResetLink, para mandar el enlace, y PasswordResetTokens, para dejarlo usar.
- *
- * No es final: acceptsUnverifiedInstitutionalEmail() es el punto donde se distingue al alumno del personal.
+ * confirmado (`email_verified_at`, lo deja la invitación de AC-08); el del alumno, no
+ * (acceptsUnverifiedInstitutionalEmail()). Lo preguntan SendPasswordResetLink, para mandar el enlace, y
+ * PasswordResetTokens, para dejarlo usar.
  */
-class PasswordResetRules
+final class PasswordResetRules
 {
+    public function __construct(private readonly Actor $actor) {}
+
     public function allows(User $user): bool
     {
         return $user->is_active
@@ -38,14 +41,16 @@ class PasswordResetRules
     }
 
     /**
-     * Si a `$user` le basta su correo institucional sin confirmar. Al personal no: su correo lo captura el jefe y solo
-     * queda confirmado cuando el usuario abre la invitación que llegó ahí (AC-08). Al alumno sí (supuesto por
-     * confirmar): su correo lo fija la regla del TecNM a partir de su número de control y el enlace solo llega al
-     * buzón del dueño. Las cuentas de alumno llegan con su propio PR (1.16, cuentas de alumno con su NIP), que responde
-     * aquí por ellas; hasta entonces todo usuario es personal y la respuesta es no.
+     * Si a `$user` le basta su correo institucional sin confirmar: al alumno sí (supuesto por confirmar), porque su
+     * correo lo fija la regla del TecNM a partir de su número de control (AC-13) y el enlace solo llega al buzón del
+     * dueño. Alumno es quien tiene algún puesto vigente y ninguno es del personal (Role::isStaff(); hoy, solo `alumno`,
+     * AC-10). Al personal no, aunque también sea alumno: su correo lo captura el jefe y solo queda confirmado cuando el
+     * usuario abre la invitación que llegó ahí (AC-08).
      */
     public function acceptsUnverifiedInstitutionalEmail(User $user): bool
     {
-        return false;
+        $roles = $this->actor->forUser($user)->heldRoles();
+
+        return $roles !== [] && array_all($roles, fn (Role $role): bool => ! $role->isStaff());
     }
 }
