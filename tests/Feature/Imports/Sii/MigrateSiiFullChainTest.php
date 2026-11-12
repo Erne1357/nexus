@@ -164,4 +164,18 @@ it('corre los trece pasos de producción sin errores ni diferencias y repetirla 
         ->and(SubjectPrerequisite::query()->count())->toBe(1)
         ->and(StudyPlanPrerequisitePending::query()->count())->toBe(1)
         ->and(Activity::query()->where('event', 'student-accounts-synced')->orderByDesc('id')->first()->properties['unchanged'])->toBe(2);
+
+    // AC-10: un alumno que egresa en una exportación más nueva pierde el acceso en la siguiente corrida.
+    $line = fn (string $control, string $grid, string $status, string $campus, string $intake): string => SiiFixtures::line(SiiFile::Alumnos, [
+        'no_de_control' => "'{$control}'", 'carrera' => "'A'", 'reticula' => "'{$grid}'", 'estatus_alumno' => "'{$status}'", 'campus' => "'{$campus}'",
+        'semestre' => '3', 'nombre_alumno' => "'ANA'", 'apellido_paterno' => "'LOPEZ'", 'apellido_materno' => "'RUIZ'", 'periodo_ingreso_it' => "'{$intake}'",
+        'nip' => '123',
+    ]);
+    SiiFixtures::write($this->dir.'/alumnos_todos.csv', SiiFile::Alumnos, [$line('S1', '1', 'EGR', '1', '20263'), $line('S2', '3', 'EGR', '2', '20043')]);
+
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful();
+
+    expect(Student::query()->where('control_number', 'S1')->sole()->user->is_active)->toBeFalse();
+    $this->post('/login', ['username' => 'S1', 'password' => '123'])->assertSessionHasErrors(['username' => __('auth.failed')]);
+    $this->assertGuest();
 });
