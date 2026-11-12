@@ -131,7 +131,7 @@ final class AssignmentBoardQuery
     }
 
     /**
-     * Los departamentos activos cuyo ranking puede ver el usuario en el campus, por clave: el suyo para el jefe y el
+     * Los departamentos activos cuyo ranking puede ver el usuario en la modalidad del campus, por clave: el suyo para el jefe y el
      * jefe de proyecto docente; todos para Subdirección y el admin.
      *
      * @return Collection<int, Department>
@@ -142,7 +142,7 @@ final class AssignmentBoardQuery
             ->where('is_active', true)
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => $actor->allows(StaffingPermission::RankingView, Target::of(campus: $campus->getKey(), unit: $department->getKey())))
+            ->filter(fn (Department $department): bool => $actor->allows(StaffingPermission::RankingView, Target::of(modality: $campus->modality_id, unit: $department->getKey())))
             ->values();
     }
 
